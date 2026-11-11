@@ -47,7 +47,7 @@ Hazırlığı denetler; Docker kurmaz veya başlatmaz.
 Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasını isteyin. Şu adımlarda durup kişiye devredin:
 
 - Kendi sağlayıcı ya da abonelik hesabına giriş ve AI/arka plan kullanımı için açık rıza. Tarayıcı oturumu veya başka birinin
-  kimlik bilgisini kopyalamayın. ChatGPT ile giriş kullanan işçinin etkinleştirilmesi N1 kanıtına kadar bekletiliyor.
+  kimlik bilgisini kopyalamayın. Ayrı ChatGPT tarayıcı girişi (SIWC) işçisi N1 kanıtını bekler; ChatGPT (Codex CLI) bağlantısı native işçi yolunu kullanır.
 - Sağlayıcı sırlarını Deckent'in maskeli alanına girmek. Değeri sohbette istemeyin; argüman, ortam değişkeni, günlük,
   ekran görüntüsü veya konuşma dökümüne koymayın.
 - Profil, izin kipi ve izin/onay kartlarını gerçek terminalde incelemek. AI, MCP, pipe ve JSON kişinin kararına tanıklık

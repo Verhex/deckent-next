@@ -118,15 +118,16 @@ olarak saklanabilir. Tam erişim ana makine dosya sistemi, ev dizini, ağ ve Git
 değişmez koruma sınırı geçerlidir; etki çağrıları denetim kaydına girer. Tam erişimin
 maruziyeti, kapalı yalıtım görünümünden farklıdır.
 
-Kabuk yürütmesi bubblewrap ve Landlock gibi kayıtlı uygulamaları; kodlama işçileri Docker'ı
-kullanır. Git çalışma ağaçları çıktıları ayırır, süreçleri, ağı veya sırları yalıtmaz.
+Kabuk yürütmesi bubblewrap ve Landlock gibi kayıtlı uygulamaları kullanır. Bağlı Claude/Codex işçileri bubblewrap;
+uygun Docker ve SIWC profilleri Docker ister (SIWC etkinleştirmesi bekletilir). Git çalışma ağaçları çıktıları ayırır, süreçleri, ağı veya sırları yalıtmaz.
 Docker ana makine çekirdeğini paylaşır. `require-sandbox`, yalıtım yoksa reddeder;
 `prefer-sandbox` ana makineye düşebilir ve bunu bildirir. Yalıtıma güvenmeden önce gerçek
 makinede `deckent doctor` çıktısını inceleyin.
 
 Sağlayıcı API anahtarları seçili sır deposu portuyla çözülür ve ajana sunulan içerikten
-maskelenir. Native abonelik işçileri sınırlandırılmış kimlik bilgisi kopyalarını alabilir;
-bu yol sağlayıcı API anahtarından ayrıdır. Dosya ve şifreli dosya depoları aynı işletim
+maskelenir. Bağlı Claude/Codex CLI işçileri girişi kendi CLI alanında tutar; Deckent token'larını okumaz.
+Claude Docker aboneliği reddedilir. Codex Docker token'ları host aktarıcısında kalır; Cursor ayrı sınırlı kimlik
+bilgisi kopyası kullanır. Bu yollar sağlayıcı API anahtarından ayrıdır. Dosya ve şifreli dosya depoları aynı işletim
 sistemi kullanıcısıyla çalışan her programa karşı koruma sağlamaz; şifreli deponun açma
 anahtarı yereldir. Ele geçirilmiş ana makine, geniş konteyner bağlamaları veya yanlış
 verilmiş tam erişim anlamlı risklerdir. Dosya sistemi, süreç, ağ ve sır sınırlarını birlikte
@@ -167,8 +168,8 @@ doğrulamalı kapsamlı bir hafıza günlüğü, mühürlü Auditor kayıtları,
 headless abonelik Brain'i ve istatistik, öneri ve imza anahtarlarıyla sürümlü ajanlar. Bunlar koddur, henüz kabul edilmiş davranış
 değildir. Her anahtar (hafıza, Nervous, kurtarma, ajan istatistiği) bir kişi açana kadar kapalı başlar; `shadow` (gölge) kipi hiçbir
 şeyi uygulamaz, ama hafıza doğrulama ve kurtarma gölgesi yine de modelini çağırır. Headless Brain'in anahtarı yoktur ve yalnız kişinin
-kendi login, connect ve onayından sonra çalışır. alpha.55'te bir Nervous kuralını yükselten komut yoktur; bu yüzden Nervous hiçbir
-durdurma adımı yürütmez ve otomatik kurtarma henüz başlayamaz; bkz. [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
+kendi login, connect ve onayından sonra çalışır. Yükseltme/izin/inceleme kartları alpha.56'dan beri vardır. Kişi ölçülmüş
+kuralı yükseltip tam eylemine izin vererek kipi açana kadar kurtarma kapalıdır; gerçek kullanım kabulü açıktır. Bkz. [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
 
 Çok adımlı iş süreçlerinin Mission düzeyinde koordinasyonu, uzak HTTP API, Desktop, Dashboard,
 Enterprise SSO/toplu kurulum yönetimi ve microVM yalıtımı gelecek işlerdir. Yerel kontroller
@@ -182,6 +183,8 @@ iptal ve kurtarma yollarını değerlendirin. Denenmemiş, yapılmamış ya da h
 `deckent audit verify --scope <id> --json` saklanan olay mühürlerini, sıra sürekliliğini, checkpoint zincirini ve audit başlarını tutarlı bir okuma snapshotında doğrular. SDK `verifyAudit(root, {schemaVersion: 1, scopeId}, options)` ve salt okunur MCP `verify_audit` aynı policy kontrollü okumayı kullanır; scope için approval `inspect` izni gerekir. Doctor ve servisin `audit-integrity` raporu bozulmayı gösterir; doğrulanmamış her durum (henüz kayıt yok, hata veren veya erişilemeyen doğrulayıcı, hiçbir scope doğrulamamış servis) nedeniyle birlikte unknown/degraded görünür, asla sağlıklı sayılmaz ve `audit verify` 1 ile çıkar. Checkpoint config ile kapatılamaz. Aynı OS hesabından çalışan ajanın yerel dosyaları değiştirmesini önlemez; saklanan kanıta göre değişimi tespit eder.
 
 `deckent audit verify --scope <id> --export-checkpoint` son kayıtlı checkpointi stdout üzerinde JSON olarak verir; yoksa `null`. Ayrı cihaz özgün çıktıyı bağımsız saklamalıdır. Sonradan `--checkpoint <dosya>` veya stdin için `--checkpoint -` ile karşılaştırılır; SDK/MCP aynı nesneyi `witness` alanında alır. Servise çıktı yolu veya witness ağ adresi verilmez.
+Özel yerel dosya için `deckent audit verify --scope <id> --export-checkpoint <file>` kullanın: 0600 izinle yalnız yeni
+dosya oluşturulur; mevcut dosya veya checkpoint yokluğu reddedilir. Dosya adı servise gönderilmez; ayrı cihazda saklama gereği sürer.
 
 Sürüm-1 çıktı `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpoint, digest}` biçimindedir. Strict checkpoint alanları `schemaVersion`, `installationId`, `scopeId`, `sequence`, `atMs`, `head: {sequence, digest}`, `policyDigest`, `producersDigest`, `previousDigest`, `keyId`, `mac`tır. Digest/MAC küçük harf SHA-256 hex biçimindedir; çıktı digest'i canonical mühürlü checkpointten hesaplanır. Audit başı scope bağlı boş baştan başlayarak tam mühürlü olayları sıra ile bağlar. Checkpoint HMAC'i unsigned canonical projeksiyonu, predecessor digest önceki mühürlü checkpointi bağlar. Özgün kurulum anahtarı erişilebilir kalmalıdır; sır veya policy içeriği dışa aktarılmaz.
 

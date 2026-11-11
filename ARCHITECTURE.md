@@ -138,8 +138,10 @@ Brain context as sealed data (`memoryAutomation.*`, `deckent memory rollout`). A
 at most one `policy-turn` record (refusals and plain allows that ran; bounded lists with exact counts); a turn with no decision writes
 none, and the record is written after the turn, best effort: a refused audit write does not fail the turn. A read-only auditor identity; safety holds only a person lifts. Nervous and recovery: deterministic detection, a broker that runs
 measured rules under the owner's grant, and a role-model decision that may continue a lost task in a new Attempt within registry
-bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's own `claude -p` subscription in a
-bubblewrap realm with a provider-only gateway and an explicit consent for AI and background use. Agents: versioned agent and skill
+bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's connected Claude/Codex CLI
+subscription in a bubblewrap realm, with consent for its use. First connect defaults to person + AI (native chat and
+connected MCP clients share the AI actor); background/system use needs its own consent. Native tool turns use the
+Deckent bridge described below; one-shot planning keeps its separate restricted transport. Agents: versioned agent and skill
 rows, system agent selection by standing, sealed statistics with Wilson bounds, suggestions decided on person cards or signed AI
 commands, and person-enrolled signer keys for AI and system writes. Alpha.55 introduced ledger v70; alpha.56 used v73 and runtime protocol v29 (alpha.60: v30, lifecycle window [30, 29]), adding person recovery promotion/grant/review cards and sealed would-stop shadow input (no recovery effect), with modes still off by default. Detail, switches and bounds:
 [core-layers](.deckent/docs/architecture/modules/core-layers.md); owner record:
@@ -170,8 +172,9 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   not a separate filesystem root. Default is one company. Enterprise maps customer identity,
   RBAC/RLS and governance into these contracts. Company-aware Core policy precedes M2; IdP/SIEM
   adapters belong to M4. The retired tenant fields and file-isolation helpers are gone (H34 S4): company is a data scope,
-  config schema 4 (CONFIG-SURFACE; explicit Next v3 read migration), layout registry 4 (SCR-A, owner 2026-09-28: `scratch` resource), doctor JSON 2; older versions are refused with a
-  typed error, never converted.
+  configuration reads schema versions 4–6 without rewriting authored bytes. Explicit v3 normalizes on read; a later
+  governed write persists v4. Unsupported versions are refused. Layout registry 4 (SCR-A, owner 2026-09-28: `scratch`
+  resource) and doctor JSON 2 retain their own version rules.
 - Development is in deckent-next. Public deckent receives only the completed Core distribution. Proprietary
   Enterprise sources/packages remain separately controlled from their first implementation, consume public Core
   APIs and are excluded from public source, history and package artifacts. Core installs without Enterprise.
@@ -346,13 +349,15 @@ non-public/local IPv4 destinations, pins the checked address and requires matchi
 ClientHello SNI; malformed/missing SNI and ECH fail closed. TLS is not terminated. Encrypted HTTP
 paths, bodies and provider-side effects are not inspected or independently authorized by this gate.
 
-The current native-connection adapter projects only the selected provider's unexpired access material
-into private container tmpfs; no host HOME, Docker socket, refresh token or host credential writeback.
-Cursor uses its native ephemeral auth-token input inside the worker process. Provider endpoints and
-connection bounds are versioned adapter catalog data. `nativeSubscription` v1 binds the provider in
-the prepared Docker task profile; configured task execution retains normal policy, reservation,
-workspace, dispatch ownership and artifact collection. Persisted supervisor connection descriptors
-contain paths and bootstrap digest, never credential values. Expired/unavailable credentials fail explicitly; subscription refresh and fleet-wide account lifecycle remain open. **Owner amendment 2026-11-03 — alpha.63 subscription parity (author candidates; independent/release acceptance separate):** the person's own Claude/Codex CLI login runs chat, workers and Brain; Deckent never reads, stores, copies or brokers the subscription token. The CLI runs its own loop in a bubblewrap login realm with only Deckent MCP tools (native tools off; Claude's three built-in plugins by registry allowlist; Codex `agents.enabled=false`, `features.plugins=false`). MCP rides the realm's existing egress relay: the gateway routes a sentinel `.invalid` host to a turn-bound Deckent facade and CONNECT to the provider allowlist, so no new Deckent process sits next to the login. Approval, policy, sandbox, effects and audit stay in Deckent's handlers on the exact project or Attempt workspace. The first chat turn and the first worker Attempt are guarded validations that persist the capability observation/F08 record; an unexpected tool surface, plugin or registry stop event stops only that turn with a typed reason (owner 2026-11-05: no pause; the next message checks again), an unrecognised CLI event becomes the turn's note, and nothing falls back to Docker or the legacy projection. Connections carry a witnessed `sourceBinding` and a ledger v74 capacity resource; global state and login files are hard-refused in every realm and subscription turns never use the host shell. Detail: [agent-turn-engine](.deckent/docs/architecture/modules/agent-turn-engine.md), [core-layers](.deckent/docs/architecture/modules/core-layers.md), [resource-quality](.deckent/docs/architecture/modules/resource-quality.md).
+Historical (2026-09-21 Docker pilot): the native-connection adapter projected selected unexpired access material
+into private container tmpfs, without host HOME, Docker socket, refresh token or credential writeback. Current
+alpha.64 routes supersede that generic custody description: connected Claude/Codex CLI workers use their own login
+realm without Deckent reading the token; Claude Docker subscription profiles are refused before login reads or launch;
+Codex Docker uses an Attempt-bounded host relay and receives only a placeholder, never the host token. Cursor retains
+its distinct ephemeral auth-token projection. Provider endpoints and connection bounds are versioned catalog data.
+`nativeSubscription` v1 Docker profiles retain policy, reservation, workspace, dispatch and artifact ownership;
+persisted descriptors carry paths/digests, never credentials. Refresh and fleet-wide account lifecycle remain open.
+**Owner amendment 2026-11-03 — alpha.63 subscription parity (author candidates; independent/release acceptance separate):** the person's own Claude/Codex CLI login runs chat, workers and Brain; Deckent never reads, stores, copies or brokers the subscription token. The CLI runs its own loop in a bubblewrap login realm with only Deckent MCP tools (native tools off; Claude's three built-in plugins by registry allowlist; Codex `agents.enabled=false`, `features.plugins=false`). MCP rides the realm's existing egress relay: the gateway routes a sentinel `.invalid` host to a turn-bound Deckent facade and CONNECT to the provider allowlist, so no new Deckent process sits next to the login. Approval, policy, sandbox, effects and audit stay in Deckent's handlers on the exact project or Attempt workspace. The first chat turn and the first worker Attempt are guarded validations that persist the capability observation/F08 record; an unexpected tool surface, plugin or registry stop event stops only that turn with a typed reason (owner 2026-11-05: no pause; the next message checks again), an unrecognised CLI event becomes the turn's note, and nothing falls back to Docker or the legacy projection. Connections carry a witnessed `sourceBinding` and a ledger v74 capacity resource; global state and login files are hard-refused in every realm and subscription turns never use the host shell. Detail: [agent-turn-engine](.deckent/docs/architecture/modules/agent-turn-engine.md), [core-layers](.deckent/docs/architecture/modules/core-layers.md), [resource-quality](.deckent/docs/architecture/modules/resource-quality.md).
 
 Native coding authoring v2 pins the observed CLI version and discovery; [template authoring](.deckent/docs/architecture/modules/config-and-cli-help.md#coding-template-authoring) reuses governed config.
 Disabled discovery is the default: Claude uses safe-mode; Codex strict-config skills keys, each proven by a
@@ -412,10 +417,11 @@ Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstr
 to grant new access. Existing Docker custody still supports observation, cancellation and output
 recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output
 is suppressed in favor of a bounded exit/error summary; Claude and Codex events are normalized,
-and so are Cursor streams (alpha.52 CURSOR-ISCI: derived turns, tokens, duration, tool calls, real `session.ended`, `final-text-json` report; cost null) (B09-1/B09-3, "Local worker observation" below; Codex not yet against a recorded live run). Full-access worker code can read its own access material and use the allowed provider channel;
-this is not within-worker secret isolation or comprehensive external-effect interception.
+and so are Cursor streams (alpha.52 CURSOR-ISCI: derived turns, tokens, duration, tool calls, real `session.ended`, `final-text-json` report; cost null) (B09-1/B09-3, "Local worker observation" below; Codex not yet against a recorded live run). A projected-credential Docker worker can read its own access material; a Codex relay worker can use
+the allowed provider routes without seeing the token. Neither establishes within-worker account-use isolation or
+comprehensive external-effect interception.
 
-Phase 1 integrates supported Codex/Claude/Cursor headless coding executors inside Docker using
+Historical phase-1 plan (2026-09-21) integrated Codex/Claude/Cursor headless coding executors inside Docker using
 subscription authority, first one verified path then parallel heterogeneous workers. Deckent owns no
 proprietary model: it owns task admission, scheduling, policy, custody and acceptance. Native executor
 semantics stay behind versioned adapters; model/persona/skill bindings are configuration, not grants.
@@ -424,7 +430,7 @@ existing host login does not prove container support. Missing simulated API cost
 subscription job; actual access/quota limits remain enforced. Local inference and other API/provider
 paths follow in phase 2; existing serving runtimes are preferred to writing a custom serving engine.
 
-Owner 2026-09-21, revised dogfood sequencing: the first isolated coding-worker profile runs
+Historical owner sequencing (2026-09-21; pilot scope, superseded for connected CLI routes by alpha.63/64 above): the first isolated coding-worker profile runs
 native unattended/full-access inside its assigned sandbox, without per-tool human prompts.
 Provider-specific flags are adapter-owned and version-verified; the mode is versioned profile data.
 A complete Deckent tool catalog or native-to-Deckent approval bridge is NOT a prerequisite for this
@@ -438,7 +444,9 @@ Permission bypass alone does not establish secret isolation or working network a
 Runtime custody, capacity, cancellation and honest outcome handling remain mandatory. General tool
 mediation and per-action approvals stay in product scope and will be designed from dogfood evidence;
 privileged external business effects are outside this pilot. Standing grants and action-specific approval
-remain distinct in the target policy model. No approval bridge or automatic native callback is claimed.
+remain distinct in the target policy model. The historical pilot claimed no approval bridge or automatic native callback.
+Current connected CLI workers compose Deckent tool/decision ports and exact Attempt-bound witnessed cards; cards offer
+one-time decisions only. This does not establish interception of every native external effect or real-account acceptance.
 Keep executor integration behind a versioned boundary usable from a future measured Go supervisor;
 Go adoption is not decided by this sequencing change.
 
@@ -447,7 +455,8 @@ subject to explicit organizational separation-of-duties restrictions. Without th
 they wait for an authorized decider. Expiry closes the approval request without permitting execution;
 the Task remains held for explicit renewal under current policy, not an automatic repeated request.
 Task-admission human approval is implemented as described in “Task approval, live sessions and
-isolated delivery” below; general native-tool approval callbacks and notification consumption are not.
+isolated delivery” below. The connected native-worker Deckent tool bridge is composed; general external-effect
+interception and real-account/assembled-release acceptance are not established.
 The bounded native coding connection is wired; full agentic acceptance, active-model admission,
 refresh, usage and dogfood closure remain open.
 
@@ -769,7 +778,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   target person, template/basis, deterministic change key, input digest, before/after revisions and counts; it has no approval/decider fields.
   Preview, refusal, conflict and current do not record a change. No audit, no policy write; an event alone does not prove publication.
 - **First-run recovery cells and I2 raise (alpha.56):** template v16 gives only the named person exact installed-scope `require-approval` cells for each `recovery-action/apply` and measured `nervous-rule/promote` seed version; readers need allow, so recovery stays off. Inside an engine-declared `policy-recovery` change only, the same requesting/deciding person may replace their own same-id, one action × id × scope require-approval cell with allow (or back), as the whole change set. `RECOVERY_RAISE_KINDS` is a versioned code constant, independent of the AI floor; `grant.add`, other principals/kinds, broad/shared/role-derived or overlapping require-approval cells and deny/restriction cannot raise. Refusal is `RECOVERY_CELL_NOT_OWN` and writes nothing; an already allowed row is current. No raw wire field declares the special path; all other I2 paths retain the delegation bound.
-  Alpha.56 current template v18 retains v16, adds v17's named-person `coding.first-commit` execute grant (person card, whole-content secret scan, retained receipt, never an install gate) and v18's installation lifecycle/exact uninstall-operation grants. Alpha.63 v19 (R4a, owner 2026-11-05 option 3) adds five MCP actor tool rules (see MCP actor and runtime-socket authority). Old installations change only by explicit upgrade; the witnessed `init policy --upgrade` path can add the template delta, while managed upgrade remains inside I2. Current rollback removes only content-equal v19 delta, on a provably fresh v19 install too (owner 2026-11-05, amending J3 for this delta only); it does not undo historical v16–v18 grants and keeps customized rows as conflicts. Headless `init --yes` leaves profile/mode authority pending until the first witnessed terminal open; interactive setup applies the selected profile's registry defaults through the existing managed policy path. OPEN (owner 2026-10-24, retained after v17/v18): adding a recovery/Nervous rule or version should not require a template version. Measured-exit rechecks bind policy revision, not a measurement sealed between read and write. Proof is external; N1 and independent acceptance remain separate.
+  Historical template sequence: alpha.56 v18 retained v16 recovery cells and added v17 named-person `coding.first-commit` (person card, whole-content secret scan, retained receipt; never an install gate) and v18 lifecycle/uninstall grants; alpha.63 v19 (owner 2026-11-05 option 3) added five MCP actor tool rules. The owner’s 2026-11-05 fresh-v19 rollback exception applied to that then-current delta; v20 now supersedes its current rollback meaning. Current alpha.64 template v20 adds Run and registry-setting proposal rules, always on person cards (no mode relaxation). At service start a bounded, audited, archived add-only upgrade installs missing v20 proposal rules once when the OS person owns both policy and bindings files, readable authority history exists and a scoped allow rule names that person; hand-built policy uses the configured service scope. Archive evidence of any previous v20 grant, including a revoked one, prevents automatic re-addition. Existing effective proposal coverage is not duplicated; customized same-id rows remain conflicts. Unreadable history or different ownership skips without granting. Explicit witnessed upgrade remains available; managed changes retain I2. Current rollback removes only content-equal v20 proposal delta (including a provably fresh install), keeps custom conflicts and all v19 model/tool grants and earlier v16–v18 authority. Headless `init --yes` still leaves profile/mode authority pending for the first witnessed terminal open. OPEN (owner 2026-10-24): a new recovery/Nervous rule or version should not require a template version; v20 does not solve it. Measured-exit checks bind policy revision, not a measurement sealed between read and write. N1/independent acceptance remains separate.
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor` and `/tasks` are
@@ -1067,7 +1076,9 @@ latest/deprecated/provenance, alternative versions, `npm audit signatures`, lice
 HIGH/CRITICAL and on any unreadable source. `acceptedRisks` (evidence-backed, expiring ≤ 30 days for HIGH/CRITICAL, ≤ 90 otherwise) turn
 an exactly matching advisory set on one package@version and carrier into MITIGATED report rows that do not fail; expiry or any
 advisory/version/carrier/severity change fails again; lint-arch validates the entries and warns after expiry. The one entry today is
-fast-uri 3.1.0 inside MCP SDK 2.3.1 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
+fast-uri 3.1.8 in MCP SDK client/server 2.4.0, installed dev/test tree only, expires 2026-12-21
+(`dependencies.json` is authoritative; the published bundle excludes it). The owner-requested automatic not-shipped
+renewal rule is still planned; `deps-watch` still checks expiry. Remove the risk when the SDK ships a corrected bundle.
 The daily/weekly/manual deps-watch runs in `platform-verification.yml` independently of its advisory macOS/Windows matrix.
 
 **Published package (DEPS-DIST, 2026-09-29; ninth batch).** The npm package has no `dependencies`: `scripts/build-dist.mjs` bundles
@@ -1150,7 +1161,7 @@ Repository standards are human/host-maintained files; Markdown admission does no
 Development-host, skill, Jev, review-channel and process-board decisions (not product contracts) are kept verbatim in
 [development host and documents](.deckent/docs/architecture/modules/development-host-and-documents.md).
 
-Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); it also binds the first CHANGELOG.md release and the highest README/README.tr/SECURITY alpha or beta claim to package.json (or the last released version while the top line is Unreleased), reads CHANGELOG.md followed by the required CHANGELOG-alpha.md as one strictly descending SemVer history, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). Since 2026-10-18 relative Markdown links in those files and `docs/*.md` must resolve to an existing file and GitHub heading anchor, and every `docs/X.md` needs `docs/X.tr.md` with the same link targets (shrink-only English-only baseline: `docs/secret-helpers.md`). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
+Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 66 KiB, no line > 800 chars) and this file (≤ 1300 lines); it also binds the first CHANGELOG.md release and the highest README/README.tr/SECURITY alpha or beta claim to package.json (or the last released version while the top line is Unreleased), reads CHANGELOG.md followed by the required CHANGELOG-alpha.md as one strictly descending SemVer history, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). Since 2026-10-18 relative Markdown links in those files and `docs/*.md` must resolve to an existing file and GitHub heading anchor, and every `docs/X.md` needs `docs/X.tr.md` with the same link targets (shrink-only English-only baseline: `docs/secret-helpers.md`). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
 Every live beta release bumps `1.0.0-beta.N` and adds exactly one human-curated line (version, date, landed commit, what it brings) to [CHANGELOG.md](CHANGELOG.md); the closed alpha history remains in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
 Design reasoning goes into [decisions.md](.deckent/docs/architecture/decisions.md).
 
@@ -1177,7 +1188,7 @@ CI-SPEED (owner-approved CI stability, 2026-10-06; landed in alpha.8): local int
 
 **W3-AUTHORITY (owner 2026-10-09; released in alpha.22):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
-service-bound calls carry `channel: mcp` (local protocol v30 since alpha.60, lifecycle window `[30,29]`; was v29 `[29,28]`), current-only mutations. This metadata delegates no
+service-bound calls carry `channel: mcp` (current local protocol v31 since alpha.64; lifecycle-only v30 compatibility; historical alpha.60 v30 `[30,29]`, earlier v29 `[29,28]`), current-only mutations. This metadata delegates no
 other OS identity and only narrows the actor. **SEC-1 (owner A48-D5, 2026-10-19):** the socket admits a same-UID peer only in the service's own PID, mount and user namespaces (a sandboxed peer is refused at accept, before any frame); the full-access bubblewrap view hides every bound runtime socket directory; `setPermissionMode`, `setSecret`, `deleteSecret` and `switchSecretStore` need the service-attested terminal witness of the peer on every surface (an engine `AuthorityWitness` port; the MCP actor is always refused; `AUTHORITY_WITNESS_REQUIRED`, nothing decided, audited or written); protocol v29 bytes are unchanged. A same-account process outside a sandbox remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 added named observation rules only; v19 (R4a, owner 2026-11-05 option 3) adds the person's first-run tool rules for the MCP actor in the installed scope (`model-invocation` invoke only, never another principal's content or cancel; read and scratch tools allow, edit/shell tools require-approval `modeEligible`,
 `workspace.file.write`/`host.shell.run`/`workspace.scratch.write` execute). The native agent and external MCP clients share that actor, so an external client may invoke models within budget, quota and `ai` consent; native chat and worker calls follow the mode of the person who owns the AI actor (`AgentToolCallRequest.person`); without that person an AI actor gets no mode relaxation. R9 (owner 2026-11-05): a Run worker's mode is the lower of the plan-card ceiling (`execution.workerMode`, never above full-auto) and the person's current mode, and its read-only shell commands are lowered under the eligible rule (audit cell `shell-read`); terminal turns are unchanged ([permission-modes](.deckent/docs/architecture/modules/permission-modes.md) R9). Config, secret, policy, approval-decide, backup and uninstall authority stay absent. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
