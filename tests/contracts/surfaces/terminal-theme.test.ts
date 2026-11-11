@@ -30,13 +30,20 @@ it('uses the approved brand roles only in dark/light, with a selection backgroun
     for (const group of groups) for (const role of group.roles) expect(palette[role as keyof typeof palette].color).toBe(group[theme]);
     expect(THEME_BACKGROUNDS[theme]).toContain(theme === 'dark' ? '#191B1A' : '#F4F5F2');
     const background = theme === 'dark' ? '#153B39' : '#DCE9E7', foreground = theme === 'dark' ? '#E7E3D9' : '#0B1215';
-    const indexed = theme === 'dark' ? 236 : 254;
-    expect(palette.selection).toEqual({ backgroundColor: background, bold: true });
-    expect(resolveWorklinePalette('ansi256', theme).selection).toEqual({ backgroundColor: `ansi256(${indexed})`, bold: true });
+    const indexed = theme === 'dark' ? 236 : 254, foregroundIndex = theme === 'dark' ? 254 : 233;
+    expect(palette.selection).toEqual({ color: foreground, backgroundColor: background, bold: true });
+    expect(resolveWorklinePalette('ansi256', theme).selection).toEqual({ color: `ansi256(${foregroundIndex})`, backgroundColor: `ansi256(${indexed})`, bold: true });
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(foreground, xterm(indexed))).toBeGreaterThanOrEqual(4.5);
     // The reported terminal ground never treats a selection background as coloured text and suppresses it.
     expect(resolveWorklinePalette('truecolor', theme, THEME_BACKGROUNDS[theme].at(-1)).selection).toEqual(palette.selection);
+    // Pinning a theme against the terminal ground must emit a readable pair, independent of the terminal's own foreground.
+    for (const tier of ['truecolor', 'ansi256'] as const) for (const ground of theme === 'dark' ? ['#F0ECE5', '#FFFFFF'] : ['#191B1A', '#000000']) {
+      const selection = resolveWorklinePalette(tier, theme, ground).selection;
+      expect(selection).toEqual(resolveWorklinePalette(tier, theme).selection);
+      const emittedHex = (color: string) => tier === 'truecolor' ? color : xterm(Number(color.match(/^ansi256\((\d+)\)$/u)![1]));
+      expect(contrast(emittedHex(selection.color!), emittedHex(selection.backgroundColor!)), `${theme}/${tier} pinned on ${ground}`).toBeGreaterThanOrEqual(4.5);
+    }
     expect(palette.link.underline).toBe(true); expect(palette.focus).toEqual({ inverse: true });
   }
   for (const theme of PALETTE_THEMES) {

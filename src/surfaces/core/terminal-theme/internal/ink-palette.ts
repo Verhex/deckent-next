@@ -92,7 +92,10 @@ function roleStyle(theme: PaletteTheme, role: PaletteRole, tier: ColorTier, back
   const style: { color?: string; backgroundColor?: string; bold?: boolean; underline?: boolean; inverse?: boolean } = {};
   const color = tierColor(theme, role, tier);
   const selectionBackground = entry.background && (tier === 'truecolor' || tier === 'ansi256');
-  if (selectionBackground && color !== undefined) style.backgroundColor = color;
+  if (selectionBackground && color !== undefined) {
+    style.backgroundColor = color;
+    if (entry.foreground) style.color = tier === 'truecolor' ? entry.foreground.hex : `ansi256(${entry.foreground.ansi256})`;
+  }
   else if (color !== undefined && (background === undefined || readable(theme, role, tier, background))) style.color = color;
   if (entry.attrs.includes('1')) style.bold = true;
   if (entry.attrs.includes('4')) style.underline = true;

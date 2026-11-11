@@ -20,6 +20,8 @@ export interface PaletteEntry {
   readonly contrast: PaletteContrast;
   /** Hex/256 is a selection background; ANSI16 keeps its foreground and reverse-video attributes. */
   readonly background?: boolean;
+  /** The selection's paired text colour at rich tiers, independent of the terminal's foreground. */
+  readonly foreground?: Readonly<{ hex: string; ansi256: number }>;
 }
 
 export const PALETTE_THEMES: readonly PaletteTheme[] = ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast', 'light-high-contrast', 'neutral-ansi'];
@@ -43,7 +45,7 @@ export const THEME_PALETTES: Readonly<Record<PaletteTheme, Readonly<Record<Palet
     workerCard: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
     windowBorder: { hex: '#A8A89C', ansi256: 248, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
     windowTitle: { hex: '#6CCFAE', ansi256: 79, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
-    selection: { hex: '#153B39', ansi256: 236, ansi16: '96', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true },
+    selection: { hex: '#153B39', ansi256: 236, ansi16: '96', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true, foreground: { hex: '#E7E3D9', ansi256: 254 } },
     diffAdded: { hex: '#9BE3A6', ansi256: 115, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
     diffRemoved: { hex: '#F0806E', ansi256: 209, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
     modeIndicator: { hex: '#6CCFAE', ansi256: 79, ansi16: '96', attrs: [], class: 'supplemental', contrast: 'text' },
@@ -76,7 +78,7 @@ export const THEME_PALETTES: Readonly<Record<PaletteTheme, Readonly<Record<Palet
     workerCard: { hex: '#136F57', ansi256: 23, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'border' },
     windowBorder: { hex: '#566065', ansi256: 59, ansi16: '90', attrs: [], class: 'decorative', contrast: 'border' },
     windowTitle: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: ['1'], class: 'primary', contrast: 'text' },
-    selection: { hex: '#DCE9E7', ansi256: 254, ansi16: '36', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true },
+    selection: { hex: '#DCE9E7', ansi256: 254, ansi16: '36', attrs: ['1', '7'], class: 'primary', contrast: 'none', background: true, foreground: { hex: '#0B1215', ansi256: 233 } },
     diffAdded: { hex: '#136F57', ansi256: 23, ansi16: '32', attrs: [], class: 'supplemental', contrast: 'text' },
     diffRemoved: { hex: '#A8281C', ansi256: 124, ansi16: '31', attrs: [], class: 'supplemental', contrast: 'text' },
     modeIndicator: { hex: '#0A4A4F', ansi256: 23, ansi16: '36', attrs: [], class: 'supplemental', contrast: 'text' },

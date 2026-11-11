@@ -17,6 +17,7 @@ const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/
  */
 const PRIMITIVES = {
   dark: {
+    brandText: { hex: '#E7E3D9' },
     brandAccent: { hex: '#6CCFAE' }, brandInfo: { hex: '#A9BFD6' }, brandSuccess: { hex: '#9BE3A6' },
     brandWarning: { hex: '#F2B24A' }, brandError: { hex: '#F0806E' }, brandMuted: { hex: '#A8A89C' }, brandSelection: { hex: '#153B39' },
     modelBlue: { hex: '#87AFFF', ansi256: 111 }, providerPurple: { hex: '#D7AFFF', ansi256: 183 },
@@ -29,6 +30,7 @@ const PRIMITIVES = {
     novaOrange: { hex: '#F0883E' },
   },
   light: {
+    brandText: { hex: '#0B1215' },
     brandAccent: { hex: '#0A4A4F' }, brandInfo: { hex: '#2E4A68' }, brandSuccess: { hex: '#136F57' },
     brandWarning: { hex: '#8A5300' }, brandError: { hex: '#A8281C' }, brandMuted: { hex: '#566065' }, brandSelection: { hex: '#DCE9E7' },
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
@@ -93,6 +95,7 @@ function entryFor(theme, roleName, spec) {
   const primitiveName = themeSpec.primitives?.[roleName] ?? spec.primitive;
   const primitive = primitiveName && !themeSpec.ansiOnly ? primitiveFor(theme, primitiveName) : undefined;
   const background = themeSpec.background?.[roleName] === true;
+  const foreground = background ? primitiveFor(theme, themeSpec.foreground[roleName]) : undefined;
   const hex = primitive?.hex ?? null;
   const ansi256 = primitive?.ansi256 ?? null;
   const override = map.themes[theme]?.ansi16?.[roleName];
@@ -100,7 +103,7 @@ function entryFor(theme, roleName, spec) {
   const attrs = (map.themes[theme]?.attrs?.[roleName] ?? spec.attrs ?? []).map(String);
   const className = spec.class ?? 'primary';
   const contrast = hex === null || background ? 'none' : spec.contrast ?? 'text';
-  return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}'${background ? ', background: true' : ''} },`;
+  return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}'${background ? `, background: true, foreground: { hex: '${foreground.hex}', ansi256: ${foreground.ansi256} }` : ''} },`;
 }
 
 const roleUnion = roles.map(([name]) => `'${name}'`).join(' | ');
@@ -127,6 +130,8 @@ export interface PaletteEntry {
   readonly contrast: PaletteContrast;
   /** Hex/256 is a selection background; ANSI16 keeps its foreground and reverse-video attributes. */
   readonly background?: boolean;
+  /** The selection's paired text colour at rich tiers, independent of the terminal's foreground. */
+  readonly foreground?: Readonly<{ hex: string; ansi256: number }>;
 }
 
 export const PALETTE_THEMES: readonly PaletteTheme[] = [${themes.map(([name]) => `'${name}'`).join(', ')}];

@@ -61,12 +61,10 @@ export function lineRange(blocks: ViewportBlocks, a: SelectionPoint, b: Selectio
   return { start: from.key === key && from.line === line ? from.cell : 0, end: to.key === key && to.line === line ? to.cell : Number.MAX_SAFE_INTEGER };
 }
 
-/** Selected cells use the palette background and normal foreground, or the existing reverse-video fallback. Restore the line's own SGR. */
-export function highlightCells(line: string, start: number, end: number, style: Readonly<{ backgroundColor?: string; bold?: boolean }> = {}): string {
-  const background = style.backgroundColor, indexed = background?.match(/^ansi256\((\d+)\)$/u);
-  const rgb = background?.startsWith('#') ? hexChannels(background) : null;
-  const backgroundCode = rgb ? `48;2;${rgb.join(';')}` : indexed ? `48;5;${indexed[1]}` : null;
-  const open = backgroundCode ? `\u001b[0m\u001b[${backgroundCode}m${style.bold ? '\u001b[1m' : ''}` : REVERSE_ON;
+/** Selected cells use the palette's background/foreground pair, or the existing reverse-video fallback. Restore the line's own SGR. */
+export function highlightCells(line: string, start: number, end: number, style: Readonly<{ color?: string; backgroundColor?: string; bold?: boolean }> = {}): string {
+  const backgroundCode = colorCode(style.backgroundColor, 48), foregroundCode = colorCode(style.color, 38);
+  const open = backgroundCode ? `\u001b[0m${foregroundCode}${backgroundCode}${style.bold ? '\u001b[1m' : ''}` : REVERSE_ON;
   let rest = line, at = 0, out = '', inside = false, saved = '';
   const close = () => backgroundCode ? `\u001b[0m${saved}` : REVERSE_OFF;
   while (rest.length > 0) {
@@ -83,6 +81,12 @@ export function highlightCells(line: string, start: number, end: number, style: 
     rest = rest.slice(textEnd + code[0].length);
   }
   return inside ? out + close() : out;
+}
+
+function colorCode(color: string | undefined, plane: 38 | 48): string {
+  const indexed = color?.match(/^ansi256\((\d+)\)$/u);
+  const value = color?.startsWith('#') ? `${plane};2;${hexChannels(color).join(';')}` : indexed ? `${plane};5;${indexed[1]}` : null;
+  return value ? `\u001b[${value}m` : '';
 }
 
 function hexChannels(hex: string): number[] {
