@@ -300,7 +300,7 @@ System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offe
 (`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.
 System prompt **v10** (NATIVE-BAGLAM, owner 2026-10-14, beta gate 3; live finding: "hangi moddayız" was answered by reading
 `.deckent/config.json`, one answer carried English reasoning): after the tools the segment carries the **session context v1**
-(`engine/core/agent-turn/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): Deckent version, scope, session id, the permission mode as
+(`src/engine/core/agent-turn/internal/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): Deckent version, scope, session id, the permission mode as
 the decision reads it (`principalPermissionMode`; a stored full-access start mode without a launched full-access turn reads standart;
 `askEdits` named) with a one-line meaning, thinking (`on` / `off` from `chatTurn.reasoning` / `model-default` when the catalog declares no
 `chat-template-enable-thinking`), the binding's supported catalog capabilities per protocol (≤ 4 protocols, ≤ 16 ids), each offered tool's
@@ -499,8 +499,13 @@ F08: the tree gate, lease/delegation checks, K6 reservation and guarded verifica
 Admitted task artifacts and predecessor handoffs appear only in tool views at `/deckent/inputs/...`;
 dependency binds retain their admitted targets. Read tools use the shared scoped reader; shell calls and
 read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
-Receipts, source roots, scope, byte limits and link checks are rechecked before consumption. A realm unable
-to provide those views refuses them. The CLI receives neither these mounts nor their paths in argv.
+NAT-3 amendment (owner 2026-11-09, B4(a)): receipts, original source roots, scope, byte/time/depth limits and link checks are
+validated once when admitting the input into bounded Deckent-owned private read-only copies. Later tool reads and shell
+views validate and use the copies (custody, directory seals, bytes and digests), not the originals. A later source edit
+neither changes nor refuses an already admitted input; a changed copy is refused. Copies consume disk under the Attempt's
+custody and follow its retention/removal lifecycle, not a separate permanent input store. See
+[the retained decision](../../decisions/owner-decisions.md#native-input-copies-2026-11-09). A realm unable
+to provide those views refuses them; this source description is not an assembled-release acceptance claim. The CLI receives neither these mounts nor their paths in argv.
 Native template defaults derive their Node requirement from the native CLI registry's hard `dataBytes`
 bound and `native-agent-execution/internal/worker-environment.json`'s heap policy; Docker defaults and
 explicit environment declarations retain their own values. Both read-only probes and governed worker

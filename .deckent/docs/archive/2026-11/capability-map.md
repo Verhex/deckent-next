@@ -2,8 +2,17 @@
 
 > **Durum notu (2026-10-23):** Bu sayfa 2026-10-05 durumunun donmuş kaydıdır; içindeki "açık", "sıradaki", "bugün" ve "güncel" ifadeleri o günü anlatır. Bugünkü yetenekleri [mimari genel bakış](../../../../docs/architecture-overview.md) ve [bilinen sınırlar](../../../../docs/known-limits.md) anlatır. Güncel iş ve durum [PLAN](../../../../PLAN.md)'da, tamamlanan iş [COMPLETED-PLAN](../../../../COMPLETED-PLAN.md)'dadır.
 
+## Bağlantı düzeltme notu — 2026-11-11
+
+Arşiv gövdesi ve kaynak SHA kaydı korunur. Eski `src/composition/core/artifacts` bağlantısının güncel sahibi
+[artifacts capability](../../../../src/capabilities/core/artifacts/index.ts), eski `src/composition/core/storage`
+bağlantısının SQLite adapter karşılığı [sqlite-ledger](../../../../src/adapters/core/sqlite-ledger/index.ts) içindedir.
+Bu gezinme notu tarihsel yetenek tablosunu güncel ürün veya kabul kanıtına dönüştürmez.
+
+
 Bugün ne var/eksik, yüzey bağlantıları ve ayarların sahipliği tabloları.
 Kaynak/Source: PLAN.md @58537c7f lines 141–191; text below is verbatim.
+
 
 ## Güncel yetenek haritası
 

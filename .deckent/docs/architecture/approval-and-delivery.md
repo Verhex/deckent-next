@@ -41,8 +41,12 @@ allow and deny; a client-declared channel or a turn capability does not bypass t
 pending and adds no decision. The session rechecks terminal evidence before privileged settlement. Hard-floor allow still requires
 at least turn-bound assurance (Core attests it with the initiating process's capability; selected extension producers may attest a stronger level). There is no automation exception; TTY attestation cannot prove human presence against a same-UID
 process that allocates its own PTY. MCP handlers run under the separate `<host>/mcp` actor; protocol v26 introduced that actor context on
-service calls (lifecycle `[26,25]` at the time) and the current runtime protocol (v29) still carries it; model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
-including through add-only custom-policy upgrades. Existing owner rules/terminal spending authority are preserved.
+service calls (lifecycle `[26,25]` at the time) and the current runtime protocol (v31) still carries it; model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
+including through add-only custom-policy upgrades; that is the historical v9 default. The v19/v20 template now gives the
+shared AI actor scoped model-call, read and scratch rights, mode-eligible edit/shell rules, and proposal rules that require
+a person's card in every mode. Consent, budget/quota and sandbox checks still bind. MCP has no approval-decision tool.
+See [the v19 amendment](../decisions/owner-decisions.md#owner-kararlari-2026-11-04-06) and the current template in
+`src/domain/core/policy-template/internal/first-run-template.ts`; existing owner rules/terminal spending authority are preserved.
 
 
 CI-FIX-R5 (`lane/ci-fix-r5`, 2026-10-04; landed in alpha.5): nonempty stale config-lock recovery retains the
@@ -986,8 +990,8 @@ signed. Author controls and open acceptance limits live in external POLITIKA-P0 
 
 ## First-run template v11 (SABLON-V11, owner 2026-10-13)
 
-(This section records the v11 delta. The current template is v15 and upgrades go to it; see
-[core layers](modules/core-layers.md#one-rule-for-every-switched-layer-off-until-a-person-turns-it-on) for both upgrade paths.)
+(This section records the v11 delta. The current template is v20; see the
+[operator upgrade reference](operator-reference.md#first-run-setup) for the full upgrade paths.)
 
 Fresh installs and installer `init policy --upgrade` add three named-person rules:
 `first-run-quota-release` grants pool `release-quota` for all ids and all scopes;
