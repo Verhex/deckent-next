@@ -16,7 +16,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 const SECRET = 'W3-SYNTHETIC-CREDENTIAL';
-const CREDENTIALS = ['.config/gh/hosts.yml', '.docker/config.json', '.kube/config', '.codex/auth.json', '.git-credentials',
+const CREDENTIALS = ['.config/gh/hosts.yml', '.docker/config.json', '.kube/config', '.codex/auth.json', '.claude/.credentials.json', '.config/cursor/auth.json', '.git-credentials',
   '.aws/credentials', '.aws/config', '.azure/accessTokens.json', '.azure/msal_token_cache.json', '.config/gcloud/application_default_credentials.json',
   '.config/doctl/config.yaml', '.oci/config', '.aliyun/config.json', '.config/aliyun/config.json', '.config/hcloud/cli.toml',
   '.config/ibmcloud/config.json', '.bluemix/config.json', '.terraform.d/credentials.tfrc.json', '.dbus/session-bus/fake'];
@@ -27,6 +27,7 @@ async function fixture(fullAccess = false) {
   for (const name of ['config.json', 'policy.json']) await writeFile(join(project, '.deckent', name), '{}\n');
   for (const name of ['secrets.key', 'secrets.sealed.json']) await writeFile(join(global, name), SECRET);
   for (const name of CREDENTIALS) { const path = join(home, name); await mkdir(dirname(path), { recursive: true }); await writeFile(path, SECRET); }
+  for (const name of ['.claude/settings.json', '.config/cursor/cli-config.json']) await writeFile(join(home, name), 'ordinary settings');
   const environment: Record<string, string> = { HOME: home, PATH: '/usr/bin:/bin', DECKENT_GLOBAL_HOME: global };
   const product = resolveProductLayout({ projectRoot: project });
   const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, agentWorkspaceDeny(project, product, fullAccess)), scratchDir: scratch,
@@ -90,6 +91,10 @@ describe('W3: real sandbox negative paths (synthetic files and IPC only)', () =>
       expect(out.output).not.toContain(SECRET); expect(out.output).not.toContain('UNSAFE-HOST-IPC');
     }
     expect((await f.run('bubblewrap', `echo allowed > '${f.home}/notes.txt'; echo allowed > src/allowed`, true)).exitCode).toBe(0);
+    for (const name of ['.claude/settings.json', '.config/cursor/cli-config.json']) {
+      const out = await f.run('bubblewrap', `cat '${join(f.home, name)}'`, true);
+      expect(out.exitCode, out.output).toBe(0); expect(out.output).toContain('ordinary settings');
+    }
     expect(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).toBe('{}\n');
     expect(await readFile(join(f.home, 'notes.txt'), 'utf8')).toBe('allowed\n');
   }, 60_000);
