@@ -210,104 +210,116 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       return { grant, lines: [{ label: t('tui.provider.field.key', {}, locale), text: grant ? t('tui.provider.key.projectUse', { project: root }, locale) : t('tui.provider.key.adminGrant', { project: root, scope: scopeId, name }, locale) },
         { label: t('tui.provider.field.storage', {}, locale), text: custodyText(backend, locale), tone: 'muted' as const }] };
     } } : {}),
-    async inspect() {
-      const notes: string[] = [];
-      let names: readonly string[] | null = null;
-      if (host.listSecretNames) {
-        try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
-        catch (error) { notes.push(isCodedError(error, 'SECRET_STORE_UNSUPPORTED') ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
-      }
-      let named: readonly string[] = [], served: string | null = null;
+    async inspect(progress, signal) {
+      const checking = t('tui.model.checking', {}, locale), title = t('tui.panel.provider.title', {}, locale);
+      const checkingRows: ProviderPanelKind[] = connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(kind => ({
+        id: kind.id, label: kindLabel(kind, kind.id, locale), detail: checking, blocked: checking, keyName: kind.secretName, keyStored: false,
+        endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: [], models: [], modelBlocked: checking }));
+      progress?.({ title, kinds: [...checkingRows], notes: [] });
+      const opening = await host.openModelInspection?.(root, scopeId, options, signal), reads = { ...host, ...opening?.host };
       try {
-        const config = await loadConfig(root, options) as Record<string, unknown>;
-        named = credentialRefs(config, scopeId);
-        // The installation's own inference server (inference_serving), when configured: the first address offered (owner 2026-10-08, D3).
-        try { const profile = readInferenceServingProfile(config); served = profile ? buildInferenceServingPlan(profile).openaiBaseUrl : null; } catch { served = null; }
-      } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
-      /** The kind's address list: the configured server, the kind's known addresses (adapter data), the provider's default; one row per base. */
-      const choicesOf = (kind: ProviderConnectKindView) => {
-        if (!kind.endpointEditable) return [];
-        const rows = [...(served ? [{ id: 'configured', label: t('tui.provider.endpoint.choice.configured', {}, locale), url: served }] : []),
-          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: messageText(choice.labelKey, locale) ?? choice.id, url: choice.url })),
-          ...(kind.endpointDefault ? [{ id: 'default', label: t('tui.provider.endpoint.choice.default', {}, locale), url: kind.endpointDefault }] : [])];
-        const seen = new Set<string>();
-        return rows.flatMap(row => {
-          const checked = connect.endpoint(row.url);
-          if (!checked.ok || seen.has(checked.base)) return [];
-          seen.add(checked.base);
-          return [{ ...row, url: checked.base }];
-        });
-      };
-      // T4-B: what each kind can connect — its seed's models (exact ids), or the declared catalog models speaking its protocol family.
-      let declared: readonly DeclaredConnectionModel[] = [];
-      if (host.inspectDeclaredModels && host.connectModel) {
+        const displayReadiness = subscriptionReadinessPort(root, scopeId, reads, options);
+        const notes: string[] = [];
+        let names: readonly string[] | null = null;
+        if (host.listSecretNames) {
+          try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
+          catch (error) { notes.push(isCodedError(error, 'SECRET_STORE_UNSUPPORTED') ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
+        }
+        let named: readonly string[] = [], served: string | null = null;
         try {
-          const inspection = await host.inspectDeclaredModels(root, options);
-          if (inspection.status === 'declared') declared = inspection.catalog.providers.flatMap(provider => provider.models.map(model => {
-            const key = referenceKey({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version });
-            return { id: `${DECLARED}${key}`, label: model.id, detail: key, family: model.protocols.map(protocol => protocol.family) };
-          }));
-        } catch { declared = []; }
-      }
-      const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
-        await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
-      // PV 2a: a CLI subscription that runs only isolated is disabled with its reason on a host without usable isolation (refusal card on Enter).
-      isolation = connect.isolationRefusal && connect.kinds.some(kind => kind.headlessLogin) ? await connect.isolationRefusal(options).catch((error: unknown) => error) : null;
-      const isolationReason = isolation instanceof DeckentError ? ErrorRegistry.get(isolation.code, locale, isolation.params)?.message ?? t('tui.provider.isolation.blocked', {}, locale)
-        : t('tui.provider.isolation.blocked', {}, locale);
-      const reading = await host.inspectInvocableModels?.(root, scopeId, options), catalogView = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a worker-only CLI channel's count
-      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(async kind => {
-        const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
-        // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
-        const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
-        // R8e: the count is the channel's active catalog models; the notes below mark the others "Off" from the same rows.
-        const active = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === (kind.catalogProviderId ?? kind.id)), on = active && active.access === 'allowed' ? active.models.filter(model => model.activation?.state === 'active').length : 0;
-        const stateDetail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
-          : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
-        const join = (lead: string) => stateDetail && stateDetail !== '-' ? `${lead} · ${stateDetail}` : lead; // BeUser r-rest 4: no dangling "· -"
-        const detail = kind.terminalTextChat ? join(t('tui.provider.login.ownSubscriptionNote', {}, locale)) : stateDetail;
-        let grantBlocked: string | null = null, grantRequired = false;
-        if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
-          grantBlocked = errorText(error); grantRequired = isCodedError(error, 'SECRET_GRANT_REQUIRED');
-        } }
-        // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
-        const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.terminalTextChat ? detail : kind.presentation === 'beta' ? join(t('tui.provider.beta', {}, locale)) : kind.billing === 'subscription' && kind.available ? join(t('tui.provider.billing.subscription', {}, locale)) : detail,
-          blocked: !kind.available ? `${t('tui.provider.unavailable', {}, locale)} ${t('siwc.card.apiKey', {}, locale)}` : kind.headlessLogin && isolation ? isolationReason : null, keyName, keyStored: stored, grantRequired,
-          endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
-          models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
-          // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
-          modelBlocked: kind.keyRequired && keyName !== null ? grantBlocked ?? (!stored ? t('tui.provider.model.needsKey', {}, locale) : null) : null };
-      }));
-      // (c) A key kept under a name no row uses any more (T4-A's shared OpenAI-compatible slot): warned, removable, never used.
-      for (const legacy of connect.legacyKeys ?? []) {
-        if (names === null || !names.includes(legacy.secretName)) continue;
-        const target = kindLabel(kindOf(legacy.moveTo), legacy.moveTo, locale);
-        notes.push(t('tui.provider.legacy.note', { name: legacy.secretName, kind: target }, locale));
-        kinds.push({ id: `${LEGACY}${legacy.secretName}`, label: t('tui.provider.legacy.label', { name: legacy.secretName }, locale), detail: t('tui.provider.legacy.detail', { kind: target }, locale),
-          blocked: null, keyName: legacy.secretName, keyStored: true, endpointEditable: false, endpointDefault: null, keyRequired: true, endpointChoices: [], models: [], modelBlocked: null,
-          legacy: true });
-      }
-      if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
-      if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      const off = (model: NonNullable<typeof reading>['models'][number]) => { // R8e: the catalog row the kind's count reads, never a second source
-        const channel = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === model.reference.providerId);
-        const entry = channel?.access === 'allowed' ? channel.models.find(item => item.modelId === model.nativeId) : undefined;
-        return entry !== undefined && entry.activation?.state !== 'active';
-      };
-      const open = (reading?.models ?? []).filter(model => subscriptionReadiness.recognizes(model.reference) && !off(model)), readiness = await subscriptionReadiness.inspectMany('chat', open.map(model => model.reference));
-      const rows = (reading?.models ?? []).map(model => { const login = subscriptionReadiness.recognizes(model.reference), closed = login && off(model);
-        return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
-        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; });
-      // R3c: one note per subscription login (its models share the readiness words); a model whose words differ keeps its own; other models one note each.
-      const groups = new Map<string, typeof rows>();
-      for (const row of rows) { const key = row.login ? `${row.model.reference.providerId}\n${row.text}` : referenceKey(row.model.reference); groups.set(key, [...groups.get(key) ?? [], row]); }
-      notes.push(...[...groups.values()].map(group => {
-        const { model, login, text } = group[0]!, name = providerDisplayName(model.reference.providerId, connect, locale);
-        const whole = login && !group[0]!.off && group.length === rows.filter(row => row.login && !row.off && row.model.reference.providerId === model.reference.providerId).length;
-        return whole ? `${name} · ${t('tui.provider.state.models', { count: group.length }, locale)}: ${text}` : `${name} / ${group.map(row => row.model.nativeId).join(', ')}: ${text}`;
-      }));
-      return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
+          const config = opening?.config ?? await loadConfig(root, options) as Record<string, unknown>;
+          named = credentialRefs(config, scopeId);
+          // The installation's own inference server (inference_serving), when configured: the first address offered (owner 2026-10-08, D3).
+          try { const profile = readInferenceServingProfile(config); served = profile ? buildInferenceServingPlan(profile).openaiBaseUrl : null; } catch { served = null; }
+        } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
+        /** The kind's address list: the configured server, the kind's known addresses (adapter data), the provider's default; one row per base. */
+        const choicesOf = (kind: ProviderConnectKindView) => {
+          if (!kind.endpointEditable) return [];
+          const rows = [...(served ? [{ id: 'configured', label: t('tui.provider.endpoint.choice.configured', {}, locale), url: served }] : []),
+            ...kind.endpointChoices.map(choice => ({ id: choice.id, label: messageText(choice.labelKey, locale) ?? choice.id, url: choice.url })),
+            ...(kind.endpointDefault ? [{ id: 'default', label: t('tui.provider.endpoint.choice.default', {}, locale), url: kind.endpointDefault }] : [])];
+          const seen = new Set<string>();
+          return rows.flatMap(row => {
+            const checked = connect.endpoint(row.url);
+            if (!checked.ok || seen.has(checked.base)) return [];
+            seen.add(checked.base);
+            return [{ ...row, url: checked.base }];
+          });
+        };
+        // T4-B: what each kind can connect — its seed's models (exact ids), or the declared catalog models speaking its protocol family.
+        let declared: readonly DeclaredConnectionModel[] = [];
+        if (reads.inspectDeclaredModels && host.connectModel) {
+          try {
+            const inspection = await reads.inspectDeclaredModels(root, options);
+            if (inspection.status === 'declared') declared = inspection.catalog.providers.flatMap(provider => provider.models.map(model => {
+              const key = referenceKey({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version });
+              return { id: `${DECLARED}${key}`, label: model.id, detail: key, family: model.protocols.map(protocol => protocol.family) };
+            }));
+          } catch { declared = []; }
+        }
+        const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
+          await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
+        // PV 2a: a CLI subscription that runs only isolated is disabled with its reason on a host without usable isolation (refusal card on Enter).
+        isolation = connect.isolationRefusal && connect.kinds.some(kind => kind.headlessLogin) ? await connect.isolationRefusal(options).catch((error: unknown) => error) : null;
+        const isolationReason = isolation instanceof DeckentError ? ErrorRegistry.get(isolation.code, locale, isolation.params)?.message ?? t('tui.provider.isolation.blocked', {}, locale)
+          : t('tui.provider.isolation.blocked', {}, locale);
+        const reading = await reads.inspectInvocableModels?.(root, scopeId, options), catalogView = await reads.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a worker-only CLI channel's count
+        const off = (model: NonNullable<typeof reading>['models'][number]) => { // R8e: the catalog row the kind's count reads, never a second source
+          const channel = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === model.reference.providerId);
+          const entry = channel?.access === 'allowed' ? channel.models.find(item => item.modelId === model.nativeId) : undefined;
+          return entry !== undefined && entry.activation?.state !== 'active';
+        };
+        const open = (reading?.models ?? []).filter(model => displayReadiness.recognizes(model.reference) && !off(model)), readiness = await displayReadiness.inspectMany('chat', open.map(model => model.reference));
+        const rows = (reading?.models ?? []).map(model => { const login = displayReadiness.recognizes(model.reference), closed = login && off(model);
+          return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+          : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; });
+        const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(async kind => {
+          const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
+          // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
+          const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
+          // R8e: the count is the channel's active catalog models; the notes below mark the others "Off" from the same rows.
+          const active = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === (kind.catalogProviderId ?? kind.id)), on = active && active.access === 'allowed' ? active.models.filter(model => model.activation?.state === 'active').length : 0;
+          const stateDetail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
+            : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
+          const join = (lead: string) => stateDetail && stateDetail !== '-' ? `${lead} · ${stateDetail}` : lead; // BeUser r-rest 4: no dangling "· -"
+          const detail = kind.terminalTextChat ? join(t('tui.provider.login.ownSubscriptionNote', {}, locale)) : stateDetail;
+          let grantBlocked: string | null = null, grantRequired = false;
+          if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
+            grantBlocked = errorText(error); grantRequired = isCodedError(error, 'SECRET_GRANT_REQUIRED');
+          } }
+          // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
+          const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
+          const row: ProviderPanelKind = { id: kind.id, billing: kind.billing ?? 'metered', label: kindLabel(kind, kind.id, locale), detail: kind.terminalTextChat ? detail : kind.presentation === 'beta' ? join(t('tui.provider.beta', {}, locale)) : kind.billing === 'subscription' && kind.available ? join(t('tui.provider.billing.subscription', {}, locale)) : detail,
+            blocked: !kind.available ? `${t('tui.provider.unavailable', {}, locale)} ${t('siwc.card.apiKey', {}, locale)}` : kind.headlessLogin && isolation ? isolationReason : null, keyName, keyStored: stored, grantRequired,
+            endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
+            models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
+            // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
+            modelBlocked: kind.keyRequired && keyName !== null ? grantBlocked ?? (!stored ? t('tui.provider.model.needsKey', {}, locale) : null) : null };
+          const at = checkingRows.findIndex(row => row.id === kind.id); checkingRows[at] = row;
+          progress?.({ title, kinds: [...checkingRows], notes: [...notes] });
+          return row;
+        }));
+        // (c) A key kept under a name no row uses any more (T4-A's shared OpenAI-compatible slot): warned, removable, never used.
+        for (const legacy of connect.legacyKeys ?? []) {
+          if (names === null || !names.includes(legacy.secretName)) continue;
+          const target = kindLabel(kindOf(legacy.moveTo), legacy.moveTo, locale);
+          notes.push(t('tui.provider.legacy.note', { name: legacy.secretName, kind: target }, locale));
+          kinds.push({ id: `${LEGACY}${legacy.secretName}`, label: t('tui.provider.legacy.label', { name: legacy.secretName }, locale), detail: t('tui.provider.legacy.detail', { kind: target }, locale),
+            blocked: null, keyName: legacy.secretName, keyStored: true, endpointEditable: false, endpointDefault: null, keyRequired: true, endpointChoices: [], models: [], modelBlocked: null,
+            legacy: true });
+        }
+        if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
+        if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
+        // R3c: one note per subscription login (its models share the readiness words); a model whose words differ keeps its own; other models one note each.
+        const groups = new Map<string, typeof rows>();
+        for (const row of rows) { const key = row.login ? `${row.model.reference.providerId}\n${row.text}` : referenceKey(row.model.reference); groups.set(key, [...groups.get(key) ?? [], row]); }
+        notes.push(...[...groups.values()].map(group => {
+          const { model, login, text } = group[0]!, name = providerDisplayName(model.reference.providerId, connect, locale);
+          const whole = login && !group[0]!.off && group.length === rows.filter(row => row.login && !row.off && row.model.reference.providerId === model.reference.providerId).length;
+          return whole ? `${name} · ${t('tui.provider.state.models', { count: group.length }, locale)}: ${text}` : `${name} / ${group.map(row => row.model.nativeId).join(', ')}: ${text}`;
+        }));
+        return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
+      } finally { opening?.dispose(); }
     },
     endpoint(kind, text) {
       const checked = connect.endpoint(text);

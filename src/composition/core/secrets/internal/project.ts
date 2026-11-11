@@ -1,3 +1,4 @@
+import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
@@ -24,13 +25,13 @@ const globalRoot = (options: ConfigLoadOptions) => {
  * (one project, one vault, one grant record); any other project to itself. A `.git` file that is not a worktree of its repository (a copied
  * worktree folder) is `SECRET_PROJECT_VAULT_CLAIMED`. Null: the anchor has no installation or project identity yet.
  */
-export async function resolveProjectVaultAnchor(context: ProjectSecretContext, options: ConfigLoadOptions): Promise<ProjectVaultAnchor | null> {
+export async function resolveProjectVaultAnchor(context: ProjectSecretContext, options: ConfigLoadOptions, snapshot?: ModelInspectionSnapshot): Promise<ProjectVaultAnchor | null> {
   const projectRoot = context.config.projectRoot, repository = await projectRepository(projectRoot);
   if (repository.kind === 'foreign') throw projectVaultClaimed({ projectRoot });
   let installationId = context.installationId, projectId = context.projectId, dataRoot = context.layout.root, anchorRoot = projectRoot;
   if (repository.kind === 'linked' && repository.mainWorkTree !== null && repository.mainWorkTree !== projectRoot) {
-    const main = await loadComposedConfig(repository.mainWorkTree, { ...options, heal: false });
-    const installation = await loadConfiguredInstallationIdentity(main.projectRoot, options);
+    const main = await (snapshot?.configFor(repository.mainWorkTree) ?? loadComposedConfig(repository.mainWorkTree, { ...options, heal: false }));
+    const installation = await loadConfiguredInstallationIdentity(main.projectRoot, options, snapshot ? { config: main, inspectSource: snapshot.inspectSource } : undefined);
     const project = await new FileProjectIdentityStore(main.projectRoot, main.configFile.writeLockTimeoutMs).read();
     installationId = installation.status === 'available' ? installation.value.installationId : null;
     projectId = project.status === 'available' ? project.value.projectId : null;
@@ -41,8 +42,8 @@ export async function resolveProjectVaultAnchor(context: ProjectSecretContext, o
   return projectVaultAnchorSchema.parse({ installationId, projectId, binding, repository: repository.kind === 'none' ? null : repository.repository, projectRoot: anchorRoot });
 }
 /** The project's vault, read-only (also the inventory's current project): its anchor, directory (null: never written), `.deck`, store and grants. An existing vault of another owner is refused. */
-export async function openProjectSecrets(context: ProjectSecretContext, options: ConfigLoadOptions) {
-  const anchor = await resolveProjectVaultAnchor(context, options);
+export async function openProjectSecrets(context: ProjectSecretContext, options: ConfigLoadOptions, snapshot?: ModelInspectionSnapshot) {
+  const anchor = await resolveProjectVaultAnchor(context, options, snapshot);
   if (!anchor) return null;
   const root = globalRoot(options), directory = await projectVaultDirectory(root, anchor, false);
   if (directory) await admitProjectVault(directory, anchor, false, 0, lockMs(context));
@@ -57,10 +58,10 @@ export async function openProjectSecrets(context: ProjectSecretContext, options:
  * value is read. An injected `options.secretResolver` (tests, SDK) substitutes only the final main-vault read. A personal-file MCP server's `$DECK:` key
  * comes here too (KER-17 amendment 2026-10-28); installation-level secrets (backup passphrase, `$DECK:` in global config) never do.
  */
-export function projectCredentialResolver(context: ProjectSecretContext, scopeId: string, options: ConfigLoadOptions): ProjectCredentialResolver {
+export function projectCredentialResolver(context: ProjectSecretContext, scopeId: string, options: ConfigLoadOptions, snapshot?: ModelInspectionSnapshot): ProjectCredentialResolver {
   const decide = async (name: string): Promise<{ readonly decision: CredentialSource; readonly opened: Awaited<ReturnType<typeof openProjectSecrets>> }> => {
     assertPublicSecretName(name);
-    const opened = await openProjectSecrets(context, options);
+    const opened = await openProjectSecrets(context, options, snapshot);
     if (!opened) return { decision: decideCredentialSource({ identified: false, declaration: 'undeclared', projectHas: false, granted: false }), opened };
     const declaration = deckDeclaration(opened.deck, name);
     const projectHas = declaration !== 'main' && opened.store !== null && (await opened.store.listNames()).includes(name);
@@ -76,10 +77,10 @@ export function projectCredentialResolver(context: ProjectSecretContext, scopeId
   });
 }
 /** Typed refusal before send (headless, Brain, runtime and terminal turns alike): the decision, never a transport error. */
-export async function assertProjectCredential(context: ProjectSecretContext, scopeId: string, name: string, options: ConfigLoadOptions): Promise<void> {
-  const decision = await projectCredentialResolver(context, scopeId, options).check(name);
+export async function assertProjectCredential(context: ProjectSecretContext, scopeId: string, name: string, options: ConfigLoadOptions, snapshot?: ModelInspectionSnapshot): Promise<void> {
+  const decision = await projectCredentialResolver(context, scopeId, options, snapshot).check(name);
   if (decision.source !== 'refused') return;
-  const anchor = await resolveProjectVaultAnchor(context, options).catch(() => null);
+  const anchor = await resolveProjectVaultAnchor(context, options, snapshot).catch(() => null);
   throw credentialSourceError(decision.code, { name, project: anchor?.projectRoot ?? context.config.projectRoot, scopeId });
 }
 /** The same decision for a project root and scope (the terminal `/provider` window, after storing a key). */

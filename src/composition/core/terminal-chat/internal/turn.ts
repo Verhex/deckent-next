@@ -1,3 +1,5 @@
+import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
+import { resolveTerminalModel } from '#adapters/index.js';
 import { inspectNativeChat, nativeChatVerifiedAtMs } from './native.js';
 import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile } from '#domain/index.js';
@@ -27,10 +29,11 @@ type TerminalChatPlan = Readonly<{
   toolsVerifiedAtMs?: number;
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
-export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
-  let choice = await configuredTerminalModel(projectRoot, options), skipped: ModelReference | null = null;
-  if (choice?.source === 'user-default' && (await inspectModelBinding(projectRoot, choice.reference, options)).status !== 'declared') { skipped = choice.reference; choice = await configuredTerminalModel(projectRoot, options, null, true); }
-  const declared = choice ? null : await inspectDeclaredModels(projectRoot, options).catch(() => null);
+export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}, snapshot?: ModelInspectionSnapshot): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
+  const choose = async (skipDefault = false) => snapshot ? resolveTerminalModel(await snapshot.documents(), null, skipDefault) : configuredTerminalModel(projectRoot, options, null, skipDefault);
+  let choice = await choose(), skipped: ModelReference | null = null;
+  if (choice?.source === 'user-default' && (await (snapshot?.bindings.inspect(choice.reference) ?? inspectModelBinding(projectRoot, choice.reference, options))).status !== 'declared') { skipped = choice.reference; choice = await choose(true); }
+  const declared = choice ? null : snapshot?.declared ?? await inspectDeclaredModels(projectRoot, options).catch(() => null);
   const only = declared?.status === 'declared' ? declared.catalog.providers.flatMap(provider => provider.models.map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }))) : [];
   return { choice: choice ?? (only.length === 1 ? Object.freeze({ reference: only[0]!, source: 'connected' as const }) : null), skipped };
 }
@@ -51,24 +54,24 @@ const nativeChatProfile = (profiles: readonly ModelInvocationProfile[], scopeId:
   && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && isDeepStrictEqual(profile.reference, reference));
 /** R8e: the host's chat readiness read for `/provider` and `/model` (read only: no preflight, spawn or sign-in). KG6 F5: one view build is one call,
  * one forced config load and one typed profile read; each model still reads its own observation, and nothing is kept for the next build. */
-export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; references: readonly ModelReference[] }>, options: ConfigLoadOptions = {}) {
-  const profiles = query.surface === 'chat' ? configuredInvocationProfiles(await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>) : [];
+export async function inspectConfiguredNativeChat(projectRoot: string, query: Readonly<{ scopeId: string; surface: string; references: readonly ModelReference[] }>, options: ConfigLoadOptions = {}, snapshot?: ModelInspectionSnapshot) {
+  const profiles = query.surface === 'chat' ? configuredInvocationProfiles(snapshot?.config ?? await loadComposedConfig(projectRoot, { ...options, force: true, heal: false }) as Record<string, unknown>) : [];
   const readiness = configuredNativeChatReadiness(projectRoot, options, true, profiles);
   return Promise.all(query.references.map(reference => { const profile = nativeChatProfile(profiles, query.scopeId, reference);
     return profile ? inspectNativeChat(profile, { readiness }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const; }));
 }
-export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<TerminalChatPlan> {
-  runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options) };
-  const config = await loadComposedConfig(projectRoot, options) as Record<string, unknown>, chat = readTerminalChatConfig(config);
+export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }, snapshot?: ModelInspectionSnapshot): Promise<TerminalChatPlan> {
+  runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options, Boolean(snapshot), snapshot ? configuredInvocationProfiles(snapshot.config) : undefined) };
+  const config = snapshot?.config ?? await loadComposedConfig(projectRoot, options) as Record<string, unknown>, chat = readTerminalChatConfig(config);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
-  const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
+  const { choice, skipped } = await terminalModelHere(projectRoot, options, snapshot), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
   if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
-  const binding = await inspectModelBinding(projectRoot, reference, options);
+  const binding = await (snapshot?.bindings.inspect(reference) ?? inspectModelBinding(projectRoot, reference, options));
   const profile = nativeChatProfile(configuredInvocationProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
-  const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true)).catch(() => null) : null;
+  const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',

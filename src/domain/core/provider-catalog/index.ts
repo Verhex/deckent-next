@@ -2,7 +2,7 @@ export { NATIVE_MODEL_ID_MAX_LENGTH, /** @deprecated No importer in Core; barrel
   ProviderCatalogError, parseProviderCatalog, providerCatalogObjectSchema, providerProtocolSchema } from './internal/catalog.js';
 export type { ProviderCatalog, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ProviderCatalogErrorCode } from './internal/catalog.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MODEL_BINDING_ENCODING_VERSION, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ MODEL_BINDING_PREFIX, encodeModelBindingDefinition,
-  modelReferenceSchema, parseModelBindingDefinition, parseModelReference, resolveModelBindingDefinition } from './internal/binding.js';
+  resolveParsedModelBindingDefinition, encodeParsedModelBindingDefinition, modelReferenceSchema, parseModelBindingDefinition, parseModelReference, resolveModelBindingDefinition } from './internal/binding.js';
 export type { ModelBindingDefinition, ModelReference } from './internal/binding.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION, CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EXACT_MODEL_ID_MAX_LENGTH,
   exactModelIdSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ modelLifecycleSchema, catalogChannelSchema, catalogModelSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ providerCatalogDocumentSchema,

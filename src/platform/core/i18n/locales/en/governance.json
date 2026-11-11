@@ -1206,6 +1206,7 @@
   "tui.model.reconcile.keep": "Keep current records",
   "tui.model.workers.notSetUp": "Workers not set up — run /setup.",
   "tui.model.state.on": "On",
+  "tui.model.checking": "Checking…",
   "tui.model.state.off": "Off",
   "tui.model.fix.activate": "Turn on",
   "tui.model.fix.deactivate": "Turn off",

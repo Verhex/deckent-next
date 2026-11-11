@@ -1,3 +1,6 @@
+import * as platform from '#platform/index.js';
+import { FilePolicySource } from '#adapters/index.js';
+import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -375,6 +378,12 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     const leased = configuredModelProfiles(leasedContext.config).find(profile => profile.scopeId === 'target')!;
     expect(leased.schemaVersion).toBe(3);
     expect((await resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options))?.sourceProfile).toEqual(sourceProfile);
+    // One display opening keeps source and target inputs separate, while repeating each model-use authorization.
+    const loads = vi.spyOn(platform, 'loadConfig'), policies = vi.spyOn(FilePolicySource.prototype, 'load');
+    const opening = await openModelInspection(f.b, 'target', f.options);
+    for (let check = 0; check < 3; check++) expect((await resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options, opening))?.sourceProfile).toEqual(sourceProfile);
+    expect(loads).toHaveBeenCalledTimes(2); expect(policies).toHaveBeenCalledTimes(2);
+    loads.mockRestore(); policies.mockRestore();
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, scopeIds: ['other'] }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
     // A native chat turn runs as the person's MCP workload (turn.ts withMcpPrincipal): the attachment admits the person it acts for, the principal stays the workload.
     const workload = await withMcpPrincipal(() => loadConfiguredScopeContext(f.b, 'target', f.options, 'write'));
@@ -383,6 +392,8 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-inactive', action: 'deactivate',
       reference: sourceProfile.reference, expectedBinding: binding.binding, expectedRevision: 1 }, f.options);
     await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
+    await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options, opening)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
+    opening.dispose();
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-reactivate', action: 'activate',
       reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 2 }, f.options);
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, issuer: 'foreign-person' }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_PERSON_MISMATCH' });

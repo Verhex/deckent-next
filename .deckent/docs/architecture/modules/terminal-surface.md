@@ -41,7 +41,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
   settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
   sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
-  and `/quit` never wait. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
+  and `/quit`, plus local `/model`, `/provider`, `/help` and `/tasks` windows, never wait here. Their actions retain their own fresh admission checks. Slash-menu filtering already stays in the local composer. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
   notice on the grant, error notice and standart without it) before any turn. **Setup after the frame:** onboarding is prepared once
   (`prepareOnboardingSession`: person check, one observation, settle) after the start settled; its waiting card opens by itself only
   while the person has typed nothing since the frame (checked after keys already received reached the composer, in the same step as
@@ -615,3 +615,17 @@ Author RED/GREEN and compiled CLI/PTY evidence are external in `proof/ALPHA63/k9
 ### İşçi onay önizlemeleri (alpha.63 K24 yazar adayı)
 
 Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte edilmiş komut/diff önizlemesini ve kesim bilgisini exact çağrının argsDigest değeriyle mühürlü taşır; büyük önizlemenin tam kopyası yalnız bekleme boyunca kişiye özel saklanır ve kesik veya eski önizlemesiz kart allow üretemez. Ön kontrol sırasındaki iptal, model süreci başlamadan iptal sonucuna bağlanır; gerçek ön kontrol hataları ve mevcut iptal süresi değişmez. Yazar kanıtı dış `proof/ALPHA63/k24/` alanındadır; monte sürüm kabulü ve bağımsız inceleme ayrıdır.
+
+
+**beta.1 model/provider opening reads (B1-PERF-MODEL).** The CLI host gives each window inspection a disposable,
+read-only `model-inspection` snapshot: one effective config and parsed declared catalog per root, one scope/policy
+context per distinct scope, and one authored-layer projection for chat selection. Producers still authorize every
+model separately; shared source and target scopes remain separate authorities. The parsed catalog supplies exact
+bindings without parsing or cloning the full catalog per model. Preview credential-presence checks reuse these
+inputs but read credential/grant stores each time; no credential value is stored in the snapshot. Names appear
+first with EN `Checking…` / TR `Kontrol ediliyor…` and disabled choices, then checked rows fill in. Subscription
+readiness belongs to each row's check. Snapshots are discarded after inspection and aborted/cleared on close or
+reload; late UI results are ignored. Picking, sending, connecting, activation and all config/credential writes use
+the ordinary fresh producers, including bootstrap/restore/uninstall fences and revocation checks. Optional budget,
+cache, protocol, workspace and custody reads retain their independent ports. This describes source wiring and
+fixture verification, not physical paint, live-installation timings, independent review or release acceptance.

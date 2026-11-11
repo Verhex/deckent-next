@@ -71,11 +71,15 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice); a read failure only hides the row.
   const [cache, setCache] = useState<CachePanelView | null>(null);
-  const reload = useCallback(async () => { setView(await port.inspect()); setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null);
+  const inspection = useRef(0), mounted = useRef(true), inspectionAbort = useRef<AbortController | null>(null);
+  const reload = useCallback(async () => { const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
+    const publish = (view: ProviderPanelView) => { if (mounted.current && inspection.current === generation) setView(view); };
+    publish(await port.inspect(publish, abort.signal)); setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null);
     setCache(port.cache ? await port.cache.inspect().catch(() => null) : null); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
+  useEffect(() => { mounted.current = true; reload().catch(error => { if (mounted.current) { exits.current.onError(error); exits.current.onClose(); } });
+    return () => { mounted.current = false; inspection.current++; inspectionAbort.current?.abort(); }; }, [reload]);
   useEffect(() => {
     let active = true;
     port.inspectCustody?.().then(result => { if (active) setCustody(result); }).catch(() => {});

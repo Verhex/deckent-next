@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { parseProviderCatalog } from '#domain/index.js';
 import { ModelBindingApplication } from '../../../src/engine/core/provider-catalog/index.js';
 
 const reference = { providerId: 'provider', providerVersion: 2, modelId: 'model', modelVersion: 3 };
@@ -12,6 +13,8 @@ it('hashes the versioned canonical UTF-8 definition against an independent golde
   expect(result.binding).toEqual({ encodingVersion: 1, algorithm: 'sha256',
     digest: 'b0dc8a5d82596ec1d603579543466573753a50d72d47809e6a90bbb3a3add243' });
   expect(result.definition).toEqual({ encodingVersion: 1, provider: { id: 'provider', version: 2 }, model: catalog.providers[0]!.models[0] });
+  const parsed = await new ModelBindingApplication({ read: async () => { throw new Error('parsed binding must not reread'); } }, parseProviderCatalog(catalog)).inspect(reference);
+  expect(parsed).toEqual(result);
   expect(result.availability).toBe('not-observed'); expect(reads).toBe(1);
   expect(Object.isFrozen(result)).toBe(true); expect(Object.isFrozen(result.binding)).toBe(true);
   expect(Object.isFrozen(result.definition?.model.protocols)).toBe(true);

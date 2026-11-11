@@ -1206,6 +1206,7 @@
   "tui.model.reconcile.keep": "Kayıtları koru",
   "tui.model.workers.notSetUp": "İşçiler kurulmadı — /setup çalıştırın.",
   "tui.model.state.on": "Açık",
+  "tui.model.checking": "Kontrol ediliyor…",
   "tui.model.state.off": "Kapalı",
   "tui.model.fix.activate": "Aç",
   "tui.model.fix.deactivate": "Kapat",

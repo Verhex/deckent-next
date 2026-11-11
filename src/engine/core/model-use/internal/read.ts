@@ -18,7 +18,7 @@ export async function assertModelUseSource(ports: ModelUseReadPorts, context: Mo
   if (profile.schemaVersion === 3) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   assertModelUsePerson(context, profile, actor);
   await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('invoke', profile, actor);
-  const binding = await new ModelBindingApplication({ read: async () => context.config['provider_catalog'] }).inspect(profile.reference);
+  const binding = await (ports.binding?.(context, profile.reference) ?? new ModelBindingApplication({ read: async () => context.config['provider_catalog'] }).inspect(profile.reference));
   if (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) return attachmentFailure('MODEL_USE_BINDING_CHANGED');
   if (!requireActive) return binding;
   const active = await ports.activation(context, profile.scopeId, profile.reference);

@@ -29,7 +29,11 @@ export function parseModelReference(input: unknown): ModelReference {
 
 /** Exact lookup only: no version selection, alias, default or fallback behavior. */
 export function resolveModelBindingDefinition(catalogInput: unknown, referenceInput: unknown): ModelBindingDefinition | null {
-  const catalog = parseProviderCatalog(catalogInput), reference = parseModelReference(referenceInput);
+  return resolveParsedModelBindingDefinition(parseProviderCatalog(catalogInput), parseModelReference(referenceInput));
+}
+
+/** Internal typed lookup after the catalog trust boundary has validated the snapshot. */
+export function resolveParsedModelBindingDefinition(catalog: ProviderCatalog, reference: ModelReference): ModelBindingDefinition | null {
   const provider = catalog.providers.find(candidate => candidate.id === reference.providerId && candidate.version === reference.providerVersion);
   const model = provider?.models.find(candidate => candidate.id === reference.modelId && candidate.version === reference.modelVersion);
   if (!provider || !model) return null;
@@ -68,5 +72,10 @@ export function parseModelBindingDefinition(input: unknown): ModelBindingDefinit
 
 /** UTF-16 key ordering with ECMAScript JSON scalar encoding; this is deliberately not an RFC-JCS claim. */
 export function encodeModelBindingDefinition(definitionInput: unknown): string {
-  return `${MODEL_BINDING_PREFIX}${canonicalJson(parseModelBindingDefinition(definitionInput))}`;
+  return encodeParsedModelBindingDefinition(parseModelBindingDefinition(definitionInput));
+}
+
+/** Encoding of an already validated binding from a parsed catalog. */
+export function encodeParsedModelBindingDefinition(definition: ModelBindingDefinition): string {
+  return `${MODEL_BINDING_PREFIX}${canonicalJson(definition)}`;
 }
