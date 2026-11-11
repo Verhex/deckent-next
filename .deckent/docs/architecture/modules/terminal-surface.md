@@ -471,6 +471,16 @@ Inside a broken OSC/DCS, ESC starts a fresh sequence (including a keyboard CSI o
 string; recovery also works after either bound. Ctrl+C (0x03 or kitty `CSI 99;5u`) always passes once and ends a probe. On a reported background a role below its minimum keeps only
 its attributes. Consumers move to `terminalPalette`/the theme request in L3. Proof is kept with the lead's package record (alpha.60 package 2, lane TH-A).
 
+**Brand palette (B11-PALETTE, owner 2026-11-11 #72).** Only `dark` and `light` use the approved brand roles, selected by per-theme
+primitive overrides in `terminal.map.json`: accent `#6CCFAE` / `#0A4A4F` (assistant label, window title, section header, mode indicator),
+info blue `#A9BFD6` / `#2E4A68` (info, links, code, model), success `#9BE3A6` / `#136F57`, warning `#F2B24A` / `#8A5300`,
+error `#F0806E` / `#A8281C`, muted `#A8A89C` / `#566065` (including provider, user rail and window border). The reference grounds include
+`#191B1A` / `#F4F5F2`; the terminal still owns its foreground and background. Selection uses background `#153B39` / `#DCE9E7` and normal
+terminal foreground with bold text in truecolor/256, retaining reverse video in ANSI16. Pickers, monitor rows and in-app text selection
+consume the same selection style; nested semantic colours yield to normal foreground on brand selection. Link underline, focus and the
+user/key/system labels and system rail stay unchanged. Daltonized, high-contrast and ANSI theme values stay frozen for this release;
+applying the brand to those themes needs a separate colour-vision check and owner review.
+
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
 details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor
 (instance, pid, build) as details. `/scope`: you, project (name and short id), company, mode, rule version, surface access in words,

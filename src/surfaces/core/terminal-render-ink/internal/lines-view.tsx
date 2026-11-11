@@ -8,9 +8,10 @@ export function spanStyle(part: Span, palette: WorklineInkPalette): InkRoleStyle
   return { ...(part.role ? palette[part.role] : {}), ...(part.bold ? palette.strong : {}), ...(part.italic ? palette.emphasis : {}), ...(part.strike ? palette.strike : {}) };
 }
 
-export function SpanText({ spans }: { readonly spans: readonly Span[] }) {
+export function SpanText({ spans, selected = false }: { readonly spans: readonly Span[]; readonly selected?: boolean }) {
   const palette = useWorklinePalette();
-  return <>{spans.map((part, index) => <Text key={index} {...spanStyle(part, palette)}>{part.text}</Text>)}</>;
+  const selection = palette.selection.backgroundColor && (selected || spans.some(part => part.role === 'selection'));
+  return <>{spans.map((part, index) => <Text key={index} {...(selection ? palette.selection : spanStyle(part, palette))}>{part.text}</Text>)}</>;
 }
 
 /**

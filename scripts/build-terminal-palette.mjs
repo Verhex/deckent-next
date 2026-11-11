@@ -8,7 +8,8 @@ const mapPath = join(root, 'design/tokens/terminal.map.json');
 const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/palette.ts');
 
 /**
- * NOVA primitive hex/256 per theme. `dark` is the base; the other themes override what differs. An absent `ansi256` is the nearest xterm
+ * Primitive hex/256 per theme. Legacy dark primitives stay frozen for inherited themes; brand roles are dark/light overrides in the map.
+ * An absent `ansi256` is the nearest xterm
  * 256-colour index (cube + gray ramp); a pinned one keeps 4.5:1 or the hue where the nearest does not. Light values keep WCAG 2.2 4.5:1 on
  * every light reference background (white to the warm #F0ECE5); the daltonized themes move the success/error pair to the blue/orange axis
  * of the Okabe–Ito colour-universal palette, darkened on light backgrounds; the high-contrast themes keep 7:1 (1.4.6). `ansiOnly` themes have
@@ -16,6 +17,8 @@ const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/
  */
 const PRIMITIVES = {
   dark: {
+    brandAccent: { hex: '#6CCFAE' }, brandInfo: { hex: '#A9BFD6' }, brandSuccess: { hex: '#9BE3A6' },
+    brandWarning: { hex: '#F2B24A' }, brandError: { hex: '#F0806E' }, brandMuted: { hex: '#A8A89C' }, brandSelection: { hex: '#153B39' },
     modelBlue: { hex: '#87AFFF', ansi256: 111 }, providerPurple: { hex: '#D7AFFF', ansi256: 183 },
     novaGo: { hex: '#43E39A', ansi256: 78 },
     novaAbort: { hex: '#FF6B5E', ansi256: 203 },
@@ -26,11 +29,17 @@ const PRIMITIVES = {
     novaOrange: { hex: '#F0883E' },
   },
   light: {
+    brandAccent: { hex: '#0A4A4F' }, brandInfo: { hex: '#2E4A68' }, brandSuccess: { hex: '#136F57' },
+    brandWarning: { hex: '#8A5300' }, brandError: { hex: '#A8281C' }, brandMuted: { hex: '#566065' }, brandSelection: { hex: '#DCE9E7' },
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
     novaGo: { hex: '#16774A', ansi256: 22 }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },
     novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' }, novaOrange: { hex: '#A64B00', ansi256: 94 },
   },
-  'dark-daltonized': { novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' }, novaOrange: { hex: '#E69F00' } },
+  'dark-daltonized': {
+    modelBlue: { hex: '#87AFFF', ansi256: 111 }, providerPurple: { hex: '#D7AFFF', ansi256: 183 },
+    novaGlow: { hex: '#38D3FF', ansi256: 81 }, novaGlowBright: { hex: '#7BE8FF', ansi256: 117 }, seaTextMuted: { hex: '#7FA3B2', ansi256: 109 },
+    novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' }, novaOrange: { hex: '#E69F00' },
+  },
   'light-daltonized': {
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
     novaGo: { hex: '#00669E' }, novaAbort: { hex: '#A04A00', ansi256: 88 }, novaAmber: { hex: '#8A5A00' },
@@ -80,15 +89,18 @@ function primitiveFor(theme, name) {
 }
 
 function entryFor(theme, roleName, spec) {
-  const primitive = spec.primitive && !map.themes[theme].ansiOnly ? primitiveFor(theme, spec.primitive) : undefined;
+  const themeSpec = map.themes[theme];
+  const primitiveName = themeSpec.primitives?.[roleName] ?? spec.primitive;
+  const primitive = primitiveName && !themeSpec.ansiOnly ? primitiveFor(theme, primitiveName) : undefined;
+  const background = themeSpec.background?.[roleName] === true;
   const hex = primitive?.hex ?? null;
   const ansi256 = primitive?.ansi256 ?? null;
   const override = map.themes[theme]?.ansi16?.[roleName];
   const ansi16 = typeof override === 'string' ? override : typeof spec.ansi16 === 'string' ? spec.ansi16 : '';
   const attrs = (map.themes[theme]?.attrs?.[roleName] ?? spec.attrs ?? []).map(String);
   const className = spec.class ?? 'primary';
-  const contrast = hex === null ? 'none' : spec.contrast ?? 'text';
-  return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}' },`;
+  const contrast = hex === null || background ? 'none' : spec.contrast ?? 'text';
+  return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}'${background ? ', background: true' : ''} },`;
 }
 
 const roleUnion = roles.map(([name]) => `'${name}'`).join(' | ');
@@ -101,7 +113,7 @@ export type PaletteRole = ${roleUnion};
 
 export type PaletteClass = 'primary' | 'supplemental' | 'decorative';
 
-/** WCAG 2.2: \`text\` needs 4.5:1 (1.4.3), \`border\` 3:1 (1.4.11) against each reference background; \`none\` uses the terminal's foreground. */
+/** WCAG 2.2: \`text\` needs 4.5:1 (1.4.3), \`border\` 3:1 (1.4.11) against each reference background; \`none\` uses the terminal's foreground (selection backgrounds are measured with foreground text). */
 export type PaletteContrast = 'text' | 'border' | 'none';
 
 export type PaletteTheme = ${themeUnion};
@@ -113,6 +125,8 @@ export interface PaletteEntry {
   readonly attrs: readonly string[];
   readonly class: PaletteClass;
   readonly contrast: PaletteContrast;
+  /** Hex/256 is a selection background; ANSI16 keeps its foreground and reverse-video attributes. */
+  readonly background?: boolean;
 }
 
 export const PALETTE_THEMES: readonly PaletteTheme[] = [${themes.map(([name]) => `'${name}'`).join(', ')}];
@@ -131,7 +145,7 @@ export const THEME_BACKGROUNDS: Readonly<Record<PaletteTheme, readonly string[]>
 ${themes.map(([theme, spec]) => `  '${theme}': [${(spec.backgrounds ?? []).map(value => `'${value}'`).join(', ')}],`).join('\n')}
 };
 
-/** The dark theme: the palette before themes existed. */
+/** Default dark semantic palette. */
 export const PALETTE: Readonly<Record<PaletteRole, PaletteEntry>> = THEME_PALETTES.dark;
 `;
 

@@ -61,20 +61,31 @@ export function lineRange(blocks: ViewportBlocks, a: SelectionPoint, b: Selectio
   return { start: from.key === key && from.line === line ? from.cell : 0, end: to.key === key && to.line === line ? to.cell : Number.MAX_SAFE_INTEGER };
 }
 
-/** The line with cells `start`..`end` in reverse video; the line's own colour codes are kept and the reverse is restored after each one. */
-export function highlightCells(line: string, start: number, end: number): string {
-  let rest = line, at = 0, out = '', inside = false;
+/** Selected cells use the palette background and normal foreground, or the existing reverse-video fallback. Restore the line's own SGR. */
+export function highlightCells(line: string, start: number, end: number, style: Readonly<{ backgroundColor?: string; bold?: boolean }> = {}): string {
+  const background = style.backgroundColor, indexed = background?.match(/^ansi256\((\d+)\)$/u);
+  const rgb = background?.startsWith('#') ? hexChannels(background) : null;
+  const backgroundCode = rgb ? `48;2;${rgb.join(';')}` : indexed ? `48;5;${indexed[1]}` : null;
+  const open = backgroundCode ? `\u001b[0m\u001b[${backgroundCode}m${style.bold ? '\u001b[1m' : ''}` : REVERSE_ON;
+  let rest = line, at = 0, out = '', inside = false, saved = '';
+  const close = () => backgroundCode ? `\u001b[0m${saved}` : REVERSE_OFF;
   while (rest.length > 0) {
     const code = SGR_TOKEN.exec(rest);
     const textEnd = code ? code.index : rest.length;
     for (const cluster of graphemes(rest.slice(0, textEnd))) {
       const width = cells(cluster), last = at + Math.max(1, width) - 1, covered = last >= start && at <= end;
-      if (covered && !inside) { out += REVERSE_ON; inside = true; } else if (!covered && inside) { out += REVERSE_OFF; inside = false; }
+      if (covered && !inside) { out += open; inside = true; } else if (!covered && inside) { out += close(); inside = false; }
       out += cluster; at += width;
     }
     if (!code) break;
-    out += code[0] + (inside ? REVERSE_ON : '');
+    saved += code[0];
+    if (!inside || !backgroundCode) out += code[0] + (inside ? REVERSE_ON : '');
     rest = rest.slice(textEnd + code[0].length);
   }
-  return inside ? out + REVERSE_OFF : out;
+  return inside ? out + close() : out;
+}
+
+function hexChannels(hex: string): number[] {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [n >> 16, (n >> 8) & 255, n & 255];
 }

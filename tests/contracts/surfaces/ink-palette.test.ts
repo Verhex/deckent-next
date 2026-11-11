@@ -17,6 +17,6 @@ describe('workline ink palette', () => {
 
   it('uses truecolor hex when tier admits it', () => {
     const palette = resolveWorklinePalette('truecolor');
-    expect(palette.error.color).toBe('#FF6B5E');
+    expect(palette.error.color).toBe('#F0806E');
   });
 });
