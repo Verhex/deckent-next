@@ -762,15 +762,24 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
 number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
-If `deckent doctor` reports this in the registered source project, `deckent init identity --keep` is currently refused
-with `PROJECT_ATTACHMENT_SOURCE_REGISTERED`. In that source project folder, run these commands in order:
+In a project that is not the registered source, `deckent init identity --keep` is enough.
+
+In the registered source project `deckent init identity --keep` is currently refused with
+`PROJECT_ATTACHMENT_SOURCE_REGISTERED`. When the source has **no attached project** (none active or pending), run these
+commands in that folder, in this order:
 
 ```sh
 deckent terminal attach --unregister --apply
 deckent init identity --keep
 ```
 
-In a project that is not the registered source, `deckent init identity --keep` alone is enough. After the two commands the source project works again, but registering it again and attaching other folders to it is refused (`PROJECT_ATTACHMENT_CHANGED`) until the fix planned for the next beta.
+The source project then works again, but registering it again and attaching other folders to it is refused
+(`PROJECT_ATTACHMENT_CHANGED`) in this beta.
+
+When the source **has attached projects**, the first command is refused with `PROJECT_ATTACHMENT_SOURCE_REGISTERED` until
+each one is detached (`deckent terminal attach --detach <projectId> --apply`). That path has not been confirmed for a moved
+installation; this beta may offer no way out there short of restoring a backup. The guard stays as it is; the binding fix
+is planned for the next beta.
 
 ## Recovery and upgrades
 

@@ -757,15 +757,22 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 WSL yeniden başlatıldığında dağıtım diskleri farklı sırada bağlanabilir. Kurulum bağı disk aygıt numarasını
 kaydettiği için proje taşınmamış olsa bile komutlar `INSTALLATION_IDENTITY_RELOCATED` hatasıyla durabilir.
-`deckent doctor` bunu kayıtlı kaynak projede bildirirse `deckent init identity --keep` şu anda
-`PROJECT_ATTACHMENT_SOURCE_REGISTERED` hatasıyla reddedilir. O kaynak proje klasöründe şu komutları sırayla çalıştırın:
+Kayıtlı kaynak olmayan projede `deckent init identity --keep` yeter.
+
+Kayıtlı kaynak projede `deckent init identity --keep` şu anda `PROJECT_ATTACHMENT_SOURCE_REGISTERED` hatasıyla
+reddedilir. Kaynağın **bağlı projesi yoksa** (etkin ya da bekleyen), o klasörde şu komutları bu sırayla çalıştırın:
 
 ```sh
 deckent terminal attach --unregister --apply
 deckent init identity --keep
 ```
 
-Kayıtlı kaynak olmayan projede yalnız `deckent init identity --keep` yeter. İki komuttan sonra kaynak proje yeniden çalışır; ancak onu yeniden kaydetmek ve başka klasörleri ona bağlamak, bir sonraki beta için planlanan düzeltmeye kadar reddedilir (`PROJECT_ATTACHMENT_CHANGED`).
+Kaynak proje yeniden çalışır; ancak onu yeniden kaydetmek ve başka klasörleri ona bağlamak bu betada reddedilir
+(`PROJECT_ATTACHMENT_CHANGED`).
+
+Kaynağın **bağlı projeleri varsa** ilk komut, her biri ayrılana kadar (`deckent terminal attach --detach <projeKimliği> --apply`)
+`PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile reddedilir. Bu yol taşınmış kurulumda doğrulanmadı; bu betada orada yedekten
+geri yüklemek dışında çıkış olmayabilir. Koruma olduğu gibi kalır; bağ düzeltmesi bir sonraki beta için planlanıyor.
 
 ## Kurtarma ve yükseltme
 

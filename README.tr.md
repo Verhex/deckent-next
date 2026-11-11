@@ -191,7 +191,7 @@ deckent --version
 
 Her seferinde yeni bir `--out` dizini kullanın veya seçtiğiniz revizyondaki bubblewrap kilidiyle eşleşen, tamamlanmış bir derlemeyi stage edin.
 Ardından mevcut proje klasörlerinin her birinde `deckent doctor` çalıştırın.
-Doctor kayıtlı kaynak projede `INSTALLATION_IDENTITY_RELOCATED` bildirirse orada önce `deckent terminal attach --unregister --apply`, sonra `deckent init identity --keep` çalıştırın; kayıtlı kaynak olmayan projede yalnız ikinci komut yeter ([bilinen sınıra](docs/known-limits.tr.md#kurulumun-konumu-değiştiğinde) bakın).
+Doctor `INSTALLATION_IDENTITY_RELOCATED` bildirirse [bilinen sınıra](docs/known-limits.tr.md#kurulumun-konumu-değiştiğinde) bakın: kayıtlı kaynak olmayan projede `deckent init identity --keep` yeter; kayıtlı kaynakta ek adımlar gerekir ve bu betada sınırları vardır.
 
 ### Adım adım ilk oturum
 
