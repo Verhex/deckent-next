@@ -14,13 +14,16 @@ agentic skills.
 
 ## Runtime truth
 
-Desktop is Electron + React in the separate `deckent-desktop` repository (`contract/`, `shell/`, `ui/`);
-Next holds the typed bridge contract in `src/surfaces/core/desktop/internal/bridge-contract.ts`. Runtime
-authority stays in Next. Inspect PLAN and actual wiring of both before claiming a capability is shipped.
-A platform migration requires
-new comparative evidence and owner direction. Keep one shell and one authority rather than
-separate Classic/NOVA products. Verify current Electron security guidance before implementation;
-renderer integration cannot become a second execution or secret authority.
+Accepted Desktop carrier: Tauri 2 + React (owner 2026-11-08, confirmed 2026-11-10); Desktop is a
+simple chat app (owner 2026-11-10). See the design-dna reference and
+[architecture decision log](../../../.deckent/docs/architecture/decisions.md); D2–D7 remain unchanged.
+The earlier Electron + React carrier is historical. Runtime authority remains in the separate service.
+Next's inspected bridge source is `src/surfaces/core/desktop/internal/bridge-contract.ts`; it does not
+prove the state of the external `deckent-desktop` UI or a completed migration. Inspect PLAN and actual
+wiring before claiming a capability is shipped. Keep one shell and one authority rather than
+separate Classic/NOVA products. Before implementation, verify current official Tauri 2 security,
+sidecar, per-OS webview, packaging and signing guidance; renderer integration cannot become a second
+execution or secret authority.
 
 ## Workspace model
 

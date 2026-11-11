@@ -29,7 +29,8 @@ once per session for a Next card, and again only when it changes.
 
 - One board, `.deckent/host/process-board.json` (host area, outside Git/npm), written only through
   `node .agents/refactor/board.mjs`: `init`, `get [SLOT]`, `show`, `render [--out PATH]`,
-  `set-own-row SLOT BODY_FILE|- --session ID --revision N`, main-only `set-map BODY_FILE|-` and `clear-row SLOT`.
+  `set-own-row SLOT BODY_FILE|- --session ID --revision N`, main-only
+  `set-map BODY_FILE|- --session ID --revision N` and `clear-row SLOT --session ID --revision N`.
   Bodies are JSON files or stdin, never long flag lists.
 - A session writes only its own row; an unassigned row is claimed by the first writer, a different id is refused
   and the session leaves handoff information for main. Main reconciles the role map and lists short-lived workers

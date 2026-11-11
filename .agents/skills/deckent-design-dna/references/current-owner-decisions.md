@@ -3,6 +3,8 @@
 This file is the single home of the Deckent design direction; other design skills point here.
 
 Authority, newest first (Alperen live design direction):
+- 2026-11-10: Tauri confirmed; Desktop is a simple chat app. The 2026-11-08 carrier decision
+  is recorded in [the architecture decision log](../../../../.deckent/docs/architecture/decisions.md).
 - 2026-10-18: follow proven Claude Code / Codex app UX instead of reinventing interaction; Basic/Advanced
   Desktop modes are removed in favour of one chat-first main view.
 - 2026-10-16: no Desktop decision surface before beta; approvals stay in the Terminal.
@@ -15,9 +17,10 @@ not prove a shipped Desktop, Terminal behavior or runtime health; verify actual 
 Read this file before proposing or revising Deckent product, Desktop workspace or visual-language direction.
 These are active decision constraints, not inspiration. Do not repackage a rejected direction under a new name.
 
-## Desktop direction (2026-10-09, 2026-10-16, 2026-10-18)
+## Desktop direction (2026-10-09 through 2026-11-10)
 
-- **Main view.** One calm, chat-first main view with the same function and flow as the Terminal (reference:
+- **Main view.** Desktop is a simple chat app (owner 2026-11-10). One calm, chat-first main view
+  with the same function and flow as the Terminal (reference:
   the Claude and Codex apps). It shows only light information, such as how many workers run and that
   background work proceeds. Never put everything on one screen.
 - **Detail panels.** Selecting an item opens a detail or control panel for agents, runs, workers, approvals,
@@ -32,13 +35,16 @@ These are active decision constraints, not inspiration. Do not repackage a rejec
   separate `deckent-desktop` repository, `ui/src/styles.css` (see `design-tokens-pipeline`).
 - **Type.** Atkinson Hyperlegible Next for the interface and Atkinson Hyperlegible Mono for code, with
   Literata only for long prose. All OFL and self-hosted. Text must be fluid and easy to read.
-- **Carrier.** Electron + React in the separate `deckent-desktop` repository (`contract/`, `shell/`, `ui/`);
-  Next holds the typed bridge contract.
+- **Carrier.** Accepted: Tauri 2 + React (owner 2026-11-08, confirmed 2026-11-10), replacing the
+  historical Electron + React decision of 2026-10-09. Runtime authority remains in the separate
+  service; D2–D7 remain unchanged. Next holds the typed bridge contract. This decision does not
+  prove a completed migration or a shipped Desktop.
 
 ## Accepted product direction
 
-- Desktop is a full management, intervention, approval, integration and enterprise-system control
-  plane (post-beta target for decisions). It is not an observability-only dashboard.
+- Historical Desktop target (before the 2026-11-10 simple-chat direction): a full management,
+  intervention, approval, integration and enterprise-system control plane (post-beta target for
+  decisions), rather than an observability-only dashboard.
 - Terminal carries the same product jobs and canonical authority for developer and expert teams.
   **Causal Workline with contextual Work Ledger** is the accepted single-surface design baseline:
   Workline is the default causal shell; `/runs --follow` opens Ledger as a temporary lens in the

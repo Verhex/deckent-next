@@ -29,7 +29,8 @@ State skipped/unavailable checks with reasons; planned checks are not passed che
 - Blocking findings and resolution:
 
 Author checks, worker reports, Jev and CI do not constitute independent PASS.
-Landing remains the lead's gate: independent review + targeted checks and owner authorization.
+Landing remains the lead's gate: independent review, applicable local verification under law 7,
+green hosted PR CI at the exact candidate SHA and owner authorization.
 
 ## Risks, limits and next step
 
