@@ -6,7 +6,8 @@ import REGISTRY from './timing-registry.json' with { type: 'json' };
 import COMMANDS from './timing-commands.json' with { type: 'json' };
 
 export type TimingPhase = 'process-entry' | 'queued' | 'started' | 'gate-passed' | 'dispatch' | 'first-flush' | 'populated-flush' | 'first-output' | 'finished' | 'cancelled' | 'exit' | 'read-completed';
-type Read = typeof REGISTRY.reads[number];
+// JSON arrays infer string[]; keep the data import out of published declarations. The registry validates labels at runtime.
+type Read = string;
 type Cache = 'none' | 'hit' | 'miss' | 'forced' | 'read' | 'reparsed';
 type Result = 'ok' | 'error' | 'cancelled' | 'unknown';
 export type TimingCounts = Record<string, { count: number; totalMs: number }>;

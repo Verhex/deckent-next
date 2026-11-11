@@ -518,7 +518,8 @@ it('names the running model from its catalog reference and tells the model that 
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
   expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(11); expect(prompt.startsWith('[Deckent runtime instructions v11]')).toBe(true);
-  expect(prompt).toContain(`Running Deckent: ${PACKAGE_VERSION}; channel: alpha.`);
+  const channel = PACKAGE_VERSION.includes('-') ? PACKAGE_VERSION.split('-')[1]!.split('.')[0] : 'stable';
+  expect(prompt).toContain(`Running Deckent: ${PACKAGE_VERSION}; channel: ${channel}.`);
   expect(prompt).toContain('A project checkout may be a different revision');
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
