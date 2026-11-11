@@ -758,6 +758,20 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   first 10 000 policy changes of a scope are searched (the page then says the times are partial). People are shown as
   issuer/subject: Core keeps no display names.
 
+## Installation moved
+
+On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
+number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
+If `deckent doctor` reports this in the registered source project, `deckent init identity --keep` is currently refused
+with `PROJECT_ATTACHMENT_SOURCE_REGISTERED`. In that source project folder, run these commands in order:
+
+```sh
+deckent terminal attach --unregister --apply
+deckent init identity --keep
+```
+
+Afterwards, previously attached folders must be attached again. A fix is planned for the next beta.
+
 ## Recovery and upgrades
 
 - **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build

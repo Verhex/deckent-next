@@ -6,7 +6,8 @@ Yüzeyler (tek kurulum, aynı tipli işlemler):
   deckent <komut>     bu CLI: bir çağrı, bir sonuç; insan için metin, betik ve
                       AI ajanları için --json
   deckent-mcp         MCP sunucusu: deckent işlemleri AI istemcilerine araç
-                      olarak; hangilerini kullanacaklarını policy izni belirler
+                      olarak; hangilerini kullanacaklarını
+                      yetki politikası izni belirler
 
 Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
 

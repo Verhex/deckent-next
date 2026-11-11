@@ -147,7 +147,7 @@
   "doctor.installationBinding.unsupported": "Kurulum bağı: bu ortamda desteklenmiyor ({platform}) - taşınma ve kopya tespiti kapalı",
   "doctor.secretStore.envMissing": "  Ortamdan çözümlenen, {to} deposunda olmayan referanslar: {names}.",
   "doctor.secretStore.envUnverified": "  Ortam referansları {to} deposuyla karşılaştırılamadı: {code}.",
-  "doctor.secretStore": "Secret deposu: {backend} ({status}{codeSuffix})",
+  "doctor.secretStore": "Gizli anahtar deposu: {backend} ({status}{codeSuffix})",
   "doctor.secretStore.custody.env": "  Anahtarlar yalnız ortam değişkenlerinden okunur; deckent'e yazılamaz. Şifreli depoya geçmek için: deckent secret store.",
   "doctor.secretStore.custody.file": "  Anahtarlar diskte düz metin durur (yalnız sizin okuyabildiğiniz 0600 dosya). Şifreli depo önerilir: deckent secret store anahtarları taşır ve düz metni siler.",
   "doctor.secretStore.custody.encryptedFile": "  Anahtarlar diskte şifreli; açma anahtarı aynı klasörde durur ve parola istenmez. deckent'in işçileri ve sandbox'ı okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir. Katı kurulum: README › API anahtarları.",

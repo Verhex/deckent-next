@@ -106,7 +106,7 @@ describe('K1 real binary journeys', () => {
     expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
     expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen işçi');
     expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
-    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
+    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Gizli anahtar deposu: core.secret-store.env@1 (ready)');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');

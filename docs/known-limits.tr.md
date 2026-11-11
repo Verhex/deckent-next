@@ -753,6 +753,20 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   yalnız ilk 10 000 politika değişikliği aranır (sayfa o zaman zamanların eksik olduğunu söyler). Kişiler issuer/subject olarak
   görünür: Core görünen ad tutmaz.
 
+## Kurulumun konumu değiştiğinde
+
+WSL yeniden başlatıldığında dağıtım diskleri farklı sırada bağlanabilir. Kurulum bağı disk aygıt numarasını
+kaydettiği için proje taşınmamış olsa bile komutlar `INSTALLATION_IDENTITY_RELOCATED` hatasıyla durabilir.
+`deckent doctor` bunu kayıtlı kaynak projede bildirirse `deckent init identity --keep` şu anda
+`PROJECT_ATTACHMENT_SOURCE_REGISTERED` hatasıyla reddedilir. O kaynak proje klasöründe şu komutları sırayla çalıştırın:
+
+```sh
+deckent terminal attach --unregister --apply
+deckent init identity --keep
+```
+
+Ardından önceden bağlı klasörlerin yeniden bağlanması gerekir. Düzeltme bir sonraki beta için planlanıyor.
+
 ## Kurtarma ve yükseltme
 
 - **Docker ayarı olmayan yapılandırmayı eski build okuyamaz (alpha.63, R8b).** `execution` yalnız `git` taşıdığında alpha.63 öncesi build
