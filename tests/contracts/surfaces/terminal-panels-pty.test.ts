@@ -133,8 +133,8 @@ describe('settings windows on a real PTY (T3 L4)', () => {
       const usage = result.frames.find(([label]) => label === '+usage identity')![1];
       expect(screen(usage)).toContain('Fixture switched (OpenRouter)');
       if (color) {
-        expect(result.output).toContain(`${ESC}[38;5;111m`);
-        expect(result.output).toContain(`${ESC}[38;5;183m`);
+        expect(result.output).toContain(`${ESC}[38;5;146m`);
+        expect(result.output).toContain(`${ESC}[38;5;248m`);
       } else expect(result.output).not.toMatch(ANY_COLOR);
       expect(text).not.toMatch(/Error:|TypeError|ERR:/u);
     });

@@ -99,9 +99,9 @@ await host.wait();
   const esc = '\u001b[';
   // Exact palette tokens: high contrast at opening, host apply while open, then DEC 2031's dark background. The tab stays on Runs.
   expect(frame(2)).toContain(`${esc}38;2;10;48;105m[1 `);
-  expect(frame(4)).toContain(`${esc}38;2;11;106;158m[2 Runs]`);
-  expect(frame(5)).toContain(`${esc}38;2;56;211;255m[2 Runs]`);
-  expect(frame(5)).not.toContain(`${esc}38;2;11;106;158m[2 Runs]`);
+  expect(frame(4)).toContain(`${esc}38;2;10;74;79m[2 Runs]`);
+  expect(frame(5)).toContain(`${esc}38;2;108;207;174m[2 Runs]`);
+  expect(frame(5)).not.toContain(`${esc}38;2;10;74;79m[2 Runs]`);
 }
 
 it('the built monitor keeps its status and key-hint rows fixed across tabs, help, Config and the filter (PTY)', async () => {
