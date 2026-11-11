@@ -31,7 +31,7 @@ const PRIMITIVES = {
   },
   light: {
     brandText: { hex: '#0B1215' },
-    brandAccent: { hex: '#0A4A4F' }, brandInfo: { hex: '#2E4A68' }, brandSuccess: { hex: '#136F57' },
+    brandAccent: { hex: '#0A4A4F' }, brandInfo: { hex: '#2E4A68', ansi256: 24 }, brandSuccess: { hex: '#136F57', ansi256: 22 },
     brandWarning: { hex: '#8A5300' }, brandError: { hex: '#A8281C' }, brandMuted: { hex: '#566065' }, brandSelection: { hex: '#DCE9E7' },
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
     novaGo: { hex: '#16774A', ansi256: 22 }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },

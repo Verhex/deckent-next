@@ -475,8 +475,9 @@ its attributes. Consumers move to `terminalPalette`/the theme request in L3. Pro
 **Brand palette (B11-PALETTE, owner 2026-11-11 #72).** Only `dark` and `light` use the approved brand roles, selected by per-theme
 primitive overrides in `terminal.map.json`: accent `#6CCFAE` / `#0A4A4F` (assistant label, window title, section header, mode indicator),
 info blue `#A9BFD6` / `#2E4A68` (info, links, code, model), success `#9BE3A6` / `#136F57`, warning `#F2B24A` / `#8A5300`,
-error `#F0806E` / `#A8281C`, muted `#A8A89C` / `#566065` (including provider, user rail and window border). The reference grounds include
-`#191B1A` / `#F4F5F2`; the terminal still owns its normal foreground and background. Selection pairs background `#153B39` / `#DCE9E7`
+error `#F0806E` / `#A8281C`, muted `#A8A89C` / `#566065` (including provider, user rail and window border).
+For light 256-colour output, accent keeps index 23, success uses 22 and info/link/code/model use 24, preserving distinct green/teal/blue hues.
+The reference grounds include `#191B1A` / `#F4F5F2`; the terminal still owns its normal foreground and background. Selection pairs background `#153B39` / `#DCE9E7`
 with explicit theme text `#E7E3D9` / `#0B1215` and bold in truecolor/256, so pinning a theme against the terminal's ground stays readable;
 ANSI16 retains reverse video. Pickers, monitor rows and in-app text selection consume the same pair; nested semantic colours yield
 to the selected foreground. Link underline, focus and the

@@ -26,6 +26,13 @@ it('uses the approved brand roles only in dark/light, with a selection backgroun
   ];
   for (const theme of ['dark', 'light'] as const) {
     const palette = resolveWorklinePalette('truecolor', theme);
+    const indexedRoles = ['accent', 'info', 'success', 'warning', 'error', 'muted'] as const;
+    const indexes = indexedRoles.map(role => THEME_PALETTES[theme][role].ansi256!);
+    expect(new Set(indexes).size, `${theme} keeps the six brand colours apart at 256 colours`).toBe(indexedRoles.length);
+    const infoIndex = THEME_PALETTES[theme].info.ansi256!;
+    expect(infoIndex).toBeLessThan(232);
+    expect([59, 102, 145, 188]).not.toContain(infoIndex);
+    if (theme === 'light') expect([THEME_PALETTES.light.accent.ansi256, THEME_PALETTES.light.success.ansi256, infoIndex]).toEqual([23, 22, 24]);
     expect(Object.entries(THEME_PALETTES[theme]).filter(([, entry]) => entry.background).map(([role]) => role)).toEqual(['selection']);
     for (const group of groups) for (const role of group.roles) expect(palette[role as keyof typeof palette].color).toBe(group[theme]);
     expect(THEME_BACKGROUNDS[theme]).toContain(theme === 'dark' ? '#191B1A' : '#F4F5F2');
