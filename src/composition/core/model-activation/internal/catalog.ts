@@ -6,6 +6,7 @@ import { ModelCatalogError, modelCatalogCommandSchema, type ModelCatalogQuery } 
 import { verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization } from '#engine/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
+import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -19,13 +20,13 @@ export async function applyConfiguredModelCatalogOnly(projectRoot: string, input
   } catch (error) { throw queryFailure(error); }
 }
 /** Read-only listing (WORKER-CURRENCY-2). `modelUse: false` (connect, KG6 F7): the authorized catalog facts only, without the chat state that reads model use. */
-export async function inspectConfiguredModelCatalog(projectRoot: string, query: ModelCatalogQuery, options: ConfigLoadOptions = {}, use: Readonly<{ modelUse?: false }> = {}) {
+export async function inspectConfiguredModelCatalog(projectRoot: string, query: ModelCatalogQuery, options: ConfigLoadOptions = {}, use: Readonly<{ modelUse?: false }> = {}, snapshot?: ModelInspectionSnapshot) {
   try {
-    const { application, config } = await catalog(projectRoot, query.scopeId, options, 'read');
+    const { application, config } = await catalog(projectRoot, query.scopeId, options, 'read', snapshot);
     const result = await application.inspect(query);
     if (use.modelUse === false) return result;
     if (!config.provider_catalog) return result;
-    const declared = (await inspectDeclaredModels(projectRoot, options)).catalog;
+    const declared = (snapshot?.declared ?? await inspectDeclaredModels(projectRoot, options)).catalog;
     if (!declared) return result;
     return { ...result, channels: await Promise.all(result.channels.map(async channel => {
       if (channel.access !== 'allowed') return channel;
@@ -34,15 +35,15 @@ export async function inspectConfiguredModelCatalog(projectRoot: string, query: 
         const model = provider?.models.find(model => model.nativeId === entry.modelId);
         if (!model) return entry;
         const chat = await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: query.scopeId,
-          reference: { providerId: provider!.id, providerVersion: provider!.version, modelId: model.id, modelVersion: model.version } }, options);
+          reference: { providerId: provider!.id, providerVersion: provider!.version, modelId: model.id, modelVersion: model.version } }, options, {}, snapshot);
         const chatState = chat.activation?.state ?? null;
         return { ...entry, chatState, activationConflict: !(chatState === 'active' && (!channel.activation || !entry.activation)) && (chatState === 'active') !== (channel.activation?.state === 'active' && entry.activation?.state === 'active') }; // workers never activated = /setup, not reconcile
       })) };
     })) };
   } catch (error) { throw queryFailure(error); }
 }
-async function catalog(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write') {
-  const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, scopeId, options, access);
+async function catalog(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write', snapshot?: ModelInspectionSnapshot) {
+  const { config, document, principal, path } = await (snapshot?.context() ?? loadConfiguredScopeContext(projectRoot, scopeId, options, access));
   return { config, application: new ModelCatalogApplication(verifiedPrincipal(principal), new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
     access === 'write' ? async () => openSqliteModelCatalogStore(await path(), config.storage.sqlite, 'forbid') : async () => { throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY'); }, Date.now, async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs })) };
 }

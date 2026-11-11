@@ -10,17 +10,7 @@ export function createConfigFileDocuments(projectRoot: string, options: ConfigLo
   const projectPath = productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config');
   const globalPath = resolveGlobalConfigPaths(env, platform).platformPath;
   const pathFor = (layer: ConfigLayer) => layer === 'global' ? globalPath : projectPath;
-  async function snapshot(layer: ConfigLayer): Promise<ConfigSnapshot> {
-    const [globalRead, projectRead, effective] = await Promise.all([
-      readJsonFile(globalPath), options.globalOnly ? Promise.resolve({ kind: 'absent' as const }) : readJsonFile(projectPath), loadConfig(projectRoot, { ...options, force: true, heal: false }),
-    ]);
-    for (const read of [globalRead, projectRead]) if (read.kind === 'io' || read.kind === 'corrupt' || read.kind === 'ready' && !isRecord(read.value)) throw new ConfigApplicationError('CONFIG_READ_IO_HOLD');
-    const global = globalRead.kind === 'ready' && isRecord(globalRead.value) ? versionedConfig(globalRead.value) : {};
-    const project = projectRead.kind === 'ready' && isRecord(projectRead.value) ? versionedConfig(projectRead.value) : {};
-    const targetRead = layer === 'global' ? globalRead : projectRead;
-    return { document: layer === 'global' ? global : project, global, project, effective,
-      digest: targetRead.kind === 'ready' ? targetRead.digest : null, layer, env };
-  }
+  const snapshot = (layer: ConfigLayer) => readConfigFileSnapshot(projectRoot, options, layer);
   return { snapshot, async publish(input, planner) {
     const layer = input.layer ?? 'project', path = pathFor(layer);
     const waitingPolicy = (await snapshot(layer)).effective.configFile;
@@ -41,4 +31,20 @@ export function createConfigFileDocuments(projectRoot: string, options: ConfigLo
         overridden: configFieldView(after, input.keyPath).source === 'env' || layer === 'global' && configFieldView(after, input.keyPath).source === 'project' };
     }, waitingPolicy.writeLockTimeoutMs);
   } };
+}
+
+/** Read-only layer projection; an action always goes through the document port above. */
+export async function readConfigFileSnapshot(projectRoot: string, options: ConfigLoadOptions, layer: ConfigLayer, effective?: ConfigSnapshot['effective']): Promise<ConfigSnapshot> {
+  const env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  const projectPath = productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config');
+  const globalPath = resolveGlobalConfigPaths(env, platform).platformPath;
+  const [globalRead, projectRead, resolved] = await Promise.all([
+    readJsonFile(globalPath), options.globalOnly ? Promise.resolve({ kind: 'absent' as const }) : readJsonFile(projectPath), effective ?? loadConfig(projectRoot, { ...options, force: true, heal: false }),
+  ]);
+  for (const read of [globalRead, projectRead]) if (read.kind === 'io' || read.kind === 'corrupt' || read.kind === 'ready' && !isRecord(read.value)) throw new ConfigApplicationError('CONFIG_READ_IO_HOLD');
+  const global = globalRead.kind === 'ready' && isRecord(globalRead.value) ? versionedConfig(globalRead.value) : {};
+  const project = projectRead.kind === 'ready' && isRecord(projectRead.value) ? versionedConfig(projectRead.value) : {};
+  const targetRead = layer === 'global' ? globalRead : projectRead;
+  return { document: layer === 'global' ? global : project, global, project, effective: resolved,
+    digest: targetRead.kind === 'ready' ? targetRead.digest : null, layer, env };
 }

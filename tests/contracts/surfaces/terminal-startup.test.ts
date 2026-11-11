@@ -1,3 +1,4 @@
+import { openingGate } from '#surfaces/core/terminal-kit/index.js';
 import { stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, resolveWorklinePalette, startupFrame, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, writeStartup, type WorklineStartup } from '#surfaces/core/terminal/index.js';
@@ -75,4 +76,21 @@ describe('opening frame (T2 T-STARTUP)', () => {
     expect(terminalConfigSchema.safeParse({ banner: 'loud' }).success).toBe(false);
     expect(terminalConfigSchema.safeParse({ theme: 'solarized' }).success).toBe(false);
   });
+});
+
+
+it('local windows bypass pending startup; a real turn still waits and can be cancelled', async () => {
+  let release: (() => void) | undefined;
+  const gate = openingGate(new Promise<void>(resolve => { release = resolve; }));
+  const abort = new AbortController(); let waiting = 0;
+  for (const line of ['/model', '/provider', '/help', '/tasks', '/exit', '/quit']) {
+    expect(await gate(line, abort.signal, () => waiting++)).toBe(true);
+  }
+  expect(waiting).toBe(0);
+  let proceeded = false;
+  const send = gate('hello', abort.signal, () => waiting++).then(result => { proceeded = result; });
+  await Promise.resolve(); expect(proceeded).toBe(false); expect(waiting).toBe(1);
+  abort.abort(); await send; expect(proceeded).toBe(false);
+  release!();
+  expect(await gate('hello', new AbortController().signal, () => waiting++)).toBe(true);
 });

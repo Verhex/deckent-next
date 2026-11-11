@@ -1,3 +1,4 @@
+import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { resolveConfiguredModelUse, modelUseNative } from '#composition/core/model-use/index.js';
 import { createSiwcResponsesPort, SIWC_INFERENCE, siwcResponsesDefinitionSchema, createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, shellSandboxCapabilities } from '#adapters/index.js';
 import { withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
@@ -28,7 +29,7 @@ export const configuredBubblewrap = (options: ConfigLoadOptions = {}) => async (
 /** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
 const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
-export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false, agent?: ModelInvocationNativeBinding) {
+export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false, agent?: ModelInvocationNativeBinding, snapshot?: ModelInspectionSnapshot) {
   const now = () => clock.sample().wallMs, isolation = configuredBubblewrap(options);
   const catalogTariff = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
@@ -72,7 +73,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       }
       if (profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
         const definition = parseAnthropicMessagesDefinition(profile.adapter.definition);
-        const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options), catalogTariff });
+        const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options, readOnly ? snapshot : undefined), catalogTariff });
         anthropic = { profile, priced }; return priced.native;
       }
       if (isOpenAiChatHttpAdapter(profile.adapter)) {
@@ -80,10 +81,10 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         if (definition.tariff.kind === 'openrouter-endpoint') {
           const cell: { observation?: OpenRouterMetadataObservation } = {}, priced = createOpenRouterOpenAiPricedNative({
             currentObservation: () => { if (!cell.observation) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return cell.observation; },
-            now, resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
+            now, resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options, readOnly ? snapshot : undefined) });
           selected = { profile, priced, cell }; return priced.native;
         }
-        openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options), catalogTariff,
+        openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options, readOnly ? snapshot : undefined), catalogTariff,
           cacheSalt: scopeId => readOnly ? localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, false) : installationCacheSalt(context, scopeId) }); return openai.native;
       }
       if (profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENROUTER_CHAT_HTTP_ADAPTER_VERSION) return null;
@@ -97,14 +98,14 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     // PRE-8 v2 credential-source decision: for the headless CLI it is the preflight (version, flags, login kind; no model call), typed and before
     // any claim; read-only views never spawn it.
     admit: async (profile: ModelInvocationProfile, signal?: AbortSignal) => {
-      await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options);
+      await resolveConfiguredModelUse(context.config.projectRoot, profile, context.principal, options, readOnly ? snapshot : undefined);
       if (agent) { await agent.recheck(); return agent.admit(signal); }
       if (profile.adapter.id === SIWC_INFERENCE.adapter.id) {
         const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
-        return withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); });
+        return withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); }, readOnly ? snapshot : undefined);
       }
       return isNativeCliHeadlessAdapter(profile.adapter)
-        ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options);
+        ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options, readOnly ? snapshot : undefined);
     },
     async acquire(input: { readonly profile: ModelInvocationProfile; readonly definition: ModelBindingDefinition; readonly native: ModelInvocationNativePort }, signal?: AbortSignal): Promise<void> {
       const openaiDefinition = isOpenAiChatHttpAdapter(input.profile.adapter) ? parseOpenAiChatHttpDefinition(input.profile.adapter.definition) : null;
@@ -150,6 +151,6 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: current.priced.quote(input) });
     },
   });
-  const natives = { ...rawNatives, resolve(profile: ModelInvocationProfile) { const raw = rawNatives.resolve(profile); if (!raw) return null; const port = agent ? { ...raw, async send(...args: Parameters<ModelInvocationNativePort['send']>) { await agent.recheck(); return raw.send(...args); } } : raw; const guarded = modelUseNative(context.config.projectRoot, profile, context.principal, options, port); originals.set(guarded, port); return guarded; } };
+  const natives = { ...rawNatives, resolve(profile: ModelInvocationProfile) { const raw = rawNatives.resolve(profile); if (!raw) return null; const port = agent ? { ...raw, async send(...args: Parameters<ModelInvocationNativePort['send']>) { await agent.recheck(); return raw.send(...args); } } : raw; const guarded = modelUseNative(context.config.projectRoot, profile, context.principal, options, port, readOnly ? snapshot : undefined); originals.set(guarded, port); return guarded; } };
   return Object.freeze({ natives, spending });
 }

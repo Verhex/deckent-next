@@ -1,10 +1,12 @@
+import * as platform from '#platform/index.js';
+import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installationSecretRoot, listProjectVaults, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
@@ -186,6 +188,14 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     expect(await (await resolverOf(tree, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
     expect(await (await resolverOf(root, env)).resolve('OWN_KEY')).toBe(OWN_VALUE);
     expect(await projectRepository(tree)).toMatchObject({ kind: 'linked', mainWorkTree: root });
+    const loads = vi.spyOn(platform, 'loadConfig'), opening = await openModelInspection(tree, 'scope', { env });
+    try {
+      const context = await opening.context(), resolver = projectCredentialResolver(context, 'scope', { env }, opening);
+      for (let read = 0; read < 3; read++) expect(await resolver.resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+      expect(loads).toHaveBeenCalledTimes(2); loads.mockRestore();
+      await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'revoke', 'admin', { env }, human);
+      expect(await code(resolver.resolve('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_GRANT_REQUIRED');
+    } finally { opening.dispose(); loads.mockRestore(); }
     const copied = join(base, 'repo-wt-copy');
     await cp(tree, copied, { recursive: true });
     expect(await projectRepository(copied)).toEqual({ kind: 'foreign' });
