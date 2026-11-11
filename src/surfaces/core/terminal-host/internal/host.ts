@@ -5,7 +5,7 @@ import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { terminalPalette, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { resolveRenderGlyphs, RenderGlyphsContext, TerminalHandoverContext } from '#surfaces/core/terminal-render-ink/index.js';
 import type { TerminalHandover } from './handoff.js';
-import { ResizeFrame } from './resize-frame.js';
+import { createResizeOwnership, ResizeFrame } from './resize-frame.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
   type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
@@ -111,7 +111,12 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const reportingOff = () => { try { out.write(modes(MOUSE_REPORTING_OFF, FOCUS_REPORTING_OFF, PALETTE_NOTICES_OFF)); } catch { /* the terminal is gone */ } };
   const reportingOn = () => { try { out.write(modes(MOUSE_REPORTING_ON, FOCUS_REPORTING_ON, PALETTE_NOTICES_ON)); } catch { /* the terminal is gone */ } };
   // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
-  const handover: TerminalHandover | undefined = mouse ? { release: () => { reportingOff(); mouse.hold(true); }, reclaim: () => { mouse.hold(false); reportingOn(); } } : undefined;
+  const resizeOwnership = createResizeOwnership();
+  const handover: TerminalHandover | undefined = mouse || fullscreen ? {
+    // Reporting modes are switched only where the mouse layer switched them on (as before); the resize gate applies to every full window.
+    release: () => { resizeOwnership.release(); if (mouse) { reportingOff(); mouse.hold(true); } },
+    reclaim: () => { if (mouse) { mouse.hold(false); reportingOn(); } resizeOwnership.reclaim(); },
+  } : undefined;
   let view = options.view;
   const repaint = () => { if (request) palette = drawn(); if (open) instance.rerender(tree(view, palette)); };
   const theme: TerminalHostContext['theme'] = { background: () => reported ?? null, apply: next => { setting = next; repaint(); } };
@@ -121,7 +126,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
       createElement(TerminalHandoverContext.Provider, { value: handover ?? null },
-        fullscreen ? createElement(ResizeFrame, { stdout: out }, view(context)) : view(context))) });
+        fullscreen ? createElement(ResizeFrame, { stdout: out, ownership: resizeOwnership }, view(context)) : view(context))) });
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(tree(view, palette),
