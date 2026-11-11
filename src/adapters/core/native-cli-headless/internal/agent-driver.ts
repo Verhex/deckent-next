@@ -116,7 +116,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const atLength = finished.stopReason !== null && 'lengthStopReasons' in headless.guards && headless.guards.lengthStopReasons.includes(finished.stopReason);
               response = { schemaVersion: 1, native: { object: 'chat.completion', model: prepared.model,
                 choices: [{ index: 0, message: { role: 'assistant', content: text || finished.text }, finish_reason: atLength ? 'length' : 'stop' }],
-                headless: { cliVersion: execution.cliVersion, flagSetDigest: execution.flagSetDigest, guard: 'passed', egress: { ...evidence.egress, ...headlessEgressReasons(evidence.egress) } } },
+                headless: { cliVersion: execution.cliVersion, flagSetDigest: execution.flagSetDigest, guard: 'passed', builtinPlugins: claude!.builtinPlugins(), egress: { ...evidence.egress, ...headlessEgressReasons(evidence.egress) } } },
                 usage: { prompt_tokens: inputTokens, completion_tokens: usage['output_tokens']!, total_tokens: inputTokens + usage['output_tokens']!,
                   cache_read: usage['cache_read_input_tokens']!, cache_write: usage['cache_creation_input_tokens']! } };
             } else if (ended && 'response' in ended) {

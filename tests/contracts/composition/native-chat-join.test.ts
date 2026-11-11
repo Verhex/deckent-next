@@ -1,3 +1,5 @@
+import { notifyNativeBuiltinPlugins } from '#composition/core/model-invocation/index.js';
+import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -47,7 +49,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -79,7 +81,7 @@ async function fixture(askEdits = true) {
           state.channels.push(localPrincipalChannel());
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: JSON.parse(call.argumentsJson), _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
-          return { schemaVersion: 1, native: { object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
+          return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
       close: async () => { state.closes++; for (const server of state.servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } } }) };
@@ -91,7 +93,7 @@ async function fixture(askEdits = true) {
   const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => undefined,
     emit(event: AgentTurnStreamEvent) { events.push(event); if (event.kind === 'approval.requested') offer(event); } };
   const command = { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn', messages: [{ role: 'user', content: 'write the business result' }] };
-  const run = () => runPeerConfiguredChatTurn(f.project, command, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
+  const run = (turnId = command.turnId) => runPeerConfiguredChatTurn(f.project, { ...command, turnId }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
   const decide = (event: Awaited<typeof offered>, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', commandId: 'decide-k11', approvalId: event.approvalId,
     expectedRevision: event.revision, decision, reason: 'synthetic person decision', channel: 'local-terminal-card', decisionCapability: event.decisionCapability }, f.options, peer, undefined, {}, host.decisions, host.answers);
   return { f, profile, runtime, execution, state, host, peer, events, run, offered, decide };
@@ -193,9 +195,28 @@ it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the 
   if (await unsupportedPeer()) return;
   const h = await fixture(false), driver = h.runtime.driver;
   h.runtime.driver = async input => ({ ...await driver(input), notices: () => ['system/future_notice'] });
+  h.state.builtinPlugins = ['cc-plugin-unseen', 'cc-plugin-unseen'];
   const result = await h.run();
   expect(result).toMatchObject({ finish: 'stop', answer: 'finished', recorded: true });
   expect(result.note).toContain('system/future_notice');
+  const message = '[deckent] Claude CLI 2.1.322 loaded a new built-in plugin: cc-plugin-unseen. Nothing was blocked; this observation is recorded with the turn.';
+  expect(result.note?.split(message)).toHaveLength(2);
+  expect((await h.run()).note).toBe(result.note); // Durable replay; no new invocation.
+  expect((await h.run('builtin-again')).note).not.toContain('cc-plugin-unseen');
+  h.state.cliVersion = '2.1.323';
+  expect((await h.run('builtin-next-version')).note).toContain('CLI 2.1.323');
+  const ledger = openSqliteLedger(h.f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
+  try {
+    const outcomes = ledger.prepare("SELECT record FROM agent_turns WHERE turn_id='k11-turn'").get();
+    expect(JSON.stringify(outcomes)).toContain('cc-plugin-unseen');
+    // The existing invocation content retains version/name on every call, even when notice suppression applies.
+    const records = ledger.prepare("SELECT record FROM model_invocation_contents ORDER BY invocation_id").all();
+    const observed = records.map(row => JSON.parse(String(row.record))).filter(row => JSON.stringify(row).includes('cc-plugin-unseen'));
+    expect(observed).toHaveLength(3);
+    expect(JSON.stringify(observed)).toContain('2.1.322');
+    expect(JSON.stringify(observed)).toContain('2.1.323');
+  } finally { ledger.close(); }
+
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('approved business result\n');
 });
 
@@ -260,4 +281,26 @@ it('cancels the first no-model preflight from the starting person before any mod
     expect(h.events.filter(event => event.kind === 'text')).toEqual([]);
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
   } finally { release.resolve(); await pending.catch(() => undefined); }
+});
+
+it('builtin notices use session memory once per terminal/version/name with EN/TR text and no persistent counters', async () => {
+  const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state' } });
+  cleanups.push(f.close);
+  const session = {}, notices: string[] = [];
+  const result = { replayed: false, receipt: { profile: f.config.provider_invocation_profiles.profiles[0], claim: { scopeId: 's' } },
+    response: { native: { headless: { cliVersion: '2.1.322', builtinPlugins: ['cc-plugin-unseen', 'cc-plugin-unseen'] } } } } as unknown as ModelInvocationResult;
+  const notify = (value = result, language: 'en' | 'tr' = 'en', terminal = 'terminal-1', host = session) =>
+    notifyNativeBuiltinPlugins(value, language, host, terminal, text => { notices.push(text); });
+  await Promise.all([notify(), notify()]);
+  expect(notices).toEqual(['[deckent] Claude CLI 2.1.322 loaded a new built-in plugin: cc-plugin-unseen. Nothing was blocked; this observation is recorded with the turn.']);
+  await notify(); expect(notices).toHaveLength(1);
+  const next = { ...result, response: { schemaVersion: 1 as const, native: { headless: { cliVersion: '2.1.323', builtinPlugins: ['cc-plugin-unseen'] } }, usage: null } };
+  await notify(next, 'tr');
+  expect(notices[1]).toBe('[deckent] Claude CLI 2.1.323 yeni bir yerleşik eklenti yükledi: cc-plugin-unseen. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi.');
+  await notify({ ...next, replayed: true }); expect(notices).toHaveLength(2);
+  await notify(result, 'en', 'terminal-2'); expect(notices).toHaveLength(3);
+  await notify(result, 'en', 'terminal-1', {}); expect(notices).toHaveLength(4); // A fresh runtime may show it again.
+  const db = new DatabaseSync(f.path, { readOnly: true });
+  try { expect(db.prepare("SELECT count(*) AS total FROM audit_counters WHERE counter LIKE 'native-builtin:%'").get()?.total).toBe(0); }
+  finally { db.close(); }
 });

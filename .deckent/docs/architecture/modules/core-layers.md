@@ -153,7 +153,7 @@ sign-in at their terminal; the person's `~/.claude` is not used, and `--config-d
 `--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as `CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
 the binary, its version range, required flags (help-hidden flags proven by a parser refusal in an empty temporary config directory) and
 the login fields. Guards stop the process group when the CLI reports an API key source, a tool, an MCP server, a plugin outside the
-registry allow-list or a model other than the pinned one; every refusal is typed and nothing falls back to an API. Every inference and
+registry builtin provenance class or a model other than the pinned one; every refusal is typed and nothing falls back to an API. Every inference and
 preflight spawn runs inside a bubblewrap realm (the person's own sign-in, `deckent models login`, runs outside it at their terminal because
 it needs their browser, and holds the login lock): system prefixes read-only, the login directory the only writable host directory, an empty network
 namespace whose one way out is a relay to the provider's allow-listed gateway, and file-size, descriptor and core-dump limits. Without a

@@ -277,7 +277,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.
     const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
       answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
-    const cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
+    const pluginNotices = new Set<string>(), cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
       onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], roundSignal: AbortSignal,
@@ -293,7 +293,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             if (delta.kind === 'text') shownText += delta.text; else shownReasoning += delta.text;
             onDelta(delta);
           };
-          result = agent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, agent)
+          result = agent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, agent, text => { pluginNotices.add(text); })
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); await channel.drained(); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
@@ -359,7 +359,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
-        hostNote: () => cliNotices.size ? t('headless.agent.cliNotices', { events: [...cliNotices].join(', ') }, language) : null,
+        hostNote: () => [...pluginNotices, ...(cliNotices.size ? [t('headless.agent.cliNotices', { events: [...cliNotices].join(', ') }, language)] : [])].join(' ') || null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       // alpha.64: the proposal tools are decided by the AI actor's v20 rules; the turn's `policy-turn` record names them like every other call.
