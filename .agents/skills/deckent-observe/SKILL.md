@@ -1,9 +1,9 @@
 ---
 name: deckent-observe
-description: Watch or inspect active or recently finished Deckent Next Runs, Tasks, Attempts, workers, effects and settlements through read-only lifecycle and freshness evidence.
+description: Watch or inspect active or recently finished deckent Next Runs, Tasks, Attempts, workers, effects and settlements through read-only lifecycle and freshness evidence.
 ---
 
-# Deckent Next Observe
+# deckent Next Observe
 
 ## Responsibility
 

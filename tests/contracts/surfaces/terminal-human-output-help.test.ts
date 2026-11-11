@@ -8,7 +8,7 @@ import { WORKLINE_TEST_LABELS, mountWorkline, settle, until } from '../support/w
 describe('/help grouped', () => {
   it('EN', () => {
     expect(slashHelpText(terminalComposerLabels('en').slash).split('\n\n')[0]).toBe([
-      'Commands', 'Info', '  /status  Show whether Deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
+      'Commands', 'Info', '  /status  Show whether deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
       '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Choose this session\'s model; models that cannot be used show why',
       '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report', '  /scope  Show scope, project, mode and surface access',
       '  /roles  Show which models hold which tier and roles (read-only)', '  /help  List the commands by group'].join('\n'));
@@ -58,7 +58,7 @@ describe('/help grouped', () => {
 describe('/help on the real workline', () => {
   const views: Array<ReturnType<typeof mountWorkline>> = [];
   afterEach(() => { for (const view of views.splice(0)) view.instance.unmount(); });
-  it.each([['en', 'Info: Commands\nInfo\n  /status  Show whether'], ['tr', 'Bilgi: Komutlar\nBilgi\n  /status  Deckent\'in']] as const)('%s', async (locale, opening) => {
+  it.each([['en', 'Info: Commands\nInfo\n  /status  Show whether'], ['tr', 'Bilgi: Komutlar\nBilgi\n  /status  deckent\'in']] as const)('%s', async (locale, opening) => {
     const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, composer: terminalComposerLabels(locale), work: workSurfaceLabels(locale) } });
     views.push(view);
     await until(() => view.stdout.frame.includes('READY'), 'ready');

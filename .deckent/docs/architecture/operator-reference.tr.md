@@ -23,10 +23,10 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   Servisi başlatın (`deckent`) ve `doctor`'ı yeniden çalıştırın.
 - **Ubuntu 24.04 ve sonrası.** Çekirdek, bubblewrap'ın ihtiyaç duyduğu ayrıcalıksız kullanıcı ad alanlarını kısıtlayabilir.
   `sysctl kernel.apparmor_restrict_unprivileged_userns` ile bakın: `1` kısıtlı demektir; WSL'de anahtar yoksa (`cannot stat`)
-  kısıt yoktur. Deckent o zaman kısıtı bildirir, görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder,
+  kısıt yoktur. deckent o zaman kısıtı bildirir, görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder,
   çünkü onlar açık bubblewrap sandbox'ı ister. Bir yönetici bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona
   `userns` izni veren bir AppArmor profiliyle kurabilir.
-- `npm link`'ten sonra Deckent kaynak dizininin dışındaki kendi proje klasörünüzde çalışın. Uzun ve boşluklu yollar çalışır:
+- `npm link`'ten sonra deckent kaynak dizininin dışındaki kendi proje klasörünüzde çalışın. Uzun ve boşluklu yollar çalışır:
   yerel soket, kuruluma özel kısa ve özel bir dizin kullanır.
 - **Platformlar.** Yerel runtime soketi ve doğrulanmış terminal tanığı yalnız Linux'ta (WSL dahil) vardır. macOS'ta runtime
   servisi henüz çalışmaz; bu yüzden sohbet, işler ve yedekleme kullanılamaz. Linux dışındaki her sistemde teslim, dala alma ve
@@ -39,8 +39,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   (`terminal.scopeId`) ve sohbet sınırlarını yazar, iptal ayarlarını ve güncel, boş bir ledger'ı oluşturur. Linux, WSL ve
   macOS'ta yeni kurulum şifreli anahtar deposuyla başlar. Sonraki komutlarda aynı kapsam kimliğini kullanın; mevcut kurulumda
   ayarlarda tanımlı kapsam kimliği geçerlidir.
-- **Eski bir kurulumu yükseltme.** Yeni kurulum güncel ilk kurulum policy şablonunu (alpha.55'ten beri şablon v15) doğrudan
-  alır. Eski bir kurulum, policy'sinin nasıl yazıldığına göre iki yoldan biriyle yükseltilir:
+- **Eski bir kurulumu yükseltme.** Yeni kurulum ilk kurulum politika şablonu v20'yi alır. Eski bir kurulumun tam
+  yükseltmesi, policy'sinin nasıl yazıldığına göre iki yoldan biriyle yapılır:
   - **İlk kurulum şablonuyla kurulmuşsa:** `deckent policy upgrade --template current --scope <id> --preview`, ardından
     `--apply`. Bu, sizin adınıza yönetilen policy zinciriyle çalışır (sizin kartınız, denetim, arşiv).
   - **Elle yazılmışsa:** `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, ardından
@@ -54,9 +54,9 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
   Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, satırda gösterilen numara o satırla
   yanıtlar, Esc kapatır; her evet/hayır sorusu (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
-- `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
-  algıladığı host aracı köprülerini önizler. Docker kodlama işçileri onu okumaz; onlar
-  [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif) bölümündeki işçi dosyasını alır.
+- `deckent init --preview`, `AGENTS.md` ve `CLAUDE.md` yoksa bir `AGENTS.md` talimat dosyasını önizler; host köprüsü eklemez.
+  Terminal okuyucusu `DECKENT.md` dosyasını eski kurulumlar için son seçenek olarak korur. İşçi talimatları ayrıca seçilir:
+  [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif).
 - `deckent doctor` neyin hazır olduğunu söyler, kurulum başlayamıyorsa sıfır dışı kodla çıkar.
   `deckent init preview --profile <dosya>` bir kurulum profili dosyasını önizler (ileri düzey). İlk kurulum şablonundan geniş
   kurallı bir profili uygulamak (`init apply --profile`, `init resume`) sizi gerçek terminalde ister (`AUTHORITY_WITNESS_REQUIRED`,
@@ -68,7 +68,7 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   LM Studio gibi yerel bir sunucu ve fiyatı yayımlanmış OpenAI uyumlu bir uç nokta. Ücretsiz denemenin reddettiği anahtar asla
   saklanmaz. Ücretsiz denemesi olmayan sağlayıcıda anahtar doğrulanmadan saklanır; olası reddi ilk tur gösterir.
 - **Model bağla:** paketlenmiş kataloğu olan sağlayıcılar o modelleri sunar; kataloğu olmayanlarda önce adresi, sonra sınırlı
-  `/v1/models` listesinden birebir model kimliğini seçersiniz. Deckent bu kimliği aynen saklar. Yerel loopback modeller
+  `/v1/models` listesinden birebir model kimliğini seçersiniz. deckent bu kimliği aynen saklar. Yerel loopback modeller
   ücretsiz ölçülür; yayımlanmış fiyatı doğrulanmamış uzak model listelenir ama nedeni ve sonraki adımıyla kilitli kalır (Zhipu
   GLM Çin, fiyatları CNY olduğu için kilitli kalır). OpenRouter model bağlantıları sunar; ücretli çağrı için fiyat ve
   yönlendirme yine doğrulanmalıdır.
@@ -97,10 +97,15 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   (Claude Code, Cursor) bütçesiz çalışır. Sağlayıcı bildirmediyse `/usage` akıl yürütme token'larını *ölçülmedi* gösterir;
   harcama hesabını (üst sınır, ayrılan, kesinleşen) okumak için orada bir bütçe açın. Paranın nasıl ayrılıp kesinleştiği:
   [Harcamanın kesinleşmesi](#harcamanın-kesinleşmesi).
-- **Bugün abonelikler:** Claude Code işçisi kendi Claude girişinizle çalışır; abonelikli Brain (`/do`'nun arkasındaki
-  planlayıcı) `claude-cli-subscription` ya da `codex-cli-subscription` ile kullanılabilir (bkz.
-  [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)); Claude aboneliğiyle terminal sohbeti hâlâ
-  desteklenmiyor, sohbet için Anthropic API anahtarı kullanın. ChatGPT ile giriş `/provider`'da henüz kullanılamıyor olarak görünür.
+- **Bugün abonelikler:** Claude aboneliğiyle, kendi CLI girişiniz üzerinden metin sohbeti desteklenir; araçların hazır olması
+  ayrıca denetlenir. Claude/Codex araçlı sohbeti yalnız aynı profilin doğrulamasından sonra deckent'in yönetilen native ajan
+  yolunu kullanır; doğrulama eksikse metin sohbeti açık kalır ve araçların neden hazır olmadığı gösterilir. Devir onayı, politika,
+  kota ve sandbox kontrolleri her kullanımda geçerlidir. Abonelikli Brain planlaması `claude-cli-subscription` veya
+  `codex-cli-subscription` ile kullanılabilir (bkz. [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)).
+  `/provider`, Claude ile giriş ve ChatGPT ile giriş satırlarını gösterir; ikincisi kendi Codex CLI girişinizi kullanır.
+  Yinelenen eski Codex satırı gizlidir; CLI komutları ve profilleri okunabilir kalır. Cursor beta etiketlidir. ChatGPT girişi
+  şifreli depo kontrollerini korur; ilerleyemezse API anahtarlı sağlayıcı seçimi sunulur. Ayrı SIWC tarayıcı girişinin işçi rölesi
+  etkinleştirme beklemesindedir; yalnız giriş yapmak onu etkinleştirmez.
 - **Cursor işçileri:** paketli Cursor abonelik kataloğunu `deckent models catalog register --scope <id> --command-id <id>
   --seed cursor-cli-subscription` ile kaydedin, sonra modelleri `models catalog activate` ile açın. Bir Cursor denemesi tur,
   token, süre ve araç çağrılarını bildirir ve rapor JSON'u ile biter; gerçekten kullandığı model oturum başlangıç adından okunur
@@ -128,27 +133,38 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   Model kartındaki Esc · Later (alpha.59) kullanılabilir model yokken kalıcıdır: sonraki açılışlarda kart gelmez, durum satırı
   "Model bağlı değil — /setup" der ve `/setup` kartı yeniden sunar. Model yokken gönderdiğiniz mesaj gönderilmez: taslak olarak girişte
   kalır ve model kartı açılır.
-- **İşçi imajı (alpha.54):** `deckent init` işçi imajını kurulu paketten ön planda derler; önce boyutu ve süre sınırını
-  (`toolchains.update.buildTimeoutMs`) söyleyen bir kart gösterir ve bu kurulum için bir makbuz kaydeder.
-  `deckent init --image-id sha256:<kimlik>` ise bu Docker'da zaten olan bir imajı paketin işçi imaj sürümüyle karşılaştırır
-  (ağsız, salt okunur tek kısa konteyner) ve makbuzu kaydeder. Yalnız terminaldeki kişiye sorulur; `--yes` hiçbir zaman
-  derlemez. Bu Docker'da zaten bir Deckent işçi imajı varsa yeni derleme ondan sonraki sürümü alır. Sürümler ve güncelleme:
-  [Kodlama işçisi imaj sürümleri](#kodlama-işçisi-imaj-sürümleri).
-- **`execution` değerleri:** `deckent init` yalnız Docker çalıştırılabilirini, derlediği ya da benimsediği imaj kimliğini ve
-  bulduğu Git çalıştırılabilirini yazar; bellek, süreç, CPU, süre, log ve çıktı sınırları varsayılanında kalır
-  (`deckent config explain execution`). `deckent doctor` yapılandırılan imajın bu Docker'da olduğunu salt okunur denetler
-  (`docker image inspect`, konteyner yok). Ayarı elle kaydetmek şunu basar:
-  `execution, proje katmanına kaydedildi. Uygulama: yeniden başlatınca. Yedek: …/.deckent/config.json.bak.<zaman>.…` ve
-  `Yeniden başlatma gerekli: çalışan servis önceki yapılandırmayla başladı. `deckent runtime restart` ile (terminalde /service-restart) yeniden başlatın.`
-- **Kayıt ve havuz:** `deckent init registry`, bulduğu kodlama CLI'ından ilk kabul kaydını (registry) ve havuz ayarlarını
-  yazar. Önizleme CLI'ın tam sürümünü geçici ve ağsız bir konteynerde ölçer, önerilen sürümlü profili ve görev türünü
-  gösterir, hiçbir şey yazmaz; uygulama ölçümü tekrarlar ve config policy'si, revizyon kontrolü ve denetim üzerinden yazar.
-  Var olan bir kaydın üzerine asla yazılmaz (tipli ret); başka bir tür eklemek için
-  `deckent coding template --provider <id> --kind <tür> --preview|--apply` kullanın. Sonucu `deckent config explain admission`
-  gösterir. `--discovery`, işçi CLI'ının depodan neyi yükleyebileceğini seçer (bkz.
-  [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif)). Mevcut bir kurulumda eksik havuz için
-  `deckent init pool --scope <id> --preview`, ardından `--apply` çalıştırın; kapasite kabul (admission) yapılandırmasından
-  gelir, farklı bir mevcut havuzun üzerine asla yazılmaz.
+- **İzin varsayılanları:** sürümlü profil verisi başlangıç modunu sunar. Paketli `core:solo@1` tam otomatik modu önerir;
+  böyle bir kaydı olmayan profil ve sürümler standart modda kalır. Kişi onayı önce installer yazıcısıyla mod iznini açar, ardından
+  mevcut mod uygulamasıyla seçimi kaydeder. İki yazım arasında kesilirse eksik mod adımından sürer. Şirket politikası, korunan
+  işlem tabanı ve denetim geçerlidir; Shift+Tab veya `/mode` modu değiştirir, `/policy` izinleri gösterir.
+- **İşçi yolu, imaj ve kayıt:** kurulumdan sonraki onboarding, kodlama sağlayıcısını giriş yapmış CLI'lardan veya bağlı
+  abonelikten seçer. Claude/Codex `native-cli-worker` binding'i Linux bubblewrap ve bağlantının kendi girişiyle Docker ve
+  imaj olmadan çalışabilir; düz Docker profili veya SIWC röle işçisi imaj ister. Eski Claude Docker yolu kapalıdır.
+  İmaj kullanan yolda açık imaj edinme onayı arka planda hazırlığa izin verir. Sonraki hazır kartı işçi ayarlarını, kaydı
+  (registry) ve havuzu bu sırayla, mevcut politika, revizyon ve denetim sahipleri üzerinden gözler ve tamamlar. Yapılandırılmış
+  imaj kurulumun yedek seçimidir; ikinci sağlayıcı için onay değildir. İmaj kullanan yolda `/setup`, giriş yapılmış ek sağlayıcıyı o sağlayıcının
+  imajıyla profil ekleme önizlemesinde sunar; mevcut profiller, türler ve değerlendiriciler korunur. Değişmiş önizleme veya
+  reddedilen yazım uygulanmaz. İlk kayıt mevcut registry'nin üzerine yazmaz. Etkin ayarlar `deckent config explain execution`
+  ve `deckent config explain admission` ile görülür.
+- **Açık CLI kurulumu:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
+  --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` mevcut kaydın üzerine yazmadan ilk
+  registry'yi önizler; `--apply` aynı yönetilen sahibi kullanır. Docker'sız abonelik türü için `--connection <profile-id>` verin
+  (kimlik `deckent coding` çıktısında; `--provider` CLI ile, yani `claude` veya `codex` ile eşleşmelidir). Mevcut şablonda
+  `deckent coding template --connection <profile-id>` bağlı native işçiyi seçer. `/provider` içinden veya
+  `deckent models login --connection <kind>` ardından `deckent models connect` ile giriş yapıp bağlanın; deckent bu CLI
+  girişini host CLI girişinden ayrı tutar, host girişi tek başına işçiyi hazır yapmaz. `--connection` yoksa registry kurulumu `execution.docker` ister ve
+  CLI sürümünü yapılandırılmış imajda ölçer. `deckent coding template --provider <id> --kind <kind> --preview|--apply`,
+  kabul edilmiş profilden bir tür ekler. `--discovery` depo keşfini seçer (bkz.
+  [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif)). Eksik havuz
+  `deckent init pool --scope <id> --preview` ile önizlenir ve `--apply` ile açıkça uygulanır; kapasite admission ayarından gelir,
+  farklı mevcut havuz korunur. İmaj soyu: [Kodlama işçisi imaj sürümleri](#kodlama-işçisi-imaj-sürümleri).
+- **İlk commit:** henüz commit olmayan Git deposu ayrı onboarding teklifi alır; bu adım kurulumu engellemez. Sınırlı önizleme
+  `.gitignore` kurallarını gözetir, işaretli dosyaları açıkça seçilmedikçe dışarıda bırakır, kimlik/imzalamayı ve hook'ların
+  çalışmayacağını bildirir. İlk kurulum şablonu v17'den beri kuran kişinin ilk commit operation iznini sağlar; işlem yine kişi
+  kartı ve sır taraması ister. Politika reddi Git dosyalarını değiştirmez. Git olmayan iş klasörleri bu adımı atlar.
+  HEAD yazılmış ama index tamamlanamamışsa `/setup` saklanan özel NUL yol listesini gösterir. Diğer Git yazıcıları bittikten sonra
+  yalnız bu yollar index'te sıfırlanabilir; başka staging, HEAD ve çalışma ağacı korunur. Aynı yola eşzamanlı staging elle
+  uzlaştırılır ve reset komutu sunulmaz. Başka Git yazıcısının kilidini kaldırmayın.
 - **Yeniden başlatma:** `deckent runtime restart` şunu söyler: `Çalışma servisi yeniden başlatıldı (pid …, örnek …).` Yeni bir
   `init policy --apply` servisi zaten adlandırır (`service.identity`) ve onu yalnız kuran kişinin durdurmasına izin verir. Eski
   bir kurulum için [Runtime servisi](#runtime-servisi) bölümüne bakın.
@@ -156,11 +172,13 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   `approvals.requestTtlMs` (10 dakika) sonra sona erer. `y` sonrası: `Run <run-id> başlatıldı. /tasks veya /monitor ile izleyin.`
   "Başlatıldı" Run'ın başladığı demektir; görevin sonucu daha sonra kabul edilir: çıkış koduyla ve tanımlıysa işçinin
   yapılandırılmış raporu ve tipli kabul kontrolleriyle; içerik bağımsız doğrulanmaz.
-- **Teslim ve dala alma satırları:** `/deliver` "/deliver · teslim bekleyen görevler" başlığını taşır; yamayı güncel kaynakla
+- **Teslim ve dala alma satırları:** `working-tree` modunda sonuç `Dosyalarınıza yazıldı (commit atılmadı)` der, teslim
+  komutunu ve dosyaları geri alma komutunu gösterir; index, HEAD ve dallar değişmez. `reference` modunda `/deliver`
+  "/deliver · teslim bekleyen görevler" başlığını taşır; yamayı güncel kaynakla
   karşılaştırır ve `Teslim edildi: commit <commit> → refs/deckent/deliveries/<özet>` ile biter. Dala alma
   `<commit> commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.` diye sorar ve
   `Dala alındı: refs/heads/deckent/first-job <önce> → <sonra>` ile biter; `main` burada checkout edilmişken sunulmaz.
-  Checkout'unuz, index'iniz ve çalışma dosyalarınız değişmez. Ayrıntı: [Teslim](#teslim).
+  `reference` modunda checkout'unuz, index'iniz ve çalışma dosyalarınız değişmez. Ayrıntı: [Teslim](#teslim).
 
 ## Kodlama işçisinin talimatları ve keşif
 
@@ -196,9 +214,18 @@ Bir profilin keşif ve hook ayarlarını nasıl taşıdığı: [Native kodlama p
 
 ## Teslim
 
-Teslimin her biri kendi `y`'sini isteyen üç adımı vardır: değişiklik ayrı bir referansa yazılır (teslim), referans izin
-verdiğiniz bir dala taşınır (dala alma) ve bir dala alma geri taşınabilir (geri alma). Hiçbiri kendiliğinden olmaz: bir kural
-kuyruktaki bir işi teslim *edip etmeyeceğini* kaydeder ama yalnız tavsiye verir.
+Teslim, Run'a sabitlenen `execution.deliveryMode` değerini izler. Ayar yoksa iş hedefi veya dolu `execution.adoption.targets`
+`reference` seçer; aksi durumda `working-tree` seçilir. İş hedefi her zaman `reference` kullanır.
+
+`working-tree` modunda teslim `y`'niz kabul edilen değişikliği güncel dosyalarınıza uygular; deponuza commit, Git nesnesi veya
+referans yazılmaz. Index, HEAD, dallar ve ilgisiz düzenlemeler korunur. Dokunulan bir dosya Run tabanından sonra değişmişse
+teslim hiçbir şey yazmadan reddedilir. deckent eski dosyaları ve teslim günlüğünü saklar. Dosyaları geri alma ayrı bir kişi
+kartıdır ve yalnız dokunulan her yol hâlâ teslim edilen içerikle eşleşiyorsa eski hâlleri geri koyar.
+
+`reference` modunda her adım ayrı `y` ister: teslim ayrı referans yazar, dala alma izinli dalı ilerletir, geri alma dalı geri
+çeker. Çalışma dosyaları ve index değişmez. Kuyruk kuralı bir işi teslim *edip etmeyeceğini* kaydeder; yalnız tavsiye verir.
+Şirket politikası dosyaya teslimi kapatabilir; `deliver-working-tree` için ek `require-approval`, bu sürümde ikinci onaylayan
+yolu olmadığı için reddedilir. Ayar değişikliği mevcut Run'ların değil, yeni Run'ların modunu seçer.
 
 ### Terminalde teslim penceresi
 
@@ -207,9 +234,10 @@ kuyruktaki bir işi teslim *edip etmeyeceğini* kaydeder ama yalnız tavsiye ver
   satırı Ctrl+T ve Enter ile odağı ona verir). `/deliver` kapsamdaki bekleyen tüm görevleri listeler ve seçileni odakla açar.
 - **Gösterdikleri.** Önce sade sözlerle bir özet: başlık, neyin değiştiği, neden kabul edildiği (işçinin kendi raporu iddia
   olarak işaretlenir), risk ve evet ya da hayırın ne yapacağı. Ardından görevin Run/Görev kimlikleri, güncel kaynağa karşı uyum
-  kontrolü (etkilenen dosyalar tabanla aynı), değişen dosyalar `patch-preview --stat` sayılarıyla, yalnız ayrı bir
-  `refs/deckent/deliveries/` referansının yazılacağı (dallar, index ve çalışma ağacı değişmez) ve yalnız
-  `execution.adoption.targets` yapılandırılmışsa sonraki ayrı bir seçim olarak hedef dallar.
+  kontrolü (etkilenen dosyalar tabanla aynı), değişen dosyalar `patch-preview --stat` sayılarıyla ve evetin nereye yazacağı:
+  `working-tree` bu dosyaları commit atmadan yazar, eski hâllerini saklar; `reference` yalnız
+  `refs/deckent/deliveries/` yazar (dallar, index ve çalışma ağacı değişmez). Yalnız `reference` modunda
+  `execution.adoption.targets` yapılandırılmışsa sonraki ayrı seçim olarak hedef dallar sunulur.
 - **Farkı görmek.** ↑↓/j/k dosya seçer, Enter hunk'ları önizlemenin kurulduğu deneme, taban ve öneri kimliğiyle açar, Esc
   listeye döner. Fark gövdeleri `deliver-port.json` ile sınırlıdır (`maxDiffFiles`, `maxDiffLinesPerFile`,
   `maxDiffBytesPerFile`); ikili ya da aşırı büyük dosya "Gösterilemez: ikili veya çok büyük" der, kesilen satırlar sayılır. Her
@@ -219,21 +247,25 @@ kuyruktaki bir işi teslim *edip etmeyeceğini* kaydeder ama yalnız tavsiye ver
   hazırlık ve teslimi tek akışta yapar: pencerenin `y`'si onayı yalnız kart pencerenin gösterdiği işlem, kimlikler, komut,
   dosya kümesi ve tabanla birebir aynıysa yanıtlar; değilse kartın kendisi gösterilir ve yeni bir `y` ister. Girişe yazılan `y`
   hiçbir zaman onay değildir.
-- **Dala almak.** Teslimden sonra yapılandırılmış bir dal yalnız ikinci bir `y` ile dala alınır (↑↓ dalı seçer); `n`/Esc
+- **Dala almak (yalnız `reference`).** Teslimden sonra yapılandırılmış bir dal yalnız ikinci bir `y` ile dala alınır (↑↓ dalı seçer); `n`/Esc
   hiçbir şey yapmaz. `execution.adoption.verification` yapılandırılmışsa bu `y` önce bir doğrulama adımı açar: kapsamın
   yapılandırılmış türde (tek görevli) kabul edilmiş Run'ları, yalnız doğrulama zorunlu değilse "doğrulamasız dala al" satırı;
   ↑↓ seçer, tek yazılmış `y` seçimle dala alır, `r` listeyi yeniden okur, `n`/Esc geri döner. Hiç yoksa bunu söyler ve
   `deckent run create … --delivery-command-id <bu teslim>` adımını adlandırır. Dala alma, Run'ın tam olarak bu commit'i güncel
   profil ve kurulum ölçütleriyle doğruladığını yine denetler; bir ret nedeniyle seçime döner.
-- **Sonuçlar ve retler.** Teslim ve dala alma satırları ile döküm özeti teslim ve dala alma komut kimliklerini gösterir
-  (`task integration-rollback --adoption-command-id` için). Eskimiş taban, eksik izin (deneme araması için `scope inspect` ve
-  entegrasyon eylemleri) ya da doğrulanmış terminal olmayan bir oturum sade sözlerle ve sonraki adımla reddedilir.
+- **Sonuçlar ve retler.** `working-tree` sonucunda `Dosyalarınıza yazıldı (commit atılmadı)` denir, teslim komutu ve dosyaları
+  geri koymak için `deckent task integration-rollback --scope <id> --run <id> --task <id>` gösterilir. Dokunulan dosya değişmişse
+  `r`, `/do <görevin kayıtlı isteği>` satırını girişe koyar; Enter yeni plan kartını açar, hiçbir şey kendiliğinden başlamaz.
+  `reference` modunda teslim/dala alma satırları ve döküm teslim/dala alma komut kimliklerini gösterir (dalı geri alma
+  `task integration-rollback --adoption-command-id` kullanır). Eskimiş taban, eksik izin (deneme araması için `scope inspect` ve
+  entegrasyon eylemleri) veya doğrulanmamış terminal sade sözlerle ve sonraki adımla reddedilir. Yarıda kalan dosya teslimi
+  yazılan/yazılmayan yolları adlandırır, eski dosyaları saklar; körlemesine tamamlanmaz.
 
 ### Teslim onayı
 
 - `task integration-deliver`, `task integration-adopt` ve `task integration-rollback` her biri doğrulanmış bir insan
-  terminalinde tek açık `y` ister. Geri alma, dala alınmış dalı geri taşır; bu yüzden dala alma gibi sorar, kartı dalı ve
-  şimdiki → önceki commit'i gösterir.
+  terminalinde tek açık `y` ister. `working-tree` geri alma kartı teslim edilen → eski dosya hâllerini gösterir; değişmiş yol
+  `PATCH_WORKING_TREE_CHANGED` ile hiçbir şey yazmadan reddedilir. `reference` geri alma kartı dalı ve şimdiki → önceki commit'i gösterir.
 - Kart görev başlığını, Run/Görev kimliklerini, referansı ya da dalı, önceki/yeni commit'i ve değişen dosyaları gösterir. Boş
   yanıt, `n`, girdinin sonu, yönlendirilmiş giriş ya da çıkış ve SDK ya da MCP'den gelen yeni bir etki reddedilir. Hazırlama ve
   kontrol yalnız bir aday kurar.
@@ -241,16 +273,16 @@ kuyruktaki bir işi teslim *edip etmeyeceğini* kaydeder ama yalnız tavsiye ver
   ister.
 - Dala alma ayrıca `execution.adoption.targets`, policy, görevin kabulü ve yapılandırılmış doğrulamayı ister; komut satırında
   `--verification-run <run>` verin.
-- Teslim commit'leri görev başlığını, kimlikleri ve sınırlı bir kabul durumunu taşır. Yazar ve committer zamanı güvenilir
+- `reference` modunda teslim commit'leri görev başlığını, kimlikleri ve sınırlı bir kabul durumunu taşır. Yazar ve committer zamanı güvenilir
   teslim planlama saatinden alınır ve yeniden oynatmanın aynı commit'i yazması için teslim niyetinde sabitlenir. Varsayılan
-  kimlik Deckent'tir; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Önizleme Git nesneleri
+  kimlik `Deckent`'tir; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Önizleme Git nesneleri
   yanıttan önce yalnız adayda hazırlanır; bir ret deponuzda hiçbir Git nesnesi, ref, dal ya da teslim niyeti yazmaz.
 - Doğrulanmış terminal tanığı yalnız Linux'ta (WSL dahil) vardır; başka sistemlerde bu komutlar
   `DELIVERY_INTERACTIVE_REQUIRED` ile reddedilir.
 
 ### Teslim kuyruğu: inceleme ve geri alma
 
-Kayıtlı bir entegrasyon hedefi servis kuyruğunu kullanır. Kuyruk alpha.43'ten beri Deckent'in kendi geliştirmesinde gerçek
+Kayıtlı bir entegrasyon hedefi servis kuyruğunu kullanır. Kuyruk alpha.43'ten beri deckent'in kendi geliştirmesinde gerçek
 değişiklikleri teslim etti; bu henüz paketlenmiş, barındırılan ya da başka platformlardaki kullanımın kanıtı değildir, bunu
 beta göstermelidir. `/deliver` güncel tabanda hazırlar; taban ya da hedef reddinden sonra `r` yeniden hazırlama sunar. Son
 bilinen durumu `r` ile okuyun; yayın ve dala alma tam ve sabit partiyi ayrı gösterip ayrı bir `y/N` sorar. `/runs` ayrıntısı
@@ -307,21 +339,23 @@ Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index 
 ## Sandbox görünümleri
 
 - Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje, çağrının onay
-  kuralları içinde yazılabilir; `.git` salt okunur, ev klasörü gizli ve ağ kapalıdır. Onaylanan komutlar da Deckent'in yetki
+  kuralları içinde yazılabilir; `.git` salt okunur, ev klasörü gizli ve ağ kapalıdır. Onaylanan komutlar da deckent'in yetki
   dosyalarına yazamaz. Landlock ayrıca izin ve sahiplik değişikliklerini reddeder ve korunan yolları tutan dizinlerde giriş
   ekleyip silemez.
-- Tam erişim, kullanılabilir bir **açık bubblewrap sandbox'ı** ister: ağ ve ev klasörü açılır; Deckent durumu, ayarlar, kimlik
+- Tam erişim, kullanılabilir bir **açık bubblewrap sandbox'ı** ister: ağ ve ev klasörü açılır; deckent durumu, ayarlar, kimlik
   bilgisi kalıpları ve host Docker/oturum D-Bus soketleri maskeli ya da salt okunur kalır. Açık sandbox yoksa tam erişim kabuk
   çağrıları, açıkça `host` seçilmiş olsa bile reddedilir.
-- **Host'a düşme.** Sandbox yoksa kapalı bir mod host'a düşer ve bunu söyler (`terminal.shell.realm`, varsayılan
+- **Host'a düşme.** API profillerinde sandbox yoksa kapalı bir mod host'a düşer ve bunu söyler (`terminal.shell.realm`, varsayılan
   `prefer-sandbox`); bu yolun dosya sistemi sınırı yoktur, bu yüzden yalıtım şartsa `require-sandbox` seçin.
+  Abonelik profilleri sandbox ister; açıkça seçilen veya yedek yol olan host kabuğu reddedilir (`SUBSCRIPTION_HOST_SHELL_REFUSED`).
+  API host çağrıları mevcut onay kurallarını korur.
 - **MCP sunucuları** varsayılan olarak ağ erişimi ve kendi kalıcı ev klasörü olan bir sandbox'ta (`sandbox-net`) çalışır; kaydı
   `host` diyen bir sunucu sandbox'sız çalışır, her birinin nerede çalıştığını `/mcp` gösterir.
 - Ortak kimlik bilgisi kataloğu gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın bulut CLI'larını kapsar. Ev klasörü
   maskelemesi sınırlıdır (3 derinlik, 20.000 giriş); özel konumlar, farklı dosya adları ve maskelerin dışındaki takma yollar
   ayrıca yalıtılmalıdır.
 - Tam otomatik `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) için yine sorar; ekleme (`>>`) değişiklik sayılır.
-- Sabit zemin (Deckent ayarları, policy, onaylar, denetim, sırlar ve MCP kayıt defteri) her sandbox modunda uygulanır.
+- Sabit zemin (deckent ayarları, policy, onaylar, denetim, sırlar ve MCP kayıt defteri) her sandbox modunda uygulanır.
 
 ## İzin modları
 
@@ -337,8 +371,8 @@ terminal iznin verilmediğini söyler. Sözleşme: [sahibin açtığı modlar](m
 | Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
 |---|---|---|
 | `core.secret-store.env@1` (hiçbir depo seçilmemişse) | hiçbir şey; ortam değişkeninden okunur | o ortamı devralan her program |
-| `core.secret-store.file@1` | düz metin, 0600 dosya | Deckent ve sizin hesabınızla çalışan diğer programlar |
-| `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
+| `core.secret-store.file@1` | düz metin, 0600 dosya | deckent ve sizin hesabınızla çalışan diğer programlar |
+| `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
 
 Sağlayıcı çağrıları anahtarı runtime'ın içinde çözer; anahtar isteme ya da shell ortamına konmaz ve işçiler asla anahtar
 almaz. Desteklenen sandbox görünümleri depoyu gizler; host realm'i ya da host'a düşen yol dosya sistemi yalıtımı sağlamaz.
@@ -356,10 +390,10 @@ seçimlerini korur.
    ister); `doctor` aynı adları gösterir. Komut her anahtarı kopyalar, doğrular, yeni depoyu seçer ve ardından eski kopyayı
    siler; daha zayıf bir depoya geçiş ikinci bir uyarı kartında onay ister. Kaydetme, silme ve geçiş tek bir kurulum geneli
    muhafaza bölümünü paylaşır.
-2. Diğer yapay zekâ araçlarını Deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
+2. Diğer yapay zekâ araçlarını deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
    dosyasında depo dosyaları için `Read` yasak kuralları. Bu, dosya araçlarını ve yaygın shell komutlarını durdurur, her betiği
    değil.
-3. Planlanan: Deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece
+3. Planlanan: deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece
    hesabınızdaki hiçbir program anahtarları okuyamaz.
 
 Dosya depoları native Windows'ta yok.
@@ -386,13 +420,13 @@ Sözleşme: [proje anahtar kasası](modules/permission-modes.md#pre-8-project-ke
 
 ## Harcamanın kesinleşmesi
 
-Her kapsamın tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce Deckent, geçerli olabilecek
+Her kapsamın tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce deckent, geçerli olabilecek
 en pahalı fiyat kademesinde çağrının tutabileceği en yüksek tutarı ayırır; sonra çağrıyı sağlayıcının son yanıtında bildirdiği
 kullanım ile doğrulanmış yayımlanmış fiyatın çarpımından kesinleştirir (`measured-tariff`). OpenRouter çağrıları istisnadır:
 OpenRouter'ın yanıtında bildirdiği ücretten kesinleşir. Sağlayıcı hangi fiyat kademesini kullandığını söylemiyorsa (DeepSeek)
 çağrı yayımlanmış en yüksek fiyattan kesinleşir ve üst sınır olarak işaretlenir. İlk ücretli OpenRouter çağrısından önce
 https://openrouter.ai/settings/plugins sayfasında hiçbir eklentinin "Prevent overrides" ile açık olmadığını kontrol edin ve
-OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde ayarlayın; Deckent bu iki ayarı göremez.
+OpenRouter kredi sınırını deckent bütçenizden yüksek olmayacak şekilde ayarlayın; deckent bu iki ayarı göremez.
 
 - Kapsamın ilk bütçesi `deckent models create-budget --scope <id> --usd <n>` ile ya da bütçe penceresiyle (`/provider`'ın ilk
   satırı) açılır, `deckent models revise-budget --scope <id> --usd <n>` ile değişir.
@@ -539,7 +573,7 @@ reddetmek ayrı bir karardır, buradaki bir tuş değildir.
 
 ## MCP ve kimlik
 
-- **Deckent'in ajanı için MCP sunucuları.** `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve
+- **deckent'in ajanı için MCP sunucuları.** `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve
   hiçbir şeyi başlatmaz; `--check` yalnız güvenilen sunucuları başlatır. Her güven kararı (`mcp approve`, yerel ya da kullanıcı
   kapsamına `mcp add`) kişinin terminalindeki bir karttır; terminal dışında reddedilir (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes`
   kartı atlamaz. Sunucuların nerede çalıştığı: [Sandbox görünümleri](#sandbox-görünümleri).
@@ -591,7 +625,7 @@ gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten
 - **Abonelik Brain'i.** Önce `deckent models login --connection claude-cli-subscription [--sso]` Brain'in kendi girişini açar
   (Claude CLI'nin kendi girişi, kendi terminalinizde); sonra `deckent models connect --scope <id> --connection claude-cli-subscription
   --command-id <id> --model <id> [--executable <mutlak yol>] [--config-dir <mutlak dizin>] [--delegate none|ai|system|ai,system]` onu
-  Brain planlaması için bağlar. Giriş Deckent'e aittir (global durum kökünde `headless/logins`, `deckent paths` gösterir); `--config-dir`
+  Brain planlaması için bağlar. Giriş deckent'e aittir (global durum kökünde `headless/logins`, `deckent paths` gösterir); `--config-dir`
   vermedikçe `~/.claude` kullanılmaz. Kullanılabilir bir bubblewrap korumalı alanı yoksa reddedilir. `--delegate`, AI ya da MCP üzerinden
   planlama ve arka plan rolleri (kurtarma kararı, hafıza değerlendirici) için onayınızdır; verilmezse önceki seçiminiz kalır.
   `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir. CLI'nin kendi yenileme kilidi varken ya da başka bir Brain çağrısı
@@ -602,7 +636,7 @@ gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten
   models connect --connection codex-cli-subscription --executable <mutlak yol> --config-dir <mutlak dizin> --delegate system` onu bağlar
   (her bayrak yukarıdaki gibi). Kabul edilmiş işçi imajı yoksa bağlantı yine de araçsız tek seferlik model çağrıları (BeUser) için başarılı olur
   ve hiçbir işçi modelinin etkinleştirilmediğini söyler.
-  Kotası ChatGPT planınızınkidir ve Deckent kendi çalıştırdığınız bir Codex oturumunun yenileme kilidini gözlemez.
+  Kotası ChatGPT planınızınkidir ve deckent kendi çalıştırdığınız bir Codex oturumunun yenileme kilidini gözlemez.
 - **Kota sorusu.** Kota beklemesi biten bir işçi Run'ı size sorar: `deckent run resume --quota wait` beklemeyi sürdürür,
   `deckent run resume --quota next-candidate` WorkClass listesindeki sıradaki adayı kullanır; Run'ı kapatmak ayrı bir seçimdir.
   Beklemeyi sürdürme en çok `runRuntime.quotaRecovery.maxRewaits` (3) kez sunulur, sonra `RUN_QUOTA_WAIT_LIMIT`.

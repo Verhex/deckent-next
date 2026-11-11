@@ -126,7 +126,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(run.output.indexOf('Who uses this installation: applied')).toBeGreaterThan(run.output.indexOf('Language: applied', permissions));
     const summary = screen(run.output);
     for (const line of ['1. Language · done', '6. Permissions · done', '3. Folder and scope · done', '5. Who uses this installation · done', '7. Starting permissions · done',
-      '9. Final check · done']) expect(summary).toContain(line);
+      '9. Final check · check ran']) expect(summary).toContain(line);
     for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied', 'Starting permissions: applied']) expect(summary).toContain(result);
     for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
     expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.
@@ -146,7 +146,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const repeat = await f.deckent(['init', '--yes', '--scope', 'erp-demo', '--json']);
     expect(repeat.code, repeat.stderr).toBe(0);
     expect(JSON.parse(repeat.stdout).apply.results).toEqual([]);
-    const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['Deckent setup', '\u001b']]);
+    const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['deckent setup', '\u001b']]);
     expect(rerun.timeout, rerun.output?.slice(-3000)).toBeUndefined();
     expect(rerun.status).toBe(0);
     expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile Solo is already saved in your user's configuration.");
@@ -273,7 +273,7 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     // Order on the terminal: the window offers the stage → the window closes → the card → sudo's own prompt → re-detection → the window again.
     const at = (text: string, from = 0) => run.output.indexOf(text, from);
     const offered = at('Install Docker Engine now?'), card = at('Install Docker Engine (administrator rights)', offered), prompt = at('[fake-sudo] password for fake:', card);
-    const ready = at('Docker 29.0.0 is ready', prompt), reopened = at('Deckent setup', ready);
+    const ready = at('Docker 29.0.0 is ready', prompt), reopened = at('deckent setup', ready);
     expect([offered, card, prompt, ready, reopened].every(index => index > 0)).toBe(true);
     expect(offered < card && card < prompt && prompt < ready && ready < reopened).toBe(true);
     expect(screen(run.output.slice(0, at('\u001b[?2026l', reopened) + 8))).toContain('8. Execution environment · done');
@@ -334,7 +334,7 @@ esac
     expect(run.status, run.output.slice(-2000)).toBe(0);
     // Order on the terminal: the question in the window → the card (size and time) → the build line → the window again with the settings.
     const at = (text: string, from = 0) => run.output.indexOf(text, from);
-    const asked = at('Build the Deckent worker image now?'), card = at('Build worker image', asked), building = at('Building the worker image', card), settings = at('Execution settings', building);
+    const asked = at('Build the deckent worker image now?'), card = at('Build worker image', asked), building = at('Building the worker image', card), settings = at('Execution settings', building);
     expect([asked, card, building, settings].every(index => index > 0) && asked < card && card < building && building < settings, run.output.slice(-4000)).toBe(true);
     expect(run.output.slice(card, building)).toMatch(/about 3\.3 GB/u);
     expect(run.output).toContain('Worker image, registry and pool are set up: ready for the first job.');

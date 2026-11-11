@@ -10,7 +10,7 @@ import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configu
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
+import { configuredWorkerKinds, isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.js';
 import { configuredWorkerSetupFact } from './internal/intent-facts.js';
 import { preflightConfiguredRunIntent, transitionConfiguredRunIntent } from './internal/intents.js';
@@ -75,8 +75,14 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options), localPrincipalPeer())).responseContent;
       return content?.kind === 'response-body' ? content.data : null; },
       async prepare(command) {
-        const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
+        const configuredRegistry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
+        const unavailableKinds = (await configuredWorkerKinds(context.config)).filter(row => row.reason !== null);
+        const usableKinds = configuredRegistry?.kinds.filter(row => !unavailableKinds.some(value => value.kind === row.kind));
+        const registry = configuredRegistry && usableKinds ? { ...configuredRegistry, kinds: usableKinds,
+          profiles: configuredRegistry.profiles.filter(profile => usableKinds.some(row => row.profile.id === profile.id && row.profile.version === profile.version)) } : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
+        if (!registry.kinds.length) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: { phase: 'awaiting-confirmation',
+          ...Object.fromEntries(unavailableKinds.map((kind, index) => [`${kind.reason}.${index}`, kind.kind])) } });
         // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
         const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
         const gate = await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
@@ -114,7 +120,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
         assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
         const note = memory.note();
-        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), ...(note ? { planningMemory: note } : {}),
+        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), unavailableKinds, ...(note ? { planningMemory: note } : {}),
           quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']), brainBelowRecommended: gate.belowRecommended };
       },
     }).plan(input, undefined, signal, observe);

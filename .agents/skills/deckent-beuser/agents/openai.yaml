@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent BeUser"
+  display_name: "deckent BeUser"
   short_description: "Journey spec, then walk the assembled release as the person"
   default_prompt: "Use $deckent-beuser to write the journey spec for this surface, or to walk every branch of it as the persona on the assembled release and record the transcript and verdicts."
 policy:

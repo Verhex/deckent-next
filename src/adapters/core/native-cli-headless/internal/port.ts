@@ -1,7 +1,8 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { headlessEgressReasons } from '#domain/index.js';
 import { realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
   type HeadlessEgress, type ModelInvocationProfile } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliHeadless, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
@@ -200,3 +201,5 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
     },
   });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

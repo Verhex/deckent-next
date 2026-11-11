@@ -1,3 +1,5 @@
+import { currentTiming, type TimingTrace } from '#platform/index.js';
+import { TimingFrameContext } from '#surfaces/core/terminal-kit-ink/index.js';
 import { useCallback, useMemo, useRef } from 'react';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
@@ -61,11 +63,12 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };
   }, [panels, permissionMode, pinnable, input.themeControl]);
+  const timing = useRef<TimingTrace | undefined>(undefined);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
   const open = useCallback(async (command: string, args: string, execution: LocalExecution): Promise<boolean> => {
     const kind = settingsPanelOf(command, args, ports);
     if (!kind) return false;
-    approvalAfter.current = null;
+    approvalAfter.current = null; timing.current = currentTiming();
     await panel.pick(execution, { kind: 'settings', panel: kind }, ['close']);
     const approvalId = approvalAfter.current; approvalAfter.current = null;
     if (approvalId && !execution.signal.aborted) {
@@ -78,8 +81,8 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const window = kind && ports && panels && !input.blocked
     // SLASH-WINDOWS: what a settings window reports when it closes (a `/model` pin, a `/config` or `/mcp` outcome, a `/provider` result) is the
     // one system summary line, never a chat notice.
-    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => ({ ...systemSummaryEntry(item.text, item.level), ...(item.identity ? { identity: item.identity } : {}) })))}
+    ? <TimingFrameContext.Provider value={timing.current}><SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => ({ ...systemSummaryEntry(item.text, item.level), ...(item.identity ? { identity: item.identity } : {}) })))}
       onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
-      onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
+      onClose={() => { panel.choose(handle.current, 'close'); }} /></TimingFrameContext.Provider> : null;
   return { open, openKind: kind, window };
 }

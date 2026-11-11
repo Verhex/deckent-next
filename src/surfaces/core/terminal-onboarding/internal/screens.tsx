@@ -10,6 +10,7 @@ import { welcomeScreen } from './first-task.js';
 import { guideScreen } from './guides.js';
 import { settleOnboardingReady } from './ready.js';
 import { firstCommitScreen } from './first-commit.js';
+import presentation from './presentation.json' with { type: 'json' };
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
 export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: OnboardingFocus, conversationNotice?: string): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
@@ -71,13 +72,23 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
       const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
       // F2-13: one row per subscription CLI (its first connected profile): the system assigns the worker model per WorkClass, so per-model rows only repeated the CLI.
       const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = (model.snapshot.connections ?? []).filter((row, index, all) => all.findIndex(other => other.provider === row.provider) === index);
+      const uncertain = model.snapshot.hosts.some(row => row.cli === 'unknown' || row.cli === 'found' && row.login === 'unknown');
+      const picker = { title: firstSignedInHost(model.snapshot) ? t('onboarding.work.none', {}, locale) : uncertain ? t('onboarding.work.notReady', {}, locale) : model.snapshot.hosts.some(row => row.cli === 'found') ? t('onboarding.work.unsigned', {}, locale) : t('onboarding.work.missing', {}, locale),
+        body: [...body, t('onboarding.work.explain', {}, locale)], choices: rows.map(row => {
+          const ready = row.cli === 'found' && row.login === 'found', guidance = presentation.cliGuidance.find(entry => entry.id === row.id);
+          const status = ready ? t('onboarding.work.available', {}, locale) : row.cli === 'absent' ? t('onboarding.work.cliMissing', {}, locale)
+            : row.cli === 'found' && row.login === 'absent' ? t('onboarding.work.loginMissing', {}, locale) : t('onboarding.work.unknown', {}, locale);
+          return { id: row.id, label: `${row.id} · ${status}`,
+            disabled: !ready, detail: !ready && guidance ? [t('onboarding.work.install', { cli: row.id, page: guidance.installPage }, locale),
+              t('onboarding.work.signIn', { command: guidance.signIn }, locale), t('onboarding.work.return', {}, locale)] : [] };
+        }) };
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
       const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
-        : { title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale), body, choices: provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : [] };
+        : provider ? { title: t('onboarding.work.selected', { cli: provider }, locale), body, choices: [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] } : picker;
       // BeUser M-28: a kind already set up (revisit) is kept by default; adding another CLI is the explicit second choice.
       choice = admitted.length && step.stages[0]?.state === 'done' ? await askOnboardingQuestion({ ...question, title: t('onboarding.work.configured', { cli: admitted.join(', ') }, locale),
         choices: [{ id: 'keep', label: t('onboarding.session.continue', {}, locale) }, { id: 'change', label: t('onboarding.work.add', {}, locale) }] }, io) : await askOnboardingQuestion({ ...question, title: offer.title, body: offer.body,
-        choices: [...offer.choices, { id: 'change', label: t('onboarding.work.change', {}, locale) }] }, io);
+        choices: [...offer.choices, ...(provider || connections.length ? [{ id: 'change', label: t('onboarding.work.change', {}, locale) }] : [])] }, io);
       if (choice.id === 'keep') { await session.finish(step); continue; }
       const connection = connections.find(row => choice.id === `connection:${row.id}`);
       if (connection) {
@@ -88,9 +99,7 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         continue;
       }
       const changing = choice.id === 'change';
-      if (changing) choice = await askOnboardingQuestion({ ...question, choices: rows.map(row => ({ id: row.id,
-        label: `${row.id} · ${(row.cli === 'found' && row.login === 'found' ? t('onboarding.work.available', {}, locale) : t('onboarding.work.unavailable', {}, locale))}`,
-        disabled: row.cli !== 'found' || row.login !== 'found' })) }, io);
+      if (changing) choice = await askOnboardingQuestion({ ...question, ...picker }, io);
       if (changing && rows.some(row => row.id === choice.id && row.cli === 'found' && row.login === 'found')) {
         const selected = choice.id;
         const confirmed = await askOnboardingQuestion({ ...question, title: t('onboarding.work.selected', { cli: selected }, locale),

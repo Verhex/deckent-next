@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Terminal Design"
+  display_name: "deckent Terminal Design"
   short_description: "Design capable Workline and contextual Ledger"
   default_prompt: "Use $deckent-terminal-design to define Causal Workline, contextual Ledger and truthful TTY, keyboard and platform behavior."
 policy:

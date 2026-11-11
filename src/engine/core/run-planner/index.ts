@@ -1,6 +1,7 @@
+import { timedSync, catalogParseObserver } from '#platform/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
+  parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition as encodeModelBindingDefinitionRaw, parseProviderCatalog as parseProviderCatalogRaw, resolveModelBindingDefinition as resolveModelBindingDefinitionRaw, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, brainModelSwitchedOff, boundBrainContext, assertBrainLeavesAssignment,
   BRAIN_CORRECTION_TEMPLATE, prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
@@ -61,6 +62,7 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
   }
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
+  readonly unavailableKinds?: readonly import('#engine/core/toolchain-currency/index.js').WorkerKindAvailability[];
   /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
   /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
   /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
@@ -191,7 +193,10 @@ export class BrainPlanApplication {
       // BeUser D-02: the refusal names the kinds the model used that this scope has not registered, and the registered ones (bounded, names only);
       // the rejected draft's tasks (`plan`: id and kind, names only) are its detail.
       const unknown = [...new Set(draft.graph.tasks.map(task => task.kind).filter(kind => !prepared.kinds!.includes(kind)))].slice(0, 8);
+      const unavailable = prepared.unavailableKinds?.filter(row => unknown.includes(row.kind)) ?? [];
       throw Object.assign(ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: unknown.join(', '),
+        ...(unavailable.length ? { missingKinds: unavailable.filter(row => row.reason === 'image-missing').map(row => row.kind).join(', '),
+          unverifiedKinds: unavailable.filter(row => row.reason === 'image-unverified').map(row => row.kind).join(', ') } : {}),
         registered: prepared.kinds.slice(0, 16).join(', ') || '-', plan: draft.graph.tasks.slice(0, 8).map(task => `${task.id} (${task.kind})`).join(', ') } }), { [ANSWER]: text });
     }
     return draft;
@@ -285,3 +290,9 @@ export class BrainPlanApplication {
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
   }
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);
+
+const resolveModelBindingDefinition = (input: unknown, reference: unknown) => resolveModelBindingDefinitionRaw(input, reference, catalogParseObserver);
+
+const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);

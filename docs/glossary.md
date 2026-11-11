@@ -1,4 +1,4 @@
-# Deckent glossary
+# deckent glossary
 
 [Türkçe](glossary.tr.md) · [Architecture overview](architecture-overview.md) · [README](../README.md)
 
@@ -51,7 +51,7 @@ execution. The MCP surface can list and inspect approvals; it cannot decide them
 
 ## Hard floor
 
-The protections a permission mode cannot relax. Sensitive paths and actions include Deckent
+The protections a permission mode cannot relax. Sensitive paths and actions include deckent
 configuration, policy, approvals, secrets and the MCP registry. Depending on the operation,
 the floor requires explicit approval or keeps sensitive state outside the execution view.
 It prevents convenience modes from rewriting their own authority. It does not claim to protect
@@ -71,7 +71,7 @@ A USD limit against which paid model calls reserve funds before sending. The cur
 path uses one shared budget per scope across providers. The account distinguishes the limit,
 reserved amounts and settled amounts. Missing budget or insufficient available funds refuses
 a new paid call. A cancelled or interrupted call may keep a reservation held until reconciliation.
-This is Deckent's admission control, not a provider-side spending limit or invoice.
+This is deckent's admission control, not a provider-side spending limit or invoice.
 
 ## Measured tariff
 
@@ -90,7 +90,7 @@ checks, but local storage does not make a compromised host trustworthy.
 
 ## Protocol
 
-The versioned message contract between Deckent clients and the local runtime service. It carries
+The versioned message contract between deckent clients and the local runtime service. It carries
 typed commands, queries, events, errors and results. Protocol version, ledger schema and package
 version are different identifiers. Supported lifecycle compatibility can allow describing or
 stopping an older service without allowing execution through an incompatible client.
@@ -105,7 +105,7 @@ supply itself with authority.
 
 ## Core layers
 
-The parts that let Deckent run work with less supervision, added in alpha.55 as code and not yet accepted behaviour:
+The parts that let deckent run work with less supervision, added in alpha.55 as code and not yet accepted behaviour:
 
 - **Brain:** the planner behind `/do`. It splits a request into tasks and names each task's **WorkClass** (the kind of work);
   it does not choose the worker model.

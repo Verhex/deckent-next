@@ -1,10 +1,11 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { providerSpendLocalZeroTariffProfile } from '#engine/core/provider-spend/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, encodeModelInvocationProfile, encodeModelInvocationRequest,
+import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition as encodeModelBindingDefinitionRaw, encodeModelInvocationProfile, encodeModelInvocationRequest,
   identitySchema, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationCommandSchema,
   MODEL_INVOCATION_NATIVE_JSON_LIMITS, modelInvocationProfileSchema, parseModelActivationRecord,
-  parseModelBindingDefinition, parseModelInvocationCommand, parseModelInvocationReceipt, parseModelReference,
+  parseModelBindingDefinition as parseModelBindingDefinitionRaw, parseModelInvocationCommand, parseModelInvocationReceipt, parseModelReference,
   modelInvocationRequestEvidence, providerSpendBudgetSchema, providerSpendQuoteSchema, type ModelInvocationActor, type ModelInvocationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port.js';
 import { verifyModelActivationRecord } from '#engine/core/model-activation/index.js';
@@ -101,3 +102,7 @@ export function sameModelInvocationRequest(receiptInput: unknown, commandInput: 
       requestDigest }) === JSON.stringify(receipt.request)
     && JSON.stringify(modelActivationActorSchema.parse(actor)) === JSON.stringify(receipt.actor);
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);
+
+const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);

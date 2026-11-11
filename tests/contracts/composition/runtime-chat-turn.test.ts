@@ -294,7 +294,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
-    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v11\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v12\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
     expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
     expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
     // The summary call never carries the switch when the model does not declare it (TL-C D8).
@@ -323,17 +323,17 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const f = await runtime({ dataInside: true }); await f.start();
     f.state.script = [{ content: 'Hello.' }, { content: 'Again.' }];
     // The shortened catalog prompt proposed in i18n-delta.json (the lead applies it to the locale files).
-    const clientPrompt = 'You are the Deckent operator terminal assistant. Reply in English.';
+    const clientPrompt = 'You are the deckent operator terminal assistant. Reply in English.';
     const events: AgentTurnStreamEvent[] = [];
     await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-prompt', messages: [{ role: 'system', content: clientPrompt },
       { role: 'user', content: 'hello' }], sessionId: 'session-d4' }, event => events.push(event));
     const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
     expect(sent.map(message => message.role)).toEqual(['system', 'user']);
     const system = sent[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v11]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
-    expect(system).toContain('Context contract: carry v1, render v1.'); expect(system).toContain(`Project root: ${f.project}`);
-    expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).not.toContain('terminal-sessions'); expect(system).toMatch(/saved conversations[^\n]*protected/);
-    expect(system).toContain('.deckent/config.json'); expect(system).toContain('you are native-chat (Deckent catalog: provider local-openai v1, model chat v1), running inside Deckent');
+    expect(system.startsWith('[Deckent runtime instructions v12]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system).toContain('Context contract: carry v1, render v2.'); expect(system).toContain(`Project root: ${f.project}`);
+    expect(system).toContain('deckent data root: .deckent/live-data'); expect(system).not.toContain('terminal-sessions'); expect(system).toMatch(/saved conversations[^\n]*protected/);
+    expect(system).toContain('.deckent/config.json'); expect(system).toContain('you are native-chat (deckent catalog: provider local-openai v1, model chat v1), running inside deckent');
     expect(system).toContain('Read tools: read_file, list_dir, grep, glob'); expect(system).toContain('Edit tools: edit_file, write_file');
     expect(system).toContain('Shell tool: run_shell'); expect(system).toContain('hasMore=true'); expect(system).toMatch(/one short line/);
     // The old catalog sentence contradicted the declared tools; neither the segment nor the proposed client text says it.

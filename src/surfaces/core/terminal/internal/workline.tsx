@@ -1,3 +1,5 @@
+import { TimingWindowFrame } from '#surfaces/core/terminal-kit-ink/index.js';
+import { runWithTiming, currentTiming, type TimingTrace } from '#platform/index.js';
 import { useOnboardingHandoff, type OnboardingFocus, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
@@ -198,7 +200,7 @@ export interface WorklineProps {
   /** alpha.60 C: what the launch shell kept while the host loaded — the draft as typed and the lines sent meanwhile, sent in order after mount
    *  through the opening's send gate. */
   readonly initialDraft?: ComposerHistoryEntry | null; readonly armedAt?: number | null; // a first idle Ctrl+C in the shell: the next one quits
-  readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>[];
+  readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry; timing?: TimingTrace }>[];
   /** ADAYLAR 16b (QW): whether the configured model takes tools (`describeTerminalChat` `tools`); `none` is said once as a system line. */
   readonly modelTools?: 'available' | 'none' | 'unknown' | 'unverified';
 }
@@ -364,7 +366,7 @@ export function WorklineApp(props: WorklineProps) {
   const settings = useWorklineSettings({ panels: props.panels, ...(props.themeControl ? { themeControl: props.themeControl } : {}), permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
-    openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
+    openApprovals: async (approvalId, execution) => { if (await waitForOpening('/approvals', execution)) await work.openApproval(approvalId, execution); } });
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, picker: labels.windows?.picker, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
@@ -505,6 +507,14 @@ export function WorklineApp(props: WorklineProps) {
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
   const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(() => props.initialDraft ? { seq: 1, entry: props.initialDraft } : null);
+  const waitForOpening = useCallback(async (line: string, execution: LocalExecution) => {
+    const allowed = await gate(line, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => {
+      currentTiming()?.fail(); push([notice('error', errorText(error))]);
+      setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: line, pastes: [] } })); return false;
+    });
+    if (allowed) { currentTiming()?.phase('gate-passed'); currentTiming()?.phase('dispatch'); }
+    return allowed;
+  }, [gate, props.opening, push, errorText]);
   const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: redactForRecord(text, props.knownSecrets), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim(), hold, typed: Boolean(props.initialDraft || props.queuedInputs?.length), say: (level, text) => push([notice(level, text)]),
     opened: async () => { await refreshMode(); const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined; if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group }); } });
   openSetup.current = onboarding.open;
@@ -709,6 +719,8 @@ export function WorklineApp(props: WorklineProps) {
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
+    // A command picked inside a bypassing window meets the gate under its own name too.
+    if (!await waitForOpening(line, execution)) return true;
     const slash = parseSlashLine(line), words = labels.windows;
     if (!slash || keepsTypedArgument(slash.command) || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
@@ -716,20 +728,23 @@ export function WorklineApp(props: WorklineProps) {
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
     // A watch window outlives its command (it is not awaited): it keeps the note until it closes; otherwise the note ends with the command.
     finally { if (!liveRef.current?.isOpen()) note.consume(); }
-  }, [labels.windows, performLine]);
+  }, [labels.windows, performLine, waitForOpening]);
   performRef.current = perform;
 
+  const executionTiming = useRef<TimingTrace | undefined>(undefined);
   execute.current = async execution => {
+    executionTiming.current = currentTiming();
     const action = taskActions.current.get(execution.input.inputId);
     taskActions.current.delete(execution.input.inputId);
     if (action && ledger && labels.work) {
+      if (!await waitForOpening(`/${action.action}`, execution)) return;
       try { await openTaskAction(action, panel, execution, ledger, labels.work,
         runId => work.run('cancel', '', execution, undefined, runId)); }
       catch (error) { push([notice('error', errorText(error))]); }
       return;
     }
     // B: a line sent before the opening is ready waits behind one notice (Ctrl+C sends nothing); a failed start says its typed error and gives the line back as the draft.
-    if (await gate(execution.input.text, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => { push([notice('error', errorText(error))]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: execution.input.text, pastes: [] } })); return false; })) await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
+    await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
   };
   const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
   taskActionRef.current = action => {
@@ -754,7 +769,7 @@ export function WorklineApp(props: WorklineProps) {
   };
   submitRef.current = submit;
   const handedOver = useRef(false); // alpha.60 C: the shell's sent lines go once, in order, through the same submit and send gate
-  useEffect(() => { if (handedOver.current) return; handedOver.current = true; for (const line of props.queuedInputs ?? []) submit(line.text, line.mentions, line.entry); }, []);
+  useEffect(() => { if (handedOver.current) return; handedOver.current = true; for (const line of props.queuedInputs ?? []) runWithTiming(line.timing, () => submit(line.text, line.mentions, line.entry)); }, []);
   const withdraw = () => { const taken = handoffs.withdraw(); if (taken) typedArgumentInputs.current.delete(taken.inputId); return taken?.entry ?? null; };
   const cancel = () => {
     const current = panel.controller.snapshot(), active = current.active;
@@ -832,6 +847,7 @@ export function WorklineApp(props: WorklineProps) {
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
     waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>
+    {othersOpen ? <TimingWindowFrame trace={executionTiming.current} /> : null}
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
     {instructions.window}
     {fullscreenMode ? null : liveNode}

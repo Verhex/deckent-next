@@ -53,13 +53,15 @@ try {
   architectureLines = architecture.trimEnd().split('\n').length;
   if (architectureLines > LIMITS.architectureLines) fail('ARCHITECTURE.md', `${architectureLines} lines > ${LIMITS.architectureLines}`);
   const packageVersion = JSON.parse(read('package.json')).version, current = version(packageVersion);
-  const releases = read('CHANGELOG.md').split('\n').flatMap((line, index) => {
+  const releases = ['CHANGELOG.md', 'CHANGELOG-alpha.md'].flatMap(name => read(name).split('\n').flatMap((line, index) => {
     const match = /^\s*-\s+\*\*([^*]+)\*\*/u.exec(line);
-    return match ? [{ line, number: index + 1, value: match[1] }] : [];
-  });
-  if (releases[0]?.value !== packageVersion) fail('CHANGELOG.md', `first release ${releases[0]?.value ?? '(missing)'} must equal package.json ${packageVersion}`);
+    return match ? [{ line, name, number: index + 1, value: match[1] }] : [];
+  }));
+  const first = releases[0]?.name === 'CHANGELOG.md' ? releases[0].value : undefined;
+  if (first !== packageVersion) fail('CHANGELOG.md', `first release ${first ?? '(missing)'} must equal package.json ${packageVersion}`);
   for (const [index, release] of releases.entries()) {
-    const where = `CHANGELOG.md:${release.number}`;
+    const where = `${release.name}:${release.number}`;
+    if (index > 0 && compare(version(releases[index - 1].value), version(release.value)) <= 0) fail(where, 'releases must be in strictly descending SemVer order across both changelogs');
     if (compare(version(release.value), current) > 0) continue;
     // Explicit Unreleased is the only exemption; a prerelease version alone is not an unlanded release.
     if (index === 0 && release.value === packageVersion && /^\s*-\s+\*\*[^*]+\*\*\s*—\s*Unreleased\b/iu.test(release.line)) continue;
@@ -68,18 +70,15 @@ try {
     // The first ref after the date must be a SHA, not a branch followed by a SHA elsewhere in the prose.
     if (!/\*\*\s*—\s*\d{4}-\d{2}-\d{2}\s*·\s*`[0-9a-f]{7,40}`(?:\s|$)/iu.test(release.line)) fail(where, 'landed ref after the date must be a commit SHA, not a branch');
   }
-  // An alpha is `alpha.N` or a hotfix `alpha.N.M` (alpha.55.1, 2026-10-24); compared as (N, M) with M = 0 when absent.
-  const alphaOf = (text) => { const match = /-alpha\.(\d+)(?:\.(\d+))?(?:\+.*)?$/u.exec(text); return match ? [BigInt(match[1]), BigInt(match[2] ?? 0)] : null; };
-  const alphaName = ([major, minor]) => minor ? `${major}.${minor}` : `${major}`;
-  const packageAlpha = /^\d+\.\d+\.\d+-alpha\.\d+(?:\.\d+)?(?:\+.*)?$/u.test(packageVersion) ? alphaOf(packageVersion) : null;
   // Public docs describe what is live: the package version once released, or the last released version while the top CHANGELOG line is Unreleased.
   const unreleasedTop = /^\s*-\s+\*\*[^*]+\*\*\s*—\s*Unreleased\b/iu.test(releases[0]?.line ?? '');
-  const lastReleasedAlpha = alphaOf((unreleasedTop ? releases[1] : releases[0])?.value ?? '');
-  if (packageAlpha) for (const name of ['README.md', 'README.tr.md', 'SECURITY.md']) {
-    const alphas = [...read(name).matchAll(/\balpha\.(\d+)(?:\.(\d+))?\b/gu)].map(match => [BigInt(match[1]), BigInt(match[2] ?? 0)]);
-    const highest = alphas.reduce((max, value) => value[0] > max[0] || value[0] === max[0] && value[1] > max[1] ? value : max, [-1n, 0n]);
-    const allowed = new Set([alphaName(packageAlpha), ...(unreleasedTop && lastReleasedAlpha ? [alphaName(lastReleasedAlpha)] : [])]);
-    if (!allowed.has(alphaName(highest))) fail(name, `highest alpha.${alphaName(highest)} must equal package.json ${packageVersion}${unreleasedTop && lastReleasedAlpha ? ` or the last released alpha.${alphaName(lastReleasedAlpha)}` : ''}`);
+  const lastReleased = unreleasedTop && releases[1] ? version(releases[1].value) : null;
+  if (['alpha', 'beta'].includes(current.pre[0])) for (const name of ['README.md', 'README.tr.md', 'SECURITY.md']) {
+    const claims = [...read(name).matchAll(/\b(?:alpha|beta)\.\d+(?:\.\d+)*\b/gu)].map(match => version(`${current.core.join('.')}-${match[0]}`));
+    const highest = claims.reduce((max, value) => !max || compare(value, max) > 0 ? value : max, null);
+    if (!highest || ![current, ...(lastReleased ? [lastReleased] : [])].some(allowed => compare(highest, allowed) === 0)) {
+      fail(name, `highest ${highest?.pre.join('.') ?? '(missing)'} must equal package.json ${packageVersion}${lastReleased ? ` or the last released ${lastReleased.pre.join('.')}` : ''}`);
+    }
   }
   for (const name of ['ARCHITECTURE.md', ...architectureFiles('.deckent/docs/architecture')]) {
     read(name).split('\n').forEach((line, index) => {

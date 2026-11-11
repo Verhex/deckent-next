@@ -68,7 +68,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections,
       // NF-2: `execution` (first job) means Docker; a chosen connection's kind needs only its Git settings, planned after the kind stage.
       ...(chosen ? { connection: chosen, execution: connected === 'configured' } : {}) } };
-    return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
+    return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: installed ? await verdict(env, root).catch(() => ({ state: 'not-run' as const })) : { state: 'not-run' as const } } };
   };
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {
     const op = stage.operation?.id ?? '-', input = stage.operation?.input ?? {}, scopeId = String(input['scopeId'] ?? options.scopeId ?? '');

@@ -90,11 +90,12 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   const { values, flags } = readFlags(argv, 1, ['--json', '--lang']);
   const locale = commandLocale(context, values.get('--lang'));
   const config = await loadConfig(context.root ?? process.cwd(), { env: context.env ?? process.env, heal: false });
+  const workerKinds = await context.inspectWorkerKinds?.(context.root ?? process.cwd(), { env: context.env ?? process.env, heal: false });
   const all = configuredInvocationProfiles(config), profiles = codingProfiles(config, affectedToolchainProfiles(config), all), configured = config.execution?.docker?.imageId ?? null;
   // The configured image runs none of the admitted CLIs: `coding template` without `--image` would find no toolchain there.
   const connections = all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family }));
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
-  emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
+  emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured, workerKinds: workerKinds ?? null }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
     const label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
     const available = t('coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
     if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available].join('\n');
@@ -103,6 +104,8 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
       renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
         cliTableStyle(context)),
       t('clisetup.coding.configuredImage', { image: shortImage(configured) }, locale), ...(unused ? [t('clisetup.coding.imageUnused', {}, locale)] : []),
+      ...(data.workerKinds ?? []).flatMap(row => row.reason ? [row.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: row.kind }, locale) : t('worker.kind.image-unverified', { kind: row.kind }, locale),
+        row.rebind ? t('worker.kind.rebind', { kind: row.kind }, locale) : t('worker.kind.restore', { kind: row.kind }, locale)] : []),
       available, t('clisetup.coding.next', {}, locale)].join('\n');
   } });
 }

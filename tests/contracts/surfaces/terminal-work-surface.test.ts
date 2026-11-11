@@ -125,7 +125,7 @@ describe('work surface: /transcript', () => {
     } } });
     await view.type('/transcript\r'); await view.card('> Task 1', 'worker picker'); await view.type('\r');
     await view.card('RENDERED-TIMELINE', 'transcript window'); expect(view.frame()).toContain('T-HEADER 1 a1');
-    view.stdin.write('\u001B'); await view.card('◆ Deckent system', 'summary'); await settle(40);
+    view.stdin.write('\u001B'); await view.card('◆ deckent system', 'summary'); await settle(40);
     await view.type('/transcript\r'); await view.card('> Task 1', 'second picker'); view.stdin.write('\u001B[B'); await settle(30); await view.type('\r');
     await view.card('ERR:POLICY_DENIED', 'policy denial window'); view.stdin.write('\u001B');
     expect(asked).toEqual(['a1', 'a2']);
@@ -178,7 +178,7 @@ describe('work surface: approvals', () => {
     const rows = view.frame().split('\n');
     const head = rows.findIndex(row => row.includes(primary));
     expect(rows[head]).not.toContain(id);
-    expect(rows[head]).toContain(locale === 'en' ? '◆ Deckent system ·' : '◆ Deckent sistemi ·');
+    expect(rows[head]).toContain(locale === 'en' ? '◆ deckent system ·' : '◆ deckent sistemi ·');
     expect(view.frame()).not.toContain(`${detail}${id}`);
   });
 
@@ -224,7 +224,7 @@ describe('work surface: approvals', () => {
     await view.type('/approvals ap-2\r'); await view.card('> A-ITEM 1 ap-1', 'picker');
     expect(fake.decisions).toEqual([]); await view.type('\r'); await view.card('Approval: ap-1', 'card');
     await view.type('y'); await view.card('ERR:APPROVAL_CONFLICT', 'failed decision window'); view.stdin.write('\u001B');
-    await until(() => view.frame().includes('◆ Deckent system') && !view.frame().includes(work.live!.hints), 'one system result');
+    await until(() => view.frame().includes('◆ deckent system') && !view.frame().includes(work.live!.hints), 'one system result');
   });
 
   it('does not list approvals more often than every 10 s by default, even with a fast worker heartbeat', async () => {

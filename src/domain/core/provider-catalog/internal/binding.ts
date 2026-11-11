@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema, immutableJsonObjectSchema, sanitizeIssues } from '#domain/core/primitives/index.js';
-import { parseProviderCatalog, PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, type ProviderCatalog } from './catalog.js';
+import { parseProviderCatalog, PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, type ProviderCatalog, type CatalogParseObserver } from './catalog.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_BINDING_ENCODING_VERSION = 1;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const MODEL_BINDING_PREFIX = 'deckent.model-binding.v1\n';
@@ -28,8 +28,12 @@ export function parseModelReference(input: unknown): ModelReference {
 }
 
 /** Exact lookup only: no version selection, alias, default or fallback behavior. */
-export function resolveModelBindingDefinition(catalogInput: unknown, referenceInput: unknown): ModelBindingDefinition | null {
-  const catalog = parseProviderCatalog(catalogInput), reference = parseModelReference(referenceInput);
+export function resolveModelBindingDefinition(catalogInput: unknown, referenceInput: unknown, observe?: CatalogParseObserver): ModelBindingDefinition | null {
+  return resolveParsedModelBindingDefinition(parseProviderCatalog(catalogInput, observe), parseModelReference(referenceInput));
+}
+
+/** Internal typed lookup after the catalog trust boundary has validated the snapshot. */
+export function resolveParsedModelBindingDefinition(catalog: ProviderCatalog, reference: ModelReference): ModelBindingDefinition | null {
   const provider = catalog.providers.find(candidate => candidate.id === reference.providerId && candidate.version === reference.providerVersion);
   const model = provider?.models.find(candidate => candidate.id === reference.modelId && candidate.version === reference.modelVersion);
   if (!provider || !model) return null;
@@ -52,14 +56,14 @@ const definitionShape = z.strictObject({
 const definitionEnvelopeSchema = createImmutableJsonObjectSchema(PROVIDER_CATALOG_WIRE_LIMITS);
 const MODEL_BINDING_DEFINITION_REVISION = 'model-binding-definition';
 
-export function parseModelBindingDefinition(input: unknown): ModelBindingDefinition {
+export function parseModelBindingDefinition(input: unknown, observe?: CatalogParseObserver): ModelBindingDefinition {
   const copied = definitionEnvelopeSchema.safeParse(input);
   if (!copied.success) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID', sanitizeIssues(copied.error.issues));
   const shaped = definitionShape.safeParse(copied.data);
   if (!shaped.success) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID', sanitizeIssues(shaped.error.issues));
   const catalog = parseProviderCatalog({ schemaVersion: 1, revision: MODEL_BINDING_DEFINITION_REVISION, providers: [
     { id: shaped.data.provider.id, version: shaped.data.provider.version, models: [shaped.data.model] },
-  ] });
+  ] }, observe);
   const model = catalog.providers[0]?.models[0];
   if (!model) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID');
   return Object.freeze({ encodingVersion: MODEL_BINDING_ENCODING_VERSION,
@@ -67,6 +71,11 @@ export function parseModelBindingDefinition(input: unknown): ModelBindingDefinit
 }
 
 /** UTF-16 key ordering with ECMAScript JSON scalar encoding; this is deliberately not an RFC-JCS claim. */
-export function encodeModelBindingDefinition(definitionInput: unknown): string {
-  return `${MODEL_BINDING_PREFIX}${canonicalJson(parseModelBindingDefinition(definitionInput))}`;
+export function encodeModelBindingDefinition(definitionInput: unknown, observe?: CatalogParseObserver): string {
+  return encodeParsedModelBindingDefinition(parseModelBindingDefinition(definitionInput, observe));
+}
+
+/** Encoding of an already validated binding from a parsed catalog. */
+export function encodeParsedModelBindingDefinition(definition: ModelBindingDefinition): string {
+  return `${MODEL_BINDING_PREFIX}${canonicalJson(definition)}`;
 }

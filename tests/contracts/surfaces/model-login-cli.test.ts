@@ -52,8 +52,8 @@ it('negative: an AI tool, a pipe and --json are refused before the handler runs 
   expect(calls).toEqual([]); expect(card.asked).toEqual([]);
 });
 it('the person sees the exact dir on a card first, then the outcome (kind and plan only); a declined card signs nothing in and exits 1', async () => {
-  for (const [lang, title, words] of [['en', 'Sign the Brain in for claude-cli-subscription?', ['Login directory: ' + DIR + " (the Brain's own", 'Deckent captures nothing', 'Signed in: claude.ai (max)']],
-    ['tr', 'Brain claude-cli-subscription için giriş yapsın mı?', ['Giriş dizini: ' + DIR + " (Brain'in kendi", 'Deckent gösterdiği hiçbir şeyi almaz', 'Giriş yapıldı: claude.ai (max)']]] as const) {
+  for (const [lang, title, words] of [['en', 'Sign the Brain in for claude-cli-subscription?', ['Login directory: ' + DIR + " (the Brain's own", 'deckent captures nothing', 'Signed in: claude.ai (max)']],
+    ['tr', 'Brain claude-cli-subscription için giriş yapsın mı?', ['Giriş dizini: ' + DIR + " (Brain'in kendi", 'deckent gösterdiği hiçbir şeyi almaz', 'Giriş yapıldı: claude.ai (max)']]] as const) {
     const f = await project(), calls: unknown[] = [], out = capture(); card.interactive = true; card.asked = []; card.answers = ['apply'];
     expect(await modelsCommand([...LOGIN, '--sso', '--lang', lang], { root: f.root, env: f.env, stdin: tty(), stdout: out.sink, ...handler(calls) } as never)).toBeUndefined();
     expect(card.asked.map(request => request.title)).toEqual([title]);

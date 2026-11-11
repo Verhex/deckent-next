@@ -155,7 +155,7 @@ it('TTY hold: the revision is read just before the card, the card names scope an
   expect(cards.asked[0]!.body!.join('\n')).toContain('Bekletmeyi deckent run resume kaldırır'); // no window key on a CLI card
   expect(cards.asked[1]!.body!.join('\n')).toContain('İş bu arada değişti');
   const write = s.calls.find(call => call.startsWith('apply:'))!;
-  expect(JSON.parse(write.slice(6))).toMatchObject({ action: 'hold', runId: LONG, scopeId: 's', expectedRevision: 9, holdReason: 'Kişi Deckent terminalinde bekletti.' });
+  expect(JSON.parse(write.slice(6))).toMatchObject({ action: 'hold', runId: LONG, scopeId: 's', expectedRevision: 9, holdReason: 'Kişi deckent terminalinde bekletti.' });
   expect(JSON.parse(write.slice(6)).commandId).toMatch(/^cli-run-hold-/u);
   expect(printed.join('\n')).toContain('bekletme kaydedildi');
 });

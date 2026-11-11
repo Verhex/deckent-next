@@ -87,7 +87,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor), 'posix', scan);
     // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
     for (const verdict of [readOnly, mutation]) {
-      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
+      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); deckent's own state is not opened by any approval; nothing was run` };
     }
     const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command, scan));
     const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined, scan).contained };

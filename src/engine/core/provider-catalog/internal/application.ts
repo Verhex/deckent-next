@@ -1,4 +1,5 @@
-import { parseProviderCatalog, type ProviderCatalog } from '#domain/index.js';
+import { catalogParseObserver } from '#platform/index.js';
+import { parseProviderCatalog as parseProviderCatalogRaw, type ProviderCatalog } from '#domain/index.js';
 
 export type DeclaredModelsInspection = Readonly<{
   schemaVersion: 1; availability: 'not-observed';
@@ -14,3 +15,5 @@ export class DeclaredModelsApplication {
     return Object.freeze({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: parseProviderCatalog(authored) });
   }
 }
+
+const parseProviderCatalog = (input: unknown) => parseProviderCatalogRaw(input, catalogParseObserver);

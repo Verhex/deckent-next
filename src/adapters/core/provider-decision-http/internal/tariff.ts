@@ -1,6 +1,7 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { DecisionHttpError, decisionHttpAdapter, decisionHttpProtocolData } from './contract.js';
 import { prepareDecisionHttpRequest } from './transport.js';
@@ -24,3 +25,5 @@ export function quoteDecisionHttpOperatorTariff(input: ModelInvocationSpendingIn
     meter: { id: decisionHttpProtocolData.meterId, version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
     currency: tariff.currency, maxChargeMinorUnits: 0 });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

@@ -1,4 +1,5 @@
 export { inspectConfiguredToolchainCurrency } from './internal/currency.js';
+export { configuredWorkerKinds, inspectConfiguredWorkerKinds } from './internal/worker-kinds.js';
 export type { NpmLatestVersionFetcher } from './internal/currency.js';
 export { updateConfiguredToolchains } from './internal/update.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolchainUpdateResult, ToolchainUpdateDependencies } from './internal/update.js';

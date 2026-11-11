@@ -1,3 +1,4 @@
+import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
@@ -10,18 +11,21 @@ import { resolveConfiguredScopeMembership } from './registry.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
 // The local OS identity is read after the policy loads: unsupported policy custody (native Windows) refuses POLICY_UNAVAILABLE before
 // any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
-export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access);
+type ScopeReadInputs = Readonly<{ config: ResolvedConfig; document: Awaited<ReturnType<ReturnType<typeof contextPolicySource>['load']>>;
+  inspectSource: NonNullable<Parameters<typeof configuredInstallationProjectContext>[4]> }>;
+export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs) => timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected);
 export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => {
   const verified = verifyLocalPeerIdentity(peer);
-  return loadScopeContext(projectRoot, scopeId, options, () => verified, access);
+  return timedScopeContext(projectRoot, scopeId, options, () => verified, access);
 };
-async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
-  let document; try { document = (await contextPolicySource({ layout, config, ownerUid }).load()); }
+async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess, inspected?: ScopeReadInputs) {
+  const reading = access === 'read' ? inspected : undefined;
+  const config = reading?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
+  let document; try { document = reading?.document ?? await contextPolicySource({ layout, config, ownerUid }).load(); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
-  const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId, { issuer: identity.issuer, subject: identity.subject }));
+  const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId, { issuer: identity.issuer, subject: identity.subject }, reading?.inspectSource));
   const installation = installationContext.kind === 'legacy' ? await accessIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation), access) : installationContext.identity;
   if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
   const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
@@ -56,9 +60,9 @@ export async function loadConfiguredProjectIdentity(projectRoot: string, options
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
 }
-export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  return readBootstrapIdentity(async () => (await configuredInstallationProjectContext(config, options)).identity);
+export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}, inspected?: Pick<ScopeReadInputs, 'config' | 'inspectSource'>) {
+  const config = inspected?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false });
+  return readBootstrapIdentity(async () => (await configuredInstallationProjectContext(config, options, undefined, undefined, inspected?.inspectSource)).identity);
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
 type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
@@ -93,3 +97,5 @@ export async function ensureConfiguredTerminalIdentity(root: string, scopeId: st
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   return Object.freeze({ installationId, projectId });
 }
+
+const timedScopeContext = timedAsync('scope-context', loadScopeContext);

@@ -149,7 +149,7 @@ describe.skipIf(process.platform !== 'linux')('the approval card describes the w
       expect(forcedCard.preview).toContain('.git writable');
       expect(forcedCard.preview).not.toContain('.git read-only');
       // OPEN-SANDBOX: the card of a full-access turn names the open view (bubblewrap) or says it is not available (Landlock, require-sandbox).
-      expect(forcedCard.preview).toContain('network on, HOME visible, Deckent state and credentials hidden/read-only');
+      expect(forcedCard.preview).toContain('network on, HOME visible, deckent state and credentials hidden/read-only');
 
       // Approve the original O_WRONLY probe (`>>` with zero bytes), then verify the configuration hard floor still prevents opening it.
       const configPath = join(forced.project, '.deckent/config.json');

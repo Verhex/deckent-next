@@ -86,6 +86,9 @@ describe('I-S4 bare deckent init', () => {
     await expect(text).toMatchFileSnapshot(`../../fixtures/setup/plan-plain-${locale}.txt`);
   });
 
+});
+
+describe('I-S4 setup outcomes', () => {
   it('U3-2: language switches immediately, declined foreground stays unapplied, warnings do not enter a repeated --yes loop', async () => {
     const fresh = harness(), first = createSetupController({ context: fresh.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
     const turkish = (await first.step('tr'))!;
@@ -93,7 +96,7 @@ describe('I-S4 bare deckent init', () => {
     expect(first.locale()).toBe('tr');
     const saved: SetupObservation = { ...base, language: { configured: 'en', requested: null, system: null },
       profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } }, folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' },
-      policy: { state: 'upgradable' }, check: { state: 'warnings' } };
+      policy: { state: 'upgradable' }, check: { state: 'warnings', pending: 2 } };
     const run = harness({ observation: () => saved }), controller = createSetupController({ context: run.context, root: '/x', locale: 'en',
       observed: { observation: saved, registry }, flags: { json: false, yes: false } });
     run.context.upgradePolicyTemplateInstallation = async () => ({ status: 'preview', expect: 'preview-digest', rules: [] });
@@ -114,6 +117,12 @@ describe('I-S4 bare deckent init', () => {
     const doc = JSON.parse(rerun.out());
     expect(doc.stages.find((stage: { id: string }) => stage.id === 'core:final-check').state).toBe('done');
     expect(doc).not.toHaveProperty('firstJob');
+    for (const locale of ['en', 'tr'] as const) {
+      const human = harness({ observation: () => ({ ...saved, language: { configured: locale, requested: null, system: null }, policy: { state: 'current' } }) });
+      await setupInitCommand(['init', '--lang', locale], human.context);
+      expect(human.out()).toContain(locale === 'en' ? 'Final check · check ran · The final check ran; 2 item(s) wait for you. Run deckent doctor for the results and next steps.' : 'Son kontrol · kontrol çalıştı · Son kontrol çalıştı; 2 madde sizi bekliyor. Sonuçlar ve sonraki adımlar için deckent doctor çalıştırın.');
+      expect(human.out()).not.toContain(locale === 'en' ? 'Final check · done' : 'Son kontrol · tamam');
+    }
     const onboard = harness();
     await setupInitCommand(['init', '--json', '--phase', 'onboarding'], onboard.context);
     expect(JSON.parse(onboard.out()).stages.map((stage: { id: string }) => stage.id)).toEqual(['core:model', 'instructions:bridges']);
@@ -132,7 +141,7 @@ describe('I-S4 bare deckent init', () => {
   it('a pipe (non-TTY) never prompts and never applies; it prints plain lines', async () => {
     const run = harness({ stdin: pipe, stdout: pipe });
     await setupInitCommand(['init'], run.context);
-    expect(run.out()).toContain('Deckent setup plan'); expect(run.applied).toEqual([]); expect(run.rawMode()).toBe(0);
+    expect(run.out()).toContain('deckent setup plan'); expect(run.applied).toEqual([]); expect(run.rawMode()).toBe(0);
   });
 
   it('an AI agent on a real terminal gets JSON, is never asked and nothing is applied (INIT-D7, UX only)', async () => {
@@ -305,7 +314,7 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 72, rows: 36 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const reason = 'my-project scope for HOST/1000 starts with the Solo profile in full-auto. Usual work follows the company policy; protected settings, secrets and destructive operations keep their own approval rules. Switch the mode with Shift+Tab or /mode at any time; nothing else changes.';
-  const model = { title: 'Deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'apply', label: 'Apply now' }],
+  const model = { title: 'deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'apply', label: 'Apply now' }],
     optionRows: 2, initial: 0, hints: 'Esc close', applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
   const sent: string[] = [];
   let release = () => {};

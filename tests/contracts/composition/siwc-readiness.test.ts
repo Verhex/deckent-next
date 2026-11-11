@@ -1,8 +1,13 @@
 import { expect, it, vi } from 'vitest';
-import { OAuthConnectionError } from '#engine/index.js';
-const state = vi.hoisted(() => ({ config: {} as Record<string, unknown>, ready: true, preflights: 0 }));
-vi.mock('../../../src/composition/core/model-invocation/internal/context.js', () => ({
-  loadInvocationContext: async () => ({ config: {}, document: {}, freshConfig: async () => state.config }),
+import { OAuthConnectionError, PolicyAuthorizationError } from '#engine/index.js';
+const state = vi.hoisted(() => ({ config: {} as Record<string, unknown>, ready: true, preflights: 0, policyAvailable: true }));
+vi.mock('#composition/core/root/index.js', () => ({ loadComposedConfig: async () => state.config }));
+vi.mock('#composition/core/policy/index.js', () => ({ contextPolicySource: () => ({ load: async () => {
+  if (!state.policyAvailable) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
+  return {};
+} }) }));
+vi.mock('#composition/core/scoped-request/index.js', async original => ({
+  ...await original<object>(), loadConfiguredScopeContext: async () => ({ config: state.config, document: {} }),
 }));
 vi.mock('../../../src/composition/core/model-invocation/internal/delivery-audit.js', () => ({ configuredModelInvocationDeliverySurfaces: () => [] }));
 vi.mock('#adapters/index.js', async original => ({ ...await original<object>(), effectiveTerminalOutputCap: () => 32 }));
@@ -24,6 +29,11 @@ it('lets SIWC readiness reach its local native custody check and never reports a
   state.ready = true; state.preflights = 0;
   expect((await inspectConfiguredInvocableModels('/fixture', 'scope')).models[0]?.availability.invocable).toBe(true);
   state.ready = false;
-  expect((await inspectConfiguredInvocableModels('/fixture', 'scope')).models[0]?.availability.invocable).toBe(false);
+  expect((await inspectConfiguredInvocableModels('/fixture', 'scope')).models[0]?.availability).toEqual({
+    invocable: false, reason: { kind: 'unavailable', code: 'OAUTH_CONNECTION_REAUTHORIZE' },
+  });
   expect(state.preflights).toBe(2);
+  state.ready = true; state.policyAvailable = false;
+  await expect(inspectConfiguredInvocableModels('/fixture', 'scope')).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+  expect(state.preflights).toBe(2); // An unreadable policy must refuse before native admission can claim readiness.
 });

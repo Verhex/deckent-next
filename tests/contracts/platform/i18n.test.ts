@@ -19,6 +19,7 @@ describe('kernel/i18n contract', () => {
   it.each(['en', 'tr'] as const)('keeps %s product copy free of developer notes and upgrade template numbers', locale => {
     const catalog = MESSAGE_REGISTRY.catalogs[locale];
     for (const [key, value] of Object.entries(catalog)) {
+      expect(value, key).not.toMatch(/\bDeckent\b/u);
       expect(value, key).not.toMatch(/Placeholder|lane/iu);
       if (key.startsWith('cli.init.policyUpgrade.') || key.startsWith('cli.policy.upgrade.')) {
         expect(value).not.toMatch(/v\d+\s+(?:rules|kurallar)|v\d+\s*→\s*v\d+/u);

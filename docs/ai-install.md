@@ -1,9 +1,9 @@
-# Install Deckent with an AI assistant
+# Install deckent with an AI assistant
 
 [Türkçe](ai-install.tr.md) · [README](../README.md) · [Known limits](https://github.com/Verhex/deckent-next/blob/main/docs/known-limits.md)
 
-Use this guide when a person asks you to install Deckent. Ask for their target folder and the verified package artifact.
-Deckent runs on the person's infrastructure; installation does not authorize their business operations.
+Use this guide when a person asks you to install deckent. Ask for their target folder and the verified package artifact.
+With deckent, work runs on the person's own infrastructure; installation does not authorize their business operations.
 This guide was re-checked against the CLI help and source of the alpha.58 candidate (`f6b119d4f`), released on 2026-10-29 as `0ba89deab`; alpha.59 (released 2026-10-30 as `4d12d6fa8`) and the alpha.60 candidate change no CLI command it uses. It is not a claim that an npm package or the website has been released.
 For the last released version's source-install path, use the README.
 
@@ -17,7 +17,7 @@ check `node --version` and `npm --version`, then retry the install. Docker must 
 A local-model chat does not itself need a coding worker. Do not change OS permissions or install Docker with elevated privileges
 without handing the administrator's step back to the person.
 
-Deckent is not on npm yet. Obtain an artifact whose origin and integrity the person trusts. Replace the example tarball path
+An npm package for deckent is not available yet. Obtain an artifact whose origin and integrity the person trusts. Replace the example tarball path
 below with that artifact's absolute path; the filename is a placeholder. Do not guess an npm package name or download an
 unverified substitute. Once an npm release exists, use its verified package identity and version.
 
@@ -25,7 +25,7 @@ unverified substitute. Once an npm release exists, use its verified package iden
 npm install --global /absolute/path/to/deckent-package.tgz
 ```
 
-Run the following in the person's chosen project folder, outside Deckent's source. Replace `my-project` with their stable
+Run the following in the person's chosen project folder, outside deckent's source. Replace `my-project` with their stable
 scope name. A scope groups policy and records; it is not a sandbox. This writes the fresh installation's language and
 permissions; it does not choose an identity profile, sign in, enter a key or approve a card.
 
@@ -47,8 +47,9 @@ configuration, warnings or unverified checks. It checks readiness; it does not i
 Ask the person to open `deckent` in that folder and complete the setup screens. Stop and hand back these steps:
 
 - Sign in to their own provider or subscription account and accept any explicit consent for AI/background use. Never copy
-  browser sessions or another user's credentials. Sign in with ChatGPT worker activation remains held pending N1 proof.
-- Enter provider secrets in Deckent's masked field. Do not request the value in chat or put it in arguments, environment,
+  browser sessions or another user's credentials. The separate ChatGPT browser-sign-in (SIWC) worker remains held pending N1 proof; the ChatGPT (Codex CLI)
+  connection uses the native worker path.
+- Enter provider secrets in deckent's masked field. Do not request the value in chat or put it in arguments, environment,
   logs, screenshots or your transcript.
 - Review the profile, permission mode and permission/approval cards at their real terminal. AI, MCP, pipes and JSON do not
   witness a person's decision. Never simulate a terminal, alter policy files or swap commands to bypass a refusal.

@@ -1,3 +1,4 @@
+import { timingEnabled, startTiming, runWithTiming } from '#platform/index.js';
 /**
  * Composer view: the single input owner of the workline. Keys go through the pure reducer; this component only
  * renders the draft and turns intents into the callbacks the workline owns (submit, cancel, exit).
@@ -120,6 +121,7 @@ export function Composer(props: ComposerProps): ReactNode {
   const clock = () => (latest.current.now ?? Date.now)();
 
   const dispatch = useCallback((key: ComposerKey): void => {
+    const enteredAt = timingEnabled ? performance.now() : undefined;
     const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText, onWithdraw, onEditor, onSteer } = latest.current;
     const result = reduceComposer(current.current, key, { now: clock(), busy, pasteChip: latest.current.labels.pasteChip, ...(policy ? { policy } : {}),
       ...(onEditor ? { editor: true } : {}), ...(latest.current.steer && onSteer ? { steer: true } : {}) });
@@ -152,7 +154,8 @@ export function Composer(props: ComposerProps): ReactNode {
         const entry = remembered.get(intent.entry) ?? intent.entry;
         void (async () => history?.append(entry))().catch(ignore);
         // The owner gets the draft as typed (T3 gives it back on Alt+Up); only recall and history keep the remembered form.
-        (intent.type === 'steer' && onSteer ? onSteer : onSubmit)(intent.text, intent.mentions, intent.entry);
+        const timing = timingEnabled && intent.text.trimStart().startsWith('/') ? startTiming(intent.text.trimStart().slice(1).split(/\s/u)[0]!, enteredAt) : undefined;
+        runWithTiming(timing, () => (intent.type === 'steer' && onSteer ? onSteer : onSubmit)(intent.text, intent.mentions, intent.entry));
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
         if (lookupTimer.current) clearTimeout(lookupTimer.current);

@@ -69,10 +69,10 @@ async function folders(): Promise<{ home: string; root: string }> {
 
 describe.skipIf(process.platform === 'win32')('deckent task on a real PTY in a folder with no installation (production entry)', () => {
   it.each([
-    { argv: ['task'], next: 'No Deckent installation in this folder. Run `deckent init` to set it up.' },
-    { argv: ['task', 'inspect'], next: 'No Deckent installation in this folder. Run `deckent init` to set it up.' },
-    { argv: ['task', 'transcript'], next: 'No Deckent installation in this folder. Run `deckent init` to set it up.' },
-    { argv: ['task', '--lang', 'tr'], next: 'Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın.' },
+    { argv: ['task'], next: 'No deckent installation in this folder. Run `deckent init` to set it up.' },
+    { argv: ['task', 'inspect'], next: 'No deckent installation in this folder. Run `deckent init` to set it up.' },
+    { argv: ['task', 'transcript'], next: 'No deckent installation in this folder. Run `deckent init` to set it up.' },
+    { argv: ['task', '--lang', 'tr'], next: 'Bu klasörde deckent kurulumu yok. Kurmak için `deckent init` çalıştırın.' },
   ])('NEGATIVE: deckent $argv names only `deckent init` with a typed code, exit 2, and writes nothing', async ({ argv, next }) => {
     await access(cli);
     const { home, root } = await folders();
@@ -94,10 +94,10 @@ describe.skipIf(process.platform === 'win32')('deckent task on a real PTY in a f
     delete config.terminal?.['scopeId']; await writeFile(file, JSON.stringify(config)); clearConfigCache();
     const task = await onTerminal(['task'], root, home, { after: 'Esc', send: '\u001b' });
     expect(task.output, task.output).toContain('Scope for deckent task');
-    expect(task.output).not.toMatch(/CLI_INSTALLATION_MISSING|No Deckent installation/u);
+    expect(task.output).not.toMatch(/CLI_INSTALLATION_MISSING|No deckent installation/u);
     const bare = await onTerminal([], root, home);
     expect(bare.output, bare.output).toContain('Select a scope: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]');
-    expect(bare.output).not.toMatch(/CLI_INSTALLATION_MISSING|No Deckent installation/u);
+    expect(bare.output).not.toMatch(/CLI_INSTALLATION_MISSING|No deckent installation/u);
     expect(bare.status, bare.output).toBe(2);
   }, 120_000);
 });

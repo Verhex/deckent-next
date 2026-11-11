@@ -970,6 +970,64 @@ it('a blocked model offers its governed repair, writes only after the card, and 
   expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
 });
 
+it('reloading partly loaded model/provider windows ignores the old generation success and error', async () => {
+  for (const kind of ['model', 'provider'] as const) for (const outcome of ['success', 'error'] as const) {
+    let finish!: () => void, reject!: (error: unknown) => void, oldSignal: AbortSignal | undefined, inspections = 0;
+    const model: ModelPanelView = { ...MODELS, fixApply: 'Apply state change', choices: [{ ...MODELS.choices[1]!, fixes: [{ id: 'activate', label: 'Turn on' }] }] };
+    const old = <T,>(value: T, progress?: (view: T) => void | Promise<void>, signal?: AbortSignal) => {
+      inspections++; if (inspections > 1) return Promise.resolve({ ...value, title: 'NEW-GENERATION' });
+      oldSignal = signal; void progress?.(value);
+      return new Promise<T>((resolve, fail) => { finish = () => resolve({ ...value, title: 'OLD-GENERATION' }); reject = fail; });
+    };
+    const modelSource = modelPort(model), providerSource = providerPort();
+    const ports = kind === 'model' ? { model: { ...modelSource.port, inspect: (progress, signal) => old(model, progress, signal), fix: async () => undefined } satisfies ModelPanelPort }
+      : { provider: { ...providerSource.port, inspect: (progress, signal) => old(KINDS, progress, signal) } satisfies ProviderPanelPort };
+    const window = panel(kind, ports), ui = mount(window.element);
+    await until(() => ui.frame().includes(kind === 'model' ? 'coder' : 'Providers'), 'partly loaded window');
+    if (kind === 'model') {
+      await ui.press(`${ENTER}${ENTER}`); expect(ui.frame()).toContain('Apply state change'); await ui.press(ENTER);
+    } else {
+      // Enter the first provider's action list, then back out of its masked key entry to reload.
+      await ui.press(`${ENTER}${ENTER}`); await ui.press(ESC);
+    }
+    await until(() => inspections === 2 && ui.frame().includes('NEW-GENERATION'), 'new inspection');
+    expect(oldSignal?.aborted).toBe(true);
+    if (outcome === 'success') finish(); else reject(new Error('OLD-ERROR'));
+    await settle(80);
+    expect(ui.frame()).toContain('NEW-GENERATION'); expect(ui.frame()).not.toContain('OLD-GENERATION');
+    expect(window.calls.errors).toEqual([]); expect(window.calls.closed).toBe(0);
+    mounted.pop()!.unmount();
+  }
+});
+
+it('model/provider windows open during startup but a resulting approval waits for readiness', async () => {
+  for (const kind of ['model', 'provider'] as const) {
+    let ready!: () => void, scans = 0;
+    const model = modelPort(MODELS), provider = providerPort(undefined, true);
+    const view = mountWorkline({ opening: { ready: new Promise<void>(resolve => { ready = resolve; }), wait: 'OPENING-WAIT' }, pollMs: 60_000,
+      streamTurn: async function* () {},
+      ledger: { scopeId: 'scope', inspectRun: async () => null, listApprovalPage: async () => { scans++; return { items: [], nextAfter: null }; } },
+      panels: { labels: terminalPanelLabels('en'), ports: {
+        model: { inspect: model.port.inspect, makeDefault: async () => ({ status: 'approval-pending', lines: [], approvalId: 'approval-7' }) },
+        provider: { ...provider.port, inspect: async () => ({ ...KINDS, kinds: [KINDS.kinds[3]!] }) },
+      } } });
+    mounted.push(view.instance); await settleWorkline(40);
+    const before = scans; // The initial background approval watch is independent of opening a decision card.
+    const press = async (key: string) => { view.stdin.write(key); await settleWorkline(40); };
+    await press(`/${kind}${ENTER}`);
+    await until(() => view.stdout.frame.includes(kind === 'model' ? 'Models · scope' : 'Providers'), 'local window before readiness');
+    await press(ENTER); await press(DOWN); await press(ENTER);
+    if (kind === 'provider') {
+      await until(() => view.stdout.frame.includes('model to connect'), 'provider models'); await press(ENTER);
+      await until(() => view.stdout.frame.includes('Waiting for approval'), 'connection result'); await press(ENTER);
+    }
+    await until(() => view.stdout.text.includes('OPENING-WAIT'), 'approval waits');
+    expect(scans).toBe(before);
+    ready(); await until(() => scans > before, 'approval reads after readiness');
+    mounted.pop()!.unmount();
+  }
+});
+
 const SIGN_IN = `https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid%20profile%20email%20offline_access&code_challenge=${'C'.repeat(43)}&code_challenge_method=S256&state=${'s'.repeat(43)}&originator=deckent&extra=${'x'.repeat(60)}`;
 it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
   const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
@@ -1122,4 +1180,32 @@ it('K13: /model rechecks subscription readiness at confirmation and does not pin
   await until(() => calls.errors.length > 0, 'revocation reported');
   expect(model.pins).toEqual([]);
   expect(calls.errors[0]).toMatchObject({ code: 'TERMINAL_MODEL_SWITCH_REFUSED' });
+});
+
+
+it('shows pending model/provider names before slow checks; Enter cannot use a pending row, and closed windows ignore late results', async () => {
+  const { port, pins } = modelPort(MODELS);
+  let finish: ((view: ModelPanelView) => void) | undefined;
+  const checking = t('tui.model.checking', {}, 'en');
+  port.inspect = progress => { progress?.({ ...MODELS, choices: MODELS.choices.map(row => ({ ...row, detail: checking, blocked: checking })) });
+    return new Promise(resolve => { finish = resolve; }); };
+  const model = panel('model', { model: port }), ui = mount(model.element);
+  await until(() => ui.frame().includes(checking) && ui.frame().includes('chat'), 'pending model names');
+  await ui.press(ENTER); expect(pins).toEqual([]); expect(model.calls.closed).toBe(0);
+  finish!({ ...MODELS, choices: [MODELS.choices[0]!, ...MODELS.choices.slice(1).map(row => ({ ...row, blocked: checking, detail: checking }))] });
+  await until(() => ui.frame().includes('ready'), 'only checked model becomes ready');
+  await ui.press(`${DOWN}${ENTER}`); expect(pins).toEqual([]);
+  await ui.press(ESC); expect(model.calls.closed).toBe(1);
+  let resolveProvider: ((view: ProviderPanelView) => void) | undefined;
+  const original = providerPort();
+  const provider: ProviderPanelPort = { ...original.port, inspect: progress => {
+    progress?.({ ...KINDS, kinds: KINDS.kinds.map(kind => ({ ...kind, blocked: checking, detail: checking })) });
+    return new Promise(resolve => { resolveProvider = resolve; });
+  } };
+  const window = panel('provider', { provider }), providerUi = mount(window.element);
+  await until(() => providerUi.frame().includes(checking), 'pending provider names');
+  await providerUi.press(ENTER); expect(window.calls.closed).toBe(0);
+  await providerUi.press(ESC); expect(window.calls.closed).toBe(1);
+  mounted.pop()!.unmount();
+  resolveProvider!(KINDS); await settle(); expect(window.calls.errors).toEqual([]);
 });

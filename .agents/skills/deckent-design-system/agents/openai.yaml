@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Design System"
+  display_name: "deckent Design System"
   short_description: "Define accessible reusable component contracts"
   default_prompt: "Use $deckent-design-system to define reusable component contracts, accessible states and semantic surface parity."
 policy:

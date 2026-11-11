@@ -37,9 +37,9 @@ An unsigned catalog aggregator writes nothing even in shadow; `deckent doctor` a
 
 The memory switches are declared in `src/platform/core/config-fields/internal/fields.ts` (`MEMORY_AUTOMATION_MODES`), and a newly set
 memory phase 3 or 4 is refused with `MEMORY_ROLLOUT_CRITERIA_UNMET` until its measured criteria hold (see Memory). The policy template
-that grants the new identities their exact rights is first-run template v15 (`FIRST_RUN_POLICY_TEMPLATE_VERSION`,
-`src/domain/core/policy/internal/first-run-template.ts:68`). A fresh install gets template v15 directly. An existing installation gets
-it only through the owner's upgrade, previewed first and then applied: a policy installed from the first-run template upgrades with
+that introduced the new identities' exact rights was first-run template v15 (alpha.55). The current constant is v20
+(`FIRST_RUN_POLICY_TEMPLATE_VERSION`, `src/domain/core/policy-template/internal/first-run-template.ts`). A fresh install gets
+template v20 directly. The owner's full upgrade is previewed first and then applied: a policy installed from the first-run template upgrades with
 `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; a hand-written policy upgrades with
 `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (without `--person` it refuses and
 names the people of the scope).
@@ -48,7 +48,7 @@ names the people of the scope).
 
 The Brain plans tasks and names each task's WorkClass; it no longer chooses the worker model. A reply that names a model or an effort
 is refused with `BRAIN_ASSIGNMENT_REFUSED` before any proposal exists (Brain template v3 and later; the selected template is
-`run-proposal` v4, `src/capabilities/core/run-planner/internal/templates.json:8`). At Run admission the system walks the WorkClass's
+`run-proposal` v6, `src/capabilities/core/run-planner/internal/templates.json`; historical v3/v4 templates retain their contracts). At Run admission the system walks the WorkClass's
 ordered candidate list (Core seed `assets/native-coding/work-classes.json`, registry v5) and takes the first candidate that passes the
 same admission check a pinned model gets; none is `WORKER_ASSIGNMENT_NONE`, which names every skipped candidate with its reason. No
 other model is ever substituted. The choice (channel, exact model, effort, list position, catalog and WorkClass revisions) is sealed
@@ -58,10 +58,13 @@ instead of an exact id; it expands through the model role registry when reached,
 
 Tier and role live in one versioned registry, `assets/model-roles/model-roles.json` (roles `brain`, `worker`, `recovery-decision`,
 `memory-evaluator`; tiers `worker` and `frontier`; the BeUser walker and evaluator roles declare `admits: "connected"` instead of a
-tier, so every catalog model the scope has active serves them, see [BeUser](beuser.md)). Tier is eligibility and the scope's activation is permission; the Brain needs both,
-and a worker-tier, unknown or role-less Brain model is refused with `BRAIN_TIER_REFUSED` before any budget read or model call. A model
-the catalog lists without a role row is shown as pending ("new model: role pending") in `deckent doctor`, the monitor and the terminal
-`/roles` window, and every tiered role refuses it until a person runs `deckent models roles set` on their own terminal card; the write is one
+tier, so every catalog model the scope has active serves them, see [BeUser](beuser.md)). Activation is permission. For the Brain,
+owner 2026-11-06 replaced the frontier-only gate: every connected active model may plan by default; below-recommended models
+receive a note, without substitution. An authored organization `model_roles` overlay still binds, and inactive models or a
+model explicitly excluded with the per-model Brain switch remain refused. The shipped role table and the person's own `/roles`
+assignments are recommendations for Brain; other tiered roles retain their eligibility gates. A model without a role row is
+shown as pending ("new model: role pending") in `deckent doctor`, the monitor and `/roles`; a person may assign it with
+`deckent models roles set` on their own terminal card. The write is one
 compare-and-set row in the global `model_roles` overlay, audited like other governed config writes. API-channel models connect from a
 registered catalog row (`connect.tariff`, `connect.route`): a model the release does not list needs no source change, and a row
 without usable terms is refused, never priced by guess. A model-family word in a source string literal fails the architecture check
@@ -143,9 +146,9 @@ decided in shadow is not asked again after the switch to live. Every escalation 
 
 ## Headless subscription Brain and quota (S3-1…S3-5, S9, F3, F4)
 
-The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own Deckent-owned
+The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own deckent-owned
 login (s3c, owner 2026-10-24: layout resource `headlessLogins`, `headless/logins/claude` under the global state root, 0700, never backed
-up, never read by Deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
+up, never read by deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
 sign-in at their terminal; the person's `~/.claude` is not used, and `--config-dir` is the person's override): one turn, no tools, no MCP,
 `--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as `CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
 the binary, its version range, required flags (help-hidden flags proven by a parser refusal in an empty temporary config directory) and
@@ -168,7 +171,7 @@ The gateway keeps its refusals as counts and DNS host names (bounded by `provide
 beside the preflight record feeds the doctor Brain-login line. The CLI's OAuth refresh lock is a name beside its login in the login
 directory (registry `refreshLock.names`; none exists at rest and none appeared during in-realm `--version`, `--help` and `auth status`); the
 realm binds that directory itself, so file exclusion is shared with the person's own sessions, but a process-id staleness check would see
-across PID namespaces wrongly, and Deckent cannot serialize sessions it does not start. Deckent therefore starts no spawn while such a name
+across PID namespaces wrongly, and deckent cannot serialize sessions it does not start. deckent therefore starts no spawn while such a name
 exists and serializes its own spawns per login directory with a 0600 lock in the global headless root; past the registry wait it refuses
 with `HEADLESS_LOGIN_BUSY`. The S3-3 switch `models.headless.preview` is retired: the key still parses and is no longer offered.
 

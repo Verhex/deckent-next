@@ -61,12 +61,10 @@ export function useDraftHandoffs<C extends PanelContext, E extends { readonly te
     let outcome: ExternalEditorOutcome = { kind: 'refused', reason: 'failed' };
     process.on('SIGINT', ignore);
     try {
-      await suspendTerminal(async () => {
-        handover?.release();
-        try { outcome = await editor.edit(text); } finally { handover?.reclaim(); }
-      });
+      handover?.release();
+      await suspendTerminal(async () => { outcome = await editor.edit(text); });
     } catch { /* the outcome stays `failed`; the draft is kept */ }
-    finally { process.off('SIGINT', ignore); release?.(); }
+    finally { handover?.reclaim(); process.off('SIGINT', ignore); release?.(); }
     const result = outcome as ExternalEditorOutcome;
     if (result.kind === 'refused' && labels) say(result.reason === 'no-editor' ? 'warning' : 'error', labels.editor[result.reason]);
     return result.kind === 'edited' ? result.text : null;

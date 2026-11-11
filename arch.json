@@ -170,7 +170,8 @@
         "src/engine/core/identity-profile",
         "src/capabilities/core/run-planner",
         "src/adapters/core/extension-registry",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -221,7 +222,8 @@
         "src/domain/core/policy",
         "src/engine/core/policy",
         "src/platform/core/validate",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "SECURITY"
     },
@@ -270,7 +272,8 @@
       "dependencies": [
         "src/adapters/core/docker-supervisor",
         "src/platform/core/validate",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "ISOLATION"
     },
@@ -372,7 +375,9 @@
         "src/engine/core/monitor",
         "src/composition/core/beuser",
         "src/adapters/core/docker-supervisor",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/surfaces/core/terminal-provider",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SURFACES"
     },
@@ -603,7 +608,8 @@
         "src/platform/core/errors",
         "src/capabilities/core/native-agent-execution",
         "src/composition/core/subscription-readiness",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SURFACES"
     },
@@ -986,7 +992,8 @@
         "src/platform/core/config",
         "src/domain/core/run",
         "src/domain/core/command",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/platform/core/state-root"
       ],
       "plan": "EXECUTION"
     },
@@ -1053,7 +1060,8 @@
     },
     "src/platform/core/state-root": {
       "dependencies": [
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/utils"
       ],
       "plan": "FOUNDATION"
     },
@@ -1172,7 +1180,8 @@
         "src/domain/core/agent-tool",
         "src/platform/core/output",
         "src/surfaces/core/terminal-theme",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1314,7 +1323,8 @@
     "src/surfaces/core/terminal-composer": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-kit-ink"
+        "src/surfaces/core/terminal-kit-ink",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1390,7 +1400,8 @@
         "src/surfaces/core/delivery-port",
         "src/surfaces/core/terminal-kit-ink",
         "src/surfaces/core/terminal-render-ink",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1404,7 +1415,8 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-kit-ink",
-        "src/surfaces/core/terminal-render-ink"
+        "src/surfaces/core/terminal-render-ink",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1531,7 +1543,8 @@
         "src/surfaces/core/cli-hub",
         "src/surfaces/core/cli-beuser",
         "src/domain/core/project-attachment",
-        "src/surfaces/core/mcp-presentation"
+        "src/surfaces/core/mcp-presentation",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1814,7 +1827,8 @@
     "src/engine/core/provider-catalog": {
       "dependencies": [
         "src/domain/core/provider-catalog",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1891,7 +1905,8 @@
         "src/domain/core/audit",
         "src/domain/core/worker-event",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1929,7 +1944,8 @@
         "src/engine/core/project-attachment",
         "src/platform/core/utils",
         "src/engine/core/dispatch",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1952,7 +1968,8 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/provider-connect",
         "src/composition/core/model-use",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -2027,7 +2044,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
         "src/platform/core/errors",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2061,7 +2079,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2181,7 +2200,8 @@
         "src/platform/core/errors",
         "src/engine/core/oauth-connection",
         "src/composition/core/model-use",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -2268,7 +2288,8 @@
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2803,7 +2824,11 @@
         "src/engine/core/runtime",
         "src/platform/core/config-fields",
         "src/composition/core/scoped-request",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-coding"
       ],
       "plan": "PROVIDERS"
     },
@@ -3048,7 +3073,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -3100,7 +3126,8 @@
         "src/engine/core/audit",
         "src/composition/core/scoped-request",
         "src/adapters/core/mcp-client",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SECURITY"
     },
@@ -3278,7 +3305,8 @@
         "src/platform/core/integrity",
         "src/platform/core/validate",
         "src/engine/core/policy",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/platform/core/state-root"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3373,7 +3401,8 @@
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3707,13 +3736,13 @@
         "src/engine/core/model-invocation",
         "src/engine/core/run-proposal",
         "src/domain/core/provider-catalog",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/platform/core/state-root"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
     "src/composition/core/run-planner": {
       "dependencies": [
-        "src/capabilities/core/native-agent-execution",
         "src/domain/core/run",
         "src/domain/core/model-invocation",
         "src/engine/core/run-planner",
@@ -3738,7 +3767,6 @@
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store",
         "src/platform/core/integrity",
-        "src/engine/core/toolchain-currency",
         "src/engine/core/run-proposal",
         "src/engine/core/policy",
         "src/platform/core/clock",
@@ -3746,11 +3774,11 @@
         "src/adapters/core/run-proposal-store",
         "src/composition/core/policy",
         "src/engine/core/runtime",
-        "src/adapters/core/worker-image",
         "src/adapters/core/provider-siwc",
         "src/engine/core/audit",
         "src/engine/core/authentication",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3856,7 +3884,8 @@
         "src/platform/core/config",
         "src/adapters/core/native-cli-registry",
         "src/platform/core/host",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -4050,7 +4079,8 @@
         "src/surfaces/core/cli-models",
         "src/engine/core/recovery",
         "src/engine/core/provider-catalog",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4126,7 +4156,8 @@
         "src/engine/core/worker-setup",
         "src/platform/core/validate",
         "src/platform/core/host",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/state-root"
       ],
       "plan": "INSTALLATION"
     },
@@ -4945,7 +4976,8 @@
         "src/adapters/core/siwc-connection",
         "src/engine/core/project-attachment",
         "src/composition/core/model-use",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -5225,7 +5257,8 @@
         "src/engine/core/inference-serving",
         "src/engine/core/model-invocation",
         "src/surfaces/core/terminal-render-ink",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/surfaces/core/terminal-kit-ink"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -5306,7 +5339,9 @@
         "src/composition/core/root",
         "src/composition/core/scoped-request",
         "src/adapters/core/config-file",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "INSTALLATION"
     },
@@ -5483,7 +5518,8 @@
       "dependencies": [
         "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -5602,6 +5638,19 @@
         "src/adapters/core/sqlite-ledger"
       ],
       "plan": "STORE"
+    },
+    "src/composition/core/model-inspection": {
+      "dependencies": [
+        "src/composition/core/scoped-request",
+        "src/composition/core/root",
+        "src/adapters/core/config-file",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config",
+        "src/composition/core/policy",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/policy"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {
@@ -5777,6 +5826,7 @@
       "PLAN.md",
       "COMPLETED-PLAN.md",
       "CHANGELOG.md",
+      "CHANGELOG-alpha.md",
       "docs/policy-and-ai.md",
       "docs/policy-and-ai.tr.md",
       "docs/reports/ai-floor-compliance.md",

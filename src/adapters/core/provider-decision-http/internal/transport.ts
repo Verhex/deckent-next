@@ -1,5 +1,6 @@
+import { catalogParseObserver } from '#platform/index.js';
 import { performance } from 'node:perf_hooks';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationNativeResult } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { decisionAdviceFromWire } from './advice.js';
@@ -62,3 +63,5 @@ export function createDecisionHttpNativePort(options: DecisionHttpNativeOptions 
     },
   });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

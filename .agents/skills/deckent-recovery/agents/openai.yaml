@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Recovery"
+  display_name: "deckent Recovery"
   short_description: "Bound typed Next recovery and reconciliation"
   default_prompt: "Use $deckent-recovery for this exact authorized Next recovery through existing typed ports and durable reconciliation evidence."
 policy:

@@ -29,7 +29,7 @@ export const setupObservationSchema = z.strictObject({
   get policy() { return z.strictObject({ state: z.enum(['absent', 'current', 'upgradable', 'hand-built', 'conflict', 'pending']) }); },
   get sandbox() { return z.strictObject({ realm: z.enum(['bubblewrap', 'landlock', 'none']), selfTest: z.enum(['ok', 'failed', 'not-run']), usernsRestricted: z.boolean() }); },
   get model() { return z.strictObject({ connections: counterSchema }); },
-  get check() { return z.strictObject({ state: z.enum(['ok', 'warnings', 'errors', 'not-run']) }); },
+  get check() { return z.strictObject({ state: z.enum(['ok', 'warnings', 'errors', 'not-run']), pending: counterSchema.optional() }); },
   get families() { return z.record(z.string(), z.unknown().optional()).prefault({}); },
 });
 export type SetupObservation = z.input<typeof setupObservationSchema>;

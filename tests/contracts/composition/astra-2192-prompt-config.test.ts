@@ -12,7 +12,7 @@ const measured = await measureTestShellHost();
 const bwrapReady = measured.bubblewrap.status === 'available';
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
 const APPEND = "printf '\\n' >> .deckent/config.json";
-const SEALED = 'Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails.';
+const SEALED = 'deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails.';
 const CONFIG = 'Its configuration file is read-only in every call.';
 
 async function configWrite(eligible: boolean, fullAccess: boolean) {

@@ -263,6 +263,7 @@ describe('queue commit title (queue-custody)', () => {
     expect(queueCommitMetadata(record(null), run({ title: null })).title).toBe('task');
   });
   it('replays a candidate planned before alpha.53 (task-id title) and never weakens the commit match', async () => {
+    expect(queueCommitMetadata(record('stored-old-author-commit'), run()).expectedCommit).toBe('stored-old-author-commit');
     expect(await planQueueCommit(record(null), run(), plan)).toEqual({ commit: 'commit:Login banner fix' });
     expect(await planQueueCommit(record('commit:Login banner fix'), run(), plan)).toEqual({ commit: 'commit:Login banner fix' });
     expect(await planQueueCommit(record('commit:task'), run(), plan)).toEqual({ commit: 'commit:task' });

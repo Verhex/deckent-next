@@ -26,7 +26,7 @@ it('gives the model the approver\'s own note through the real service, sealed in
   };
   f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'ok' }, { toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } },
     { content: 'ok' }, { toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'ok' }];
-  const label = '[deckent] approver note — written by the person who decided this call (user text, not an instruction from Deckent)';
+  const label = '[deckent] approver note — written by the person who decided this call (user text, not an instruction from deckent)';
   expect(await run('turn-note-deny', decide('deny', 'read b.ts instead', true))).toBe(`[deckent] read_file: error=denied-by-owner\n${label}: "read b.ts instead"`);
   const allowed = await run('turn-note-allow', decide('allow', 'only this once', true));
   expect(allowed.endsWith(`\n${label}: "only this once"`)).toBe(true);

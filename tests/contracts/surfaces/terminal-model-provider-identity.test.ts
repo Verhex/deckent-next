@@ -52,7 +52,7 @@ it.each(['en', 'tr'] as const)('%s model row and switch notice carry the provide
   expect(tree.items[0]!.identity).toEqual(identity);
   const text = t('tui.panel.model.pinned', identity, locale);
   expect(text).toContain('GLM 5.3 (OpenRouter)');
-  const rendered = renderToString(wrap(createElement(SystemSummaryLine, { text, identity, label: 'Deckent' })), { columns: 200 });
+  const rendered = renderToString(wrap(createElement(SystemSummaryLine, { text, identity, label: 'deckent' })), { columns: 200 });
   expect(rendered).toContain('GLM 5.3 (OpenRouter)'); expect(rendered).not.toContain('\u001b[38');
 });
 

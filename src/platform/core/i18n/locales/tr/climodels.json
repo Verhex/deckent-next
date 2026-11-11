@@ -259,7 +259,7 @@
   "models.connect.pull.unpriced": "{model}: kullanılamaz — fiyat doğrulanmadı",
   "models.connect.pull.notOnKey": "{model}: katalogda var, bu anahtarda yok",
   "models.connect.pull.notInCatalog": "{model}: bu anahtarda var, fiyatlı katalogda yok",
-  "models.connect.pull.notInCatalogSubscription": "{model}: aboneliğinizde var, Deckent henüz desteklemiyor (bağlanmadı)",
+  "models.connect.pull.notInCatalogSubscription": "{model}: aboneliğinizde var, deckent henüz desteklemiyor (bağlanmadı)",
   "climodels.models.card.channelCascade": "Bu kanalı ve açık modellerini aç. Daha önce seçilmemiş adaylar (her biri tarife kapısından geçer): {models}. Açıkça kapatılmış modeller kapalı kalır.",
   "models.catalog.lifecycle.active": "kullanılabilir",
   "models.catalog.lifecycle.retired": "emekli",

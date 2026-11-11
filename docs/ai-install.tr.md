@@ -1,9 +1,9 @@
-# AI asistanıyla Deckent kurulumu
+# AI asistanıyla deckent kurulumu
 
 [English](ai-install.md) · [README (EN)](../README.md) · [Bilinen sınırlar (EN)](https://github.com/Verhex/deckent-next/blob/main/docs/known-limits.md)
 
-Bir kişi Deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
-Deckent kişinin altyapısında çalışır; kurulum kişinin iş operasyonlarını yürütme izni vermez.
+Bir kişi deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
+İşler deckent ile kişinin kendi altyapısında yürür; kurulum iş operasyonlarını yürütme izni vermez.
 Bu rehber alpha.58 adayının (`f6b119d4f`; 2026-10-29'da `0ba89deab` olarak yayımlandı) CLI yardımı ve kaynağıyla yeniden kontrol edildi; alpha.59 (2026-10-30'da `4d12d6fa8` olarak yayımlandı) ve alpha.60 adayı kullandığı hiçbir CLI komutunu değiştirmez. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
 Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
@@ -17,7 +17,7 @@ açın, `node --version` ve `npm --version` kontrolünden sonra kurulumu tekrarl
 Yerel model sohbeti kendi başına kod işçisi gerektirmez. İşletim sistemi izinlerini değiştirmek ya da Docker'ı yükseltilmiş
 yetkiyle kurmak gerekiyorsa yönetici adımını kişiye bırakın.
 
-Deckent henüz npm'de yoktur. Kişinin kaynağına ve bütünlüğüne güvendiği paket dosyasını edinin. Aşağıdaki örnek tarball yolunu
+Henüz npm'de deckent paketi yoktur. Kişinin kaynağına ve bütünlüğüne güvendiği paket dosyasını edinin. Aşağıdaki örnek tarball yolunu
 bu dosyanın mutlak yoluyla değiştirin; dosya adı yer tutucudur. npm paket adı tahmin etmeyin ya da doğrulanmamış alternatif
 indirmeyin. npm yayını olduğunda doğrulanmış paket kimliğini ve sürümünü kullanın.
 
@@ -25,7 +25,7 @@ indirmeyin. npm yayını olduğunda doğrulanmış paket kimliğini ve sürümü
 npm install --global /absolute/path/to/deckent-package.tgz
 ```
 
-Aşağıdaki adımları kişinin seçtiği proje klasöründe, Deckent kaynağının dışında çalıştırın. `my-project` yerine kalıcı kapsam
+Aşağıdaki adımları kişinin seçtiği proje klasöründe, deckent kaynağının dışında çalıştırın. `my-project` yerine kalıcı kapsam
 adını yazın. Kapsam politika ve kayıtları gruplar; sandbox değildir. Bu adım yeni kurulumun dilini ve izinlerini yazar;
 kimlik profili seçmez, giriş yapmaz, anahtar girmez ve kart onaylamaz.
 
@@ -47,8 +47,8 @@ Hazırlığı denetler; Docker kurmaz veya başlatmaz.
 Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasını isteyin. Şu adımlarda durup kişiye devredin:
 
 - Kendi sağlayıcı ya da abonelik hesabına giriş ve AI/arka plan kullanımı için açık rıza. Tarayıcı oturumu veya başka birinin
-  kimlik bilgisini kopyalamayın. ChatGPT ile giriş kullanan işçinin etkinleştirilmesi N1 kanıtına kadar bekletiliyor.
-- Sağlayıcı sırlarını Deckent'in maskeli alanına girmek. Değeri sohbette istemeyin; argüman, ortam değişkeni, günlük,
+  kimlik bilgisini kopyalamayın. Ayrı ChatGPT tarayıcı girişi (SIWC) işçisi N1 kanıtını bekler; ChatGPT (Codex CLI) bağlantısı native işçi yolunu kullanır.
+- Sağlayıcı sırlarını deckent'in maskeli alanına girmek. Değeri sohbette istemeyin; argüman, ortam değişkeni, günlük,
   ekran görüntüsü veya konuşma dökümüne koymayın.
 - Profil, izin kipi ve izin/onay kartlarını gerçek terminalde incelemek. AI, MCP, pipe ve JSON kişinin kararına tanıklık
   etmez. Terminal taklit etmeyin, politika dosyası değiştirmeyin ve reddi aşmak için komut değiştirmeyin.

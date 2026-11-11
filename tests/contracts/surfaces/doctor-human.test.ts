@@ -7,6 +7,9 @@ import { main } from '#surfaces/core/cli/index.js';
 import { ErrorRegistry, t, clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
+import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
+import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
+import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
@@ -41,14 +44,31 @@ describe('doctor rows (pure)', () => {
     const egress = { models: [{ name: 'openai-chat-http', host: '127.0.0.1', local: true }, { name: 'anthropic', host: 'api.anthropic.com', local: false }],
       fetch: { mode: 'allowlist', hosts: ['docs.example.com'] }, toolchainCheck: 'registry.npmjs.org', mcp: [{ name: 'gh', host: 'api.github.com', realm: null }] };
     const en = renderDoctorChecks(doctorChecks(report, facts({ egress }), 'en'), 'en');
+    for (const locale of ['en', 'tr'] as const) {
+      const checks = doctorChecks(report, facts({ egress: { ...egress, models: [...Array.from({ length: 7 }, () => egress.models[1]!), egress.models[0]!] } }), locale).filter(row => row.id === 'data.egress');
+      expect(checks.filter(row => row.text.includes('Model anthropic:'))).toHaveLength(7);
+      expect(renderDoctorChecks(checks, locale).match(/Model anthropic:/gu)).toHaveLength(1);
+      expect(renderDoctorChecks(checks, locale)).toContain(`${checks[0]!.text} × 7`);
+      expect(renderDoctorChecks(checks, locale)).toContain('Model openai-chat-http: 127.0.0.1');
+    }
     expect(en.split('\n').indexOf('Where your data can go')).toBeGreaterThan(en.split('\n').indexOf('Tools'));
     for (const text of ['Model openai-chat-http: 127.0.0.1, on this machine', 'Model anthropic: api.anthropic.com, a remote service', 'only these hosts: docs.example.com',
-      'MCP server gh: api.github.com', 'Toolchain version check: registry.npmjs.org', 'Deckent sends no telemetry or usage data']) expect(en).toContain(text);
+      'MCP server gh: api.github.com', 'Toolchain version check: registry.npmjs.org', 'deckent sends no telemetry or usage data']) expect(en).toContain(text);
     expect(renderDoctorChecks(doctorChecks(report, facts({ egress: { ...egress, models: [] } }), 'tr'), 'tr')).toContain('Yapılandırılmış model bağlantısı yok');
   });
   it('groups rows under Kurulum / Güvenlik / Çalışma / Araçlar with word markers, a summary first and one next step per warning', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const unavailable = doctorChecks(report, facts({ workerKinds: [{ kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'prepared-code', reason: 'image-unverified', rebind: false }] }), locale).filter(row => row.id === 'work.kind');
+      expect(unavailable).toHaveLength(2);
+      expect(unavailable[0]).toMatchObject({ group: 'work', state: 'warning' });
+      expect(unavailable[0]!.text).toContain(locale === 'en' ? 'worker image is missing' : 'işçi imajı eksik');
+      expect(unavailable[0]!.next).toContain('deckent coding template --kind missing-code --connection <id>');
+      expect(unavailable[1]!.next).toContain('deckent coding --json'); expect(unavailable[1]!.next).not.toContain('--connection');
+    }
     const checks = doctorChecks(report, facts(), 'tr');
     for (const check of checks.filter(row => row.state === 'warning' || row.state === 'error')) expect(check.next, check.id).toBeTruthy();
+    const budget = doctorChecks(report, facts({ budgetPeriodText: 'No API budget yet' }), 'en').find(row => row.id === 'work.budgetPeriod');
+    expect(budget).toMatchObject({ state: 'warning', next: 'deckent models create-budget --usd <amount> --scope live' });
     const text = renderDoctorChecks(checks, 'tr');
     const lines = text.split('\n');
     expect(lines[0]).toMatch(/^Durum: hazır · \d+ uyarı · \d+ sınanmadı$/);
@@ -85,10 +105,10 @@ describe('doctor rows (pure)', () => {
     expect(docker('blocked', 'setup.execution.unknown')).toMatchObject({ state: 'untested' });
     expect(docker('blocked', 'setup.execution.unknown').next).toBeUndefined();
     const en = doctorChecks(report, facts({ executionEnvironment: { state: 'blocked', reason: { code: 'setup.execution.none', params: {} } } }), 'en').find(row => row.id === 'work.docker')!;
-    expect(en.text).toBe('No execution environment is installed: work, /do and delivery cannot run. Chat, MCP and governed tools work. Open /setup in the Deckent terminal to set up execution.');
+    expect(en.text).toBe('No execution environment is installed: work, /do and delivery cannot run. Chat, MCP and governed tools work. Open /setup in the deckent terminal to set up execution.');
     // R8b: work set up on a connected subscription (execution without Docker) is not told to set Docker up.
     expect(docker('blocked', 'setup.execution.none', { firstJob: { execution: false, registry: true, connection: true } })).toEqual({ group: 'work', id: 'work.docker', state: 'ok',
-      text: 'Docker gerekmez: işler bağlı aboneliğinle bu bilgisayarda Deckent\'in korumalı alanında çalışır.' });
+      text: 'Docker gerekmez: işler bağlı aboneliğinle bu bilgisayarda deckent\'in korumalı alanında çalışır.' });
   });
   it('PRE-34: a current worker image without a version names the configured image instead of nothing', () => {
     const image = { ...report, imageRefresh: { status: 'current', reason: null, imageVersion: null } };
@@ -107,9 +127,12 @@ describe('doctor rows (pure)', () => {
   it('an error row reads as needing attention; a new installation without an audit checkpoint is not tested, not a problem', () => {
     const fresh = doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'unknown', reason: 'no-checkpoint-yet', head: null, checkpoint: null } } as never, facts(), 'en');
     expect(fresh.find(row => row.id === 'security.audit')).toMatchObject({ state: 'untested' });
-    expect(fresh.find(row => row.id === 'security.audit')?.next).toBeUndefined();
+    expect(fresh.find(row => row.id === 'security.audit')?.next).toContain('deckent audit verify --scope live');
+    expect(fresh.find(row => row.id === 'security.audit')?.next).toContain('does not create a checkpoint');
     for (const locale of ['en', 'tr'] as const) {
-      const audit = fresh.filter(row => row.id === 'security.audit');
+      const audit = doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'unknown', reason: 'no-checkpoint-yet', head: null, checkpoint: null } } as never, facts(), locale).filter(row => row.id === 'security.audit');
+      expect(audit[0]!.next).toContain('deckent runtime serve');
+      expect(audit[0]!.next).toContain('deckent audit verify --scope live');
       expect(audit[0]).toMatchObject({ needsAttention: true });
       expect(renderDoctorChecks(audit, locale).split('\n')[0]).toBe(locale === 'en' ? 'Status: needs attention · 1 not tested · no warnings' : 'Durum: ilgi bekliyor · 1 sınanmadı · uyarı yok');
     }
@@ -131,6 +154,9 @@ describe('doctor rows (pure)', () => {
     expect(doctorChecks(report, facts({ pendingRoleModels: pending.slice(0, 1) }), 'tr').find(row => row.id === 'work.modelRoles')?.text).toContain('Yeni model: rol bekliyor');
     for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ pendingRoleModels: value }), 'en').some(row => row.id === 'work.modelRoles')).toBe(false);
   });
+});
+
+describe('doctor subscription rows (pure)', () => {
   it('S3-3 "Brain girişi": each subscription login with its kind, plan, directory, channel state and consent; no check yet is "not tested"', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: ['ai', 'system'] },
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude-team', consent: [] },
@@ -140,7 +166,19 @@ describe('doctor rows (pure)', () => {
     expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, tools: 'none' }] }), 'tr').find(row => row.id === 'work.modelConnection')?.text).toContain('araç');
     expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, tools: 'available' }] }), 'en').some(row => row.id === 'work.modelConnection')).toBe(false);
     expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, stale: true }] }), 'en').find(row => row.id === 'work.modelConnection')?.text).toContain('No matching current invocation profile');
-    expect(doctorChecks(report, facts({ headlessLogins: [{ ...logins[0]!, cliUpdated: { from: '1', to: '2' } }] }), 'en').some(row => row.id === 'work.cliUpdated')).toBe(true); // HL supplies the translation at join.
+    for (const locale of ['en', 'tr'] as const) {
+      const updated = doctorChecks(report, facts({ headlessLogins: [{ ...logins[0]!, cliUpdated: { cli: 'fixture-cli', from: '1', to: '2' } }] }), locale).find(row => row.id === 'work.cliUpdated');
+      expect(updated?.text).toBe(locale === 'en' ? 'CLI fixture-cli updated 1 → 2 (checked again before use)' : 'CLI fixture-cli güncellendi: 1 → 2 (kullanmadan önce yeniden denetlendi)');
+      const checks = doctorChecks(report, facts({ headlessLogins: [...Array.from({ length: 7 }, () => logins[0]!), logins[1]!] }), locale).filter(row => row.id === 'work.brainLogin');
+      const before = JSON.stringify(checks), rendered = renderDoctorChecks(checks, locale);
+      expect(checks).toHaveLength(8);
+      expect(rendered.match(/(?:Brain login|Brain girişi):/gu)).toHaveLength(2);
+      expect(rendered).toContain(`${checks[0]!.text} × 7`);
+      expect(rendered).toContain(checks[7]!.text);
+      // Different next steps stay separate even when the subject and state are identical.
+      expect(renderDoctorChecks([{ ...checks[0]!, next: 'first' }, { ...checks[0]!, next: 'second' }], locale)).not.toContain('×');
+      expect(JSON.stringify(checks)).toBe(before);
+    }
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
@@ -198,7 +236,8 @@ describe('doctor rows (pure)', () => {
 const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
-    const root = await project();
+    registerProviderConfig();
+    const root = await project({ terminal: { scopeId: 'fixture' } });
     let legacy = true;
     const run = async (args: string[]) => { const out: string[] = [];
       await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
@@ -207,9 +246,15 @@ describe('deckent doctor (command)', () => {
     const grouped = await run([]);
     expect(grouped.split('\n')[0]).toMatch(/^Status: /);
     expect(grouped).toContain('\nInstallation\n');
+    expect(grouped).toContain('Tool versions were not checked (the check contacts the npm registry)');
     expect(grouped).not.toContain('Details (--verbose):');
     expect(grouped).toContain('Legacy DECKENT.md'); legacy = false;
-    expect(await run([])).not.toContain('Legacy DECKENT.md');
+    const withoutLegacy = await run([]);
+    expect(withoutLegacy).not.toContain('Legacy DECKENT.md');
+    const env = { HOME: join(root, 'h') };
+    const verdict = await doctorVerdict(root, { env }, { env });
+    expect(verdict).toEqual({ state: 'warnings', pending: withoutLegacy.split('\n').filter(line => /^ {2}(?:warning|error)\s/u.test(line)).length });
+    expect(verdict.pending).toBeGreaterThan(0);
     const verbose = await run(['--verbose']);
     expect(verbose).toContain('Details (--verbose):');
     expect(verbose).toContain('Platform: ');
@@ -219,6 +264,31 @@ describe('deckent doctor (command)', () => {
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
     for (const key of ['platform', 'host', 'node', 'status', 'poolReadiness', 'secretStore', 'shellRealm', 'imageRefresh', 'recoveryFiles']) expect(Object.keys(json)).toContain(key);
+    await mkdir(join(env.HOME, '.deckent'), { recursive: true });
+    await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+    clearConfigCache();
+    const healthy = { env, inspectCodingRepository: async () => ({ state: 'skipped', reason: { code: 'fixture.not-applicable', params: {} } }),
+      verifyAudit: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', status: 'match' as const, head: null, checkpoint: null }) };
+    expect(await doctorVerdict(root, healthy, { env })).toEqual({ state: 'ok', pending: 0 });
+    const freshAudit = { ...healthy, verifyAudit: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', status: 'unknown' as const,
+      reason: 'no-checkpoint-yet' as const, head: null, checkpoint: null }) };
+    expect(await doctorVerdict(root, freshAudit, { env })).toEqual({ state: 'warnings', pending: 1 });
+    for (const context of [healthy, freshAudit]) {
+      const check = await doctorVerdict(root, context, { env });
+      const observation: SetupObservation = { schemaVersion: 2, check,
+        environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: null },
+        folder: { installation: 'present', homeRoot: false, configuredScope: 'fixture', suggestedScope: 'fixture' },
+        profile: { available: [{ id: 'core:solo', version: 1 }], selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' },
+        sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 0 } };
+      const plan = planSetup(observation, undefined, new SetupStageRegistry([]));
+      for (const locale of ['en', 'tr'] as const) {
+        const text = renderSetupLines(plan, locale, { requested: false, results: [] });
+        if (context === healthy) {
+          expect(text).toContain(locale === 'en' ? 'The final check ran; no items need attention.' : 'Son kontrol çalıştı; ilgi bekleyen madde yok.');
+          expect(text).not.toContain(locale === 'en' ? 'wait for you' : 'sizi bekliyor');
+        } else expect(text).toContain(locale === 'en' ? 'The final check ran; 1 item(s) wait for you.' : 'Son kontrol çalıştı; 1 madde sizi bekliyor.');
+      }
+    }
   });
   // J2e join (delta C-MODELS-for-C-DOCTOR): the retirement row follows the same rule as `deckent models`: a switched-on model whose retirement
   // day is within models.retirementWarningDays (config field) is warned about, even while its catalog lifecycle still reads `active`.
@@ -419,7 +489,7 @@ it('names an open secret folder ssh-style with chmod 700 and says when ChatGPT s
   expect(open).toEqual([expect.objectContaining({ id: 'security.secretsRoot', state: 'warning', next: 'chmod 700 /fixture/global' })]);
   expect(open[0]!.text).toContain('0755');
   const parent = custody({ personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }, 'tr');
-  expect(parent).toHaveLength(1); expect(parent[0]!.text).toContain('/tmp'); expect(parent[0]!.next).toBeUndefined();
+  expect(parent).toHaveLength(1); expect(parent[0]!.text).toContain('/tmp'); expect(parent[0]!.next).toContain('deckent config'); expect(parent[0]!.next).not.toContain('chmod');
   expect(custody({ personalCustody: { status: 'refused', reason: 'unknown-locality' } })[0]!.text).toContain('local disk');
   expect(custody({ backend: 'core.secret-store.env@1', personalCustody: { status: 'store' } })[0]).toMatchObject({ state: 'warning', next: 'deckent secret store --to core.secret-store.encrypted-file@1' });
   expect(custody({ personalCustody: { status: 'ready' } })[0]).toMatchObject({ state: 'ok' });

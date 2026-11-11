@@ -1,9 +1,11 @@
+import { timingEnabled, installTimingFlush } from '#platform/index.js';
 import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { terminalPalette, type ColorTier, type TerminalThemeSetting, type WorklineInkPalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { resolveRenderGlyphs, RenderGlyphsContext, TerminalHandoverContext } from '#surfaces/core/terminal-render-ink/index.js';
 import type { TerminalHandover } from './handoff.js';
+import { createResizeOwnership, ResizeFrame } from './resize-frame.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
   type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
@@ -109,7 +111,14 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const reportingOff = () => { try { out.write(modes(MOUSE_REPORTING_OFF, FOCUS_REPORTING_OFF, PALETTE_NOTICES_OFF)); } catch { /* the terminal is gone */ } };
   const reportingOn = () => { try { out.write(modes(MOUSE_REPORTING_ON, FOCUS_REPORTING_ON, PALETTE_NOTICES_ON)); } catch { /* the terminal is gone */ } };
   // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
-  const handover: TerminalHandover | undefined = mouse ? { release: () => { reportingOff(); mouse.hold(true); }, reclaim: () => { mouse.hold(false); reportingOn(); } } : undefined;
+  const resizeOwnership = createResizeOwnership();
+  let holds = 0;
+  const handover: TerminalHandover | undefined = mouse || fullscreen ? {
+    // Reporting modes are switched only where the mouse layer switched them on (as before); the resize gate applies to every full window.
+    // Holds are counted: a second, refused handover (Ink allows one suspension) must not return input or reporting under the first one.
+    release: () => { resizeOwnership.release(); if (holds++ === 0 && mouse) { reportingOff(); mouse.hold(true); } },
+    reclaim: () => { if (--holds === 0 && mouse) { mouse.hold(false); reportingOn(); } resizeOwnership.reclaim(); },
+  } : undefined;
   let view = options.view;
   const repaint = () => { if (request) palette = drawn(); if (open) instance.rerender(tree(view, palette)); };
   const theme: TerminalHostContext['theme'] = { background: () => reported ?? null, apply: next => { setting = next; repaint(); } };
@@ -118,7 +127,8 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) };
   const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-      createElement(TerminalHandoverContext.Provider, { value: handover ?? null }, view(context))) });
+      createElement(TerminalHandoverContext.Provider, { value: handover ?? null },
+        fullscreen ? createElement(ResizeFrame, { stdout: out, ownership: resizeOwnership }, view(context)) : view(context))) });
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(tree(view, palette),
@@ -127,6 +137,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true, kittyKeyboard: { mode: 'auto' as const } } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
       stdout: options.clearScreen === false ? out : mainScreenOutput(out) });
+  const releaseTiming = timingEnabled ? installTimingFlush(async () => { await yieldToInput(); await instance.waitUntilRenderFlush(); }) : undefined;
   const stop = () => instance.unmount();
   if (signal?.aborted) stop(); else signal?.addEventListener('abort', stop, { once: true }); // aborted during the probe: nothing stays open
   if (mouse) { reportingOn(); process.once('exit', reportingOff); }
@@ -139,7 +150,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   process.removeAllListeners('warning'); process.on('warning', hold);
   let open = true;
   const done = (async () => { try { await instance.waitUntilExit(); }
-  finally { open = false;
+  finally { open = false; releaseTiming?.();
     process.off('warning', hold); for (const listener of warningListeners) process.on('warning', listener);
     for (const warning of held) process.emitWarning(warning);
     signal?.removeEventListener('abort', stop);

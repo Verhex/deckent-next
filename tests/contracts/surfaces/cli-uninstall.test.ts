@@ -40,7 +40,7 @@ it('offers the tiers in one card, checks before the single confirmation, preview
     expect(JSON.parse(output)).toMatchObject({ schemaVersion: 2, tier: flags.includes('--all') ? 'all' : 'keep-data' }); expect(output.trim().split('\n')).toHaveLength(1); expect(applies).toBe(0);
   }
   output = ''; expect(await uninstallCommand(['uninstall', '--dry-run'], context)).toBe(0);
-  expect(output).toContain(uninstallDetailLines(plan, 'en').join('\n')); expect(output.match(/Remove Deckent/gu)).toHaveLength(1); expect(applies).toBe(0);
+  expect(output).toContain(uninstallDetailLines(plan, 'en').join('\n')); expect(output.match(/Remove deckent/gu)).toHaveLength(1); expect(applies).toBe(0);
   // The menu: one summary card (the title once, a running service is "will be stopped", never "work active"), Cancel changes nothing.
   expect(await uninstallCommand(['uninstall'], context)).toBe(1);
   expect(card.requests).toHaveLength(1); expect(card.requests[0]!.body).toEqual(uninstallSummaryLines(plan, 'en')); expect(card.requests[0]!.initial).toBe('keep-data');

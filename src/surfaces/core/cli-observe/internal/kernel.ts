@@ -1,3 +1,4 @@
+import { timingCommand } from './timing.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, getConfigFieldDefault, type ConfigLoadOptions, type Locale, type OutputMode } from '#platform/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -33,7 +34,7 @@ function parse(argv: readonly string[]): KernelArgs {
 }
 export async function runKernelCommand(argv: readonly string[], context: KernelCommandContext = {}): Promise<void> {
   const args = parse(argv), root = context.root ?? process.cwd(), env = context.env ?? process.env;
-  const [command] = args.positionals;
+  const [command, action] = args.positionals;
   if ((args.toolchains || args.verbose) && command !== 'doctor') throw ErrorRegistry.createError('CLI_USAGE');
   const call: KernelCall = {
     args, root, env, locale: commandLocale(context, args.language), mode: getConfigFieldDefault('output_mode'),
@@ -43,6 +44,7 @@ export async function runKernelCommand(argv: readonly string[], context: KernelC
     options: { env, globalOnly: args.global, onWarning: warning => call.output(warning, value => value.message, 'warning') },
   };
   context.onLocale?.(call.locale);
+  if (command === 'doctor' && action === 'timing') return timingCommand(call);
   if (command === 'policy') return policyVocabularyCommand(call);
   if (command === 'paths') return pathsCommand(call, context);
   return doctorCommand(call, context);

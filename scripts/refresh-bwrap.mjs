@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { BWRAP_ARCHES, bundledIdentityModule, dockerOutputOwner, resolvedPackagePins } from './build-bwrap.mjs';
 import { CACHE_INPUTS, licenseInput } from './bwrap-cache.mjs';
+import { DOCKER_PREFLIGHT_INPUTS } from './docker-preflight.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const REFRESH_PATHS = Object.freeze(['packaging/bwrap/bwrap.lock.json', 'src/adapters/core/shell-sandbox-bwrap/internal/bundled.ts']);
@@ -79,7 +80,7 @@ export function refresh({ root = ROOT, out, execute = run }) {
   }
   // The scratch driver gets every file it reads from the checkout, including the lock-pinned license texts.
   const licenses = lock.linked.filter(part => part.licenseText).map(part => licenseInput(part.name));
-  for (const path of [...CACHE_INPUTS, ...licenses, 'packaging/bwrap/resolve.sh']) {
+  for (const path of [...CACHE_INPUTS, ...DOCKER_PREFLIGHT_INPUTS, ...licenses, 'packaging/bwrap/resolve.sh']) {
     mkdirSync(dirname(join(scratch, path)), { recursive: true }); cpSync(join(root, path), join(scratch, path));
   }
   mkdirSync(dirname(join(scratch, REFRESH_PATHS[1])), { recursive: true });

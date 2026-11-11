@@ -35,7 +35,7 @@
   "cli.policy.upgrade.rolledBack": "The first-run rules were removed ({ids}); the earlier documents stay archived.",
   "cli.policy.upgrade.nothing": "No first-run rule to remove; nothing was written.",
   "cli.policy.upgrade.noUpgradeRecorded": "Nothing to roll back: this policy is the first-run template's own version and the authority archive records no upgrade of it; nothing was written. Its template and administrators: deckent policy status --scope {scope}",
-  "cli.policy.upgrade.historyMissing": "Rollback refused: the earlier versions of this policy are not in the authority archive, so Deckent cannot prove which rules an upgrade added; nothing was written. Check the policy: deckent policy status --scope {scope}",
+  "cli.policy.upgrade.historyMissing": "Rollback refused: the earlier versions of this policy are not in the authority archive, so deckent cannot prove which rules an upgrade added; nothing was written. Check the policy: deckent policy status --scope {scope}",
   "cli.policy.revoke.notFound": "No standing approval {id} of yours in this scope; nothing changed.",
   "cli.policy.revoke.done": "Standing approval {id} revoked; the same call asks again.",
   "cli.policy.revoke.kept": "Standing approval {id} kept (not confirmed; pass --yes to confirm without a terminal).",

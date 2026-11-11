@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Product Design"
+  display_name: "deckent Product Design"
   short_description: "Model jobs, journeys and real product capability"
   default_prompt: "Use $deckent-product-design to map the user job, actual Next object model, journeys and accepted surface targets."
 policy:

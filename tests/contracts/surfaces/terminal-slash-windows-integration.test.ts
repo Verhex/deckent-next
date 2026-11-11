@@ -23,7 +23,7 @@ vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
   } };
 });
 
-const ESC = '\u001B', MARK = '◆ Deckent system';
+const ESC = '\u001B', MARK = '◆ deckent system';
 const words = (key: string) => t(key, {}, 'en');
 const WINDOWS: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{to}/{total}', hints: words('terminal.window.hints'), infoHints: words('terminal.window.infoHints'), typedArgument: words('terminal.window.typedArgument'),
   reasoning: { title: 'Reasoning', thinkingOn: 'on', thinkingOff: 'off', previewOn: 'shown', previewOff: 'hidden', current: 'current', thinkingOnDetail: '', thinkingOffDetail: '',

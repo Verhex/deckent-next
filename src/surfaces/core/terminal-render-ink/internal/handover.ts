@@ -16,11 +16,11 @@ export function useTerminalHandover() {
     const ignore = () => undefined; let result: { value: T } | null = null;
     process.on('SIGINT', ignore);
     try {
+      handover?.release();
       await suspendTerminal(async () => {
-        handover?.release();
-        try { stdout.write(`${banner}\n`); result = { value: await work() }; } finally { stdout.write('\n'); handover?.reclaim(); }
+        try { stdout.write(`${banner}\n`); result = { value: await work() }; } finally { stdout.write('\n'); }
       });
-    } catch { /* the hand-over failed: null */ } finally { process.off('SIGINT', ignore); }
+    } catch { /* the hand-over failed: null */ } finally { handover?.reclaim(); process.off('SIGINT', ignore); }
     return (result as { value: T } | null)?.value ?? null;
   }, [suspendTerminal, stdout, handover]);
 }

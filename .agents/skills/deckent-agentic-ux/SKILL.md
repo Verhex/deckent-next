@@ -1,10 +1,10 @@
 ---
 name: deckent-agentic-ux
-description: Design how Deckent shows agent work - runs, workers, tool and MCP calls, approvals, verification, autonomy, checkpoints, pause/resume/cancel, failure, recovery and human intervention. Static layout and styling belong to deckent-visual-language.
+description: Design how deckent shows agent work - runs, workers, tool and MCP calls, approvals, verification, autonomy, checkpoints, pause/resume/cancel, failure, recovery and human intervention. Static layout and styling belong to deckent-visual-language.
 ---
 
 
-# Deckent Agentic UX
+# deckent Agentic UX
 
 ## Objective
 

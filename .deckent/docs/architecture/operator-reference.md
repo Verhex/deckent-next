@@ -22,10 +22,10 @@ one section; other sections link to it.
   the host. Start the service (`deckent`) and run `doctor` again.
 - **Ubuntu 24.04 and later.** The kernel may restrict unprivileged user namespaces, which bubblewrap needs. Check with
   `sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted; on WSL a missing key (`cannot stat`) means there
-  is no restriction. Deckent then reports the restriction, falls back to Landlock visibly, and refuses full-access shell calls
+  is no restriction. deckent then reports the restriction, falls back to Landlock visibly, and refuses full-access shell calls
   because they need the open bubblewrap sandbox. An administrator can install bubblewrap root-owned as `/usr/local/bin/bwrap`
   together with an AppArmor profile that allows `userns` for it.
-- After `npm link`, work in your own project folder, outside the Deckent source checkout. Long paths and spaces work: the local
+- After `npm link`, work in your own project folder, outside the deckent source checkout. Long paths and spaces work: the local
   socket uses a short private directory per installation.
 - **Platforms.** The local runtime socket and the verified-terminal witness exist only on Linux (WSL included). On macOS the
   runtime service does not run yet, so chat, jobs and backup cannot be used; on any non-Linux system delivery, adoption and
@@ -38,8 +38,8 @@ one section; other sections link to it.
   (`terminal.scopeId`) and chat limits, and initializes cancellation settings and an empty, current ledger. On Linux, WSL and
   macOS a fresh installation starts on the encrypted key store. Reuse the same scope id in later commands; for an existing
   installation use its configured scope id.
-- **Upgrading an older installation.** A fresh installation gets the current first-run policy template (template v15, since
-  alpha.55) directly. An older one upgrades in one of two ways, depending on how its policy was written:
+- **Upgrading an older installation.** A fresh installation receives first-run policy template v20. The full upgrade of an older
+  installation has two paths, depending on how its policy was written:
   - **Installed from the first-run template:** `deckent policy upgrade --template current --scope <id> --preview`, then
     `--apply`. This runs as you through the governed policy chain (your card, audit, archive).
   - **Written by hand:** `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then
@@ -53,8 +53,8 @@ one section; other sections link to it.
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
   In the setup window and its cards, ↑↓ (or j/k) move, Enter sends the highlighted answer, the number shown on a row answers with
   that row and Esc closes; every yes/no question shows and takes (y) and (n). A choice among several answers (language, profile) has no letters.
-- `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
-  host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
+- `deckent init --preview` previews an `AGENTS.md` instruction file when neither `AGENTS.md` nor `CLAUDE.md` exists; it adds
+  no host bridge. The terminal reader retains `DECKENT.md` as a legacy fallback. Worker instructions are selected separately:
   [Worker instructions and discovery](#worker-instructions-and-discovery).
 - `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init preview --profile <file>`
   previews an installation profile file (advanced). Applying one (`init apply --profile`, `init resume`) whose rules reach wider
@@ -66,7 +66,7 @@ one section; other sections link to it.
   vLLM, Ollama or LM Studio, and an OpenAI-compatible endpoint with published pricing. A key the free check rejects is never
   stored. Where a provider has no free check, the key is kept unverified and the first turn shows any rejection.
 - **Connect a model:** providers with a packaged catalog offer those models; for a provider without one, choose an address,
-  then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged. Local loopback models are
+  then select an exact ID from its bounded `/v1/models` list. deckent stores that ID unchanged. Local loopback models are
   free-measured; a remote model without a verified published price is listed but locked, with the reason and the next step
   (Zhipu GLM China stays locked because its prices are in CNY). OpenRouter offers model connections; paid calls still
   require verified pricing and routing.
@@ -94,12 +94,14 @@ one section; other sections link to it.
   Code, Cursor) run without a budget. `/usage` shows reasoning tokens as *not measured* when the provider did not report them;
   open a budget there to read its spend account (limit, reserved, settled). How money is reserved and settled:
   [Spend settlement](#spend-settlement).
-- **Subscriptions today:** a Claude Code worker runs with your own Claude login; a subscription-backed Brain (the planner
-  behind `/do`) is available through `claude-cli-subscription` or `codex-cli-subscription` (see
-  [Core layers](#core-layers-memory-agents-model-roles-recovery)); terminal chat with a Claude subscription is still not
-  supported, so use an Anthropic API key for chat. The subscription rows in `/provider` are Sign in with Claude and Sign in with ChatGPT; Cursor is labelled beta.
-  The older Codex CLI connection remains available through its CLI commands and existing profiles. ChatGPT sign-in retains
-  the local encrypted-store checks and offers API-key provider selection if it cannot proceed.
+- **Subscriptions today:** Claude subscription text chat is supported with your own CLI sign-in; tool readiness has separate
+  checks. Tool-bearing Claude/Codex chat uses deckent's governed native-agent path only after its exact-profile verification;
+  missing verification leaves text chat available with the tool-readiness reason. Consent, policy, quota and sandbox checks bind
+  every use. Subscription Brain planning is available through `claude-cli-subscription` or `codex-cli-subscription` (see
+  [Core layers](#core-layers-memory-agents-model-roles-recovery)). `/provider` shows Sign in with Claude and Sign in with ChatGPT;
+  the latter uses your own Codex CLI sign-in. The duplicate legacy Codex row is hidden, but its CLI commands and profiles remain
+  readable. Cursor is labelled beta. ChatGPT sign-in retains encrypted-store checks and the API-key provider picker when it
+  cannot proceed. The separate SIWC browser-login worker relay remains on activation hold; sign-in alone never activates it.
 - **Cursor workers:** register the packaged Cursor subscription catalog with `deckent models catalog register --scope <id>
   --command-id <id> --seed cursor-cli-subscription`, then switch models on with `models catalog activate`. A Cursor attempt
   reports turns, tokens, duration and tool calls and ends with its report JSON; the model it really used is read from its
@@ -133,22 +135,30 @@ one section; other sections link to it.
   profiles or versions without an entry retain standard mode. The confirmation opens the person's mode grant through the installer
   writer, then saves the mode through the existing mode application. An interruption between those writes resumes at the missing mode
   entry. Company policy, protected-operation floors and audits still apply; Shift+Tab or `/mode` changes the mode, `/policy` shows grants.
-- **Worker image and registry:** a coding provider is selected from the observed signed-in CLIs. Its explicit image acquisition consent
-  permits background preparation. The later ready card observes and settles worker settings, the registry and pool in that order, through
-  their existing policy, revision and audit owners. The configured image is an installation fallback, not consent for a second provider.
-  `/setup` offers an additional signed-in provider through a profile-add preview with that provider's image; existing profiles, kinds and
+- **Worker path, image and registry:** after installation, onboarding selects a coding provider from the observed signed-in CLIs
+  or a connected subscription. A Claude/Codex `native-cli-worker` binding can run without Docker or an image, using Linux
+  bubblewrap and the connection's own sign-in; a plain Docker profile or SIWC relay worker still requires an image. The legacy
+  Claude Docker path is closed. For an image-backed path, explicit image acquisition consent permits background preparation.
+  The later ready card observes and settles worker settings, the registry and pool in that order through their existing policy,
+  revision and audit owners. The configured image is an installation fallback, not consent for a second provider.
+  On an image-backed path, `/setup` offers an additional signed-in provider through a profile-add preview with that provider's image; existing profiles, kinds and
   evaluators are preserved. A changed preview or denied write is refused. Bootstrap never overwrites an existing registry.
   `deckent config explain execution` and `deckent config explain admission` show the effective settings.
 - **Explicit CLI setup:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
-  --execution-slots <n> --in-flight-slots <n> --preview` previews the first registry without overwriting one; `--apply` uses the same
-  governed owner. `deckent coding template --provider <id> --kind <kind> --preview|--apply` adds a kind from an already admitted profile.
+  --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` previews the first registry without
+  overwriting one; `--apply` uses the same governed owner. For a Dockerless subscription kind, use `--connection <profile-id>`
+  (find the id in `deckent coding`; `--provider` must match its CLI, `claude` or `codex`). For an existing template,
+  `deckent coding template --connection <profile-id>` binds that connected native worker. Sign in and connect through
+  `/provider` or `deckent models login --connection <kind>` followed by `deckent models connect`; deckent keeps this CLI
+  login separate from the host CLI login, which alone does not make the worker ready. Without `--connection`, registry setup requires `execution.docker` and
+  measures the CLI version in the configured image. `deckent coding template --provider <id> --kind <kind> --preview|--apply` adds a kind from an already admitted profile.
   `--discovery` selects repository discovery (see [Worker instructions and discovery](#worker-instructions-and-discovery)).
   A missing pool is previewed with `deckent init pool --scope <id> --preview`, then explicitly applied with `--apply`; capacity comes
   from admission configuration and a different existing pool is preserved. Image lineage: [Worker image versions](#worker-image-versions).
 - **First commit:** an unborn Git repository receives a separate onboarding offer; it never blocks installation. The bounded preview
   respects `.gitignore`, excludes flagged files unless explicitly selected, reports identity/signing and states that hooks do not run.
-  The person-only operation still needs an operation policy grant and its normal approval; the current template does not supply that
-  new operation grant. A policy refusal changes no Git files. Non-Git business folders skip this step.
+  The first-run template supplies the installing person's first-commit operation grant from v17; the operation still requires its
+  person card and secret scan. A policy refusal changes no Git files. Non-Git business folders skip this step.
   If HEAD was committed but its index could not be settled, `/setup` shows the retained private NUL path list. After other Git writers
   finish, only those paths may be reset in the index; unrelated staging, HEAD and the worktree are preserved. Same-path concurrent
   staging requires manual reconciliation and receives no reset command. Never remove another Git writer's lock.
@@ -159,11 +169,13 @@ one section; other sections link to it.
   after `approvals.requestTtlMs` (10 minutes). After `y`: `Run <run-id> admitted. Follow /tasks or /monitor.` "Admitted" means
   the Run started; a task's result is accepted later: on its exit code plus, where declared, the worker's structured report and
   typed acceptance checks; the content is not independently verified.
-- **Delivery and adoption lines:** `/deliver` is titled "/deliver · tasks awaiting delivery"; it checks the patch against the
+- **Delivery and adoption lines:** in `working-tree` mode the result says `Written into your files (no commit)` and names the
+  delivery command and file rollback command; index, HEAD and branches stay unchanged. In `reference` mode, `/deliver` is titled
+  "/deliver · tasks awaiting delivery"; it checks the patch against the
   current source and ends with `Delivered: commit <commit> → refs/deckent/deliveries/<digest>`. Adoption asks
   `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
   `Adopted: refs/heads/deckent/first-job <from> → <to>`; `main` is not offered while it is checked out here. Your checkout, index
-  and working files are unchanged. Details: [Delivery](#delivery).
+  and working files are unchanged in `reference` mode. Details: [Delivery](#delivery).
 
 ## Worker instructions and discovery
 
@@ -200,9 +212,18 @@ How a profile carries discovery and hook settings: [Native coding profiles](#nat
 
 ## Delivery
 
-Delivery has three steps, each with its own `y`: the change is written to a dedicated reference (delivery), the reference is
-moved into a branch you allowed (adoption), and an adoption can be moved back (rollback). Nothing is automatic: a rule
-records whether it *would* deliver a queued item, but it only advises.
+Delivery follows the Run's pinned `execution.deliveryMode`. Unset, a work target or non-empty `execution.adoption.targets`
+selects `reference`; otherwise it selects `working-tree`. A work target always uses `reference`.
+
+In `working-tree`, your delivery `y` applies the accepted change to your current files without a commit, Git object or
+reference in your repository; index, HEAD, branches and unrelated edits stay unchanged. A touched file changed since the
+Run's base refuses the delivery without writing. deckent keeps the replaced originals and a delivery journal. File rollback
+is a separate person card and restores them only while every touched path still matches the delivered contents.
+
+In `reference`, each step has its own `y`: delivery writes a dedicated reference, adoption moves an allowed branch, and
+rollback moves an adoption back. Working files and index stay unchanged. A queue rule records whether it *would* deliver or
+hold an item; it only advises. Company policy may deny file delivery; an extra `require-approval` on `deliver-working-tree`
+is refused because this build has no second-approver path. Configuration changes select the mode of new Runs, not existing ones.
 
 ### Delivery window in the terminal
 
@@ -211,9 +232,10 @@ records whether it *would* deliver a queued item, but it only advises.
   Enter, moves input to it). `/deliver` lists every waiting task of the scope and opens the chosen one with focus.
 - **What it shows.** First a summary in plain words: title, what changed, why it was accepted (the worker's own report is
   marked as a claim), risk and what yes or no will do. Then the task's Run/Task ids, the integration check against the current
-  source (affected files match the base), the changed files with `patch-preview --stat` counts, that only a dedicated
-  `refs/deckent/deliveries/` reference is written (branches, index and working tree stay unchanged) and, only when
-  `execution.adoption.targets` is configured, the target branches as a later, separate choice.
+  source (affected files match the base), the changed files with `patch-preview --stat` counts and where yes writes:
+  `working-tree` writes those files without a commit and keeps the replaced originals; `reference` writes only
+  `refs/deckent/deliveries/` (branches, index and working tree stay unchanged). Only `reference` with
+  `execution.adoption.targets` configured offers target branches as a later, separate choice.
 - **Viewing a diff.** ↑↓/j/k choose a file, Enter opens its hunks with the attempt, base and proposal the preview was built
   from, Esc returns to the list. Diff bodies are bounded by `deliver-port.json` (`maxDiffFiles`, `maxDiffLinesPerFile`,
   `maxDiffBytesPerFile`); a binary or over-large file shows "Cannot show: binary or too large", and cut lines are counted.
@@ -223,22 +245,25 @@ records whether it *would* deliver a queued item, but it only advises.
   `task integration-check|prepare|deliver` and the confirmation below: the window's `y` answers the confirmation only when its
   card shows exactly the operation, ids, command, file set and base the window showed; otherwise the exact card is shown and
   needs a fresh `y`. A `y` typed in the input never confirms.
-- **Adopting.** After delivery a configured branch is adopted only with a second `y` (↑↓ chooses the branch); `n`/Esc does
+- **Adopting (`reference` only).** After delivery a configured branch is adopted only with a second `y` (↑↓ chooses the branch); `n`/Esc does
   nothing. With `execution.adoption.verification` configured, that `y` first opens a verification step: the scope's accepted
   Runs of the configured kind (one task), plus "adopt without verification" only when verification is not required; ↑↓
   chooses, a single typed `y` adopts with the choice, `r` reads the list again, `n`/Esc go back. With none it says so and names
   `deckent run create … --delivery-command-id <this delivery>`. The adoption still checks that the Run verified exactly this
   commit with the current profile and the installation's criteria; a refusal returns to the choice with its reason.
-- **Results and refusals.** The delivered and adopted lines and the transcript summary show the delivery and adoption command
-  ids (for `task integration-rollback --adoption-command-id`). A stale base, a missing grant (`scope inspect` for the attempt
-  lookup plus the integration actions) or a session that is not a verified terminal is refused in plain words with the next
-  step.
+- **Results and refusals.** In `working-tree`, the result starts `Written into your files (no commit)` and names the delivery
+  command and `deckent task integration-rollback --scope <id> --run <id> --task <id>` to put the files back. If a touched file
+  changed, `r` puts `/do <the task's recorded request>` in the composer; Enter opens a new plan card, nothing starts by itself.
+  In `reference`, delivered/adopted lines and the transcript show delivery/adoption command ids (branch rollback uses
+  `task integration-rollback --adoption-command-id`). A stale base, missing grant (`scope inspect` for the attempt lookup plus
+  integration actions) or an unverified terminal is refused in plain words with the next step. An interrupted file delivery
+  names written/unwritten paths and keeps originals; it is never completed blindly.
 
 ### Delivery confirmation
 
 - `task integration-deliver`, `task integration-adopt` and `task integration-rollback` each require one explicit `y` in a
-  verified human terminal. A rollback moves the adopted branch back, so it asks like an adoption; its card shows the branch and
-  current → previous commit.
+  verified human terminal. In `working-tree`, rollback shows delivered → original file states and refuses changed paths with
+  `PATCH_WORKING_TREE_CHANGED`, without writing. In `reference`, rollback shows the branch and current → previous commit.
 - The card shows the task title, Run/Task ids, reference or branch, from/to commits and changed files. An empty answer, `n`,
   end of input, redirected input or output and a new effect from the SDK or MCP refuse. Prepare and check only build a
   candidate.
@@ -246,8 +271,8 @@ records whether it *would* deliver a queued item, but it only advises.
   confirmation.
 - Adoption also requires `execution.adoption.targets`, policy, the task's acceptance and any configured verification; on the
   command line pass `--verification-run <run>`.
-- Delivery commits carry the task title, ids and a bounded acceptance state. Author and committer time come from the trusted
-  delivery planning clock and are fixed in the delivery intent so a replay writes the same commit. Deckent is the default
+- In `reference` mode, delivery commits carry the task title, ids and a bounded acceptance state. Author and committer time come from the trusted
+  delivery planning clock and are fixed in the delivery intent so a replay writes the same commit. `Deckent` is the default
   identity; `execution.git.deliveryIdentity` can set `authorName`/`authorEmail`. Preview Git objects are prepared only in the
   candidate before the answer; a refusal writes no Git object, ref, branch or delivery intent in your repository.
 - The verified-terminal witness exists only on Linux (WSL included); elsewhere these commands are refused with
@@ -255,7 +280,7 @@ records whether it *would* deliver a queued item, but it only advises.
 
 ### Delivery queue: inspect and undo
 
-A registered integration target uses the service queue. It has delivered real changes in Deckent's own development since
+A registered integration target uses the service queue. It has delivered real changes in deckent's own development since
 alpha.43; that is not yet evidence for packaged, hosted or other-platform use, which the beta has to show. `/deliver` prepares
 on the current base; after a base or target refusal, `r` offers re-preparation. Inspect last-known state with `r`; publish and
 adopt each show their exact frozen batch and ask a separate `y/N`. `/runs` details show the authorized scope's position,
@@ -309,20 +334,22 @@ Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and w
 ## Sandbox views
 
 - In standard, careful and full auto, sandboxed shell commands get a **closed view**: the project is writable within the call's
-  approval rules, `.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write Deckent
+  approval rules, `.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write deckent
   authority files. Landlock also refuses permission and ownership changes, and cannot add or remove entries in directories
   holding protected paths.
-- Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while Deckent state, configuration,
+- Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while deckent state, configuration,
   credential patterns and host Docker/session D-Bus sockets remain masked or read-only. Without an open sandbox, full-access
   shell calls are refused, including an explicit `host` realm.
-- **Host fallback.** If no sandbox is available, a closed mode falls back to the host and says so (`terminal.shell.realm`,
+- **Host fallback.** For API profiles, if no sandbox is available, a closed mode falls back to the host and says so (`terminal.shell.realm`,
   default `prefer-sandbox`); that fallback has no filesystem boundary, so set `require-sandbox` when confinement is required.
+  Subscription profiles require the sandbox; explicit or fallback host shell execution is refused (`SUBSCRIPTION_HOST_SHELL_REFUSED`).
+  API host calls retain their approval rules.
 - **MCP servers** run by default in a sandbox with network access and their own persistent home folder (`sandbox-net`); a
   server whose entry names `host` runs without a sandbox, and `/mcp` shows where each one runs.
 - The shared credential registry covers gh, Docker, kube, Codex, Git credentials and common cloud CLIs. HOME masking is bounded
   (depth 3, 20,000 entries); custom locations, arbitrary filenames and aliases outside those masks need separate isolation.
 - Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and moves (`mv`); appends (`>>`) remain modifications.
-- The hard floor (Deckent configuration, policy, approvals, audit, secrets and the MCP registry) is enforced in every sandbox
+- The hard floor (deckent configuration, policy, approvals, audit, secrets and the MCP registry) is enforced in every sandbox
   mode.
 
 ## Permission modes
@@ -339,8 +366,8 @@ very next call no longer has the mode; the stored choice stays, and the terminal
 | Store (`secrets.store`) | On disk | Who can read the key |
 |---|---|---|
 | `core.secret-store.env@1` (when no store is selected) | nothing; read from the environment | every program that inherits that environment |
-| `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
-| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
+| `core.secret-store.file@1` | plain text, a 0600 file | deckent and other programs running as your user |
+| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | deckent; other programs running as your user can still open it |
 
 Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment, and workers never
 receive a key. Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement. A provider
@@ -356,9 +383,9 @@ installations keep their selection.
    config reference names missing in the target and asks yes/no (scripts require `--confirm-env-missing`); `doctor` shows the
    same names. It copies every key, checks it, selects the new store and then removes the old copy; a move to a weaker store
    asks for approval on a second warning card. Set, delete and switch share one installation-wide custody section.
-2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
+2. Keep other AI tools out of deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
    `~/.claude/settings.json`. This stops their file tools and common shell commands, not every script.
-3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the
+3. Planned: run the deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the
    keys.
 
 The file stores are not available on native Windows.
@@ -385,13 +412,13 @@ Contract: [project key vault](modules/permission-modes.md#pre-8-project-key-vaul
 
 ## Spend settlement
 
-Each scope has one shared budget in USD for every API provider. Before a paid call, Deckent reserves the most it could cost at
+Each scope has one shared budget in USD for every API provider. Before a paid call, deckent reserves the most it could cost at
 the dearest price tier that can apply; afterwards it settles the call from the usage the provider itself reported in its final
 answer, multiplied by the verified published price (`measured-tariff`). OpenRouter calls are the exception: they settle from
 the cost OpenRouter reports in its answer. Where a provider does not say which price tier it used (DeepSeek), the call settles
 at the published peak price and is labelled an upper bound. Before the first paid OpenRouter call, check
 https://openrouter.ai/settings/plugins that no plugin is enabled with "Prevent overrides", and set an OpenRouter credit limit no
-higher than your Deckent budget; Deckent cannot see either setting.
+higher than your deckent budget; deckent cannot see either setting.
 
 - The scope's first budget is created with `deckent models create-budget --scope <id> --usd <n>` or the budget window (the
   first row of `/provider`), and changed with `deckent models revise-budget --scope <id> --usd <n>`.
@@ -535,7 +562,7 @@ only a single typed `y` sends it. Accepting or rejecting a task is a separate de
 
 ## MCP and identity
 
-- **MCP servers for Deckent's agent.** `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and
+- **MCP servers for deckent's agent.** `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and
   starts nothing; `--check` starts trusted servers only. Every trust decision (`mcp approve`, `mcp add` to a local or user scope)
   is a card on a person's terminal; off a terminal it is refused (`MCP_APPROVAL_NEEDS_TERMINAL`), and `--yes` does not skip the
   card. Where servers run: [Sandbox views](#sandbox-views).
@@ -585,7 +612,7 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
 - **Subscription Brain.** `deckent models login --connection claude-cli-subscription [--sso]` first signs in the Brain's own login
   (the Claude CLI's own sign-in, at your terminal); then `deckent models connect --scope <id> --connection claude-cli-subscription
   --command-id <id> --model <id> [--executable <abs path>] [--config-dir <abs dir>] [--delegate none|ai|system|ai,system]` connects
-  it for Brain planning. The login is Deckent's own (`headless/logins` under the global state root, shown by `deckent paths`); your
+  it for Brain planning. The login is deckent's own (`headless/logins` under the global state root, shown by `deckent paths`); your
   `~/.claude` is not used unless you pass `--config-dir`. It is refused without a usable bubblewrap sandbox. `--delegate` is your
   consent for AI or MCP planning and for background roles (recovery decision, memory evaluator); absent keeps your earlier choice.
   `deckent doctor` shows a Brain login row per connection. While the CLI's own refresh lock exists or another Brain call holds the
@@ -595,7 +622,7 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
   [--executable <abs path>]` runs `codex login` (ChatGPT; no `--sso`) into the Brain's own `headless/logins/codex`, then `deckent models
   connect --connection codex-cli-subscription --executable <abs path> --config-dir <abs dir> --delegate system` connects it (each flag as above).
   Without an admitted worker image the connect still succeeds for tool-less one-shot model calls (BeUser) and says that no worker model was activated.
-  Its quota is your ChatGPT plan's, and Deckent does not observe the refresh lock of a Codex session you run yourself.
+  Its quota is your ChatGPT plan's, and deckent does not observe the refresh lock of a Codex session you run yourself.
 - **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
   `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
   Keeping the wait is offered at most `runRuntime.quotaRecovery.maxRewaits` (3) times, then `RUN_QUOTA_WAIT_LIMIT`.
@@ -752,7 +779,7 @@ revision explicitly.
 Patch capture compares the workspace with the base tree by Git object id and reads only changed base files; exhausted Git
 output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`, `git-timeout`, `time`, `bytes`,
 `entries`, `depth`, `path`, `git-copy`). `execution.git.outputBytes` defaults to 4 MiB. `execution.git.copyBytes` (unset: 8 GiB) bounds the
-objects one copy streams into a Deckent-owned private repository: an integration candidate's is `PATCH_LIMIT` `git-copy`, a working-tree
+objects one copy streams into a deckent-owned private repository: an integration candidate's is `PATCH_LIMIT` `git-copy`, a working-tree
 Run's base (HEAD's whole history) the permanent launch refusal `PATCH_WORKING_TREE_COPY_LIMIT`.
 
 For a retained workspace patch, `deckent task integration-check` checks the recorded base against HEAD and the affected

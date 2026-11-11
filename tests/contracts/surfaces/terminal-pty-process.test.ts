@@ -207,14 +207,14 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('renders the workline, routes /workers through policy, surfaces a typed chat block and exits on /exit', async () => {
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
-      ['Deckent workline', '/workers\r'],
+      ['deckent workline', '/workers\r'],
       // SLASH-WINDOWS (SW-2): the policy refusal is shown in the /workers window; Esc closes it and leaves the one system line.
       ['The trusted policy cannot be read', '\u001b'],
-      ['◆ Deckent system · The trusted policy', 'hello\r'],
+      ['◆ deckent system · The trusted policy', 'hello\r'],
       ['No model is chosen', '/nope\r'],
       // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
-      ['is not a Deckent command', '\u001b'],
-      ['Deckent workline', '/exit\r'],
+      ['is not a deckent command', '\u001b'],
+      ['deckent workline', '/exit\r'],
     ]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
@@ -229,7 +229,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('/clear erases the screen and the scrollback in a real terminal (also with NO_COLOR); on TERM=dumb it sends nothing', async () => {
     const f = await project();
     const colour = Object.fromEntries(Object.entries(f.env).filter(([key]) => key !== 'NO_COLOR'));
-    const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['No model is chosen', '/clear\r'], ['New conversation started.', '/exit\r']];
+    const steps: ReadonlyArray<readonly [string, string]> = [['deckent workline', 'hello\r'], ['No model is chosen', '/clear\r'], ['New conversation started.', '/exit\r']];
     const result = await inPty(f.projectRoot, colour, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
@@ -241,7 +241,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
     const screen = terminalScreen(result.output, 120);
     expect(screen).not.toContain('No model is chosen'); expect(screen).not.toMatch(/│ hello/u);
-    expect(screen).toContain('◆ Deckent system · New conversation started.');
+    expect(screen).toContain('◆ deckent system · New conversation started.');
     const noColour = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
     expect(noColour.timeout, noColour.output).toBeUndefined();
     expect(noColour.output.slice(noColour.output.indexOf('No model is chosen'))).toContain('\u001b[3J');
@@ -253,7 +253,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'],
-      [['Deckent workline', '\u0003'], ['Press Ctrl+C again to exit', '\u0003']]);
+      [['deckent workline', '\u0003'], ['Press Ctrl+C again to exit', '\u0003']]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
   });
@@ -262,7 +262,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const f = await governedChat();
     await startRuntime(f.projectRoot, f.env);
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'hello\r'],
+      ['deckent workline', 'hello\r'],
       ['pty-ok', '/exit\r'],
     ]);
     expect(result.timeout, result.output).toBeUndefined();
@@ -295,12 +295,12 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     await writeFile(join(f.projectRoot, '.env'), 'SECRET_TOKEN=pty\n');
     await startRuntime(f.projectRoot, f.env);
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', '/hel'],
+      ['deckent workline', '/hel'],
       ['/help', '\r'],
       // SW-1: /help opens its window (registry rows: name, two spaces, detail; the palette pads names to a column); Esc closes it and leaves
       // the one framed system summary line, then the composer owns the keyboard again. The anchor is the first Info row: later rows can sit
       // past the window's first page.
-      ['/status  Show whether Deckent is running', '\u001b'],
+      ['/status  Show whether deckent is running', '\u001b'],
       ['Help: ', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
@@ -379,10 +379,10 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('an empty /model offers "Connect a model…" first and Enter opens the provider window (real terminal)', async () => {
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
-      ['Deckent workline', '/model\r'],
+      ['deckent workline', '/model\r'],
       ['Connect a model…', '\r'],
       ['Providers', '\u001b'],
-      ['Deckent workline', '/exit\r'],
+      ['deckent workline', '/exit\r'],
     ]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.output).toContain('No model is connected yet'); expect(result.output).not.toMatch(/25 USD/u);

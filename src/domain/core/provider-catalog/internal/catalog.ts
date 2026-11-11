@@ -77,7 +77,10 @@ function duplicateIssues(catalog: ProviderCatalog): ValidationIssue[] {
   return issues;
 }
 
-export function parseProviderCatalog(input: unknown): ProviderCatalog {
+export type CatalogParseObserver = () => (() => void) | undefined;
+export function parseProviderCatalog(input: unknown, observe?: CatalogParseObserver): ProviderCatalog {
+  const finished = observe?.();
+  try {
   const copied = catalogEnvelopeSchema.safeParse(input);
   if (!copied.success) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID', sanitizeIssues(copied.error.issues));
   const parsed = providerCatalogObjectSchema.safeParse(copied.data);
@@ -95,4 +98,5 @@ export function parseProviderCatalog(input: unknown): ProviderCatalog {
     })).sort((a, b) => compareTuple([a.id, a.version], [b.id, b.version])),
   };
   return Object.freeze(providerCatalogObjectSchema.parse(sorted));
+  } finally { finished?.(); }
 }

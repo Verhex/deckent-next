@@ -38,7 +38,7 @@ const line = (block: string, prefix: string) => block.split('\n').find(row => ro
 describe('session context block per mode', () => {
   it('standart: mode and meaning, thinking, declared capabilities, computed effects, surfaces and the hard rules', async () => {
     const block = renderAgentSessionContext(await snapshot('standart'));
-    expect(line(block, '- Where:')).toBe(`- Where: Deckent ${(await snapshot('standart')).deckent} operator terminal; scope scope; session session-1.`);
+    expect(line(block, '- Where:')).toBe(`- Where: deckent ${(await snapshot('standart')).deckent} operator terminal; scope scope; session session-1.`);
     expect(line(block, '- Permission mode:')).toMatch(/^- Permission mode: standart — reads run at once;.*Only the person changes it \(\/mode or Shift\+Tab\)\.$/u);
     expect(line(block, '- Thinking:')).toBe('- Thinking: on (the person switches it with /reasoning).');
     // Only what the catalog declares supported is named.
@@ -89,14 +89,14 @@ describe('session context block per mode', () => {
     for (const [command] of AGENT_SESSION_SURFACES) expect(registry.has(command.split(' ')[0]!)).toBe(true);
   });
 
-  it('joins the v11 system prompt only when given, after the tools and before the working style', async () => {
+  it('joins the v12 system prompt only when given, after the tools and before the working style', async () => {
     const base = { projectRoot: '/p', layout: resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/data' }), tools: TOOLS, language: 'tr' as const,
       model: { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1, nativeId: 'Qwen3.8-27B' } };
     const without = renderAgentTurnSystemPrompt(base), withSession = renderAgentTurnSystemPrompt({ ...base, session: await snapshot('standart') });
-    expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(11);
-    expect(without).not.toContain('Session context v1');
-    expect(withSession.indexOf('Session context v1')).toBeGreaterThan(withSession.indexOf('\nTools:\n'));
-    expect(withSession.indexOf('Session context v1')).toBeLessThan(withSession.indexOf('\nWorking style:\n'));
+    expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(12);
+    expect(without).not.toContain('Session context v2');
+    expect(withSession.indexOf('Session context v2')).toBeGreaterThan(withSession.indexOf('\nTools:\n'));
+    expect(withSession.indexOf('Session context v2')).toBeLessThan(withSession.indexOf('\nWorking style:\n'));
     expect(withSession).toContain('- Keep your reasoning out of the answer');
     expect(withSession.split('\n').at(-1)).toBe('- Write every reply to the user in Turkish (Türkçe).');
   });

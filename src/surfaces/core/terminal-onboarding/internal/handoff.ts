@@ -38,8 +38,8 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
     await new Promise(resolve => setImmediate(resolve));
     if (!keep()) return DECLINED;
     const unhold = latest.current.hold?.();
-    try { await suspendTerminal(async () => { latest.current.release?.(); try { await new Promise(resolve => process.nextTick(resolve)); if (keep() && last()) result = await work(); } finally { latest.current.reclaim?.(); } }); }
-    finally { unhold?.(); }
+    try { latest.current.release?.(); await suspendTerminal(async () => { await new Promise(resolve => process.nextTick(resolve)); if (keep() && last()) result = await work(); }); }
+    finally { latest.current.reclaim?.(); unhold?.(); }
     return result;
   };
   useEffect(() => {

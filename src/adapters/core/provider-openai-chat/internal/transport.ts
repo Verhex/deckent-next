@@ -1,4 +1,5 @@
-import { counterSchema, persistedString, persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
+import { catalogParseObserver } from '#platform/index.js';
+import { counterSchema, persistedString, persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { z } from 'zod';
 import { requestToolChoiceAccepted, responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
@@ -237,3 +238,5 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
     },
   });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

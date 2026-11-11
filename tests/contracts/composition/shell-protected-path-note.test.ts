@@ -10,10 +10,10 @@ const EROFS = "unlink: cannot unlink 'src/deneme.md': Read-only file system\n";
 describe('protectedPathShellNote (B3)', () => {
   it('names the protected path, why and what can change it, in English and Turkish', () => {
     const en = protectedPathShellNote('rm src/deneme.md && echo silindi || echo silemedi', EROFS, floor, 'en');
-    expect(en).toMatch(/^\[deckent\] src\/deneme\.md: protected path \(Deckent's own source or the write floor\)\./u);
+    expect(en).toMatch(/^\[deckent\] src\/deneme\.md: protected path \(deckent's own source or the write floor\)\./u);
     expect(en).toContain('edit tools (write_file, edit_file), which ask for approval'); expect(en).toContain('full access');
     const tr = protectedPathShellNote('rm src/deneme.md && echo silindi || echo silemedi', EROFS, floor, 'tr');
-    expect(tr).toMatch(/^\[deckent\] src\/deneme\.md: korunan yol \(Deckent'in kendi kaynağı ya da yazma zemini\)\./u);
+    expect(tr).toMatch(/^\[deckent\] src\/deneme\.md: korunan yol \(deckent'in kendi kaynağı ya da yazma zemini\)\./u);
     expect(tr).toContain('onay isteyen düzenleme araçlarını'); expect(tr).toContain('tam erişimde');
     expect(en).not.toContain('\n'); expect(tr).not.toContain('\n');
   });

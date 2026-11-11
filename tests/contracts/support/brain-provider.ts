@@ -141,6 +141,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     Object.assign(config, JSON.parse(await readFile(configPath, 'utf8')));
     if (!options.template) config.admission.registry.profiles[0] = workers.prepared(workerRegistry.profiles[0]!, { model: { channelId: SEED_CHANNEL, modelId: workerModel.nativeId,
       auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Prepare a purchase and business readback.', scope: 'purchase', acceptance: 'The purchase has a durable business readback.' } }) as never;
+    else config.admission.registry.profiles[0] = workers.template(workerRegistry.profiles[0]!.id) as never;
     await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
   }
   return { project, data, path, options: loadOptions, reference, config, bodies, counterBodies, get posts() { return posts; }, setOutput(value: string | ((body: string) => string)) { output = value; },

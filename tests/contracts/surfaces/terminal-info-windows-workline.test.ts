@@ -18,7 +18,7 @@ import { createProviderSpendAccount, createProviderSpendCheckpoint } from '#engi
 // chat stream while they are open; on close exactly one framed system summary line stays; identities are never the primary label.
 const ESC = '\u001B', DOWN = '\u001B[B';
 const INSTALLATION = '7d1e2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b', PROJECT = '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d', COMMIT = '3f9a2c71e4b8d0aa55c1e2f3a4b5c6d7e8f90123';
-const MARK = '◆ Deckent system';
+const MARK = '◆ deckent system';
 const roots: string[] = [], views: Array<ReturnType<typeof mountWorkline>> = [];
 afterEach(async () => { for (const view of views.splice(0)) view.instance.unmount(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const count = (text: string, part: string) => text.split(part).length - 1;
@@ -50,6 +50,27 @@ async function expectFrozenRemaining(root: string) {
 }
 
 describe('information windows on the real workline (SW-1)', () => {
+  it('help opens during startup but its selected command waits under its own name, including cancellation', async () => {
+    const root = await project();
+    let ready!: () => void, reads = 0;
+    const info = admin(root, running).info, status = info.ports.status!;
+    const view = await open({ opening: { ready: new Promise<void>(resolve => { ready = resolve; }), wait: 'OPENING-WAIT' },
+      info: { ...info, ports: { ...info.ports, status: async input => { reads++; return status(input); } } } });
+    const selectStatus = async () => {
+      await type(view, '/help\r'); await until(() => view.stdout.frame.includes('>   /status'), 'help before readiness');
+      await type(view, '\r');
+    };
+    await selectStatus(); await settle(60);
+    expect(view.stdout.frame).toContain('OPENING-WAIT'); expect(reads).toBe(0);
+    view.stdin.write('\u0003'); await until(() => view.stdout.frame.includes('READY'), 'cancel selected command');
+    expect(reads).toBe(0);
+    await selectStatus(); await settle(60); expect(reads).toBe(0);
+    ready(); await until(() => view.stdout.frame.includes('▸ Runtime service'), 'selected command after readiness');
+    expect(reads).toBe(1);
+    await type(view, ESC); await until(() => view.stdout.frame.includes(MARK), 'status closes');
+    await selectStatus(); await until(() => reads === 2, 'help selection once ready');
+  });
+
   it('/status opens a window, holds the composer, and leaves exactly one system summary line on Esc', async () => {
     const root = await project();
     const view = await open({ info: admin(root, running).info });
@@ -65,7 +86,7 @@ describe('information windows on the real workline (SW-1)', () => {
     await settle(40);
     const after = view.stdout.frame;
     expect(count(after, MARK)).toBe(1);
-    expect(after).toContain(`${MARK} · Status: Deckent is running · ${PACKAGE_VERSION}`);
+    expect(after).toContain(`${MARK} · Status: deckent is running · ${PACKAGE_VERSION}`);
     for (const body of ['▸ Runtime service', 'current instance', 'pid 4242', 'Terminal: stdin yes', 'Info:']) expect(after, body).not.toContain(body);
     expect(after).not.toMatch(/\byou\b[\s\S]*hello/u);
     await type(view, '/status\r'); await until(() => view.stdout.frame.includes('▸ Runtime service'), 'status again');
@@ -218,6 +239,6 @@ describe('information window words (SW-1)', () => {
       const words = JSON.stringify(ports(locale));
       expect(words).not.toMatch(/"terminal\.info\./u);
     }
-    expect(ports('tr').systemLabel).toBe('Deckent sistemi');
+    expect(ports('tr').systemLabel).toBe('deckent sistemi');
   });
 });

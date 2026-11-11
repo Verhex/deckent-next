@@ -12,7 +12,7 @@ timer checks recipient-pending channel entries every 45 minutes and admits a wak
 only when idle; no model call on an empty channel, no interruption of an active turn, no authority from message bodies.
 The ignored `.deckent/host/channel/watch` kit reconciles its own queued submissions and preserves other clients' prompts.
 Polling persists through logout with user linger; machine/WSL downtime, authentication and daemon availability bound operation.
-This is development coordination, not a Deckent scheduler, product recovery mechanism or continuous product-runtime admission.
+This is development coordination, not a deckent scheduler, product recovery mechanism or continuous product-runtime admission.
 
 ## Host kit, skills and documents
 

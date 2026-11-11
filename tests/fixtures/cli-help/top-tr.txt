@@ -5,8 +5,9 @@ Yüzeyler (tek kurulum, aynı tipli işlemler):
                       yardım
   deckent <komut>     bu CLI: bir çağrı, bir sonuç; insan için metin, betik ve
                       AI ajanları için --json
-  deckent-mcp         MCP sunucusu: Deckent işlemleri AI istemcilerine araç
-                      olarak; hangilerini kullanacaklarını policy izni belirler
+  deckent-mcp         MCP sunucusu: deckent işlemleri AI istemcilerine araç
+                      olarak; hangilerini kullanacaklarını
+                      yetki politikası izni belirler
 
 Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
 
@@ -79,8 +80,7 @@ Onaylar:
       list | inspect | decide | renew
       [--scope <id>] [--input <dosya|->]
   recovery    Kaybolan işçi kurtarma: geçiş ilerlemesi ve kör incelemeniz
-      review
-      [--scope <id>] [--json]
+      review | [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | show | delegations | delegate | undelegate |
       grants | revoke | upgrade | recovery | mcp list|grant|revoke|narrow |
@@ -88,7 +88,7 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
-  uninstall   Deckent’i bu klasörden kaldırır;
+  uninstall   deckent’i bu klasörden kaldırır;
               verileriniz varsayılan olarak korunur.
       [--keep-data|--keep-work|--all] [--force] [--disable-unit]
       [--yes] [--dry-run [--verbose]] [--json]
@@ -112,10 +112,9 @@ Kurulum/Bakım:
       list | set | delete | grant | revoke | handover | store
       [<ad>] [--scope <id>]
   toolchains  İşçi araçlarını kontrol et veya güncelle
-      update
-      [update [--apply]]
+      update | [update [--apply]]
   doctor      Kurulum sağlığını kontrol et
-      [--verbose] [--toolchains] [--json]
+      timing | [--verbose] [--toolchains] [--json]
 
 Geliştirici:
   inventory   Kayıtlı denemeleri incele

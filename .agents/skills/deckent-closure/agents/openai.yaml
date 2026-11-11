@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Closure"
+  display_name: "deckent Closure"
   short_description: "Assess exact Next outcome completion evidence"
   default_prompt: "Use $deckent-closure to assess this exact Next completion claim against its applicable wiring, surface and settlement evidence."
 policy:

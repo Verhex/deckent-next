@@ -167,8 +167,9 @@ export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonl
       const commands = catalog.filter(item => item.group === group && !item.planned);
       return commands.length ? ['', message(`cli.help.group.${group}`, locale) + ':', ...commands.flatMap(command => [
         ...hanging(`  ${command.name.padEnd(12)}`, message(command.summary, locale) + bareNote(command, locale)),
-        ...(live(command).length ? alternatives(actionNames(command)) : []),
-        ...(command.args ? [wrapHelp(`      ${placeholders(command.args, locale)}`)] : []),
+        ...(live(command).length === 1 && command.args
+          ? alternatives([...actionNames(command), placeholders(command.args, locale)])
+          : [...(live(command).length ? alternatives(actionNames(command)) : []), ...(command.args ? [wrapHelp(`      ${placeholders(command.args, locale)}`)] : [])]),
       ])] : [];
     }), '', message('cli.help.top.options', locale), '', message('cli.help.top.footer', locale)].join('\n');
 }

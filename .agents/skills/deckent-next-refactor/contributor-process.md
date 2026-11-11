@@ -4,7 +4,7 @@ Moved from CONTRIBUTING.md on 2026-10-09. This preserves the existing internal p
 it is not a new public contribution requirement. External contributors use
 [CONTRIBUTING.md](../../../CONTRIBUTING.md). Dated status remains historical.
 
-# Contributing to Deckent
+# Contributing to deckent
 
 Contributions in English or Turkish are welcome. Follow the [Code of Conduct](../../../CODE_OF_CONDUCT.md).
 Report vulnerabilities privately through [SECURITY.md](../../../SECURITY.md).
@@ -72,8 +72,8 @@ Enterprise/ERP adapters must layer on through registries and public contracts wi
 `npm run lint` aggregates package-metadata validation, typecheck, ESLint, architecture and
 core-memory checks. [arch.json](../../../arch.json) is the current machine contract enforced by
 `scripts/lint-arch.mjs`: dependency direction, pure domain, cycles, public unit imports, package/
-source/test budgets, Markdown and i18n gates. Current limits include 1,500 lines per governed text
-file (800 design target), 2,000 per unit and 8,000 test cases; package/total budgets are in arch.json.
+source/test budgets, Markdown and i18n gates. Read current file, unit, package and test-case limits
+from arch.json; the design target is separate from the enforced ceiling.
 Do not remove capabilities to fit a budget. The hardcode ratchet rejects new mutable policy/vendor
 hardcoding; its frozen legacy allowlist only shrinks. Put mutable policy in registries/config;
 versioned protocol/security invariants stay in code. Every product user string needs both `en`
@@ -129,7 +129,7 @@ of the merge. Refresh affected docs and preserve proof before landing. No direct
 CODEOWNERS names the default owner; automatic review requests and enforcement depend on GitHub
 permissions, the base branch and repository protection settings. These files do not enable settings.
 
-## Deckent-worker branches and PRs — WORKER-GIT-PR
+## deckent-worker branches and PRs — WORKER-GIT-PR
 
 This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script
 (`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Its owner test and landing status is tracked in PLAN. The intended workflow is:
@@ -161,7 +161,9 @@ and the scope must still name those paths. Host tooling under `.agents/refactor/
 
 [PLAN.md](../../../.deckent/docs/archive/2026-11/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
 replay/failure checks and the owner test status.
-Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
+With separate push authority, the lead's `pr.mjs open --push` publishes the lane branch and opens
+its PR using host-held credentials. Credential provisioning, main landing and DOGFOOD/live switching
+remain outside this script.
 
 ## Development host
 
@@ -178,7 +180,9 @@ node .agents/refactor/next-entry.mjs mcp
 node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
 ```
 
-The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
+The host entry preserves the caller's working directory. CLI/MCP code comes from the validated staged
+`current` release when present, otherwise this checkout's `dist`; an invalid `current` is refused.
+The `node` form runs the supplied script. The entry pins `DECKENT_GLOBAL_HOME` to
 `~/.local/state/deckent-next-dev`, outside the checkout (the runtime copies the bundled bubblewrap there,
 and a launcher inside the project is refused). It drops an inherited `DECKENT_HOME` to avoid redirecting project
 runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.

@@ -1,4 +1,5 @@
-import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog, roleModelKey, type ModelActivationRecord,
+import { timedSync } from '#platform/index.js';
+import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog as parseProviderCatalogRaw, roleModelKey, type ModelActivationRecord,
   type ModelReference, type ModelRolePolicy, type RoleModelDecision, type RoleModelRow, type RoleModelTarget } from '#domain/index.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
@@ -10,12 +11,12 @@ export interface RoleModelActivationPorts {
   activation(scopeId: string, reference: ModelReference): Promise<ModelActivationRecord | null>;
 }
 /** What a caller reads for a role decision: the `model_roles` config section, the declared `provider_catalog` and the activation store. */
-export type RoleModelSources = Readonly<{ modelRoles: unknown; providerCatalog: unknown;
+export type RoleModelSources = Readonly<{ parsedCatalog?: import('#domain/index.js').ProviderCatalog | null; modelRoles: unknown; providerCatalog: unknown;
   activation(scopeId: string, reference: ModelReference): Promise<ModelActivationRecord | null> }>;
 /** The Core tier/role seed with the installation's overlays, composed per call (never cached past the config that carried it). */
 export const composeModelRolePolicy = (section: unknown) => mergeModelRoleRegistries(CORE_MODEL_ROLES, section === undefined ? [] : modelRoleConfigSchema.parse(section).overlays);
 export function roleModelPorts(sources: RoleModelSources): RoleModelActivationPorts {
-  const catalog = sources.providerCatalog === undefined ? null : parseProviderCatalog(sources.providerCatalog);
+  const catalog = sources.parsedCatalog !== undefined ? sources.parsedCatalog : sources.providerCatalog === undefined ? null : parseProviderCatalog(sources.providerCatalog);
   return { activation: (scopeId, reference) => sources.activation(scopeId, reference),
     references: target => (catalog?.providers ?? []).filter(row => row.id === target.channelId).flatMap(provider => provider.models
       .filter(model => model.nativeId === target.modelId).map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }))) };
@@ -43,7 +44,7 @@ export async function decideRoleModelInScope(policy: ModelRolePolicy, roleId: st
 /** Read port for later role consumers (S6R-5 recovery decision, S4B memory evaluator, BeUser setup): the role's models today, each with its permission. */
 export async function inspectRoleModelsInScope(sources: RoleModelSources, roleId: string, scopeId: string, nowMs: number) {
   const policy = composeModelRolePolicy(sources.modelRoles), ports = roleModelPorts(sources);
-  const catalog = sources.providerCatalog === undefined ? [] : parseProviderCatalog(sources.providerCatalog).providers
+  const catalog = (sources.parsedCatalog !== undefined ? sources.parsedCatalog?.providers ?? [] : sources.providerCatalog === undefined ? [] : parseProviderCatalog(sources.providerCatalog).providers)
     .flatMap(provider => provider.models.map(model => ({ channelId: provider.id, modelId: model.nativeId })));
   const today = utcDay(nowMs), listed = eligibleRoleModels(policy, roleId, { today, active: new Set(), catalog });
   const measured = policy.models.filter(row => row.measured !== undefined && row.roles.includes(roleId));
@@ -56,3 +57,5 @@ export function roleModelInvocationReference(sources: RoleModelSources, profiles
   const references = sources.providerCatalog === undefined ? [] : roleModelPorts(sources).references(target);
   return references.find(reference => held.some(profile => profile.scopeId === scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference))) ?? null;
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);

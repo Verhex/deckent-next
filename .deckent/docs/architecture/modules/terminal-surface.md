@@ -41,7 +41,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
   settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
   sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
-  and `/quit` never wait. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
+  and `/quit`, plus local `/model`, `/provider`, `/help` and `/tasks` windows, never wait here. Their actions retain their own fresh admission checks. Slash-menu filtering already stays in the local composer. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
   notice on the grant, error notice and standart without it) before any turn. **Setup after the frame:** onboarding is prepared once
   (`prepareOnboardingSession`: person check, one observation, settle) after the start settled; its waiting card opens by itself only
   while the person has typed nothing since the frame (checked after keys already received reached the composer, in the same step as
@@ -225,7 +225,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   never moves it); the release copies exactly the displayed (secret-projected) text, SGR and trailing padding removed, as one OSC 52 write
   (`osc52Copy`) from `runTerminalWorkline`, and the hint row shows `terminal.viewport.copied` for 4 s (fixed height). A plain click or any
   key but the scroll keys clears it; a press outside the drawn lines starts nothing; a drag past the view clamps (no autoscroll, no
-  double/triple click). Unlike Claude Code's local path (pbcopy / wl-copy / PowerShell `Set-Clipboard`), Deckent writes only OSC 52: no
+  double/triple click). Unlike Claude Code's local path (pbcopy / wl-copy / PowerShell `Set-Clipboard`), deckent writes only OSC 52: no
   process is spawned and nothing but the person's selection reaches the clipboard. Native selection stays on the terminal's modifier
   (Shift; Option in iTerm2) and `terminal.layout: inline` captures no mouse at all. Spacing (TERM-POLISH): `stepSpaceBefore`
   (terminal-work) is the one rule — a row gets one blank line above it when it is a tool step or follows one — used by `Static`, the
@@ -354,7 +354,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 on `wave/slash-windows`; released with alpha.15, PR #46):** `terminal-window` owns
   `InfoWindow` (projects every visible model word through the workline's known-secret / human-text projection before layout, choice ids
   unchanged — `projectInfoModel`; SW-3 list windows do the same through `projectSlashPickSpec` / `projectPickerTree`, Astra 2456 P1-2; typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
-  choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ Deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
+  choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
   truncates). Bare `/help` `/status` `/usage` `/doctor` `/scope` `/context` (SW-1) answer in information windows filled by terminal-admin
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
   whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
@@ -380,7 +380,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
   inference-metrics adapter (loopback only — the name `localhost` is resolved and every answer must be a valid 127.0.0.0/8 or `::1` address before contact, then connections go only to the checked addresses, in answer order after a connection failure; one total deadline covers resolution and every attempt, and a late answer starts no connection — the profile's metrics limits, no redirect follow) and never
-  through a surface fetch. Deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
+  through a surface fetch. deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
   is not Run admission. MCP `inference_plan` and `inference_budget` are the same read. The Desktop bridge
   snapshot carries work rows only (no chat content) and is not a live file channel. İzlemeler
   S18 üretim ledger takibiyle beslenir; `followWorkers` / `followRuns` portu bulunmayan tüketicide bounded single-flight poll kalır.
@@ -436,12 +436,12 @@ Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel
 `windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
 `light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
 nearest xterm-256 index for new primitives). A contract test measures WCAG 2.2 contrast (text 4.5:1, borders 3:1) of every truecolor value
-on each reference background of its theme; Deckent never sets the terminal background. Colour choice is split: `colorCapability`
+on each reference background of its theme; deckent never sets the terminal background. Colour choice is split: `colorCapability`
 (platform) reads `NO_COLOR`/`--no-color`/`FORCE_COLOR`/`TERM=dumb`/TTY, `COLORTERM` truecolor|24bit and a 256-colour `TERM`;
 `resolveTerminalTheme` (terminal-theme) applies `terminal.theme` (`auto|dark|light|dark-daltonized|light-daltonized|ansi`, default `auto`):
 `auto` uses the dark/light theme only when `COLORFGBG` reports the background and otherwise stays in ansi16 (the terminal's own palette);
 `colorTier` (monitor, crash report) keeps its background guard. The person's row is a left rail with the `You`/`Sen` label and the text in
-the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Mode colours (owner
+the terminal's own foreground; the answer heading is `● deckent` (`assistantLabel`); worker cards use `workerCard`. Mode colours (owner
 2026-10-18): standart `muted`, full-auto `modeIndicator` (its own token, no longer equal to `warning`), full-access `warning` bold with the
 calm mark `⏵⏵⏵` (ASCII `>>>`) and a factual line (`tui.panel.mode.fullAccessLine`); the launch notice is warning level. Security behaviour
 is unchanged. Opening (inline layout; the full window shows the banner as its first block instead): on a TTY the
@@ -578,7 +578,7 @@ System messages stay in the system prompt. No CLI session or credential is impor
 flag, auth, UID, delegated-use, bubblewrap, egress and resource checks; native tools and MCP remain off. Existing durable chat turns and
 model invocations own streaming, cancellation, usage, quota refusal and replay; subscription billing has no API budget gate. The connection
 is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
-The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
+The account belongs to the person using Anthropic's unmodified binary and sign-in; deckent never handles the OAuth/session token or resells
 or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.
 
 
@@ -615,3 +615,47 @@ Author RED/GREEN and compiled CLI/PTY evidence are external in `proof/ALPHA63/k9
 ### İşçi onay önizlemeleri (alpha.63 K24 yazar adayı)
 
 Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte edilmiş komut/diff önizlemesini ve kesim bilgisini exact çağrının argsDigest değeriyle mühürlü taşır; büyük önizlemenin tam kopyası yalnız bekleme boyunca kişiye özel saklanır ve kesik veya eski önizlemesiz kart allow üretemez. Ön kontrol sırasındaki iptal, model süreci başlamadan iptal sonucuna bağlanır; gerçek ön kontrol hataları ve mevcut iptal süresi değişmez. Yazar kanıtı dış `proof/ALPHA63/k24/` alanındadır; monte sürüm kabulü ve bağımsız inceleme ayrıdır.
+
+## Local command timing
+
+`DECKENT_TIMING_TRACE=1` opts CLI and terminal processes into local, bounded JSONL timing. The early CLI bootstrap records process entry before
+loading the command graph. A random, non-authorizing correlation follows a slash submission through its FIFO and opening gate (the `started` milestone separates queue residence from gate wait); the renderer's
+`waitUntilRenderFlush` marks first and populated frames for model/provider/status/doctor. For model/provider, first means names with
+EN `Checking…` / TR `Kontrol ediliyor…`; populated means the opening's row checks have all completed. The initial progress callback can
+await that first flush before row checks start; the preliminary loading frame is excluded. Information windows currently have no separate loading
+frame, so their first frame is also populated. Picker dwell is excluded. Flush means output bytes, not physical emulator paint.
+
+The registered `timingTrace` resource is under the global installation state root (`state/timing/commands.jsonl`): a private directory, 0600 regular
+single-link files, pinned no-follow custody, nonblocking exclusive writer lock, two generations of at most 1 MiB each and at most 256 pending
+records. Limits and the switch name live in the timing registry. Unsupported custody or logging failure drops observations without changing
+command authority or behavior; the next retained record carries the process's cumulative dropped count. The pinned file port currently supports
+Linux; other platforms run commands without timing persistence. No tracing files are created while the switch is off.
+
+Records contain only schema/build identity, generated trace identity, registered command/phase/read-operation enums, monotonic elapsed times,
+counts, cache outcomes and result categories. No input text, arguments, paths, business identities, model/provider identifiers, environment,
+credentials, URLs, raw errors or child output enter the serializer. Nested read durations overlap and are not an additive latency total. Reads started before screen completion can append
+`read-completed` count snapshots afterward; they never extend the screen-latency sample. Pure
+catalog parsers accept an optional observation callback; clocks, correlation and persistence remain outside domain. Background work keeps its own
+async context rather than inheriting the latest command.
+
+`deckent doctor timing [--json] [--lang en|tr]` reads both generations without installation initialization, service requests or file creation. It
+reports CLI and slash samples separately, median, nearest-rank p95 and the largest p95 interval between screen milestones per command. Slash samples end at populated
+flush (first flush where there is no populated view); CLI samples end at first output. Incomplete samples are excluded; records may be lost at rotation or forced
+termination; the summary reports the largest observed per-process dropped count, not a global exact loss total. Source runs label builds unbuilt;
+packaged runs include the build tree digest. Local instrumentation and tests do not establish performance improvement or live acceptance.
+
+**beta.1 model/provider opening reads (B1-PERF-MODEL).** The CLI host gives each window inspection a disposable,
+read-only `model-inspection` snapshot: one effective config and parsed declared catalog per root, one scope/policy
+context per distinct scope (including installation/project identity facts for display checks), and one authored-layer projection for chat selection. Producers still authorize every
+model separately; shared source and target scopes remain separate authorities. The parsed catalog supplies exact
+bindings without parsing or cloning the full catalog per model. Preview credential-presence checks reuse these
+inputs but read credential/grant stores each time; no credential value is stored in the snapshot. Names appear
+first with EN `Checking…` / TR `Kontrol ediliyor…` and disabled choices, then checked rows fill in. Subscription
+readiness belongs to each row's check. Snapshots are discarded after inspection and aborted/cleared on close or
+reload; late UI results are ignored. Picking, sending, connecting, activation and all config/credential writes use
+the ordinary fresh producers, including bootstrap/restore/uninstall fences and revocation checks. Optional budget,
+cache, protocol, workspace and custody reads retain their independent ports. This describes source wiring and
+fixture verification, not physical paint, live-installation timings, independent review or release acceptance.
+Local `/help`, `/model`, `/provider` and `/tasks` windows can open during startup. A command selected from help,
+a task-window action or an approval opened after a settings action meets the opening gate under its own command
+name. Progress, final results and errors from an aborted or superseded model/provider inspection cannot change the new view.

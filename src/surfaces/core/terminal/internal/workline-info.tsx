@@ -1,3 +1,5 @@
+import { currentTiming } from '#platform/index.js';
+import { TimingFrameContext, TimingPopulatedFrame } from '#surfaces/core/terminal-kit-ink/index.js';
 import { useCallback, useRef, useMemo, useState } from 'react';
 import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS, slashSearchEntries, type SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 import { PickerWindow } from '#surfaces/core/terminal-panels/index.js';
@@ -55,10 +57,11 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
     if (signal.aborted) return null;
     const aborted = () => slot.close();
     signal.addEventListener('abort', aborted, { once: true });
+    const timing = currentTiming();
     try {
       for (let view = first; ;) {
         const shown = view;
-        const choice = await slot.ask(answer => <InfoWindow model={shown.model} labels={labels} onClose={answer} />);
+        const choice = await slot.ask(answer => <TimingFrameContext.Provider value={timing}><TimingPopulatedFrame><InfoWindow model={shown.model} labels={labels} onClose={answer} /></TimingPopulatedFrame></TimingFrameContext.Provider>);
         if (signal.aborted) return null;
         if (choice === null || !view.pick) {
           if (choice === null && view.model.summary) push([systemSummaryEntry(view.model.summary)]);
@@ -83,7 +86,8 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
         const abort = () => slot.close();
         execution.signal.addEventListener('abort', abort, { once: true });
         try {
-          const picked = await slot.ask(answer => <HelpWindow slash={current.slash} labels={labels} picker={current.picker ?? NEUTRAL_PICKER_LABELS} query={query} onClose={answer} />);
+          const timing = currentTiming();
+          const picked = await slot.ask(answer => <TimingFrameContext.Provider value={timing}><TimingPopulatedFrame><HelpWindow slash={current.slash} labels={labels} picker={current.picker ?? NEUTRAL_PICKER_LABELS} query={query} onClose={answer} /></TimingPopulatedFrame></TimingFrameContext.Provider>);
           if (picked === null && !execution.signal.aborted) push([systemSummaryEntry(fillTemplate(labels.help.summary, { count: WORKLINE_SLASH_COMMANDS.length }))]);
           return { handled: true, picked: execution.signal.aborted ? null : picked };
         } finally { execution.signal.removeEventListener('abort', abort); }
@@ -93,7 +97,7 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
         if (!port) return { handled: false, picked: null };
         view = await port(current.input());
       }
-    } catch (error) { current.push([notice('error', current.errorText(error))]); return { handled: true, picked: null }; }
+    } catch (error) { currentTiming()?.fail(); current.push([notice('error', current.errorText(error))]); return { handled: true, picked: null }; }
     if (execution.signal.aborted) return { handled: true, picked: null };
     const picked = await show(view, labels, execution.signal);
     return { handled: true, picked: name === 'help' && !execution.signal.aborted ? picked : null };

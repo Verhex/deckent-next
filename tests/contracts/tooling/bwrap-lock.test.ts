@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 // BWRAP-BUNDLE: source, image, sysroot and output identities stay locked; host tools resolve at build time.
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, dockerOutputOwner, IDENTITY_MODULE, lockProblems, resolvedPackagePins, stageBundle } from '../../../scripts/build-bwrap.mjs';
+// @ts-expect-error Executable JS tooling has no declaration file.
+import { preflightBubblewrap } from '../../../scripts/stage-bubblewrap.mjs';
 
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const buildScript = readFileSync(new URL('../../../packaging/bwrap/build.sh', import.meta.url), 'utf8');
@@ -94,6 +96,13 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     expect(readFileSync(join(target, 'source', 'build.sh'), 'utf8')).toBe(buildScript);
     expect(JSON.parse(readFileSync(join(target, 'source', 'bwrap.lock.json'), 'utf8'))).toEqual(copy);
     expect(bundleProblems(target, copy)).toEqual([]);
+    mkdirSync(join(root, 'packaging/bwrap'), { recursive: true });
+    writeFileSync(join(root, 'packaging/bwrap/bwrap.lock.json'), JSON.stringify(copy));
+    const bundled = join(root, 'src/adapters/core/shell-sandbox-bwrap/bundled');
+    cpSync(target, bundled, { recursive: true });
+    // A valid staged bundle must not read unrelated build output or need Docker.
+    const bad = join(root, 'bad-output'); mkdirSync(join(bad, 'out/x86_64/bwrap'), { recursive: true });
+    preflightBubblewrap({ root, platform: 'linux', buildOutput: bad, checkDocker: () => expect.unreachable() });
     expect(bundleProblems(target, lock)).toContain('source/bwrap.lock.json is not the lock');
     // Drift is named: a changed binary, an extra architecture, a missing source file.
     writeFileSync(join(target, 'linux-x64', 'bwrap'), 'other\n'); cpSync(join(target, 'linux-x64'), join(target, 'linux-arm64'), { recursive: true });

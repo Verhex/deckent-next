@@ -1,14 +1,14 @@
 ---
 name: deckent-design-dna
-description: First stop for Deckent product, Desktop, Terminal or Dashboard design, interaction, visual-language or design-system work - routes to the smallest Deckent design skill set under current product authority.
+description: First stop for deckent product, Desktop, Terminal or Dashboard design, interaction, visual-language or design-system work - routes to the smallest deckent design skill set under current product authority.
 ---
 
 
-# Deckent Design DNA
+# deckent Design DNA
 
 ## Purpose
 
-This is Deckent's design entry point and routing contract. It prevents a polished but semantically
+This is deckent's design entry point and routing contract. It prevents a polished but semantically
 false interface from becoming product authority.
 
 ## Load current authority
@@ -28,7 +28,7 @@ Before applying vendor or accessibility standards, verify current official sourc
 date, established practice, current state and unavailable context7/registry evidence. Checking
 documentation does not certify product compliance.
 
-For Deckent product, Desktop workspace or visual-language work, also read
+For deckent product, Desktop workspace or visual-language work, also read
 [references/current-owner-decisions.md](references/current-owner-decisions.md), the single home of the
 design direction. Treat its accepted
 and rejected directions as a decision ratchet: do not re-propose settled or rejected context unless

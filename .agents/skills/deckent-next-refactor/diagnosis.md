@@ -23,7 +23,7 @@ real code path, asserts the reported symptom, gives the same verdict each run (o
 flakes), runs in seconds, and runs unattended. If no such signal can be built, say so, list what you tried and
 ask for access, a captured artifact or permission for temporary instrumentation.
 
-Two perspectives: in Deckent's own development the signal is usually a test or CLI call. In the target product a
+Two perspectives: in deckent's own development the signal is usually a test or CLI call. In the target product a
 customer's ERP/CRM process has no test suite; the red signal is a read-only query or a durable evidence record
 showing the wrong business state. Test code is the git adapter's evidence, not the general acceptance model.
 

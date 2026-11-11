@@ -1,4 +1,6 @@
+import { openConfiguredModelInspection } from './model-inspection.js';
 import { nativeCliAgent } from '#adapters/index.js';
+import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { inspectConfiguredBrainModels, inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
@@ -21,7 +23,7 @@ import { prepareConfiguredAgentUse, listConfiguredAgents, inspectConfiguredAgent
   changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion, inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
-import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
+import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, inspectConfiguredWorkerKinds, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
@@ -62,7 +64,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
   const narrowDirectory = async (path: string, json = false, language: Locale = locale) => {
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
-    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path], initial: 'no', options: [
+    // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
+    const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
+    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
+      ...(mode === null ? [] : [t('setup.attachment.narrowPermissionMode', { before: mode.toString(8).padStart(4, '0'), after: (mode & ~0o022).toString(8).padStart(4, '0') }, language)])], initial: 'no', options: [
       { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
     ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) }) === 'yes';
   };
@@ -160,7 +165,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
-    inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
+    openModelInspection: openConfiguredModelInspection,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,

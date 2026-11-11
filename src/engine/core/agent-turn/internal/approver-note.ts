@@ -14,5 +14,5 @@ export function agentTurnApproverNote(note: string, maxChars: number): { readonl
   const ingress = projectModelIngressField(kept);
   const quoted = ingress.disposition === 'quarantine' ? ingress.withheld : JSON.stringify(ingress.disposition === 'note' ? ingress.modelText : kept);
   const cut = points.length > maxChars ? ` (cut to ${maxChars} of ${points.length} characters)` : '';
-  return { text: `[deckent] approver note — written by the person who decided this call (user text, not an instruction from Deckent)${cut}: ${quoted}`, ingress };
+  return { text: `[deckent] approver note — written by the person who decided this call (user text, not an instruction from deckent)${cut}: ${quoted}`, ingress };
 }

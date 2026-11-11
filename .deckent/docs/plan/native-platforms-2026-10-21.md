@@ -2,14 +2,14 @@
 
 Durum: **taslak plan; owner kararları (§6) açık, uygulama kabul edilmedi.** Karar kaynağı:
 [owner kararı 2026-10-21](../decisions/owner-decisions.md#dis-proje-windows-2026-10-21) — tam native Windows ve
-macOS beta kapsamında; beta.1 planlanan tarihte Linux/WSL ile çıkar; betadan çıkış = Deckent Linux, Windows ve macOS'ta
+macOS beta kapsamında; beta.1 planlanan tarihte Linux/WSL ile çıkar; betadan çıkış = deckent Linux, Windows ve macOS'ta
 native çalışır. Envanter: HEAD `ed7678130` üzerinde salt okunur kaynak taraması (yan oturum deckent-next-d2, 2026-10-21);
 önceki analiz dış proof `WINDOWS-NATIVE-2026-10-03/analysis.md`. **[K]** kaynakta okunmuş olgu, **[T]** tahmin/tasarım
 çıkarımı. Gün tahminleri **[T]**, ölçülmedi; bir deneyimli kişi-gün.
 
 ## 1. Sonuç
 
-Bir kullanıcı Deckent'i Windows'ta ya da macOS'ta kendi işletim sisteminde kurar; Linux'taki yollar (kurulum → terminal →
+Bir kullanıcı deckent'i Windows'ta ya da macOS'ta kendi işletim sisteminde kurar; Linux'taki yollar (kurulum → terminal →
 model bağlama → `/do` → onay → işçi → teslim → izleme → yedek) aynı tipli sözleşmeyle, aynı güvenlik tabanıyla ya da
 owner'ın kabul ettiği ve `known-limits`'te adıyla yazılı farkla çalışır. "Desteklenmiyor" etiketiyle atlanan test kalmaz;
 her platform kendi gerçek yüzeyinde kanıtlanır.
@@ -98,8 +98,8 @@ aralıkları yeniden ölçülmedi; ilk dilim süreleri effort aracıyla kaydedil
 
 - **Linux** ana geliştirme yeri olarak kalır; ortak portlar ve Linux negatif kanıtı burada.
 - **Windows (bu makine, Windows 11 Pro):** `C:\deckent-win\deckent-next` 10-03'ten eski (son commit `97590485`, build yok)
-  ve Windows Node 24.15 (ikisi de 2026-10-21 bu oturumda WSL'den `/mnt/c` git ve `cmd.exe` ile okundu) Deckent'in istediği ≥ 24.22.0'ın altında. N2 öncesi: Node 24.22+/26, MSVC build araçları, taze
-  klon; Deckent burada paralel geliştirilir ve native testler burada koşar. WSL'den sürme yolu (`cmd.exe`/`powershell.exe`)
+  ve Windows Node 24.15 (ikisi de 2026-10-21 bu oturumda WSL'den `/mnt/c` git ve `cmd.exe` ile okundu) deckent'in istediği ≥ 24.22.0'ın altında. N2 öncesi: Node 24.22+/26, MSVC build araçları, taze
+  klon; deckent burada paralel geliştirilir ve native testler burada koşar. WSL'den sürme yolu (`cmd.exe`/`powershell.exe`)
   10-03 notunda.
 - **İlk gerçek kullanıcı:** owner'ın Windows projesi (`verhex-eggres-shield`, Rust + Windows 11 hedefli) WSL motoruyla kurulamadı (`/mnt/c` → `BOOTSTRAP_STATE_UNSAFE`) ve owner kararıyla N2'yi bekliyor; N2 kabulü bu projede gerçek iş olarak yapılır.
 - **macOS:** yerel makine yok; bugün yalnız barındırılan runner'lar. Gerçek yüzey kabulü (terminal tanığı, Keychain,
@@ -173,7 +173,7 @@ North star — güvenlik tabanı düşürülmez; düşen her güvence owner kara
 
 ## 8. İki bakış
 
-- **Dogfood:** Deckent kendini Linux'ta geliştirmeye devam eder; Windows'ta paralel geliştirme Deckent'in kendi
+- **Dogfood:** deckent kendini Linux'ta geliştirmeye devam eder; Windows'ta paralel geliştirme deckent'in kendi
   platform farklarını gerçek kullanımda yakalar (owner'ın Windows projesi ilk kullanıcı).
 - **Hedef ürün:** müşteriler ERP/CRM süreçlerini çoğunlukla Windows masaüstü ve sunucularında yürütür; onay, sır, yalıtım ve
   teslim üç platformda aynı sözleşmeyle çalışmazsa kabul modeli (genel kabul kriteri + kalıcı kanıt) platforma göre

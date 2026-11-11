@@ -5,7 +5,7 @@ Surfaces (one installation, one set of typed operations):
                       when piped
   deckent <command>   this CLI: one call, one result; text for people, --json
                       for scripts and AI agents
-  deckent-mcp         MCP server: Deckent operations as tools for AI clients;
+  deckent-mcp         MCP server: deckent operations as tools for AI clients;
                       policy grants decide which ones they may use
 
 Commands (deckent <command> --help shows each action and its options):
@@ -79,8 +79,7 @@ Approvals:
       list | inspect | decide | renew
       [--scope <id>] [--input <file|->]
   recovery    Lost-worker recovery: rollout progress and your blind review
-      review
-      [--scope <id>] [--json]
+      review | [--scope <id>] [--json]
   policy      Inspect policy and standing grants (without an action: status)
       vocabulary | status | show | delegations | delegate | undelegate |
       grants | revoke | upgrade | recovery | mcp list|grant|revoke|narrow |
@@ -88,7 +87,7 @@ Approvals:
       [--scope <id>]
 
 Setup / Maintenance:
-  uninstall   Remove Deckent from this folder; keeps your data by default.
+  uninstall   Remove deckent from this folder; keeps your data by default.
       [--keep-data|--keep-work|--all] [--force] [--disable-unit]
       [--yes] [--dry-run [--verbose]] [--json]
   audit       Read and verify the audit log (who did what, when) and its
@@ -111,10 +110,9 @@ Setup / Maintenance:
       list | set | delete | grant | revoke | handover | store
       [<name>] [--scope <id>]
   toolchains  Check or update worker toolchains
-      update
-      [update [--apply]]
+      update | [update [--apply]]
   doctor      Check installation health
-      [--verbose] [--toolchains] [--json]
+      timing | [--verbose] [--toolchains] [--json]
 
 Developer:
   inventory   Inspect recorded attempts

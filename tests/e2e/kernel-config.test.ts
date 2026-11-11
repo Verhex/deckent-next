@@ -68,8 +68,10 @@ describe('K1 real binary journeys', () => {
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
     // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope;
     // alpha.64 SETUPUX: codingRepository, the read-only coding-folder observation).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status', 'workerKinds']);
     expect({ ownerBaseline: result.ownerBaseline, providerSpending: result.providerSpending }).toEqual({ ownerBaseline: null, providerSpending: null });
+    // beta.1 SETUPFACT: workerKinds is always present; this fixture admitted no worker image, so no kind is listed.
+    expect(result.workerKinds).toEqual([]);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
@@ -104,7 +106,7 @@ describe('K1 real binary journeys', () => {
     expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
     expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen işçi');
     expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
-    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
+    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Gizli anahtar deposu: core.secret-store.env@1 (ready)');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
