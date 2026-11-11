@@ -275,5 +275,11 @@ hosted, built binary and live/N1 acceptance remain open.
 alpha.55 adds four planning facts; [core layers](core-layers.md) holds the details. The Brain model must hold the `brain` role and be
 active in the scope, otherwise `BRAIN_TIER_REFUSED` before any budget read or model call. A reply that names a worker model or effort is
 refused with `BRAIN_ASSIGNMENT_REFUSED`; the system assigns models from the WorkClass candidate list. Templates written for context v3
-(the selected v4) receive the scope's verified memory as a labelled data part (`BRAIN_MEMORY_CONTEXT_HELD` on a failed read). A
+(v4 at that release) receive the scope's verified memory as a labelled data part (`BRAIN_MEMORY_CONTEXT_HELD` on a failed read). A
 subscription quota refusal waits visibly within `brain_planner.quotaWait` and is shown in the monitor before a Run exists.
+
+**Amendment (owner 2026-11-06; reconciled 2026-11-11).** The alpha.55 Brain role gate above is historical. Every connected active
+model may plan by default; below-recommended is a note. Authored organization role restrictions, inactive models and explicit
+per-model Brain exclusions still bind; no model is silently substituted. The shipped selection is `run-proposal` v6
+(`src/capabilities/core/run-planner/internal/templates.json`); historical v3/v4 templates retain their original contracts.
+See [the owner amendment](../../decisions/owner-decisions.md#owner-kararlari-2026-11-04-06).
