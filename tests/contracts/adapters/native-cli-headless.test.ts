@@ -27,11 +27,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     const saved = Object.fromEntries(DENIED.map(name => [name, process.env[name]]));
     for (const name of DENIED) process.env[name] = `leak-${name}`;
     try {
-      const c = await connection({ version: '2.1.322', steps: happy().map(step => 'line' in step && typeof step.line === 'object' && step.line.subtype === 'init'
-        ? { line: initLine({ claude_code_version: '2.1.322', plugins: [...plugins322, unseenBuiltin] }) } : step) }), deltas: ModelInvocationDelta[] = [];
+      // The fixture's own CLI version (9.1.0) stays: the pinned model's minimum version applies; the five built-in names are those CLI 2.1.322 reports.
+      const c = await connection({ steps: happy().map(step => 'line' in step && typeof step.line === 'object' && step.line.subtype === 'init'
+        ? { line: initLine({ plugins: [...plugins322, unseenBuiltin] }) } : step) }), deltas: ModelInvocationDelta[] = [];
       const result = await c.call(null, {}, undefined, deltas);
       expect(result).toMatchObject({ schemaVersion: 1, native: { object: 'chat.completion', model: PINNED,
-        choices: [{ message: { role: 'assistant', content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '2.1.322', guard: 'passed', builtinPlugins: expect.arrayContaining(['cc-plugin-unseen']) } },
+        choices: [{ message: { role: 'assistant', content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', builtinPlugins: expect.arrayContaining(['cc-plugin-unseen']) } },
       usage: { prompt_tokens: 586, completion_tokens: 9, total_tokens: 595, modelUsage: { [PINNED]: { inputTokens: 2, outputTokens: 9 } },
         quota: { five_hour: { utilizationPermille: 250, resetsAtMs: 1792773600000 }, seven_day: { utilizationPermille: 730 } } } });
       expect(JSON.stringify(result)).not.toMatch(/cost|usd/iu);
@@ -53,7 +54,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
       expect(existsSync(join(c.runDir, headless.systemPromptFile))).toBe(false);
       // N21: the preflight record keeps the login kind, never the account's email or organization.
       const record = await readFile(join(c.root, 'state', 'preflight.json'), 'utf8');
-      expect(JSON.parse(record)).toMatchObject({ state: 'open', version: '2.1.322', auth: { authMethod: 'claude.ai', apiProvider: 'firstParty' } });
+      expect(JSON.parse(record)).toMatchObject({ state: 'open', version: '9.1.0', auth: { authMethod: 'claude.ai', apiProvider: 'firstParty' } });
       expect(record).not.toMatch(/example\.invalid|org-fixture|Fixture Org/u);
       expect((await stat(join(c.root, 'state', 'preflight.json'))).mode & 0o777).toBe(0o600);
     } finally { for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } }
