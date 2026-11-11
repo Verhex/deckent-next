@@ -18,7 +18,7 @@ export interface JobWindowLabels {
   readonly cancelPickerTitle: string; readonly system: string; readonly runTitle: string; readonly runFallback: string; readonly transcriptTitle: string;
   readonly state: string; readonly tasks: string; readonly attempts: string; readonly delivery: string; readonly unknown: string;
   readonly clearSession: string; readonly clearDetail: string; readonly kept: string; readonly closed: string;
-  /** I-5: the opening line when work is running: `{runs}`, `{workers}`. */
+  /** I-5: the opening line when work is running or unverifiable: `{runs}`, `{workers}`, `{unknown}`. */
   readonly opening: string;
   readonly runStates: Readonly<Record<string, string>>;
   /** Owner 2026-10-17: why a parked Run waits (`parked` state reasons), and the window's `{code}` / `{note}` lines. */
@@ -49,11 +49,11 @@ export function runStateText(run: RunView, labels: JobWindowLabels): string {
 }
 /**
  * SLASH-WINDOWS I-5 (owner 2026-10-08, Jev 59f75361): the one opening system line when the start snapshot shows running work — runs that
- * are not finished and workers still active — or null when nothing runs (then nothing is printed; the status row keeps the approval count).
+ * are not finished, workers still active and workers whose state is unknown — or null when all counts are zero.
  */
-export function openingWorkText(runs: readonly RunView[] | undefined, activeWorkers: number, labels: JobWindowLabels): string | null {
+export function openingWorkText(runs: readonly RunView[] | undefined, activeWorkers: number, labels: JobWindowLabels, unknownWorkers = 0): string | null {
   const running = (runs ?? []).filter(run => run.state?.kind !== 'terminal').length;
-  return running + activeWorkers > 0 ? fillTemplate(labels.opening, { runs: running, workers: activeWorkers }) : null;
+  return running + activeWorkers + unknownWorkers > 0 ? fillTemplate(labels.opening, { runs: running, workers: activeWorkers, unknown: unknownWorkers }) : null;
 }
 /**
  * The state word of a Run in the Runs list and picker: the state, and for a parked Run its reason; a hold laid over another park says both

@@ -151,7 +151,7 @@
   "doctor.fix.toolchainUpdate.noChange": "Güncellenecek bir şey yok: kabul edilen araçlar güncel.",
   "doctor.fix.toolchainUpdate.disabled": "Bu kurulumda araç güncellemesi kapalı (toolchains.update.mode).",
   "doctor.fix.toolchainUpdate.planned": "İmaj {version} için güncelleme planlandı; derlenmedi.",
-  "cli.workers.summary": "{scope} · {active} çalışan · {attention} dikkat bekleyen · {history} geçmiş",
+  "cli.workers.summary": "{scope} · {active} çalışan · {unknown} durumu bilinmeyen · {attention} dikkat bekleyen · {history} geçmiş",
   "cli.workers.sourceDown": "Kaynak {source}: {status}",
   "cli.workers.source.denied": "erişim reddedildi",
   "cli.workers.source.notSampled": "bu kez okunmadı",

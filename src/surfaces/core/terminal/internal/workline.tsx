@@ -5,7 +5,7 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { cardCopy, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
+import { cardCopy, CLIPBOARD_LIMITS, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { parseSlashLine, keepsTypedArgument, type LocalSlashCommand, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, surfaceFollowLine, type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion, WorklinePaletteProvider, useWorklinePalette, useWorklineWatch, useSurfacePushFeed } from '#surfaces/core/terminal-kit-ink/index.js';
@@ -14,7 +14,7 @@ import { useLiveWindows } from './workline-live.js';
 import { openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, AssistantLive, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
 import { humanRecordText, projectHumanPickerText, HumanTextContext, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { optionalField, ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
+import { isRunIntentResult, workerKind, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from '#surfaces/core/terminal-session/index.js';
@@ -185,7 +185,7 @@ export interface WorklineProps {
   readonly decisionArmMs?: number;
   /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
   readonly wheel?: WheelSource;
-  /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the clipboard write of the selection (OSC 52). */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => void;
+  /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the shared clipboard writer's result. */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => ClipboardResult;
   /** T4 (Ctrl+G): the person's editor (an adapter) and the host's switch of its mouse and focus reports while it runs. */
   readonly externalEditor?: ExternalEditorPort; readonly handover?: TerminalHandover;
   /** T2: rings the terminal bell while the window is in the background (the host decides); absent when the setting is off. */
@@ -241,7 +241,7 @@ export function WorklineApp(props: WorklineProps) {
   const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
-  const { selection: pointerSelection, copied } = usePointerCopy(props.pointer, props.copyText);
+  const { selection: pointerSelection, copied, refused: copyRefused } = usePointerCopy(props.pointer, props.copyText);
   const [bannerShown, setBannerShown] = useState(true);
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const handoffs = useDraftHandoffs<TerminalLocalContext, ComposerHistoryEntry>({ controller: panel.controller, say: (level, text) => push([notice(level, text)]), labels: labels.handoff,
@@ -302,10 +302,12 @@ export function WorklineApp(props: WorklineProps) {
     const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
     if (signal.aborted) return [];
     if (snapshot.scopeId !== ledger.scopeId) return kinds;
-    let active = 0;
+    let active = 0, unknown = 0;
     if (snapshot.workers) {
-      active = snapshot.workers.sources.reduce((sum, source) => sum + source.workers.filter(worker => !worker.terminal &&
-        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))).length, 0);
+      for (const source of snapshot.workers.sources) for (const worker of source.workers) {
+        const kind = workerKind(worker);
+        if (kind === 'active') active++; else if (kind === 'unknown') unknown++;
+      }
       activeWorkers.current = active > 0;
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
@@ -318,7 +320,7 @@ export function WorklineApp(props: WorklineProps) {
     // I-5: the opening snapshot says once whether work is running (one system line from what it was allowed to read; nothing when idle).
     if (!openingTold.current) {
       openingTold.current = true;
-      const text = labels.work?.jobs ? openingWorkText(snapshot.runs, active, labels.work.jobs) : null;
+      const text = labels.work?.jobs ? openingWorkText(snapshot.runs, active, labels.work.jobs, unknown) : null;
       if (text) push([systemSummaryEntry(text)]);
     }
     return snapshot.denied;
@@ -843,7 +845,9 @@ export function WorklineApp(props: WorklineProps) {
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} steer={turnSteer.steerable} onSteer={turnSteer.add} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
-  const hintNode = copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
+  const copyFailure = copyRefused?.reason === 'too-large' ? labels.viewport?.copyTooLarge : labels.viewport?.copyUnavailable;
+  const hintNode = copyRefused && copyFailure ? <Text {...palette.error} wrap="truncate-end">{fillTemplate(copyFailure, { bytes: copyRefused.bytes, max: CLIPBOARD_LIMITS.maxBytes })}</Text>
+    : copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
     waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>

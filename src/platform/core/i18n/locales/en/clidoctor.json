@@ -151,7 +151,7 @@
   "doctor.fix.toolchainUpdate.noChange": "Nothing to update: the admitted tools are current.",
   "doctor.fix.toolchainUpdate.disabled": "Tool updates are off in this installation (toolchains.update.mode).",
   "doctor.fix.toolchainUpdate.planned": "Update planned for image {version}; it was not built.",
-  "cli.workers.summary": "{scope} · {active} running · {attention} need attention · {history} in history",
+  "cli.workers.summary": "{scope} · {active} running · {unknown} unknown · {attention} need attention · {history} in history",
   "cli.workers.sourceDown": "Source {source}: {status}",
   "cli.workers.source.denied": "access denied",
   "cli.workers.source.notSampled": "not read this time",
