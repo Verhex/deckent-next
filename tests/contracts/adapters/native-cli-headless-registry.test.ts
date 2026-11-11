@@ -229,6 +229,13 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     }
 
     expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: [...five, unseen] })).toBeNull();
+    // Presentation bounds never narrow the provenance class, including odd and very long identities.
+    for (const names of [['x'.repeat(4096)], ['cc-plugin-new\n\t\u0001name'], Array.from({ length: 100 }, (_, i) => `cc-plugin-new-${i}`)]) {
+      const plugins = names.map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
+      expect(nativeBuiltinPlugins(plugins, policy)).toEqual(names);
+      expect(textGuard({ plugins })).toBeNull();
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins })).toBeNull();
+    }
     const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
     const port: ToolSessionPort = { session, propose: async () => { throw new Error('no tool expected'); },
       cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
