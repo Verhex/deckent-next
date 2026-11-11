@@ -80,7 +80,7 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
     expect(await f.git('rev-parse', ref)).toBe(commit); expect(await f.git('rev-parse', 'HEAD')).toBe(f.base);
     expect(await f.git('status', '--porcelain')).toBe(before);
     expect(await f.git('show', '-s', '--format=%B', commit)).toBe('Ship useful change\n\nRun: r\nTask: t\nAcceptance: Task accepted; criteria 1; run revision 7');
-    expect(await f.git('show', '-s', '--format=%an <%ae>|%at|%ct', commit)).toBe(`Deckent <delivery@deckent.invalid>|${f.time / 1000}|${f.time / 1000}`);
+    expect(await f.git('show', '-s', '--format=%an <%ae>|%at|%ct', commit)).toBe(`deckent <delivery@deckent.invalid>|${f.time / 1000}|${f.time / 1000}`);
     const replay = await f.execute('deliver-sdk', '', 'piped-input'); expect(replay.ok).toBe(true); expect(replay.result).toEqual(result.result);
     expect(replay.output).not.toContain('y/N: ');
   });

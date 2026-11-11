@@ -6,7 +6,7 @@ import { projectModelIngressField } from '#engine/core/agent-turn/index.js';
 import { MemoryJournalError, type MemoryHeld, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The versioned header of the part (`memory-templates`); its `id@version` is the part version, so the frozen profile names the wording it used. */
-export const MEMORY_CONTEXT_HEADER = Object.freeze({ id: 'context-header', version: 1 } as const);
+export const MEMORY_CONTEXT_HEADER = Object.freeze({ id: 'context-header', version: 2 } as const);
 /** One admission's question (trusted composition builds it from the admitted graph; never a wire field). */
 export interface MemoryContextRequest { readonly scopeId: string; readonly runId: string; readonly workTargetId: string | null; readonly tasks: readonly MemoryContextTask[] }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface MemoryContextEntryRef { readonly entryId: string; readonly revision: number; readonly contentDigest: string; readonly basis: 'human-review' | 'independent-evaluation' }

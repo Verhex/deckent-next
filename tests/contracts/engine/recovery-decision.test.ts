@@ -70,7 +70,7 @@ it('live: after the gate passed, one call of the role model with retries 0; the 
   expect(JSON.stringify(user)).not.toMatch(/fixture-policy|owner-policy|1000/u); // no policy, principal or host detail reaches the model
   expect(h.sealed()).toEqual([expect.objectContaining({ kind: 'recovery-decision', caseId: h.caseId, mode: 'live', action: 'continue-new-attempt', causeClass: 'infra-transient',
     note: 'previous-attempt-launcher-died', code: null, failure: null, standingRef: 'recovery-standing',
-    model: expect.objectContaining({ channelId: 'channel-a', modelId: 'model-a', template: { id: 'recovery-decision', version: 1 }, invocationId: 'inv-1',
+    model: expect.objectContaining({ channelId: 'channel-a', modelId: 'model-a', template: { id: 'recovery-decision', version: 2 }, invocationId: 'inv-1',
       inputDigest: expect.stringMatching(/^[a-f0-9]{64}$/u), outputDigest: expect.stringMatching(/^[a-f0-9]{64}$/u) }) })]);
   expect(h.lifecycle()).toEqual(['hold', 'release-worker-custody', 'recovery-decision', 'continue-lost-task']);
   const run = (await h.store.loadRun('s', 'run'))!;

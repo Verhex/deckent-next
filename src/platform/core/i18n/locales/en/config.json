@@ -70,7 +70,7 @@
   "config.panel.guard.runRuntime.recovery.mode": "shadow and live call the model in the recovery-decision role (see /roles): task details are sent to that model's provider and every call is spent. off sends nothing.",
   "config.operations.baseline.offer": "These operations are registered, but you may not run them yet. This card grants you the registered operations (and the other founder cells you may delegate):",
   "config.operations.baseline.later": "Not granted yet. To run the registered operations, on your own terminal: deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply (needed again after each new registration).",
-  "config.field.execution.git.deliveryIdentity.authorName": "Author name written on the commits deckent's delivery creates (no < > or control characters); absent: the repository's own Git identity.",
+  "config.field.execution.git.deliveryIdentity.authorName": "Author name written on the commits deckent's delivery creates (no < > or control characters); absent: deckent.",
   "config.field.execution.git.deliveryIdentity.authorEmail": "Author e-mail written on the commits deckent's delivery creates; set together with authorName.",
   "config.field.execution.adoption.targets": "Branches (refs/heads/...) a delivered integration may be adopted onto with a person's card. Empty (default): no adoption at all. deckent never pushes; main, master, the default branch and protectedTargets are never moved.",
   "config.field.execution.adoption.protectedTargets": "Branches (refs/heads/...) deckent never moves or targets, even when listed in adoption.targets; main, master and the default branch are always protected.",

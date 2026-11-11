@@ -43,7 +43,7 @@ it.each(['model', 'mechanical'] as const)('keeps original request text and obser
     expect(projection).toContain(intent);
     expect(projection).toContain(legacy);
     expect(projection.split('FIRST-DIRECTIVE')).toHaveLength(2);
-    expect(projection).toContain('render v1; carry v1; turn-local source');
+    expect(projection).toContain('render v2; carry v1; turn-local source');
     const canonical = projection.slice(projection.indexOf('Earlier user messages'));
     expect(canonical).not.toContain('model-only-fiction');
     expect(canonical).not.toContain('invented-effect-id');

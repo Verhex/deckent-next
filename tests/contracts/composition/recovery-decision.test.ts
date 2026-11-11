@@ -66,7 +66,7 @@ it('off loads nothing; live decides the released case once under the recovery pr
   expect(h.f.posts).toBe(1);
   const [event] = h.sealed();
   expect(event).toMatchObject({ principal: h.recoveryRef, subject: { kind: 'recovery-decision', caseId: h.caseId, mode: 'live', action: 'continue-new-attempt',
-    note: 'previous-attempt-launcher-died', model: { channelId: CHANNEL, modelId, template: { id: 'recovery-decision', version: 1 } } } });
+    note: 'previous-attempt-launcher-died', model: { channelId: CHANNEL, modelId, template: { id: 'recovery-decision', version: 2 } } } });
   expect(event.subject.model.invocationId).toEqual(expect.any(String));
   const run = (await h.store.loadRun('s', 'lost-run'))!;
   expect(run.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: false });

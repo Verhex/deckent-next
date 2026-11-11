@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 2,
-  "authorName": "Deckent",
+  "schemaVersion": 3,
+  "authorName": "deckent",
+  "legacyAuthorName": "Deckent",
   "authorEmail": "delivery@deckent.invalid"
 }
