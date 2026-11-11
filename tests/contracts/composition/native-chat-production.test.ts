@@ -177,8 +177,8 @@ it('compiled Workline in a real PTY cancels with Esc, stops a plugin/native-surf
   for (const family of families) {
     for (const walk of ['plugin', 'cancel']) {
     const h = await fixture(family);
-    const steps = walk === 'cancel' ? [['Deckent workline', 'K16-WAIT\r'], ['K16-WAITING', '\u001b'], ['cancelled', '/exit\r']]
-      : [['Deckent workline', 'K16-PLUGIN\r'], [family === families[0] ? 'The CLI loaded a plugin' : 'The CLI exposed an unexpected tool', 'after mismatch\r'], ['K16-TOOLS-AGAIN', '/exit\r']];
+    const steps = walk === 'cancel' ? [['deckent workline', 'K16-WAIT\r'], ['K16-WAITING', '\u001b'], ['cancelled', '/exit\r']]
+      : [['deckent workline', 'K16-PLUGIN\r'], [family === families[0] ? 'The CLI loaded a plugin' : 'The CLI exposed an unexpected tool', 'after mismatch\r'], ['K16-TOOLS-AGAIN', '/exit\r']];
     const { stdout } = await execute('python3', ['-c', DRIVER.replaceAll('time.time() + 40', 'time.time() + 15'), JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 's']), JSON.stringify(steps), 'tty', 'until-exit'],
       { cwd: h.f.project, env: { ...h.options.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' }, timeout: 100_000, maxBuffer: 16 * 1024 * 1024 });
     const result = JSON.parse(stdout) as { status: number; timeout?: string; output: string };

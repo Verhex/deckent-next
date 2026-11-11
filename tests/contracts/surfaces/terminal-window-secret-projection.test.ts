@@ -39,7 +39,7 @@ describe('information and list windows mask known secrets before layout (Astra 2
     await settle(40);
     if (columns === 200) expect(view.stdout.frame).toContain(MASK);
     expect(leaks(view.stdout.text)).toBeNull();
-    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('Deckent system'), 'summary line');
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('deckent system'), 'summary line');
     expect(leaks(view.stdout.text)).toBeNull();
   });
 

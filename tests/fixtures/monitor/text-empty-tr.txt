@@ -1,4 +1,4 @@
-Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● fresh (current) · SERVİS KAYDI YOK · ✓ sorun yok · /srv/owner/projects/fresh
 
 ── Özet ────────────────────────────────────────────────────────────────────────────────────────────

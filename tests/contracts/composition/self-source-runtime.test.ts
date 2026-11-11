@@ -28,7 +28,7 @@ describe.skipIf(process.platform !== 'linux' || !nativePeerAvailable)('self-sour
       expect(requested).toMatchObject({ risk: 'edit-self-source', requiredAssurance: 'turn-bound', summary: expect.stringContaining('src/a.ts') });
       if (requested?.kind !== 'approval.requested') throw new Error('missing card');
       expect(requested.summary).toContain(mode);
-      expect(requested.summary).toMatch(/Deckent.*source|Deckent.*kaynağı/u);
+      expect(requested.summary).toMatch(/deckent.*source|deckent.*kaynağı/u);
       expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
     });
   }
@@ -53,7 +53,7 @@ describe.skipIf(process.platform !== 'linux' || !nativePeerAvailable)('self-sour
       expect(result.card, command).toBe(false);
       expect(result.text, command).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; /u);
       expect(result.text, command).toContain('Read-only file system');
-      expect(result.text, command).toContain("\n[deckent] src/a.ts: protected path (Deckent's own source or the write floor). In this sandbox the shell sees it read-only");
+      expect(result.text, command).toContain("\n[deckent] src/a.ts: protected path (deckent's own source or the write floor). In this sandbox the shell sees it read-only");
       expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
     }
     // Negative: an ordinary project write in the same turn shape gets no protected-path note. `>` truncates, so since the destructive

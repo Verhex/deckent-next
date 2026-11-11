@@ -39,7 +39,7 @@ it.skipIf(process.platform !== 'linux')('ATTACH review F1 (verify-not-run outsid
       { when: '> 1. Language', ready: 'Enter confirm', send: '\r' }, { when: '> 3. Folder', ready: 'Enter confirm', send: '\r' }, { when: '> 5. Who uses', ready: 'Enter confirm', send: '\r' },
       { when: 'No (n)', ready: 'Enter confirm', send: 'y' }, { when: 'Apply now (y)', ready: 'Enter confirm', send: 'y' },
       { when: question, ready: 'Esc', send: answer === 'yes' ? 'y' : 'n' },
-      { when: 'Deckent setup', ready: 'Enter confirm', send: '\u001b' },
+      { when: 'deckent setup', ready: 'Enter confirm', send: '\u001b' },
     ]);
     if (process.env['DECKENT_ATTACH_TRANSCRIPTS']) {
       await writeFile(join(process.env['DECKENT_ATTACH_TRANSCRIPTS'], `guided-${answer}.txt`), result.output);

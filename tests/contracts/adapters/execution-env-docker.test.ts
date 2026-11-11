@@ -77,7 +77,7 @@ describe('planner (cond. 3, 6)', () => {
     expect(lines.slice(1)).toEqual(dockerCommandLines(install(planDockerInstall(facts(), '/tmp/s')).steps).map(line => `  $ ${line}`));
     const future = planDockerInstall(facts({ osRelease: { ID: 'ubuntu', VERSION_ID: '27.04', VERSION_CODENAME: 'future' } }), '/tmp/s') as Extract<DockerInstallPlan, { kind: 'print' }>;
     expect(future).toMatchObject({ kind: 'print', reason: 'distribution', source: null, steps: null });
-    for (const [locale, guidance] of [['en', 'Update Deckent'], ['tr', "Deckent'i güncelleyin"]] as const) {
+    for (const [locale, guidance] of [['en', 'Update deckent'], ['tr', "deckent'i güncelleyin"]] as const) {
       const text = dockerPrintLines(future, locale).join('\n');
       expect(text).toContain(guidance); expect(text).toContain(DOCKER_APT.docs); expect(text).toContain('noble'); expect(text).not.toContain('sudo');
     }
@@ -247,7 +247,7 @@ describe('foreground executor (cond. 2, 4)', () => {
     const result = await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: swapped.spawn, version: async () => null, verify: async () => false });
     expect(result).toEqual({ status: 'failed', step: 3, exitCode: null, version: null, mismatch: true });
     expect(swapped.calls.map(call => call.args.at(-1))).toEqual(['-k', '/etc/apt/keyrings', '/etc/apt/keyrings/docker.asc', '/etc/apt/sources.list.d/docker.sources']);
-    expect(dockerResultLines(result, plan.steps.length, { code: 'setup.execution.none' }, 'en')[0]).toContain('not the one Deckent shipped');
+    expect(dockerResultLines(result, plan.steps.length, { code: 'setup.execution.none' }, 'en')[0]).toContain('not the one deckent shipped');
     const dir = await mkdtemp(join(tmpdir(), 'deckent-i-d2-verify-')), data = { ...DOCKER_APT, keyring: join(dir, 'docker.asc'), sourcesFile: join(dir, 'docker.sources') };
     try {
       const check = verifyInstalledSource(plan, data);

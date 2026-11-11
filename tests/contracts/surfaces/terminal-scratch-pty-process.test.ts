@@ -187,7 +187,7 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     const f = await scratchProject();
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'keep notes in scratch\r'],
+      ['deckent workline', 'keep notes in scratch\r'],
       // TERMINAL-SABIT R2 (owner 2026-10-14): the shell card arrives during the model turn and leaves the composer focused; Ctrl+O moves
       // focus to that same card, then y approves it (a y typed in the composer would decide nothing).
       // Slice 2: the card takes the keyboard by itself; its keys show (and count) once it is armed.
@@ -201,7 +201,7 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
       ['Clear the scratch area?', 'y'],
       ['2 files', '/scratch\r'],
       ['is empty', '\u001b'],
-      ['Deckent workline', '/exit\r'],
+      ['deckent workline', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);

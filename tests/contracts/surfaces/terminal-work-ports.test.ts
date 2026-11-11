@@ -36,7 +36,7 @@ describe('terminal work ports over the CLI handlers', () => {
     await ports.decideApproval!({ approvalId: 'a1', revision: 0 }, 'allow');
     for (const command of commands) expect(approvalCommandSchema.parse(command)).toMatchObject({ scopeId: 's', approvalId: 'a1', expectedRevision: 0 });
     expect(commands.map(command => command['decision'])).toEqual(['deny', 'allow']);
-    expect(commands[0]!['reason']).toBe('Operatör Deckent terminalinde reddetti.');
+    expect(commands[0]!['reason']).toBe('Operatör deckent terminalinde reddetti.');
     expect(commands[0]!['commandId']).not.toBe(commands[1]!['commandId']);
     // APPROVER-NOTE: only the person's own words (Tab on the card) are marked as their note; the default sentence never is.
     expect(commands.map(command => command['approverNote'])).toEqual([undefined, undefined]);

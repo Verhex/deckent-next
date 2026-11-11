@@ -95,7 +95,7 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
     expect(screen(1).join('\n')).toContain('> 3. Folder and scope');
     expect(screen(2).join('\n')).toContain('> 5. Who uses this installation'); expect(screen(2).join('\n')).toMatch(/1\. Solo/u);
     // After Esc the plain summary stays in the scrollback; the folder holds only what the test put there.
-    expect(run.output.slice(run.marks[2])).toContain('Deckent setup plan'); expect(run.output).toContain('Nothing was applied.');
+    expect(run.output.slice(run.marks[2])).toContain('deckent setup plan'); expect(run.output).toContain('Nothing was applied.');
     expect(await readdir(root)).toEqual(['package.json']);
   }, 150_000);
 });

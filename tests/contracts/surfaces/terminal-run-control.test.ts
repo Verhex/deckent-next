@@ -142,7 +142,7 @@ describe('terminal lifecycle port over the CLI handler', () => {
     const held = await port.controlRun!(RUNNING, 'hold', 7);
     const [root, command] = apply.mock.calls[0]! as unknown as [string, Record<string, unknown>];
     expect(root).toBe('/project'); expect(runLifecycleCommandSchema.parse(command)).toEqual(command);
-    expect(command).toMatchObject({ schemaVersion: 1, scopeId: 'scope-a', runId: RUNNING, action: 'hold', expectedRevision: 7, holdReason: 'Held by the person in the Deckent terminal.' });
+    expect(command).toMatchObject({ schemaVersion: 1, scopeId: 'scope-a', runId: RUNNING, action: 'hold', expectedRevision: 7, holdReason: 'Held by the person in the deckent terminal.' });
     expect(String(command['commandId'])).toMatch(/^terminal-run-hold-[0-9a-f-]{36}$/u);
     expect(held).toBe(`Run 3f2a9c1e hold recorded, now running (revision 8): no new task starts; running work continues. Command ${String(command['commandId'])}`);
     await port.controlRun!(RUNNING, 'hold', 7, '  release window  ');

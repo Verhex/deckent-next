@@ -68,7 +68,7 @@ function LedgerEntryBody({ entry, labels, groupView }: { readonly entry: WorkLed
   }
   // SLASH-WINDOWS: the one render point of the system summary line (secret-projected like every human text row).
   if (entry.kind === 'notice' && entry.id === SYSTEM_SUMMARY_ENTRY_ID) {
-    return <SystemSummaryLine text={projectHumanPickerText(entry.text, known).label} identity={entry.identity} label={labels.system ?? 'Deckent'} tone={entry.level} />;
+    return <SystemSummaryLine text={projectHumanPickerText(entry.text, known).label} identity={entry.identity} label={labels.system ?? 'deckent'} tone={entry.level} />;
   }
   if (entry.kind === 'notice') {
     const levelWords = labels.workerLine?.card?.notice?.[entry.level];

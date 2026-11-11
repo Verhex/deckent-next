@@ -135,7 +135,7 @@ custodyIt('K15C: unresolved host forms show the warning even under allow/full-au
     const card = result.events.find(event => event.kind === 'approval.requested');
     expect(card, f.evidence(result)).toMatchObject({ kind: 'approval.requested',
       preview: expect.stringContaining('The working directory could not be verified;'),
-      call: { kind: 'shell', command, reason: expect.stringContaining("this command may reach Deckent's state folder") } });
+      call: { kind: 'shell', command, reason: expect.stringContaining("this command may reach deckent's state folder") } });
     expect(result.text).not.toContain('HOST_GLOBAL_STATE_UNRESOLVED');
     measurements.push({ command, grammar: grammar.reasonCode, risk: classifyShellRisk(command, grammar).risk,
       card: result.card, status: result.status, reached: result.text.includes(canary) });

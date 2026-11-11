@@ -1,4 +1,4 @@
-Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
+deckent monitor · observed 2026-10-02 09:30:00Z · observe only
 ● deckent-next (current) · RUNNING · ! 1 warning(s) · /srv/owner/projects/deckent-next
 ● dogfood · RUNNING · ! 3 warning(s) · /srv/owner/deckent-dogfood
 ○ remote-lab · UNREACHABLE · ! 2 warning(s) · /mnt/lab/deckent

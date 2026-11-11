@@ -726,7 +726,7 @@ it('K15C: host warning is localized and survives long previews; sandbox and abse
     scratch: null, productState: [], globalStateRoots: roots, language,
     sandboxes: sandbox ? [{ kind: 'bubblewrap', usable: () => ({ ok: true, realm: { kind: 'bubblewrap' } as never, marker: 'sandbox: test',
       notice: null, posture: () => '', containment: 'sandbox' }) }] : [] });
-  for (const [language, warning] of [['en', 'The working directory could not be verified;'], ['tr', 'Çalışma yeri doğrulanamadı; Deckent durum klasörüne ulaşabilir.']] as const) {
+  for (const [language, warning] of [['en', 'The working directory could not be verified;'], ['tr', 'Çalışma yeri doğrulanamadı; deckent durum klasörüne ulaşabilir.']] as const) {
     const shell = make(language);
     // A separate state directory keeps the project itself outside the named-root hard floor.
     const global = join(scope.root, `k15c-global-${language}`); await mkdir(global);
@@ -737,8 +737,8 @@ it('K15C: host warning is localized and survives long previews; sandbox and abse
       for (const command of ['cat "$DECKENT_HOME/new"', 'cat "${DECKENT_HOME}/new"', 'printf x > "$DECKENT_HOME/new"',
         'target=${DECKENT_HOME}/new printf x', 'cat $DECKENT_HOME/headless/*/auth.json']) {
         expect(await protectedShell.plan('run_shell', { command }), command).toMatchObject({ ok: false,
-          text: expect.stringContaining(language === 'en' ? "PRODUCT_STATE_PROTECTED; Deckent's own state cannot be opened by any approval."
-            : 'PRODUCT_STATE_PROTECTED; Hiçbir onay Deckent durumunu açamaz.') });
+          text: expect.stringContaining(language === 'en' ? "PRODUCT_STATE_PROTECTED; deckent's own state cannot be opened by any approval."
+            : 'PRODUCT_STATE_PROTECTED; Hiçbir onay deckent durumunu açamaz.') });
       }
       for (const command of ['cat "$DECKENT_HOME_SUFFIX/new"', 'printf DECKENT_HOME', 'DECKENT_HOME=ordinary printf ok']) {
         expect(await protectedShell.plan('run_shell', { command }), command).toMatchObject({ ok: true });

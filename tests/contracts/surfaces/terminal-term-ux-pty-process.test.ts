@@ -170,14 +170,14 @@ describe.skipIf(process.platform !== 'linux')('/resume in a real pseudo-terminal
     const f = await project();
     await startRuntime(f.projectRoot, f.env);
     const first = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'remember token XYZ-123\r'],
+      ['deckent workline', 'remember token XYZ-123\r'],
       ['Noted.', '/exit\r'],
     ]);
     expect(first.timeout, first.output).toBeUndefined();
     expect(first.status, first.output).toBe(0);
     const before = f.seen.requests.length;
     const second = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', '/resume\r'],
+      ['deckent workline', '/resume\r'],
       ['remember token XYZ-123', '\r'],
       ['Resumed 2 messages', 'what was the token?\r'],
       ['The token is XYZ-123.', '/exit\r'],
@@ -207,7 +207,7 @@ describe.skipIf(process.platform !== 'linux')('first @ in a real pseudo-terminal
     });
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'look @'],       // the person types at once, not waiting for the open-time warm-up
+      ['deckent workline', 'look @'],       // the person types at once, not waiting for the open-time warm-up
       ['q.md', '\u001b'],
       ['q.md', '\u0003'],
       ['q.md', '\u0003'],

@@ -182,7 +182,7 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
     const f = await mcpProject();
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'hello\r'],
+      ['deckent workline', 'hello\r'],
       // TERMINAL-SABIT R2 (owner 2026-10-14): trust cards raised during the turn keep the composer focused; Ctrl+O moves to each card, then y.
       // Slice 2: the card takes the keyboard by itself; its hint row shows the keys only once they count (armed), so each key waits for it.
       ['mcp_trust · mcp:fx · launch', ''], ['Enter confirm', 'y', 'next'],

@@ -1,4 +1,4 @@
-Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
+deckent monitor · observed 2026-10-02 09:30:00Z · observe only
 ● fresh (current) · NO SERVICE RECORD · ✓ no problems · /srv/owner/projects/fresh
 
 ── Summary ─────────────────────────────────────────────────────────────────────────────────────────

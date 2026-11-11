@@ -45,7 +45,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('MCP trust card i18n', () => {
   it('F5: generated launch and actual launch facts are localized without changing canonical approval text', async () => {
-    const card = { ...launch, posture: 'sandbox with network: the project is read-only, .git included; the server gets its own persistent HOME (for npx/uvx caches) and the network; your HOME, project secrets and Deckent state are hidden; no sandbox, no start; a server that must write the project needs `realm: host` in its registry entry (it then runs unsandboxed)' };
+    const card = { ...launch, posture: 'sandbox with network: the project is read-only, .git included; the server gets its own persistent HOME (for npx/uvx caches) and the network; your HOME, project secrets and deckent state are hidden; no sandbox, no start; a server that must write the project needs `realm: host` in its registry entry (it then runs unsandboxed)' };
     const server = { name: 'catalog', scope: 'project' as const, file: '/project/mcp.json', definitionDigest: 'a'.repeat(64), entry: { command: 'catalog', realm: 'host' as const }, trust: null };
     const ask = vi.fn(async () => true), directory = vi.fn(), audit = vi.fn();
     const pool: McpPoolView = { open: async () => ({ ok: true, era: 'modern', protocolVersion: null, serverInfo: null, sandboxed: false, projectReadOnly: false, posture: '',

@@ -8,7 +8,7 @@ describe('derived self-source visibility', () => {
     for (const locale of ['en', 'tr'] as const) for (const mode of ['standart', 'full-auto'] as const) {
       const summary = agentToolApprovalSummary({ tool: 'edit_file', resource: 'dist/entry.js', argsDigest: 'a'.repeat(64), cell: 'edit-self-source',
         selfSourceReason: t('terminal.approval.selfSource', { path: 'dist/entry.js', mode }, locale) });
-      expect(summary).toContain(locale === 'en' ? "Deckent's own source / running code" : "Deckent'in kendi kaynağı / çalışan kodu");
+      expect(summary).toContain(locale === 'en' ? "deckent's own source / running code" : "deckent'in kendi kaynağı / çalışan kodu");
       expect(summary).toContain('dist/entry.js');
       expect(summary).toContain(mode);
       expect(summary).toContain('aaaaaaaaaaaa');

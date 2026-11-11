@@ -323,7 +323,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const f = await runtime({ dataInside: true }); await f.start();
     f.state.script = [{ content: 'Hello.' }, { content: 'Again.' }];
     // The shortened catalog prompt proposed in i18n-delta.json (the lead applies it to the locale files).
-    const clientPrompt = 'You are the Deckent operator terminal assistant. Reply in English.';
+    const clientPrompt = 'You are the deckent operator terminal assistant. Reply in English.';
     const events: AgentTurnStreamEvent[] = [];
     await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-prompt', messages: [{ role: 'system', content: clientPrompt },
       { role: 'user', content: 'hello' }], sessionId: 'session-d4' }, event => events.push(event));

@@ -26,17 +26,18 @@ describe('opening frame (T2 T-STARTUP)', () => {
     const frame = startupFrame(startup('en'), plain, 100, 10).replace(/\n/gu, '\r\n');
     const screen = terminalScreen(before + frame, 100, 10);
     expect(screen).toContain('old line 1');
-    expect(screen.slice(screen.indexOf('╭──╮'))).toContain('Deckent 1.0.0-alpha.9');
-    expect(screen.indexOf('old line 2')).toBeLessThan(screen.indexOf('╭──╮'));
+    expect(screen.slice(screen.indexOf('⣀⣠⣀⡀'))).toContain('deckent 1.0.0-alpha.9');
+    expect(screen.indexOf('old line 2')).toBeLessThan(screen.indexOf('⣀⣠⣀⡀'));
   });
 
   it('prints the mark beside version, project, model and the hint without stale mode — EN, TR, NO_COLOR and ASCII', () => {
     const en = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 100, 30));
-    expect(en.split('\n').slice(0, 4).map(line => line.trimEnd())).toEqual([
-      '╭──╮   Deckent 1.0.0-alpha.9',
-      '│  ╰╮  Project deckent-next · ~/deckent-next',
-      '│  ╭╯  Model: local-openai/chat@1',
-      '╰──╯   /help · Shift+Tab mode · ? shortcuts',
+    expect(en.split('\n').slice(0, 5).map(line => line.trimEnd())).toEqual([
+      '          ⣀⣠⣀⡀',
+      '         ⢸⣟⡉⢻⣿⡄  deckent 1.0.0-alpha.9',
+      '        ⢀⣠⣽⣶⣟⡿⠁  Project deckent-next · ~/deckent-next',
+      '⣀⣀⣀⣠⣤⣴⣶⣟⣿⡷⠟⠉⠁    Model: local-openai/chat@1',
+      '⣿⣿⣿⣽⡿⠾⠛⠋⠁        /help · Shift+Tab mode · ? shortcuts',
     ]);
     const tr = stripVTControlCharacters(startupFrame(startup('tr', { clear: false }), plain, 100, 30));
     expect(tr).toContain('Proje deckent-next · ~/deckent-next');
@@ -46,16 +47,25 @@ describe('opening frame (T2 T-STARTUP)', () => {
     // NO_COLOR: the `none` palette leaves no escape at all in the banner.
     expect(startupFrame(startup('tr', { clear: false }), plain, 100, 30)).not.toContain('\u001b');
     const ascii = stripVTControlCharacters(startupFrame(startup('en', { clear: false }, true), plain, 100, 30));
-    expect(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 5).trimEnd())).toEqual([' __', '|  \\', '|  |', '|__/']);
-    expect(/[^ -~]/u.test(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 5)).join(''))).toBe(false);
+    expect(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 9).trimEnd())).toEqual(['      .-.', "   .o-'o|", " .o'  `-'", "-'"]);
+    expect(/[^ -~]/u.test(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 9)).join(''))).toBe(false);
+    for (const columns of [80, 120]) for (const locale of ['en', 'tr'] as const) for (const ascii of [false, true]) {
+      const labels = startup(locale, { clear: false }, ascii), rendered = stripVTControlCharacters(startupFrame(labels, plain, columns, 30));
+      const rows = rendered.trimEnd().split('\n');
+      expect(rows).toHaveLength(ascii ? 4 : 5);
+      expect(rows[ascii ? 0 : 1]).toContain('deckent 1.0.0-alpha.9');
+      for (const row of rows) expect(row.length).toBeLessThanOrEqual(columns);
+      for (const line of labels.lines) expect(rendered).toContain(line);
+      expect(labels.logo.join('')).toMatch(ascii ? /^[ -~]+$/u : /^[ \u2801-\u28ff]+$/u);
+    }
   });
 
   it('is one line below 60 columns or when compact, nothing but the clear when off, and nothing at all to a pipe or redirect', () => {
     const narrow = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 59, 30));
     // One row, cut at the window width so the facts that matter (version and project) stay first.
-    expect(narrow.trimEnd().split('\n')).toEqual(['Deckent 1.0.0-alpha.9 · deckent-next · /help · ? shortcuts']);
+    expect(narrow.trimEnd().split('\n')).toEqual(['deckent 1.0.0-alpha.9 · deckent-next · /help · ? shortcuts']);
     expect(stripVTControlCharacters(startupFrame(startup('tr', { clear: false, banner: 'compact' }), plain, 120, 30)).trimEnd())
-      .toBe('Deckent 1.0.0-alpha.9 · deckent-next · /help · ? kısayollar');
+      .toBe('deckent 1.0.0-alpha.9 · deckent-next · /help · ? kısayollar');
     expect(startupFrame(startup('en', { banner: 'off' }), plain, 100, 3)).toBe(`\n\n\n${CLEAR_VISIBLE_SCREEN}`);
     expect(startupFrame(startup('en', { banner: 'off', clear: false }), plain, 100, 3)).toBe('');
     // A pipe or redirect gets nothing at all (no clear sequence, no banner).

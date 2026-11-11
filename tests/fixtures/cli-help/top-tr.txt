@@ -5,7 +5,7 @@ Yüzeyler (tek kurulum, aynı tipli işlemler):
                       yardım
   deckent <komut>     bu CLI: bir çağrı, bir sonuç; insan için metin, betik ve
                       AI ajanları için --json
-  deckent-mcp         MCP sunucusu: Deckent işlemleri AI istemcilerine araç
+  deckent-mcp         MCP sunucusu: deckent işlemleri AI istemcilerine araç
                       olarak; hangilerini kullanacaklarını policy izni belirler
 
 Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
@@ -87,7 +87,7 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
-  uninstall   Deckent’i bu klasörden kaldırır;
+  uninstall   deckent’i bu klasörden kaldırır;
               verileriniz varsayılan olarak korunur.
       [--keep-data|--keep-work|--all] [--force] [--disable-unit]
       [--yes] [--dry-run [--verbose]] [--json]
