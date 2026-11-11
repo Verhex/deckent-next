@@ -8,6 +8,8 @@ import { ErrorRegistry, t, clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
+import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
+import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
@@ -226,7 +228,8 @@ describe('doctor subscription rows (pure)', () => {
 const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
-    const root = await project();
+    registerProviderConfig();
+    const root = await project({ terminal: { scopeId: 'fixture' } });
     let legacy = true;
     const run = async (args: string[]) => { const out: string[] = [];
       await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
@@ -235,13 +238,14 @@ describe('deckent doctor (command)', () => {
     const grouped = await run([]);
     expect(grouped.split('\n')[0]).toMatch(/^Status: /);
     expect(grouped).toContain('\nInstallation\n');
+    expect(grouped).toContain('Tool versions were not checked (the check contacts the npm registry)');
     expect(grouped).not.toContain('Details (--verbose):');
     expect(grouped).toContain('Legacy DECKENT.md'); legacy = false;
     const withoutLegacy = await run([]);
     expect(withoutLegacy).not.toContain('Legacy DECKENT.md');
     const env = { HOME: join(root, 'h') };
     const verdict = await doctorVerdict(root, { env }, { env });
-    expect(verdict).toEqual({ state: 'warnings', pending: withoutLegacy.split('\n').filter(line => /^ {2}(?:warning|error|not tested)\s/u.test(line)).length });
+    expect(verdict).toEqual({ state: 'warnings', pending: withoutLegacy.split('\n').filter(line => /^ {2}(?:warning|error)\s/u.test(line)).length });
     expect(verdict.pending).toBeGreaterThan(0);
     const verbose = await run(['--verbose']);
     expect(verbose).toContain('Details (--verbose):');
@@ -252,6 +256,31 @@ describe('deckent doctor (command)', () => {
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
     for (const key of ['platform', 'host', 'node', 'status', 'poolReadiness', 'secretStore', 'shellRealm', 'imageRefresh', 'recoveryFiles']) expect(Object.keys(json)).toContain(key);
+    await mkdir(join(env.HOME, '.deckent'), { recursive: true });
+    await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+    clearConfigCache();
+    const healthy = { env, inspectCodingRepository: async () => ({ state: 'skipped', reason: { code: 'fixture.not-applicable', params: {} } }),
+      verifyAudit: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', status: 'match' as const, head: null, checkpoint: null }) };
+    expect(await doctorVerdict(root, healthy, { env })).toEqual({ state: 'ok', pending: 0 });
+    const freshAudit = { ...healthy, verifyAudit: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', status: 'unknown' as const,
+      reason: 'no-checkpoint-yet' as const, head: null, checkpoint: null }) };
+    expect(await doctorVerdict(root, freshAudit, { env })).toEqual({ state: 'warnings', pending: 1 });
+    for (const context of [healthy, freshAudit]) {
+      const check = await doctorVerdict(root, context, { env });
+      const observation: SetupObservation = { schemaVersion: 2, check,
+        environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: null },
+        folder: { installation: 'present', homeRoot: false, configuredScope: 'fixture', suggestedScope: 'fixture' },
+        profile: { available: [{ id: 'core:solo', version: 1 }], selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' },
+        sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 0 } };
+      const plan = planSetup(observation, undefined, new SetupStageRegistry([]));
+      for (const locale of ['en', 'tr'] as const) {
+        const text = renderSetupLines(plan, locale, { requested: false, results: [] });
+        if (context === healthy) {
+          expect(text).toContain(locale === 'en' ? 'The final check ran; no items need attention.' : 'Son kontrol çalıştı; ilgi bekleyen madde yok.');
+          expect(text).not.toContain(locale === 'en' ? 'wait for you' : 'sizi bekliyor');
+        } else expect(text).toContain(locale === 'en' ? 'The final check ran; 1 item(s) wait for you.' : 'Son kontrol çalıştı; 1 madde sizi bekliyor.');
+      }
+    }
   });
   // J2e join (delta C-MODELS-for-C-DOCTOR): the retirement row follows the same rule as `deckent models`: a switched-on model whose retirement
   // day is within models.retirementWarningDays (config field) is warned about, even while its catalog lifecycle still reads `active`.
