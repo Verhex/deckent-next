@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Token Pipeline"
+  display_name: "deckent Token Pipeline"
   short_description: "Maintain actual Next token and palette generation"
   default_prompt: "Use $design-tokens-pipeline to inspect the actual Next token source, Terminal palette builder and affected generated consumers."
 policy:

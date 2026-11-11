@@ -2,7 +2,7 @@
 
 [Türkçe](architecture-overview.tr.md) · [Glossary](glossary.md) · [Contributing](../CONTRIBUTING.md)
 
-Deckent is a customer-installed Agent Control & Execution Plane. It combines authorization
+deckent is a customer-installed Agent Control & Execution Plane. It combines authorization
 and execution: a person, model or tool proposes work; policy determines whether it may run;
 a configured execution environment performs it; durable records describe the outcome.
 The open Core is Apache-2.0 and can operate independently. Proprietary Enterprise packages
@@ -97,7 +97,7 @@ Some older execution/delivery paths still have their own settlement mechanisms; 
 the generic effect port is incomplete. An extension should reuse the generic contract.
 
 Paid model calls reserve against the scope's shared USD budget. Final usage and a pinned tariff
-produce the measured charge using exact arithmetic. This is Deckent's calculation, not the
+produce the measured charge using exact arithmetic. This is deckent's calculation, not the
 provider's invoice. Missing final usage keeps funds held; reconciliation records an explicit
 settle, release or write-off. Per-provider budgets are still planned.
 
@@ -122,7 +122,7 @@ Docker shares the host kernel. A `require-sandbox` shell posture refuses unavail
 on the actual machine before relying on a sandbox.
 
 Provider API keys are resolved through the configured secret-store port and are masked from
-agent-facing content. Connected Claude/Codex CLI workers keep sign-in in their own CLI realm; Deckent does not read their tokens.
+agent-facing content. Connected Claude/Codex CLI workers keep sign-in in their own CLI realm; deckent does not read their tokens.
 Claude Docker subscriptions are refused. Codex Docker tokens stay on the host relay; Cursor has its own bounded
 credential projection. These routes are distinct from provider API keys. File and encrypted-file stores do not protect
 against every program running as the same OS user; the encrypted store's unlock key is local.

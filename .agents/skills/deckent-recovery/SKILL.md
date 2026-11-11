@@ -1,9 +1,9 @@
 ---
 name: deckent-recovery
-description: Recover from a Deckent Next incident - plan or perform one authorized recovery through existing typed ports, with exact affected identities, bounded effects and reconciliation proof.
+description: Recover from a deckent Next incident - plan or perform one authorized recovery through existing typed ports, with exact affected identities, bounded effects and reconciliation proof.
 ---
 
-# Deckent Next Recovery
+# deckent Next Recovery
 
 ## Authority and evidence
 

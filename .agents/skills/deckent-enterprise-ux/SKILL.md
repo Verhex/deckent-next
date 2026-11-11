@@ -1,10 +1,10 @@
 ---
 name: deckent-enterprise-ux
-description: Deckent governance surfaces - installation/company/resource scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, compliance and large-scale administration, built on real governance semantics.
+description: deckent governance surfaces - installation/company/resource scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, compliance and large-scale administration, built on real governance semantics.
 ---
 
 
-# Deckent Enterprise UX
+# deckent Enterprise UX
 
 ## Objective
 

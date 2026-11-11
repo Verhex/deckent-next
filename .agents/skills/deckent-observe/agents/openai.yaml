@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Observe"
+  display_name: "deckent Observe"
   short_description: "Observe Next lifecycle identity and freshness"
   default_prompt: "Use $deckent-observe for a bounded read-only Next lifecycle observation with exact identities, freshness and contradictions."
 policy:

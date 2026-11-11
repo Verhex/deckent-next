@@ -1,9 +1,9 @@
 ---
 name: deckent-closure
-description: Completion claims, assigned card audits and REVISE handling - assess one admitted Deckent Next outcome against its proof contract, production wiring, real surfaces and durable effect settlement, reporting contract and standards axes separately.
+description: Completion claims, assigned card audits and REVISE handling - assess one admitted deckent Next outcome against its proof contract, production wiring, real surfaces and durable effect settlement, reporting contract and standards axes separately.
 ---
 
-# Deckent Next Closure
+# deckent Next Closure
 
 ## Admission and role
 

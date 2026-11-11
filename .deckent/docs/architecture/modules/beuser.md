@@ -130,7 +130,7 @@ execution profiles continue to live in the general execution registry.
 
 `deckent beuser walk --journey <id> [--candidate <path>]` without `--scope` runs from any folder on the
 person's terminal (an AI-marked or piped terminal is refused before any step). Its controller is the
-private Deckent installation at `<global state root>/beuser-controller` (folder name and the profile's
+private deckent installation at `<global state root>/beuser-controller` (folder name and the profile's
 terminal, bounds and pool values in the versioned `assets/beuser/controller.json`); its scope is that
 installation's `terminal.scopeId`. The command creates only the folder: the person installs it and
 connects subscriptions or keys there with the existing onboarding and `/provider` (`cd <controller> &&

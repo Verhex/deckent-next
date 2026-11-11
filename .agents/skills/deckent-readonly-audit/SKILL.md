@@ -1,9 +1,9 @@
 ---
 name: deckent-readonly-audit
-description: Investigate a bounded Deckent Next repository, wiring, runtime or incident question through read-only evidence and report coverage, findings and proof limits; fixes, tests and state changes stay outside it.
+description: Investigate a bounded deckent Next repository, wiring, runtime or incident question through read-only evidence and report coverage, findings and proof limits; fixes, tests and state changes stay outside it.
 ---
 
-# Deckent Next read-only audit
+# deckent Next read-only audit
 
 ## Role and scope
 
@@ -21,7 +21,7 @@ never create work, authorize fixes or constitute owner acceptance.
 
 - Inspect Next sources and retained evidence. Legacy `/home/alperen/deckent-dev` is a frozen
   read-only reference; never execute its runtime, workers, entry points or recovery procedures.
-- Read tests as source, but do not run tests, builds, benchmarks, services, Deckent flows,
+- Read tests as source, but do not run tests, builds, benchmarks, services, deckent flows,
   migrations, cleanup or recovery. Do not edit code/documents/configuration, consume channel
   entries, merge, commit or push as part of an audit. Report necessary changes as recommendations.
 - Use runtime queries or projections only when relevant and their side effects have been checked

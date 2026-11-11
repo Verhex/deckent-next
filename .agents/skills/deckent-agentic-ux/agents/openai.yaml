@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Agentic UX"
+  display_name: "deckent Agentic UX"
   short_description: "Design truthful agentic state and intervention"
   default_prompt: "Use $deckent-agentic-ux to design truthful Next lifecycle, approval, intervention and uncertain-effect experiences."
 policy:

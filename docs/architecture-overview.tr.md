@@ -2,7 +2,7 @@
 
 [English](architecture-overview.md) · [Sözlük](glossary.tr.md) · [Katkı rehberi (EN)](../CONTRIBUTING.md)
 
-Deckent, müşterinin kendi altyapısına kurduğu Agent Control & Execution Plane'dir. Yetkilendirme
+deckent, müşterinin kendi altyapısına kurduğu Agent Control & Execution Plane'dir. Yetkilendirme
 ile yürütmeyi birleştirir: kişi, model veya araç iş önerir; yetki politikası çalışıp
 çalışamayacağını belirler; seçilen ortam işi yürütür; kalıcı kayıtlar sonucu gösterir.
 Açık Core Apache-2.0 lisanslıdır ve tek başına çalışabilir. Tescilli Enterprise paketleri,
@@ -98,7 +98,7 @@ korur. Bazı eski yürütme/teslim yolları kendi etki kesinleştirme mekanizmal
 genel etki portuna geçiş tamamlanmamıştır. Eklentiler genel sözleşmeyi yeniden kullanmalıdır.
 
 Ücretli model çağrıları kapsamın ortak USD bütçesinden pay ayırır. Nihai kullanım ve
-sabitlenmiş tarife, kesin aritmetikle ücreti oluşturur. Bu Deckent'in hesabıdır; sağlayıcı
+sabitlenmiş tarife, kesin aritmetikle ücreti oluşturur. Bu deckent'in hesabıdır; sağlayıcı
 faturası değildir. Nihai kullanım yoksa ayrılan tutar tutulur; uzlaştırma açık bir
 kesinleştirme, serbest bırakma veya kayıttan düşme kararı kaydeder. Sağlayıcı başına
 bütçeler halen planlanmaktadır.
@@ -125,7 +125,7 @@ Docker ana makine çekirdeğini paylaşır. `require-sandbox`, yalıtım yoksa r
 makinede `deckent doctor` çıktısını inceleyin.
 
 Sağlayıcı API anahtarları seçili sır deposu portuyla çözülür ve ajana sunulan içerikten
-maskelenir. Bağlı Claude/Codex CLI işçileri girişi kendi CLI alanında tutar; Deckent token'larını okumaz.
+maskelenir. Bağlı Claude/Codex CLI işçileri girişi kendi CLI alanında tutar; deckent token'larını okumaz.
 Claude Docker aboneliği reddedilir. Codex Docker token'ları host aktarıcısında kalır; Cursor ayrı sınırlı kimlik
 bilgisi kopyası kullanır. Bu yollar sağlayıcı API anahtarından ayrıdır. Dosya ve şifreli dosya depoları aynı işletim
 sistemi kullanıcısıyla çalışan her programa karşı koruma sağlamaz; şifreli deponun açma

@@ -1,9 +1,9 @@
 ---
 name: solution-architect
-description: Decide Deckent architectural boundaries, reusable contract changes, deep-module seams and governance or control-flow tradeoffs; inspect existing mechanisms, ergonomics and reversibility first.
+description: Decide deckent architectural boundaries, reusable contract changes, deep-module seams and governance or control-flow tradeoffs; inspect existing mechanisms, ergonomics and reversibility first.
 ---
 
-# Solution Architect — Deckent mimari karar yöntemi
+# Solution Architect — deckent mimari karar yöntemi
 
 ## Rol ve sınır
 

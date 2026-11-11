@@ -5,7 +5,7 @@ disable-model-invocation: true
 argument-hint: "[package or area, e.g. alpha.64 KG2]"
 ---
 
-# Deckent untangle
+# deckent untangle
 
 Apply `deckent-next-refactor` and, for each change, `deckent-lean-change`. This skill shapes the analysis and the
 redesign; it grants no authority and opens no work: the owner admits the package and its scope (law 2), and the

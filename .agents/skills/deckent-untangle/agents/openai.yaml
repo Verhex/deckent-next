@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Untangle"
+  display_name: "deckent Untangle"
   short_description: "Find what should change together, redesign once, fix within the admitted package"
   default_prompt: "Use $deckent-untangle on this owner-admitted package or area."
 policy:

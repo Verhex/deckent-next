@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Outcome Plan"
+  display_name: "deckent Outcome Plan"
   short_description: "Plan one Next outcome, ownership and proof"
   default_prompt: "Use $deckent-outcome-plan to plan this admitted Next outcome as a bounded DAG, ownership map and exact proof contract."
 policy:

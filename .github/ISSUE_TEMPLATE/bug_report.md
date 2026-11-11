@@ -21,7 +21,7 @@ Describe expected and observed behavior, impact and the affected CLI/terminal/SD
 
 ## Environment / Ortam
 
-- Deckent version and commit (`deckent --version`):
+- deckent version and commit (`deckent --version`):
 - Node version, OS and Docker version (if relevant):
 - Installation/profile details relevant to the failure (no credentials or customer data):
 

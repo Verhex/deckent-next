@@ -1,10 +1,10 @@
 ---
 name: deckent-design-critic
-description: Review Deckent design output (product, interaction, visual, component, accessibility, enterprise surfaces) with evidence and a verdict. An independent verdict needs a separate reviewer; implementer self-review reports findings.
+description: Review deckent design output (product, interaction, visual, component, accessibility, enterprise surfaces) with evidence and a verdict. An independent verdict needs a separate reviewer; implementer self-review reports findings.
 ---
 
 
-# Deckent Design Critic
+# deckent Design Critic
 
 ## Role
 

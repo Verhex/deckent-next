@@ -1,11 +1,11 @@
 ---
 name: deckent-parallel-execution
-description: Dispatch and fan in authorized parallel Deckent Next lanes (Claude, Codex, Cursor workers) with disjoint ownership, single writers, exact evidence custody and merge order.
+description: Dispatch and fan in authorized parallel deckent Next lanes (Claude, Codex, Cursor workers) with disjoint ownership, single writers, exact evidence custody and merge order.
 ---
 
-# Deckent Next Parallel Execution
+# deckent Next Parallel Execution
 
-This skill keeps only Deckent constraints. For dispatch and worktree mechanics use
+This skill keeps only deckent constraints. For dispatch and worktree mechanics use
 `superpowers:dispatching-parallel-agents` and `superpowers:using-git-worktrees`. Do not use the superpowers
 per-task reviewer subagent (not independent; review is one Astra pass per batch, law 8) or its
 finishing/merge steps (merge is lead-only with owner approval and green hosted PR CI).
@@ -39,7 +39,7 @@ bounds and stop conditions, and the law check and two perspectives (full templat
     10. Enterprise katmanı — uyumlu / ilgisiz / çatışma: <neden>
     North star (güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans) — <neden>
     ## İki bakış
-    - Dogfood: Deckent kendini geliştirirken bu ne katar?
+    - Dogfood: deckent kendini geliştirirken bu ne katar?
     - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
       Kod/test'e özgü bir öğe kalıyorsa git adapter'ında mı?
 

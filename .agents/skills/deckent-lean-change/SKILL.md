@@ -1,9 +1,9 @@
 ---
 name: deckent-lean-change
-description: Writing or changing code or tests in Deckent Next - the smallest complete change that fully solves the decided scope, with the fewest tests that prove it.
+description: Writing or changing code or tests in deckent Next - the smallest complete change that fully solves the decided scope, with the fewest tests that prove it.
 ---
 
-# Deckent lean change
+# deckent lean change
 
 Apply `deckent-next-refactor`. This skill shapes how a change is written; it grants no authority and decides no
 scope. Adapted from dietrichgebert/ponytail `skills/ponytail` (MIT, see [LICENSE-ponytail.md](LICENSE-ponytail.md)).
@@ -21,8 +21,8 @@ Take the first rung that fully works:
 
 1. Does it need to exist? Decided scope counts as asked for and is built complete (north star: no MVP ceiling).
    The smallest-version rule applies only to extras nobody decided: skip them and name them in one line.
-2. Already in Deckent (a port, registry, helper, renderer, pattern)? Use it the way the surrounding code does.
-3. Node standard library or a platform feature? Use it, unless Deckent has its own.
+2. Already in deckent (a port, registry, helper, renderer, pattern)? Use it the way the surrounding code does.
+3. Node standard library or a platform feature? Use it, unless deckent has its own.
 4. An installed dependency? Use it. Never add a dependency for a few lines.
 5. One line a reader gets at a glance? One line.
 6. Otherwise: the minimum code that works.
@@ -35,7 +35,7 @@ Take the first rung that fully works:
 - Moved or merged code keeps its error handling and validation.
 - Between options of equal size, take the one correct on edge cases. Comment only the why, in one line.
 
-## What complete means in Deckent
+## What complete means in deckent
 
 Smallest never drops a law: mutable policy and model or provider identities as registry data, not literals;
 user-facing strings in matching EN and TR catalogs through the shared renderer; one typed application contract;
