@@ -765,7 +765,7 @@ deckent terminal attach --unregister --apply
 deckent init identity --keep
 ```
 
-Ardından önceden bağlı klasörlerin yeniden bağlanması gerekir. Düzeltme bir sonraki beta için planlanıyor.
+Kayıtlı kaynak olmayan projede yalnız `deckent init identity --keep` yeter. İki komuttan sonra kaynak proje yeniden çalışır; ancak onu yeniden kaydetmek ve başka klasörleri ona bağlamak, bir sonraki beta için planlanan düzeltmeye kadar reddedilir (`PROJECT_ATTACHMENT_CHANGED`).
 
 ## Kurtarma ve yükseltme
 

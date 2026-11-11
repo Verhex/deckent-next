@@ -770,7 +770,7 @@ deckent terminal attach --unregister --apply
 deckent init identity --keep
 ```
 
-Afterwards, previously attached folders must be attached again. A fix is planned for the next beta.
+In a project that is not the registered source, `deckent init identity --keep` alone is enough. After the two commands the source project works again, but registering it again and attaching other folders to it is refused (`PROJECT_ATTACHMENT_CHANGED`) until the fix planned for the next beta.
 
 ## Recovery and upgrades
 

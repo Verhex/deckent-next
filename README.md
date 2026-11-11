@@ -190,7 +190,7 @@ deckent --version
 
 Use a fresh `--out` directory each time, or stage an existing completed build that matches the checked-out bubblewrap lock.
 Then run `deckent doctor` in each existing project folder.
-If doctor reports `INSTALLATION_IDENTITY_RELOCATED` in the registered source project, run `deckent terminal attach --unregister --apply` there, then `deckent init identity --keep`; attached folders must be attached again (see [the known limit](docs/known-limits.md#installation-moved)).
+If doctor reports `INSTALLATION_IDENTITY_RELOCATED` in the registered source project, run `deckent terminal attach --unregister --apply` there, then `deckent init identity --keep`; in a project that is not the registered source the second command alone is enough (see [the known limit](docs/known-limits.md#installation-moved)).
 
 ### Your first session
 
