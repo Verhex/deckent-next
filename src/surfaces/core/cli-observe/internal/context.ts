@@ -9,7 +9,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 
 /** The host operations the kernel commands (doctor, paths, policy vocabulary) use; the CLI's full command context satisfies it. */
 export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
-  | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
+  | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths' | 'inspectWorkerKinds'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
   inspectLegacyProjectInstructions?: (root: string) => Promise<boolean>;
   inspectCodingRepository?: (root: string, options: ConfigLoadOptions) => Promise<ExecutionEnvironmentDoctorView>;
   inspectModelBinding?: import('#surfaces/core/cli-models/index.js').ModelCommandContext['inspectModelBinding'];

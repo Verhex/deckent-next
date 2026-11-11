@@ -22,6 +22,7 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
   readonly budgetPeriodText?: string | null;
@@ -171,6 +172,8 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
+  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(row('work', 'work.kind', 'warning',
+    kind.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l), kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l)));
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)

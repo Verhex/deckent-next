@@ -5,6 +5,7 @@ import type { AffectedProfile } from './update.js';
 
 /** What both derivations read from the installed configuration: its admission registry (an unreadable registry admits nothing). */
 export type ToolchainAdmissionSource = Readonly<{ admission?: Readonly<{ registry?: unknown }> | null | undefined }>;
+export type WorkerKindAvailability = Readonly<{ kind: string; reason: 'image-missing' | 'image-unverified' | null; rebind: boolean }>;
 
 const pinSchema = z.looseObject({ provider: z.string(), preflight: z.looseObject({ cliVersion: z.string() }).optional() });
 const nativeProfileSchema = z.looseObject({ id: z.string(), version: persistedNumber(z.number()), parameters: z.looseObject({ imageId: z.string().optional(),
