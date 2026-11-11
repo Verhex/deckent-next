@@ -8,9 +8,10 @@ import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/i
   | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED'
   | 'PROJECT_ATTACHMENT_PERSON_MISMATCH' | 'MODEL_USE_NOT_ACTIVE' | 'MODEL_USE_BINDING_CHANGED';
 export class ProjectAttachmentError extends CodedError {
-  constructor(override readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
+  // Transient local display context; general query mapping deliberately keeps only the code.
+  constructor(override readonly code: ProjectAttachmentErrorCode, readonly sourceRoot?: string) { super(code); this.name = 'ProjectAttachmentError'; }
 }
-export const attachmentFailure = (code: ProjectAttachmentErrorCode): never => { throw new ProjectAttachmentError(code); };
+export const attachmentFailure = (code: ProjectAttachmentErrorCode, sourceRoot?: string): never => { throw new ProjectAttachmentError(code, sourceRoot); };
 export const sameAttachmentPerson = (a: AttachmentPerson, b: AttachmentPerson) => a.issuer === b.issuer && a.subject === b.subject;
 export interface InstallationContextPorts {
   registration(): Promise<InstallationRegistration | null>;
@@ -54,8 +55,8 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   return Object.freeze({ kind: 'attached', identity: observed.identity, source: registration.source, attachment });
 }
 /** Only the existing identity is returned; losing the reference target never creates a replacement. */
-export function existingSharedIdentity(identity: InstallationIdentityRead): InstallationIdentity {
-  if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
+export function existingSharedIdentity(identity: InstallationIdentityRead, sourceRoot?: string): InstallationIdentity {
+  if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE', sourceRoot);
   return identity.value;
 }
 

@@ -770,11 +770,14 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
 number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
-In a project that is not the registered source, `deckent init identity --keep` is enough.
+In an unattached project that is not the registered source, `deckent init identity --keep` updates the binding.
+In beta.2 the current binding comparison stays in force; this release does not automatically accept a changed device number.
 
-In the registered source project `deckent init identity --keep` is currently refused with
-`PROJECT_ATTACHMENT_SOURCE_REGISTERED`. When the source has **no attached project** (none active or pending), run these
-commands in that folder, in this order:
+In the registered source project, both `deckent init identity --keep` and `--new` are refused with
+`PROJECT_ATTACHMENT_SOURCE_REGISTERED`, with separate English/Turkish explanations instead of the raw `UNKNOWN` error.
+Nothing is changed. Creating a new identity would break the project references; `--keep` cannot yet reconcile them.
+An attachment refused because its source cannot be verified names the registered source folder locally.
+When the source has **no attached project** (none active or pending), run these commands in that folder, in this order:
 
 ```sh
 deckent terminal attach --unregister --apply
@@ -787,7 +790,13 @@ The source project then works again, but registering it again and attaching othe
 When the source **has attached projects**, the first command is refused with `PROJECT_ATTACHMENT_SOURCE_REGISTERED` until
 each one is detached (`deckent terminal attach --detach <projectId> --apply`). That path has not been confirmed for a moved
 installation; this beta may offer no way out there short of restoring a backup. The guard stays as it is; the binding fix
-is planned for the next beta.
+is planned for beta.2.1. beta.2 is the reader release; it does not repair registered-source recovery.
+
+A project vault whose owner still exists at the same canonical path and inode but has a different disk device number
+is now **uncertain**, not gone. Vault access, claiming and handover are refused with `SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE`; the binding and grants
+are unchanged. Restore the original disk under its recorded device number or restore a verified backup before retrying.
+A missing owner path or another inode keeps the existing handover rules. This does not repair the personal secret store
+or renew project trust.
 
 ## Recovery and upgrades
 

@@ -28,9 +28,9 @@ export class ProjectAttachmentApplication {
   constructor(private readonly ports: ProjectAttachmentPorts) {}
   private async currentSource(registration: InstallationRegistration) {
     if (!sameAttachmentPerson(registration.source.owner, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
-    const observed = await this.ports.source(registration.source.projectRoot, registration.source.scopeId, this.ports.actor).catch((error: unknown) => { if (isCodedError(error, 'PROJECT_ATTACHMENT_READ_LIMIT')) throw error; return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'); });
-    if (JSON.stringify(observed.source) !== JSON.stringify(registration.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-    existingSharedIdentity(observed.identity);
+    const observed = await this.ports.source(registration.source.projectRoot, registration.source.scopeId, this.ports.actor).catch((error: unknown) => { if (isCodedError(error, 'PROJECT_ATTACHMENT_READ_LIMIT')) throw error; return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE', registration.source.projectRoot); });
+    if (JSON.stringify(observed.source) !== JSON.stringify(registration.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED', registration.source.projectRoot);
+    existingSharedIdentity(observed.identity, registration.source.projectRoot);
     return observed.identity;
   }
   registrationPreview(root: string, scopeId: string) { return this.ports.observe ? this.ports.observe(() => this.registrationPreviewCore(root, scopeId)) : this.registrationPreviewCore(root, scopeId); }

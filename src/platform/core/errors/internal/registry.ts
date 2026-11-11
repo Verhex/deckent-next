@@ -181,10 +181,14 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
 }, plainErrors('error.', { INSTALLATION_ROOT_FOREIGN: 'config', INSTALLATION_ROOT_INSIDE_DATA_ROOT: 'config', INSTALLATION_ROOT_WALK_UNSUPPORTED: 'config' }), {
   INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
   PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
+  PROJECT_ATTACHMENT_SOURCE_REGISTERED: { category: 'config', render: (p, l) => ({ message: p['identityChoice'] === 'keep' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.keep', p, l)
+    : p['identityChoice'] === 'new' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.new', p, l) : t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED', p, l) }) },
+  PROJECT_ATTACHMENT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_UNAVAILABLE', p, l) }) },
+  PROJECT_ATTACHMENT_CHANGED: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_CHANGED', p, l) }) },
 }, plainErrors('error.', {
   INSTALLATION_IDENTITY_RELOCATED: 'config', INSTALLATION_IDENTITY_RESOLUTION_INVALID: 'config', INSTALLATION_IDENTITY_INVALID: 'config',
-  PROJECT_ATTACHMENT_INVALID: 'config', PROJECT_ATTACHMENT_SOURCE_REGISTERED: 'config', PROJECT_ATTACHMENT_READ_LIMIT: 'config', PROJECT_ATTACHMENT_UNAVAILABLE: 'config',
-  PROJECT_ATTACHMENT_CHANGED: 'config', PROJECT_ATTACHMENT_PERSON_MISMATCH: 'config', MODEL_USE_NOT_ACTIVE: 'config',
+  PROJECT_ATTACHMENT_INVALID: 'config', PROJECT_ATTACHMENT_READ_LIMIT: 'config',
+  PROJECT_ATTACHMENT_PERSON_MISMATCH: 'config', MODEL_USE_NOT_ACTIVE: 'config',
   MODEL_USE_BINDING_CHANGED: 'config', PROJECT_ATTACHMENT_REVOKED: 'config', PROJECT_ATTACHMENT_INCOMPLETE: 'config', PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED: 'config',
   INSTALLATION_IDENTITY_UNAVAILABLE: 'config', INSTALLATION_IDENTITY_MASKED: 'config', INSTALLATION_IDENTITY_LOCKED: 'config',
   INSTALLATION_IDENTITY_UNSUPPORTED: 'config', INSTALLATION_IDENTITY_SOURCE_INVALID: 'config', INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED: 'config',
@@ -520,7 +524,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   SECRET_PROJECT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_MISSING', p, l), suggestion: t('remedy.SECRET_PROJECT_MISSING', p, l) }) },
 }, plainErrors('error.', { SECRET_PROJECT_IDENTITY_REQUIRED: 'error' }), {
   SECRET_PROJECT_VAULT_OWNERSHIP_LOST: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l) }) },
-}, plainErrors('error.', { SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE: 'error' }), {
+  SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'uncertain' ? t('error.SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE.device', p, l) : t('error.SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', p, l) }) },
   SECRET_PROJECT_VAULT_CLAIMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_CLAIMED', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_CLAIMED', p, l) }) },
 }, plainErrors('error.', {
   SECRET_GRANT_STORE_UNSAFE: 'error', SECRET_GRANT_STORE_INVALID: 'error',

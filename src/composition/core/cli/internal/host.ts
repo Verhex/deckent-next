@@ -39,7 +39,7 @@ import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalH
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, t, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, t, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -50,7 +50,12 @@ import { configuredSetup } from '#composition/core/setup/index.js';
 import { assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
 /** A host handler's failure leaves as a typed query failure: its registered code, never the raw cause. */
-const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) => { throw queryFailure(error); });
+// Source folders are local display facts only, never general query/service error parameters.
+const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) => {
+  if ((isCodedError(error, 'PROJECT_ATTACHMENT_UNAVAILABLE') || isCodedError(error, 'PROJECT_ATTACHMENT_CHANGED'))
+    && 'sourceRoot' in error && typeof error.sourceRoot === 'string') throw ErrorRegistry.createError(error.code, { params: { source: terminalSafeText(error.sourceRoot) } });
+  throw queryFailure(error);
+});
 const installationProfile = (path: string) => readInstallationProfileFile(path, getConfigFieldDefault('installation').profileMaxBytes);
 
 /** The call's settings the light entry resolved before any host module loaded. */
@@ -120,7 +125,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
     ensureTerminalIdentity: (projectRoot, scopeId, options) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options)),
-    resolveInstallationIdentity: resolveConfiguredInstallationIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
+    resolveInstallationIdentity: (root, choice, options) => typed(resolveConfiguredInstallationIdentity(root, choice, options)),
+    loadInstallationIdentity: (root, options) => typed(loadConfiguredInstallationIdentity(root, options)), loadProjectIdentity: (root, options) => typed(loadConfiguredProjectIdentity(root, options)),
     stopRuntimeService: (projectRoot, options, reason) => stopConfiguredRuntimeService(projectRoot, options, reason), inspectBackupSets: inspectConfiguredBackupSets, inspectAdminPaths: inspectConfiguredAdminPaths,
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
@@ -166,7 +172,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
     openModelInspection: openConfiguredModelInspection,
-    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,
@@ -222,11 +228,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     projectAttachment: (root, input, options, interaction) => typed(executeConfiguredProjectAttachment(root, input, options, path => narrowDirectory(path, interaction?.json))),
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => typed(previewPolicyTemplateInstallation(projectRoot, scopeId)),
     applyPolicyTemplateInstallation: (projectRoot, scopeId, interaction) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId, {}, path => narrowDirectory(path, interaction?.json))),
-    openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),
-    openPermissionModesInstallation: (projectRoot, scopeId, input) => openPermissionModesInstallation(projectRoot, scopeId, input),
+    openOwnerBaselineInstallation: (projectRoot, scopeId, input) => typed(openOwnerBaselineInstallation(projectRoot, scopeId, input)),
+    openPermissionModesInstallation: (projectRoot, scopeId, input) => typed(openPermissionModesInstallation(projectRoot, scopeId, input)),
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => typed(installConfiguredExecutionPool(projectRoot, scopeId, apply)),
-    inspectOwnerBaseline: inspectOwnerBaselineInstallation,
+    inspectOwnerBaseline: (root, scopeId, options) => typed(inspectOwnerBaselineInstallation(root, scopeId, options)),
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options), inspectAnchoredPolicyTemplate,
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
