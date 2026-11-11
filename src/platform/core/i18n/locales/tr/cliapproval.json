@@ -35,7 +35,7 @@
   "cli.policy.upgrade.rolledBack": "Güncel ilk kurulum kuralları kaldırıldı ({ids}); önceki belgeler arşivde duruyor.",
   "cli.policy.upgrade.nothing": "Kaldırılacak ilk kurulum kuralı yok; hiçbir şey yazılmadı.",
   "cli.policy.upgrade.noUpgradeRecorded": "Geri alınacak bir şey yok: bu policy ilk kurulum şablonunun kendi sürümü ve yetki arşivinde bir yükseltmesi kayıtlı değil; hiçbir şey yazılmadı. Şablonu ve yöneticileri: deckent policy status --scope {scope}",
-  "cli.policy.upgrade.historyMissing": "Geri alma reddedildi: bu policy'nin önceki sürümleri yetki arşivinde yok, bu yüzden Deckent bir yükseltmenin hangi kuralları eklediğini kanıtlayamıyor; hiçbir şey yazılmadı. Policy'yi kontrol edin: deckent policy status --scope {scope}",
+  "cli.policy.upgrade.historyMissing": "Geri alma reddedildi: bu policy'nin önceki sürümleri yetki arşivinde yok, bu yüzden deckent bir yükseltmenin hangi kuralları eklediğini kanıtlayamıyor; hiçbir şey yazılmadı. Policy'yi kontrol edin: deckent policy status --scope {scope}",
   "cli.policy.revoke.notFound": "Bu kapsamda size ait {id} kalıcı onayı yok; hiçbir şey değişmedi.",
   "cli.policy.revoke.done": "Kalıcı onay {id} geri alındı; aynı çağrı yeniden sorar.",
   "cli.policy.revoke.kept": "Kalıcı onay {id} korundu (onaylanmadı; terminal yoksa --yes verin).",

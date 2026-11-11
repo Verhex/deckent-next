@@ -79,7 +79,7 @@ it('add, revoke (unique 12-character prefix, the card says committed rows stay m
   const f = await project(), calls: unknown[] = []; card.interactive = true; card.answers = ['apply', 'apply', 'apply', 'apply'];
   const run = (args: string[], extra = {}) => agentsCommand(['agents', ...args, '--scope', 'scope', '--lang', 'en'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handlers(calls), ...extra });
   await run(['add-signer', '--input', 'key.json']);
-  expect(JSON.stringify(card.asked[0])).toContain(vendorId); expect(JSON.stringify(card.asked[0])).toContain('Deckent does not protect it');
+  expect(JSON.stringify(card.asked[0])).toContain(vendorId); expect(JSON.stringify(card.asked[0])).toContain('deckent does not protect it');
   await run(['revoke-signer', 'c'.repeat(12)]);
   expect(JSON.stringify(card.asked[1])).toContain('The 2 committed rows it signed stay as they are');
   await run(['repair-signers']);

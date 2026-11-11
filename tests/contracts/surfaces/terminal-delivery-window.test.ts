@@ -274,8 +274,8 @@ describe('delivery intent on the queue enqueue (cli-terminal port)', () => {
         files: [], added: 0, removed: 0, source: 'SRC', base: BASE, proposal: 'PROP', outOfScope: [], adoptionTargets: [], verification: null } as DeliveryPreview };
     const texts = (preview: DeliveryPreview, locale: 'en' | 'tr') => deliveryLines({ ...entry, preview }, deliveryWindowLabels(locale)).map(row => row.spans.map(part => part.text).join(''));
     const queued = { ...entry.preview, queueTarget: 'refs/heads/integration', reattempt: true } as const;
-    expect(texts(queued, 'en')).toContain('If the target moves on, Deckent re-attempts this once on the new base; your cards still decide.');
-    expect(texts(queued, 'tr')).toContain('Hedef ilerlerse Deckent bunu yeni tabanda bir kez yeniden dener; kararı yine kartlarınız verir.');
+    expect(texts(queued, 'en')).toContain('If the target moves on, deckent re-attempts this once on the new base; your cards still decide.');
+    expect(texts(queued, 'tr')).toContain('Hedef ilerlerse deckent bunu yeni tabanda bir kez yeniden dener; kararı yine kartlarınız verir.');
     for (const preview of [entry.preview, { ...entry.preview, queueTarget: 'refs/heads/integration' }, { ...entry.preview, reattempt: true } as const])
       for (const locale of ['en', 'tr'] as const) expect(texts(preview, locale)).not.toContain(deliveryWindowLabels(locale).reattempt);
     // R9p: working-tree mode names the file write instead of the reference; a preview without an integration check (delivered) names no base or source.

@@ -26,7 +26,7 @@ const run = (locale: Locale, name: 'status' | 'scope' | 'model' | 'usage', overr
 
 describe.each([
   ['en', {
-    status: [`Deckent is running · version ${VERSION} · model Qwen 3 8B (local server)`, 'Details',
+    status: [`deckent is running · version ${VERSION} · model Qwen 3 8B (local server)`, 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  REPORT-TAIL', `  Runtime service now: instance ${SERVICE}, pid 4242, build aaaaaaaaaaaa`],
     scope: ['You: alperen · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standard · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  Permission mode: standart (policy revision p-7; modes supported: yes; full access allowed: no)'],
@@ -39,7 +39,7 @@ describe.each([
       'A measurement or account snapshot, not an invoice.'],
   }],
   ['tr', {
-    status: [`Deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
+    status: [`deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  REPORT-TAIL', `  Çalışma servisi şimdi: örnek ${SERVICE}, pid 4242, sürüm aaaaaaaaaaaa`],
     scope: ['Siz: alperen · Proje: deckent-next (b7d1e2f3) · Şirket: varsayılan · Mod: standart · Kural sürümü: p-7', 'Kapsam: scope-main', 'Yüzey erişimi: işler, işçiler, onaylar', 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  İzin modu: standart (politika revizyonu p-7; modlar destekleniyor: evet; tam erişim izinli: hayır)'],

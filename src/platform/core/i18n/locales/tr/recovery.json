@@ -44,7 +44,7 @@
   "recovery.state.unknown": "Kalıcı onay okunamadı; okunana kadar kaybolan işçi vakaları bir kişiye gider.",
   "recovery.unresolved.off": "  Bu iş kabul edildiğinde otomatik kurtarma kapalıydı: hiçbir şey kendiliğinden yeniden denenmez ve yeni deneme başlamaz; bir kişi karar verir.",
   "recovery.unresolved.shadow": "  Bu iş için kurtarma gölge kipinde: bir kurtarma kararı incelemek için kaydedilir ama hiçbir şey kendiliğinden devam etmez; bir kişi karar verir.",
-  "recovery.unresolved.live": "  Bu iş için otomatik kurtarma açık: işçinin kaybolduğu kanıtlandığında, açık dış iş kalmadığında ve sahibin kalıcı izni buna olanak verdiğinde Deckent bu görevi bu iş için dondurulan sınırlar içinde yeni bir denemeyle sürdürebilir; aksi halde bir kişi karar verir.",
+  "recovery.unresolved.live": "  Bu iş için otomatik kurtarma açık: işçinin kaybolduğu kanıtlandığında, açık dış iş kalmadığında ve sahibin kalıcı izni buna olanak verdiğinde deckent bu görevi bu iş için dondurulan sınırlar içinde yeni bir denemeyle sürdürebilir; aksi halde bir kişi karar verir.",
   "error.RECOVERY_TARGET_INVALID": "Hiçbir şey değişmedi: bu kurtarma eylemi, kuralı ya da vakası bu kartta burada sunulmuyor. Seçebileceklerinizi görmek için deckent policy recovery ya da deckent recovery review çalıştırın.",
   "error.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Değişmedi: {target}, {scope} kapsamında yalnız ölçülen çıkış ölçütleri ({criteria}) sağlandıktan sonra açılabilir.",
   "recovery.next.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Her sayıyı ve onu neyin ilerlettiğini görmek için deckent recovery --scope {scope} çalıştırın.",

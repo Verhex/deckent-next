@@ -13,7 +13,7 @@ import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
 export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.open
-  ? `Runs in an open bubblewrap sandbox (full access): network on, HOME visible, Deckent state and credentials hidden/read-only; ${describeShellWritePosture(view)}; `
+  ? `Runs in an open bubblewrap sandbox (full access): network on, HOME visible, deckent state and credentials hidden/read-only; ${describeShellWritePosture(view)}; `
     + `${t('shell.homeSubtreesMayBeHidden')}; the rest of the machine is reachable as your user, and every process it starts ends with the call.`
   : `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
@@ -21,7 +21,7 @@ export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.o
  * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
 const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
   + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; ${profile ? 'its own private HOME (a persistent cache) is writable and the network is on; '
-    + 'your HOME, project secrets and Deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
+    + 'your HOME, project secrets and deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
 /** K4: the targets of the system resolver files that lie outside the bound system prefixes (a symbolic link the view would otherwise leave
  * dangling, e.g. WSL's `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`): regular files only, each bound alone and read-only. */
 const RESOLVER_FILES = ['/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'];
@@ -109,14 +109,14 @@ async function sealedRoots(project: string, roots: readonly string[], environmen
   | { readonly ok: false; readonly reason: string }> {
   const real: string[] = [], home = environment['HOME'];
   for (const root of roots) {
-    if (!isAbsolute(root)) return { ok: false, reason: `a Deckent state root is not absolute (${root})` };
+    if (!isAbsolute(root)) return { ok: false, reason: `a deckent state root is not absolute (${root})` };
     try { await mkdir(root, { recursive: true, mode: 0o700 }); real.push(await realpath(root)); }
-    catch { return { ok: false, reason: `a Deckent state root could not be prepared (${root})` }; }
+    catch { return { ok: false, reason: `a deckent state root could not be prepared (${root})` }; }
   }
   if (contained && (open || !roots.includes(contained) || !real.includes(contained) || contained === project || !under(project, contained) || under(home ?? '/', contained)))
     return { ok: false, reason: t('headless.agent.workspace.containedWorkspaceRefused', undefined, resolveLocale(undefined, environment)) };
   const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])], sealed = real.filter(root => root !== contained);
-  for (const root of sealed) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
+  for (const root of sealed) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
   const outer = [...new Set(sealed)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
   return { ok: true, sealed: outer.filter(root => under(root, project)), hidden: outer.filter(root => !under(root, project)) };
 }

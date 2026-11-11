@@ -161,12 +161,12 @@
   "desktop.theme.watch.night-watch": "Gece seyri",
   "desktop.theme.watch.nova": "Nova",
   "desktop.theme.watch.open-sea": "Açık deniz",
-  "desktop.tray.open": "Deckent'i Aç",
+  "desktop.tray.open": "deckent'i Aç",
   "desktop.tray.quit": "Çıkış",
-  "desktop.tray.tooltip": "Deckent Masaüstü",
+  "desktop.tray.tooltip": "deckent Masaüstü",
   "desktop.update.available": "Yeni bir sürüm mevcut.",
   "desktop.update.check_for_updates": "Güncellemeleri Denetle",
   "desktop.update.downloading": "Güncelleme indiriliyor…",
-  "desktop.update.restart_to_apply": "Güncellemeyi uygulamak için Deckent'i yeniden başlatın.",
-  "desktop.window.minimize_to_tray_hint": "Deckent, sistem tepsisinde çalışmaya devam eder. Yeniden açmak veya çıkmak için tepsi simgesine sağ tıklayın."
+  "desktop.update.restart_to_apply": "Güncellemeyi uygulamak için deckent'i yeniden başlatın.",
+  "desktop.window.minimize_to_tray_hint": "deckent, sistem tepsisinde çalışmaya devam eder. Yeniden açmak veya çıkmak için tepsi simgesine sağ tıklayın."
 }

@@ -11,7 +11,7 @@
   "cli.run.inspect.cancelRequested": "  İptal: istek kaydedilmiş; işçi sonlanması doğrulanmadı.",
   "cli.run.inspect.cancelNoWorker": "  İptal: istek kaydedilmiş; iptal edilen iş için hiçbir işçi başlatılmadı (başlatılmadan durduruldu).",
   "cli.run.inspect.cancelAbsent": "  İptal: istek kaydedilmemiş.",
-  "cli.run.inspect.unresolved": "  işçi sonucu doğrulanmadı: Deckent işçinin durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; onun sözüyle hiçbir şey kabul edilmez ya da serbest bırakılmaz. Çalışırken runtime servisi işçiyi yeniden kontrol eder.",
+  "cli.run.inspect.unresolved": "  işçi sonucu doğrulanmadı: deckent işçinin durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; onun sözüyle hiçbir şey kabul edilmez ya da serbest bırakılmaz. Çalışırken runtime servisi işçiyi yeniden kontrol eder.",
   "cli.run.cancel.heading": "İş {run} | iptal isteği kaydedildi | komut {command}",
   "cli.run.cancel.outcome": "  Görev {task} / Attempt {attempt}: {status}",
   "cli.run.cancel.terminal": "süreç çıkışı kaydedildi",

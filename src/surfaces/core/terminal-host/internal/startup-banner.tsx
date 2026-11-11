@@ -44,8 +44,8 @@ export function StartupBanner({ startup, columns }: { readonly startup: Workline
   const [title, ...facts] = startup.lines;
   const hint = facts.at(-1), details = facts.slice(0, -1);
   return (
-    <Box flexDirection="row">
-      <Box flexDirection="column" marginRight={2}>{startup.logo.map((row, index) => <Text key={index} {...palette.accent}>{row}</Text>)}</Box>
+    <Box flexDirection="row" alignItems="flex-end">
+      <Box flexDirection="column" marginRight={2} flexShrink={0}>{startup.logo.map((row, index) => <Text key={index} {...palette.accent}>{row}</Text>)}</Box>
       <Box flexDirection="column">
         {title ? <Text {...palette.strong} wrap="truncate-end">{title}</Text> : null}
         {details.map((line, index) => <Text key={index} wrap="truncate-end">{line}</Text>)}

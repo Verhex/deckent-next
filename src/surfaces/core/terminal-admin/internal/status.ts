@@ -69,7 +69,7 @@ export async function statusView(call: TerminalAdminCall, report: () => Promise<
   return { model: { title: t('terminal.info.status.title', {}, locale), chips: [stateChip, { state: 'info', text: PACKAGE_VERSION }],
     summary: t('terminal.info.status.summary', { state: stateText, version: PACKAGE_VERSION }, locale),
     sections: [
-      { title: 'Deckent', rows: [{ key: t('terminal.info.status.key.state', {}, locale), value: stateText }, { key: t('terminal.info.status.key.version', {}, locale), value: PACKAGE_VERSION }, modelRow] },
+      { title: 'deckent', rows: [{ key: t('terminal.info.status.key.state', {}, locale), value: stateText }, { key: t('terminal.info.status.key.version', {}, locale), value: PACKAGE_VERSION }, modelRow] },
       { title: t('terminal.info.status.section.where', {}, locale), rows: [{ key: t('terminal.info.status.key.project', {}, locale), value: basename(root) || root, id: identity.projectId },
         { key: t('terminal.info.status.key.scope', {}, locale), value: scopeId }, { key: t('terminal.info.status.key.installation', {}, locale), value: t('terminal.info.status.installationValue', {}, locale), id: identity.installationId }] },
       serviceSection,

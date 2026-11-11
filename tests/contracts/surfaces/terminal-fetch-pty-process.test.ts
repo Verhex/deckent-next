@@ -180,7 +180,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url in a real pseudo-termin
     const f = await fetchProject();
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'check the local status page\r'],
+      ['deckent workline', 'check the local status page\r'],
       // Slice 2: the card takes the keyboard by itself; its keys show (and count) once it is armed.
       ['https://localhost/status?probe=1', ''], ['Enter confirm', 'y', 'next'],
       ['Fetch turn done.', '/exit\r'],

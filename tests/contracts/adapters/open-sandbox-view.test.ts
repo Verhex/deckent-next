@@ -37,7 +37,7 @@ describe('OPEN-SANDBOX posture', () => {
     expect(sandboxWriteView({ repositoryWritable: true }, { writeFloorReadOnly: true, projectReadOnly: true, open: true }).open).toBeUndefined();
     expect(sandboxWriteView({ repositoryWritable: true }, { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true, open: true }).open).toBeUndefined();
     const view = sandboxWriteView({ repositoryWritable: true }, shellWritePosture('full-access', 'unrecognized', true));
-    expect(bubblewrapPosture(view)).toContain('network on, HOME visible, Deckent state and credentials hidden/read-only');
+    expect(bubblewrapPosture(view)).toContain('network on, HOME visible, deckent state and credentials hidden/read-only');
     expect(bubblewrapPosture(view)).toContain('.git writable');
     expect(bubblewrapPosture(sandboxWriteView({}, shellWritePosture('owner-approved', 'unrecognized', false)))).toContain('there is no network');
   });

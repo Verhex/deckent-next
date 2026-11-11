@@ -111,7 +111,7 @@ export const MCP_HOST_REALM_HINT = 'a server that must write the project needs `
 export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string {
   if (realm === 'host') return HOST_POSTURE;
   if (realm === 'sandbox-net') return `sandbox with network: ${describeShellWritePosture(sandboxWriteView({}, longLivedWritePosture()))}; the server gets its own persistent HOME `
-    + `(for npx/uvx caches) and the network; your HOME, project secrets and Deckent state are hidden; no sandbox, no start; ${MCP_HOST_REALM_HINT}`;
+    + `(for npx/uvx caches) and the network; your HOME, project secrets and deckent state are hidden; no sandbox, no start; ${MCP_HOST_REALM_HINT}`;
   const write = describeShellWritePosture(sandboxWriteView({}, longLivedWritePosture()));
   return `sandbox${realm === 'prefer-sandbox' ? ' when one is usable (else on the host, said at the start)' : ' required'}: ${write}; ${MCP_HOST_REALM_HINT}`;
 }

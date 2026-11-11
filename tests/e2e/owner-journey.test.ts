@@ -133,7 +133,7 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // First open: onboarding with the Claude subscription sign-in (the fake CLI's own `auth login`), as the owner's C was set up.
     const t = open();
     await walk('onboarding', t, [['Choose a profile to preview', CTRL_O], [800, '\r'], ...card('Confirm to complete'), ...card('Give me these rights'), ...card('rights are given'),
-      ...card('No model is connected yet'), ...card('Sign in with Claude · no extra charge ›'), ...card('Sign in with its CLI and connect'), ...card("Deckent's own login directory"),
+      ...card('No model is connected yet'), ...card('Sign in with Claude · no extra charge ›'), ...card('Sign in with its CLI and connect'), ...card("deckent's own login directory"),
       ...card('who besides you may use this login'), ...card('Model connected'), ...card('Use my claude subscription'), ...card('Project instructions', ESC), [3000, '/exit\r']]);
     await t.closed;
     // Owner 2026-11-08: the consent card says the chat's AI may use the login by default. NF-2 + R8b: the one subscription choice writes the first kind.

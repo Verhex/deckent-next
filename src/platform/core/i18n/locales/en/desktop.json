@@ -161,12 +161,12 @@
   "desktop.theme.watch.night-watch": "Night watch",
   "desktop.theme.watch.nova": "Nova",
   "desktop.theme.watch.open-sea": "Open sea",
-  "desktop.tray.open": "Open Deckent",
+  "desktop.tray.open": "Open deckent",
   "desktop.tray.quit": "Quit",
-  "desktop.tray.tooltip": "Deckent Desktop",
+  "desktop.tray.tooltip": "deckent Desktop",
   "desktop.update.available": "A new version is available.",
   "desktop.update.check_for_updates": "Check for Updates",
   "desktop.update.downloading": "Downloading update…",
-  "desktop.update.restart_to_apply": "Restart Deckent to apply the update.",
-  "desktop.window.minimize_to_tray_hint": "Deckent keeps running in the tray. Right-click the tray icon to reopen or quit."
+  "desktop.update.restart_to_apply": "Restart deckent to apply the update.",
+  "desktop.window.minimize_to_tray_hint": "deckent keeps running in the tray. Right-click the tray icon to reopen or quit."
 }

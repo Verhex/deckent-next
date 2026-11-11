@@ -1,4 +1,4 @@
-Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● deckent-next (current) · ÇALIŞIYOR · ! 1 uyarı · /srv/owner/projects/deckent-…
 ● dogfood · ÇALIŞIYOR · ! 3 uyarı · /srv/owner/deckent-dogfood
 ○ remote-lab · ERİŞİLEMİYOR · ! 2 uyarı · /mnt/lab/deckent

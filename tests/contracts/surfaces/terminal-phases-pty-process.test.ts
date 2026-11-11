@@ -196,7 +196,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     const f = await phasesProject();
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'q1\r'], ['ANSWER-1', 'q2\r'], ['ANSWER-2', 'q3\r'], ['ANSWER-3', 'q4\r'], ['ANSWER-4', 'q5\r'],
+      ['deckent workline', 'q1\r'], ['ANSWER-1', 'q2\r'], ['ANSWER-2', 'q3\r'], ['ANSWER-3', 'q4\r'], ['ANSWER-4', 'q5\r'],
       // q5 compacts; its summary never answers: the live counter runs, then Esc stops it mid-summary.
       ['summarizing earlier messages · 1s', '\u001b'],
       ['cancelled (summarizing)', 'q6\r'],
@@ -240,7 +240,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
       messages: [{ role: 'user', content: 'q2' }], reasoning: 'off' }, () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_REASONING_UNSUPPORTED' });
     expect(f.calls.rounds).toEqual([]);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning\r'], ['Model thinking on', '\r'], ['reasoning on', 'q3\r'],
+      ['deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning\r'], ['Model thinking on', '\r'], ['reasoning on', 'q3\r'],
       ['ANSWER-3', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

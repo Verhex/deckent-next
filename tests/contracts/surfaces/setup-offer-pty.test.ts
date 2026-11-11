@@ -20,8 +20,8 @@ const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const python = (process.env['PATH'] ?? '').split(':').map(dir => join(dir, 'python3')).find(path => existsSync(path)) ?? 'python3';
 const ROWS = 40, COLUMNS = 110;
-const CARD = 'There is no Deckent installation here. Start setup?';
-const MISSING = 'No Deckent installation in this folder. Run `deckent init` to set it up. [CLI_INSTALLATION_MISSING]';
+const CARD = 'There is no deckent installation here. Start setup?';
+const MISSING = 'No deckent installation in this folder. Run `deckent init` to set it up. [CLI_INSTALLATION_MISSING]';
 const SCOPE_REQUIRED = 'Select a scope: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]';
 /** Waits for each `[text, keys]` step's text in the output since the previous step, then types the keys one by one (never a burst). */
 const PTY = String.raw`
@@ -197,8 +197,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
   it.each([
     { label: 'no', key: 'n', lang: 'en_US.UTF-8', card: CARD, missing: MISSING },
     { label: 'esc', key: '\u001b', lang: 'en_US.UTF-8', card: CARD, missing: MISSING },
-    { label: 'no-tr', key: 'n', lang: 'tr_TR.UTF-8', card: 'Burada Deckent kurulumu yok. Kuruluma başla?',
-      missing: 'Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın. [CLI_INSTALLATION_MISSING]' },
+    { label: 'no-tr', key: 'n', lang: 'tr_TR.UTF-8', card: 'Burada deckent kurulumu yok. Kuruluma başla?',
+      missing: 'Bu klasörde deckent kurulumu yok. Kurmak için `deckent init` çalıştırın. [CLI_INSTALLATION_MISSING]' },
   ])('NEGATIVE: the card, then $label: nothing is written in the folder or HOME, the human answer names `deckent init`, exit 2 as before', async ({ label, key, lang, card, missing }) => {
     await access(cli);
     const f = await fixture();
@@ -210,7 +210,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     // alpha.59 L3: a main-screen card never takes mouse reports, so the terminal's own selection works on it; Ctrl+Y is the quick copy.
     expect(run.output).not.toContain('\u001b[?1000h'); expect(run.output).toContain(lang.startsWith('tr') ? 'Ctrl+Y kopyala' : 'Ctrl+Y copy');
     expect(run.output).toContain(missing);
-    expect(run.output).not.toMatch(/init policy|TERMINAL_SCOPE_REQUIRED|Deckent setup|Deckent kurulumu plan/u);
+    expect(run.output).not.toMatch(/init policy|TERMINAL_SCOPE_REQUIRED|deckent setup|deckent kurulumu plan/u);
     expect(run.status, run.output.slice(-2000)).toBe(2);
     expect(await f.empty()).toEqual({ root: [], home: [] });
   }, 120_000);
@@ -222,7 +222,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(run.timeout, run.output.slice(-2000)).toBeUndefined();
     expect(run.output).toContain(`Folder: ${f.root}`);
     // One Ink owner at a time: the card closed before the setup window drew its title.
-    expect(run.output.indexOf('Deckent setup')).toBeGreaterThan(run.output.indexOf(CARD));
+    expect(run.output.indexOf('deckent setup')).toBeGreaterThan(run.output.indexOf(CARD));
     expect(run.output).toContain('Nothing was applied.');
     expect(run.output.indexOf(MISSING)).toBeGreaterThan(run.output.indexOf('Nothing was applied.'));
     expect(run.output).not.toContain('TERMINAL_SCOPE_REQUIRED');
@@ -248,10 +248,10 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     // The setup summary (the same flow as `deckent init`), then the terminal on the scope the window wrote; no card again, no error.
     expect(run.output).toContain('Permissions: applied');
     expect(run.output).toContain('Authority pending. Open deckent terminal'); expect(run.output.indexOf('Permission settings')).toBeGreaterThan(run.output.indexOf('Step 1/'));
-    expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
+    expect(run.output.indexOf('deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     // alpha.60 B (draw first): the Workline frame comes first, the waiting setup card opens on it and the Workline returns after the last card.
-    expect(run.output.indexOf('Deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Project instructions'));
+    expect(run.output.indexOf('deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('deckent workline')).toBeGreaterThan(run.output.indexOf('Project instructions'));
     expect(run.output.slice(run.output.indexOf('Permissions: applied'))).not.toContain(CARD);
     expect(run.output).not.toMatch(/CLI_INSTALLATION_MISSING|TERMINAL_SCOPE_REQUIRED/u);
     expect((await readdir(f.root)).sort()).toEqual(['.deckent', '.git']);

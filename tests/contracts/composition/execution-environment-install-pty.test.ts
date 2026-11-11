@@ -117,7 +117,7 @@ describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on 
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('Docker Engine kurulumu');
     for (const text of ['sudo install -m 0755 -d /etc/apt/keyrings', 'sudo apt-get update', 'sudo usermod -aG docker fake', '9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88',
-      'root yetkisine eşittir', 'Deckent onu hiç görmez']) expect(run.output, text).toContain(text);
+      'root yetkisine eşittir', 'deckent onu hiç görmez']) expect(run.output, text).toContain(text);
     expect(run.output).toContain('DRIVER-STATUS=declined');
     // Cond. 2 order: no sudo call of any kind before the person's answer.
     expect(await f.argv()).toEqual([]);

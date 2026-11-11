@@ -31,7 +31,7 @@ const LABELS = { hints: 'CLOSE-HINTS', pickHints: 'PICK-HINTS', position: '{from
 const DIGEST = '3f9a2c71e4b8d0aa55c1e2f3a4b5c6d7e8f90123';
 const MODEL: InfoWindowModel = { title: 'Status', chips: [{ state: 'ok', text: 'running' }, { state: 'info', text: 'alpha.13' }], summary: 'Status: running',
   sections: [
-    { title: 'Deckent', rows: [{ key: 'State', value: 'running', chip: { state: 'ok', text: 'ok' } }, { key: 'Version', value: '1.0.0-alpha.13' }] },
+    { title: 'deckent', rows: [{ key: 'State', value: 'running', chip: { state: 'ok', text: 'ok' } }, { key: 'Version', value: '1.0.0-alpha.13' }] },
     { title: 'Service', chip: { state: 'warn', text: 'stale' }, rows: [{ key: 'Instance', value: 'runtime service', id: DIGEST }, { key: 'Process', value: '4242' }] },
     { title: 'Checks', items: [{ text: 'pool ready', chip: { state: 'fail', text: 'failed' } }], table: { columns: ['Area', 'State'], rows: [['pools', 'ready']] }, notes: ['a muted note'] },
   ] };
@@ -56,7 +56,7 @@ describe('information window model (SW-1)', () => {
 
   it('reads without colour: ASCII shapes plus words, aligned keys (proof render)', () => {
     const text = infoModelText(MODEL, INFO_GLYPHS_ASCII);
-    expect(text).toEqual(['Status', '[+ running] [i alpha.13]', '', '> Deckent', 'State    running [+ ok]', 'Version  1.0.0-alpha.13', '', '> Service [! stale]',
+    expect(text).toEqual(['Status', '[+ running] [i alpha.13]', '', '> deckent', 'State    running [+ ok]', 'Version  1.0.0-alpha.13', '', '> Service [! stale]',
       'Instance runtime service 3f9a2c71...', 'Process  4242', '', '> Checks', '  - pool ready [x failed]', 'Area   State', 'pools  ready', 'a muted note']);
     expect(shortenIdentity('abc123')).toBe('abc123');
   });
@@ -67,7 +67,7 @@ describe('InfoWindow (SW-1)', () => {
     const closed: Array<string | null> = [];
     const view = mount(createElement(InfoWindow, { model: MODEL, labels: LABELS, onClose: choice => closed.push(choice) }));
     await settle();
-    expect(view.frame()).toContain('Status'); expect(view.frame()).toContain('▸ Deckent'); expect(view.frame()).toContain('[✓ running]');
+    expect(view.frame()).toContain('Status'); expect(view.frame()).toContain('▸ deckent'); expect(view.frame()).toContain('[✓ running]');
     expect(view.frame()).toContain('3f9a2c71…'); expect(view.frame()).not.toContain(DIGEST); expect(view.frame()).toContain('CLOSE-HINTS');
     await view.press(key);
     expect(closed).toEqual([null]);
@@ -100,25 +100,25 @@ describe('InfoWindow (SW-1)', () => {
   it('draws ASCII shapes on a terminal that cannot be assumed to draw Unicode (TERM=dumb)', async () => {
     const view = mount(createElement(InfoWindow, { model: MODEL, labels: LABELS, onClose: () => undefined }), 100, 40, true);
     await settle();
-    expect(view.frame()).toContain('> Deckent'); expect(view.frame()).toContain('[+ running]'); expect(view.frame()).toContain('[x failed]');
+    expect(view.frame()).toContain('> deckent'); expect(view.frame()).toContain('[+ running]'); expect(view.frame()).toContain('[x failed]');
     expect(view.frame()).toContain('3f9a2c71...'); expect(view.frame()).not.toMatch(/[✓✗▸›…]/u);
   });
 });
 
 describe('SystemSummaryLine (SW-1)', () => {
   it('is one framed line with its own mark and label, never the assistant row', async () => {
-    const view = mount(createElement(SystemSummaryLine, { text: 'Status: Deckent is running\n · alpha.13', label: 'Deckent system' }));
+    const view = mount(createElement(SystemSummaryLine, { text: 'Status: deckent is running\n · alpha.13', label: 'deckent system' }));
     await settle();
     const rows = view.frame().split('\n').filter(row => row.trim());
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatch(/^┃ ◆ Deckent system · Status: Deckent is running · alpha\.13/u);
+    expect(rows[0]).toMatch(/^┃ ◆ deckent system · Status: deckent is running · alpha\.13/u);
     expect(rows[0]).not.toContain('●');
     expect(systemSummaryText('  a \n b  ')).toBe('a b');
   });
 
   it('keeps the label and a mark under ASCII (NO_COLOR / TERM=dumb)', async () => {
-    const view = mount(createElement(SystemSummaryLine, { text: 'Health: 3 ok', label: 'Deckent sistemi' }), 100, 40, true);
+    const view = mount(createElement(SystemSummaryLine, { text: 'Health: 3 ok', label: 'deckent sistemi' }), 100, 40, true);
     await settle();
-    expect(view.frame()).toMatch(/\| # Deckent sistemi \| Health: 3 ok/u);
+    expect(view.frame()).toMatch(/\| # deckent sistemi \| Health: 3 ok/u);
   });
 });

@@ -213,7 +213,7 @@ describe('the single approval card after Sol 2234', () => {
     expect(view.stdout.frame).not.toContain('R-PEER');
     // Esc denies; this fixture's decide port throws, so the failure shows in its own window (SW-2), which Esc closes into the one system line.
     view.stdin.write('\u001b'); await until(() => view.stdout.frame.includes('ERR:unused') && !view.stdout.frame.includes(DENY), 'deny failure window'); await settle(40);
-    view.stdin.write('\u001b'); await until(() => view.stdout.frame.includes('◆ Deckent system · ERR:unused'), 'closed'); await settle(60);
+    view.stdin.write('\u001b'); await until(() => view.stdout.frame.includes('◆ deckent system · ERR:unused'), 'closed'); await settle(60);
     await pickApproval(view, 1, 'card peer-1');
     expect(view.stdout.frame).toContain('R-PEER'); expect(view.stdout.frame).not.toContain('R-OTHER');
     view.stdin.write('\u001b');

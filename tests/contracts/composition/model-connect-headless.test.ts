@@ -222,8 +222,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       await settleOnboarding(platform.resolveProductLayout({ projectRoot: h.f.project, root: h.f.data }));
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
-      const steps = [['Deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
-        ['Ready', '/provider\r', 'fresh'], ['Deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
+      const steps = [['deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
+        ['Ready', '/provider\r', 'fresh'], ['deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
         ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
         ['CLAUDE-CHAT-SECOND', 'quota please\r'], ['Your subscription usage limit', '/exit\r', 'fresh']];
       const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),

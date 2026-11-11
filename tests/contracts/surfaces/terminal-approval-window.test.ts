@@ -126,7 +126,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const w = workSurfaceLabels('tr').approvalWindow;
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
-    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir; Deckent yetki dosyaları salt okunur, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
     // The engine's English posture sentence is never parsed into a field; it stays only in the producer's preview, shown whole (Astra 2431).
     const lines = text.split('\n'), preview = lines.indexOf('Önizleme');
     expect(lines.findIndex(line => line.includes('Runs in the bubblewrap sandbox'))).toBeGreaterThan(preview);
@@ -354,7 +354,7 @@ describe('the decision reason reaches the decision command', () => {
       decideApproval: async (input: unknown) => { sent.push(input as Record<string, unknown>); throw new Error('stop'); } })!;
     await ports.decideApproval!({ approvalId: 'a', revision: 0 }, 'deny', undefined, '  stale build  ').catch(() => undefined);
     await ports.decideApproval!({ approvalId: 'a', revision: 0 }, 'deny').catch(() => undefined);
-    expect(sent.map(item => item['reason'])).toEqual(['stale build', 'Denied by the operator in the Deckent terminal.']);
+    expect(sent.map(item => item['reason'])).toEqual(['stale build', 'Denied by the operator in the deckent terminal.']);
   });
 });
 
@@ -368,8 +368,8 @@ describe('approval window: reversibility by call kind and structured posture (T2
   };
   it('words every kind in EN and TR: edit unverified, shell unknown, destructive shell irreversible, fetch no change, MCP as its server declares', () => {
     const cases: [Partial<WorklineApproval>, string, string][] = [
-      [{ tool: 'edit_file', target: 'a', risk: 'edit', undo: 'unverified' }, 'Not checked — Deckent does not keep the earlier content', 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor'],
-      [{ tool: 'write_file', target: 'a', risk: 'edit-floor' }, 'Not checked — Deckent does not keep the earlier content', 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor'],
+      [{ tool: 'edit_file', target: 'a', risk: 'edit', undo: 'unverified' }, 'Not checked — deckent does not keep the earlier content', 'Kontrol edilmedi — deckent önceki içeriği saklamıyor'],
+      [{ tool: 'write_file', target: 'a', risk: 'edit-floor' }, 'Not checked — deckent does not keep the earlier content', 'Kontrol edilmedi — deckent önceki içeriği saklamıyor'],
       [{ tool: 'run_shell', target: 'npm test', risk: 'shell-other-modify', undo: 'may-change' }, 'Unknown (it can change the system)', 'Bilinmiyor (sistemi değiştirebilir)'],
       [{ tool: 'run_shell', target: 'rm -rf b', risk: 'shell-destructive', undo: 'irreversible' }, 'No — it cannot be undone', 'Hayır — geri alınamaz'],
       [{ tool: 'fetch_url', target: 'https://x.org', risk: 'fetch-unlisted', undo: 'no-change' }, 'Nothing to undo — it changes nothing', 'Geri alınacak bir şey yok — değişiklik yapmaz'],
@@ -408,7 +408,7 @@ describe('approval window: reversibility by call kind and structured posture (T2
     expect(rows(degraded, 'en')).toContain('In the landlock sandbox: the project is read-only, .git read-only, network off');
     expect(rows(degraded, 'tr')).toContain('Sandbox eksik korumalı (degraded)');
     const open = shell({ realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
-    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir; Deckent yetki dosyaları salt okunur, .git yazılabilir, ağ açık');
+    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git yazılabilir, ağ açık');
     const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
     expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied after the call; policy denies still apply, .git read-only, network off');
     // The engine sentence is never worded into the posture rows; it stays in the producer's preview below the Preview heading.
