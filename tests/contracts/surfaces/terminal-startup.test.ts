@@ -5,12 +5,117 @@ import { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, resolveWorklinePalette, start
 import { terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES } from '#adapters/index.js';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
+import { PassThrough, Writable } from 'node:stream';
+import { runTerminalWorkline } from '#surfaces/core/terminal/index.js';
+import { worklineLabels } from '#surfaces/core/terminal-labels/index.js';
+import { settle, until } from '../support/workline-harness.js';
+// eslint-disable-next-line no-restricted-imports -- Existing streaming VT renderer supplies real resize and screen state.
+import { BeuserScreenRenderer } from '#adapters/core/beuser-surface/internal/screen.js';
 
 // T2 T-STARTUP (owner 2026-10-07): the rich surface clears the visible screen (never the scrollback) and starts with its banner at the top.
 const facts = { version: '1.0.0-alpha.9', project: 'deckent-next', path: '~/deckent-next', model: 'local-openai/chat@1' };
 const startup = (locale: 'en' | 'tr', options: Partial<WorklineStartup> = {}, ascii = false): WorklineStartup =>
   ({ clear: true, banner: 'full', ...terminalStartupLabels(locale, facts, ascii), ...options });
 const plain = resolveWorklinePalette('none');
+
+it('keeps one startup mark and help region through width and height changes on the production terminal host', async () => {
+  class Tty extends Writable {
+    isTTY = true; rows = 30; columns = 110; text = '';
+    override _write(chunk: Buffer, _encoding: string, done: () => void) { this.text += chunk.toString('utf8'); done(); }
+  }
+  for (const banner of ['full', 'off'] as const) {
+    const stdout = new Tty(), stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false,
+      setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const screen = new BeuserScreenRenderer({ columns: 110, rows: 30, scrollback: 100 }, 1_000_000);
+    const controller = new AbortController(), labels = worklineLabels('en', '');
+    let resumeStream!: () => void, finishTurn!: () => void;
+    const streamed = new Promise<void>(resolve => { resumeStream = resolve; });
+    const decided = new Promise<void>(resolve => { finishTurn = resolve; });
+    const decisions: string[] = [];
+    let offset = 0;
+    const replay = async () => {
+      // Replay every emitted byte once, with the PTY's ONLCR line discipline; retain screen state across resizes.
+      const text = stdout.text.slice(offset); offset = stdout.text.length;
+      await screen.write(Buffer.from(text.replaceAll('\n', '\r\n')));
+      return screen.snapshot().text;
+    };
+    const resize = (columns: number, rows: number) => {
+      screen.resize(columns, rows); Object.assign(stdout, { columns, rows }); stdout.emit('resize');
+    };
+    const sizes = [[60, 30], [110, 30], [110, 40], [110, 30]] as const;
+    const checkResizes = async (tokens: readonly string[]) => {
+      for (const [columns, rows] of sizes) {
+        resize(columns, rows); await settle(160);
+        const text = await replay();
+        for (const token of tokens) expect(text.split(token).length - 1, `${banner} ${columns}x${rows}\n${text}`).toBe(1);
+      }
+    };
+    const running = runTerminalWorkline({ labels, startup: startup('en', { banner }), palette: plain,
+      stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, signal: controller.signal,
+      context: { installationId: 'i', projectId: 'p', scopeId: 's' }, target: 'scope', systemPrompt: 'system', historyMessages: 40,
+      completeTurn: async () => 'unused', errorText: String, decisionArmMs: 0,
+      streamTurn: async function* (_messages, _signal, turn) {
+        turn?.onTurnBound?.({ scopeId: 's', sessionId: turn.sessionId ?? null, turnId: 'resize-turn', phase: 'command-generated' });
+        yield { kind: 'text', text: 'STREAM-BEFORE\n' }; await streamed;
+        yield { kind: 'text', text: 'STREAM-AFTER\n' };
+        yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'resize-card', revision: 0,
+          summary: 'RESIZE-CARD', preview: 'preview survives', expiresAt: Date.now() + 600_000 };
+        await decided;
+        yield { kind: 'approval', phase: 'settled', callId: 'c1', approvalId: 'resize-card', outcome: 'deny' };
+        yield { kind: 'text', text: 'STREAM-DONE' }; yield { kind: 'done', finish: 'stop' };
+      },
+      ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] }; }, async inspectRun() { return null; },
+        async decideApproval(approval, decision) { decisions.push(decision); finishTurn();
+          return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided', decision, expiresAt: 0 }; } } });
+    try {
+      await until(() => stdout.text.includes('Enter send'), 'startup help'); await settle(120);
+      stdin.write('DRAFT-SURVIVES'); await until(() => stdout.text.includes('DRAFT-SURVIVES'), 'draft'); await settle(120);
+      const snapshots = [{ size: '110x30', text: await replay() }];
+      for (const [columns, rows] of sizes) {
+        resize(columns, rows); await settle(160);
+        snapshots.push({ size: `${columns}x${rows}`, text: await replay() });
+      }
+      for (const { size, text } of snapshots) {
+        const at = `${banner} ${size}\n${text}`;
+        for (const row of startup('en').logo) expect.soft(text.split(row.trim()).length - 1, at).toBe(banner === 'full' ? 1 : 0);
+        expect.soft(text.split('/help · Shift+Tab mode · ? shortcuts').length - 1, at).toBe(banner === 'full' ? 1 : 0);
+        expect.soft(text.split('deckent workline.').length - 1, at).toBe(1);
+        expect.soft(text.split('Ctrl+C twice when idle quits.').length - 1, at).toBe(1);
+        expect.soft(text.split('Enter send').length - 1, at).toBe(1);
+        expect.soft(text.split('DRAFT-SURVIVES').length - 1, at).toBe(1);
+        expect.soft(text, at).toContain('DRAFT-SURVIVES|');
+      }
+      stdin.write('\u001b[D'); await settle(40);
+      await checkResizes(['DRAFT-SURVIVE|S']);
+      stdin.write('X'); await settle(40);
+      expect(await replay()).toContain('DRAFT-SURVIVEX|S');
+      stdin.write('\r'); await until(() => stdout.text.includes('STREAM-BEFORE'), 'stream started');
+      stdin.write('BUSY-DRAFT'); await settle(80);
+      await checkResizes(['STREAM-BEFORE', 'BUSY-DRAFT|']);
+      resumeStream(); await until(() => stdout.text.includes('RESIZE-CARD'), 'open card'); await settle(80);
+      await checkResizes(['Approval needed', 'RESIZE-CARD', 'STREAM-AFTER']);
+      expect(decisions).toEqual([]);
+      // The card still owns keys after resizing; move to the still-mounted composer and back.
+      stdin.write('\u000f'); await settle(60);
+      expect(await replay()).toContain('BUSY-DRAFT|');
+      stdin.write('-KEPT'); await settle(40); stdin.write('\u000f'); await settle(60);
+      const burstStart = stdout.text.length;
+      resize(60, 30); resize(110, 40); resize(110, 30); await settle(160);
+      expect(stdout.text.slice(burstStart).split(CLEAR_VISIBLE_SCREEN)).toHaveLength(2);
+      expect((await replay()).split('RESIZE-CARD')).toHaveLength(2);
+      stdin.write('n'); await until(() => stdout.text.includes('STREAM-DONE'), 'stream finished'); await settle(80);
+      const final = await replay(); expect(final).toContain('BUSY-DRAFT-KEPT|'); expect(final).toContain('STREAM-DONE');
+      expect(final).not.toContain('RESIZE-CARD'); expect(decisions).toEqual(['deny']);
+      expect(stdout.text.split('\u001b[?1049h')).toHaveLength(2);
+    } finally {
+      resumeStream(); finishTurn();
+      resize(60, 30); controller.abort(); await running; await settle(40);
+      expect(stdout.listenerCount('resize')).toBe(0);
+      const closed = stdout.text; stdout.emit('resize'); await settle(40); expect(stdout.text).toBe(closed);
+      screen.dispose();
+    }
+  }
+});
 
 describe('opening frame (T2 T-STARTUP)', () => {
   it('scrolls the visible rows into the scrollback, homes and clears the screen, and never sends ED 3', () => {
