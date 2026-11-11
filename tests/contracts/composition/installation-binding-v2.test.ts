@@ -53,6 +53,7 @@ async function mountedSecret(root: string, value: string) {
   return join(mount, 'machine-id');
 }
 const exists = (path: string) => lstat(path).then(() => true, () => false);
+const filesystemReport = expect.objectContaining({ status: expect.stringMatching(/^(available|unavailable)$/u) });
 
 describe.skipIf(process.platform !== 'linux')('installation binding v2 through configured composition (Linux filesystem evidence)', () => {
   it('binds to a configured machine identity source behind a mounted-secret symlink; only a keyed digest is persisted or reported', async context => {
@@ -66,7 +67,7 @@ describe.skipIf(process.platform !== 'linux')('installation binding v2 through c
     expect(read).toEqual({ status: 'available', value: { schemaVersion: 1, installationId: ids.installationId }, bindingCapability: 'supported',
       binding: { strength: 'machine', source: 'configured' } });
     const inspection = await inspectConfiguredInstallationBinding(f.project, f.options);
-    expect(inspection).toEqual({ capability: 'supported', strength: 'machine', source: 'configured', required: false });
+    expect(inspection).toEqual({ capability: 'supported', strength: 'machine', source: 'configured', required: false, filesystemIdentity: filesystemReport });
     expect(JSON.stringify(read) + JSON.stringify(inspection)).not.toContain(RAW);
   });
 
@@ -96,7 +97,7 @@ describe.skipIf(process.platform !== 'linux')('installation binding v2 through c
       const doctor: string[] = [];
       await runKernelCommand(['doctor', '--json'], { root: f.project, env: { ...f.env, PATH: process.env['PATH'] ?? '/usr/bin:/bin' },
         stdout: { write: (text: string) => { doctor.push(text); return true; } }, inspectInstallationBinding: inspectConfiguredInstallationBinding });
-      expect(JSON.parse(doctor.join('')).installationBinding).toEqual({ capability: 'source-invalid', strength: null, source: 'configured', required: false });
+      expect(JSON.parse(doctor.join('')).installationBinding).toEqual({ capability: 'source-invalid', strength: null, source: 'configured', required: false, filesystemIdentity: filesystemReport });
       surfaced.push(doctor.join(''));
       expect(await readFile(f.path, 'utf8')).toBe(bytes);
       for (const text of surfaced) { expect(text).not.toContain(RAW); if (value === 'a'.repeat(32)) expect(text).not.toContain(value); }
@@ -108,7 +109,7 @@ describe.skipIf(process.platform !== 'linux')('installation binding v2 through c
     const ids = await ensureConfiguredTerminalIdentity(f.project, 's', f.options), record = await f.record();
     expect(record.binding).toEqual({ schemaVersion: 2, strength: 'weak', source: 'location', canonicalRoot: await realpath(join(f.project, '.deckent')),
       device: expect.stringMatching(/^\d+$/u), inode: expect.stringMatching(/^[1-9]\d*$/u) });
-    expect(await inspectConfiguredInstallationBinding(f.project, f.options)).toEqual({ capability: 'supported', strength: 'weak', source: 'location', required: false });
+    expect(await inspectConfiguredInstallationBinding(f.project, f.options)).toEqual({ capability: 'supported', strength: 'weak', source: 'location', required: false, filesystemIdentity: filesystemReport });
     const copy = join(f.root, 'copy'); await cp(f.project, copy, { recursive: true });
     const copied = join(copy, '.deckent/installation-identity/identity.json'), bytes = await readFile(copied, 'utf8');
     await expect(loadConfiguredInstallationIdentity(copy, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
@@ -125,7 +126,7 @@ describe.skipIf(process.platform !== 'linux')('installation binding v2 through c
     const f = await fixture({ requireMachineBinding: true }); noMachineId();
     await expect(ensureConfiguredTerminalIdentity(f.project, 's', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED' });
     expect(await exists(f.directory)).toBe(false);
-    expect(await inspectConfiguredInstallationBinding(f.project, f.options)).toEqual({ capability: 'supported', strength: 'weak', source: 'location', required: true });
+    expect(await inspectConfiguredInstallationBinding(f.project, f.options)).toEqual({ capability: 'supported', strength: 'weak', source: 'location', required: true, filesystemIdentity: filesystemReport });
     // An existing weak installation: reads answer, every write path refuses and leaves the bytes.
     await f.configure({}); const ids = await ensureConfiguredTerminalIdentity(f.project, 's', f.options), bytes = await readFile(f.path, 'utf8');
     await f.configure({ requireMachineBinding: true });

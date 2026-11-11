@@ -2,7 +2,7 @@ import { ErrorRegistry, messageText, t, terminalSafeText, type Locale } from '#p
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
-import { shortImageId } from './report.js';
+import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
@@ -116,6 +116,7 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
     : binding.required && binding.strength !== 'machine' ? row('setup', 'setup.binding', 'error', t('doctor.check.binding.required', {}, l), 'deckent config get installation')
       : binding.capability === 'unsupported' ? row('setup', 'setup.binding', 'untested', t('doctor.check.binding.unsupported', { platform: r.platform }, l))
         : row('setup', 'setup.binding', 'ok', binding.strength === 'weak' ? t('doctor.check.binding.weak', {}, l) : t('doctor.check.binding.machine', {}, l)));
+  if (binding?.filesystemIdentity) rows.push(row('setup', 'setup.filesystemIdentity', binding.filesystemIdentity.status === 'available' ? 'ok' : 'untested', filesystemIdentityText(binding.filesystemIdentity, l)));
   if (r.recoveryFiles?.leftovers.length) rows.push(row('setup', 'setup.recovery', 'warning', t('doctor.check.recovery', { count: r.recoveryFiles.leftovers.length }, l), 'deckent doctor --verbose'));
   return rows;
 }

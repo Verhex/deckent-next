@@ -903,6 +903,7 @@
   "error.LAYOUT_RESOURCE_UNKNOWN": "layout.resources bu sürümün tanımlamadığı bir kaynağı adlandırıyor; kaldırın veya kaynak adını düzeltin.",
   "error.LAYOUT_PATH_UNEXPRESSIBLE": "Proje kökü, veri kökü veya yapılandırma yolu * ya da ? içeriyor; çalışma alanı yasak kuralları bunu harfiyen adlandıramadığı için altındaki ürün durumu korunamaz; dizini yeniden adlandırın.",
   "error.INSTALLATION_IDENTITY_SOURCE_INVALID": "Yapılandırılmış makine kimliği kaynağı (installation.machineIdentity.source) yok, okunamıyor veya biçimi geçersiz. Kimlik okunmadı, oluşturulmadı veya değiştirilmedi; daha zayıf bağ kullanılmadı. Alanı kalıcı bir kimlik değeri içeren, okunabilir normal bir dosyaya yöneltin (16-256 karakter: harf, rakam, '.', '_', ':', '-').",
+  "error.INSTALLATION_IDENTITY_NEWER_BINDING": "Bu kurulumun kimlik kaydı daha yeni bir deckent sürümüyle yazıldı. O sürümü kullanın veya eski kaydı yedekten geri yükleyin.",
   "error.INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED": "installation.requireMachineBinding açık, ancak bu ortamda makine kimliği yok (yalnız zayıf yol bağı mümkün). Kuruluma bağlı yazmalar reddedildi. installation.machineIdentity.source alanını yapılandırın veya bir platform makine kimliği sağlayın; okumalar etkilenmez.",
   "identity.profile.solo": "Bireysel",
   "identity.profile.team": "Ekip",

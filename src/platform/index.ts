@@ -32,6 +32,7 @@ export { detectEnvironment } from '#platform/core/host/index.js';
 export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ serviceManagerStopCommand, assertRuntimeServiceStoppable, observeUserUnit, disableUserUnit, userUnitLinks, userUnitFile, type UserUnitExec, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState, processExists } from '#platform/core/host/index.js';
 export { readBuildIdentity, isSourceCheckout, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type BuildIdentity } from '#platform/core/host/index.js';
 export { privateIpcRoot } from '#platform/core/host/index.js';
+export { readHostMetadata, linuxMountsAt, linuxDeviceNumber } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { isLiteralLoopbackHostname } from '#platform/core/validate/index.js';
 // Library-independent schema contract (Standard Schema 1.1.0) for external boundaries: adapter module options today (DEPS-SCHEMA).

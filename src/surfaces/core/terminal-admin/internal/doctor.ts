@@ -1,5 +1,6 @@
 import { messageText, t, type Locale, type OutputSink } from '#platform/index.js';
 import type { InfoChip, InfoChipState, InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
+import { filesystemIdentityText, type InstallationBindingReport } from '#surfaces/core/doctor/index.js';
 
 /** `/doctor`: the very report `deckent doctor` prints, captured as lines (`run` is the CLI's own doctor command writing to this sink). */
 export async function doctorLines(run: (sink: OutputSink) => Promise<void>): Promise<readonly string[]> {
@@ -21,7 +22,7 @@ type DoctorJson = Partial<Readonly<{ schemaVersion: number; scope: string; platf
   host: Readonly<{ cpuCores: number; totalMemMB: number; recommendedMaxWorkers: number }>; company: Readonly<{ companyId: string }>; principal: Readonly<{ id: string }>;
   secretStore: Readonly<{ backend: string; status: string; code?: string | null }> | null; serviceConfig: string | null;
   imageRefresh: Readonly<{ status: string; reason: string | null; imageVersion: string | null }> | null;
-  installationBinding: Readonly<{ capability: string; strength?: string | null; required?: boolean }> | null;
+  installationBinding: InstallationBindingReport | null;
   poolReadiness: Readonly<{ status: string; code?: string | null }> | null;
   startability: Readonly<{ status: string; checks: readonly Readonly<{ code: string; message: string }>[] }> | null;
   codingRepository: Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }> | null;
@@ -88,7 +89,9 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
         : kind === 'weak' ? t('terminal.info.doctor.binding.weak', {}, locale) : t('terminal.info.doctor.binding.machine', {}, locale);
       const required = binding.required === true && binding.strength !== 'machine';
       sections.push({ title: t('terminal.info.doctor.section.binding', {}, locale), chip: chip(kind === 'machine' ? 'ok' : kind === 'sourceInvalid' || required ? 'fail' : 'warn'),
-        rows: [{ key: t('terminal.info.doctor.key.binding', {}, locale), value: words }], ...(required ? { notes: [t('doctor.installationBinding.required', {}, locale)] } : {}) });
+        rows: [{ key: t('terminal.info.doctor.key.binding', {}, locale), value: words }],
+        items: binding.filesystemIdentity ? [{ text: filesystemIdentityText(binding.filesystemIdentity, locale) }] : [],
+        ...(required ? { notes: [t('doctor.installationBinding.required', {}, locale)] } : {}) });
     }
     if (data.poolReadiness) {
       const status = data.poolReadiness.status;
