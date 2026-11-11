@@ -366,7 +366,7 @@ export function WorklineApp(props: WorklineProps) {
   const settings = useWorklineSettings({ panels: props.panels, ...(props.themeControl ? { themeControl: props.themeControl } : {}), permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
-    openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
+    openApprovals: async (approvalId, execution) => { if (await waitForOpening('/approvals', execution)) await work.openApproval(approvalId, execution); } });
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, picker: labels.windows?.picker, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
@@ -507,6 +507,14 @@ export function WorklineApp(props: WorklineProps) {
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
   const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(() => props.initialDraft ? { seq: 1, entry: props.initialDraft } : null);
+  const waitForOpening = useCallback(async (line: string, execution: LocalExecution) => {
+    const allowed = await gate(line, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => {
+      currentTiming()?.fail(); push([notice('error', errorText(error))]);
+      setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: line, pastes: [] } })); return false;
+    });
+    if (allowed) { currentTiming()?.phase('gate-passed'); currentTiming()?.phase('dispatch'); }
+    return allowed;
+  }, [gate, props.opening, push, errorText]);
   const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: redactForRecord(text, props.knownSecrets), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim(), hold, typed: Boolean(props.initialDraft || props.queuedInputs?.length), say: (level, text) => push([notice(level, text)]),
     opened: async () => { await refreshMode(); const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined; if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group }); } });
   openSetup.current = onboarding.open;
@@ -711,6 +719,8 @@ export function WorklineApp(props: WorklineProps) {
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
+    // A command picked inside a bypassing window meets the gate under its own name too.
+    if (!await waitForOpening(line, execution)) return true;
     const slash = parseSlashLine(line), words = labels.windows;
     if (!slash || keepsTypedArgument(slash.command) || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
@@ -718,7 +728,7 @@ export function WorklineApp(props: WorklineProps) {
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
     // A watch window outlives its command (it is not awaited): it keeps the note until it closes; otherwise the note ends with the command.
     finally { if (!liveRef.current?.isOpen()) note.consume(); }
-  }, [labels.windows, performLine]);
+  }, [labels.windows, performLine, waitForOpening]);
   performRef.current = perform;
 
   const executionTiming = useRef<TimingTrace | undefined>(undefined);
@@ -727,13 +737,14 @@ export function WorklineApp(props: WorklineProps) {
     const action = taskActions.current.get(execution.input.inputId);
     taskActions.current.delete(execution.input.inputId);
     if (action && ledger && labels.work) {
+      if (!await waitForOpening(`/${action.action}`, execution)) return;
       try { await openTaskAction(action, panel, execution, ledger, labels.work,
         runId => work.run('cancel', '', execution, undefined, runId)); }
       catch (error) { push([notice('error', errorText(error))]); }
       return;
     }
     // B: a line sent before the opening is ready waits behind one notice (Ctrl+C sends nothing); a failed start says its typed error and gives the line back as the draft.
-    if (await gate(execution.input.text, execution.signal, () => { if (props.opening) push([notice('info', props.opening.wait)]); }).catch((error: unknown) => { currentTiming()?.fail(); push([notice('error', errorText(error))]); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: execution.input.text, pastes: [] } })); return false; })) { currentTiming()?.phase('gate-passed'); currentTiming()?.phase('dispatch'); await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId)); }
+    await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
   };
   const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
   taskActionRef.current = action => {

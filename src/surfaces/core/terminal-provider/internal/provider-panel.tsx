@@ -75,22 +75,30 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice); a read failure only hides the row.
   const [cache, setCache] = useState<CachePanelView | null>(null);
   const inspection = useRef(0), mounted = useRef(true), inspectionAbort = useRef<AbortController | null>(null);
-  const reload = useCallback(async () => { const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
-    const publish = (view: ProviderPanelView) => { if (mounted.current && inspection.current === generation) { setView(view); return timing.frame(); } };
-    const result = await port.inspect(publish, abort.signal);
-    if (mounted.current && inspection.current === generation) { setView(result); setChecked(true); }
-    setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null);
-    setCache(port.cache ? await port.cache.inspect().catch(() => null) : null); }, [port]);
+  const reload = useCallback(async (closeOnError = false) => { const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort; setChecked(false);
+    const active = () => mounted.current && inspection.current === generation && !abort.signal.aborted;
+    const publish = (view: ProviderPanelView) => { if (active()) { setView(view); return timing.frame(); } };
+    try {
+      const result = await port.inspect(publish, abort.signal);
+      if (!active()) return;
+      setView(result); setChecked(true);
+      const budget = port.budget ? await port.budget.inspect().catch(() => null) : null;
+      if (!active()) return;
+      setBudget(budget);
+      const cache = port.cache ? await port.cache.inspect().catch(() => null) : null;
+      if (active()) setCache(cache);
+    } catch (error) { if (active()) { timing.fail(); exits.current.onError(error); if (closeOnError) exits.current.onClose(); } }
+  }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  useEffect(() => { mounted.current = true; timing.run(reload).catch(error => { if (mounted.current) { timing.fail(); exits.current.onError(error); exits.current.onClose(); } });
+  useEffect(() => { mounted.current = true; void timing.run(() => reload(true));
     return () => { mounted.current = false; inspection.current++; inspectionAbort.current?.abort(); }; }, [reload]);
   useEffect(() => {
     let active = true;
     timing.run(() => port.inspectCustody?.()).then(result => { if (active) setCustody(result ?? null); }).catch(() => {});
     return () => { active = false; };
   }, [port]);
-  const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
+  const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); void reload(); };
   // A refused connection belongs beside the alternatives, not in the onboarding host's fatal-error path.
   const failed = (error: unknown) => {
     const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.locale ?? port.siwc?.locale;

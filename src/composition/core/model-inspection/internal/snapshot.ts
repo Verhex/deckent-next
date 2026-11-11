@@ -31,6 +31,7 @@ export async function openModelInspection(root: string, scopeId: string, options
   };
   const contextFor = (root: string, scopeId: string) => {
     active.throwIfAborted();
+    // Includes identity.installation/project for this opening's display checks; actions re-read context outside this snapshot.
     const key = JSON.stringify([root, scopeId]); let value = scopes.get(key);
     if (!value) { value = configFor(root).then(async config => loadConfiguredScopeContext(root, scopeId, options, 'read', { config, document: await policyFor(config).catch(() => { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }), inspectSource })); scopes.set(key, value); }
     return value;

@@ -103,7 +103,9 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
       // The status line and transcript also name providers, so wait for the loaded group rows themselves.
       await press('/model', ENTER); await until(() => frame().includes(`${CLAUDE} ›`) && frame().includes(`${LOCAL} ›`) && !frame().includes(loading), 'provider groups');
       if (provider === LOCAL) { await press(DOWN); await until(() => new RegExp(`> +${LOCAL} ›`).test(frame()), 'provider cursor'); }
-      await press(ENTER); await until(() => frame().includes(`› ${provider}`) && !frame().includes(loading), 'provider models');
+      // Names arrive before readiness. Enter on a Checking row is deliberately ignored, so wait for its check before selecting it.
+      await press(ENTER); await until(() => frame().includes(`› ${provider}`) && !frame().includes(loading)
+        && !frame().includes(t('tui.model.checking', {}, 'tr')), 'checked provider models');
     };
     const switchTo = async (provider: typeof CLAUDE | typeof LOCAL) => {
       const sent = requests.length;
@@ -180,7 +182,8 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     mounted.push(view); await settle(60);
     const press = async (...keys: string[]) => { for (const key of keys) { await new Promise(resolve => setImmediate(resolve)); view.stdin.write(key); await settle(35); } };
     const frame = () => view.stdout.frame, loading = t('tui.panel.loading', {}, 'tr');
-    await press('/model', ENTER); await until(() => frame().includes('chat (local-openai)') && !frame().includes('[engellendi]') && !frame().includes(loading), 'model list');
+    await press('/model', ENTER); await until(() => frame().includes('chat (local-openai)') && !frame().includes('[engellendi]') && !frame().includes(loading)
+      && !frame().includes(t('tui.model.checking', {}, 'tr')), 'checked model list');
     await press(ENTER); await until(() => frame().includes(t('tui.panel.model.session', {}, 'tr')), 'confirmation step');
     await press(ENTER); await until(() => !frame().includes(t('tui.model.title', { scope: 'scope' }, 'tr')) && !frame().includes(loading) && frame().includes('READY'), 'switch closes');
     // The pin is for this session only: no setting was written; the only model declared here is in effect by itself (BeUser AYSE-13), never a saved choice.
