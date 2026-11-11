@@ -28,10 +28,11 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.64`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
-> lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
-> [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
-> not final yet).
+> This README describes **beta pre-release `1.0.0-beta.1`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> lists beta releases, newest first; older releases are in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
+> Deckent is not on npm yet: install it from source as shown in
+> [Get started](#get-started). An npm package is planned during the beta line, probably as `@verhex/deckent` (the name is
+> not final yet). The eight acceptance gates remain open during the beta line; beta acceptance is announced separately.
 >
 > Alpha.64 is the last alpha. Once it writes approval origin, delivery mode, Brain origin or resource-key records,
 > alpha.63.3 cannot read them: **there is no rollback to alpha.63.3**. Recovery requires a forward fix;
@@ -548,7 +549,7 @@ OpenRouter settings.
 
 ### Not yet
 
-- **No npm package.** Install from source until the beta.
+- **No npm package.** Install from source until the npm package is published.
 - **No Desktop app, Dashboard or remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
 - **No coordination of multi-step business processes yet.** One request becomes one Run; longer processes that
   coordinate several rounds and waits are planned.
@@ -581,13 +582,13 @@ template, and MCP/SDK refusals to stop a service systemd runs. Alpha.59 opens th
 off connecting a model, makes card text copyable and folds consecutive file reads into one line. The alpha.60 candidate draws the
 terminal's first frame in about a third of a second (bare `deckent`, measured on one Linux machine; a message sent before the service answers waits behind a visible notice), lets BeUser
 walk with any connected model and adds a Codex CLI subscription sign-in and connection. The protected layer switches still start off;
-their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
+their real-use acceptance and the ChatGPT-plan Codex worker acceptance remain open during the beta line. The beta hardens
 these layers through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.60<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers · recovery cards · signed packages<br/>ChatGPT chat · guided setup · uninstall"] --> C["Before the beta · real-use acceptance<br/>core layers enabled with measured rules<br/>ChatGPT-plan worker proof · Hub deployment gates<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
-  C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
+  N["Now · beta.1 candidate<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers · recovery cards · signed packages<br/>ChatGPT chat · guided setup · uninstall"] --> C["During the beta · real-use acceptance<br/>core layers enabled with measured rules<br/>ChatGPT-plan worker proof · Hub deployment gates<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  C --> B["Beta improvements<br/>npm package planned<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```
 
@@ -605,7 +606,7 @@ Every layer acts only through the same policy and approvals as everything else.
 - [Operator reference](.deckent/docs/architecture/operator-reference.md): setup values, sandbox views, key stores,
   spending, worker images, patch custody and recovery sets in detail
 - [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes
-- [CHANGELOG.md](CHANGELOG.md): what each release brought
+- [CHANGELOG.md](CHANGELOG.md): what each beta release brought; [CHANGELOG-alpha.md](CHANGELOG-alpha.md): older alpha releases
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md)
 
 ## License

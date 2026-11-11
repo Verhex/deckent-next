@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const release = (n: number, ref = 'abcdef12', receipt = 'PR #12') => `- **1.0.0-alpha.${n}** — 2026-10-08 · \`${ref}\` (${receipt}) · features`;
+const release = (n: number | string, ref = 'abcdef12', receipt = 'PR #12') => `- **1.0.0-${typeof n === 'number' ? `alpha.${n}` : n}** — 2026-10-08 · \`${ref}\` (${receipt}) · features`;
 async function fixture(changes: Record<string, string | null> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-docs-gate-')); roots.push(root);
   await mkdir(join(root, 'scripts'));
@@ -17,7 +17,7 @@ async function fixture(changes: Record<string, string | null> = {}) {
   const catalog = 'src/surfaces/core/cli-kit/internal/command-catalog.ts';
   await mkdir(join(root, 'src/surfaces/core/cli-kit/internal'), { recursive: true });
   await cp(new URL('../../../' + catalog, import.meta.url), join(root, catalog));
-  const files = { 'package.json': '{"version":"1.0.0-alpha.17"}', 'CHANGELOG.md': '# Changelog\n\n' + release(17) + '\n' + release(9),
+  const files = { 'package.json': '{"version":"1.0.0-alpha.17"}', 'CHANGELOG.md': '# Changelog\n\n' + release(17), 'CHANGELOG-alpha.md': '# Alpha changelog\n',
     'PLAN.md': '# Plan\n', 'ARCHITECTURE.md': '# Architecture\n', 'README.md': 'Current alpha.17. Historical screenshot alpha.10.',
     'README.tr.md': 'Güncel alpha.17. Eski görüntü alpha.10.', 'SECURITY.md': 'Supports alpha.17.',
     'docs/guide.md': '# Guide\n[Türkçe](guide.tr.md) · [readme](../README.md)\n', 'docs/guide.tr.md': '# Kılavuz\n[English](guide.md) · [readme](../README.md)\n',
@@ -49,15 +49,41 @@ describe('AI installation command drift gate', () => {
   });
 });
 describe('documentation release drift gate', () => {
-  it('accepts landed alpha.17 with older numeric alpha.9, and CRLF checkouts', async () => {
-    const root = await fixture({ 'CHANGELOG.md': [release(17), release(9)].join('\r\n') });
+  it('accepts alpha and beta history in SemVer order, and CRLF checkouts', async () => {
+    const root = await fixture({ 'CHANGELOG.md': release(17) + '\r\n', 'CHANGELOG-alpha.md': release(9) + '\r\n' });
     expect(lint(root)).toMatchObject({ status: 0, output: expect.stringContaining('0 violation(s)') });
+    const docs = (claim: string) => ({ 'README.md': `Current ${claim}; historical alpha.64.`, 'README.tr.md': `Güncel ${claim}.`, 'SECURITY.md': `Supports ${claim}.` });
+    const beta = { 'package.json': '{"version":"1.0.0-beta.2+build.1"}', 'CHANGELOG.md': [release('beta.2+build.1'), release('beta.1')].join('\r\n'), 'CHANGELOG-alpha.md': release(64) + '\r\n' };
+    expect(lint(await fixture({ ...beta, ...docs('beta.2') })).status).toBe(0);
+    for (const claim of ['alpha.64', 'beta.1', 'beta.3', 'beta.10', 'no version']) {
+      const result = lint(await fixture({ ...beta, ...docs('beta.2'), 'README.tr.md': claim }));
+      expect(result.status).toBe(1); expect(result.output).toContain('README.tr.md: highest ');
+    }
+    const candidate = { 'package.json': '{"version":"1.0.0-beta.1"}', 'CHANGELOG.md': '- **1.0.0-beta.1** — Unreleased · candidate', 'CHANGELOG-alpha.md': release(64) };
+    for (const claim of ['alpha.64', 'beta.1']) expect(lint(await fixture({ ...candidate, ...docs(claim) })).status).toBe(0);
+    for (const claim of ['alpha.63.3', 'beta.2']) expect(lint(await fixture({ ...candidate, ...docs('beta.1'), 'SECURITY.md': claim })).status).toBe(1);
+    // A beta candidate does not waive receipts for either its older beta or alpha history.
+    for (const previous of ['beta.1', 'alpha.64']) {
+      const name = previous.startsWith('alpha') ? 'CHANGELOG-alpha.md' : 'CHANGELOG.md';
+      const result = lint(await fixture({ ...beta, ...docs('beta.2'), [name]: (name === 'CHANGELOG.md' ? release('beta.2+build.1') + '\n' : '') + release(previous, 'branch', 'PR pending') }));
+      expect(result.status).toBe(1); expect(result.output).toContain('contains PR pending'); expect(result.output).toContain('must be a commit SHA');
+      expect(result.output).toContain(name + ':');
+    }
+    const numeric = { 'package.json': '{"version":"1.0.0-beta.10"}', 'CHANGELOG.md': release('beta.10') + '\n' + release('beta.2') };
+    expect(lint(await fixture({ ...numeric, ...docs('beta.10 and beta.2') })).status).toBe(0);
+    expect(lint(await fixture({ ...numeric, ...docs('beta.2') })).status).toBe(1);
+    // Alpha's gate also sees a future beta claim instead of accepting the older alpha mention.
+    expect(lint(await fixture({ 'README.md': 'Current alpha.17, future beta.1.' })).status).toBe(1);
   });
   it('requires the first CHANGELOG version to equal the package version, including a missing release', async () => {
     for (const changelog of [release(16), '# Changelog']) {
       const result = lint(await fixture({ 'CHANGELOG.md': changelog }));
       expect(result.status).toBe(1); expect(result.output).toContain('first release');
     }
+    const missing = lint(await fixture({ 'CHANGELOG-alpha.md': null }));
+    expect(missing.status).toBe(1); expect(missing.output).toContain('CHANGELOG-alpha.md');
+    const emptyCurrent = lint(await fixture({ 'CHANGELOG.md': '# Changelog', 'CHANGELOG-alpha.md': release(17) }));
+    expect(emptyCurrent.status).toBe(1); expect(emptyCurrent.output).toContain('first release (missing)');
   });
   it.each([
     [release(17, 'abcdef12', 'features only'), 'must name a PR number'],
@@ -77,7 +103,7 @@ describe('documentation release drift gate', () => {
     expect(lint(await fixture({ 'CHANGELOG.md': release(17, 'abcdef12', 'PR pending') + ' · Unreleased feature' })).status).toBe(1);
   });
   it('waives only the PR number for releases before PR-based landing (below alpha.5); SHA and PR-pending rules stay', async () => {
-    const changelog = (...lines: string[]) => ({ 'CHANGELOG.md': [release(17), ...lines].join('\n') });
+    const changelog = (...lines: string[]) => ({ 'CHANGELOG.md': release(17), 'CHANGELOG-alpha.md': lines.join('\n') });
     expect(lint(await fixture(changelog(release(4, 'de7d2469', 'batch 28'), release(1, '037cab0d', 'K0')))).status).toBe(0);
     for (const [line, error] of [[release(5, 'abcdef12', 'batch 36'), 'must name a PR number'],
       [release(4, 'lane/release', 'batch 28'), 'must be a commit SHA'], [release(4, 'abcdef12', 'PR pending'), 'contains PR pending']]) {
@@ -85,14 +111,19 @@ describe('documentation release drift gate', () => {
       expect(result.status).toBe(1); expect(result.output).toContain(error);
     }
   });
-  it('ignores receipt requirements only for versions above the package version (SemVer numeric order)', async () => {
-    const result = lint(await fixture({ 'CHANGELOG.md': release(17) + '\n' + release(100, 'branch', 'PR pending') }));
-    expect(result.status).toBe(0);
+  it('rejects reordered or duplicate releases within and across files, retaining the receipt exemption above the package version', async () => {
+    for (const [current, alpha] of [[release(17) + '\n' + release(100, 'branch', 'PR pending'), release(9)],
+      [release(17), release(18)], [release(17), release(17)], [release(17), release(9) + '\n' + release(10)],
+      [release(17), release('alpha.17+duplicate')]]) {
+      const result = lint(await fixture({ 'CHANGELOG.md': current, 'CHANGELOG-alpha.md': alpha }));
+      expect(result.status).toBe(1); expect(result.output).toContain('strictly descending SemVer order');
+      expect(result.output).not.toContain('contains PR pending');
+    }
   });
   it.each(['README.md', 'README.tr.md', 'SECURITY.md'])('rejects stale, missing or future alpha claims in %s', async name => {
     for (const claim of ['alpha.16', 'no version', 'alpha.17 and alpha.18']) {
       const result = lint(await fixture({ [name]: claim }));
-      expect(result.status).toBe(1); expect(result.output).toContain(`${name}: highest alpha.`);
+      expect(result.status).toBe(1); expect(result.output).toContain(`${name}: highest `);
     }
   });
   it('while the top line is Unreleased, public docs may claim the last released alpha (live) but nothing older or newer', async () => {
@@ -131,6 +162,8 @@ describe('documentation release drift gate', () => {
       expect(lint(await fixture({ [name]: `Candidate ${phrase}; see historical: elsewhere` })).status).toBe(1);
     }
   });
+});
+describe('documentation structure and links', () => {
   it('retains size gates and fails closed on malformed versions', async () => {
     expect(lint(await fixture({ 'PLAN.md': 'x'.repeat(801) })).output).toContain('801 chars');
     expect(lint(await fixture({ 'PLAN.md': 'x\n'.repeat(34_000) })).output).toContain('bytes >');

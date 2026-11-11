@@ -21,11 +21,12 @@ alpha.63'ten beri kendi Claude ya da ChatGPT (Codex CLI) girişiniz araçlı soh
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
 Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
 çalıştığı görüldüğünde çıkar, daha önce değil. Her madde sınırın **ne** olduğunu, size **etkisini** ve varsa bir
-**yolunu** verir. [CHANGELOG.md](../CHANGELOG.md) her sürümün o günkü sınırlarını listeler.
+**yolunu** verir. [CHANGELOG.md](../CHANGELOG.md) her beta sürümünün o günkü sınırlarını listeler;
+[CHANGELOG-alpha.md](../CHANGELOG-alpha.md) eski alpha sürümlerinin sınırlarını korur.
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuk yeniden yürüyüşü ve owner terminal testi henüz açık; betadan önce yapılır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuğun tam kabulü ve owner terminal testi beta serisinde açık kalır (owner, 2026-11-11). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
@@ -44,6 +45,15 @@ Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytl
   araçları tüm hard link'leri reddetmeye devam eder. **Host realm bir güvenlik sınırı değildir; ad denetimi en iyi çabadır.** Programın içinde
   üretilen yollar ve eşzamanlı yol değiştirme bu denetimin dışındadır. Monte abonelik köprüsü ve gerçek CLI stdout kanaryası kabulü,
   bu yazar kontrollerinden ayrıdır.
+
+## Beta.1 adayı: kontroller ve açık kurulum sınırları
+
+- **Model/provider satırları kontroller bitmeden görünür.** `/model` ve `/provider` açılış başına ortak okuma görünümü kullanır, adları “Kontrol ediliyor…” ile gösterir. Bekleyen satır seçilemez; satırın kontrolünü bekleyin. Kapatma veya yenileme eski sonuçları geçersiz kılar. Bu, görünümün yüklenmesini değiştirir; eylemin yetkisini değiştirmez.
+- **Süre kaydı isteğe bağlı, yerel ve içeriksizdir.** Ölçmek istediğiniz komutlarda `DECKENT_TIMING_TRACE=1` ayarlayın; `deckent doctor timing` tutulan örnekleri özetler. Sınırlı yerel kayıt komut adını, aşamaları ve okuma sayılarını taşır; istem, komut argümanı, model çıktısı veya sır içermez. Varsayılan kapalıdır; bu örnekler makineniz için performans garantisi değildir.
+- **İki WSL dağıtımı aynı runtime kilidinde çakışabilir.** Kilit, makine kimliği olmadan uç nokta ve işletim sistemi kullanıcı kimliğinin özetini kullanır. Ağ ad alanını paylaşan dağıtımlarda aynı kullanıcı kimliği ve proje yolu varsa çalışan servis, diğerini `LOCAL_RUNTIME_ALREADY_RUNNING` ile durdurabilir. Doctor ikinci kurulumun başlayabileceğini söyleyebilir. İkinci dağıtımda farklı proje klasörü kullanın; kilit düzeltmesi açıktır.
+- **İşçi imajı güncellemesi, kendi kartının kaydedemediği izni isteyebilir.** Kayıtlı imaj izni yoksa ve eski tek imaj makbuzlarında `images[].providers` bulunmuyorsa `toolchains update --apply`, evet yanıtından sonra `WORKER_IMAGE_CONSENT_MISSING` verebilir. Bu kart izin yazmaz; otomatik yenileme de aynı nedenle sessizce başarısız olabilir. İzni yazan yol `/setup` işçi kartıdır; hazır yerel imaj da seçilebilir. Bu yolun etkilenen canlı/N1 kurulumlarında tamamlandığı doğrulanmadı; eski makbuzları tanıma/göç ve izin kartına doğrudan yönlendirme açıktır.
+
+Beta.1 bir adaydır. Sekiz kabul kapısı beta serisinde açık kalır; beta kabulü ayrıca duyurulur.
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
@@ -72,8 +82,8 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   hüküm persona yürüyüşüne ve değerlendiricinin transkript okumasına dayanır, `unknown` asla geçişe çevrilmez. Codex yürüyücüsünün yürüyüş
   sonrası bitişi hükümsüz kalabilir (`reason: unknown`, neden henüz kaydedilmiyor). *Etki:* bir yürüyüş yetkiyi ya da güvenliği kanıtlamaz.
   *Yol:* kartı ve makbuzu `run inspect` ve denetim kaydıyla kendiniz denetleyin.
-- **Betadan önceki BeUser yeniden yürüyüşü hâlâ bekliyor (alpha.61).** Dört yolculuk (onboarding, uninstall-v2, beuser-self, theme-light)
-  birleştirilmiş sürümde birlikte yürünmedi ve owner'ın kendi terminal testi yapılmadı; ikisi de betadan önce yapılır (owner, 2026-11-01).
+- **BeUser yolculuklarının tam kabulü açıktır.** Dört yolculuk (onboarding, uninstall-v2, beuser-self, theme-light)
+  birleştirilmiş sürümde tam kabul ve owner terminal testi bekliyor. Alpha.64 kurulum yeniden yürüyüşü beta.1 düzeltmelerine kaynak oldu; sekiz kabul kapısını kapatmadı (owner, 2026-11-11).
   2026-11-02 alpha.61 onboarding yürüyüşü iki kolda da yolculuğun sonuna ulaştı ve açık bulgular bıraktı. *Etki:* alpha.60 ya da alpha.61
   için yolculuk kabulü ileri sürülmez.
 
