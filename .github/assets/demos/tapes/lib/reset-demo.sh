@@ -11,4 +11,9 @@ shopt -s dotglob nullglob; for f in "$DECKENT_DEMO_ROOT/home"/*; do mv "$f" "$T/
 # Keep a person's own CLI sign-in (deckent's headless/logins) across resets: it is the only part not recreated by a recording.
 L=.local/state/deckent-next-dev/headless/logins
 if [ -d "$T/home/$L" ]; then mkdir -p "$DECKENT_DEMO_ROOT/home/$(dirname $L)"; chmod 700 "$DECKENT_DEMO_ROOT/home/.local" "$DECKENT_DEMO_ROOT/home/.local/state" "$DECKENT_DEMO_ROOT/home/.local/state/deckent-next-dev" "$DECKENT_DEMO_ROOT/home/$(dirname $L)" 2>/dev/null || true; mv "$T/home/$L" "$DECKENT_DEMO_ROOT/home/$L"; fi
+# Keep the demo vault (the person-placed API keys) too: a reset must not drop them into trash or require placing them again.
+S=.local/state/deckent-next-dev
+for f in secrets.key secrets.sealed.json; do
+  if [ -f "$T/home/$S/$f" ]; then mkdir -p "$DECKENT_DEMO_ROOT/home/$S"; mv "$T/home/$S/$f" "$DECKENT_DEMO_ROOT/home/$S/$f"; fi
+done
 echo "reset: moved to $T"
