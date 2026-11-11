@@ -221,7 +221,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   reports out of the input before Ink parses it (wheel → `WheelContext` → three lines a notch; left press/drag/release → `PointerContext`;
   every other report dropped), so no mouse event reaches the composer or a card. Selection (TERM-POLISH, owner 2026-10-20; Claude Code
   fullscreen "click and drag … copies automatically on mouse release", code.claude.com/docs/en/fullscreen read 2026-10-20): click and drag
-  over the conversation highlights it in reverse video (`selection.ts`, content-anchored by block key/line/cell, so streaming or the wheel
+  over the conversation highlights it with the shared selection style (brand foreground/background pair in dark/light truecolor/256,
+  reverse video otherwise; `selection.ts`, content-anchored by block key/line/cell, so streaming or the wheel
   never moves it); the release copies exactly the displayed (secret-projected) text, SGR and trailing padding removed, as one OSC 52 write
   (`osc52Copy`) from `runTerminalWorkline`, and the hint row shows `terminal.viewport.copied` for 4 s (fixed height). A plain click or any
   key but the scroll keys clears it; a press outside the drawn lines starts nothing; a drag past the view clamps (no autoscroll, no
@@ -475,9 +476,10 @@ its attributes. Consumers move to `terminalPalette`/the theme request in L3. Pro
 primitive overrides in `terminal.map.json`: accent `#6CCFAE` / `#0A4A4F` (assistant label, window title, section header, mode indicator),
 info blue `#A9BFD6` / `#2E4A68` (info, links, code, model), success `#9BE3A6` / `#136F57`, warning `#F2B24A` / `#8A5300`,
 error `#F0806E` / `#A8281C`, muted `#A8A89C` / `#566065` (including provider, user rail and window border). The reference grounds include
-`#191B1A` / `#F4F5F2`; the terminal still owns its foreground and background. Selection uses background `#153B39` / `#DCE9E7` and normal
-terminal foreground with bold text in truecolor/256, retaining reverse video in ANSI16. Pickers, monitor rows and in-app text selection
-consume the same selection style; nested semantic colours yield to normal foreground on brand selection. Link underline, focus and the
+`#191B1A` / `#F4F5F2`; the terminal still owns its normal foreground and background. Selection pairs background `#153B39` / `#DCE9E7`
+with explicit theme text `#E7E3D9` / `#0B1215` and bold in truecolor/256, so pinning a theme against the terminal's ground stays readable;
+ANSI16 retains reverse video. Pickers, monitor rows and in-app text selection consume the same pair; nested semantic colours yield
+to the selected foreground. Link underline, focus and the
 user/key/system labels and system rail stay unchanged. Daltonized, high-contrast and ANSI theme values stay frozen for this release;
 applying the brand to those themes needs a separate colour-vision check and owner review.
 
