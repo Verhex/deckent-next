@@ -11,7 +11,7 @@ const { version } = JSON.parse(readFileSync(new URL('../../package.json', import
 describe.skipIf(!existsSync(BIN))('real binary', () => {
   it('deckent --version runs from dist and exits 0', async () => {
     const { stdout } = await run(process.execPath, [BIN, '--version']);
-    expect(stdout.trim()).toBe(`deckent v${version}`);
+    expect(stdout.startsWith(`deckent v${version}`)).toBe(true); // build identity lines follow in a source checkout
   });
   it('unknown command exits 2', async () => {
     await expect(run(process.execPath, [BIN, 'nope'])).rejects.toMatchObject({ code: 2 });

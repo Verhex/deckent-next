@@ -68,8 +68,10 @@ describe('K1 real binary journeys', () => {
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
     // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope;
     // alpha.64 SETUPUX: codingRepository, the read-only coding-folder observation).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status', 'workerKinds']);
     expect({ ownerBaseline: result.ownerBaseline, providerSpending: result.providerSpending }).toEqual({ ownerBaseline: null, providerSpending: null });
+    // beta.1 SETUPFACT: workerKinds is always present; this fixture admitted no worker image, so no kind is listed.
+    expect(result.workerKinds).toEqual([]);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company

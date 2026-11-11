@@ -155,5 +155,5 @@
   "worker.kind.restore": "Bu profilin sabitlenmiş imageId değerini deckent coding --json ile bulun ve imajı sakladığınız derleme veya yedekten geri yükleyin; coding template bu hazır profili yeniden bağlayamaz.",
   "worker.kinds.image-missing": "Kullanılamayan iş türleri (işçi imajı eksik): {kinds}.",
   "worker.kinds.image-unverified": "Kullanılamayan iş türleri (işçi imajı doğrulanamadı): {kinds}.",
-  "error.BRAIN_GRAPH_INVALID.unusableKind": "Model kullanılamayan bir iş türü planladı. {detail} Kullanılabilir iş türleri: {registered}. Run oluşturulmadı. Sonraki adım için deckent coding veya deckent doctor kullanın."
+  "error.BRAIN_GRAPH_INVALID.unusableKind": "Model kullanılamayan bir iş türü planladı. {detail} Kullanılabilir iş türleri: {registered}. İş oluşturulmadı. Sonraki adım için deckent coding veya deckent doctor kullanın."
 }

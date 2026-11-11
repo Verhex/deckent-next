@@ -70,7 +70,7 @@ izin vermedikçe hiçbir şey çalışmaz.
 sequenceDiagram
   autonumber
   actor Siz
-  participant T as deckent terminali
+  participant T as Terminal
   participant R as Runtime servisi
   participant P as Policy ve onaylar
   participant B as Sandbox

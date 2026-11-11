@@ -33,13 +33,13 @@ async function systemPrompt(input: { readonly realm: 'require-sandbox' | 'prefer
 const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.')) ?? '';
 
 describe.skipIf(process.platform !== 'linux')('the shell posture in the system prompt comes from the turn\'s realm (prompt v6)', () => {
-  it.skipIf(!bwrapReady)('full access in bubblewrap: the open view — network, the real HOME, project and .git writable, Deckent state sealed; no "no network" line', async () => {
+  it.skipIf(!bwrapReady)('full access in bubblewrap: the open view — network, the real HOME, project and .git writable, deckent state sealed; no "no network" line', async () => {
     const prompt = await systemPrompt({ realm: 'require-sandbox', fullAccess: true });
     // The live finding first: the v5 text told a full-access model there was no network.
     expect(prompt).not.toContain('Network access: none'); expect(prompt).not.toContain('do not try to reach the network');
     expect(shellLine(prompt)).toContain('in an open bubblewrap sandbox (full access): shell commands have network access');
     expect(shellLine(prompt)).toMatch(/your real home directory \(HOME\) is visible and writable, and the project and its \.git are writable/u);
-    expect(shellLine(prompt)).toMatch(/Deckent's own state, policy and credential files stay sealed[^\n]*Its configuration file is read-only in every call/u);
+    expect(shellLine(prompt)).toMatch(/deckent's own state, policy and credential files stay sealed[^\n]*Its configuration file is read-only in every call/u);
     expect(prompt).toContain('- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this turn');
   }, 60_000);
 
