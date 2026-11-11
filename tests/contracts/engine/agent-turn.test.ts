@@ -477,7 +477,7 @@ it('fills absent lists, stringifies scalar items, bounds item count and objectiv
   const summary = parseAgentCompactionSummary(JSON.stringify({ objective: 'o'.repeat(2_500), findings: many, decisions: [1, true, null, { a: 1 }] }))!;
   expect(summary.decisions).toEqual(['1', 'true', '{"a":1}']);
   expect(summary.unresolved).toEqual([]); expect(summary.nextActions).toEqual([]); expect(summary.inspectedAreas).toEqual([]);
-  expect(summary.findings).toHaveLength(40); expect(summary.findings.at(-1)).toBe('[6 more items omitted by Deckent]');
+  expect(summary.findings).toHaveLength(40); expect(summary.findings.at(-1)).toBe('[6 more items omitted by deckent]');
   expect(summary.objective.length).toBeLessThanOrEqual(2_000); expect(summary.objective).toMatch(/…\[cut: 2500 characters, sha256 [0-9a-f]{16}\]$/);
   expect(agentCompactionSummarySchema.safeParse(summary).success).toBe(true);
   for (const bad of ['{"findings":["x"]}', '{"objective":{"x":1}}', '[1,2]']) expect(parseAgentCompactionSummary(bad)).toBeNull();
@@ -517,14 +517,15 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(11); expect(prompt.startsWith('[Deckent runtime instructions v11]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(12); expect(prompt.startsWith('[Deckent runtime instructions v12]')).toBe(true);
+  expect(prompt.slice(prompt.indexOf('\n'))).not.toMatch(/\bDeckent\b/u);
   const channel = PACKAGE_VERSION.includes('-') ? PACKAGE_VERSION.split('-')[1]!.split('.')[0] : 'stable';
-  expect(prompt).toContain(`Running Deckent: ${PACKAGE_VERSION}; channel: ${channel}.`);
+  expect(prompt).toContain(`Running deckent: ${PACKAGE_VERSION}; channel: ${channel}.`);
   expect(prompt).toContain('A project checkout may be a different revision');
-  expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
+  expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (deckent catalog: provider vllm-local v2, model qwen v3), running inside deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
-  expect(prompt).not.toMatch(/terminal-sessions|ledger\.db/); expect(prompt).toContain('Deckent configuration: .deckent/config.json (readable)');
+  expect(prompt).not.toMatch(/terminal-sessions|ledger\.db/); expect(prompt).toContain('deckent configuration: .deckent/config.json (readable)');
 });
 
 // LANG-CRASH (live session 1d428e9f, owner: "tamamen Türkçe iletişim istiyorum, ihlal edilemez"): the local model answered several turns in
@@ -563,13 +564,13 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
     tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(11);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(12);
 
   const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
-  expect(open.startsWith('[Deckent runtime instructions v11]')).toBe(true);
+  expect(open.startsWith('[Deckent runtime instructions v12]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
-    + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'
+    + ' deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'
     + ' read-only unless the owner approves the call: an approved call can change its existing content.');
   // Astra 2192 R9: the configuration's rule is the posture's, not a fixed sentence (a floor no card opens would say so).
   expect(shellLine(render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'read-only' })))
@@ -585,7 +586,7 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
 
   const host = render({ kind: 'host' });
   expect(shellLine(host)).toBe('- Shell tool: run_shell. It runs in the project root directly on the user\'s machine, not in a sandbox: files, processes and the network'
-    + ' are reachable as the user; Deckent\'s own state is protected by name only.');
+    + ' are reachable as the user; deckent\'s own state is protected by name only.');
   expect(host).not.toContain('Network access: none');
   expect(shellLine(render({ kind: 'unavailable' }))).toBe('- Shell tool: run_shell. It cannot run commands here: no shell realm the configuration permits is usable'
     + ' on this machine, so every call is refused.');

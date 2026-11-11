@@ -6,6 +6,7 @@ import { parseIntegrationDiffStats, patchDigest, WorkspacePatchError, type Integ
 import { SystemTrustedClock, t, redactForRecord } from '#platform/index.js';
 import { queueGenerationRef, type IntegrationCommitMetadata, type GitQueueFence } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
+import format from './delivery-format.json' with { type: 'json' };
 /** Writes Git objects and one create-only dedicated reference, never the source index/checkout. */
 export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
   private readonly command: GitCommand;
@@ -19,9 +20,17 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
     await candidate.custody();
     const baseCommit = manifest.schemaVersion === 2 ? manifest.effectiveBaseCommit : patch.baseCommit;
     const tree = await this.tree(candidate, patch, baseCommit, deadline);
-    const commit = await candidate.run(['commit-tree', '--no-gpg-sign', tree, '-p', baseCommit], t('git.delivery.message', { title: redactForRecord(metadata.title).replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 256),
+    const message = t('git.delivery.message', { title: redactForRecord(metadata.title).replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 256),
         run: command.identity.runId, task: command.identity.taskId, phase: metadata.acceptance.phase, criteria: metadata.acceptance.criteria,
-        revision: metadata.acceptance.runRevision, unverified: metadata.acceptance.modelUnverified ? ' (model-unverified)' : '' }, 'en'), undefined, deadline, metadata.deliveredAtMs);
+        revision: metadata.acceptance.runRevision, unverified: metadata.acceptance.modelUnverified ? ' (model-unverified)' : '' }, 'en');
+    const args = ['commit-tree', '--no-gpg-sign', tree, '-p', baseCommit];
+    let commit = await candidate.run(args, message, undefined, deadline, metadata.deliveredAtMs);
+    if (metadata.expectedCommit && commit !== metadata.expectedCommit) {
+      const legacy = new GitCommand({ ...this.options, sourceRoot: manifest.workspace,
+        deliveryIdentity: { authorName: format.legacyAuthorName, authorEmail: format.authorEmail } });
+      const previous = await legacy.run(args, message, undefined, deadline, metadata.deliveredAtMs);
+      if (previous === metadata.expectedCommit) commit = previous;
+    }
       return { schemaVersion: 2, baseCommit: patch.baseCommit, effectiveBaseCommit: baseCommit, commit,
         ref: `refs/deckent/deliveries/${patchDigest(JSON.stringify({ scopeId: command.identity.scopeId, commandId: command.commandId }))}`,
         snapshotDigest: manifest.snapshotDigest };

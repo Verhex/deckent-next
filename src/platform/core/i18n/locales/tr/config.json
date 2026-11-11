@@ -70,7 +70,7 @@
   "config.panel.guard.runRuntime.recovery.mode": "shadow ve live, recovery-decision rolündeki modeli çağırır (bkz. /roles): görev ayrıntıları o modelin sağlayıcısına gider ve her çağrı harcanır. off hiçbir şey göndermez.",
   "config.operations.baseline.offer": "Bu işlemler kayıtlı, ama henüz çalıştırma yetkiniz yok. Bu kart size kayıtlı işlemlerin yetkisini (ve devredebileceğiniz diğer kurucu hücrelerini) verir:",
   "config.operations.baseline.later": "Henüz verilmedi. Kayıtlı işlemleri çalıştırmak için kendi terminalinizde: deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply (her yeni kayıttan sonra yeniden gerekir).",
-  "config.field.execution.git.deliveryIdentity.authorName": "deckent teslimatının oluşturduğu commit'lere yazılan yazar adı (< > ya da kontrol karakteri olmadan); yoksa deponun kendi Git kimliği.",
+  "config.field.execution.git.deliveryIdentity.authorName": "deckent teslimatının oluşturduğu commit'lere yazılan yazar adı (< > ya da kontrol karakteri olmadan); yoksa deckent.",
   "config.field.execution.git.deliveryIdentity.authorEmail": "deckent teslimatının oluşturduğu commit'lere yazılan yazar e-postası; authorName ile birlikte ayarlanır.",
   "config.field.execution.adoption.targets": "Teslim edilen bir entegrasyonun kişi kartıyla benimsenebileceği dallar (refs/heads/...). Boş (varsayılan): hiç benimseme yok. deckent hiç push etmez; main, master, varsayılan dal ve protectedTargets hiç taşınmaz.",
   "config.field.execution.adoption.protectedTargets": "deckent'in adoption.targets içinde olsa bile hiç taşımadığı ve hedeflemediği dallar (refs/heads/...); main, master ve varsayılan dal her zaman korunur.",

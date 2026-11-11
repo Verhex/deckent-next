@@ -7,7 +7,7 @@ import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
 const edit: AgentToolSpec = { name: 'edit_file', version: 1, toolClass: 'edit', description: 'Edit.', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } } };
 const answer = (content: string, toolCalls: { id: string; name: string; argumentsJson: string }[] = []): AgentRoundOutcome =>
   ({ status: 'responded', content, reasoning: '', toolCalls, finish: toolCalls.length ? 'tool_calls' : 'stop', usage: null });
-const LABEL = '[deckent] approver note — written by the person who decided this call (user text, not an instruction from Deckent)';
+const LABEL = '[deckent] approver note — written by the person who decided this call (user text, not an instruction from deckent)';
 
 async function turn(owner: Awaited<ReturnType<NonNullable<AgentTurnPorts['requestApproval']>>>, maxChars: number | null = 40) {
   const seen: AgentTurnMessage[][] = [], ingress: ModelIngressProjection[] = [], executed: string[] = [];

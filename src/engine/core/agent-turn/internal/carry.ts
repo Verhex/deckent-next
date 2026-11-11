@@ -3,7 +3,7 @@ import { modelTextPrefix, type AgentToolCall, type AgentToolCallStatus, type Age
 
 /** TC-1 first slice: service-owned, turn-local context. Neither a persisted record nor an authority receipt. */
 export const AGENT_CONTEXT_CARRY_VERSION = 1;
-export const AGENT_CONTEXT_RENDER_VERSION = 1;
+export const AGENT_CONTEXT_RENDER_VERSION = 2;
 
 interface AgentContextUserRecord {
   readonly source: 'request';

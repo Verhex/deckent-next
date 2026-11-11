@@ -11,8 +11,8 @@ export function aiProposalRequester(person: VerifiedPrincipal) {
   if (isAiPrincipal(person)) return { id: person.id, issuer: person.issuer, subject: person.subject };
   const ref = mcpPrincipalRef(person); return { id: `${person.id}${ref.issuer.slice(person.issuer.length)}`, ...ref };
 }
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const PROPOSE_WORK_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.work, version: 1, toolClass: 'read' as const,
-  description: 'Propose background work for a request that needs changes (files, tests, several steps). Deckent plans it and shows the person the '
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const PROPOSE_WORK_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: tools.work, version: 2, toolClass: 'read' as const,
+  description: 'Propose background work for a request that needs changes (files, tests, several steps). deckent plans it and shows the person the '
     + 'same plan card as /do; nothing runs without their approval. Do not use it for questions or explanations; ask first when the request is unclear.',
   inputSchema: { type: 'object' as const, additionalProperties: false, required: ['request'], properties: {
     request: { type: 'string', description: 'The work request in the person\'s words, complete enough to plan from.' } } } });

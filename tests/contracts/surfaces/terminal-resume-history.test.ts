@@ -76,6 +76,13 @@ describe('markers shared with the engine and the mention composition', () => {
     const summary = renderAgentCompaction(plan, { objective: 'goal', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] });
     const excerpt = renderAgentCompaction(plan, null);
     expect(texts(resumedHistoryEntries([summary, excerpt]))).toEqual(['notice:· summary', 'notice:· summary']);
+    const stored = [user('[Deckent context render v1; carry v1; turn-local source, not a durable effect receipt]\nEarlier assistant texts (recorded by Deckent).'),
+      user('[Deckent context summary: replaces 4 earlier messages. The parts recorded by Deckent are copied.]'),
+      user('[Deckent context excerpt: replaces 4 earlier messages. A mechanical excerpt written by Deckent.]')];
+    expect(texts(resumedHistoryEntries(stored))).toEqual(stored.map(() => 'notice:· summary'));
+    const { freshContextHistory } = await import('#surfaces/core/terminal-conversation/index.js');
+    expect(freshContextHistory([{ role: 'system', content: '[Deckent runtime instructions v11]\nRunning Deckent: stored version.' }, ...stored]))
+      .toEqual([{ role: 'system', content: '[Deckent runtime instructions v11]\nRunning Deckent: stored version.' }, ...stored]);
     const attached = await attachTerminalMentions({ projectRoot: '/p', scopeId: 's', text: 'look', paths: ['a.ts'], options: {} }, {
       find: async () => ({ schemaVersion: 1, paths: [], truncated: false, incomplete: false }),
       attach: async () => ({ schemaVersion: 1, path: 'a.ts', status: 'attached', content: 'BODY-OF-A', bytes: 9, totalBytes: 9, truncated: false }) });

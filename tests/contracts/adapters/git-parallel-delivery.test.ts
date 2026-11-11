@@ -11,8 +11,8 @@ import { deliveryMode } from '#platform/index.js';
 import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { workingTreeRemovalPatterns } from '#adapters/core/git-patch/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  targetQueueKey, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
-import type { RunSnapshot } from '#domain/index.js';
+  targetQueueKey, planQueueCommit, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
+import type { RunSnapshot, TargetQueueRecord } from '#domain/index.js';
 import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
@@ -65,7 +65,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     await target.verify(manifest, p);
     return { manifest, receipt };
   };
-  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>, ask = confirmation) => {
+  const deliver = async (p: WorkspacePatch, candidate?: Awaited<ReturnType<typeof prepare>>, ask = confirmation, writer = delivery) => {
     const { manifest, receipt } = candidate ?? await prepare(p);
     const command = { schemaVersion: 1 as const, commandId: p.identity.runId, identity: p.identity, integrationCommandId: manifest.command.commandId };
     let record: IntegrationDeliveryRecord | null = null;
@@ -74,7 +74,7 @@ async function fixture(refOnly: boolean, format = 'sha1', workingTree = false) {
     const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, sessions = await LocalOsSessionAuthority.create(['s'], 10000, clock);
     const patches = { async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
     const inspection = { async inspect() { return { manifest, receipt }; } };
-    const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, workingTree ? files : delivery, store, sessions,
+    const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, workingTree ? files : writer, store, sessions,
       { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, ask);
     const result = await app.deliver(command), plan = result.plan;
     expect(result.status).toBe(workingTree ? 'working-tree-delivered' : 'reference-delivered'); expect(await (workingTree ? files : delivery).delivered(plan)).toBe(true);
@@ -112,10 +112,14 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('parallel deli
     const f = await fixture(refOnly, format);
     const a = f.patch('a', 'a.txt', 'a before\n', 'a after\n'), b = f.patch('b', 'b.txt', 'b before\n', 'b after\n');
     b.changes.push(...[f.patch('b', 'dir/new.txt', null, 'added\n').changes[0]!, f.patch('b', 'old.txt', 'remove\n', null).changes[0]!]);
-    const approved = JSON.stringify(b), first = await f.deliver(a);
+    const approved = JSON.stringify(b), first = await f.deliver(a, undefined, confirmation,
+      new GitIntegrationDelivery({ ...f.options, deliveryIdentity: { authorName: 'Deckent', authorEmail: 'delivery@deckent.invalid' } }));
+    expect(await f.git('show', '-s', '--format=%an <%ae>', first.plan.commit)).toBe('Deckent <delivery@deckent.invalid>');
+    expect(await f.delivery.delivered(first.plan)).toBe(true);
     expect(await f.adopt(first.record)).toMatchObject({ status: 'adopted', fromCommit: f.base, toCommit: first.plan.commit });
     if (!refOnly) await f.advance(first.plan.commit);
     const before = await f.state(), second = await f.deliver(b);
+    expect(await f.git('show', '-s', '--format=%an <%ae>', second.plan.commit)).toBe('deckent <delivery@deckent.invalid>');
     expect(await f.state()).toEqual({ ...before, refs: [...before.refs.split('\n'), `${second.plan.ref} ${second.plan.commit}`].sort().join('\n') });
     expect(second.manifest).toMatchObject({ schemaVersion: 2, baseCommit: f.base, effectiveBaseCommit: first.plan.commit });
     expect(second.plan).toMatchObject({ schemaVersion: 2, baseCommit: f.base, effectiveBaseCommit: first.plan.commit });
@@ -134,6 +138,11 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('parallel deli
     expect(await readFile(join(lease.workspace, 'a.txt'), 'utf8')).toBe('a after\n');
     expect(await f.adopt(second.record)).toMatchObject({ status: 'adopted', fromCommit: first.plan.commit, toCommit: second.plan.commit });
     expect(await f.git('rev-parse', f.targetRef)).toBe(second.plan.commit);
+    const observed = await f.adoption.observe(f.targetRef);
+    await f.adoption.move(f.targetRef, second.plan.commit, first.plan.commit, observed.fence,
+      { sequence: observed.fence!.sequence + 1, scopeId: 's', commandId: 'rollback-to-old-author' });
+    expect((await f.adoption.observe(f.targetRef)).tip).toBe(first.plan.commit);
+    expect(await f.delivery.delivered(first.plan)).toBe(true);
   });
   it.each(['content', 'mode', 'absent-created', 'deleted', 'rewritten', 'grafted', 'directory', 'ancestor-file'])('refuses %s with PATCH_BASE_ADVANCED before candidate or reference writes', async kind => {
     const f = await fixture(refOnly);
@@ -281,8 +290,21 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('intervening h
 describe.skipIf(process.platform !== 'linux')('queue private prefixes and physical generations', () => {
   it('prepares C1→C2 before publication and allocates the exact private commit with original source custody', async () => {
     const f = await fixture(true), before = await f.state(), a = f.patch('private-a', 'a.txt', 'a before\n', 'a after\n'), b = f.patch('private-b', 'b.txt', 'b before\n', 'b after\n');
-    const first = await f.prepare(a), metadata = { title: 'check', acceptance: { phase: 'accepted', criteria: 1, runRevision: 1, modelUnverified: false }, deliveredAtMs: 1000 };
-    const plan1 = await f.delivery.plan({ schemaVersion: 1, commandId: 'publish-a', identity: a.identity, integrationCommandId: first.manifest.command.commandId }, first.manifest, a, metadata);
+    const first = await f.prepare(a), metadata = { title: a.identity.taskId, acceptance: { phase: 'accepted', criteria: 1, runRevision: 1, modelUnverified: false }, deliveredAtMs: 1000 };
+    const firstCommand = { schemaVersion: 1 as const, commandId: 'publish-a', identity: a.identity, integrationCommandId: first.manifest.command.commandId };
+    const oldWriter = new GitIntegrationDelivery({ ...f.options, deliveryIdentity: { authorName: 'Deckent', authorEmail: 'delivery@deckent.invalid' } });
+    const plan1 = await oldWriter.plan(firstCommand, first.manifest, a, metadata);
+    expect(await f.delivery.plan(firstCommand, first.manifest, a, { ...metadata, expectedCommit: plan1.commit })).toEqual(plan1);
+    const queued = { request: { identity: a.identity, acceptedRevision: 1, submittedAt: 1000 }, candidate: { candidateVersion: plan1.commit } } as TargetQueueRecord;
+    const run = { graph: { tasks: [{ id: a.identity.taskId, acceptanceCriteria: ['exit'], workInput: { title: 'New title' } }] },
+      progress: [{ taskId: a.identity.taskId, phase: 'accepted' }], bindings: [{ identity: a.identity }] } as RunSnapshot;
+    expect(await planQueueCommit(queued, run, replay => f.delivery.plan(firstCommand, first.manifest, a, replay))).toEqual(plan1);
+    expect((await f.delivery.plan(firstCommand, first.manifest, a, metadata)).commit).not.toBe(plan1.commit);
+    expect((await f.delivery.plan(firstCommand, first.manifest, a, { ...metadata, expectedCommit: '0'.repeat(40) })).commit).not.toBe('0'.repeat(40));
+    const configured = new GitIntegrationDelivery({ ...f.options, deliveryIdentity: { authorName: 'Configured author', authorEmail: 'configured@example.invalid' } });
+    const custom = await configured.plan(firstCommand, first.manifest, a, metadata);
+    expect((await exec('/usr/bin/git', ['-C', first.manifest.workspace, 'show', '-s', '--format=%an <%ae>', custom.commit])).stdout.trim())
+      .toBe('Configured author <configured@example.invalid>');
     const target = new GitIntegrationTarget(f.options, limits, { commit: plan1.commit, repository: first.manifest.workspace });
     const command = { schemaVersion: 1 as const, commandId: 'private-b', identity: b.identity, proposal: '0'.repeat(20) }, receipt = { schemaVersion: 1 as const, scopeId: 's', digest: patchDigest(JSON.stringify(b)), byteLength: Buffer.byteLength(JSON.stringify(b)) };
     const manifest = await target.prepare({ schemaVersion: 1, command, patch: receipt, observation: (await target.observe(b)).digest, actor }, b);

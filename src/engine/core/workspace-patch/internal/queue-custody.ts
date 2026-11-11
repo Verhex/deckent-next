@@ -25,7 +25,8 @@ export function queueCommitMetadata(record: TargetQueueRecord, run: RunSnapshot)
   const task = run.graph.tasks.find(row => row.id === record.request.identity.taskId), progress = run.progress.find(row => row.taskId === task?.id);
   if (!task || progress?.phase !== 'accepted' || !run.bindings.some(row => sameAttemptIdentity(row.identity, record.request.identity))) throw new CandidateBindingError('CANDIDATE_MISMATCH');
   return { title: task.workInput?.title || task.id, acceptance: { phase: progress.phase, criteria: task.acceptanceCriteria.length, runRevision: record.request.acceptedRevision,
-    modelUnverified: progress.acceptedEvidence === 'model-unverified' }, deliveredAtMs: record.request.submittedAt };
+    modelUnverified: progress.acceptedEvidence === 'model-unverified' }, deliveredAtMs: record.request.submittedAt,
+    ...(record.candidate ? { expectedCommit: record.candidate.candidateVersion } : {}) };
 }
 /**
  * Plans a ticket's commit and keeps candidates bound before alpha.53 replayable: they were planned with the task id as title, so when the

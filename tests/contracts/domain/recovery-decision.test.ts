@@ -12,9 +12,10 @@ const answer = (overrides: Record<string, unknown> = {}) => JSON.stringify({ sch
 const read = (text: string, actions: readonly string[] = offered) => readRecoveryDecisionAnswer(text, { caseId, evidenceDigest, offered: actions }, registry);
 
 it('the registry seed is versioned data: one current template, the note codes and every bound; unknown keys and a dangling template are refused', () => {
-  expect(registry).toMatchObject({ schemaVersion: 1, status: 'provisional', template: { id: 'recovery-decision', version: 1 } });
+  expect(registry).toMatchObject({ schemaVersion: 1, status: 'provisional', template: { id: 'recovery-decision', version: 2 } });
+  expect(recoveryDecisionTemplate(registry).text).toContain('deckent already proved the worker stopped');
   expect(registry.noteCodes.map(row => row.code)).toEqual(['previous-attempt-lost-before-report', 'previous-attempt-oom', 'previous-attempt-launcher-died']);
-  expect(recoveryDecisionTemplate(registry)).toMatchObject({ id: 'recovery-decision', version: 1, text: expect.stringContaining('JSON') });
+  expect(recoveryDecisionTemplate(registry)).toMatchObject({ id: 'recovery-decision', version: 2, text: expect.stringContaining('JSON') });
   expect(() => loadRecoveryDecisionRegistry({ ...RECOVERY_DECISION_SEED as object, extra: true })).toThrow();
   expect(() => loadRecoveryDecisionRegistry({ ...RECOVERY_DECISION_SEED as object, template: { id: 'recovery-decision', version: 9 } })).toThrow();
   expect(JSON.stringify(RECOVERY_DECISION_SEED)).not.toMatch(/claude|gpt|opus|sonnet|fable|anthropic|openai/iu); // model-independent data
