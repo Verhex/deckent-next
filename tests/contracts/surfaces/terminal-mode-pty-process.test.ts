@@ -460,10 +460,10 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
       // TERMINAL-SABIT-DUZEN: the full window opens on the alternate screen with the banner at the top of the conversation; the person's main
       // screen is never cleared, and on exit the conversation (banner first) is written to it as plain text (NO_COLOR: no escape at all).
       expect(run.output).toContain('\u001b[?1049h'); expect(run.output).not.toContain('\u001b[H\u001b[2J');
-      const left = run.output.slice(run.output.lastIndexOf('\u001b[?1049l') + '\u001b[?1049l'.length), after = left.slice(left.indexOf('          ⣀⣠⣀⡀'));
+      const left = run.output.slice(run.output.lastIndexOf('\u001b[?1049l') + '\u001b[?1049l'.length), after = left.slice(left.indexOf('            ⣿⣿⣿⡇'));
       const hint = language === 'en' ? '? shortcuts' : '? kısayollar';
       const banner = after.slice(0, after.indexOf(hint) + hint.length);
-      expect(banner.trimStart().startsWith('⣀⣠⣀⡀')).toBe(true);
+      expect(banner.trimStart().startsWith('⣿⣿⣿⡇')).toBe(true);
       expect(banner).not.toContain('\u001b');
       for (const word of words) expect(stripVTControlCharacters(banner).replace(/\s+/gu, ' ')).toContain(word);
       // The static banner carries no mutable mode (it would go stale after Shift+Tab).
@@ -522,8 +522,8 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
         await appendFile(proof, `\n### ${language} · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`);
     }
     // The banner is on the first row of the cleared screen; the status row names the careful stop.
-    expect(banner.split('\n')[0]?.trimEnd()).toBe('          ⣀⣠⣀⡀');
-    expect(banner.split('\n')[1]).toMatch(/^ +⢸⣟⡉⢻⣿⡄ +deckent /u);
+    expect(banner.split('\n')[0]?.trimEnd()).toBe('            ⣿⣿⣿⡇');
+    expect(banner.split('\n')[6]).toMatch(/^⢸⣿⣿⣧ ⣼⣿⠁ {3}⣰⣿⣿⣿⡇ +deckent /u);
     expect(banner).toContain(words.careful);
     // /help (SW-1 window): the title, then the group headings (plain rows, never a stop: F12) with the commands to pick (L3).
     expect(help).toContain(words.help); expect(help).toMatch(new RegExp(`│ ${words.heading} +│`, 'u')); expect(help).toMatch(/│ > +\/status /u);

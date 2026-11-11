@@ -10,9 +10,10 @@ interface StartupFacts {
 }
 
 /** The banner's catalog text (terminal.banner.*): the mark (Unicode or ASCII), the title, the facts, the hint and the one-line form. */
-export function terminalStartupLabels(locale: Locale, facts: StartupFacts, ascii: boolean): Pick<WorklineStartup, 'logo' | 'lines' | 'compact'> {
+export function terminalStartupLabels(locale: Locale, facts: StartupFacts, ascii: boolean): Pick<WorklineStartup, 'logo' | 'logoLarge' | 'lines' | 'compact'> {
   return {
     logo: (ascii ? t('terminal.banner.logoAscii', {}, locale) : t('terminal.banner.logo', {}, locale)).split('\n'),
+    logoLarge: (ascii ? t('terminal.banner.logoAscii', {}, locale) : t('terminal.banner.logoLarge', {}, locale)).split('\n'),
     lines: [t('terminal.banner.title', { version: facts.version }, locale), t('terminal.banner.project', { name: facts.project, path: facts.path }, locale),
       t('terminal.banner.model', { model: facts.model }, locale), t('terminal.banner.hint', {}, locale)],
     compact: t('terminal.banner.compact', { version: facts.version, name: facts.project }, locale),

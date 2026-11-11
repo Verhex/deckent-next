@@ -29,9 +29,12 @@ function splitRendered(text: string): readonly string[] {
 export function useTranscriptBlocks(rows: readonly LedgerRow[], columns: number, render: TranscriptRender, banner: ((columns: number) => string) | null, styleKey: unknown,
   variantOf: TranscriptVariant = NO_VARIANT): TranscriptBlocks {
   const cache = useRef(new Map<number, Laid>()), wanted = useRef(new Map<number, Readonly<{ columns: number; style: unknown; variant: string; draw: () => string }>>());
+  const previousBanner = useRef(banner);
   const renderRef = useRef(render); renderRef.current = render;
   const [version, setVersion] = useState(0);
   const blocks = useMemo(() => {
+    // A height-only resize can change the banner while cached conversation rows stay valid.
+    if (previousBanner.current !== banner) { cache.current.delete(BANNER_SEQ); previousBanner.current = banner; }
     const first = rows[0]?.seq ?? Number.MAX_SAFE_INTEGER;
     for (const seq of cache.current.keys()) if (seq < first && seq !== BANNER_SEQ) cache.current.delete(seq);
     const width = Math.max(1, columns), offset = banner ? 1 : 0;
