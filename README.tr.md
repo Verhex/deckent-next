@@ -28,9 +28,10 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.64`**. [CHANGELOG.md](CHANGELOG.md) tüm
-> sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
-> büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
+> Bu README geçerli sürüm adayını anlatır: **beta ön sürüm `1.0.0-beta.1`**. [CHANGELOG.md](CHANGELOG.md) beta
+> sürümlerini en yenisi başta listeler; eski sürümler [CHANGELOG-alpha.md](CHANGELOG-alpha.md) dosyasındadır.
+> Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta serisi içinde,
+> büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil). Sekiz kabul kapısı beta serisinde açık kalır; beta kabulü ayrıca duyurulur.
 >
 > Alpha.64 son alpha'dır. Onay kökeni, teslim modu, Brain kökeni veya resource-key kayıtları yazıldıktan sonra
 > alpha.63.3 bunları okuyamaz: **alpha.63.3'e geri dönüş yoktur**. Kurtarma ileri sürüm düzeltmesi gerektirir;
@@ -546,7 +547,7 @@ anlatır.
 
 ### Henüz olmayanlar
 
-- **npm paketi yok.** Betaya kadar kaynaktan kurun.
+- **npm paketi yok.** npm paketi yayımlanana kadar kaynaktan kurun.
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
 - **Çok adımlı iş süreçlerinin koordinasyonu henüz yok.** Bir istek bir Run olur; birden çok turu ve beklemeyi
   koordine eden daha uzun süreçler planlanıyor.
@@ -579,13 +580,13 @@ model bağlamayı ertelemeye izin verir, kart metnini kopyalanabilir yapar ve ar
 Alpha.60 adayı terminalin ilk karesini saniyenin yaklaşık üçte birinde çizer (çıplak `deckent`, tek Linux makinesinde ölçüldü; servis yanıtlamadan gönderilen mesaj görünür bir notun
 arkasında bekler), BeUser'ın bağlı her modelle yürümesine izin verir ve Codex CLI abonelik girişi ile bağlantısı ekler.
 Korunan katman anahtarları kapalı başlar;
-gerçek kullanım kanıtları ve ChatGPT planındaki Codex işçisinin etkinleştirilmesi beta öncesi kapılardır. Beta bu katmanları
+gerçek kullanım kabulü ve ChatGPT planındaki Codex işçisinin kabulü beta serisinde açık kalır. Beta bu katmanları
 gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi yanında başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.60<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
-  C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
+  N["Şimdi · beta.1 adayı<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Beta boyunca · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  C --> B["Beta iyileştirmeleri<br/>npm paketi planı<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```
 
@@ -603,7 +604,7 @@ policy ve onaylar üzerinden hareket eder.
 - [İşletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md): kurulum değerleri, sandbox görünümleri, anahtar
   depoları, harcama, işçi imajları, yama muhafazası ve kurtarma setleri ayrıntılı
 - [ARCHITECTURE.md](ARCHITECTURE.md): ayrıntılı mühendislik sözleşmeleri ve uygulama notları
-- [CHANGELOG.md](CHANGELOG.md): her sürümün getirdikleri
+- [CHANGELOG.md](CHANGELOG.md): her beta sürümünün getirdikleri; [CHANGELOG-alpha.md](CHANGELOG-alpha.md): eski alpha sürümleri
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [Davranış kuralları](CODE_OF_CONDUCT.md) · [Güvenlik](SECURITY.md)
 
 ## Lisans

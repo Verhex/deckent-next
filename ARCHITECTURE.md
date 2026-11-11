@@ -1134,8 +1134,8 @@ codes are retained; foreign issues without a code become `SECTION_INVALID`, and 
 
 ## Documents
 
-The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHITECTURE.md`, `PLAN.md`,
-`COMPLETED-PLAN.md`, `CHANGELOG.md`, plus owner-admitted repository standards (2026-10-03): `README.tr.md`,
+The Markdown gate admits the product/roadmap documents `README.md`, `ARCHITECTURE.md`, `PLAN.md`,
+`COMPLETED-PLAN.md`, `CHANGELOG.md`, `CHANGELOG-alpha.md` (closed alpha history, owner 2026-11-11), plus owner-admitted repository standards (2026-10-03): `README.tr.md`,
 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`;
 public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09)
@@ -1150,7 +1150,8 @@ Repository standards are human/host-maintained files; Markdown admission does no
 Development-host, skill, Jev, review-channel and process-board decisions (not product contracts) are kept verbatim in
 [development host and documents](.deckent/docs/architecture/modules/development-host-and-documents.md).
 
-Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); it also binds the first CHANGELOG release and the highest README/README.tr/SECURITY alpha claim to package.json, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). Since 2026-10-18 relative Markdown links in those files and `docs/*.md` must resolve to an existing file and GitHub heading anchor, and every `docs/X.md` needs `docs/X.tr.md` with the same link targets (shrink-only English-only baseline: `docs/secret-helpers.md`). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
+Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); it also binds the first CHANGELOG.md release and the highest README/README.tr/SECURITY alpha or beta claim to package.json (or the last released version while the top line is Unreleased), reads CHANGELOG.md followed by the required CHANGELOG-alpha.md as one strictly descending SemVer history, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). Since 2026-10-18 relative Markdown links in those files and `docs/*.md` must resolve to an existing file and GitHub heading anchor, and every `docs/X.md` needs `docs/X.tr.md` with the same link targets (shrink-only English-only baseline: `docs/secret-helpers.md`). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
+Every live beta release bumps `1.0.0-beta.N` and adds exactly one human-curated line (version, date, landed commit, what it brings) to [CHANGELOG.md](CHANGELOG.md); the closed alpha history remains in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
 Design reasoning goes into [decisions.md](.deckent/docs/architecture/decisions.md).
 
 ## Decision log

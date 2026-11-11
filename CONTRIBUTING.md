@@ -225,6 +225,10 @@ The root `README` files introduce the product, `docs/` explains public concepts 
 folders contain maintainer coordination and historical notes, which can include Turkish text.
 You do not need a private development dashboard to submit a contribution.
 
+[CHANGELOG.md](CHANGELOG.md) tracks the beta line; the closed alpha history is in
+[CHANGELOG-alpha.md](CHANGELOG-alpha.md). Every live beta release bumps `1.0.0-beta.N`
+and adds exactly one human-curated line: version, date, landed commit and what it brings.
+
 ## AI-assisted contributions
 
 AI-assisted contributions follow the same review bar as every other contribution.

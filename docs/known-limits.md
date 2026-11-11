@@ -22,10 +22,11 @@ This page says plainly what Deckent does not do yet, what has not been tried, an
 describes the current pre-release (the version is in the [README](../README.md) and the top line of the
 [CHANGELOG](../CHANGELOG.md)). A limit leaves this page when the change that closes it has landed and been
 seen working, not before. Each item gives **what** the limit is, **the impact** on you and, where one exists, a
-**workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
+**workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each beta release carried at the time;
+[CHANGELOG-alpha.md](../CHANGELOG-alpha.md) preserves those of older alpha releases.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-journey BeUser re-walk and the owner terminal test are still open and run before beta. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The complete four-journey BeUser acceptance and the owner terminal test remain open during the beta line (owner, 2026-11-11). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
@@ -44,6 +45,15 @@ Alpha.62 integration verification covers valid config versions 4–6 without rew
   reading credentials. File tools still refuse all hard-linked files. **The host realm is not a security boundary; name checks are best
   effort.** Paths computed inside arbitrary programs and concurrent replacements remain outside this check. Assembled subscription-bridge
   and real CLI stdout canary acceptance are separate from these author checks.
+
+## Beta.1 candidate: checks and remaining setup limits
+
+- **Model/provider rows appear before their checks finish.** `/model` and `/provider` share one read snapshot per opening and show names with “Checking…”. Those pending rows cannot be selected; wait for the row's check. Closing or reloading discards late results. This changes display loading, not authority for an action.
+- **Timing is opt-in, local and content-free.** Set `DECKENT_TIMING_TRACE=1` for commands you want measured; `deckent doctor timing` summarizes retained samples. The bounded local trace records command names, milestones and read counts, not prompts, command arguments, model output or secrets. It is off by default; these samples are not a performance guarantee for your machine.
+- **Two WSL distributions can collide on one runtime guard.** The guard hashes the endpoint and OS user id without a machine identity. With the same user id and project path in distributions sharing a network namespace, one running service can make the other refuse with `LOCAL_RUNTIME_ALREADY_RUNNING`. Doctor can still say the second installation can start. Use a different project folder in the second distribution; the guard correction remains open.
+- **Worker-image updates can ask for consent that their card cannot save.** With no recorded image consent and old single-image receipts that lack `images[].providers`, `toolchains update --apply` can end with `WORKER_IMAGE_CONSENT_MISSING` after you answer yes. Its card is not a consent writer; the automatic refresh can fail silently for the same reason. The consent-writing path is the `/setup` worker card, which can also select a ready local image. Completing that path on affected live/N1 installations has not been verified; recognition/migration of old receipts and a direct route to the consent card remain open.
+
+Beta.1 is a candidate. The eight acceptance gates remain open during the beta line; beta acceptance is announced separately.
 
 ## BeUser B1 journey walks (alpha.57)
 
@@ -72,9 +82,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   closes. A verdict therefore rests on the persona's walk and the evaluator's reading of the transcript, and `unknown` is never turned
   into a pass. A Codex walker's finish after the walk can end with no verdict (`reason: unknown`, cause not yet recorded). *Impact:* a
   walk does not prove authorization or safety. *Workaround:* check the card and receipt yourself with `run inspect` and the audit.
-- **The before-beta BeUser re-walk is still pending (alpha.61).** The four journeys (onboarding, uninstall-v2, beuser-self, theme-light)
-  have not been walked together on the assembled release, and the owner's own terminal test has not happened; both run before beta
-  (owner, 2026-11-01). The alpha.61 onboarding walk of 2026-11-02 reached the end of the journey in both branches and left findings open.
+- **Complete BeUser journey acceptance remains open.** The four journeys (onboarding, uninstall-v2, beuser-self, theme-light)
+  still need complete acceptance on the assembled release and the owner’s terminal test. The alpha.64 install re-walk supplied beta.1 fixes; it did not close the eight acceptance gates (owner, 2026-11-11). The alpha.61 onboarding walk of 2026-11-02 reached the end of the journey in both branches and left findings open.
   *Impact:* journey acceptance is not claimed for alpha.60 or alpha.61.
 
 ## Platforms: tried and not tried
