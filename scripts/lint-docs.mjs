@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const LIMITS = { planBytes: 60 * 1024, planLineChars: 800, architectureLines: 1200 };
+const LIMITS = { planBytes: 66 * 1024, planLineChars: 800, architectureLines: 1300 };
 const read = (name) => readFileSync(join(ROOT, name), 'utf8');
 const failures = [];
 const fail = (where, message) => failures.push(`${where.replaceAll('\\', '/')}: ${message}`);

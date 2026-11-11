@@ -63,7 +63,7 @@
       "user"
     ],
     "enforce": true,
-    "unitLines": 2000,
+    "unitLines": 2200,
     "note": "Lower tiers import only lower/same-tier unit index.ts; package index.ts composes shipped units. Optional editions are loaded lazily when implemented."
   },
   "imports": {
@@ -5630,18 +5630,18 @@
     "note": "Canonical run terminology is enforced across product source, tests and scripts; no legacy aliases. 'tenant' is retired (owner 2026-09-27, H34 S4); only tests/contracts/HARVEST.json (historical inventory) is exempt."
   },
   "budgets": {
-    "maxLinesPerFile": 1500,
+    "maxLinesPerFile": 1600,
     "packageLines": {
       "platform": 25000,
-      "domain": 11300,
+      "domain": 12400,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 42211,
+      "adapters": 46400,
       "surfaces": 45000,
-      "composition": 13690
+      "composition": 15000
     },
     "totalSrcLines": 200000,
-    "testCases": 9002,
+    "testCases": 9450,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

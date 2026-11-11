@@ -133,8 +133,8 @@ describe('documentation release drift gate', () => {
   });
   it('retains size gates and fails closed on malformed versions', async () => {
     expect(lint(await fixture({ 'PLAN.md': 'x'.repeat(801) })).output).toContain('801 chars');
-    expect(lint(await fixture({ 'PLAN.md': 'x\n'.repeat(31_000) })).output).toContain('bytes >');
-    expect(lint(await fixture({ 'ARCHITECTURE.md': 'x\n'.repeat(1201) })).output).toContain('1201 lines');
+    expect(lint(await fixture({ 'PLAN.md': 'x\n'.repeat(34_000) })).output).toContain('bytes >');
+    expect(lint(await fixture({ 'ARCHITECTURE.md': 'x\n'.repeat(1301) })).output).toContain('1301 lines');
     expect(lint(await fixture({ 'package.json': '{"version":"bad"}' })).status).toBe(1);
   });
   it('resolves relative links to existing files and GitHub heading anchors; URLs, code and fenced blocks are not links', async () => {
