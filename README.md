@@ -172,6 +172,26 @@ namespaces bubblewrap needs; deckent then says so and falls back to Landlock. Th
 cases and how an administrator lifts the restriction. The [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart)
 lists the prerequisites again and runs one test without a provider key.
 
+### Update an existing install
+
+In your existing source clone, check `git status` and preserve any local changes before choosing the revision to install.
+Fetch the available revisions, replace `<revision>` with the wanted tag or commit, then repeat the install steps:
+
+```sh
+git fetch origin --tags
+git checkout <revision>
+npm ci
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/update-build
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/update-build
+npm run build
+npm link
+deckent --version
+```
+
+Use a fresh `--out` directory each time, or stage an existing completed build that matches the checked-out bubblewrap lock.
+Then run `deckent doctor` in each existing project folder.
+If doctor reports `INSTALLATION_IDENTITY_RELOCATED` in the registered source project, run `deckent terminal attach --unregister --apply` there, then `deckent init identity --keep`; attached folders must be attached again (see [the known limit](docs/known-limits.md#installation-moved)).
+
 ### Your first session
 
 This takes you from an empty project to a governed chat and its cost, without leaving deckent. Change to your own project folder,

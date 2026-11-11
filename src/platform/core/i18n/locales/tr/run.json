@@ -346,7 +346,7 @@
   "error.HANDOFF_PATCH_UNAPPLICABLE": "Kabul edilmiş öncül yaması iş tabanına uygulanamıyor; işçi başlamadı.",
   "error.HANDOFF_INVALID": "Yapılandırılmış devir notu geçersiz.",
   "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor.",
-  "error.RUN_HOLD_PERSON_REQUIRED": "Güvenlik bekletmesini (izleyici duraklatması veya denetçi parkı) yalnızca etkileşimli terminaldeki bir kişi kaldırır; hiçbir policy izni bunun yerini tutmaz. Hiçbir şey değişmedi.",
+  "error.RUN_HOLD_PERSON_REQUIRED": "Güvenlik bekletmesini (izleyici duraklatması veya denetçi parkı) yalnızca etkileşimli terminaldeki bir kişi kaldırır; hiçbir yetki politikası izni bunun yerini tutmaz. Hiçbir şey değişmedi.",
   "error.RUN_QUOTA_PERSON_REQUIRED": "Süresi dolan abonelik kota beklemesini yalnızca etkileşimli terminaldeki bir kişi yanıtlar; hiçbir yapay zekâ, politika hücresi veya betik yanıtlayamaz.",
   "error.RUN_QUOTA_WAIT_LIMIT": "Beklemeyi sürdürme artık sunulmuyor: ayarlanan bekleme sayısı doldu. Sıradaki adayı seçin veya işi kendiniz kapatın; iş sizin yerinize hiçbir zaman iptal edilmez.",
   "error.NERVOUS_RULES_UNREADABLE": "Nervous kural kaydı okunamadı ya da geçersiz; kaybolan çalışan dedektörü başlamadı ve hiçbir kural sessizce atlanmadı. Hiçbir şey değişmedi.",

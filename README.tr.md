@@ -173,6 +173,26 @@ kısıtı nasıl kaldıracağını
 koşulları ve sağlayıcı anahtarı gerektirmeyen tek bir testi [katkıcı hızlı başlangıcı (EN)](CONTRIBUTING.md#a-30-minute-quickstart)
 gösterir.
 
+### Mevcut kurulumu güncelleme
+
+Mevcut kaynak klonunuzda `git status` ile kontrol edin; kurulacak revizyonu seçmeden önce yerel değişikliklerinizi koruyun.
+Uzak revizyonları alın, `<revision>` yerine istediğiniz etiketi veya commit'i yazın ve kurulum adımlarını tekrarlayın:
+
+```sh
+git fetch origin --tags
+git checkout <revision>
+npm ci
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/update-build
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/update-build
+npm run build
+npm link
+deckent --version
+```
+
+Her seferinde yeni bir `--out` dizini kullanın veya seçtiğiniz revizyondaki bubblewrap kilidiyle eşleşen, tamamlanmış bir derlemeyi stage edin.
+Ardından mevcut proje klasörlerinin her birinde `deckent doctor` çalıştırın.
+Doctor kayıtlı kaynak projede `INSTALLATION_IDENTITY_RELOCATED` bildirirse orada önce `deckent terminal attach --unregister --apply`, sonra `deckent init identity --keep` çalıştırın; bağlı klasörlerin yeniden bağlanması gerekir ([bilinen sınıra](docs/known-limits.tr.md#kurulumun-konumu-değiştiğinde) bakın).
+
 ### Adım adım ilk oturum
 
 Bu adımlar sizi boş bir projeden yönetilen bir sohbete ve onun maliyetine, deckent'ten çıkmadan götürür. deckent kaynak dizininin dışındaki
