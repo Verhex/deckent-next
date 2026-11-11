@@ -1,3 +1,4 @@
+import { timedAsync } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { processCommandSchema, validateProcessEvidence, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
 /** A v2 stdout line consumer: complete lines in order (UTF-8, without the newline); `stop` ends the process group at once (reason `stopped`). */
@@ -5,7 +6,7 @@ export type ProcessLineConsumer = (line: string) => 'stop' | void;
 /** Linux comparison profile: explicit environment, closed (v1) or bounded (v2) stdin, owned process group, raw bounded output.
  * This reports the command process, never the Docker container or a Task's success.
  */
-export async function runNodeProcess(input: ProcessCommand, signal?: AbortSignal, onLine?: ProcessLineConsumer): Promise<ProcessEvidence> {
+async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, onLine?: ProcessLineConsumer): Promise<ProcessEvidence> {
   const parsed = processCommandSchema.safeParse(input);
   if (!parsed.success) throw new ProcessRunnerError('PROCESS_RUNNER_INVALID');
   if (process.platform !== 'linux') throw new ProcessRunnerError('PROCESS_RUNNER_UNSUPPORTED');
@@ -65,3 +66,5 @@ export async function runNodeProcess(input: ProcessCommand, signal?: AbortSignal
   });
   return validateProcessEvidence(command, result);
 }
+
+export const runNodeProcess = timedAsync('child-node', runNodeProcessInner);

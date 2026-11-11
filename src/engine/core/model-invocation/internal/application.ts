@@ -1,3 +1,4 @@
+import { timedAsync } from '#platform/index.js';
 import type { ModelInvocationControllerHandle } from './controllers.js';
 import { claimModelInvocation } from './claim.js';
 import { acquireModelInvocationEvidence, type ModelInvocationAcquisitionInput } from './acquisition.js';
@@ -171,7 +172,8 @@ export class ModelInvocationApplication {
 
   /** Non-sending readiness check using the invocation's own policy, profile, adapter and quote. A stale catalog revision is reported only
    * for an already-active identical binding: the caller must use governed activate before pinning; invoke never accepts that stale record. */
-  async preview(input: unknown, credential?: unknown, signal?: AbortSignal, checks?: ModelInvocableNowChecks) {
+  preview(input: unknown, credential?: unknown, signal?: AbortSignal, checks?: ModelInvocableNowChecks) { return timedAsync('invocation-preview', () => this.previewTimed(input, credential, signal, checks))(); }
+  private async previewTimed(input: unknown, credential?: unknown, signal?: AbortSignal, checks?: ModelInvocableNowChecks) {
     const command = parseModelInvocationCommand(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));

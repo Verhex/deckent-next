@@ -1,4 +1,5 @@
-import { parseProviderCatalog, providerCatalogObjectSchema } from '#domain/index.js';
+import { timedSync } from '#platform/index.js';
+import { parseProviderCatalog as parseProviderCatalogRaw, providerCatalogObjectSchema } from '#domain/index.js';
 import { ConfigValidationError, registerConfigSection, CONFIG_CONTRACT_SINCE } from '#platform/index.js';
 
 import { nativeWorkerEventRetentionBytes } from '#adapters/core/native-connection/index.js';
@@ -25,3 +26,5 @@ export function registerProviderCatalogConfig(): void {
     },
   });
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);

@@ -1,10 +1,11 @@
+import { timedSync } from '#platform/index.js';
 import { CodedError } from '#platform/index.js';
 import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
 import { admittedToolchains, compareToolchainVersions, extractToolchainVersion, type ToolchainAdmissionSource } from '#engine/core/toolchain-currency/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, parseProviderCatalog, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
+import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, parseProviderCatalog as parseProviderCatalogRaw, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
   type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
   type CatalogModel, type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
@@ -406,3 +407,5 @@ export function workerConnectionModelIds(seed: ProviderCatalogDocument, source: 
     return observed !== null && (model.minCliVersion === null || compareToolchainVersions(observed, model.minCliVersion) >= 0);
   })).map(model => model.nativeId));
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);

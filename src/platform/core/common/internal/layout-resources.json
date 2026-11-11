@@ -40,7 +40,8 @@
     "compileCache": "state/compile-cache",
     "bin": "bin",
     "installationRegistration": "installation/registration.json",
-    "projectAttachment": "project-attachment.json"
+    "projectAttachment": "project-attachment.json",
+    "timingTrace": "state/timing/commands.jsonl"
   },
   "bootstrapResource": "config",
   "fixedResources": [

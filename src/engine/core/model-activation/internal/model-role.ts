@@ -1,4 +1,5 @@
-import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog, roleModelKey, type ModelActivationRecord,
+import { timedSync } from '#platform/index.js';
+import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog as parseProviderCatalogRaw, roleModelKey, type ModelActivationRecord,
   type ModelReference, type ModelRolePolicy, type RoleModelDecision, type RoleModelRow, type RoleModelTarget } from '#domain/index.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
@@ -56,3 +57,5 @@ export function roleModelInvocationReference(sources: RoleModelSources, profiles
   const references = sources.providerCatalog === undefined ? [] : roleModelPorts(sources).references(target);
   return references.find(reference => held.some(profile => profile.scopeId === scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference))) ?? null;
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);

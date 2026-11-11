@@ -1,3 +1,4 @@
+import { timingFrame, timingEnabled, currentTiming, startTiming, runWithTiming, type TimingTrace } from '#platform/index.js';
 import type { ExactContext, PanelApprovalView, PanelContext, PanelController, PanelInput, PanelPort,
   PanelSnapshot, PanelPickerView, PanelSubmission, PanelTurnBinding, TerminalLocalContext } from './panel-contract.js';
 
@@ -54,6 +55,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
   let context = captureContext(ports.context), active: Active<C> | null = null, approval: Card<C> | null = null;
   let picker: { view: PanelPickerView; resolve: (choice: string | null) => void } | null = null;
   let closed = false, last: PanelSnapshot<C>['last'] = null;
+  const timings = new Map<string, TimingTrace>();
   const queue: PanelSubmission<C>[] = [], listeners = new Set<(snapshot: PanelSnapshot<C>) => void>();
   const snapshot = (): PanelSnapshot<C> => Object.freeze({ context,
     phase: closed ? 'closed' : active?.abort.signal.aborted ? 'cancelling' : active ? 'running' : 'idle',
@@ -110,11 +112,12 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
   const drain = () => {
     if (closed || active || !queue.length) return;
     const input = queue.shift()!;
+    timings.get(input.inputId)?.phase('started');
     const operation: Active<C> = { input, abort: new AbortController(), binding: null, handles: new Set(), revisions: new Map() };
     active = operation; publish();
     // A reentrant observer may close/cancel before the adapter gets the input.
     if (!current(operation)) { finish(operation, 'unknown'); return; }
-    void (async () => {
+    void runWithTiming(timings.get(input.inputId), async () => {
       let outcome: 'returned' | 'unknown' = 'returned';
       try {
         await ports.execute(Object.freeze({ input, signal: operation.abort.signal, pick: (view: PanelPickerView) => pick(operation, view),
@@ -134,12 +137,16 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
             if (settlement.outcome === 'unsettled') approval.phase = 'unknown'; else retire();
             publish(); return true;
           } }));
-      } catch { outcome = 'unknown'; }
+      } catch { outcome = 'unknown'; timings.get(input.inputId)?.fail(); }
+      const timing = timings.get(input.inputId);
+      if (timing && !timing.done) await timingFrame(timing, false).catch(() => undefined);
+      if (outcome === 'unknown') timing?.phase('finished', 'error');
       finish(operation, operation.abort.signal.aborted ? 'unknown' : outcome);
-    })();
+    });
   };
   const finish = (operation: Active<C>, outcome: 'returned' | 'unknown') => {
     if (active !== operation) return;
+    timings.get(operation.input.inputId)?.finish(operation.abort.signal.aborted); timings.delete(operation.input.inputId);
     retire(); finishPicker(null); operation.handles.clear(); operation.revisions.clear(); active = null; last = Object.freeze({ inputId: operation.input.inputId, outcome });
     if (!closed) { publish(); drain(); }
   };
@@ -162,6 +169,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
   const send = (input: PanelInput<C>): boolean => {
     if (closed || !sameContext(context, input.context)) return false;
     if (input.kind === 'close-view') {
+      for (const trace of timings.values()) trace.finish(true); timings.clear();
       closed = true; queue.length = 0;
       const operation = active; active = null; retire(); finishPicker(null);
       operation?.handles.clear(); operation?.revisions.clear(); operation?.abort.abort();
@@ -170,6 +178,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
     if (input.kind === 'cancel' || input.kind === 'cancel-input') {
       if (!active || active.abort.signal.aborted || (input.kind === 'cancel'
         ? active.binding?.turnId !== input.turnId : active.input.inputId !== input.inputId || active.binding !== null)) return false;
+      timings.get(active.input.inputId)?.finish(true);
       retire(); finishPicker(null); active.abort.abort(); publish(); return true;
     }
     if (input.kind === 'choose-item') {
@@ -177,16 +186,23 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
         || (input.itemHandle !== null && !picker.view.items.some(item => item.itemHandle === input.itemHandle))) return false;
       finishPicker(input.itemHandle); publish(); return true;
     }
-    if (input.kind === 'decide-approval' || input.kind === 'withdraw-queued') return input.kind === 'decide-approval' ? decide(input) : withdrawQueued(queue, input.inputId, publish);
+    if (input.kind === 'decide-approval') return decide(input);
+    if (input.kind === 'withdraw-queued') { const taken = withdrawQueued(queue, input.inputId, publish); if (taken) { timings.get(input.inputId)?.finish(true); timings.delete(input.inputId); } return taken; }
     const text = input.text.trim();
     if ((input.kind !== 'submit' && input.kind !== 'edit-queued') || !text || !input.inputId) return false;
     if (input.kind === 'edit-queued') {
       const index = queue.findIndex(item => item.inputId === input.inputId);
       if (index < 0) return false;
+      timings.get(input.inputId)?.finish(true); timings.delete(input.inputId);
       queue[index] = Object.freeze({ context, inputId: input.inputId, text, mentions: Object.freeze([...(input.mentions ?? queue[index]!.mentions)]) });
     } else {
       if (active?.input.inputId === input.inputId || queue.some(item => item.inputId === input.inputId)) return false;
       queue.push(Object.freeze({ context, inputId: input.inputId, text, mentions: Object.freeze([...(input.mentions ?? [])]) }));
+    }
+    if (timingEnabled && text.startsWith('/')) {
+      const inherited = input.kind === 'submit' ? currentTiming() : undefined;
+      const trace = inherited && !inherited.done && !inherited.process ? inherited : startTiming(text.slice(1).split(/\s/u)[0]!);
+      if (trace) { timings.set(input.inputId, trace); trace.phase('queued'); }
     }
     publish(); drain(); return true;
   };

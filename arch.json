@@ -170,7 +170,8 @@
         "src/engine/core/identity-profile",
         "src/capabilities/core/run-planner",
         "src/adapters/core/extension-registry",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -221,7 +222,8 @@
         "src/domain/core/policy",
         "src/engine/core/policy",
         "src/platform/core/validate",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "SECURITY"
     },
@@ -270,7 +272,8 @@
       "dependencies": [
         "src/adapters/core/docker-supervisor",
         "src/platform/core/validate",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "ISOLATION"
     },
@@ -986,7 +989,8 @@
         "src/platform/core/config",
         "src/domain/core/run",
         "src/domain/core/command",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/platform/core/state-root"
       ],
       "plan": "EXECUTION"
     },
@@ -1053,7 +1057,8 @@
     },
     "src/platform/core/state-root": {
       "dependencies": [
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/utils"
       ],
       "plan": "FOUNDATION"
     },
@@ -1172,7 +1177,8 @@
         "src/domain/core/agent-tool",
         "src/platform/core/output",
         "src/surfaces/core/terminal-theme",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1314,7 +1320,8 @@
     "src/surfaces/core/terminal-composer": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-kit-ink"
+        "src/surfaces/core/terminal-kit-ink",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1390,7 +1397,8 @@
         "src/surfaces/core/delivery-port",
         "src/surfaces/core/terminal-kit-ink",
         "src/surfaces/core/terminal-render-ink",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1404,7 +1412,8 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-kit-ink",
-        "src/surfaces/core/terminal-render-ink"
+        "src/surfaces/core/terminal-render-ink",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -1531,7 +1540,8 @@
         "src/surfaces/core/cli-hub",
         "src/surfaces/core/cli-beuser",
         "src/domain/core/project-attachment",
-        "src/surfaces/core/mcp-presentation"
+        "src/surfaces/core/mcp-presentation",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1814,7 +1824,8 @@
     "src/engine/core/provider-catalog": {
       "dependencies": [
         "src/domain/core/provider-catalog",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1891,7 +1902,8 @@
         "src/domain/core/audit",
         "src/domain/core/worker-event",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1929,7 +1941,8 @@
         "src/engine/core/project-attachment",
         "src/platform/core/utils",
         "src/engine/core/dispatch",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2027,7 +2040,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
         "src/platform/core/errors",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2061,7 +2075,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -2268,7 +2283,8 @@
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -3048,7 +3064,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -3278,7 +3295,8 @@
         "src/platform/core/integrity",
         "src/platform/core/validate",
         "src/engine/core/policy",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/platform/core/state-root"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3373,7 +3391,8 @@
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/state-root"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3707,7 +3726,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/run-proposal",
         "src/domain/core/provider-catalog",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/platform/core/state-root"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3856,7 +3876,8 @@
         "src/platform/core/config",
         "src/adapters/core/native-cli-registry",
         "src/platform/core/host",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/platform/core/state-root"
       ],
       "plan": "PROVIDERS"
     },
@@ -4050,7 +4071,8 @@
         "src/surfaces/core/cli-models",
         "src/engine/core/recovery",
         "src/engine/core/provider-catalog",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4126,7 +4148,8 @@
         "src/engine/core/worker-setup",
         "src/platform/core/validate",
         "src/platform/core/host",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/state-root"
       ],
       "plan": "INSTALLATION"
     },
@@ -5225,7 +5248,8 @@
         "src/engine/core/inference-serving",
         "src/engine/core/model-invocation",
         "src/surfaces/core/terminal-render-ink",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/surfaces/core/terminal-kit-ink"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -5483,7 +5507,8 @@
       "dependencies": [
         "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/platform/core/state-root"
       ],
       "plan": "SURFACES",
       "ink": true

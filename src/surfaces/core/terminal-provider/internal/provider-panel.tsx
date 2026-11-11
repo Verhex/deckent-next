@@ -1,3 +1,4 @@
+import { useTimingFrame } from '#surfaces/core/terminal-kit-ink/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 const SiwcWindow = lazy(loadSiwcWindow);
@@ -61,6 +62,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   readonly onClose: () => void; readonly errorText?: (error: unknown) => string; readonly laterLabel?: string }) {
   const words = labels.provider;
   const [view, setView] = useState<ProviderPanelView | null>(null);
+  const timing = useTimingFrame(view !== null);
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
@@ -75,10 +77,10 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     setCache(port.cache ? await port.cache.inspect().catch(() => null) : null); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
+  useEffect(() => { timing.run(reload).catch(error => { timing.fail(); exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
   useEffect(() => {
     let active = true;
-    port.inspectCustody?.().then(result => { if (active) setCustody(result); }).catch(() => {});
+    timing.run(() => port.inspectCustody?.()).then(result => { if (active) setCustody(result ?? null); }).catch(() => {});
     return () => { active = false; };
   }, [port]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };

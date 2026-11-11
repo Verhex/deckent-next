@@ -1,6 +1,7 @@
+import { timedSync, catalogParseObserver } from '#platform/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
+  parseModelInvocationCommand, modelRoleConfigSchema, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition as encodeModelBindingDefinitionRaw, parseProviderCatalog as parseProviderCatalogRaw, resolveModelBindingDefinition as resolveModelBindingDefinitionRaw, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, brainModelSwitchedOff, boundBrainContext, assertBrainLeavesAssignment,
   BRAIN_CORRECTION_TEMPLATE, prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
@@ -285,3 +286,9 @@ export class BrainPlanApplication {
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
   }
 }
+
+const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);
+
+const resolveModelBindingDefinition = (input: unknown, reference: unknown) => resolveModelBindingDefinitionRaw(input, reference, catalogParseObserver);
+
+const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);

@@ -1,4 +1,5 @@
-import { counterSchema, modelInvocationProfileSchema, parseModelBindingDefinition, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
+import { catalogParseObserver } from '#platform/index.js';
+import { counterSchema, modelInvocationProfileSchema, parseModelBindingDefinition as parseModelBindingDefinitionRaw, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
 import { anthropicResponseSpendMeasurement, anthropicSpendMeasurement, anthropicUsageForSpending } from './measurement.js';
 import type { AnthropicUsage } from './assemble.js';
 import { z } from 'zod';
@@ -149,3 +150,5 @@ export function createAnthropicMessagesPricedNative(input: AnthropicMessagesNati
     const quote = quoteAnthropicPublishedTariff(input, read(input.prepared), catalogVerified.has(input.prepared as object)); quotes.set(input.prepared as object, quote); return quote;
   } });
 }
+
+const parseModelBindingDefinition = (input: unknown) => parseModelBindingDefinitionRaw(input, catalogParseObserver);

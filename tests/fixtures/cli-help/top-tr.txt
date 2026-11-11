@@ -79,8 +79,7 @@ Onaylar:
       list | inspect | decide | renew
       [--scope <id>] [--input <dosya|->]
   recovery    Kaybolan işçi kurtarma: geçiş ilerlemesi ve kör incelemeniz
-      review
-      [--scope <id>] [--json]
+      review | [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | show | delegations | delegate | undelegate |
       grants | revoke | upgrade | recovery | mcp list|grant|revoke|narrow |
@@ -112,10 +111,9 @@ Kurulum/Bakım:
       list | set | delete | grant | revoke | handover | store
       [<ad>] [--scope <id>]
   toolchains  İşçi araçlarını kontrol et veya güncelle
-      update
-      [update [--apply]]
+      update | [update [--apply]]
   doctor      Kurulum sağlığını kontrol et
-      [--verbose] [--toolchains] [--json]
+      timing | [--verbose] [--toolchains] [--json]
 
 Geliştirici:
   inventory   Kayıtlı denemeleri incele
