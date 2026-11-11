@@ -12,6 +12,6 @@ export async function inspectConfiguredInstallationSource(root: string, scopeId:
     await resolveConfiguredScopeMembership(config, document, actor, [scopeId], 'read'); });
 }
 export const configuredAttachmentStore = (config: ResolvedConfig, options: ConfigLoadOptions) => new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
-export const configuredInstallationProjectContext = (config: ResolvedConfig, options: ConfigLoadOptions, scopeId?: string, actor?: { readonly issuer: string; readonly subject: string }) =>
-  resolveInstallationProjectContext(localInstallationProjectContextPorts(config, options, source => inspectConfiguredInstallationSource(source.projectRoot, source.scopeId, actor ?? source.owner, options)),
+export const configuredInstallationProjectContext = (config: ResolvedConfig, options: ConfigLoadOptions, scopeId?: string, actor?: { readonly issuer: string; readonly subject: string }, inspectSource: typeof inspectConfiguredInstallationSource = inspectConfiguredInstallationSource) =>
+  resolveInstallationProjectContext(localInstallationProjectContextPorts(config, options, source => inspectSource(source.projectRoot, source.scopeId, actor ?? source.owner, options)),
     { registrationId: config.installation.sharedRegistrationId ?? null, companyId: config.company.id, ...optionalField('scopeId', scopeId), ...optionalField('actor', actor) });

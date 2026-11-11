@@ -46,11 +46,14 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   readonly onClose: () => void }) {
   const words = labels.model;
   const provider = port.provider as ProviderWindowPort | undefined, locale = provider?.locale ?? 'en';
-  const inspect = () => port.inspect().then(view => subscriptionModelView(view, provider, locale));
+  const inspection = useRef(0), inspectionAbort = useRef<AbortController | null>(null);
+  const inspect = (progress?: (view: ModelPanelView) => void | Promise<void>) => { if (progress) setView(null); const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
+    return port.inspect(value => { if (mounted.current && generation === inspection.current) return progress?.(value); }, abort.signal).then(view => subscriptionModelView(view, provider, locale)); };
   const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<NonNullable<ModelPanelPort['workspace']>['inspect']>>>([]);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [view, setView] = useState<ModelPanelView | null>(null);
-  const timing = useTimingFrame(view !== null);
+  const [checked, setChecked] = useState(false);
+  const timing = useTimingFrame(checked, view !== null);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [shadow, setShadow] = useState<Readonly<{ choice: ModelPanelChoice; projectModel: string; first: readonly string[] }> | null>(null);
   // Stage 1: the scope budget row (create / change) and its window; a budget read failure only hides the row.
@@ -67,17 +70,17 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     mounted.current = true;
     let live = true;
-    timing.run(inspect).then(value => { if (live) setView(value); }, error => { if (live) { timing.fail(); exits.current.onError(error); exits.current.onClose(); } });
+    timing.run(() => inspect(value => { if (live) { setView(value); return timing.frame(); } })).then(value => { if (live) { setView(value); setChecked(true); } }, error => { if (live) { timing.fail(); exits.current.onError(error); exits.current.onClose(); } });
     timing.run(() => port.budget?.inspect()).then(value => { if (live) setBudget(value ?? null); }, () => undefined);
     timing.run(() => port.cache?.inspect()).then(value => { if (live) setCache(value ?? null); }, () => undefined);
     timing.run(() => port.workspace?.inspect()).then(value => { if (live) setWorkspaces(value ?? []); }, () => undefined);
     timing.run(() => port.protocol?.inspect()).then(value => { if (live) setProtocol(value ?? null); }, () => undefined);
-    return () => { live = false; mounted.current = false; };
+    return () => { live = false; mounted.current = false; inspectionAbort.current?.abort(); };
   }, [port]);
   const loading = useLoadingText(labels, !view || preparing);
   if (!view) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={onClose} onResult={onClose} />;
-  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void inspect().then(setView, onError); }} />;
+  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void inspect(setView).then(setView, onError); }} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   if (workspaceOpen && port.workspace && labels.workspace) return <WorkspaceWindow port={port.workspace} profiles={workspaces} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
@@ -151,7 +154,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       { id: 'keep', label: view.fixKeep ?? words.shadowKeep, unscoped: true }] }} body={[{ spans: [span(fix.choice.detail)] }, { spans: [span(fix.choice.exact)] }]}
     onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
       setPreparing(true); const selected = fix; setFix(null);
-      port.fix!(selected.choice, selected.action).then(inspect).then(setView, onError).finally(() => setPreparing(false)); }} />;
+      port.fix!(selected.choice, selected.action).then(() => inspect(setView)).then(setView, onError).finally(() => setPreparing(false)); }} />;
   if (preparing) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {

@@ -871,6 +871,7 @@
   "tui.panel.provider.disconnectKeys": "y sil · n tut · Esc tut",
   "tui.panel.provider.empty": "Bilinen bir sağlayıcı türü yok.",
   "tui.panel.provider.transparency": "Deckent bu anahtarı kurulumun seçili gizli deposunda ({backend}) saklar ve adıyla kullanır. Deckent anahtarı asla günlüklere yazmaz. Aynı işletim sistemi kullanıcısıyla çalışan başka programlar anahtarı okuyabilir.",
+  "tui.panel.provider.storeUnresolved": "Kurulum, seçili gizli deposunun bilgisini döndürmedi; saklama ayrıntıları gösterilemiyor.",
   "tui.provider.kind.anthropicApi": "Anthropic API",
   "tui.provider.kind.openaiApi": "OpenAI API",
   "tui.provider.kind.deepseekApi": "DeepSeek API",

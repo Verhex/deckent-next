@@ -1,3 +1,6 @@
+import * as platform from '#platform/index.js';
+import { FilePolicySource } from '#adapters/index.js';
+import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -5,6 +8,8 @@ import * as localPrincipal from '#adapters/core/local-principal/index.js';
 import * as childProcess from 'node:child_process';
 import { main as cliMain } from '#composition/core/cli/index.js';
 import * as surface from '#surfaces/index.js';
+import * as cliHuman from '#surfaces/core/cli-human/index.js';
+import { main as surfaceCli } from '#surfaces/core/cli/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
@@ -187,6 +192,20 @@ it.skipIf(process.platform === 'win32')('ATTACH F3: real initCommand/createCliHo
     expect(surface.askCliCard).not.toHaveBeenCalled(); expect(output).toContain('PROJECT_ATTACHMENT_DENIED');
     expect((await fs.lstat(project)).mode & 0o777).toBe(0o775);
     expect(await readdir(project)).toEqual([]); expect(await readdir(global)).toEqual([]);
+    for (const language of ['en', 'tr']) {
+      output = '';
+      expect(await cliMain(['init', 'policy', '--scope', 's', '--apply', '--lang', language])).toBe(78);
+      const request = vi.mocked(surface.askCliCard).mock.calls.at(-1)![0];
+      expect(request.initial).toBe('no');
+      expect(request.body).toEqual([project, language === 'en'
+        ? 'Only this folder: remove write permission for the group and others. Nothing inside the folder changes.'
+        : 'Yalnız bu klasör: grubun ve diğer hesapların yazma izni kaldırılır. Klasörün içindekiler değişmez.',
+      language === 'en' ? 'Folder permission: 0775 → 0755' : 'Klasör izni: 0775 → 0755']);
+      expect(output).toContain('chmod go-w .'); expect(output).toContain('deckent init');
+      expect(output).toContain(language === 'en' ? "This is the person's decision." : 'Bu karar kişiye aittir.');
+      expect((await fs.lstat(project)).mode & 0o777).toBe(0o775);
+      expect(await readdir(project)).toEqual([]); expect(await readdir(global)).toEqual([]);
+    }
   } finally { writes.forEach(write => write.mockRestore()); streams.forEach((stream, index) => { const descriptor = descriptors[index]; if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor); else Reflect.deleteProperty(stream, 'isTTY'); }); }
 });
 it.skipIf(process.platform !== 'linux')('ATTACH owner repair pins the folder and witness across the answer; never follows replacements or recurses', async () => {
@@ -287,6 +306,30 @@ it.skipIf(process.platform !== 'linux')('ATTACH review P2 carries location guida
   try { await assertGuidance(real); } finally { vi.mocked(fs.lstat).mockReset(); }
 });
 
+it.skipIf(process.platform !== 'linux')('ATTACHDOC: the copied preview command attaches durably and replays with its generated command id', async () => {
+  const f = await fixture(), target = await f.make(f.b), preview = await target.app.preview('target');
+  let output = '', errors = '';
+  const attachCliContext = { root: f.b, env: f.options.env, stdin: { isTTY: true } as NodeJS.ReadStream,
+    stdout: { isTTY: true, write: (text: string) => { output += text; } }, stderr: { write: (text: string) => { errors += text; } },
+    projectAttachment: async (_root: string, command: import('#domain/index.js').ProjectAttachmentCommand) => {
+      if (command.action === 'preview') return target.app.preview(command.scopeId);
+      if (command.action === 'apply') return target.app.apply(command.scopeId, command.expect, command.commandId);
+      throw new Error('unexpected fixture action');
+    } };
+  expect(await surfaceCli(['terminal', 'attach', '--scope', 'target', '--preview'], attachCliContext), errors).toBe(0);
+  const args = output.trimEnd().split('\n').at(-1)!.split(' ').slice(1), commandId = args.at(-1)!;
+  const confirm = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue('yes');
+  try {
+    output = '';
+    expect(await surfaceCli(args, attachCliContext), errors).toBe(0);
+    expect(confirm).toHaveBeenCalledOnce();
+  } finally { confirm.mockRestore(); }
+  const persisted = await target.store.attachment();
+  expect(persisted).toMatchObject({ scopeId: 'target', commandId });
+  expect(await target.app.apply('target', preview.planDigest, commandId)).toMatchObject({ attachment: persisted });
+  expect(await target.store.attachment()).toEqual(persisted);
+});
+
 describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {
 
   it('registers explicitly, journals one attachment, replays, revokes and never creates a missing source identity', async () => {
@@ -335,6 +378,12 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     const leased = configuredModelProfiles(leasedContext.config).find(profile => profile.scopeId === 'target')!;
     expect(leased.schemaVersion).toBe(3);
     expect((await resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options))?.sourceProfile).toEqual(sourceProfile);
+    // One display opening keeps source and target inputs separate, while repeating each model-use authorization.
+    const loads = vi.spyOn(platform, 'loadConfig'), policies = vi.spyOn(FilePolicySource.prototype, 'load');
+    const opening = await openModelInspection(f.b, 'target', f.options);
+    for (let check = 0; check < 3; check++) expect((await resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options, opening))?.sourceProfile).toEqual(sourceProfile);
+    expect(loads).toHaveBeenCalledTimes(2); expect(policies).toHaveBeenCalledTimes(2);
+    loads.mockRestore(); policies.mockRestore();
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, scopeIds: ['other'] }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
     // A native chat turn runs as the person's MCP workload (turn.ts withMcpPrincipal): the attachment admits the person it acts for, the principal stays the workload.
     const workload = await withMcpPrincipal(() => loadConfiguredScopeContext(f.b, 'target', f.options, 'write'));
@@ -343,6 +392,8 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-inactive', action: 'deactivate',
       reference: sourceProfile.reference, expectedBinding: binding.binding, expectedRevision: 1 }, f.options);
     await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
+    await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options, opening)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
+    opening.dispose();
     await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-reactivate', action: 'activate',
       reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 2 }, f.options);
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, issuer: 'foreign-person' }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_PERSON_MISMATCH' });

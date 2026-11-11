@@ -162,7 +162,8 @@ Kurulum başarıyla bittiyse derleme adımına geçilebilir; bu bildirim güvenl
 kurabilen `npm audit fix --force` komutunu çalıştırmayın.
 
 Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter. `BUBBLEWRAP_BUILD_REQUIRED` ile durursa Docker'a
-ulaşılamamıştır: Docker'ı başlatın, iki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
+ulaşılamamıştır: rootless → `systemctl --user start docker` (sonraki oturumlar için `systemctl --user enable docker`); sistem Docker'ı → `sudo systemctl start docker`; WSL'de Docker Desktop → Desktop'ı başlatın ve Settings > Resources > WSL Integration'ı etkinleştirin.
+İki betik de uzun işten önce Docker'ı yoklar; hata, saptanan kuruluma uyan komutu (bilinmiyorsa üçünü) gösterir. İki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
 `.pack/bwrap/second-build`) yeniden çalıştırın, sonra `npm run build`. Ubuntu 24.04 ve sonrasında çekirdek, bubblewrap'ın ihtiyaç
 duyduğu kullanıcı ad alanlarını engelleyebilir; Deckent bunu söyler ve Landlock'a düşer. İki durumu ve bir yöneticinin
 kısıtı nasıl kaldıracağını
@@ -189,7 +190,9 @@ flowchart LR
    bir klasör ya da sandbox değildir. Size ait, başka hesapların yazamadığı bir klasör kullanın. Ubuntu gibi grup yazma
    izniyle klasör oluşturan sistemlerde Deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
    Evet yalnız o klasörün grup/diğer yazma iznini kaldırır; hayır klasörü değiştirmez ve `chmod go-w .` rehberini gösterir.
-   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra üretilen özeti `--apply --expect <özet>` ile kullanın.
+   `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra sonda gösterilen tam uygulama komutunu kopyalayıp çalıştırın.
+   Komut `--scope <id> --apply --expect <özet> --command-id <uuid>` içerir; yeniden denerken aynı komut kimliğini koruyun.
+   Proje bağlama bu açık komut kimliğini gerektirir; uygulama kendisi kimlik üretmez.
    Makine çıktısı (`--json`), TTY dışı ve AI çağrıları soru veya izin değişikliği olmadan reddedilir.
    `my-project` gibi bir kapsam seçin, policy'yi önizleyin ve kurun:
 

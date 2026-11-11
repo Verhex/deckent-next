@@ -1,4 +1,4 @@
-import { timedSync } from '#platform/index.js';
+import { catalogParseObserver } from '#platform/index.js';
 import { parseProviderCatalog as parseProviderCatalogRaw, providerCatalogObjectSchema } from '#domain/index.js';
 import { ConfigValidationError, registerConfigSection, CONFIG_CONTRACT_SINCE } from '#platform/index.js';
 
@@ -27,4 +27,4 @@ export function registerProviderCatalogConfig(): void {
   });
 }
 
-const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);
+const parseProviderCatalog = (input: unknown) => parseProviderCatalogRaw(input, catalogParseObserver);

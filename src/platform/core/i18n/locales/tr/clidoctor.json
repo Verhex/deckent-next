@@ -198,7 +198,7 @@
   "cli.terminalInfo.context.noProfile": "Bağlam penceresi: ilk yanıt ölçülene kadar bilinmiyor; inference_serving profili olmadığından pencere boyutu yalnız sağlayıcı bildirirse bilinir (o zamana kadar durum çubuğu \"bağlam ?\" gösterir)",
   "cli.terminalInfo.context.profile": "Bağlam penceresi: ilk yanıttan ölçülür (o zamana kadar durum çubuğu \"bağlam ?\" gösterir)",
   "cli.workers.validScopes": "{scope} kapsamı burada okuyabildiğiniz bir kapsam değil. Geçerli kapsamlar: {scopes}",
-  "doctor.check.audit.noCheckpoint": "Audit zinciri: henüz kontrol noktası yok, karşılaştırılacak bir şey yok",
+  "doctor.check.audit.noCheckpoint": "Audit zinciri doğrulanmadı: bu kapsamda henüz kontrol noktası yok",
   "doctor.check.toolchains.notAdmitted": "{provider}: bu kurulumda kabul edilmiş sürüm yok, karşılaştırılacak bir şey yok",
   "doctor.check.toolchains.disabled": "{provider}: sürüm kontrolü burada kapalı ya da karşılaştırılacak bir şey yok",
   "doctor.firstJob.execution": "İşçi imajı ve çalıştırma ayarları",
@@ -242,5 +242,8 @@
   "doctor.timing.phase.cancelled": "iptal",
   "doctor.timing.phase.exit": "çıkış",
   "doctor.timing.phase.read-completed": "okuma bitti",
-  "doctor.timing.phase.started": "kuyruk beklemesi"
+  "doctor.timing.phase.started": "kuyruk beklemesi",
+  "doctor.check.audit.firstCheckpoint.next": "Runtime servisi, bu kapsamda denetim kaydı oluşturan bir işlemden (örneğin onaylı bir yapılandırma değişikliği) sonra ilk kontrol noktasını oluşturur. deckent runtime serve ile başlatın; sonraki kontrol noktası döngüsünden sonra {verify} çalıştırın. Doğrulama yalnız okur; kontrol noktası oluşturmaz.",
+  "doctor.check.custody.next": "Kendi terminalinizde deckent config ile kişisel kimlik profilini seçin ve yerel diskte size özel bir kimlik bilgisi klasörü kullanın. Ardından deckent models connect çalıştırın.",
+  "doctor.repeated": "{text} × {count}"
 }

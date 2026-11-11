@@ -62,7 +62,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   readonly onClose: () => void; readonly errorText?: (error: unknown) => string; readonly laterLabel?: string }) {
   const words = labels.provider;
   const [view, setView] = useState<ProviderPanelView | null>(null);
-  const timing = useTimingFrame(view !== null);
+  const [checked, setChecked] = useState(false);
+  const timing = useTimingFrame(checked, view !== null);
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
@@ -73,11 +74,17 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice); a read failure only hides the row.
   const [cache, setCache] = useState<CachePanelView | null>(null);
-  const reload = useCallback(async () => { setView(await port.inspect()); setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null);
+  const inspection = useRef(0), mounted = useRef(true), inspectionAbort = useRef<AbortController | null>(null);
+  const reload = useCallback(async () => { const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort;
+    const publish = (view: ProviderPanelView) => { if (mounted.current && inspection.current === generation) { setView(view); return timing.frame(); } };
+    const result = await port.inspect(publish, abort.signal);
+    if (mounted.current && inspection.current === generation) { setView(result); setChecked(true); }
+    setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null);
     setCache(port.cache ? await port.cache.inspect().catch(() => null) : null); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  useEffect(() => { timing.run(reload).catch(error => { timing.fail(); exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
+  useEffect(() => { mounted.current = true; timing.run(reload).catch(error => { if (mounted.current) { timing.fail(); exits.current.onError(error); exits.current.onClose(); } });
+    return () => { mounted.current = false; inspection.current++; inspectionAbort.current?.abort(); }; }, [reload]);
   useEffect(() => {
     let active = true;
     timing.run(() => port.inspectCustody?.()).then(result => { if (active) setCustody(result ?? null); }).catch(() => {});

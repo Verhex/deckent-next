@@ -14,6 +14,8 @@ import type { NativeAgentReadiness } from '#capabilities/index.js';
 import { ModelInvocableNowApplication, modelInvocationProfileDigest, modelInvocabilityText, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { main as runConfiguredCli } from '#composition/core/cli/index.js';
 import * as cliSurface from '#surfaces/index.js';
+import * as terminalSurface from '#surfaces/core/terminal/index.js';
+import { PassThrough } from 'node:stream';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -588,6 +590,26 @@ it('U1 provider port blocks unknown/grantless keys and renders custody refusal o
   const connected = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: false });
   expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
   expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
+  // SETUPTEXT: the wired key card must retain the store resolved by the preceding permission card.
+  let wiredPort: NonNullable<Parameters<typeof terminalSurface.runTerminalWorkline>[0]['panels']>['ports']['provider'];
+  const draw = vi.spyOn(terminalSurface, 'runTerminalWorkline').mockImplementation(async view => { wiredPort = view.panels!.ports.provider; });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true }), stdout = { isTTY: true, write() { return true; } };
+  try {
+    for (const locale of ['en', 'tr'] as const) {
+      expect(await cliSurface.main(['terminal', 'workline', '--scope', 'scope', '--lang', locale], {
+        root, env: { ...options.env, TERM: 'xterm' }, stdin: stdin as never, stdout: stdout as never, stderr: stdout as never,
+        ensureTerminalIdentity: async () => ({ installationId: 'fixture-installation', projectId: 'fixture-project' }), completeTerminalChat: async () => '',
+        providerConnect: connectHost('ok'), prepareMainSecret: async () => ({ state: 'ready', backend: 'core.secret-store.encrypted-file@1' }),
+      })).toBe(0);
+      const prepared = await wiredPort!.prepareKey!('anthropic-api', null);
+      expect(wiredPort!.transparency[0]!.text).toBe(t('doctor.secretStore.custody.encryptedFile', {}, locale).trim());
+      expect(prepared.lines.at(-1)!.text).toBe(wiredPort!.transparency[0]!.text);
+      expect(wiredPort!.transparency[0]!.text).not.toContain('(-)');
+      const unknown = providerPanelPort(root, 'scope', { providerConnect: connectHost('ok') }, options, locale, errorText);
+      expect(unknown.transparency[0]!.text).toBe(t('tui.panel.provider.storeUnresolved', {}, locale));
+    }
+    expect(draw).toHaveBeenCalledTimes(2);
+  } finally { draw.mockRestore(); stdin.destroy(); }
 });
 
 it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothing usable says so and never leaks an internal id', async () => {

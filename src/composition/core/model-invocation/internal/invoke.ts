@@ -1,3 +1,4 @@
+import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';
 import { t, SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
@@ -13,7 +14,7 @@ import { modelSpendRefusal } from './spend-refusal.js';
 type InvocationGuard = { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void };
 type ApplicationOptions = {
   context: Awaited<ReturnType<typeof loadInvocationContext>>; options: ConfigLoadOptions; host?: RuntimeModelInvocationHost | undefined;
-  readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
+  snapshot?: ModelInspectionSnapshot; readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
   observeSpending?: InvocationGuard['spending'] | undefined; agent?: ModelInvocationNativeBinding | undefined;
 };
 type InvokeOptions = {
@@ -79,10 +80,10 @@ function parsedCommand(input: ModelInvocationCommand) {
   if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return parsed.data as ModelInvocationCommand;
 }
-export function application({ context, options, host, readOnly = false, entry = 'raw', profileGuard, observeSpending, agent }: ApplicationOptions) {
+export function application({ context, options, host, readOnly = false, entry = 'raw', profileGuard, observeSpending, agent, snapshot }: ApplicationOptions) {
   // One trusted clock for pricing and durable invocation records (I40).
-  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly, agent);
-  const verifier = verifiedPrincipal(context.principal), bindings = new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
+  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly, agent, readOnly ? snapshot : undefined);
+  const verifier = verifiedPrincipal(context.principal), bindings = readOnly && snapshot ? snapshot.bindings : new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
     { async resolve(scopeId, reference) {

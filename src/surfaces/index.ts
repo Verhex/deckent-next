@@ -1,3 +1,4 @@
+export type { ProviderPanelHost } from '#surfaces/core/terminal-provider/index.js';
 import { lazyFunction } from '#surfaces/core/cli-kit/index.js';
 export { dispatch, main } from '#surfaces/core/cli/index.js';
 export type { ExitCode } from '#surfaces/core/cli/index.js';

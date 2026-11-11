@@ -156,12 +156,12 @@ export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label:
   brain?: boolean }>;
 export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];
   /** Why "also make default" cannot be offered (null: it can). */
-  defaultBlocked: string | null; fixTitle?: string; fixApply?: string; fixKeep?: string }>;
+  defaultBlocked: string | null; subscriptionChecked?: true; fixTitle?: string; fixApply?: string; fixKeep?: string }>;
 /** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
 /** T4-B (owner 2026-10-08, Jev 77898686): the default was written but this project names its own model, which keeps winning here. */
 type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
-  inspect(): Promise<ModelPanelView>;
+  inspect(progress?: (view: ModelPanelView) => void | Promise<void>, signal?: AbortSignal): Promise<ModelPanelView>;
   readonly provider?: ProviderPanelPort;
   fix?(choice: ModelPanelChoice, action: 'activate' | 'deactivate' | 'reconcile'): Promise<void>;
   /** Rechecks runnability and refreshes an eligible stale activation through its governed owner before any session pin. */
@@ -269,7 +269,7 @@ export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | n
 export type ProviderModelOutcome = Readonly<{ connected: boolean; title: string; lines: readonly PanelLine[]; summary: string; approvalId: string | null }>;
 export interface ProviderPanelPort {
   readonly siwc?: import('#surfaces/core/siwc/index.js').SiwcWindowPort;
-  inspect(): Promise<ProviderPanelView>;
+  inspect(progress?: (view: ProviderPanelView) => void | Promise<void>, signal?: AbortSignal): Promise<ProviderPanelView>;
   /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
    * check will call (the preview), or the localized reason it is refused. */
   endpoint(kind: string, text: string): Readonly<{ ok: true; base: string; check: string }> | Readonly<{ ok: false; reason: string }>;

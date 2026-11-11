@@ -1,4 +1,4 @@
-import { timedSync } from '#platform/index.js';
+import { catalogParseObserver } from '#platform/index.js';
 import { parseProviderCatalog as parseProviderCatalogRaw, type ProviderCatalog } from '#domain/index.js';
 
 export type DeclaredModelsInspection = Readonly<{
@@ -16,4 +16,4 @@ export class DeclaredModelsApplication {
   }
 }
 
-const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);
+const parseProviderCatalog = (input: unknown) => parseProviderCatalogRaw(input, catalogParseObserver);

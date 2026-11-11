@@ -239,7 +239,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
       // The Git folder offers worker setup even without a host CLI. Follow each card by title: Later can change the remaining step count.
       // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
       ['Permission settings', '\u001b'], ['Your management rights', '\u001b'], ['Model connection', '\u001b'],
-      ['Choose a signed-in coding CLI', '\u001b'], ['First Git commit', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
+      ['No coding CLI is installed', '\u001b'], ['First Git commit', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();

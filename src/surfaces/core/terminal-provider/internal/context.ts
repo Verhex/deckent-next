@@ -1,4 +1,4 @@
-import type { ConfigLoadOptions, Locale } from '#platform/index.js';
+import type { ConfigLoadOptions, Locale, ResolvedConfig } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ModelReference } from '#domain/index.js';
@@ -62,6 +62,8 @@ type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersio
 type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
   layer: 'global' | 'project'; decision: 'allow' | 'require-approval' | 'deny' | 'refused'; ruleId: string | null }>[] }>;
 export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels' | 'connectModel' | 'siwc'> {
+  /** One display opening; the returned reads are never used by actions. */
+  openModelInspection?: (root: string, scopeId: string, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<{ readonly config: ResolvedConfig; readonly host: ModelInspectionReads; dispose(): void }>;
   inspectSubscriptionReadiness?: (root: string, query: Readonly<{ scopeId: string; surface: SubscriptionSurface; references: readonly ModelReference[] }>, options: ConfigLoadOptions) => Promise<readonly NativeAgentReadiness[]>;
   /** Read-only doctor projection; optional custody facts never authorize a connection. */
   inspectSecretStore?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; writable: boolean; enumerable: boolean;
@@ -77,6 +79,11 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
     name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
   deleteSecret?: TerminalSecretDeleteHandler;
 }
+export type ModelInspectionReads = Pick<ModelCommandContext, 'inspectDeclaredModels' | 'inspectModelBinding' | 'inspectModelActivation' | 'inspectModelCatalog'>
+  & Pick<ProviderPanelHost, 'inspectInvocableModels' | 'inspectSubscriptionReadiness'> & {
+    inspectBrainModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<Readonly<{ models: readonly import('#domain/index.js').RoleModelRow[] }>>;
+    describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<{ reference: ModelReference | null; source: string | null }>;
+  };
 /** PV: who besides the person may use a CLI subscription login (S10: never MCP). */
 export type ProviderDelegateClass = 'ai' | 'system';
 export type ProviderSubscriptionOutcome = ProviderModelOutcome & Readonly<{ delegationBlocked: string | null }> & (Readonly<{ state: 'applied'; delegate: readonly ProviderDelegateClass[] }>

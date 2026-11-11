@@ -30,7 +30,8 @@ export function subscriptionReadinessPort(root: string, scopeId: string, host: P
   };
 }
 /** `/model` keeps the existing catalog/activation owner, adding the same subscription prerequisite read as `/provider`. */
-export async function subscriptionModelView(view: ModelPanelView, provider: ProviderPanelPort | undefined, locale: Locale): Promise<ModelPanelView> {
+export async function subscriptionModelView(view: ModelPanelView, provider: ProviderPanelPort | Pick<ProviderWindowPort, 'subscriptionReadiness'> | undefined, locale: Locale): Promise<ModelPanelView> {
+  if (view.subscriptionChecked) return view;
   const port = (provider as ProviderWindowPort | undefined)?.subscriptionReadiness;
   if (!port) return view;
   const logins = view.choices.filter(choice => port.recognizes(choice.reference)), readiness = await port.inspectMany('chat', logins.map(choice => choice.reference));

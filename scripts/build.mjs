@@ -6,11 +6,12 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { stageBubblewrap } from './stage-bubblewrap.mjs';
+import { preflightBubblewrap, stageBubblewrap } from './stage-bubblewrap.mjs';
 import { buildTypeScript } from './build-typescript.mjs';
 import { writeBuildIdentity } from './build-identity.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+preflightBubblewrap({ root: ROOT });
 workerLineage(ROOT);
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');

@@ -375,7 +375,9 @@
         "src/engine/core/monitor",
         "src/composition/core/beuser",
         "src/adapters/core/docker-supervisor",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/surfaces/core/terminal-provider",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SURFACES"
     },
@@ -606,7 +608,8 @@
         "src/platform/core/errors",
         "src/capabilities/core/native-agent-execution",
         "src/composition/core/subscription-readiness",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SURFACES"
     },
@@ -1965,7 +1968,8 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/provider-connect",
         "src/composition/core/model-use",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -2196,7 +2200,8 @@
         "src/platform/core/errors",
         "src/engine/core/oauth-connection",
         "src/composition/core/model-use",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -3117,7 +3122,8 @@
         "src/engine/core/audit",
         "src/composition/core/scoped-request",
         "src/adapters/core/mcp-client",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "SECURITY"
     },
@@ -3770,7 +3776,8 @@
         "src/adapters/core/provider-siwc",
         "src/engine/core/audit",
         "src/engine/core/authentication",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -4968,7 +4975,8 @@
         "src/adapters/core/siwc-connection",
         "src/engine/core/project-attachment",
         "src/composition/core/model-use",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "PROVIDERS"
     },
@@ -5330,7 +5338,9 @@
         "src/composition/core/root",
         "src/composition/core/scoped-request",
         "src/adapters/core/config-file",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/engine/core/provider-catalog",
+        "src/composition/core/model-inspection"
       ],
       "plan": "INSTALLATION"
     },
@@ -5627,6 +5637,19 @@
         "src/adapters/core/sqlite-ledger"
       ],
       "plan": "STORE"
+    },
+    "src/composition/core/model-inspection": {
+      "dependencies": [
+        "src/composition/core/scoped-request",
+        "src/composition/core/root",
+        "src/adapters/core/config-file",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config",
+        "src/composition/core/policy",
+        "src/adapters/core/project-attachment",
+        "src/engine/core/policy"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {

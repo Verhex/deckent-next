@@ -41,7 +41,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
   settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
   sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
-  and `/quit` never wait. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
+  and `/quit`, plus local `/model`, `/provider`, `/help` and `/tasks` windows, never wait here. Their actions retain their own fresh admission checks. Slash-menu filtering already stays in the local composer. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
   notice on the grant, error notice and standart without it) before any turn. **Setup after the frame:** onboarding is prepared once
   (`prepareOnboardingSession`: person check, one observation, settle) after the start settled; its waiting card opens by itself only
   while the person has typed nothing since the frame (checked after keys already received reached the composer, in the same step as
@@ -620,7 +620,9 @@ Kalıcı işçi kartı, sohbetle aynı sınırlı ve bilinen sırları redakte e
 
 `DECKENT_TIMING_TRACE=1` opts CLI and terminal processes into local, bounded JSONL timing. The early CLI bootstrap records process entry before
 loading the command graph. A random, non-authorizing correlation follows a slash submission through its FIFO and opening gate (the `started` milestone separates queue residence from gate wait); the renderer's
-`waitUntilRenderFlush` marks first and populated frames for model/provider/status/doctor. Information windows currently have no separate loading
+`waitUntilRenderFlush` marks first and populated frames for model/provider/status/doctor. For model/provider, first means names with
+EN `Checking…` / TR `Kontrol ediliyor…`; populated means the opening's row checks have all completed. The initial progress callback can
+await that first flush before row checks start; the preliminary loading frame is excluded. Information windows currently have no separate loading
 frame, so their first frame is also populated. Picker dwell is excluded. Flush means output bytes, not physical emulator paint.
 
 The registered `timingTrace` resource is under the global installation state root (`state/timing/commands.jsonl`): a private directory, 0600 regular
@@ -641,3 +643,16 @@ reports CLI and slash samples separately, median, nearest-rank p95 and the large
 flush (first flush where there is no populated view); CLI samples end at first output. Incomplete samples are excluded; records may be lost at rotation or forced
 termination; the summary reports the largest observed per-process dropped count, not a global exact loss total. Source runs label builds unbuilt;
 packaged runs include the build tree digest. Local instrumentation and tests do not establish performance improvement or live acceptance.
+
+**beta.1 model/provider opening reads (B1-PERF-MODEL).** The CLI host gives each window inspection a disposable,
+read-only `model-inspection` snapshot: one effective config and parsed declared catalog per root, one scope/policy
+context per distinct scope, and one authored-layer projection for chat selection. Producers still authorize every
+model separately; shared source and target scopes remain separate authorities. The parsed catalog supplies exact
+bindings without parsing or cloning the full catalog per model. Preview credential-presence checks reuse these
+inputs but read credential/grant stores each time; no credential value is stored in the snapshot. Names appear
+first with EN `Checking…` / TR `Kontrol ediliyor…` and disabled choices, then checked rows fill in. Subscription
+readiness belongs to each row's check. Snapshots are discarded after inspection and aborted/cleared on close or
+reload; late UI results are ignored. Picking, sending, connecting, activation and all config/credential writes use
+the ordinary fresh producers, including bootstrap/restore/uninstall fences and revocation checks. Optional budget,
+cache, protocol, workspace and custody reads retain their independent ports. This describes source wiring and
+fixture verification, not physical paint, live-installation timings, independent review or release acceptance.

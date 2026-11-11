@@ -190,7 +190,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - TypeScript Core is retained. Go may own measured execution responsibilities through a versioned supervisor
   port when total complexity/resource/reliability evidence justifies it. No duplicate scheduler, approval or
   acceptance authority, and no automatic full-Go rewrite. Application daemon and supervisor are distinct roles.
-- Accepted size policy: 1,500 lines maximum per file including native C; 800 is a design target, not a second
+- Accepted size policy: 1,600 lines maximum per file including native C; 800 is a design target, not a second
   hard ceiling. FOUNDATION/A applies this limit coherently in ESLint and the source/native/app gate.
   No silent native exemption. Variable product policies/catalogs are data; protocol constants and safety
   invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,200-line unit budget.
@@ -972,7 +972,7 @@ Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versio
 ## Package contract
 
 - Public API is `index.ts`; everything else is internal.
-- Every configured text source file ≤ 1,500 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
+- Every configured text source file ≤ 1,600 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
 - Package line budgets and the total budget live in `arch.json` (`budgets`); growth past a budget is a
   design decision, not a lint fix.
 - lint-arch geliştirme kapıları (ARCH-GUARDS, 2026-10-06): src-boundary, test-host-import, host-word, host-path (2026-10-18), slug-cap, tier-direction, tier-budget, effect-flow; `arch.json guards`, `budgets.tierLines`, `literals.allowUnits`; ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
@@ -1128,7 +1128,7 @@ codes are retained; foreign issues without a code become `SECTION_INVALID`, and 
   (there is no `tests/golden/`).
 - Test-ERP (`tests/contracts/composition/test-erp-operations.test.ts`): off Linux the scenarios are skipped with a typed
   `{status: 'verify-not-run', reason: 'platform-unsupported'}` record, never as operation acceptance.
-- Budget: ≤ 8,000 declared test cases total (static `it`/`test` declarations counted by `lint-arch`; parameterised cases run more), every test file ≤ 1,500 lines (lint; 800 design target). Legacy invariant titles are in
+- Budget: ≤ 9,450 declared test cases total (static `it`/`test` declarations counted by `lint-arch`; parameterised cases run more), every test file ≤ 1,600 lines (lint; 800 design target). Legacy invariant titles are in
   `tests/contracts/HARVEST.json`; each port card lists which titles it honours.
 - `tests/perf/` — a separate `tests/perf/vitest.config.ts` series (`*.perf.ts`): a latency gate on three paths (p95 ≤ 500 ms, baseline JSON); it does not affect the default suite; the threshold is a measurement input, not product config.
 

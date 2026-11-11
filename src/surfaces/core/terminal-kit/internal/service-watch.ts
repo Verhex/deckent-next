@@ -18,14 +18,14 @@ export function serviceAbsenceWatch(describe: () => Promise<unknown>, reached: b
  * alpha.60 B (P3 draw-first): the send gate of the opened view. Until `ready` settles (the runtime service answered and the first mode read
  * settled) a line waits behind one visible notice; the controller runs one line at a time, so the order is kept. The line's own cancel (Ctrl+C)
  * ends the wait and nothing is sent. A start that failed meanwhile (the autostart's LifecycleDeadline included) rejects the waiting line with its
- * typed error; lines after it meet their own checks (BeUser M-09 start). `/exit` and `/quit` never wait: they send nothing.
+ * typed error; lines after it meet their own checks (BeUser M-09 start). Local information/settings windows and `/exit`/`/quit` do not wait here; their actions keep their own admission checks.
  */
 export function openingGate(ready: Promise<unknown>) {
   let settled = false;
   ready.then(() => { settled = true; }, () => { settled = true; });
   return async (line: string, signal: AbortSignal, waiting: () => void): Promise<boolean> => {
     const command = parseSlashLine(line)?.command;
-    if (settled || command === 'exit' || command === 'quit') return !signal.aborted;
+    if (settled || command === 'exit' || command === 'quit' || command === 'model' || command === 'provider' || command === 'help' || command === 'tasks') return !signal.aborted;
     waiting();
     const cancelled = new Promise<false>(resolve => { if (signal.aborted) resolve(false); else signal.addEventListener('abort', () => resolve(false), { once: true }); });
     return await Promise.race([ready.then(() => true), cancelled]) && !signal.aborted;

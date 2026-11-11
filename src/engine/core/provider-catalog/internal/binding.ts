@@ -1,7 +1,6 @@
-import { timedSync, catalogParseObserver } from '#platform/index.js';
-import { timedAsync } from '#platform/index.js';
+import { timedAsync, catalogParseObserver } from '#platform/index.js';
 import { createHash } from 'node:crypto';
-import { parseModelReference, parseProviderCatalog as parseProviderCatalogRaw, resolveModelBindingDefinition as resolveModelBindingDefinitionRaw, encodeModelBindingDefinition as encodeModelBindingDefinitionRaw,
+import { parseModelReference, parseProviderCatalog as parseProviderCatalogRaw, resolveParsedModelBindingDefinition, encodeParsedModelBindingDefinition, type ProviderCatalog,
   type ModelReference, type ModelBindingDefinition } from '#domain/index.js';
 import type { ProviderCatalogSource } from './application.js';
 
@@ -18,26 +17,22 @@ export type ModelBindingInspection = Readonly<{
 
 /** A content binding identifies an exact declaration. It grants no activation or invocation authority. */
 export class ModelBindingApplication {
-  constructor(private readonly source: ProviderCatalogSource) {}
+  constructor(private readonly source: ProviderCatalogSource, private readonly parsed?: ProviderCatalog | null) {}
   inspect(input: unknown): Promise<ModelBindingInspection> { return timedAsync('binding-inspect', () => this.inspectTimed(input))(); }
   private async inspectTimed(input: unknown): Promise<ModelBindingInspection> {
     const reference = parseModelReference(input);
     const base = { schemaVersion: 1 as const, reference, availability: 'not-observed' as const };
-    const authored = await this.source.read();
+    const authored = this.parsed ?? await this.source.read();
     if (authored === undefined) return Object.freeze({ ...base, status: 'not-configured',
       catalogRevision: null, definition: null, binding: null });
-    const catalog = parseProviderCatalog(authored);
-    const definition = resolveModelBindingDefinition(catalog, reference);
+    const catalog = this.parsed ?? parseProviderCatalog(authored);
+    const definition = resolveParsedModelBindingDefinition(catalog, reference);
     if (definition === null) return Object.freeze({ ...base, status: 'not-declared',
       catalogRevision: catalog.revision, definition: null, binding: null });
-    const digest = createHash('sha256').update(encodeModelBindingDefinition(definition), 'utf8').digest('hex');
+    const digest = createHash('sha256').update(encodeParsedModelBindingDefinition(definition), 'utf8').digest('hex');
     return Object.freeze({ ...base, status: 'declared', catalogRevision: catalog.revision, definition,
       binding: Object.freeze({ encodingVersion: 1, algorithm: 'sha256', digest }) });
   }
 }
 
-const parseProviderCatalog = timedSync('catalog-parse', parseProviderCatalogRaw);
-
-const resolveModelBindingDefinition = (input: unknown, reference: unknown) => resolveModelBindingDefinitionRaw(input, reference, catalogParseObserver);
-
-const encodeModelBindingDefinition = (input: unknown) => encodeModelBindingDefinitionRaw(input, catalogParseObserver);
+const parseProviderCatalog = (input: unknown) => parseProviderCatalogRaw(input, catalogParseObserver);

@@ -5,6 +5,7 @@ import type { ModelActivationStore, ModelCatalogReader, ModelCatalogStore } from
 export interface ModelUseContext { readonly config: ResolvedConfig; readonly layout: ProductLayout; readonly document: ReturnType<typeof policySchema.parse>;
   readonly principal: VerifiedPrincipal; readonly projectId: ProjectId | null; readonly installationId: InstallationId | null; path(): Promise<string> }
 export interface ModelUseReadPorts {
+  binding?(context: ModelUseContext, reference: ModelReference): Promise<import('#engine/core/provider-catalog/index.js').ModelBindingInspection>;
   config(root: string): Promise<ResolvedConfig>;
   context(root: string, scopeId: string): Promise<ModelUseContext>;
   shared(config: ResolvedConfig, scopeId?: string, actor?: { issuer: string; subject: string }): Promise<InstallationProjectContext>;

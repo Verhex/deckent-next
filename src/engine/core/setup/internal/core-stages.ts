@@ -119,13 +119,14 @@ function model(input: CoreStageInput): CoreStageResult {
 }
 function finalCheck(input: CoreStageInput): CoreStageResult {
   // Settles over the install phase only: onboarding stages (model, first work) are the first open's, never the installation's.
-  const check = input.facts.check.state, others = [...input.states].filter(([id]) => input.phases.get(id) === 'install').map(([, state]) => state);
+  const check = input.facts.check.state, pending = input.facts.check.pending, others = [...input.states].filter(([id]) => input.phases.get(id) === 'install').map(([, state]) => state);
+  const warning = pending === undefined ? reason('setup.reason.checkWarnings') : reason('setup.reason.checkPending', { count: pending });
   if (check === 'ok' && others.every(settled)) return result({ state: 'done', reason: reason('setup.reason.checkPassed') }, true);
   // KUR-14: the check ran and only warnings remain: the observed verdict, settled; a repeat `--yes` applies nothing.
-  if (check === 'warnings' && others.every(settled)) return result({ state: 'done', reason: reason('setup.reason.checkWarnings') }, true);
+  if (check === 'warnings' && others.every(settled)) return result({ state: 'done', reason: warning }, true);
   const code = check === 'warnings' ? 'setup.reason.checkWarnings' : check === 'errors' ? 'setup.reason.checkErrors' : 'setup.reason.checkReady';
   // Read-only: the final check never heals configuration.
-  return result({ state: 'ready', reason: reason(code), operation: { id: 'doctor.inspect', version: 1, input: { heal: false } },
+  return result({ state: 'ready', reason: check === 'warnings' ? warning : check === 'errors' && pending !== undefined ? reason('setup.reason.checkPending', { count: pending }) : reason(code), operation: { id: 'doctor.inspect', version: 1, input: { heal: false } },
     cli: ['deckent', 'doctor', '--json'] }, true);
 }
 export const CORE_STAGE_EVALUATORS: Readonly<Record<CoreSetupStageId, (input: CoreStageInput) => CoreStageResult>> = Object.freeze({

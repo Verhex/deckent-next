@@ -162,7 +162,8 @@ Read `npm audit` for the affected packages and report them to the maintainers. K
 do not run `npm audit fix --force`, which can install incompatible dependency versions.
 
 The build ends with `bubblewrap=present` or `bubblewrap=staged from …`. If it stops with `BUBBLEWRAP_BUILD_REQUIRED`,
-Docker was not reachable: start it, run both `build-bwrap` commands again with a new `--out` directory (for example
+Docker was not reachable: rootless → `systemctl --user start docker` (`systemctl --user enable docker` for future sessions); system Docker → `sudo systemctl start docker`; Docker Desktop on WSL → start Desktop and enable Settings > Resources > WSL Integration.
+Both scripts check Docker before long work; the error gives the detected setup's command (or all three when unknown). Run both `build-bwrap` commands again with a new `--out` directory (for example
 `.pack/bwrap/second-build`), then `npm run build`. On Ubuntu 24.04 and later the kernel may block the user
 namespaces bubblewrap needs; Deckent then says so and falls back to Landlock. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#source-build-and-sandbox-posture) explains both
@@ -188,7 +189,9 @@ flowchart LR
    it is not a folder or a sandbox. Use a folder you own that other accounts cannot write to. On systems such as Ubuntu
    that create group-writable folders, Deckent asks once on a real terminal whether to narrow that folder's permission.
    Yes removes group/other write access from that folder only; no leaves it unchanged and shows `chmod go-w .` guidance.
-   For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, use its digest with `--apply --expect <digest>`.
+   For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, copy and run the complete apply command printed at the end.
+   It includes `--scope <id> --apply --expect <digest> --command-id <uuid>`; keep the same command id when retrying.
+   Attaching a project requires that explicit command id; apply does not generate one.
    Machine output (`--json`), non-TTY and AI callers are refused without a question or permission change.
    Choose a scope such as `my-project`, preview the policy and install it:
 

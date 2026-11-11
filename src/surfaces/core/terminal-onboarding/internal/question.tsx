@@ -6,7 +6,7 @@ import presentation from './presentation.json' with { type: 'json' };
 import { fillTemplate, humanRecordText, truncateEnd, wrapCells, useSpinnerGlyph } from '#surfaces/core/terminal-render-ink/index.js';
 import { cardCopyText, isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
-export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
+export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean; detail?: readonly string[] }>[];
   step: number; total: number; initial?: string | null; text?: boolean }>;
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
 type CardWork = 'applying' | 'preparing';
@@ -24,9 +24,10 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
   /** Ctrl+Y sends the step's title, body and visible option labels (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
   const [at, select] = useState(initial), [text, setText] = useState(''), [empty, setEmpty] = useState(false), [bodyAt, scroll] = useState(0), done = useRef(false), busy = useRef(false);
-  const [applying, setApplying] = useState(false), [refused, setRefused] = useState(false), spinner = useSpinnerGlyph(applying);
+  const [applying, setApplying] = useState(false), [refused, setRefused] = useState(false), [unavailable, setUnavailable] = useState(false), spinner = useSpinnerGlyph(applying);
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
-  const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));
+  const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), detail = question.choices[at]?.detail ?? [];
+  const bodyLines = [...(unavailable ? [t('onboarding.session.unavailableChoice', {}, locale)] : question.body), ...detail].flatMap(line => wrapCells(terminalSafeText(line), width));
   const send = (answer: QuestionAnswer) => { if (done.current) return; done.current = true; if (finish(answer)) { busy.current = true; setApplying(true); } };
   const yieldToTyping = () => { if (!done.current && welcome) { welcome.typed(); send({ id: 'later' }); } };
   usePaste(text => { if (text) yieldToTyping(); }, { isActive: welcome !== undefined });
@@ -41,7 +42,7 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
     if (copy && isCardCopyKey(input, key)) {
       // Astra 2834 R1: file names and error messages reach this body unprojected; the copy redacts like the Window cards' copy (patterns + known values).
       const text = humanRecordText(cardCopyText([{ text: question.title }], question.body.map(text => ({ spans: [{ text }] })),
-        question.text ? [] : question.choices.slice(start, start + height).map(row => row.label)), known), result = copy.write(text);
+        question.text ? [] : question.choices.slice(start, start + height).flatMap(row => [row.label, ...(row.detail ?? [])])), known), result = copy.write(text);
       setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
       return;
     }
@@ -50,11 +51,11 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
     if (key.ctrl && input === 'c') { send({ id: 'exit' }); return; }
     if (key.pageUp) { scroll(value => Math.max(0, value - bodyHeight)); return; }
     if (key.pageDown) { scroll(value => Math.min(Math.max(0, bodyLines.length - bodyHeight), value + bodyHeight)); return; }
-    if (key.upArrow) select(value => Math.max(0, value - 1));
-    else if (key.downArrow) select(value => Math.min(question.choices.length - 1, value + 1));
+    if (key.upArrow || key.downArrow) { select(value => key.upArrow ? Math.max(0, value - 1) : Math.min(question.choices.length - 1, value + 1)); setUnavailable(false); scroll(0); }
     else if (key.return) {
       if (question.text) { if (text.trim()) send({ id: 'submit', text: text.trim() }); else setEmpty(true); }
       else if (question.choices[at] && !question.choices[at]!.disabled) send({ id: question.choices[at]!.id });
+      else if (question.choices[at]?.disabled && detail.length) { setUnavailable(true); scroll(0); }
     } else if (question.text && (key.backspace || key.delete)) setText(value => Array.from(value).slice(0, -1).join(''));
     else if (question.text && !key.ctrl && !key.meta && !input.includes('\u001b')) setText(value => (value + terminalSafeText(input)).slice(0, 4096));
   });
