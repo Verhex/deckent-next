@@ -20,3 +20,4 @@ export { prepareNativeWorkerObservation } from './internal/worker-preparation.js
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
 export { nativeWorkerEnvironmentProbes, nativeWorkerTemplateEnvironment, nativeWorkerToolBounds, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, type NativeWorkerProbeRunner } from './internal/worker-environment.js';
 export { workerToolPreviewComplete, mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type WorkerToolCard } from './internal/worker-card.js';
+export { nativeBuiltinPlugins } from './internal/plugins.js';

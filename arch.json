@@ -2160,6 +2160,7 @@
     },
     "src/composition/core/model-invocation": {
       "dependencies": [
+        "src/platform/core/output",
         "src/adapters/core/provider-connect",
         "src/adapters/core/local-keyring",
         "src/adapters/core/contract",

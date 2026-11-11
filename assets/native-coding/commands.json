@@ -744,20 +744,15 @@
             "none"
           ],
           "permissionMode": "dontAsk",
-          "plugins": [
-            {
-              "name": "cc-plugin-agents-md",
-              "path": "builtin"
-            },
-            {
-              "name": "cc-plugin-privacy",
-              "path": "builtin"
-            },
-            {
-              "name": "cc-plugin-plugin-authoring",
-              "path": "builtin"
-            }
-          ],
+          "plugins": {
+            "path": "builtin",
+            "sourceTemplate": "{name}@builtin",
+            "knownNames": [
+              "cc-plugin-agents-md",
+              "cc-plugin-privacy",
+              "cc-plugin-plugin-authoring"
+            ]
+          },
           "lengthStopReasons": [
             "max_tokens"
           ],
@@ -886,24 +881,16 @@
             "apiKeySources": [
               "none"
             ],
-            "plugins": [
-              {
-                "name": "cc-plugin-agents-md",
-                "path": "builtin",
-                "source": "cc-plugin-agents-md@builtin"
-              },
-              {
-                "name": "cc-plugin-privacy",
-                "path": "builtin",
-                "source": "cc-plugin-privacy@builtin"
-              },
-              {
-                "name": "cc-plugin-plugin-authoring",
-                "path": "builtin",
-                "source": "cc-plugin-plugin-authoring@builtin"
-              }
-            ],
-            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c) init; owner plugin exception limited to these builtin identities; no arbitrary plugin paths; stopEvents: owner 2026-11-05 (R5b/R6b) — other unrecognised events are turn notes, these stop the turn: CLI-side permission denial, model substitution, out-of-band execution (task, local command, hook, plugin install) and a host control request",
+            "plugins": {
+              "path": "builtin",
+              "sourceTemplate": "{name}@builtin",
+              "knownNames": [
+                "cc-plugin-agents-md",
+                "cc-plugin-privacy",
+                "cc-plugin-plugin-authoring"
+              ]
+            },
+            "source": "proof/ALPHA63/A0/RESULT.md (2026-11-03) A0-2(c) init; owner 2026-11-11 builtin provenance class; known names only control notices; no arbitrary plugin paths; stopEvents: owner 2026-11-05 (R5b/R6b) — other unrecognised events are turn notes, these stop the turn: CLI-side permission denial, model substitution, out-of-band execution (task, local command, hook, plugin install) and a host control request",
             "stopEvents": [
               "system/permission_denied",
               "system/model_fallback",

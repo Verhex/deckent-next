@@ -26,7 +26,7 @@ are included in `nativeAgentFlagSetDigest`. Claude keeps restricted mode, empty 
 removes safe mode and the blanket MCP denial, and admits exactly one generated `{mcpConfigFile}` slot, a tool list
 and an admission-policy turn bound. Drivers must materialize that file only at the registry file name in the private run
 directory; the registry accepts no arbitrary MCP path or inline configuration. The init guard compares the exact session
-tool set and built-in plugin provenance; any other tool/plugin refuses sealing. Codex keeps the v1 argv and uses direct MCP
+tool set and registry-defined built-in plugin provenance; any other tool/plugin refuses sealing. Built-ins are accepted as a class (owner 2026-11-11): path `builtin` AND source exactly `<name>@builtin`, mandatory in both guards and fixed by schema literals. Duplicate or malformed entries and plugin errors refuse. Unknown built-in names and CLI version are retained in the existing invocation response; tool-chat also uses the existing durable turn note. The existing text-chat host-notice callback can show them; internal Brain invocations have evidence but no person-facing notice callback. Notice suppression is in memory per terminal process, scope, CLI version and name until the runtime host restarts; there is no persistent counter, new record type, ledger schema or migration. Codex keeps the v1 argv and uses direct MCP
 tools (`omit_tools_from`) with `approve`; this value opens the route to deckent's handler, never bypasses its approval.
 Native/unknown item types refuse; only the exact measured code-mode error is allowed (K3 also enforces stream counts/order).
 

@@ -1,3 +1,4 @@
+import { nativeBuiltinPluginPolicySchema } from './plugins.js';
 import { z } from 'zod';
 import { persistedInteger, promptFramingAllowanceSchema } from '#domain/index.js';
 import { text as argument, positive, envName, flag, args } from './schema-parts.js';
@@ -13,7 +14,7 @@ const authSchema = z.union([z.strictObject({ authMethods: words, apiProviders: w
   z.strictObject({ kind: z.literal('status'), stream: z.enum(['stdout', 'stderr']), loggedIn: z.array(z.strictObject({ line: argument, authMethod: argument }).readonly()).min(1).readonly(),
     source: argument }).readonly()]);
 /** Line guards by event stream: Claude's init/result fields, or Codex's allowed item types and error-text patterns (quota patterns stay in providers.json). */
-const guardsSchema = z.union([z.strictObject({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.strictObject({ name: argument, path: argument }).readonly()).readonly(),
+const guardsSchema = z.union([z.strictObject({ apiKeySources: words, permissionMode: argument, plugins: nativeBuiltinPluginPolicySchema,
   lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).readonly(),
   // `reconnectPatterns`: the CLI's own counted stream-retry notices (error lines), tolerated up to `maxReconnects` per call.
   z.strictObject({ allowedItems: words, loginPatterns: words, errorAllow: z.strictObject({ maxBytes: positive, rules: z.array(z.strictObject({ pattern: argument, errorClass: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u) }).readonly()).readonly(), source: argument }).readonly(), noticePatterns: words, maxNotices: positive, noticeSource: argument, reconnectPatterns: words, maxReconnects: positive, reconnectSource: argument, source: argument }).readonly()]);

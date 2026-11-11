@@ -134,6 +134,16 @@ it('owner 2026-11-05: an unrecognised Claude event is a turn note; a registry st
   const noted = await (await fixture(family, { events: [{ type: 'system', subtype: 'future_notice', text: 'never echoed' }], calls })).start();
   expect(await noted.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
   expect(noted.driver.notices()).toEqual(['system/future_notice']);
+  const names = ['cc-plugin-sec-default', 'cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring', 'cc-plugin-unseen'];
+  const plugins = names.map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
+  const builtin = await (await fixture(family, { init: { plugins }, calls })).start();
+  expect(await builtin.run()).toMatchObject({ native: { headless: { builtinPlugins: expect.arrayContaining(['cc-plugin-unseen']) } } });
+  for (const init of [{ plugin_errors: [{ plugin: 'cc-plugin-unseen', type: 'failed' }] }, { skills: ['extra'] }, { slash_commands: ['extra'] }]) {
+    const bad = await fixture(family, { init: { plugins, ...init }, calls }), blocked = await bad.start();
+    expect(await blocked.run()).toMatchObject({ kind: 'rejected' });
+    expect(bad.propose).not.toHaveBeenCalled();
+  }
+
   const f = await fixture(family, { events: [{ type: 'system', subtype: 'permission_denied' }], calls }), h = await f.start(), result = await h.run();
   expect(result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null).toMatchObject({ field: 'agent-surface:event', subtype: 'system/permission_denied' });
   await notPaused(f.profile);
