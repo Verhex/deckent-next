@@ -1,6 +1,6 @@
 import { open } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { auditVerifyQuerySchema, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
+import { auditVerifyQuerySchema, auditRefusalMatchesPolicy, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
 import { optionalField, emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -93,9 +93,23 @@ async function rebaselineCommand(argv: readonly string[], context: AdminCommandC
   return result.status === 'match' ? EXIT_CODES.success : EXIT_CODES.error;
 }
 
+function refusalSource(source: 'deckent-decision' | 'cli-reported' | 'adapter-reported', locale: Locale): string {
+  return { 'deckent-decision': t('cli.audit.refusal.source.deckent-decision', {}, locale),
+    'cli-reported': t('cli.audit.refusal.source.cli-reported', {}, locale), 'adapter-reported': t('cli.audit.refusal.source.adapter-reported', {}, locale) }[source];
+}
+function refusalOperation(operation: 'read' | 'write' | 'execute' | 'invoke' | 'connect' | 'authority', locale: Locale): string {
+  return { read: t('cli.audit.refusal.operation.read', {}, locale), write: t('cli.audit.refusal.operation.write', {}, locale),
+    execute: t('cli.audit.refusal.operation.execute', {}, locale), invoke: t('cli.audit.refusal.operation.invoke', {}, locale),
+    connect: t('cli.audit.refusal.operation.connect', {}, locale), authority: t('cli.audit.refusal.operation.authority', {}, locale) }[operation];
+}
 /** BeUser S-04: one audit record in words: its number, local time, who, what (the subject kind and its action when it names one) and the policy revision. */
-function auditLine(record: AuditListView['records'][number], locale: Locale): string {
-  const { kind, action: named } = record.event.subject as { kind: string; action?: unknown }, what = typeof named === 'string' ? `${kind} (${named})` : kind;
+function auditLine(record: AuditListView['records'][number], locale: Locale, peers: AuditListView['records'] = []): string {
+  const subject = record.event.subject, { kind, action: named } = subject as { kind: string; action?: unknown };
+  let what = typeof named === 'string' ? `${kind} (${named})` : kind;
+  if (subject.kind === 'access-refusal-summary') what = t('cli.audit.refusal.row', { kind, operation: refusalOperation(subject.operationClass, locale),
+    source: refusalSource(subject.decisionSource, locale), role: subject.target.role }, locale);
+  const joined = [...new Map(peers.map(peer => [peer.sequence, peer])).values()].filter(peer => auditRefusalMatchesPolicy(record.event, peer.event) || auditRefusalMatchesPolicy(peer.event, record.event));
+  if (joined.length) what += ` · ${t('cli.audit.refusal.joined', { sequences: joined.map(peer => `#${peer.sequence}`).join(', ') }, locale)}`;
   return t('cli.audit.list.row', { sequence: record.sequence, at: formatClock(record.event.atMs, locale), who: terminalSafeText(`${record.event.principal.issuer}/${record.event.principal.subject}`),
     what: terminalSafeText(what), policy: terminalSafeText(record.event.policyRevision) }, locale);
 }
@@ -123,11 +137,22 @@ async function auditListCommand(argv: readonly string[], context: AdminCommandCo
   if (show) {
     const record = view.records[0];
     if (!record || record.sequence !== Number(argv[2])) throw ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND', { params: { sequence: argv[2]!, scope: terminalSafeText(scopeId) } });
-    emit(record, { json, ...adminSinks(context), render: () => [auditLine(record, locale), terminalSafeText(JSON.stringify(record.event.subject, null, 2))].join('\n') });
+    emit(view.related || view.correlationLimited ? { ...record, ...optionalField('related', view.related), ...optionalField('correlationLimited', view.correlationLimited) } : record,
+      { json, ...adminSinks(context), render: () => {
+        const subject = record.event.subject;
+        return [auditLine(record, locale, view.related),
+          ...(subject.kind === 'access-refusal-summary' ? [subject.countBasis === 'at-least' ? t('cli.audit.refusal.countAtLeast', { count: subject.count }, locale) : t('cli.audit.refusal.countExact', { count: subject.count }, locale),
+            ...(subject.target.identity === null ? [t('cli.audit.refusal.unresolved', {}, locale)] : []),
+            refusalSource(subject.decisionSource, locale)] : []),
+          terminalSafeText(JSON.stringify(record, null, 2)),
+          ...(view.related ?? []).flatMap(peer => [auditLine(peer, locale, [record]), terminalSafeText(JSON.stringify(peer, null, 2))]),
+          ...(view.correlationLimited ? [t('cli.audit.refusal.correlationLimited', {}, locale)] : [])].join('\n');
+      } });
     return EXIT_CODES.success;
   }
   emit(view, { json, ...adminSinks(context), render: () => [t('cli.audit.list.head', { scope: terminalSafeText(scopeId) }, locale),
-    ...(view.records.length ? view.records.map(record => auditLine(record, locale)) : [t('cli.audit.list.none', {}, locale)]),
+    ...(view.records.length ? view.records.map(record => auditLine(record, locale, [...view.records, ...(view.related ?? [])])) : [t('cli.audit.list.none', {}, locale)]),
+    ...(view.correlationLimited ? [t('cli.audit.refusal.correlationLimited', {}, locale)] : []),
     view.next === null ? t('cli.audit.list.end', {}, locale) : t('cli.audit.list.next', { scope: terminalSafeText(scopeId), after: view.next }, locale)].join('\n') });
   return EXIT_CODES.success;
 }

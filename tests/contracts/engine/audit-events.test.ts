@@ -1,6 +1,7 @@
+import { refusalSubject } from '../../fixtures/audit-refusal.js';
 import { randomBytes } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { AUDIT_EVENT_SCHEMA_VERSION, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_POLICY_TURN_LIMITS, AUDIT_REFUSAL_TOKEN_MAX_CHARS, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
 import { AuditApplication, deliveryDismissalEvent, dismissedDeliveries, runRequestRefusedEvent, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
 import { createHmacIntegrity, snapshotKnownSecrets } from '#platform/index.js';
 
@@ -90,4 +91,24 @@ it('BeUser M-33: the latest dismissal record of a task wins; a restored task is 
   mark('t1', 'dismiss', 5);
   expect(dismissedDeliveries(audit, 'scope', 200).map(row => row.taskId).sort()).toEqual(['t1', 't2']);
   expect(dismissedDeliveries(audit, 'other', 200)).toEqual([]);
+});
+
+it('refusal summary v1 keeps bounded open catalog tokens and strict nested shapes, opaque targets and honest observation/count facts', () => {
+  const valid = { ...base, subject: refusalSubject };
+  expect(auditEventSchema.parse(valid)).toEqual(valid);
+  for (const decisionSource of ['deckent-decision', 'cli-reported', 'adapter-reported'])
+    expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, decisionSource } }).success).toBe(true);
+  expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, target: { role: 'erp:invoice', identity: { keyId: 'scope-key-v2', digest: 'e'.repeat(64) } } } }).success).toBe(true);
+  for (const invalid of [
+    { schemaVersion: 2 }, { operationClass: 'other' }, { decisionSource: 'other' },
+    { reasonCode: 'Bearer secret' }, { evidenceBasis: 'https://customer/private' }, { reasonCode: 'x'.repeat(AUDIT_REFUSAL_TOKEN_MAX_CHARS + 1) },
+    { tool: { name: 'read_file', version: 0 } }, { operation: { id: 'read', version: 1, raw: 'secret' } },
+    { target: { role: '/customer/invoice', identity: null } }, { target: { role: 'credential', identity: { keyId: 'k', digest: 'guessable' } } },
+    { target: { role: 'credential', identity: null, path: '/private' } }, { call: { ...refusalSubject.call, path: '/private' } },
+    { samples: Array.from({ length: AUDIT_POLICY_TURN_LIMITS.refusedMax + 1 }, () => refusalSubject.call) },
+    { samples: [{ ...refusalSubject.call, round: 0 }] }, { count: 0 }, { count: Number.MAX_SAFE_INTEGER + 1 },
+    { countBasis: 'unknown' }, { firstObservedAtMs: 21 }, { turnId: 'other' },
+    { count: 1, countBasis: 'exact', overflow: true }, { count: 1, samples: [refusalSubject.call, refusalSubject.call] },
+    { runId: undefined }, { taskId: undefined }, { attemptId: undefined }, { generation: 0 }, { raw: 'secret' },
+  ]) expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, ...invalid } }).success, JSON.stringify(invalid)).toBe(false);
 });

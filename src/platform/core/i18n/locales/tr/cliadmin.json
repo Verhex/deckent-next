@@ -420,5 +420,20 @@
   "cli.uninstall.reason.vcs-unverified": "Git izleme bilgisi okunamadı, bu yüzden korunur",
   "cli.uninstall.group.workspaces": "işçi çalışma alanları",
   "cli.uninstall.apply.stop": "Servisi durdur ve kaldır",
-  "cli.uninstall.details": "Ayrıntıları göster"
+  "cli.uninstall.details": "Ayrıntıları göster",
+  "cli.audit.refusal.row": "{kind} · {operation} · kaynak: {source} · hedef rolü: {role}",
+  "cli.audit.refusal.source.deckent-decision": "Deckent kararı (deckent-decision)",
+  "cli.audit.refusal.source.cli-reported": "CLI ret bildirdi; kararı Deckent vermedi (cli-reported)",
+  "cli.audit.refusal.source.adapter-reported": "Adapter ret bildirdi (adapter-reported)",
+  "cli.audit.refusal.countAtLeast": "Sayı en az {count}.",
+  "cli.audit.refusal.countExact": "Sayı tam olarak {count}.",
+  "cli.audit.refusal.unresolved": "Hedef çözümlenemiyor.",
+  "cli.audit.refusal.joined": "Politika izin verdi, sınırda reddedildi (ilişkili: {sequences})",
+  "cli.audit.refusal.correlationLimited": "İlişkili kayıt araması sınırına ulaştı; eşleşme yokluğu doğrulanamadı.",
+  "cli.audit.refusal.operation.read": "okuma",
+  "cli.audit.refusal.operation.write": "yazma",
+  "cli.audit.refusal.operation.execute": "çalıştırma",
+  "cli.audit.refusal.operation.invoke": "çağırma",
+  "cli.audit.refusal.operation.connect": "bağlanma",
+  "cli.audit.refusal.operation.authority": "yetki"
 }

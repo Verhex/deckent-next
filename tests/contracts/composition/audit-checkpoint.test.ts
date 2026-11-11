@@ -1,3 +1,5 @@
+import { refusalSubject } from '../../fixtures/audit-refusal.js';
+import { encodeCommandProjection, type AuditEvent } from '#domain/index.js';
 import { mkdtemp, mkdir, readFile, rm, writeFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -119,6 +121,24 @@ it.skipIf(process.platform !== 'win32')('unsupported Windows policy custody refu
 it.skipIf(process.platform === 'win32')('audit list and show read the verified log of the scope; a foreign scope is refused', async () => {
   const f = await auditCheckpointFixture(); roots.push(f.root);
   expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('match');
+  const scoped = await loadConfiguredScopeContext(f.root, 's', f.options, 'read');
+  const policy: AuditEvent = { schemaVersion: 1, scopeId: 's', eventId: 'policy-allow', principal: { issuer: scoped.principal.issuer, subject: scoped.principal.subject },
+    policyRevision: 'p', atMs: 30, subject: { kind: 'policy-turn', turnId: 'turn', ceiling: false, refused: { count: 0, calls: [] },
+      allowed: { count: 1, calls: [{ tool: { name: 'read_file', version: 1 }, call: { round: 1, index: 0, callId: 'call' },
+        cell: 'read', argsDigest: 'a'.repeat(64), revision: 'p' }] } } };
+  const policyRow = await withScopeAudit(scoped, audit => audit.record(policy), false);
+  const future: AuditEvent = { ...policy, eventId: 'future-boundary', subject: refusalSubject };
+  const integrity = await adapters.openLocalIntegrityAuthority(scoped.layout, scoped.config.approvals.keyFile);
+  const signed = { event: future, sequence: policyRow.sequence + 1, keyId: integrity.keyId };
+  const fixture = { ...signed, mac: integrity.sign(encodeCommandProjection('audit-record:1', signed)) };
+  const raw = new DatabaseSync(f.ledger);
+  try { raw.prepare('INSERT INTO audit_events(scope_id,sequence,event_id,kind,at_ms,key_id,mac,record) VALUES(?,?,?,?,?,?,?,?)')
+    .run('s', fixture.sequence, future.eventId, future.subject.kind, future.atMs, fixture.keyId, fixture.mac, JSON.stringify(fixture)); }
+  finally { raw.close(); }
+  const single = await listConfiguredAudit(f.root, { schemaVersion: 1, scopeId: 's', after: policyRow.sequence, limit: 1 }, f.options);
+  expect(single.records).toEqual([{ sequence: fixture.sequence, event: future }]);
+  expect(single.related).toEqual([{ sequence: policyRow.sequence, event: policy }]);
+  expect((await verifyAudit(f.root, { schemaVersion: 1, scopeId: 's' }, f.options)).status).toBe('match');
   const listAudit = (root: string, query: unknown) => listConfiguredAudit(root, query, f.options);
   const run = async (...argv: string[]) => { let out = '', err = ''; const code = await main(['audit', ...argv, '--scope', 's'], { root: f.root, env: f.options.env, listAudit,
     stdout: { write: value => { out += value; } }, stderr: { write: value => { err += value; } } }); return { code, out, err }; };
@@ -127,6 +147,9 @@ it.skipIf(process.platform === 'win32')('audit list and show read the verified l
   const text = await run('list', '--limit', '1');
   expect(text.out).toContain('Audit log of scope s'); expect(text.out).toContain(`#1 · `); expect(text.out).toContain(view.records[0]!.event.subject.kind);
   if (view.records.length > 1) expect(text.out).toContain('deckent audit list --scope s --after 1');
+  const boundary = await run('show', String(fixture.sequence));
+  expect(boundary.code).toBe(0); expect(boundary.out).toContain('Allowed by policy, refused at the boundary');
+  expect(boundary.out).toContain('Count is at least 2.'); expect(boundary.out).toContain('Target not resolvable.');
   const shown = await run('show', '1', '--json'); expect(JSON.parse(shown.out).event.eventId).toBe(view.records[0]!.event.eventId);
   const missing = await run('show', String(view.records.length + 50)); expect(missing.code).not.toBe(0); expect(missing.err).toContain('deckent audit list --scope s');
   await expect(listAudit(f.root, { schemaVersion: 1, scopeId: 'foreign' })).rejects.toBeDefined();

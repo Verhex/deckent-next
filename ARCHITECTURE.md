@@ -136,7 +136,11 @@ role come from one versioned model role registry (`model_roles` overlay, `decken
 candidates come from accepted work, are verified only by a person or an independent other-maker evaluator, and reach worker and
 Brain context as sealed data (`memoryAutomation.*`, `deckent memory rollout`). Auditor: each agent turn that decided a tool call seals
 at most one `policy-turn` record (refusals and plain allows that ran; bounded lists with exact counts); a turn with no decision writes
-none, and the record is written after the turn, best effort: a refused audit write does not fail the turn. A read-only auditor identity; safety holds only a person lifts. Nervous and recovery: deterministic detection, a broker that runs
+none, and the record is written after the turn, best effort: a refused audit write does not fail the turn. Beta.2 additionally reads strict v1 `access-refusal-summary` records (operation class, source, reason/evidence codes, role + keyed opaque target,
+observation times, exact/lower-bound counts, bounded call samples and overflow); no producer or backfill writes them until beta.2.1.
+`audit list/show` distinguish `deckent-decision`, `cli-reported` (the CLI reported it; Deckent did not decide) and `adapter-reported`.
+Verified call identities join policy allows with boundary refusals without rewriting either sealed row; unresolved targets are explicit.
+A read-only auditor identity; safety holds only a person lifts. Nervous and recovery: deterministic detection, a broker that runs
 measured rules under the owner's grant, and a role-model decision that may continue a lost task in a new Attempt within registry
 bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's connected Claude/Codex CLI
 subscription in a bubblewrap realm, with consent for its use. First connect defaults to person + AI (native chat and

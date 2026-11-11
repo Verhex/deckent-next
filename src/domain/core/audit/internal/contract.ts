@@ -36,6 +36,7 @@ export const AUDIT_TRACKED_PATHS_MAX = 50;
 export const AUDIT_POLICY_TURN_LIMITS = Object.freeze({ refusedMax: limits.policyTurnRefusedMax, allowedMax: limits.policyTurnAllowedMax });
 /** S4B-5: the most memory entries one `memory-context` event names (the memory registry's `context.maxEntries` stays at or below it). */
 export const AUDIT_MEMORY_CONTEXT_ENTRIES_MAX = limits.memoryContextEntriesMax;
+export const AUDIT_REFUSAL_TOKEN_MAX_CHARS = limits.refusalTokenMaxChars;
 export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
 /** S6R-2: the typed signal summary a `recovery-detection` seals (counts and states only, never a log line, path or worker output). */
 export const recoveryEvidenceSchema = z.strictObject({ get activity() { return z.enum(NERVOUS_ACTIVITY_STATES).nullable(); }, get launcher() { return z.enum(NERVOUS_LAUNCHER_BASES).nullable(); },
@@ -76,7 +77,24 @@ const turnCallRef = z.strictObject({ get round() { return counterSchema.positive
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
+const refusalToken = z.string().min(1).max(AUDIT_REFUSAL_TOKEN_MAX_CHARS).regex(/^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/u);
 const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
+  /** beta.2 reads only; beta.2.1 owns producers. Tokens are catalog codes, never target names or diagnostic text.
+   * The identity is a scope/domain-separated keyed digest plus an opaque key reference; resolution is outside this reader.
+   * Samples name observed calls only; overflow means observations were omitted. Counts with at-least basis are lower bounds. */
+  z.strictObject({ get kind() { return z.literal('access-refusal-summary'); }, get schemaVersion() { return z.literal(1); },
+    get operationClass() { return z.enum(['read', 'write', 'execute', 'invoke', 'connect', 'authority']); },
+    get operation() { return z.strictObject({ id: refusalToken, version: counterSchema.positive() }).optional(); },
+    get tool() { return z.strictObject({ name: refusalToken, version: counterSchema.positive() }).optional(); },
+    get decisionSource() { return z.enum(['deckent-decision', 'cli-reported', 'adapter-reported']); },
+    reasonCode: refusalToken, evidenceBasis: refusalToken,
+    get target() { return z.strictObject({ role: refusalToken, identity: z.strictObject({ keyId: refusalToken, digest }).nullable() }); },
+    firstObservedAtMs: counterSchema, lastObservedAtMs: counterSchema, get count() { return counterSchema.positive(); },
+    get countBasis() { return z.enum(['exact', 'at-least']); },
+    get samples() { return z.array(callRef).max(AUDIT_POLICY_TURN_LIMITS.refusedMax); }, get overflow() { return z.boolean(); },
+    get turnId() { return identitySchema.optional(); }, get runId() { return identitySchema.optional(); }, get taskId() { return identitySchema.optional(); },
+    get attemptId() { return identitySchema.optional(); }, get generation() { return counterSchema.positive().optional(); },
+    get invocationId() { return identitySchema.optional(); }, get commandId() { return identitySchema.optional(); }, get call() { return callRef.optional(); } }),
   z.strictObject({ get kind() { return z.literal('target-batch-decision'); }, batchDigest: digest, get operation() { return z.enum(['publish', 'adopt', 'rollback']); }, get answer() { return z.enum(['allow', 'decline']); }, get peerPid() { return counterSchema.positive(); }, witnessDigest: digest }),
   z.strictObject({ get kind() { return z.literal('target-queue'); }, commandId: identitySchema, targetKey: digest, get ordinal() { return counterSchema.positive(); },
     revision: counterSchema, state: identitySchema, payloadDigest: digest, recordDigest: digest, get reason() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional(); } }),
@@ -375,6 +393,13 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     get bytes() { return counterSchema.nullable(); }, get counters() { return z.strictObject({ peersRefused: counterSchema, capabilityIssued: counterSchema, capabilityRefused: counterSchema, relayed: counterSchema,
       refused: counterSchema, upstreamSends: counterSchema, suppressed: counterSchema }).nullable(); } }),
 ]).superRefine((subject, context) => {
+  if (subject.kind === 'access-refusal-summary' && (subject.lastObservedAtMs < subject.firstObservedAtMs
+    || subject.samples.length > subject.count || subject.overflow && subject.countBasis === 'exact' && subject.samples.length >= subject.count
+    || subject.taskId !== undefined && subject.runId === undefined || subject.attemptId !== undefined && subject.taskId === undefined
+    || subject.generation !== undefined && subject.attemptId === undefined
+    || subject.turnId !== undefined && (subject.call && subject.call.turnId !== subject.turnId || subject.samples.some(call => call.turnId !== subject.turnId)))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
+  }
   // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost;
   // relay counters exactly on the closing summary.
   if (subject.kind === 'recovery-decision' && (subject.terminationReceiptId === null) !== (subject.basis === 'would-stop')
