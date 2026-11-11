@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **beta pre-release `1.0.0-beta.1`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **beta pre-release `1.0.0-beta.1.1`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists beta releases, newest first; older releases are in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
 > deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned during the beta line, probably as `@verhex/deckent` (the name is
