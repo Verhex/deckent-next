@@ -28,6 +28,7 @@ export interface FakeAgentScenario {
   readonly textFrom?: string;
   readonly preamble?: string;
   readonly pluginMismatch?: boolean;
+  readonly init?: Record<string, unknown>;
   readonly nativeItem?: boolean | 'collab_tool_call';
   readonly echoToken?: boolean;
   readonly loginCanary?: string;
@@ -61,7 +62,7 @@ const line = value => new Promise(resolve => { if(s.scenario.traceFile) fs.appen
 async function main() {
  const prompt=Buffer.concat(chunks).toString('utf8'); const selected=(x.turns??[]).filter(row=>prompt.includes(row.when)).sort((a,b)=>prompt.lastIndexOf(b.when)-prompt.lastIndexOf(a.when))[0]; if(selected) x={...x,...selected};
  const model = argv[argv.indexOf(e.command.modelFlag)+1], agent = claude ? argv.includes('--mcp-config') : argv.some(a => a.startsWith('mcp_servers.'));
- if (!agent) { const text=x.textFrom ? String(new Function('prompt','argv','fs',x.textFrom)(prompt,argv,fs)) : x.text ?? 'text-only still available'; if (claude) { await line({...s.init,cwd:process.cwd(),model}); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }
+ if (!agent) { const text=x.textFrom ? String(new Function('prompt','argv','fs',x.textFrom)(prompt,argv,fs)) : x.text ?? 'text-only still available'; if (claude) { await line({...s.init,...x.init,cwd:process.cwd(),model}); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }
  else for (const value of s.codex) await line(value.item?.type === 'agent_message' ? {...value,item:{...value.item,text}} : value); return; }
  let token, server;
  if (claude) { const file=argv[argv.indexOf('--mcp-config')+1]; server=JSON.parse(fs.readFileSync(file,'utf8')).mcpServers[e.bridge.serverName]; token=server.headers[e.bridge.tokenHeaderName].slice('Bearer '.length);
@@ -75,7 +76,7 @@ async function main() {
  await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'synthetic-agent',version:'1'}});
  const listed = await rpc('tools/list',{});
  if (!claude && x.proposalBeforeItem) { const call=x.calls[0]; try { await rpc('tools/call',{name:call.name,arguments:call.arguments,_meta:{callId:'call-early',itemId:'fc-early'}}); } catch {} await new Promise(r=>setTimeout(r,100)); return; }
- if (claude) { await line({...s.init,cwd:process.cwd(),model,tools:listed.tools.map(t=>e.bridge.toolPrefix+t.name),mcp_servers:[{name:e.bridge.serverName,status:'connected'}],...(x.pluginMismatch?{plugins:[{name:'unexpected',path:'fixture',source:'fixture'}]}:{})}); await new Promise(r=>setTimeout(r,100)); }
+ if (claude) { await line({...s.init,...x.init,cwd:process.cwd(),model,tools:listed.tools.map(t=>e.bridge.toolPrefix+t.name),mcp_servers:[{name:e.bridge.serverName,status:'connected'}],...(x.pluginMismatch?{plugins:[{name:'unexpected',path:'fixture',source:'fixture'}]}:{})}); await new Promise(r=>setTimeout(r,100)); }
  else { await line(s.codex[0]); await line(s.codex[1]); if(x.nativeItem) { await line({type:'item.started',item:{id:'native-bad',type:x.nativeItem===true?'command_execution':x.nativeItem,command:'unchanged risky request'}}); await new Promise(r=>setTimeout(r,100)); } }
  if (claude) for (const event of x.events ?? []) await line({...event,session_id:'s-1',uuid:'u-ev'});
  if (claude && x.thinkingTokens) await line({type:'system',subtype:'thinking_tokens',estimated_tokens:40,estimated_tokens_delta:40,session_id:'s-1',uuid:'u-tt'});

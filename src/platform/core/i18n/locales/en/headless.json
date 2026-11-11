@@ -66,7 +66,7 @@
   "headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED": "Sign in through the CLI’s own login in your terminal before using agent tools.",
   "headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED": "Agent execution has not been verified for this CLI version and profile. It is unavailable until verification completes.",
   "headless.agent.reason.NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED": "The CLI exposed an unexpected tool or event, so that turn stopped and no tool ran without permission. The next message checks again; no reconnect is needed.",
-  "headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED": "The CLI loaded a plugin outside the allowed built-in set, so that turn stopped and no tool ran. Remove the plugin or check the CLI version; the next message checks again.",
+  "headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED": "The CLI loaded a plugin that is not built-in, so that turn stopped and no tool ran. Remove the plugin or check the CLI version; the next message checks again.",
   "headless.agent.reason.NATIVE_AGENT_BRIDGE_UNAVAILABLE": "The governed tool bridge is unavailable. No agent tool can run until it is ready.",
   "headless.agent.reason.NATIVE_AGENT_ENVIRONMENT_REFUSED": "The agent environment contains a forbidden override or bypasses the governed proxy. Agent execution stays closed.",
   "headless.agent.tui.provider.kind.claudeCliSubscription": "Sign in with Claude",
@@ -118,5 +118,8 @@
   "headless.agent.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "The worker CLI tool guard refused the surface. The Attempt ended; this binding and seal will not be retried.",
   "headless.agent.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "The worker CLI reported an unexpected plugin. The Attempt ended; this binding and seal will not be retried.",
   "headless.agent.worker.NATIVE_WORKER_INPUT_REFUSED": "The task input read-only view could not be verified. Inspect its path, scope, links and byte limits.",
-  "headless.agent.workspace.containedWorkspaceRefused": "The worker workspace cannot be opened as a closed view of installation state."
+  "headless.agent.workspace.containedWorkspaceRefused": "The worker workspace cannot be opened as a closed view of installation state.",
+  "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} loaded a new built-in plugin: {name}. Nothing was blocked; this observation is recorded with the turn.",
+  "headless.agent.builtinPlugins": "[deckent] Claude CLI {version} loaded new built-in plugins: {name}. Nothing was blocked; this observation is recorded with the turn.",
+  "headless.agent.builtinPluginsMore": "+{count} more"
 }

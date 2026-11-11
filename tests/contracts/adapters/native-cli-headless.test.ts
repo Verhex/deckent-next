@@ -15,6 +15,9 @@ import { measureTestShellHost } from '../../fixtures/shell-host.js';
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 afterEach(cleanupConnections);
+const plugins322 = ['cc-plugin-sec-default', 'cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+  .map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
+const unseenBuiltin = { name: 'cc-plugin-unseen', path: 'builtin', source: 'cc-plugin-unseen@builtin' };
 const happy = (text = '{"ok":true}'): FakeStep[] => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
 const body = (result: unknown) => JSON.parse(Buffer.from((result as { evidence: { body: { data: string } } }).evidence.body.data, 'base64').toString('utf8'));
 const DENIED = headless.env.deny;
@@ -24,10 +27,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     const saved = Object.fromEntries(DENIED.map(name => [name, process.env[name]]));
     for (const name of DENIED) process.env[name] = `leak-${name}`;
     try {
-      const c = await connection({ steps: happy() }), deltas: ModelInvocationDelta[] = [];
+      // The fixture's own CLI version (9.1.0) stays: the pinned model's minimum version applies; the five built-in names are those CLI 2.1.322 reports.
+      const c = await connection({ steps: happy().map(step => 'line' in step && typeof step.line === 'object' && step.line.subtype === 'init'
+        ? { line: initLine({ plugins: [...plugins322, unseenBuiltin] }) } : step) }), deltas: ModelInvocationDelta[] = [];
       const result = await c.call(null, {}, undefined, deltas);
       expect(result).toMatchObject({ schemaVersion: 1, native: { object: 'chat.completion', model: PINNED,
-        choices: [{ message: { role: 'assistant', content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed' } },
+        choices: [{ message: { role: 'assistant', content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', builtinPlugins: expect.arrayContaining(['cc-plugin-unseen']) } },
       usage: { prompt_tokens: 586, completion_tokens: 9, total_tokens: 595, modelUsage: { [PINNED]: { inputTokens: 2, outputTokens: 9 } },
         quota: { five_hour: { utilizationPermille: 250, resetsAtMs: 1792773600000 }, seven_day: { utilizationPermille: 730 } } } });
       expect(JSON.stringify(result)).not.toMatch(/cost|usd/iu);
@@ -130,10 +135,16 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards and typed refusals (fake CLI)', () => {
   it.each([
     ['N2 an API key source', initLine({ apiKeySource: 'ANTHROPIC_API_KEY' }), 'invalid-response', { refusal: 'guard', field: 'apiKeySource' }],
-    ['N3 a tool', initLine({ tools: ['Bash'] }), 'invalid-response', { refusal: 'guard', field: 'tools' }],
-    ['N3 an MCP server', initLine({ mcp_servers: [{ name: 'x', status: 'connected' }] }), 'invalid-response', { refusal: 'guard', field: 'mcpServers' }],
+    ['N3 a tool', initLine({ plugins: plugins322, tools: ['Bash'] }), 'invalid-response', { refusal: 'guard', field: 'tools' }],
+    ['N3 an MCP server', initLine({ plugins: plugins322, mcp_servers: [{ name: 'x', status: 'connected' }] }), 'invalid-response', { refusal: 'guard', field: 'mcpServers' }],
     ['N3 a user plugin', initLine({ plugins: [{ name: 'user-plugin', path: '/home/x/plugins', source: 'user-plugin@market' }] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
-    ['a skill', initLine({ skills: ['skill'] }), 'invalid-response', { refusal: 'guard', field: 'skills' }],
+    ['a builtin with foreign provenance', initLine({ plugins: [{ ...unseenBuiltin, source: 'cc-plugin-unseen@market' }] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
+    ['a builtin naming another plugin', initLine({ plugins: [{ ...unseenBuiltin, source: 'another@builtin' }] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
+    ['a builtin missing carried source', initLine({ plugins: [unseenBuiltin, { name: 'missing', path: 'builtin' }] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
+    ['duplicate builtins', initLine({ plugins: [unseenBuiltin, unseenBuiltin] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
+    ['a malformed plugin', initLine({ plugins: [null] }), 'invalid-response', { refusal: 'guard', field: 'plugins' }],
+    ['plugin errors', initLine({ plugins: plugins322, plugin_errors: [{ plugin: 'cc-plugin-telemetry', type: 'failed' }] }), 'invalid-response', { refusal: 'guard', field: 'pluginErrors' }],
+    ['a skill', initLine({ plugins: plugins322, skills: ['skill'] }), 'invalid-response', { refusal: 'guard', field: 'skills' }],
     ['another permission mode', initLine({ permissionMode: 'bypassPermissions' }), 'invalid-response', { refusal: 'guard', field: 'permissionMode' }],
     ['another CLI version', initLine({ claude_code_version: '9.9.9' }), 'invalid-response', { refusal: 'guard', field: 'cliVersion' }],
     ['N20 another cwd', initLine({ cwd: '/repository' }), 'invalid-response', { refusal: 'guard', field: 'cwd' }],

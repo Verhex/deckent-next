@@ -491,9 +491,11 @@ it('compacts mechanically when the summary answer is unreadable: labelled not mo
   const p = ports([messages => { sent.push(messages); return answer('done'); }]), events: AgentTurnEvent[] = [];
   const result = await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: event => events.push(event) },
     { ...p.value, measure: async input => ({ promptTokens: JSON.stringify(input.messages).length, windowTokens: 40_000, quality: 'provider-count' }),
-      summarize: async () => 'unreadable' });
+      summarize: async () => 'unreadable', hostNote: () => 'host-observation '.repeat(4096) });
   expect(result).toMatchObject({ finish: 'stop', answer: 'done' });
   expect(result.note).toMatch(/without a model summary/);
+  expect(result.note!.length).toBeLessThanOrEqual(4096);
+  expect(result.note).toMatch(/…$/u); // Host observations cannot crowd out the mechanical-compaction diagnostic.
   const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnEvent, { kind: 'compacted' }>;
   const excerpt = compacted.messages[0]!.content;
   expect(excerpt).toContain('not written by the model'); expect(excerpt).not.toContain('Summary (model-written)');

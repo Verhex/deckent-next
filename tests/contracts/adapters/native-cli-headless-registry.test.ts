@@ -1,3 +1,5 @@
+import { nativeBuiltinPlugins, createClaudeAgentDriver, type ToolSessionPort } from '#capabilities/index.js';
+import { nativeHeadlessInitRefusal as initGuard } from '#adapters/core/native-cli-headless/index.js';
 import { resolve } from 'node:path';
 import { nativeCliHeadlessDefinitionSchema } from '#adapters/core/native-cli-headless/index.js';
 import { describe, expect, it } from 'vitest';
@@ -175,19 +177,86 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     Object.assign(stdio.adapters.codex.agent.transport.mcpConfig, { command: 'node', args: [] });
     expect(() => parseNativeCliRegistry(stdio)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
   });
-  it('refuses a Claude seal for a foreign plugin, plugin provenance or tool; missing fields also fail closed', () => {
+  it('accepts Claude builtins as a class while refusing foreign provenance, duplicates and expanded tool surfaces', () => {
     const { agent, bridge } = nativeCliAgent(FAMILY)!;
-    // R9 (2026-11-05): the Brain text path and the agent path allow the same owner-excepted built-in plugins (CLI 2.1.317+ loads cc-plugin-privacy).
-    const names = (rows: readonly { name: string; path: string }[]) => rows.map(row => `${row.name}@${row.path}`).sort();
-    expect(names(registry.adapters.claude.headless.guards.plugins)).toEqual(names((agent.transport as { guards: { plugins: { name: string; path: string }[] } }).guards.plugins));
+    if (agent.transport.kind !== 'claude-mcp') throw new Error('fixture');
+    const entry = nativeCliHeadless(FAMILY)!;
+    if (!('apiKeySources' in entry.headless.guards)) throw new Error('fixture');
+    const headlessGuards = entry.headless.guards;
+    const textGuard = (over: Record<string, unknown>) => { const line = parseClaudeStreamLine(JSON.stringify(initLine(over)));
+      if (line.kind !== 'init') throw new Error('fixture');
+      return initGuard(line, { model: PINNED }, headlessGuards, { version: '9.1.0' }, '/run/dir'); };
+    const policy = agent.transport.guards.plugins, textPolicy = registry.adapters.claude.headless.guards.plugins;
+    expect(policy).toEqual(textPolicy);
+    for (const guards of ['headless', 'agent'] as const) {
+      for (const over of [{ path: '/tmp/plugin' }, { sourceTemplate: '{name}@inline' }]) {
+        const invalid = structuredClone(registry);
+        Object.assign(guards === 'headless' ? invalid.adapters.claude.headless.guards.plugins : invalid.adapters.claude.agent.transport.guards.plugins, over);
+        expect(() => parseNativeCliRegistry(invalid)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+      }
+    }
+    const five = ['cc-plugin-sec-default', 'cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+      .map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
+    expect(nativeBuiltinPlugins(five, policy)).not.toBeNull();
+    expect(nativeBuiltinPlugins(five, textPolicy)).not.toBeNull();
+    const unseen = { name: 'cc-plugin-unseen', path: 'builtin', source: 'cc-plugin-unseen@builtin' };
+    expect(nativeBuiltinPlugins([unseen], policy)).toEqual(['cc-plugin-unseen']);
+    expect(textGuard({ plugins: [...five, unseen] })).toBeNull();
+    expect(textGuard({ plugins: five, tools: ['Bash'] })).toMatchObject({ body: { field: 'tools' } });
+    // Both paths require source, including an init where no entry carries it.
+    expect(textGuard({ plugins: [{ name: unseen.name, path: 'builtin' }] })).toMatchObject({ body: { field: 'plugins' } });
+    for (const plugins of [[{ ...unseen, path: '/tmp/plugin' }], [{ ...unseen, source: 'cc-plugin-unseen@market' }],
+      [{ ...unseen, source: 'another-name@builtin' }], [{ ...unseen, path: '/tmp/plugin', source: 'cc-plugin-unseen@inline' }],
+      [{ ...unseen, path: '/tmp/plugin', source: 'cc-plugin-unseen@builtin' }],
+      [{ name: 'cc-plugin-privacy', path: '/tmp/plugin', source: 'cc-plugin-privacy@inline' }, ...five], [unseen, unseen], [null], [{}],
+      [{ ...unseen, name: 3 }], [{ ...unseen, name: '' }], [unseen, { name: 'missing-source', path: 'builtin' }]]) {
+      expect(nativeBuiltinPlugins(plugins, policy)).toBeNull();
+      expect(nativeBuiltinPlugins(plugins, textPolicy)).toBeNull();
+      expect(textGuard({ plugins })).toMatchObject({ body: { field: 'plugins' } });
+    }
+    expect(nativeBuiltinPlugins([{ name: unseen.name, path: 'builtin' }], policy)).toBeNull();
     // Literal wire shape from A0-2(c); source has more tools, this session deliberately exposes only read_file.
     const init = { type: 'system', subtype: 'init', tools: ['mcp__deckent__read_file'], mcp_servers: [{ name: 'deckent', status: 'connected', source: 'dynamic' }],
       plugins: [{ name: 'cc-plugin-agents-md', path: 'builtin', source: 'cc-plugin-agents-md@builtin' }], skills: [], slash_commands: [], permissionMode: 'dontAsk', apiKeySource: 'none' };
     expect(nativeAgentInitReason(agent, bridge, session, init)).toBeNull();
-    expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: [...init.plugins, { name: 'foreign', path: 'builtin', source: 'foreign@builtin' }] })).toBe('NATIVE_AGENT_PLUGIN_UNEXPECTED');
+    for (const plugins of [[{ ...unseen, path: '/tmp/plugin' }], [{ ...unseen, source: 'cc-plugin-unseen@inline' }],
+      [{ ...unseen, source: 'another-name@builtin' }], [{ ...unseen, path: '/tmp/plugin', source: 'cc-plugin-unseen@inline' }],
+      [unseen, unseen], [{ name: 'cc-plugin-privacy', path: '/tmp/plugin', source: 'cc-plugin-privacy@inline' }, ...five]]) {
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins })).toBe('NATIVE_AGENT_PLUGIN_UNEXPECTED');
+    }
+    for (const plugins of [[null], [{}], [{ name: unseen.name, path: 'builtin' }], [{ ...unseen, name: 3 }]]) {
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+    }
+
+    expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: [...five, unseen] })).toBeNull();
+    // Presentation bounds never narrow the provenance class, including odd and very long identities.
+    for (const names of [['x'.repeat(4096)], ['cc-plugin-new\n\t\u0001name'], Array.from({ length: 100 }, (_, i) => `cc-plugin-new-${i}`)]) {
+      const plugins = names.map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
+      expect(nativeBuiltinPlugins(plugins, policy)).toEqual(names);
+      expect(textGuard({ plugins })).toBeNull();
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins })).toBeNull();
+    }
+    const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
+    const port: ToolSessionPort = { session, propose: async () => { throw new Error('no tool expected'); },
+      cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
+    const stream = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192 });
+    expect(stream.line(JSON.stringify({ ...init, plugins: [...five, unseen], model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }))).toBeUndefined();
+    expect(stream.builtinPlugins()).toContain('cc-plugin-unseen');
+    expect(stream.line(JSON.stringify(resultLine('ok')))).toBeUndefined();
+    expect(stream.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'completed' });
+    for (const extra of [{ plugin_errors: [{ plugin: 'cc-plugin-unseen', type: 'failed' }] }, { plugin_errors: {} }]) {
+      const failed = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192 });
+      expect(failed.line(JSON.stringify({ ...init, plugins: five, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir', ...extra }))).toBe('stop');
+      expect(textGuard({ plugins: five, ...extra })).toMatchObject({ body: { field: 'pluginErrors' } });
+    }
+
     expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: [{ ...init.plugins[0], path: '/tmp/plugin' }] })).toBe('NATIVE_AGENT_PLUGIN_UNEXPECTED');
+    for (const extra of [{ skills: ['skill'] }, { slash_commands: ['command'] }, { mcp_servers: [...init.mcp_servers, { name: 'extra', status: 'connected' }] }]) {
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: five, ...extra })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+      if (!('slash_commands' in extra)) expect(textGuard({ plugins: five, ...extra })).not.toBeNull();
+    }
     for (const tools of [['Read'], ['mcp__foreign__read_file'], ['mcp__deckent__decide_approval'], ['mcp__deckent__read_file', 'mcp__deckent__write_file'], undefined]) {
-      expect(nativeAgentInitReason(agent, bridge, session, { ...init, tools })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+      expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: five, tools })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
     }
   });
   it('fails closed on native/unknown Codex items and allows only the exact measured code-mode notice', () => {

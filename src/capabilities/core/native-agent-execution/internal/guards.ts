@@ -1,3 +1,4 @@
+import { nativeBuiltinPlugins } from './plugins.js';
 import { z } from 'zod';
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { ToolSession } from './session.js';
@@ -14,8 +15,7 @@ export function nativeAgentInitReason(agent: NativeCliAgent, bridge: NativeAgent
   const parsed = initSchema.safeParse(value);
   if (!parsed.success) return 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
   const init = parsed.data, { guards } = agent.transport;
-  if (init.plugins.some(plugin => !guards.plugins.some(allowed => plugin.name === allowed.name && plugin.path === allowed.path && plugin.source === allowed.source))
-    || new Set(init.plugins.map(plugin => plugin.name)).size !== init.plugins.length) return 'NATIVE_AGENT_PLUGIN_UNEXPECTED';
+  if (nativeBuiltinPlugins(init.plugins, guards.plugins) === null) return 'NATIVE_AGENT_PLUGIN_UNEXPECTED';
   const expected = new Set(session.tools.map(tool => bridge.toolPrefix + tool.name));
   if (new Set(init.tools).size !== init.tools.length || init.tools.length !== expected.size || init.tools.some(tool => !expected.has(tool))
     || init.skills.length || init.slash_commands.length || init.permissionMode !== guards.permissionMode || !guards.apiKeySources.includes(init.apiKeySource)

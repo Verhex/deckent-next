@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/index.js';
-import { ModelInvocationApplication } from '#engine/core/model-invocation/index.js';
+import { notifyNativeBuiltinPlugins } from '#composition/core/model-invocation/index.js';
+import { ModelInvocationApplication, type ModelInvocationNativePort } from '#engine/core/model-invocation/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding, openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
@@ -21,7 +22,7 @@ const expectedBinding = { encodingVersion: 1 as const, algorithm: 'sha256' as co
 const principal = { id: 'person', issuer: 'test', subject: '1', assurance: 'os-user' as const, scopeIds: ['scope'] };
 const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance }, authorization = { revision: 'policy', ruleId: 'invoke' };
 const steps = (text: string) => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
-async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}, bound = true) {
+async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}, bound = true, native?: ModelInvocationNativePort) {
   const c = await connection({ steps: lines }, {}, expectedBinding.digest, isolation), path = join(c.root, 'ledger.db');
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const admitted = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
@@ -32,13 +33,39 @@ async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, 
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return authorization; } },
     { async inspect() { return { schemaVersion: 1, reference, status: 'declared', catalogRevision: 'catalog', definition, binding: expectedBinding, availability: 'not-observed' }; } },
     async () => ({ async loadRecord() { return admitted.receipt.record; }, close() {} }), { async resolve() { return c.profile; } },
-    { resolve() { return c.port; }, async admit(profile, signal) { await c.port.preflight(profile, signal); onAdmitted(); } },
+    { resolve() { return native ?? c.port; }, async admit(profile, signal) { if (!native) await c.port.preflight(profile, signal); onAdmitted(); } },
     async () => openSqliteModelInvocationStore(path, sqlite, 'forbid'), { invocationId: () => 'invocation', ownerId: () => 'owner', now: () => 10 });
   const command = { schemaVersion: 1, commandId: 'plan-1', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding, nativeRequest: request() };
   return { c, app, path, command };
 }
 const calls = async (c: Awaited<ReturnType<typeof connection>>) => (await c.log()).filter(entry => entry.mode === 'call').length;
 
+it('retains an unseen builtin and CLI version once in invocation evidence and notifies once without persistent deduplication', async () => {
+  // Guard provenance is exercised through both real guards in native-cli-headless-registry. Only CLI I/O is substituted here.
+  let sends = 0;
+  const native: ModelInvocationNativePort = { billingAxis: 'subscription', async prepare() { return {}; }, async send() {
+    sends++;
+    return { schemaVersion: 1, native: { object: 'chat.completion', model: definition.model.nativeId,
+      choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      headless: { cliVersion: '2.1.322', builtinPlugins: ['cc-plugin-unseen'] } },
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+  } };
+  const { app, command, path } = await fixture(undefined, testIsolation, () => {}, true, native);
+  const first = await app.invoke(command), notices: string[] = [], session = {};
+  const notify = (result: typeof first) => notifyNativeBuiltinPlugins(result, 'en', session, 'terminal', text => { notices.push(text); });
+  await notify(first); await notify(first); await notify(await app.invoke(command));
+  expect(sends).toBe(1);
+  expect(notices).toEqual(['[deckent] Claude CLI 2.1.322 loaded a new built-in plugin: cc-plugin-unseen. Nothing was blocked; this observation is recorded with the turn.']);
+  const store = await openSqliteModelInvocationStore(path, sqlite, 'forbid');
+  try { expect((await store.loadReceipt('scope', command.commandId))?.content).toMatchObject({ kind: 'native-response',
+    response: { native: { headless: { cliVersion: '2.1.322', builtinPlugins: ['cc-plugin-unseen'] } } } }); }
+  finally { store.close(); }
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    expect(db.prepare('SELECT count(*) AS n FROM model_invocation_contents').get()?.n).toBe(1);
+    expect(db.prepare("SELECT count(*) AS n FROM audit_counters WHERE counter LIKE 'native-builtin:%'").get()?.n).toBe(0);
+  } finally { db.close(); }
+});
 it.skipIf(!sandbox)('records a subscription receipt without money, replays it without a second spawn (N16), and keeps model and token counters after purge (N17)', async () => {
   const { c, app, path, command } = await fixture();
   const first = await app.invoke(command);

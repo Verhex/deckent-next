@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **beta pre-release `1.0.0-beta.1.1`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **beta pre-release `1.0.0-beta.1.2`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists beta releases, newest first; older releases are in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
 > deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned during the beta line, probably as `@verhex/deckent` (the name is
@@ -228,7 +228,7 @@ flowchart LR
    runs the same setup step by step and lists what is still missing.
 2. **Open the terminal** with `deckent`. It opens in the scope you just set up (`deckent --scope my-project` picks one
    explicitly) and starts the runtime service in the background. To start in Turkish, run `deckent --lang tr`; save that
-   preference with `deckent config set --global language tr` (English: `en`). You can also choose it during `deckent init --lang tr`.
+   preference with `deckent config set --global language '"tr"'` (English: `'"en"'`; the value is JSON, so the quotes are needed). You can also choose it during `deckent init --lang tr`.
 3. **Connect a provider** with `/provider`. Choose **Sign in with Claude**, **Sign in with ChatGPT (Codex CLI)**,
    a local model, or **Connect with an API key**. Subscription sign-in uses the CLI's own flow at your terminal;
    an API key goes into a masked field and is stored by deckent. Choose the exact model to connect in this scope.

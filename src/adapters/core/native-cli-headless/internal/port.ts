@@ -1,3 +1,4 @@
+import { nativeBuiltinPlugins } from '#capabilities/index.js';
 import { catalogParseObserver } from '#platform/index.js';
 import { headlessEgressReasons } from '#domain/index.js';
 import { realpath, rm, writeFile } from 'node:fs/promises';
@@ -26,14 +27,13 @@ const SCALE = 1000; // Stream reset timestamps are Unix seconds; receipts carry 
 const PERMILLE = 1000;
 const ms = (seconds: unknown) => typeof seconds === 'number' && seconds >= 0 && Number.isSafeInteger(Math.round(seconds * SCALE)) ? Math.round(seconds * SCALE) : null;
 
-/** Init guard: the exact CLI version, the pinned model, no tool, MCP server or skill, only allowlisted builtin plugins, the registry permission
+/** Init guard: the exact CLI version, the pinned model, no tool, MCP server or skill, only plugins with registry-defined builtin provenance, the registry permission
  * mode, a claude.ai-login key source and the connection's own run dir as cwd. The first failing field is returned (the process is stopped). */
-function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, runDir: string): Refusal | null {
-  const plugins = list(line.plugins);
+export function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: Pick<Prepared, 'model'>, guards: ClaudeGuards, preflight: Pick<HeadlessPreflight, 'version'>, runDir: string): Refusal | null {
   if (line.model !== prepared.model) return reject('model-mismatch', { refusal: 'model-mismatch', field: 'init.model' });
   const failed = line.cliVersion !== preflight.version ? 'cliVersion' : line.apiKeySource === null || !guards.apiKeySources.includes(line.apiKeySource) ? 'apiKeySource'
     : line.permissionMode !== guards.permissionMode ? 'permissionMode' : list(line.tools)?.length !== 0 ? 'tools' : list(line.mcpServers)?.length !== 0 ? 'mcpServers'
-      : list(line.skills)?.length !== 0 ? 'skills' : !plugins || plugins.some(plugin => !guards.plugins.some(allowed => allowed.name === plugin?.name && allowed.path === plugin?.path)) ? 'plugins'
+      : list(line.skills)?.length !== 0 ? 'skills' : nativeBuiltinPlugins(line.plugins, guards.plugins) === null ? 'plugins'
         : line.pluginErrors !== undefined && list(line.pluginErrors)?.length !== 0 ? 'pluginErrors' : line.cwd !== runDir ? 'cwd' : null;
   return failed ? reject('invalid-response', { refusal: 'guard', field: failed }) : null;
 }
@@ -54,13 +54,13 @@ function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prep
   return models.length === 1 && models[0] === prepared.model ? null : reject('model-mismatch', { refusal: 'model-mismatch', field: 'modelUsage' });
 }
 /** The governed result in the chat-completion shape the Brain reads; counters keep the reported model id and quota windows, never a cost. */
-function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress) {
+function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress, builtinPlugins: readonly string[]) {
   const usage = line.usage, input = count(usage.input_tokens), output = count(usage.output_tokens), cacheRead = count(usage.cache_read_input_tokens), cacheWrite = count(usage.cache_creation_input_tokens);
   // The per-model counters only as reported and valid; otherwise none (unknown is never a provider-reported zero).
   const reported = reportedCounters(line.modelUsage?.[prepared.model], ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens']) ?? {};
   return Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model, choices: [{ index: 0, message: { role: 'assistant', content: line.result ?? '' },
     finish_reason: line.stopReason !== null && guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
-  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress: { ...egress, ...headlessEgressReasons(egress) } } },
+  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', builtinPlugins, stopReason: line.stopReason, egress: { ...egress, ...headlessEgressReasons(egress) } } },
   usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
     modelUsage: { [prepared.model]: reported }, quota } });
 }
@@ -69,11 +69,12 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
   const { guards } = prepared.entry.headless;
   if (!('apiKeySources' in guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const quotaPolicy = nativeQuotaPolicy(), quota: Quota = {};
+  let builtinPlugins: readonly string[] = [];
   let init = false, result: Extract<ClaudeStreamLine, { kind: 'result' }> | null = null;
   return {
     line(raw) {
       const line = parseClaudeStreamLine(raw);
-      if (line.kind === 'init') { const refusal = init ? reject('invalid-response', { refusal: 'guard', field: 'init' }) : initGuard(line, prepared, guards, preflight, runDir); init = true; return refusal; }
+      if (line.kind === 'init') { const refusal = init ? reject('invalid-response', { refusal: 'guard', field: 'init' }) : initGuard(line, prepared, guards, preflight, runDir); init = true; if (!refusal) builtinPlugins = nativeBuiltinPlugins(line.plugins, guards.plugins)!; return refusal; }
       if (line.kind === 'system' && line.subtype === 'api_retry') return reject('invalid-response', { refusal: 'guard', field: 'api_retry' });
       if ((line.kind === 'assistant' || line.kind === 'result') && !init) return reject('invalid-response', { refusal: 'guard', field: 'init' });
       if (line.kind === 'assistant') {
@@ -92,7 +93,7 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
       // A provider refusal inside the run ends with an error result and a non-zero exit; it is still a complete, typed rejection.
       const mapped = finished && exit.exited ? resultRefusal(finished, prepared, guards) : null;
       if (mapped) return { refusal: mapped };
-      return finished && exit.exited && exit.exitCode === 0 ? { response: assemble(finished, prepared, guards, preflight, quota, egress) } : null;
+      return finished && exit.exited && exit.exitCode === 0 ? { response: assemble(finished, prepared, guards, preflight, quota, egress, builtinPlugins) } : null;
     },
   };
 }

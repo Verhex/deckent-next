@@ -6,7 +6,7 @@ import registry from '../../../assets/native-coding/commands.json' with { type: 
 export const PINNED = 'vendor-model-pinned';
 export const FAMILY = 'claude-code-stream-json';
 export const headless = registry.adapters.claude.headless;
-export const builtinPlugins = headless.guards.plugins.map(plugin => ({ ...plugin, source: `${plugin.name}@builtin` }));
+export const builtinPlugins = headless.guards.plugins.knownNames.map(name => ({ name, path: 'builtin', source: `${name}@builtin` }));
 type Line = Record<string, unknown>;
 export const uiLine = (): Line => ({ type: 'system', subtype: 'ui_invalidate', event: 'ui.render', uuid: 'u-0', session_id: 's-1' });
 export const initLine = (over: Line = {}): Line => ({ type: 'system', subtype: 'init', cwd: '/run/dir', session_id: 's-1', tools: [], mcp_servers: [], model: PINNED,

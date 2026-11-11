@@ -1,7 +1,8 @@
+import { notifyNativeBuiltinPlugins } from './plugin-notices.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';
-import { t, SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
+import { t, resolveLocale, SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, type ModelInvocationCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
@@ -21,7 +22,7 @@ type InvokeOptions = {
   input: ModelInvocationCommand; loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>; options: ConfigLoadOptions;
   signal?: AbortSignal | undefined; delivery?: ModelInvocationDelivery | undefined; host?: RuntimeModelInvocationHost | undefined;
   onDelta?: ModelInvocationDeltaSink | undefined; entry?: 'raw' | 'feature'; onNotice?: ((text: string) => void | Promise<void>) | undefined;
-  guard?: InvocationGuard | undefined; agent?: ModelInvocationNativeBinding | undefined;
+  guard?: InvocationGuard | undefined; agent?: ModelInvocationNativeBinding | undefined; terminal?: string | undefined;
 };
 export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers; readonly clock?: TrustedClock }
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
@@ -48,13 +49,14 @@ export async function prepareConfiguredModelAs(projectRoot: string, input: Model
 export async function previewConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}) { try { return await application({ context: await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), options }).preview(input); } catch (error) { throw queryFailure(error); } }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) { return invoke({ input, loadContext: scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta }); }
-export async function invoke({ input, loadContext, options, signal, delivery, host, onDelta, entry = 'raw', onNotice, guard, agent }: InvokeOptions) {
+export async function invoke({ input, loadContext, options, signal, delivery, host, onDelta, entry = 'raw', onNotice, guard, agent, terminal }: InvokeOptions) {
   try {
     const command = parsedCommand(input), context = await loadContext(command.scopeId);
     const forCommand = (value: ModelInvocationCommand) => application({ context, options, host, entry, agent, observeSpending: guard?.spending,
       profileGuard: async profile => { await configuredContinuationPin(value)?.(profile); await guard?.profile(profile); } });
     const app = forCommand(input);
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
+    if (onNotice) await notifyNativeBuiltinPlugins(result, resolveLocale(undefined, options.env ?? process.env, context.config.language), host ?? options, terminal ?? '', onNotice);
     if (agent || entry !== 'feature' || !onDelta || !onNotice) return result;
     const next = await prepareConfiguredSiwcContinuation(context, options, command, result, value => app.preview(value, undefined, signal),
       reference => onNotice(`${t('siwc.switch.notice', { model: reference.modelId }, context.config.language)}\n`), signal);
@@ -106,7 +108,7 @@ export async function invokeConfiguredFeatureModel(projectRoot: string, input: M
   return invoke({ input, loadContext: scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, entry: 'feature' });
 }
 export async function invokePeerConfiguredFeatureModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal, onNotice?: (text: string) => void | Promise<void>) {
-  return invoke({ input, loadContext: scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta, entry: 'feature', onNotice });
+  return invoke({ input, loadContext: scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta, entry: 'feature', onNotice, terminal: `${peer.uid}:${peer.pid}` });
 }
 
 /** Brain keeps its explicit source lineage when an authorized billing continuation changes the model reference. */
@@ -119,6 +121,6 @@ export async function prepareConfiguredFeatureContinuation(root: string, command
 
 /** K11 code-only push invocation: preserves policy, activation, allocation, cancellation and durable model receipts. */
 export async function invokePeerConfiguredAgentModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions,
-  host: RuntimeModelInvocationHost, onDelta: ModelInvocationDeltaSink, signal: AbortSignal, agent: ModelInvocationNativeBinding) {
-  return invoke({ input, loadContext: scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, host, onDelta, entry: 'feature', agent });
+  host: RuntimeModelInvocationHost, onDelta: ModelInvocationDeltaSink, signal: AbortSignal, agent: ModelInvocationNativeBinding, onNotice?: (text: string) => void | Promise<void>) {
+  return invoke({ input, loadContext: scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, host, onDelta, entry: 'feature', agent, onNotice, terminal: `${peer.uid}:${peer.pid}` });
 }

@@ -8,7 +8,7 @@ import { checkModelIngressArguments, projectModelIngressSchema } from './model-i
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
 import { optionalField, LOCALES, t, type Locale } from '#platform/index.js';
-import { agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
+import { chatTurnResultSchema, agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
   type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 const providerStopWords = (language: Locale | undefined) => ({ 'content-filter': t('agent.turn.outcome.contentFilter', {}, language), 'context-window': t('agent.turn.outcome.providerContext', {}, language),
@@ -400,8 +400,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
     const host = ports.hostNote?.() ?? null;
-    const extra = [...(host ? [host] : []), ...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
-    const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
+    const extra = [...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : []), ...(host ? [host] : [])];
+    const joined = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
+    // Keep closure diagnostics first and the joined host observations inside the existing durable note budget.
+    const noteLimit = chatTurnResultSchema.unwrap().shape.note.unwrap().maxLength!;
+    const note = joined && joined.length > noteLimit ? `${joined.slice(0, noteLimit - 1).replace(/\p{Surrogate}$/u, '')}…` : joined;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;
     const answer = final?.role === 'assistant' && final.toolCalls.length === 0 && final.content ? final.content : null;

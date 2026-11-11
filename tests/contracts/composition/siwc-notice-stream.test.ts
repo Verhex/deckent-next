@@ -24,7 +24,8 @@ vi.mock('#engine/index.js', async original => ({ ...await original<object>(), co
   async invoke(_command: unknown, _credential: unknown, _signal: unknown, _delivery: unknown, onDelta?: (delta: { kind: string; text: string }) => void) {
     await this.check(); state.calls++;
     if (state.calls === 2) { state.order.push('model'); onDelta?.({ kind: 'text', text: 'model answer' }); }
-    return { receipt: { outcome: { state: state.calls === 1 ? 'rejected' : 'responded' } } };
+    // beta.1.2: invoke reads the receipt's adapter id before the built-in plugin notice; a real receipt always carries its profile.
+    return { receipt: { profile: { adapter: { id: 'fixture-adapter' } }, outcome: { state: state.calls === 1 ? 'rejected' : 'responded' } } };
   }
 } }));
 import { invokeConfiguredModelAs, invokePeerConfiguredFeatureModel, invokeConfiguredModelWithOptions as invoke } from '#composition/core/model-invocation/index.js';

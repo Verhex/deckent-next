@@ -35,7 +35,7 @@ deckent doctor --json
 ```
 
 İlk ekrandan itibaren Türkçe için `deckent init` ve `deckent` komutlarına `--lang tr` ekleyin; tercih
-`deckent config set --global language tr` ile kaydedilir. İngilizce için `en` kullanılır.
+`deckent config set --global language '"tr"'` ile kaydedilir. İngilizce için `'"en"'` kullanılır; değer JSON olduğu için tırnaklar gerekir.
 
 JSON'un tamamını ve süreç çıkışını okuyun. Kurulumun bitmesi başlangıç adımlarının bitmesinden ayrıdır.
 Başsız kurulum yetkiyi beklemede bırakır; kişinin tanıklı ilk terminal açılışı profil ve izin varsayılanlarını önizler.

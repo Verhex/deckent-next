@@ -1,3 +1,4 @@
+import { nativeBuiltinPlugins } from './plugins.js';
 import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
@@ -16,7 +17,7 @@ type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; f
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
-  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[] }>;
+  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[] }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
 /** R5b: shape facts for a refusal's record. Identifier-shaped names and codes only (never arguments, text or CLI output), at most 64 characters. */
@@ -37,6 +38,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
+  const pluginPolicy = entry.agent.transport.guards.plugins;
+  let builtinPlugins: readonly string[] = [];
   const notices = new Set<string>(), stopEvents = new Set(entry.agent.transport.guards.stopEvents);
   const notice = (value: Record<string, unknown>): 'stop' | undefined => {
     // Case-folded so a spelling variant cannot pass a stop event; a non-identifier name ('?') stops too.
@@ -79,6 +82,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (reason) return fail('init', reason);
       if (value.model !== model || value.claude_code_version !== cliVersion || value.cwd !== runDir
         || value.plugin_errors !== undefined && (!Array.isArray(value.plugin_errors) || value.plugin_errors.length !== 0)) return fail('init-binding');
+      builtinPlugins = nativeBuiltinPlugins(value.plugins, pluginPolicy)!;
       init = true; return;
     }
     // A0's inert invalidation may precede init; other system events follow the registry stop rules.
@@ -164,7 +168,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     });
     return current.promise;
   };
-  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices],
+  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices], builtinPlugins: () => builtinPlugins,
     async cancel() { ended = true; controller.abort(); return port.cancel(); },
     async revoke() { ended = true; controller.abort(); return port.revoke(); },
     finish(exit: StreamExit): ClaudeAgentResult {
