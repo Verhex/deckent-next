@@ -229,7 +229,7 @@ flowchart LR
    başlayamıyorsa sıfır dışı kodla çıkar. `deckent init` aynı kurulumu adım adım yapar ve eksik kalanı listeler.
 2. **Terminali açın**: `deckent`. Az önce kurduğunuz kapsamda açılır (`deckent --scope my-project` kapsamı açıkça seçer) ve
    runtime servisini arka planda başlatır. İlk açılışı Türkçe yapmak için `deckent --lang tr` kullanın; tercihi
-   `deckent config set --global language tr` ile kaydedin (İngilizce: `en`). `deckent init --lang tr` sırasında da seçebilirsiniz.
+   `deckent config set --global language '"tr"'` ile kaydedin (İngilizce: `'"en"'`; değer JSON olduğu için tırnaklar gerekir). `deckent init --lang tr` sırasında da seçebilirsiniz.
 3. **Sağlayıcı bağlayın**: `/provider`. **Claude ile giriş**, **ChatGPT ile giriş (Codex CLI)**, yerel model ya da
    **API anahtarıyla bağlan** yolunu seçin. Abonelik girişi terminalinizde CLI'ın kendi akışından geçer; API anahtarı
    gizlenen alana yazılır ve deckent'te saklanır. Bu kapsamda bağlanacak tam modeli seçin.

@@ -35,7 +35,7 @@ deckent doctor --json
 ```
 
 For Turkish from the first screen, pass `--lang tr` to `deckent init` and `deckent`; the preference is saved with
-`deckent config set --global language tr`. English uses `en`.
+`deckent config set --global language '"tr"'`. English uses `'"en"'`; the value is JSON, so the quotes are needed.
 
 Read the complete JSON and the process exit status. Installation completion is separate from onboarding completion.
 Headless setup leaves authority pending; the first witnessed terminal open previews the profile and permission defaults for

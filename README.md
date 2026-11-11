@@ -228,7 +228,7 @@ flowchart LR
    runs the same setup step by step and lists what is still missing.
 2. **Open the terminal** with `deckent`. It opens in the scope you just set up (`deckent --scope my-project` picks one
    explicitly) and starts the runtime service in the background. To start in Turkish, run `deckent --lang tr`; save that
-   preference with `deckent config set --global language tr` (English: `en`). You can also choose it during `deckent init --lang tr`.
+   preference with `deckent config set --global language '"tr"'` (English: `'"en"'`; the value is JSON, so the quotes are needed). You can also choose it during `deckent init --lang tr`.
 3. **Connect a provider** with `/provider`. Choose **Sign in with Claude**, **Sign in with ChatGPT (Codex CLI)**,
    a local model, or **Connect with an API key**. Subscription sign-in uses the CLI's own flow at your terminal;
    an API key goes into a masked field and is stored by deckent. Choose the exact model to connect in this scope.
