@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installationSecretRoot, listProjectVaults, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { installationSecretRoot, listProjectVaults, observeOwnerRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
@@ -292,6 +292,29 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is au
     const m = await moved(), before = await readFile(m.record, 'utf8');
     expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await readFile(m.record, 'utf8')).toBe(before);
+    // Same canonical path and inode, only the recorded device differs: never evidence of an abandoned owner (owner 80).
+    const record = JSON.parse(before), grants = await readFile(m.grants, 'utf8');
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('present');
+    record.anchor.binding.device = String(BigInt(record.anchor.binding.device) + 1n);
+    await writeFile(m.record, JSON.stringify(record));
+    const uncertain = await readFile(m.record, 'utf8');
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('uncertain');
+    const failure = await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(platform.DeckentError);
+    expect(failure).toMatchObject({ code: 'SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', params: { reason: 'uncertain' } });
+    for (const locale of ['en', 'tr'] as const) {
+      expect((failure as platform.DeckentError).localize!(locale).message).toContain(locale === 'en' ? 'disk device number differs' : 'disk aygıt numarası farklı');
+    }
+    expect(await code((await resolverOf(m.root, m.env)).resolve('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE');
+    expect(await code(setProjectSecret(m.root, 'scope', 'OWN_KEY', OWN_VALUE, { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE');
+    expect(await readFile(m.record, 'utf8')).toBe(uncertain); expect(await readFile(m.grants, 'utf8')).toBe(grants);
+    // Other inode remains gone; removing the original still permits today's witnessed, authorized handover.
+    expect(await observeOwnerRoot({ ...record.anchor.binding, inode: String(BigInt(record.anchor.binding.inode) + 1n) })).toBe('gone');
+    await rm(m.root, { recursive: true, force: true });
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('gone');
+    await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human);
+    expect(JSON.parse(await readFile(m.record, 'utf8')).anchor.projectRoot).toBe(m.copy);
+    expect(await (await resolverOf(m.copy, m.env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
   });
   it('the decision cannot be written: nothing changes (binding and grants)', async () => {
     const m = await moved(), before = await readFile(m.record, 'utf8'), grants = await readFile(m.grants, 'utf8');

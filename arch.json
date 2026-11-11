@@ -308,6 +308,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/platform/core/output",
         "src/surfaces/core/cli-human",
         "src/engine/core/secret-store",
         "src/adapters/core/native-cli-registry",

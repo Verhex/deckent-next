@@ -49,10 +49,11 @@ async function accessIdentity<T extends { readonly status: string; readonly reas
     return current;
   });
 }
-async function readBootstrapIdentity<T>(read: () => Promise<T>) {
+async function readBootstrapIdentity<T>(read: () => Promise<T>, identityChoice?: InstallationIdentityChoice) {
   try { return await read(); }
   catch (error) {
-    if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code, {
+      params: error.code === 'PROJECT_ATTACHMENT_SOURCE_REGISTERED' && identityChoice ? { identityChoice } : {} });
     throw error;
   }
 }
@@ -84,9 +85,11 @@ export async function inspectConfiguredInstallationBinding(projectRoot: string, 
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
   const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  await attachmentLifecycle(config, options).assert();
-  return readBootstrapIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
-    .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }));
+  return readBootstrapIdentity(async () => {
+    await attachmentLifecycle(config, options).assert();
+    return new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
+      .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject });
+  }, choice);
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
 export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {

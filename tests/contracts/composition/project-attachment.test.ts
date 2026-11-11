@@ -23,8 +23,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
-import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
+import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
 import { ProjectAttachmentApplication } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, DeckentError } from '#platform/index.js';
@@ -330,8 +331,51 @@ it.skipIf(process.platform !== 'linux')('ATTACHDOC: the copied preview command a
   expect(await target.store.attachment()).toEqual(persisted);
 });
 
-describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {
+it.skipIf(process.platform !== 'linux')('F2: registered-source identity recovery renders distinct EN/TR refusals without writes; source attach failure names the folder locally', async () => {
+  const f = await fixture(), before = await snapshotBytes(f.root);
+  for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+  vi.stubEnv('TERM', 'dumb');
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(f.a);
+  let output = '';
+  vi.spyOn(process.stdout, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof process.stdout.write);
+  vi.spyOn(process.stderr, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof process.stderr.write);
+  for (const choice of ['keep', 'new'] as const) {
+    await expect(resolveConfiguredInstallationIdentity(f.a, choice, f.options)).rejects.toBeInstanceOf(DeckentError);
+    for (const language of ['en', 'tr']) {
+      output = '';
+      expect(await cliMain(['init', 'identity', `--${choice}`, '--lang', language])).toBe(78);
+      expect(output).toContain('PROJECT_ATTACHMENT_SOURCE_REGISTERED'); expect(output).not.toContain('UNKNOWN');
+      expect(output).toContain(language === 'en' ? 'Nothing was changed' : 'Hiçbir şey değiştirilmedi');
+      expect(output).toContain(choice === 'new' ? (language === 'en' ? 'break its project references' : 'proje bağlarını koparır')
+        : (language === 'en' ? 'cannot yet repair' : 'henüz onaramaz'));
+      expect(output).toContain('beta.2.1'); expect(output).toContain('known-limits');
+    }
+  }
+  expect(await snapshotBytes(f.root)).toEqual(before);
+  // Source-only failure: the registered path exists, but its own scope no longer passes inspection.
+  const policy = join(f.a, '.deckent/policy.json'), policyBytes = await readFile(policy, 'utf8');
+  await writeFile(policy, policyBytes.replaceAll('"source"', '"withdrawn"')); clearConfigCache();
+  cwd.mockReturnValue(f.b);
+  const refused = await snapshotBytes(f.root);
+  for (const language of ['en', 'tr']) {
+    output = '';
+    expect(await cliMain(['terminal', 'attach', '--scope', 'target', '--preview', '--lang', language])).toBe(78);
+    expect(output).toContain('PROJECT_ATTACHMENT_UNAVAILABLE'); expect(output).toContain(f.a);
+    expect(output).toContain(language === 'en' ? 'could not be verified' : 'doğrulanamadı');
+  }
+  expect(await snapshotBytes(f.root)).toEqual(refused);
+  const target = await f.make(f.b), error = await target.app.preview('target').catch((error: unknown) => error);
+  expect(queryFailure(error).params ?? {}).not.toHaveProperty('source');
+  await writeFile(policy, policyBytes); clearConfigCache();
+  const current = (await f.selected.store.registration())!;
+  const changed = { ...current, source: { ...current.source, location: { ...current.source.location, device: String(BigInt(current.source.location.device) + 1n) } } };
+  await f.selected.store.hold(() => f.selected.store.write(current, changed));
+  output = '';
+  expect(await cliMain(['terminal', 'attach', '--scope', 'target', '--preview', '--lang', 'en'])).toBe(78);
+  expect(output).toContain('PROJECT_ATTACHMENT_CHANGED'); expect(output).toContain(f.a);
+});
 
+describe.skipIf(process.platform !== 'linux')('shared installation / isolated project context', () => {
   it('registers explicitly, journals one attachment, replays, revokes and never creates a missing source identity', async () => {
     const f = await fixture(), original = await loadConfiguredInstallationIdentity(f.a, f.options), target = await f.make(f.b);
     const preview = await target.app.preview('target'), commandId = randomUUID();

@@ -767,10 +767,14 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 WSL yeniden başlatıldığında dağıtım diskleri farklı sırada bağlanabilir. Kurulum bağı disk aygıt numarasını
 kaydettiği için proje taşınmamış olsa bile komutlar `INSTALLATION_IDENTITY_RELOCATED` hatasıyla durabilir.
-Kayıtlı kaynak olmayan projede `deckent init identity --keep` yeter.
+Bir kaynağa bağlı olmayan ve kayıtlı kaynak olmayan projede `deckent init identity --keep` bağı günceller.
+beta.2 sürümünde mevcut bağ karşılaştırması korunur; değişmiş aygıt numarası otomatik kabul edilmez.
 
-Kayıtlı kaynak projede `deckent init identity --keep` şu anda `PROJECT_ATTACHMENT_SOURCE_REGISTERED` hatasıyla
-reddedilir. Kaynağın **bağlı projesi yoksa** (etkin ya da bekleyen), o klasörde şu komutları bu sırayla çalıştırın:
+Kayıtlı kaynak projede `deckent init identity --keep` ve `--new`, `PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile
+reddedilir; ham `UNKNOWN` hatası yerine her biri için ayrı Türkçe/İngilizce açıklama gösterilir. Hiçbir şey değiştirilmez.
+Yeni kimlik proje bağlarını koparır; `--keep` bu bağları henüz uzlaştıramaz. Kaynağı doğrulanamadığı için reddedilen
+bağlama, kayıtlı kaynak klasörünü yalnız yerel kullanıcıya gösterir. Kaynağın **bağlı projesi yoksa** (etkin ya da bekleyen),
+o klasörde şu komutları bu sırayla çalıştırın:
 
 ```sh
 deckent terminal attach --unregister --apply
@@ -782,7 +786,13 @@ Kaynak proje yeniden çalışır; ancak onu yeniden kaydetmek ve başka klasörl
 
 Kaynağın **bağlı projeleri varsa** ilk komut, her biri ayrılana kadar (`deckent terminal attach --detach <projeKimliği> --apply`)
 `PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile reddedilir. Bu yol taşınmış kurulumda doğrulanmadı; bu betada orada yedekten
-geri yüklemek dışında çıkış olmayabilir. Koruma olduğu gibi kalır; bağ düzeltmesi bir sonraki beta için planlanıyor.
+geri yüklemek dışında çıkış olmayabilir. Koruma olduğu gibi kalır; bağ düzeltmesi beta.2.1 için planlanıyor. beta.2 okuyucu sürümüdür; kayıtlı kaynağı kurtarmayı düzeltmez.
+
+Proje kasasının sahibi aynı gerçek yolda ve aynı inode (dizin kimliği) ile duruyorsa, yalnız disk aygıt numarası
+farkı artık **belirsiz** sayılır, yok sayılmaz. Kasa erişimi, sahiplenme ve devir `SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE` ile reddedilir; bağ ve
+izinler değişmez. Yeniden denemeden önce asıl diski kayıtlı aygıt numarasıyla erişilebilir yapın veya doğrulanmış bir
+yedekten geri yükleyin. Sahip yolu yoksa veya inode farklıysa mevcut devir kuralları sürer. Bu değişiklik kişisel
+sır deposunu onarmaz ve proje güvenini yenilemez.
 
 ## Kurtarma ve yükseltme
 
