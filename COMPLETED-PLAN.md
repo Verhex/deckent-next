@@ -25,6 +25,8 @@ Bu belge inmiş sürümlerin ve kapanmış işlerin kaydıdır: her sürüm içi
 - **Teslim:** yeni projede kişi/AI delegasyonu; abonelik ilk bağlantı onayı ve ilk iş türü/havuzu; Docker'sız işçide doğrulanmış CLI sürümü; Brain'in görev sınıfı seçimi ve kısa kartlar; `/model` Brain seçimi ve son doğrulama gösterimi. Ayrıntı [CHANGELOG-alpha.md](CHANGELOG-alpha.md)'da; alpha.63 (PR #137) ve güvenlik düzeltmeleri alpha.63.1 (PR #139), alpha.63.2 (PR #141) bu yayının öncülleridir.
 - **Kanıt sınırı:** tarih/switch/PR, [CHANGELOG-alpha.md](CHANGELOG-alpha.md)'daki lead kaydından aktarıldı; geçmiş tam suite, bağımsız inceleme, hosted CI ve gerçek hesap yürüyüşü bu belge turunda yeniden çalıştırılmadı. Alpha.64'ün doğrulaması veya beta kabulü sayılmaz.
 
+- **Birleşik kayıt sınırı (2026-11-11 belge uzlaştırması):** alpha.63 (PR #137), alpha.63.1 (PR #139) ve alpha.63.2 (PR #141), alpha.63.3 ile birlikte özetlenmiştir; bu üç yayının ayrı tam-suite/bağımsız PASS/hosted CI ve switch makbuzları bu turda doğrulanmadı. Önceki kayıtlardaki hotfix kapsamı ve owner kararları korunur; eksik makbuzlar başarılı sayılmaz.
+
 ## alpha.62 — 2026-11-02 (PR #136, merge `09b03c40f`; canlı ve N1 22:17Z; switch `09b03c40fb72-decfb7ec4c7e`; defter v73, runtime protocol v30)
 
 - **Teslim:** iki giriş satırı (Claude / ChatGPT; Codex satırı gizli, Cursor ve ChatGPT betada); ilk iş kurulumdan çıktı, karşılama kartı yazıya yol verir; her onboarding kartında 500 ms Enter koruması; Claude aboneliğiyle metin sohbeti; bir kez kurulum (ONCE D1–D4: ortak kurulum kimliği, proje başına scope/policy/ledger/runtime, geri alınabilir model kullanım izni, bütçe şablonu, lifecycle uzlaştırması); ilk sıfır kurulum kaynak olur; scoped-request bağlı projeyi isteyen kişiye bağlar.

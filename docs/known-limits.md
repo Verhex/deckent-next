@@ -10,7 +10,7 @@ Native worker input views (task artifacts, handoffs and dependency mounts) are c
 
 Native environment checks stop on Run cancellation or service shutdown. Run cancellation is observed at the configured progression interval; shutdown signals the check directly. A failed worker authority check revokes the tool session, preventing later calls. Unconfirmed cleanup remains unknown; revocation does not undo completed effects. Assembled-release acceptance remains open.
 
-K23 adds a candidate connection for witnessed background-worker decisions and exact Run/Task/Attempt cards. Shared runtime/driver caller changes remain a lead integration patch; this branch alone does not enable the complete path. Worker cards currently offer one-time approval or denial; session and permanent scopes are not offered without a producer-owned standing answer. Self-source src/dist/scripts/assets writes still need approval even inside a separate Attempt workspace; static authority-floor writes by AI stay denied. Real-account and assembled-release acceptance remain open.
+The composed native runtime/driver binds Deckent tool calls and witnessed worker decisions to exact Run/Task/Attempt cards (K23). Source wiring is present; real-account and assembled-surface proof remain open. Worker cards currently offer one-time approval or denial; session and permanent scopes are not offered without a producer-owned standing answer. Self-source src/dist/scripts/assets writes still need approval even inside a separate Attempt workspace; static authority-floor writes by AI stay denied. Real-account and assembled-release acceptance remain open.
 
 Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it. The Codex text profile (subscription text chat and Brain) keeps the CLI's own subagents on by owner choice (2026-11-03): gpt-6.x catalog models ignore `features.multi_agent=false`, so the model may open helper agents whose turns and quota use Deckent does not see. Deckent-governed CLI subagents in the natural CLI flow are the first item of the next package.
 
@@ -114,8 +114,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   answered and the first mode was read; while the launch shell still shows "Preparing…" it only queues your lines (Ctrl+C does not take
   one back; Ctrl+D or a second Ctrl+C closes the window); once the Workline has taken over, Ctrl+C on a waiting line sends nothing, `/exit`
   never waits, and a failed start gives the line its error and keeps it as the draft. Setup opens by itself only while you have typed
-  nothing; otherwise one line says "Setup: N steps waiting — /setup". The goal was a first frame under 300 ms warm and under 1 s cold: cold
-  is met, warm is not (344 ms; the remaining step is bundling the program's own code). Inline layout, `--full-access`, no scope, a retired
+  nothing; otherwise one line says "Setup: N steps waiting — /setup". In that early alpha.60 candidate, the goal of a first frame under 300 ms warm and under 1 s cold
+  was met only for cold (344 ms warm). The later bundled candidate, recorded with alpha.61 on 2026-11-01, met the local warm
+  goal: 238 ms median, 284 ms maximum over ten warm samples on a responsive PTY. This is historical host evidence, not a
+  measurement of this HEAD, another machine or owner acceptance. Inline layout, `--full-access`, no scope, a retired
   folder, `TERM=dumb` and pipes take the earlier launch path and were not measured. The numbers are medians of five runs on one WSL2
   machine (Node 26.13.0, pseudo-terminal 110x30, setup deferred, compile cache filled; "cold" means the runtime service was stopped) on the
   integration build before the merge; later commits changed teardown, uninstall and the cache records, not drawing, and were not
@@ -351,12 +353,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **First installation and new folders (A62):** a fresh installation completed with the person's witness becomes the source when no global
   source is registered. Existing installations are not registered automatically. From the installed folder, run
   `deckent terminal attach --register --apply`, confirm the source, then open `deckent` in the new folder. An existing source is kept.
-- **Provider sign-in menu (A62):** the subscription rows are **Sign in with Claude** and **Sign in with ChatGPT**; ChatGPT and Cursor are labelled beta.
-  The older Codex CLI connection and profiles remain readable through the same CLI commands; hiding its duplicate menu row does not move
-  credentials or make a worker ready. ChatGPT consent names chat, AI workers (`ai`) and Brain/background features (`system`), with extra use
-  off by default. Choosing ChatGPT with automatic API continuation off still starts sign-in. **Connect with an API key** opens API-provider
-  selection, including after a refusal; masked entry, custody, grants and budget requirements remain in force. Real account login and
-  Windows Terminal acceptance still need the assembled release walk.
+- **Provider sign-in menu (current candidate):** **Sign in with Claude** and **Sign in with ChatGPT (Codex CLI)** use the
+  person's CLI flow. The separate browser SIWC route is not the Codex CLI connection. First subscription consent defaults
+  to you and AI actors; connected MCP clients use that same AI identity. You may restrict use to yourself; background/system
+  use needs separate consent. **Connect with an API key** keeps masked entry, custody, grants and priced-call budgets.
+  Real-account login and Windows Terminal acceptance still need the assembled-release walk.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
   codex-cli-subscription` (it runs `codex login` into its own Deckent-owned directory, `headless/logins/codex`; `--config-dir` and
@@ -364,8 +365,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   codex-cli-subscription --executable <path> --config-dir <dir> --delegate system` connects it: without `--executable` the first `codex`
   on the PATH is used, without `--config-dir` the Brain's own login, and `--delegate none|ai|system|ai,system` states who besides you may
   use the login (absent keeps your earlier choice). Connecting does not need a worker image: without an admitted one it writes the invocation profile and the chat activation for
-  tool-less one-shot model calls (for example BeUser), activates no worker model and says so ("no worker image admits this CLI version yet"); build the image in `/setup`
-  and connect again to use it for workers too. The same bubblewrap sandbox, consent and one-spawn-per-login rules as the Claude connection apply (below), against your ChatGPT
+  tool-less one-shot model calls (for example BeUser). That one-shot activation alone does not prove a worker ready. For a
+  connected native worker, find the profile in `deckent coding`, then bind with `deckent coding template --connection <profile-id>`
+  or `deckent init registry --scope <id> --provider <cli-id> --connection <profile-id> --kind coding --pool <pool-id>
+  --execution-slots <n> --in-flight-slots <n> --preview`; readiness/F08 checks still apply. Image/reconnect
+  guidance applies only to eligible Docker activation, not Claude Docker (refused). The same bubblewrap sandbox, consent and one-spawn-per-login rules as the Claude connection apply (below), against your ChatGPT
   plan's quota; Deckent does not observe the refresh lock of a Codex session you run yourself. *Impact:*
   Deckent stops the Codex process when its output line shows more than the answer, but it acts on events the CLI reports, so this is
   not a block before the effect: the read-only sandbox and Deckent's realm bound what could already have run. The model name is the one
@@ -375,11 +379,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. The terminal's `/provider` does the same
   (alpha.60): it shows the login directory first, hands the terminal to the CLI's own sign-in (Ctrl+C stops it; the registry time
-  bound ends it), connects, then asks who besides you may use the login (system and ai unticked on a first connect, the consent in force ticked on a reconnect; MCP never). It runs only where
+  bound ends it), connects, then asks who besides you may use the login (first connect defaults to you + AI; connected MCP
+  clients share that AI actor; you may narrow to person-only, and system needs its own consent). It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
-  sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 adds text-only terminal chat through this
-  isolated connection; native CLI tools and MCP remain disabled. *Workaround where the sandbox is missing:* use an Anthropic API key.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT subscriptions support text chat;
+  sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 added text chat; since alpha.63
+  subscription chat uses Deckent tools under policy and approval. The CLI's built-in tools stay disabled; the Deckent MCP bridge is available after verification. *Workaround where the sandbox is missing:* use an Anthropic API key.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support Deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
 - **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
@@ -409,13 +414,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **A worker that does not see its Git repository (R9o) was not reproduced.** One owner-walk Attempt reported "not a git repository" with
   `.git` present; a hermetic worker-shell check (`git rev-parse --is-inside-work-tree` in the contained view) passes. *Impact:* the cause is
   not known. *Workaround:* if you see it, keep the Run id and the worker's stderr and report it.
-- **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
-  must exist and be readable by Deckent. This path may change.
-- **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
-  access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
-  API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
-  until that token expires. *Workaround:* none; the token's own lifetime is the bound.
-- **Sign in with ChatGPT serves chat; the Codex worker on the plan is still held.** Alpha.56 opens person sign-in for terminal
+- **Subscription custody depends on the route.** Connected Claude/Codex workers keep login inside the CLI's own realm;
+  Deckent does not read their tokens. Claude Docker is refused. Codex Docker keeps the real token on its host relay;
+  Cursor retains its bounded credential projection. See the route-specific alpha.64 limits above, including same-account
+  risk and subscription spend through the allowed relay. No universal token-copy or token-invisibility claim applies.
+- **Separate ChatGPT browser sign-in (SIWC) serves chat; its worker is still held.** Alpha.56 opens person sign-in for terminal
   chat and Deckent's own features (`/provider` → ChatGPT, or `deckent models connect --connection chatgpt-login`, from your own
   terminal). The session stays only in your own local encrypted store: Linux or WSL, a folder only you can open (0700) on this
   computer's local disk. A shared team host, a store on a network share or `/mnt/c`, or a folder other users can open is refused
@@ -582,15 +585,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   exits 0 without a valid report fails as `report-missing` or `report-invalid`. Since 1.0.0-alpha.52 this includes Cursor workers, which end with the report JSON as their final answer (`final-text-json`). A CLI whose installed
   version no longer offers its result channel reads `unsupported` and is not gated. Since 1.0.0-alpha.50 a worker
   can mark a report check with `checkId` and `role: acceptance`, and the worker instructions ask it to; an acceptance check whose last
-  result is not `passed` refuses the task (`declared-check-not-passed`). A worker that does not type its checks is not caught:
-  untyped and exploratory checks remain claims and do not block acceptance. *Workaround:* prefer Claude or Codex workers for tasks
+  result is not `passed` refuses the task (`declared-check-not-passed`). Checks not marked as acceptance are not gated:
+  exploratory checks remain claims; checks explicitly marked `role: acceptance` are gated even without a `checkId`. *Workaround:* prefer Claude or Codex workers for tasks
   whose completion must be proven.
-- **A coding task is accepted on its exit code.** Its criterion may ask for more (a retained diff, a readback), but the only evaluator
-  available to coding tasks is `process-exit`; Core work classes carry an acceptance profile (completion, retained artifact) that
-  the planner uses, but no evaluator scores it, so the extra evidence is not checked. Since 1.0.0-alpha.50 the evaluation line
-  says so ("accepted · exit code · content not independently verified") in the monitor, `workers`, `/runs`, `run inspect`, `task
-  inspect` and `report`; counts such as "1/1 accepted" are not qualified. An acceptance profile with a real verification evaluator
-  is beta work.
+- **Coding content is not independently verified.** Acceptance checks process outcome, required retained output/patch,
+  result-report support and declared acceptance-check results. The `process-exit` evaluator does not independently judge
+  semantic content or an arbitrary readback demanded in prose. Since alpha.50 surfaces qualify this as content not
+  independently verified; aggregate “1/1 accepted” counts remain unqualified. An independent semantic evaluator is beta work.
 - **Deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
   `environment.requirements`; Deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
   is unmet (no worker, no model call; fix it, then resume, which checks again). An undeclared missing tool is reported as a check that
@@ -623,7 +624,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and the current ledger (v73; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
+  v31 and the current ledger (v75; the queue arrived with ledger v57–v59 and protocol v29) need a rebuilt binary and a verified pre-switch ledger
   backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
@@ -1020,7 +1021,7 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **There is no Desktop app, no Dashboard and no remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
   `deckent monitor` is a read-only live view. Desktop app development starts during the beta, after the core layers are in
   place; it is not shipped today.
-- **`deckent runtime` does not show since when the service runs.** The runtime protocol (v29) carries no start time; it waits for
+- **`deckent runtime` does not show since when the service runs.** The current runtime protocol (v31) carries no start time; it waits for
   the next protocol version. The status shows build, configuration, running work and socket only.
 - **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect

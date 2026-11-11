@@ -115,15 +115,16 @@ and call; it can be switched on for one terminal session or stored as the person
 the hard floor remain effective, with effect calls audited. Full access should be understood
 as a different exposure level from closed sandbox execution.
 
-Shell execution uses registered backends such as bubblewrap and Landlock; coding workers use
-Docker. Git worktrees separate outputs but do not isolate processes, networks or secrets.
+Shell execution uses registered backends such as bubblewrap and Landlock. Connected Claude/Codex workers use
+bubblewrap; eligible Docker and SIWC worker profiles need Docker (SIWC activation remains held). Git worktrees separate outputs but do not isolate processes, networks or secrets.
 Docker shares the host kernel. A `require-sandbox` shell posture refuses unavailable confinement;
 `prefer-sandbox` can fall back to the host and reports that posture. Inspect `deckent doctor`
 on the actual machine before relying on a sandbox.
 
 Provider API keys are resolved through the configured secret-store port and are masked from
-agent-facing content. Native subscription workers can receive bounded credential projections;
-that path is distinct from a provider API key. File and encrypted-file stores do not protect
+agent-facing content. Connected Claude/Codex CLI workers keep sign-in in their own CLI realm; Deckent does not read their tokens.
+Claude Docker subscriptions are refused. Codex Docker tokens stay on the host relay; Cursor has its own bounded
+credential projection. These routes are distinct from provider API keys. File and encrypted-file stores do not protect
 against every program running as the same OS user; the encrypted store's unlock key is local.
 A compromised host, broad container mounts or incorrectly granted full access remain meaningful
 risks. Check filesystem, process, network and secret boundaries together.
@@ -162,8 +163,8 @@ journal with independent verification, sealed Auditor records, Nervous detection
 Brain in a bubblewrap realm, and versioned agents with statistics, suggestions and signer keys. They are code, not accepted behaviour yet. Every switch
 (memory, Nervous, recovery, agent statistics) starts off until a person turns it on; its `shadow` mode applies nothing, but
 memory-verification and recovery shadow still call their model. The headless Brain has no switch and works only after the
-person's own login, connect and consent. alpha.55 has no command that promotes a Nervous rule, so Nervous executes no stop step
-and automatic recovery cannot start yet; see [core layers](../.deckent/docs/architecture/modules/core-layers.md).
+person's own login, connect and consent. Recovery promotion/grant/review cards exist since alpha.56. Recovery stays off
+until a person promotes a measured rule, grants its exact action and enables the mode; real-use acceptance remains open. See [core layers](../.deckent/docs/architecture/modules/core-layers.md).
 
 Mission-level coordination of multi-step business processes, a remote HTTP API,
 Desktop, Dashboard, Enterprise SSO/fleet management and microVM isolation remain future work.
@@ -176,7 +177,8 @@ words what is untried, not built or still open.
 
 `deckent audit verify --scope <id> --json` verifies all retained event seals, sequence continuity, checkpoint chaining and checkpoint audit heads in a consistent read snapshot. SDK `verifyAudit(root, {schemaVersion: 1, scopeId}, options)` and read-only MCP `verify_audit` use the same policy-authorized read. The scoped approval `inspect` grant is required. Doctor and service `audit-integrity` reports expose degradation; anything not verified (nothing recorded yet, a throwing or unavailable verifier, a service that has not verified any scope) shows unknown/degraded with its reason and is never healthy, and `audit verify` exits 1. Checkpointing cannot be disabled by configuration. This detects tampering relative to retained evidence; it does not prevent an agent using the same OS account from changing local files.
 
-Export with `deckent audit verify --scope <id> --export-checkpoint` (JSON on stdout, or `null` if no checkpoint exists). A separate device must retain that original export independently. Compare it later with `--checkpoint <file>` or `--checkpoint -` for stdin; SDK/MCP take the same object in `witness`. No output path or witness network address is sent to the service.
+Export with `deckent audit verify --scope <id> --export-checkpoint` (JSON on stdout, or `null` if no checkpoint exists). For a private local file, use `deckent audit verify --scope <id> --export-checkpoint <file>`: exclusive creation with
+mode 0600 refuses an existing file and refuses export when no checkpoint exists. A separate device must retain that original export independently. Compare it later with `--checkpoint <file>` or `--checkpoint -` for stdin; SDK/MCP take the same object in `witness`. No output path or witness network address is sent to the service.
 
 The version-1 export is `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpoint, digest}`. Its strict checkpoint contains `schemaVersion`, `installationId`, `scopeId`, `sequence`, `atMs`, `head: {sequence, digest}`, `policyDigest`, `producersDigest`, `previousDigest`, `keyId` and `mac`. Digests/MACs are lowercase SHA-256 hex; the export digest hashes the canonical sealed checkpoint. The head hashes canonical complete sealed audit records in sequence, starting from a scope-bound empty head. The checkpoint HMAC covers its unsigned canonical projection; the predecessor digest binds the previous sealed checkpoint. The existing installation key must remain available; no secret or policy content is exported.
 

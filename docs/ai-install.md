@@ -47,7 +47,8 @@ configuration, warnings or unverified checks. It checks readiness; it does not i
 Ask the person to open `deckent` in that folder and complete the setup screens. Stop and hand back these steps:
 
 - Sign in to their own provider or subscription account and accept any explicit consent for AI/background use. Never copy
-  browser sessions or another user's credentials. Sign in with ChatGPT worker activation remains held pending N1 proof.
+  browser sessions or another user's credentials. The separate ChatGPT browser-sign-in (SIWC) worker remains held pending N1 proof; the ChatGPT (Codex CLI)
+  connection uses the native worker path.
 - Enter provider secrets in Deckent's masked field. Do not request the value in chat or put it in arguments, environment,
   logs, screenshots or your transcript.
 - Review the profile, permission mode and permission/approval cards at their real terminal. AI, MCP, pipes and JSON do not
