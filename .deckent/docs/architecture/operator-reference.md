@@ -147,7 +147,10 @@ one section; other sections link to it.
 - **Explicit CLI setup:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
   --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` previews the first registry without
   overwriting one; `--apply` uses the same governed owner. For a Dockerless subscription kind, use `--connection <profile-id>`
-  (find the id in `deckent coding`; `--provider` must match its CLI). Without it, the command requires `execution.docker` and
+  (find the id in `deckent coding`; `--provider` must match its CLI, `claude` or `codex`). For an existing template,
+  `deckent coding template --connection <profile-id>` binds that connected native worker. Sign in and connect through
+  `/provider` or `deckent models login --connection <kind>` followed by `deckent models connect`; deckent keeps this CLI
+  login separate from the host CLI login, which alone does not make the worker ready. Without `--connection`, registry setup requires `execution.docker` and
   measures the CLI version in the configured image. `deckent coding template --provider <id> --kind <kind> --preview|--apply` adds a kind from an already admitted profile.
   `--discovery` selects repository discovery (see [Worker instructions and discovery](#worker-instructions-and-discovery)).
   A missing pool is previewed with `deckent init pool --scope <id> --preview`, then explicitly applied with `--apply`; capacity comes

@@ -149,7 +149,10 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 - **Açık CLI kurulumu:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
   --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` mevcut kaydın üzerine yazmadan ilk
   registry'yi önizler; `--apply` aynı yönetilen sahibi kullanır. Docker'sız abonelik türü için `--connection <profile-id>` verin
-  (kimlik `deckent coding` çıktısında; `--provider` CLI ile eşleşmelidir). Bu seçenek yoksa komut `execution.docker` ister ve
+  (kimlik `deckent coding` çıktısında; `--provider` CLI ile, yani `claude` veya `codex` ile eşleşmelidir). Mevcut şablonda
+  `deckent coding template --connection <profile-id>` bağlı native işçiyi seçer. `/provider` içinden veya
+  `deckent models login --connection <kind>` ardından `deckent models connect` ile giriş yapıp bağlanın; deckent bu CLI
+  girişini host CLI girişinden ayrı tutar, host girişi tek başına işçiyi hazır yapmaz. `--connection` yoksa registry kurulumu `execution.docker` ister ve
   CLI sürümünü yapılandırılmış imajda ölçer. `deckent coding template --provider <id> --kind <kind> --preview|--apply`,
   kabul edilmiş profilden bir tür ekler. `--discovery` depo keşfini seçer (bkz.
   [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif)). Eksik havuz

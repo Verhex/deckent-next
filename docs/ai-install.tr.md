@@ -3,7 +3,7 @@
 [English](ai-install.md) · [README (EN)](../README.md) · [Bilinen sınırlar (EN)](https://github.com/Verhex/deckent-next/blob/main/docs/known-limits.md)
 
 Bir kişi deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
-**deckent** kişinin altyapısında çalışır; kurulum kişinin iş operasyonlarını yürütme izni vermez.
+İşler deckent ile kişinin kendi altyapısında yürür; kurulum iş operasyonlarını yürütme izni vermez.
 Bu rehber alpha.58 adayının (`f6b119d4f`; 2026-10-29'da `0ba89deab` olarak yayımlandı) CLI yardımı ve kaynağıyla yeniden kontrol edildi; alpha.59 (2026-10-30'da `4d12d6fa8` olarak yayımlandı) ve alpha.60 adayı kullandığı hiçbir CLI komutunu değiştirmez. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
 Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
@@ -17,7 +17,7 @@ açın, `node --version` ve `npm --version` kontrolünden sonra kurulumu tekrarl
 Yerel model sohbeti kendi başına kod işçisi gerektirmez. İşletim sistemi izinlerini değiştirmek ya da Docker'ı yükseltilmiş
 yetkiyle kurmak gerekiyorsa yönetici adımını kişiye bırakın.
 
-**deckent** henüz npm'de yoktur. Kişinin kaynağına ve bütünlüğüne güvendiği paket dosyasını edinin. Aşağıdaki örnek tarball yolunu
+Henüz npm'de deckent paketi yoktur. Kişinin kaynağına ve bütünlüğüne güvendiği paket dosyasını edinin. Aşağıdaki örnek tarball yolunu
 bu dosyanın mutlak yoluyla değiştirin; dosya adı yer tutucudur. npm paket adı tahmin etmeyin ya da doğrulanmamış alternatif
 indirmeyin. npm yayını olduğunda doğrulanmış paket kimliğini ve sürümünü kullanın.
 

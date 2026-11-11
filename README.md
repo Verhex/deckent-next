@@ -215,8 +215,10 @@ flowchart LR
    First subscription consent defaults to you and AI actors, including connected MCP clients sharing that AI identity.
    You may restrict it to yourself; background/system use needs its own consent. Step 5 selects the session's model.
 4. **Set a budget for priced API calls.** Every paid API turn reserves from the scope's shared USD budget and is refused
-   without one. In `/provider`, choose **Create budget**, select the amount and confirm. Subscription and local-model
-   paths need neither an API key nor a USD budget; provider-plan limits still apply to subscriptions.
+   without one. In `/provider`, move down past the connections to **Create budget**, or type `budget` to filter the list.
+   The window highlights **10 USD**; choose 5, 10, 25, 50 or 100 USD, or **Another amount (arrow keys)** for a whole-dollar
+   amount from 1 to 1000, then confirm. Subscription and local models need neither an API key nor a USD budget;
+   provider-plan limits still apply to subscriptions.
 5. **Choose a model** with `/model`, for this session or as your default. A model you cannot use yet is shown locked,
    with the reason and the fix.
 6. **Work.** Ask in plain words. Tool calls follow your installation's policy and your permission mode; anything that needs
@@ -243,7 +245,7 @@ each window are trimmed; nothing else is changed.
   </tr>
 </table>
 
-For the API-key route, steps 3 and 4 also have command-line forms; secret entry stays with the person:
+For an API-key connection, steps 3 and 4 also have command-line forms; secret entry stays with the person:
 
 ```sh
 deckent secret set DECKENT_ANTHROPIC_KEY --main
@@ -272,12 +274,12 @@ flowchart LR
   L --> R["Git reference<br/><sub>branch adoption is separate</sub>"]
 ```
 
-Start in a Git project with at least one commit and a connected model (a USD budget is required only for paid APIs).
-For a connected subscription, sign in through `/provider` or `deckent models login --connection <kind>` and connect
-through deckent, then bind the worker template to that connection. This uses a separate CLI login realm; an existing
-host CLI login alone does not make the worker ready. Native Claude/Codex workers require Linux/WSL bubblewrap;
-eligible Docker profiles require Docker and an image. Claude's old Docker subscription route is refused; the separate
-ChatGPT browser-sign-in (SIWC) worker remains held. Real-account and clean-machine first-job acceptance remain open
+Start in a Git project with at least one commit and a connected model. For a Claude or ChatGPT subscription,
+sign in and connect through `/provider`, then open `/setup` to prepare the worker. These Claude/Codex CLI workers run
+inside bubblewrap on Linux/WSL and need no Docker image. Signing in to a CLI outside deckent does not complete this setup.
+If you use an eligible Docker worker profile instead, `/setup` prepares or selects its image; building one needs Docker
+and network access.
+Only paid API calls need a USD budget. Real-account and clean-machine first-job checks are still open
 ([known limits](docs/known-limits.md)).
 
 ### One-time setup
@@ -288,46 +290,23 @@ Fable 5.2 requires [Claude Code 2.1.321 or later](https://code.claude.com/docs/e
 Fable 5.1 remains selectable in the catalog; registration and recommendations do not activate a model.
 Using Fable 5.1 for a role requires assigning that role explicitly with `deckent models roles set`.
 
-Choose the worker route before preparing execution settings, a kind of work and a worker pool. Connected Claude/Codex
-CLI workers run in bubblewrap without a Docker image. Eligible Docker workers need an image; `/setup` prepares that route
-on cards at your own terminal. Each step writes only after confirmation. Some second-provider setup paths still require
-an image; see the [known limits](docs/known-limits.md).
+In `/setup`, choose the worker, its execution settings, the kind of work and the worker pool. Each step shows what
+will change and asks before writing. Build or select an image only for a Docker worker; some second-provider setup
+paths still require one ([known limits](docs/known-limits.md)).
 
 ```sh
-# 1. Install in your project and open setup. Select the worker route, execution settings, work kind and pool.
-#    Build or pick an image only for a Docker route. /setup opens the steps again later.
+# Set up your project and open the terminal; /setup revisits the worker steps.
 deckent init
 deckent
-#    Without the terminal, doctor prints each missing step with its exact command (see below):
+# Show missing steps and their commands outside the terminal.
 deckent doctor
-
-# 2. If the service was already running, restart it so it reads the new settings
+# If the service was already running, reload it after setup.
 deckent runtime restart
 ```
 
-For a connected subscription, find its exact profile id in `deckent coding` and preview a registry using it:
-
-```sh
-deckent coding
-deckent init registry --scope my-project --provider <cli-id> --connection <profile-id> --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --preview
-deckent init pool --scope my-project --preview
-```
-
-`<cli-id>` must match the connection’s CLI (`claude` or `codex`). For an existing template, `deckent coding template --connection <profile-id>` binds the connected native worker.
-For an eligible Docker profile, prepare the image in `/setup`, then preview:
-
-```sh
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
-```
-That build needs Docker and the network; its card states size and time bounds. Cursor also needs its catalog step.
-
-Each `--preview` shows what would change and writes nothing; run the same command with `--apply` to write it.
-`--discovery repository` lets the worker CLI load your repository's own instruction files, hooks and MCP settings; leave it
-out to hide them (the default).
-The [operator reference](.deckent/docs/architecture/operator-reference.md#first-job-setup-in-detail) explains every value,
-what each preview checks, and what to do on an installation set up before the current first-run policy.
+For command-line setup, an existing worker template, Cursor's catalog step or repository instruction settings, use the
+[operator reference](.deckent/docs/architecture/operator-reference.md#first-job-setup-in-detail).
+It covers connection ids, previews and older installations.
 
 ### Run the job
 
@@ -534,7 +513,7 @@ OpenRouter settings.
 - **Work with an agent in the terminal**: streamed turns, file edits and a sandboxed shell, approval and monitor windows,
   permission modes, MCP tools, conversation compaction, in English and Turkish.
 - **Ask for a job in plain words**: `/do` plans it with acceptance criteria, you approve, a coding worker (Claude Code,
-  Codex or Cursor) uses its configured bubblewrap or Docker route; `/deliver` writes to project files or a Git reference
+  Codex or Cursor) runs in bubblewrap or Docker as configured; `/deliver` writes to project files or a Git reference
   according to the delivery mode. Branch adoption needs a separate confirmation.
 - **Orchestrate work**: Runs, tasks and attempts (each try of a task) are admitted, scheduled, held, resumed, cancelled and recovered, all
   recorded in a durable SQLite ledger.
@@ -569,11 +548,12 @@ OpenRouter settings.
 - **No ERP or CRM connectors.** The operation contract and a generic HTTP target exist; product connectors do not.
 - **Delivery is never automatic.** A rule records whether it *would* deliver each queued item, but it only advises; every
   delivery, adoption and rollback waits for your `y`.
-- **Coding content is not independently verified.** Acceptance checks process outcome and required retained evidence/reports,
-  including declared acceptance-check results; it does not independently judge whether the content satisfies your intent.
-- **Subscriptions have route-specific limits.** Claude and ChatGPT (Codex CLI) connections support tool chat, native workers
-  and Brain in the Linux/WSL bubblewrap sandbox. The separate browser sign-in (SIWC) worker remains held. Real-account,
-  assembled-release and beta acceptance remain separate; a successful sign-in is not worker-readiness proof.
+- **Coding content is not independently verified.** Checks cover how the worker finished, its saved patch and required
+  report, including the acceptance checks it reports; they do not independently judge whether the content meets your request.
+- **Subscriptions have limits.** Claude and ChatGPT (Codex CLI) connections support tool chat, coding workers and Brain
+  inside bubblewrap on Linux/WSL. Claude's old Docker subscription option is refused. The separate ChatGPT browser sign-in
+  supports chat, but its worker is not enabled yet. Signing in does not by itself make a worker ready; real-account checks,
+  a walk through the complete release and beta acceptance are still open.
 - **Platforms.** Native Windows is not supported. On macOS the local runtime service does not run yet (its socket is
   Linux-only), so chat, jobs and backup cannot be used there. Delivery, adoption, rollback and key grants need a terminal
   witness that exists only on Linux (WSL included) and are refused on other systems. arm64 is not shipped. A Docker
@@ -586,13 +566,14 @@ OpenRouter settings.
 
 ## Roadmap
 
-The current candidate is beta.1; alpha.64 is the last released alpha. Beta.1 prepares setup and speed corrections on top of
-subscription tool chat, connected native workers, Brain and proposal cards. The eight acceptance gates remain open during
-beta; publication does not close them. Later beta releases improve the product through dogfood and real journeys.
-The separate SIWC worker, Hub deployment and native-platform acceptance still need their own evidence. Core-layer switches
-remain off until governed activation. Desktop follows the accepted orchestration prerequisites; general promotion waits
-for the owner's Desktop acceptance. Historical alpha changes and measurements remain in [the alpha changelog](CHANGELOG-alpha.md)
-and [completed plan](COMPLETED-PLAN.md), not a timing guarantee for this candidate.
+The beta.1 candidate brings setup and speed improvements to a terminal that already supports subscription tool chat,
+coding workers, job plans and approval cards; alpha.64 is the last released alpha.
+The beta series is for improving these features through real work and checking complete journeys, including setup on
+a clean machine; all eight beta acceptance checks are still open.
+An npm package is planned, while the separate ChatGPT browser-sign-in worker, shared package Hub and native Windows/macOS
+support still need verification before they are ready.
+Desktop development depends on the planned work coordination features, and wider promotion waits for the project owner's
+acceptance of that app; a separate Enterprise edition will add company administration and ERP connectors.
 
 ```mermaid
 flowchart LR
@@ -610,7 +591,7 @@ Every layer acts only through the same policy and approvals as everything else.
 
 - [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
 - [Policy and AI](docs/policy-and-ai.md): human and AI authority, delegation, administration commands and compliance evidence
-- [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
+- [Glossary](docs/glossary.md): scope, execution environments, work lifecycle, approvals and spending
 - [Known limits](docs/known-limits.md): what is not tried, not built or still open, with the impact and a workaround
 - [Operator reference](.deckent/docs/architecture/operator-reference.md): setup values, sandbox views, key stores,
   spending, worker images, patch custody and recovery sets in detail
