@@ -1,6 +1,12 @@
 <div align="center">
 
-# deckent
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/brand/lockup-on-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/brand/lockup-on-light.svg">
+    <img src=".github/assets/brand/lockup-on-light.svg" alt="deckent" width="360">
+  </picture>
+</h1>
 
 **Agent Control & Execution Plane**
 
