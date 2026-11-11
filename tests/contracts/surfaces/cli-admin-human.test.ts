@@ -1,3 +1,5 @@
+import { refusalSubject } from '../../fixtures/audit-refusal.js';
+import type { AuditListView, AuditEvent } from '#domain/index.js';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
@@ -428,4 +430,40 @@ it('paths shows the composed Brain login root and distinguishes the encryption k
   expect(await main(['paths'], { ...human.context, inspectAdminPaths: async () => ({ schemaVersion: 1, runtimeSocket: null, mcp: null,
     headlessLogins: root, secretStore: { store: 'fixture', files: [data, key], keyFile: key } }) })).toBe(0);
   const text = human.out.text(); expect(text).toContain(root); expect(text).toContain('Brain login root'); expect(text).toContain('Secret store encryption key');
+});
+
+it('audit lists the refusal source and role, shows lower bounds and unresolved targets, and preserves both correlated rows in human and JSON output', async () => {
+  const policy: AuditEvent = { schemaVersion: 1, eventId: 'policy', scopeId: 'live', principal: { issuer: 'os', subject: 'agent' }, policyRevision: 'p', atMs: 30,
+    subject: { kind: 'policy-turn', turnId: 'turn', ceiling: false, refused: { count: 0, calls: [] }, allowed: { count: 1, calls: [{ tool: { name: 'read_file', version: 1 },
+      call: { round: 1, index: 0, callId: 'call' }, cell: 'read', argsDigest: 'a'.repeat(64), revision: 'p' }] } } };
+  for (const language of ['en', 'tr'] as const) {
+    const f = await project(undefined, language);
+    for (const source of ['deckent-decision', 'cli-reported', 'adapter-reported'] as const) {
+      const record = { sequence: 2, event: { ...policy, eventId: 'boundary', subject: { ...refusalSubject, decisionSource: source } } };
+      const peer = { sequence: 9, event: policy };
+      const view: AuditListView = { schemaVersion: 1, scopeId: 'live', records: [record], next: null, related: [peer] };
+      const handlers = { listAudit: async () => view };
+      const listed = io(f, handlers);
+      expect(await main(['audit', 'list'], listed.context)).toBe(0);
+      for (const text of ['access-refusal-summary', 'outside-workspace', source, t('cli.audit.refusal.operation.read', {}, language),
+        t('cli.audit.refusal.joined', { sequences: '#9' }, language)]) expect(listed.out.text()).toContain(text);
+      if (source === 'cli-reported') expect(listed.out.text()).toContain(language === 'en' ? 'Deckent did not decide' : 'kararı Deckent vermedi');
+      const shown = io(f, handlers);
+      expect(await main(['audit', 'show', '2'], shown.context)).toBe(0);
+      for (const text of [t('cli.audit.refusal.countAtLeast', { count: 2 }, language), t('cli.audit.refusal.unresolved', {}, language),
+        'firstObservedAtMs', 'lastObservedAtMs', 'samples', 'overflow', 'evidenceBasis', 'attempt', 'policy-turn']) expect(shown.out.text()).toContain(text);
+      const exported = io(f, handlers);
+      expect(await main(['audit', 'list', '--json'], exported.context)).toBe(0);
+      expect(JSON.parse(exported.out.text())).toEqual(view);
+      const exportedOne = io(f, handlers);
+      expect(await main(['audit', 'show', '2', '--json'], exportedOne.context)).toBe(0);
+      expect(JSON.parse(exportedOne.out.text())).toEqual({ ...record, related: [peer] });
+      const exact = io(f, { listAudit: async () => ({ ...view, correlationLimited: true, records: [{ ...record,
+        event: { ...record.event, subject: { ...record.event.subject, countBasis: 'exact', target: { role: 'credential', identity: { keyId: 'k1', digest: 'e'.repeat(64) } } } } }] }) });
+      expect(await main(['audit', 'show', '2'], exact.context)).toBe(0);
+      expect(exact.out.text()).toContain(t('cli.audit.refusal.countExact', { count: 2 }, language));
+      expect(exact.out.text()).not.toContain(t('cli.audit.refusal.unresolved', {}, language));
+      expect(exact.out.text()).toContain(t('cli.audit.refusal.correlationLimited', {}, language));
+    }
+  }
 });

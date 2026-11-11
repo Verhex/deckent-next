@@ -6,7 +6,8 @@ function projection(record: Omit<AuditRecord, 'mac'>) {
 }
 export function sealAuditRecord(event: AuditEvent, sequence: number, authority: IntegrityAuthority): AuditRecord {
   const parsed = auditEventSchema.safeParse(event);
-  if (!parsed.success || !Number.isSafeInteger(sequence) || sequence < 1) throw new AuditError('AUDIT_INVALID');
+  // beta.2 reads this subject; even secondary seal producers must wait for beta.2.1.
+  if (!parsed.success || parsed.data.subject.kind === 'access-refusal-summary' || !Number.isSafeInteger(sequence) || sequence < 1) throw new AuditError('AUDIT_INVALID');
   const signed = { event: parsed.data, sequence, keyId: authority.keyId };
   const sealed = auditRecordSchema.safeParse({ ...signed, mac: authority.sign(projection(signed)) });
   if (!sealed.success) throw new AuditError('AUDIT_INVALID');
