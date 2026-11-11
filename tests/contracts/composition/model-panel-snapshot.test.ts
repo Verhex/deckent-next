@@ -104,4 +104,11 @@ it.skipIf(process.platform === 'win32')('30 models: one opening reads inputs onc
   abort.abort(); reset();
   await expect(opening.host.inspectInvocableModels!(f.project, 'scope', options)).rejects.toMatchObject({ name: 'AbortError' });
   expect(counts()).toEqual({ config: 0, scope: 0, catalog: 0, policy: 0 });
+  // A fresh opening with an unreadable policy can publish locked names, but never a usable model.
+  await writeFile(join(f.data, 'policy.json'), '{'); reset();
+  const lockedFrames: ModelPanelView[] = [];
+  await expect(source.inspect(view => { lockedFrames.push(structuredClone(view)); })).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+  expect(lockedFrames[0]!.choices).toHaveLength(30);
+  expect(lockedFrames.every(view => view.choices.every(row => row.blocked === 'Checking…'))).toBe(true);
+  expect(counts()).toEqual({ config: 1, scope: 0, catalog: 1, policy: 1 });
 }, 60_000);
