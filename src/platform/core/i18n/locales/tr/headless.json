@@ -119,5 +119,7 @@
   "headless.agent.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "İşçi CLI beklenmeyen bir eklenti bildirdi. Attempt sonlandı; aynı bağlantı ve mühür yeniden denenmez.",
   "headless.agent.worker.NATIVE_WORKER_INPUT_REFUSED": "Görev girdisinin salt okunur görünümü doğrulanamadı. Girdi yolu, kapsamı, bağlantıları ve bayt sınırlarını inceleyin.",
   "headless.agent.workspace.containedWorkspaceRefused": "İşçinin çalışma dizini, kurulum durumunun kapalı görünümü olarak açılamıyor.",
-  "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} yeni bir yerleşik eklenti yükledi: {name}. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi."
+  "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} yeni bir yerleşik eklenti yükledi: {name}. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi.",
+  "headless.agent.builtinPlugins": "[deckent] Claude CLI {version} yeni yerleşik eklentiler yükledi: {name}. Hiçbir şey engellenmedi; bu gözlem turun kanıtına kaydedildi.",
+  "headless.agent.builtinPluginsMore": "+{count} tane daha"
 }

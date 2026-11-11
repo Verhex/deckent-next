@@ -119,5 +119,7 @@
   "headless.agent.worker.NATIVE_WORKER_PLUGIN_UNEXPECTED": "The worker CLI reported an unexpected plugin. The Attempt ended; this binding and seal will not be retried.",
   "headless.agent.worker.NATIVE_WORKER_INPUT_REFUSED": "The task input read-only view could not be verified. Inspect its path, scope, links and byte limits.",
   "headless.agent.workspace.containedWorkspaceRefused": "The worker workspace cannot be opened as a closed view of installation state.",
-  "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} loaded a new built-in plugin: {name}. Nothing was blocked; this observation is recorded with the turn."
+  "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} loaded a new built-in plugin: {name}. Nothing was blocked; this observation is recorded with the turn.",
+  "headless.agent.builtinPlugins": "[deckent] Claude CLI {version} loaded new built-in plugins: {name}. Nothing was blocked; this observation is recorded with the turn.",
+  "headless.agent.builtinPluginsMore": "+{count} more"
 }
