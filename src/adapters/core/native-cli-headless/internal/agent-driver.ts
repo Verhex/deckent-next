@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { headlessEgressReasons, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationProfileDigest, createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
-import { nativeAgentExecutionSchema, toolSessionSchema, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
+import { nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
 import { feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { createClaudeAgentDriver } from './claude-agent.js';
 import { codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
@@ -15,6 +15,7 @@ import { agentTarget, preflightNativeAgent, recordNativeAgentObservation } from 
 import { NATIVE_CLI_HEADLESS_ADAPTER, refuse } from './contract.js';
 import { nativeAgentFlagSetDigest } from './env.js';
 import { emitDelta, reject, type Prepared, type Refusal } from './turn.js';
+import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 
 type Bridge = NonNullable<HeadlessSpawn['mcp']> & Readonly<{ turnToken: string; url: string; tokenEnvName: string }>;
 const projectResponse = (value: unknown, known: KnownSecretSnapshot, field = ''): unknown => typeof value === 'string'
@@ -23,7 +24,7 @@ const projectResponse = (value: unknown, known: KnownSecretSnapshot, field = '')
     ? Object.fromEntries(Object.entries(value).map(([key, item]) => [redactForRecord(key, known), projectResponse(item, known, key)])) : value;
 /** In-memory driver construction is pure. Admission probes and run files occur only inside the governed invocation. */
 export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['profile']; execution: NativeAgentExecution; session: ToolSessionPort;
-  now: () => number; isolation: HeadlessIsolation }>) {
+  now: () => number; isolation: HeadlessIsolation; paidExtraUsage?: 'continue' | 'stop-at-limit' }>) {
   const { profile, entry, definition } = agentTarget(input.profile), execution = nativeAgentExecutionSchema.parse(input.execution);
   toolSessionSchema.parse(input.session.session);
   if (execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
@@ -60,7 +61,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck, notices: () => claude?.notices() ?? [],
     async close() { lifetime.abort(); calls.clear(); },
     native(bridge: Bridge, secrets: { configured: KnownSecretSnapshot; turn: KnownSecretSnapshot }): ModelInvocationNativePort {
-      const known = combineKnownSecrets(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation });
+      const known = combineKnownSecrets(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation, ...(input.paidExtraUsage ? { paidExtraUsage: input.paidExtraUsage } : {}) });
       // K4 projects the serialized envelope before sending it. Correlate that same representation, without re-executing the call.
       projectToolResult = value => JSON.parse(redactForRecord(JSON.stringify(value), known)) as typeof value;
       const tokens = new WeakSet<object>();
@@ -81,7 +82,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           const delta: ModelInvocationDeltaSink = part => { if (part.kind !== 'text') return; text += part.text;
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
-            cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, onDelta: delta }) : undefined;
+            cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',
@@ -97,6 +98,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             raw => { if (claude) return claude.line(raw); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
             if (finished?.kind === 'refused') {
+              const limit = finished.limit;
+              if (limit) return rejectResult(reject(limit.kind === 'unknown' ? 'invalid-response' : 'http-status', nativeQuotaRejection(limit)));
               // Owner 2026-11-05: a refused turn stops only itself; no negative observation pauses later turns.
               refusal = finished.reason;
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
@@ -116,7 +119,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const atLength = finished.stopReason !== null && 'lengthStopReasons' in headless.guards && headless.guards.lengthStopReasons.includes(finished.stopReason);
               response = { schemaVersion: 1, native: { object: 'chat.completion', model: prepared.model,
                 choices: [{ index: 0, message: { role: 'assistant', content: text || finished.text }, finish_reason: atLength ? 'length' : 'stop' }],
-                headless: { cliVersion: execution.cliVersion, flagSetDigest: execution.flagSetDigest, guard: 'passed', builtinPlugins: claude!.builtinPlugins(), egress: { ...evidence.egress, ...headlessEgressReasons(evidence.egress) } } },
+                headless: { cliVersion: execution.cliVersion, flagSetDigest: execution.flagSetDigest, guard: 'passed', builtinPlugins: claude!.builtinPlugins(), ...(claude!.paidExtraUsage() ? { paidExtraUsage: claude!.paidExtraUsage() } : {}), egress: { ...evidence.egress, ...headlessEgressReasons(evidence.egress) } } },
                 usage: { prompt_tokens: inputTokens, completion_tokens: usage['output_tokens']!, total_tokens: inputTokens + usage['output_tokens']!,
                   cache_read: usage['cache_read_input_tokens']!, cache_write: usage['cache_creation_input_tokens']! } };
             } else if (ended && 'response' in ended) {

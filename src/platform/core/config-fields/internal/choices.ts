@@ -313,6 +313,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'terminal.scratch.retentionDays': { kind: 'numeric', unit: 'days', step: 1, presets: [1, 3, 7, 14, 30, 90, 365] },
   'models.retirementWarningDays': { kind: 'numeric', unit: 'days', step: 1, presets: [7, 15, 30, 60, 90] },
   // Retired by S3-5 (nothing reads it): old configs still parse, but selection never offers it as a switch.
+  'models.headless.paidExtraUsage': { kind: 'schema' },
   'models.headless.preview': { kind: 'hidden' },
   'terminal.scratch.sweepIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'terminal.fetch.schemaVersion': { kind: 'schema' },

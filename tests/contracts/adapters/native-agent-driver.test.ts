@@ -8,8 +8,8 @@ import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { inspectNativeChat } from '#composition/core/terminal-chat/index.js';
-import type { ToolSessionPort } from '#capabilities/index.js';
-import { snapshotKnownSecrets } from '#platform/index.js';
+import { nativeQuotaText, type ToolSessionPort } from '#capabilities/index.js';
+import { snapshotKnownSecrets, clockText } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
@@ -29,9 +29,9 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
   const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-  const start = async () => {
+  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue') => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
-    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: port, now: Date.now, isolation: testIsolation });
+    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: port, now: Date.now, isolation: testIsolation, paidExtraUsage });
     close.push(() => driver.close());
     const configured = snapshotKnownSecrets(scenario.loginCanary ? [{ name: 'FIXTURE_LOGIN', value: scenario.loginCanary }] : []);
     const bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, knownSecrets: configured,
@@ -160,6 +160,55 @@ it('keeps cancelled calls unknown, closes the process and removes token-bearing 
     expect(await readdir(join(f.c.root, 'state', 'run'))).toEqual([]);
     expect(await readNativeAgentObservation(f.profile)).not.toMatchObject({ toolSurface: true });
     expect(f.propose).not.toHaveBeenCalled();
+  }
+});
+
+it('records Claude subscription limits in the existing strict refusal and renders the same EN/TR family as plain chat', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  for (const info of [
+    { status: 'rejected', rateLimitType: 'five_hour', resetsAt: 1792773600 },
+    { status: 'rejected', rateLimitType: 'seven_day_opus', overageStatus: 'rejected' },
+    { status: 'rejected', rateLimitType: 'odd\n\u001b' + 'x'.repeat(200) },
+    { status: 'future-status', rateLimitType: 'seven_day' }, {},
+    { status: 'rejected', errorCode: 'credits_required' },
+  ]) {
+    const f = await fixture(families[0]!, { events: [{ type: 'rate_limit_event', rate_limit_info: info }] });
+    const h = await f.start(), result = await h.run();
+    expect(result.kind).toBe('rejected');
+    const body = result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null;
+    expect(body).not.toBeNull(); expect(body!.schemaVersion).toBe(1);
+    expect(body).toMatchObject({ resetsAtMs: 'resetsAt' in info ? 1792773600000 : null });
+    expect(f.propose).not.toHaveBeenCalled();
+    expect(h.driver.refusal()).toBeNull(); // A limit never becomes the misleading unexpected-tool notice.
+    for (const language of ['en', 'tr'] as const) {
+      const text = nativeQuotaText(body!, language)!;
+      expect(text).not.toMatch(/\{\w+\}/u); expect(text).not.toContain('\n'); expect(text).not.toContain('\u001b');
+      if ('errorCode' in info) { expect(text).toContain(language === 'en' ? 'extra credits' : 'ek kredi'); continue; }
+      if (!('status' in info) || info.status === 'future-status') {
+        expect(text).toContain(language === 'en' ? 'Unknown limit status' : 'Bilinmeyen limit durumu');
+        expect(text).toContain('status' in info ? 'future-status' : '?'); continue;
+      }
+      expect(body).toMatchObject({ refusal: 'quota', subtype: 'rejected' });
+      expect(text).toContain(language === 'en' ? 'stopped this turn instead of continuing on paid extra usage' : 'bu turu ücretli ek kullanımla sürdürmek yerine durdurdu');
+      expect(text).toContain('deckent models login --connection claude-cli-subscription');
+      expect(text).toContain('resetsAt' in info ? clockText(1792773600000) : language === 'en' ? 'unknown' : 'bilinmiyor');
+      if (info.rateLimitType === 'five_hour') expect(text).toContain(language === 'en' ? 'five-hour window' : 'beş saatlik pencere');
+      if (info.rateLimitType === 'seven_day_opus') expect(text).toContain(language === 'en' ? 'weekly window for Opus' : 'Opus için haftalık pencere');
+      if (info.rateLimitType?.startsWith('odd')) { expect(body).toMatchObject({ field: 'odd__' + 'x'.repeat(19) }); expect(text).toContain('odd__' + 'x'.repeat(19)); }
+    }
+  }
+});
+
+it('keeps paid extra usage in open native evidence and stops it only on the configured choice', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  for (const info of [{ status: 'rejected', overageStatus: 'allowed', rateLimitType: 'five_hour', resetsAt: 1792773600 },
+    { status: 'allowed', overageInUse: true }]) {
+    const f = await fixture(families[0]!, { events: [{ type: 'rate_limit_event', rate_limit_info: info }] });
+    const continued = await f.start();
+    expect(await continued.run()).toMatchObject({ native: { headless: { paidExtraUsage: { kind: 'overage', status: info.status } } } });
+    const stopped = await f.start('stop-at-limit'), result = await stopped.run();
+    expect(result.kind).toBe('rejected');
+    if (result.kind === 'rejected') expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'quota', subtype: info.status });
   }
 });
 

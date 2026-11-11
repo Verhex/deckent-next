@@ -1,4 +1,5 @@
-import { nativeBuiltinPlugins, createClaudeAgentDriver, type ToolSessionPort } from '#capabilities/index.js';
+import { nativeBuiltinPlugins, createClaudeAgentDriver, classifyClaudeRateLimit, nativeQuotaRejection, nativeQuotaText, type ToolSessionPort } from '#capabilities/index.js';
+import { headlessRejectionBodySchema } from '#domain/index.js';
 import { nativeHeadlessInitRefusal as initGuard } from '#adapters/core/native-cli-headless/index.js';
 import { resolve } from 'node:path';
 import { nativeCliHeadlessDefinitionSchema } from '#adapters/core/native-cli-headless/index.js';
@@ -6,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { nativeCliHeadless, nativeCliAgent, parseNativeCliRegistry } from '#adapters/core/native-cli-registry/index.js';
 import { headlessFlagSetDigest, nativeAgentFlagSetDigest, nativeAgentInitReason, nativeAgentItemReason, toolSessionSchema, nativeAgentCorrelationSchema,
   nativeAgentToolResultSchema, nativeAgentReadinessSchema, nativeAgentReadinessReasonSchema } from '#adapters/core/native-cli-headless/index.js';
-import { t } from '#platform/core/i18n/index.js';
-import { parseClaudeStreamLine } from '#adapters/core/native-connection/index.js';
+import { t, clockText } from '#platform/core/i18n/index.js';
+import { nativeQuotaPolicy, parseClaudeStreamLine } from '#adapters/core/native-connection/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 import { CODEX_FAMILY } from '../../fixtures/native-headless/codex.js';
 import { FAMILY, PINNED, assistantLine, happyLines, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
@@ -239,13 +240,13 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
     const port: ToolSessionPort = { session, propose: async () => { throw new Error('no tool expected'); },
       cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-    const stream = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192 });
+    const stream = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy() });
     expect(stream.line(JSON.stringify({ ...init, plugins: [...five, unseen], model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }))).toBeUndefined();
     expect(stream.builtinPlugins()).toContain('cc-plugin-unseen');
     expect(stream.line(JSON.stringify(resultLine('ok')))).toBeUndefined();
     expect(stream.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'completed' });
     for (const extra of [{ plugin_errors: [{ plugin: 'cc-plugin-unseen', type: 'failed' }] }, { plugin_errors: {} }]) {
-      const failed = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192 });
+      const failed = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy() });
       expect(failed.line(JSON.stringify({ ...init, plugins: five, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir', ...extra }))).toBe('stop');
       expect(textGuard({ plugins: five, ...extra })).toMatchObject({ body: { field: 'pluginErrors' } });
     }
@@ -257,6 +258,95 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     }
     for (const tools of [['Read'], ['mcp__foreign__read_file'], ['mcp__deckent__decide_approval'], ['mcp__deckent__read_file', 'mcp__deckent__write_file'], undefined]) {
       expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: five, tools })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+    }
+  });
+  it('stops Claude limits using registry policy, preserves bounded v1 evidence and renders EN/TR without a realm', () => {
+    const { bridge } = nativeCliAgent(FAMILY)!;
+    const init = initLine({ tools: session.tools.map(tool => bridge.toolPrefix + tool.name), mcp_servers: [{ name: bridge.serverName, status: 'connected' }] });
+    const closure = { turnId: session.turnId, generation: 1, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
+    const port: ToolSessionPort = { session, propose: async () => { throw new Error('no tool expected'); },
+      cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
+    const start = (quotaPolicy = nativeQuotaPolicy(), paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue') => {
+      const driver = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy, paidExtraUsage });
+      driver.line(JSON.stringify({ ...init, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }));
+      return driver;
+    };
+    for (const status of ['allowed', 'allowed_warning']) {
+      const driver = start();
+      expect(driver.line(JSON.stringify(rateLimitLine(status)))).toBeUndefined();
+      driver.line(JSON.stringify(resultLine('ok')));
+      expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false }).kind).toBe('completed');
+    }
+    const unrecognisedOverage = start();
+    expect(unrecognisedOverage.line(JSON.stringify(rateLimitLine('rejected', { overageStatus: 'future-overage' })))).toBeUndefined();
+    expect(unrecognisedOverage.paidExtraUsage()).toBeNull(); // Only registry-recognized paid availability produces the billing notice.
+    for (const info of [
+      { status: 'rejected', overageStatus: 'allowed', rateLimitType: 'five_hour', resetsAt: 1792773600 },
+      { status: 'allowed', isUsingOverage: true }, { status: 'allowed_warning', overageInUse: true },
+      { status: 'rejected', isUsingOverage: true, overageStatus: 'rejected' },
+    ]) {
+      const driver = start();
+      expect(driver.line(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toBeUndefined();
+      expect(driver.paidExtraUsage()).toMatchObject({ kind: 'overage', status: info.status });
+      driver.line(JSON.stringify(resultLine('ok')));
+      expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false }).kind).toBe('completed');
+      const stopped = start(nativeQuotaPolicy(), 'stop-at-limit');
+      expect(stopped.line(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toBe('stop');
+      expect(stopped.paidExtraUsage()).toBeNull();
+      expect(stopped.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
+    }
+    for (const info of [
+      { status: 'rejected', rateLimitType: 'five_hour', resetsAt: 1792773600 },
+      { status: 'rejected', rateLimitType: 'seven_day_opus', overageStatus: 'rejected' },
+      { status: 'rejected', rateLimitType: 'odd\n\u001b' + 'x'.repeat(200), resetsAt: -1 },
+      { status: 'rejected', rateLimitType: 'seven_day_sonnet', resetsAt: Number.MAX_SAFE_INTEGER },
+      { status: 'rejected', rateLimitType: 'seven_day', resetsAt: 'tomorrow' },
+      { status: 'future-status', isUsingOverage: true, rateLimitType: 'odd\n\u001b' + 'x'.repeat(200) }, {},
+      { status: 'rejected', errorCode: 'credits_required' },
+    ]) {
+      const driver = start();
+      expect(driver.line(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toBe('stop');
+      expect(driver.signal.aborted).toBe(true);
+      const result = driver.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false });
+      expect(result).toMatchObject({ kind: 'refused', field: !('status' in info) || info.status === 'future-status' ? 'rate-limit-status' : 'rate-limit' });
+      if (result.kind === 'refused') {
+        expect(result.detail!.length).toBeLessThanOrEqual(64); expect(result.detail).not.toContain('\n'); expect(result.detail).not.toContain('\u001b');
+        const body = headlessRejectionBodySchema.parse({ schemaVersion: 1, ...nativeQuotaRejection(result.limit!) });
+        for (const language of ['en', 'tr'] as const) {
+          const text = nativeQuotaText(body, language)!;
+          expect(text).not.toMatch(/\{\w+\}/u); expect(text).not.toContain('\n'); expect(text).not.toContain('\u001b');
+          if ('errorCode' in info) expect(text).toContain(language === 'en' ? 'extra credits' : 'ek kredi');
+          else if (info.status === 'future-status' || !('status' in info)) {
+            expect(text).toContain(language === 'en' ? 'Unknown limit status' : 'Bilinmeyen limit durumu');
+            expect(text).toContain('status' in info ? info.status! : '?');
+          } else {
+            expect(text).toContain(info.resetsAt === 1792773600 ? clockText(1792773600000) : language === 'en' ? 'unknown' : 'bilinmiyor');
+            expect(text).toContain(language === 'en' ? 'stopped this turn instead of continuing on paid extra usage' : 'bu turu ücretli ek kullanımla sürdürmek yerine durdurdu');
+            expect(text).toContain('deckent models login --connection claude-cli-subscription');
+            if (info.rateLimitType === 'five_hour') expect(text).toContain(language === 'en' ? 'five-hour window' : 'beş saatlik pencere');
+            if (info.rateLimitType === 'seven_day') expect(text).toContain(language === 'en' ? 'weekly window' : 'haftalık pencere');
+            if (info.rateLimitType === 'seven_day_opus') expect(text).toContain(language === 'en' ? 'weekly window for Opus' : 'Opus için haftalık pencere');
+            if (info.rateLimitType === 'seven_day_sonnet') expect(text).toContain(language === 'en' ? 'weekly window for Sonnet' : 'Sonnet için haftalık pencere');
+            if (info.rateLimitType?.startsWith('odd')) expect(text).toContain('odd__' + 'x'.repeat(19));
+          }
+        }
+      }
+    }
+    const missing = start();
+    expect(missing.line('{"type":"rate_limit_event"}')).toBe('stop');
+    expect(missing.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ field: 'rate-limit-status', limit: { status: '?', resetsAtMs: null } });
+    // Registry changes drive both hosts; a formerly allowed spelling must not bypass a new policy.
+    const quotaPolicy = { ...nativeQuotaPolicy(), claudeAllowedStatuses: ['new-allowed'], claudeRejectedStatuses: ['allowed'] };
+    expect(classifyClaudeRateLimit({ status: 'allowed' }, quotaPolicy, []).kind).toBe('quota');
+    expect(start(quotaPolicy).line(JSON.stringify(rateLimitLine('allowed', { overageStatus: 'allowed' })))).toBe('stop');
+    for (const language of ['en', 'tr'] as const) {
+      const legacy = nativeQuotaText({ schemaVersion: 1, refusal: 'quota', resetsAtMs: null }, language)!;
+      expect(legacy).toContain('/model');
+      expect(legacy).not.toContain('claude-cli-subscription');
+      const missingResult = missing.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false });
+      if (missingResult.kind !== 'refused') throw new Error('fixture');
+      const body = headlessRejectionBodySchema.parse({ schemaVersion: 1, ...nativeQuotaRejection(missingResult.limit!) });
+      expect(nativeQuotaText(body, language)).toContain(language === 'en' ? 'Unknown limit status' : 'Bilinmeyen limit durumu');
     }
   });
   it('fails closed on native/unknown Codex items and allows only the exact measured code-mode notice', () => {

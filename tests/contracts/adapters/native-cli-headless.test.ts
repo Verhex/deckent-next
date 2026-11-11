@@ -23,6 +23,21 @@ const body = (result: unknown) => JSON.parse(Buffer.from((result as { evidence: 
 const DENIED = headless.env.deny;
 
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native port with a fake CLI (no real CLI, no model call)', () => {
+  it('continues paid extra usage by default, preserves unknown statuses and honors the shared stop setting', async () => {
+    for (const info of [{ status: 'rejected', overageStatus: 'allowed' }, { status: 'allowed', overageInUse: true },
+      { status: 'new-status', isUsingOverage: true }]) {
+      const c = await connection({ steps: [initLine(), rateLimitLine(info.status, info), resultLine('ok')].map(line => ({ line })) });
+      const port = (paidExtraUsage: 'continue' | 'stop-at-limit') => createNativeCliHeadlessPort({ now: Date.now, isolation: testIsolation, paidExtraUsage });
+      const run = async (paidExtraUsage: 'continue' | 'stop-at-limit') => { const p = port(paidExtraUsage); return p.send(await p.prepare(c.profile, binding, request())); };
+      const result = await run('continue');
+      expect(result).toMatchObject({ schemaVersion: 1 });
+      if (info.status !== 'new-status') expect(result).toMatchObject({ native: { headless: { paidExtraUsage: { kind: 'overage', status: info.status } } } });
+      else expect(JSON.stringify(result)).not.toContain('paidExtraUsage');
+      const stopped = await run('stop-at-limit');
+      if (info.status === 'new-status') expect(stopped).toMatchObject({ schemaVersion: 1 });
+      else { expect(stopped.kind).toBe('rejected'); if (stopped.kind === 'rejected') expect(readHeadlessRejection(stopped.evidence)).toMatchObject({ refusal: 'quota', subtype: info.status }); }
+    }
+  });
   it('runs one guarded turn: built env, prompt never in argv, stdin message, 0600 prompt file removed, chat-shaped counters without cost', async () => {
     const saved = Object.fromEntries(DENIED.map(name => [name, process.env[name]]));
     for (const name of DENIED) process.env[name] = `leak-${name}`;

@@ -13,4 +13,4 @@ export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredCon
 export { invokePeerConfiguredAgentModel } from './internal/invoke.js';
 export { configuredBubblewrap } from './internal/native.js';
 export { invoke as invokeConfiguredModelWithOptions } from './internal/invoke.js';
-export { notifyNativeBuiltinPlugins } from './internal/plugin-notices.js';
+export { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './internal/plugin-notices.js';

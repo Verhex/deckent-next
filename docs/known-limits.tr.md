@@ -1,5 +1,7 @@
 # Bilinen sınırlar
 
+- **Claude abonelik sınırları ve ücretli ek kullanım.** Metin ve araç turları aynı registry sınıflamasını kullanır. Ücretli ek kullanım olmadan reddedilen istek durur; pencere, yerel sıfırlanma saati (yoksa bilinmiyor) ve bekleme/giriş/bağlantı seçenekleri gösterilir. Sağlayıcı ücretli ek kullanımı etkin veya reddedilen plan sınırında kullanılabilir bildirirse iki yol da varsayılan olarak devam eder. Başarılı terminal turu oturum ve kapsam başına bir bildirim gösterir; sınırlı durum/pencere/saat bilgisi çağrı metadata'sında, araç turunda teslim edilen bildirim mevcut tur notunda kalır. deckent sağlayıcının ücret tutarını göremez. İki yolu da durdurmak için `deckent config set models.headless.paidExtraUsage stop-at-limit` kullanın. Bilinmeyen/eksik durum araç turunu açık bir mesajla durdurur; metin sohbetinde bilgi olarak kalır. Bildirim mevcut eklenti yolunu izler: iptal edilen, başarısız veya süresi dolan tur başarı bildirimi göstermez. Sıkı politika preset'leri değişmedi. Model yanında yüzde ve Codex sınır sinyalleri kapsam dışıdır.
+
 Kabuk koruması tek tırnaklı `'$DECKENT_HOME/x'` sabit metnini de reddeder; ayrıştırmada tırnak bilgisi kaybolduğu için bu, tutucu bir yanlış rettir.
 
 Patch dışlamaları çalışma alanının okuma kimlik bilgisi tabanını da kullanır. `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` ve `*.jks` dahil kimlik bilgisi yolları artık patch dışında tutulur. Mevcut patch dışlamaları da geçerlidir.

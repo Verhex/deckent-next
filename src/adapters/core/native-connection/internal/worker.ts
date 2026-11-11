@@ -304,7 +304,7 @@ const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookR
   WebFetch: 'network', WebSearch: 'network', Task: 'agent', Agent: 'agent' };
 const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
 const NATIVE_TIMESTAMP_SCALE = 1000; // Native protocol reset timestamps are Unix seconds; contract uses milliseconds.
-export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
+export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly claudeAllowedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `bridgeTools` (F2-7): the class of each Deckent tool the worker reaches through the tool bridge, keyed by its Claude wire name
  * (`mcp__<server>__<tool>`); without it every MCP tool reads as `network` (a fetch with no target). */
 export interface NormalizerState { readonly quotaPolicy?: QuotaPolicy; sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[];

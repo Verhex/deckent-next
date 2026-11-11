@@ -7,10 +7,10 @@ import { field } from './field.js';
 export const MODEL_FIELDS = Object.freeze({
   /** C-MODELS (owner CLI review 2026-10-19, law 6): how many days before a switched-on model's announced retirement `deckent models` and
    * `doctor` warn. Display only: admission still refuses a retired model on its own day, whatever this says. */
-  models: field('config.field.models', { state: 'bound', consumers: ['src/surfaces/core/cli-models'] }, 'live', z.strictObject({
+  models: field('config.field.models', { state: 'bound', consumers: ['src/surfaces/core/cli-models', 'src/composition/core/agent-turn', 'src/composition/core/model-invocation'] }, 'live', z.strictObject({
     retirementWarningDays: persistedInteger().min(1).max(365).prefault(15),
     /** S3-3 (design §10) owner switch for the subscription Brain preview, retired by S3-5: the kind now connects wherever its isolation realm is
      * usable and nothing reads this key. It still parses (alpha.54 configs hold it; the strict schema must accept them) and stays protected. */
-    headless: z.strictObject({ preview: z.boolean().prefault(false) }).prefault({}),
+    headless: z.strictObject({ preview: z.boolean().prefault(false), paidExtraUsage: z.enum(['continue', 'stop-at-limit']).prefault('continue') }).prefault({}),
   }).prefault({})),
 });
