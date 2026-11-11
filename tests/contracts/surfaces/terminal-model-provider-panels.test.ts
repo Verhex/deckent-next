@@ -59,7 +59,9 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false, copy
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, copy ? createElement(CardCopyContext.Provider, { value: streamCardCopy(stdout, cardCopyLabels('en'), {}) }, stack) : stack) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
   return { frame: () => stdout.frame, all: () => stdout.all,
-    pointer: async (kind: PointerEvent['kind'], column: number, row: number) => { for (const listener of listeners) listener({ kind, column, row }); await settle(30); }, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+    pointer: async (kind: PointerEvent['kind'], column: number, row: number) => { for (const listener of listeners) listener({ kind, column, row }); await settle(30); }, // Hosted CI (PR #148 attempt 1, PR #149 node 26): a key written in the same turn as the frame that announced a list was dropped before the
+    // list's input effect was attached; one short turn first lets the committed screen take its keys.
+    press: async (keys: string, ms?: number) => { await settle(20); for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
     /** One stdin chunk, as a terminal sends a modified or coalesced key. */
     raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
