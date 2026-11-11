@@ -3,7 +3,7 @@
 [Türkçe](ai-install.tr.md) · [README](../README.md) · [Known limits](https://github.com/Verhex/deckent-next/blob/main/docs/known-limits.md)
 
 Use this guide when a person asks you to install deckent. Ask for their target folder and the verified package artifact.
-**deckent** runs on the person's infrastructure; installation does not authorize their business operations.
+With deckent, work runs on the person's own infrastructure; installation does not authorize their business operations.
 This guide was re-checked against the CLI help and source of the alpha.58 candidate (`f6b119d4f`), released on 2026-10-29 as `0ba89deab`; alpha.59 (released 2026-10-30 as `4d12d6fa8`) and the alpha.60 candidate change no CLI command it uses. It is not a claim that an npm package or the website has been released.
 For the last released version's source-install path, use the README.
 
@@ -17,7 +17,7 @@ check `node --version` and `npm --version`, then retry the install. Docker must 
 A local-model chat does not itself need a coding worker. Do not change OS permissions or install Docker with elevated privileges
 without handing the administrator's step back to the person.
 
-**deckent** is not on npm yet. Obtain an artifact whose origin and integrity the person trusts. Replace the example tarball path
+An npm package for deckent is not available yet. Obtain an artifact whose origin and integrity the person trusts. Replace the example tarball path
 below with that artifact's absolute path; the filename is a placeholder. Do not guess an npm package name or download an
 unverified substitute. Once an npm release exists, use its verified package identity and version.
 

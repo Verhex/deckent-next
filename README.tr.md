@@ -216,8 +216,10 @@ flowchart LR
    İlk abonelik onayı varsayılan olarak size ve AI aktörlerine açıktır; bağlı MCP istemcileri aynı AI kimliğini kullanır.
    Yalnız kendinize daraltabilirsiniz; arka plan/system kullanımı ayrı onay ister. 5. adım oturum modelini seçer.
 4. **Ücretli API çağrıları için bütçe belirleyin.** Her ücretli tur kapsamın ortak USD bütçesinden pay ayırır; bütçe
-   yoksa reddedilir. `/provider` içinde **Bütçe oluştur** satırından tutarı seçip onaylayın. Abonelik ve yerel model
-   yolları API anahtarı veya USD bütçesi istemez; aboneliklerde sağlayıcı planının sınırları geçerlidir.
+   yoksa reddedilir. `/provider` içinde bağlantıları geçip aşağıdaki **Bütçe oluştur** satırına inin veya listeyi süzmek
+   için `bütçe` yazın. Pencere **10 USD** seçili açılır; 5, 10, 25, 50 veya 100 USD seçin ya da **Başka tutar (ok tuşlarıyla)**
+   üzerinden 1–1000 arasında tam dolar belirleyip onaylayın. Abonelik ve yerel modeller API anahtarı veya USD bütçesi
+   istemez; aboneliklerde sağlayıcı planının sınırları geçerlidir.
 5. **Model seçin**: `/model` ile, yalnız bu oturum için ya da varsayılanınız olarak. Henüz kullanamayacağınız model, nedeni
    ve çözümüyle kilitli görünür.
 6. **Çalışın.** İsteğinizi düz bir cümleyle söyleyin. Araç çağrıları kurulumunuzun policy'sine ve izin modunuza uyar; size
@@ -273,12 +275,13 @@ flowchart LR
   L --> R["Git referansı<br/><sub>dalı ilerletmek ayrı</sub>"]
 ```
 
-En az bir commit'i olan Git projesinde ve bağlı bir modelle başlayın; USD bütçesi yalnız ücretli API için gerekir.
-Abonelikte `/provider` ya da `deckent models login --connection <kind>` ile giriş yapıp deckent üzerinden bağlanın;
-işçi şablonunu o bağlantıya bağlayın. Bu ayrı bir CLI giriş alanıdır; mevcut host CLI girişi işçiyi hazır yapmaz.
-Native Claude/Codex işçileri Linux/WSL bubblewrap ister; uygun Docker profilleri Docker ve imaj ister. Claude'un eski
-Docker abonelik yolu reddedilir; ayrı ChatGPT tarayıcı girişi (SIWC) işçisi bekletilir. Gerçek hesap ve sıfırdan ilk iş
-kabulü açıktır ([bilinen sınırlar](docs/known-limits.tr.md)).
+En az bir commit'i olan Git projesinde ve bağlı bir modelle başlayın. Claude veya ChatGPT aboneliği için `/provider`
+içinden giriş yapıp bağlanın, ardından işçiyi hazırlamak için `/setup` açın. Bu Claude/Codex CLI işçileri Linux/WSL'de
+bubblewrap içinde çalışır ve Docker imajı istemez. CLI'a deckent dışında giriş yapmak bu kurulumu tamamlamaz.
+Uygun bir Docker işçi profili kullanıyorsanız `/setup` onun imajını hazırlar veya seçer; imaj derlemek Docker ve ağ
+erişimi gerektirir.
+USD bütçesi yalnız ücretli API çağrılarına gerekir. Gerçek hesapla ve sıfırdan kurulumda ilk iş kontrolleri henüz
+tamamlanmadı ([bilinen sınırlar](docs/known-limits.tr.md)).
 
 ### Bir kez yapılan kurulum
 
@@ -288,46 +291,23 @@ Fable 5.2 için [Claude Code 2.1.321 veya sonrası](https://code.claude.com/docs
 Fable 5.1 katalogda seçilebilir kalır; katalog kaydı ve öneriler modeli etkinleştirmez.
 Fable 5.1'i bir rolde kullanmak için `deckent models roles set` ile o rolü açıkça atamanız gerekir.
 
-Yürütme ayarlarını, iş türünü ve havuzu hazırlamadan önce işçi yolunu seçin. Bağlı Claude/Codex CLI işçileri Docker imajı
-olmadan bubblewrap içinde çalışır. Uygun Docker işçileri imaj ister; `/setup` bu yolu kendi terminalinizde kartlarla
-hazırlar. Her adım yalnız onaydan sonra yazar. Bazı ikinci sağlayıcı kurulum yolları hâlâ imaj ister;
-[bilinen sınırlara](docs/known-limits.tr.md) bakın.
+`/setup` içinde işçiyi, yürütme ayarlarını, iş türünü ve işçi havuzunu seçin. Her adım neyin değişeceğini gösterir ve
+yazmadan önce sorar. İmajı yalnız Docker işçisi için derleyin veya seçin; bazı ikinci sağlayıcı kurulumları hâlâ imaj
+ister ([bilinen sınırlar](docs/known-limits.tr.md)).
 
 ```sh
-# 1. Projenizde kurun ve kurulumu açın. İşçi yolunu, yürütme ayarlarını, iş türünü ve havuzu seçin.
-#    İmajı yalnız Docker yolu için derleyin veya seçin. /setup adımları sonra yeniden açar.
+# Projenizi kurun ve terminali açın; /setup işçi adımlarına geri döner.
 deckent init
 deckent
-#    Terminal olmadan doctor eksik her adımı tam komutuyla yazar (aşağıya bakın):
+# Terminal dışında eksik adımları ve komutlarını görün.
 deckent doctor
-
-# 2. Servis zaten çalışıyorduysa yeni ayarları okusun diye yeniden başlatın
+# Servis zaten çalışıyorduysa kurulumdan sonra yeniden başlatın.
 deckent runtime restart
 ```
 
-Bağlı abonelik için `deckent coding` içinden tam profil kimliğini bulup onunla registry önizleyin:
-
-```sh
-deckent coding
-deckent init registry --scope my-project --provider <cli-id> --connection <profile-id> --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --preview
-deckent init pool --scope my-project --preview
-```
-
-`<cli-id>` bağlantının CLI kimliğiyle (`claude` veya `codex`) aynı olmalıdır. Mevcut şablonda `deckent coding template --connection <profile-id>` bağlı native işçiyi seçer.
-Uygun Docker profili için `/setup` içinde imajı hazırlayıp önizleyin:
-
-```sh
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
-```
-Derleme Docker ve ağ ister; kart boyut ve süre sınırını söyler. Cursor ayrıca katalog adımı ister.
-
-Her `--preview` neyin değişeceğini gösterir ve hiçbir şey yazmaz; yazmak için aynı komutu `--apply` ile çalıştırın.
-`--discovery repository` işçi CLI'ının deponuzun kendi talimat dosyalarını, hook'larını ve MCP ayarlarını yüklemesine
-izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değeri, her
-önizlemenin neyi kontrol ettiğini ve güncel ilk kurulum policy'sinden önce kurulmuş bir kurulumda ne yapılacağını
-[işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#adım-adım-ilk-iş-kurulumu) anlatır.
+Komut satırından kurulum, mevcut işçi şablonu, Cursor'ın katalog adımı veya depo talimatı ayarları için
+[işletim başvurusunu](.deckent/docs/architecture/operator-reference.tr.md#adım-adım-ilk-iş-kurulumu) kullanın.
+Bağlantı kimlikleri, önizlemeler ve eski kurulumların adımları orada anlatılır.
 
 ### İşi çalıştırın
 
@@ -567,11 +547,12 @@ anlatır.
 - **ERP ya da CRM bağlayıcısı yok.** Operasyon sözleşmesi ve genel bir HTTP hedefi var; ürün bağlayıcıları yok.
 - **Teslim hiçbir zaman kendiliğinden olmaz.** Bir kural kuyruktaki her iş için teslim *edip etmeyeceğini* kaydeder ama yalnız
   tavsiye verir; her teslim, dalı ilerletme ve geri alma sizin `y`'nizi bekler.
-- **Kodlama içeriği bağımsız doğrulanmaz.** Kabul süreç sonucunu, zorunlu kalıcı kanıtı/raporu ve beyan edilmiş kabul
-  kontrollerini denetler; içeriğin isteğinizi karşılayıp karşılamadığını bağımsız değerlendirmez.
-- **Abonelik sınırları yola bağlıdır.** Claude ve ChatGPT (Codex CLI) bağlantıları Linux/WSL bubblewrap alanında araçlı
-  sohbet, native işçi ve Brain yollarını sunar. Ayrı tarayıcı girişi (SIWC) işçisi bekletilir. Gerçek hesap, birleşik sürüm
-  ve beta kabulü ayrıdır; başarılı giriş işçinin hazır olduğunun kanıtı değildir.
+- **Kodlama içeriği bağımsız doğrulanmaz.** Kontroller işçinin nasıl bitirdiğine, saklanan yamaya, zorunlu rapora ve
+  raporladığı kabul kontrollerine bakar; içeriğin isteğinizi karşılayıp karşılamadığını bağımsız değerlendirmez.
+- **Aboneliklerin sınırları var.** Claude ve ChatGPT (Codex CLI) bağlantıları Linux/WSL'de bubblewrap içinde araçlı sohbet,
+  kodlama işçisi ve Brain sunar. Claude'un eski Docker abonelik seçeneği reddedilir. Ayrı ChatGPT tarayıcı girişi sohbete
+  açıktır, ancak onun işçisi henüz etkin değildir. Giriş yapmak tek başına işçiyi hazır yapmaz; gerçek hesap kontrolleri,
+  tamamlanmış sürümde uçtan uca kullanım ve beta kabulü hâlâ açıktır.
 - **Platformlar.** Native Windows desteklenmiyor. macOS'ta yerel runtime servisi henüz çalışmıyor (soketi yalnız Linux'ta
   var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dalı ilerletme, geri alma ve anahtar izni yalnız Linux'ta
   (WSL dahil) bulunan bir terminal tanığı ister, diğer sistemlerde reddedilir. arm64 paketlenmiyor. Docker işçisi host
@@ -584,13 +565,14 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Güncel aday beta.1'dir; alpha.64 son yayımlanmış alpha'dır. Beta.1; abonelikle araçlı sohbet, bağlı native işçiler,
-Brain ve öneri kartları üzerine kurulum ve hız düzeltmeleri hazırlar. Sekiz kabul kapısı beta sürecinde açık kalır;
-yayın bunları kapatmaz. Sonraki beta sürümleri ürünü dogfood ve gerçek yolculuklarla iyileştirir.
-Ayrı SIWC işçisi, Hub dağıtımı ve native platform kabulü kendi kanıtını bekler. Çekirdek katman anahtarları yönetilen
-etkinleştirmeye kadar kapalıdır. Masaüstü kabul edilmiş orkestrasyon önkoşullarını izler; genel tanıtım owner'ın
-masaüstü kabulünü bekler. Tarihsel alpha değişiklikleri ve ölçümleri [alpha günlüğünde](CHANGELOG-alpha.md) ve
-[tamamlanan planda](COMPLETED-PLAN.md) kalır; bu aday için süre garantisi değildir.
+Beta.1 adayı; abonelikle araçlı sohbet, kodlama işçileri, iş planları ve onay kartları sunan terminale kurulum ve hız
+iyileştirmeleri getirir; alpha.64 son yayımlanmış alpha'dır.
+Beta boyunca bu özellikler gerçek işlerde iyileştirilecek, sıfırdan kurulum dahil uçtan uca kullanım kontrol edilecek;
+sekiz beta kabul koşulunun tamamı hâlâ açıktır.
+npm paketi planlanıyor; ayrı ChatGPT tarayıcı girişi işçisi, ortak paket Hub'ı ve native Windows/macOS desteği hazır
+sayılmadan önce doğrulanmayı bekliyor.
+Masaüstü geliştirmesi planlanan iş koordinasyonu özelliklerine bağlıdır; genel tanıtım proje sahibinin bu uygulamayı
+kabul etmesini bekler, ayrı Enterprise sürümü de şirket yönetimi ve ERP bağlayıcılarını getirecektir.
 
 ```mermaid
 flowchart LR
