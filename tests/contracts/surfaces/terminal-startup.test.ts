@@ -6,6 +6,10 @@ import { terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES } from '#adapters/index.js';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { PassThrough, Writable } from 'node:stream';
+import { createElement } from 'react';
+import { Box, measureElement, Text, type DOMElement } from 'ink';
+import { openTerminalHost } from '#surfaces/core/terminal-host/index.js';
+import { useTerminalHandover } from '#surfaces/core/terminal-render-ink/index.js';
 import { runTerminalWorkline } from '#surfaces/core/terminal/index.js';
 import { worklineLabels } from '#surfaces/core/terminal-labels/index.js';
 import { settle, until } from '../support/workline-harness.js';
@@ -21,7 +25,11 @@ const plain = resolveWorklinePalette('none');
 it('keeps one startup mark and help region through width and height changes on the production terminal host', async () => {
   class Tty extends Writable {
     isTTY = true; rows = 30; columns = 110; text = '';
-    override _write(chunk: Buffer, _encoding: string, done: () => void) { this.text += chunk.toString('utf8'); done(); }
+    holdFlush = false; releaseFlush: (() => void) | undefined;
+    override _write(chunk: Buffer, _encoding: string, done: () => void) {
+      this.text += chunk.toString('utf8');
+      if (this.holdFlush && chunk.length === 0) { this.holdFlush = false; this.releaseFlush = () => { this.releaseFlush = undefined; done(); }; } else done();
+    }
   }
   for (const banner of ['full', 'off'] as const) {
     const stdout = new Tty(), stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false,
@@ -31,6 +39,8 @@ it('keeps one startup mark and help region through width and height changes on t
     let resumeStream!: () => void, finishTurn!: () => void;
     const streamed = new Promise<void>(resolve => { resumeStream = resolve; });
     const decided = new Promise<void>(resolve => { finishTurn = resolve; });
+    let finishEditor!: () => void, finishSetup!: () => void, editorOpen = false, setupOpen = false;
+    const editor = new Promise<void>(resolve => { finishEditor = resolve; }), setup = new Promise<void>(resolve => { finishSetup = resolve; });
     const decisions: string[] = [];
     let offset = 0;
     const replay = async () => {
@@ -54,6 +64,8 @@ it('keeps one startup mark and help region through width and height changes on t
       stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, signal: controller.signal,
       context: { installationId: 'i', projectId: 'p', scopeId: 's' }, target: 'scope', systemPrompt: 'system', historyMessages: 40,
       completeTurn: async () => 'unused', errorText: String, decisionArmMs: 0,
+      externalEditor: { edit: async () => { editorOpen = true; await editor; return { kind: 'unchanged' }; } },
+      onboarding: { modelDraft: 'unused', open: async () => { setupOpen = true; await setup; return null; } },
       streamTurn: async function* (_messages, _signal, turn) {
         turn?.onTurnBound?.({ scopeId: 's', sessionId: turn.sessionId ?? null, turnId: 'resize-turn', phase: 'command-generated' });
         yield { kind: 'text', text: 'STREAM-BEFORE\n' }; await streamed;
@@ -107,9 +119,68 @@ it('keeps one startup mark and help region through width and height changes on t
       const final = await replay(); expect(final).toContain('BUSY-DRAFT-KEPT|'); expect(final).toContain('STREAM-DONE');
       expect(final).not.toContain('RESIZE-CARD'); expect(decisions).toEqual(['deny']);
       expect(stdout.text.split('\u001b[?1049h')).toHaveLength(2);
+      // Real editor and /setup callers must bracket the whole Ink suspension, including its async resume.
+      for (const kind of ['editor', 'setup'] as const) {
+        if (kind === 'editor') stdin.write('\u0007');
+        else { stdin.write('\u0015'); await settle(40); stdin.write('/setup\r'); }
+        await until(() => kind === 'editor' ? editorOpen : setupOpen, `${kind} handed over`);
+        const held = stdout.text.length;
+        resize(60, 30); resize(110, 40); await settle(160);
+        expect(stdout.text.slice(held), `${kind} owns the screen`).toBe('');
+        const returned = stdout.text.length;
+        if (kind === 'editor') finishEditor(); else finishSetup();
+        await until(() => stdout.text.slice(returned).includes(CLEAR_VISIBLE_SCREEN), `${kind} repaint after return`); await settle(120);
+        expect(stdout.text.slice(returned).split(CLEAR_VISIBLE_SCREEN)).toHaveLength(2);
+        const text = await replay(); expect(text.split('Enter send')).toHaveLength(2);
+        if (kind === 'editor') expect(text.split('BUSY-DRAFT-KEPT|')).toHaveLength(2);
+      }
     } finally {
-      resumeStream(); finishTurn();
+      resumeStream(); finishTurn(); finishEditor(); finishSetup();
       resize(60, 30); controller.abort(); await running; await settle(40);
+      expect(stdout.listenerCount('resize')).toBe(0);
+      const closed = stdout.text; stdout.emit('resize'); await settle(40); expect(stdout.text).toBe(closed);
+      screen.dispose();
+    }
+  }
+  // Exercise the public handover hook on the same production host, including a flush held after the hidden frame.
+  for (const pending of [false, true]) {
+    const stdout = new Tty(), stdin = Object.assign(new PassThrough(), { isTTY: true,
+      setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const screen = new BeuserScreenRenderer({ columns: 110, rows: 30, scrollback: 100 }, 1_000_000);
+    let handover!: ReturnType<typeof useTerminalHandover>, finish!: () => void, entered = false, offset = 0, frame: DOMElement | null = null;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    function View() { handover = useTerminalHandover(); return createElement(Box, { ref: node => { frame = node; } }, createElement(Text, null, 'OWNED-FRAME')); }
+    const host = await openTerminalHost({ palette: plain, view: () => createElement(View),
+      stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream });
+    const replay = async () => {
+      const text = stdout.text.slice(offset); offset = stdout.text.length;
+      await screen.write(Buffer.from(text.replaceAll('\n', '\r\n'))); return screen.snapshot().text;
+    };
+    const resize = (columns: number, rows: number) => {
+      screen.resize(columns, rows); Object.assign(stdout, { columns, rows }); stdout.emit('resize');
+    };
+    let handed: Promise<unknown> | undefined;
+    try {
+      await host.flushed(); expect(await replay()).toContain('OWNED-FRAME');
+      if (pending) {
+        stdout.holdFlush = true; resize(60, 30);
+        await until(() => Boolean(stdout.releaseFlush), 'hidden-frame flush held');
+        expect(measureElement(frame!).height, 'subtree hidden before the clear').toBe(0);
+      }
+      handed = handover('OTHER-SURFACE', async () => { entered = true; await gate; });
+      await until(() => entered, 'terminal handed over');
+      await replay();
+      if (pending) stdout.releaseFlush?.();
+      const start = stdout.text.length;
+      resize(60, 30); resize(110, 40); await settle(160);
+      expect.soft(stdout.text.slice(start), `no repaint bytes while handed over (pending=${pending})`).toBe('');
+      const returned = stdout.text.length; finish(); await handed; await settle(160);
+      expect.soft(stdout.text.slice(returned).split(CLEAR_VISIBLE_SCREEN), `one repaint after return (pending=${pending})`).toHaveLength(2);
+      expect.soft((await replay()).split('OWNED-FRAME'), stdout.text.slice(returned)).toHaveLength(2);
+      // Ink re-enters once on resume; ResizeFrame must never add another alternate-screen entry.
+      expect(stdout.text.split('\u001b[?1049h')).toHaveLength(3);
+    } finally {
+      stdout.releaseFlush?.(); finish(); await handed; await host.close();
       expect(stdout.listenerCount('resize')).toBe(0);
       const closed = stdout.text; stdout.emit('resize'); await settle(40); expect(stdout.text).toBe(closed);
       screen.dispose();
