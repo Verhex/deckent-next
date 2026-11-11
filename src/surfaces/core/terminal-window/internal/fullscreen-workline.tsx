@@ -166,7 +166,7 @@ export function ChatViewport({ blocks, live, active, labels, onSearch, onClick }
     <Box ref={innerRef} flexDirection="column" flexShrink={0}>
       {lines.map((line, index) => {
         const range = shown ? lineRange(blocks, shown.anchor, shown.focus, at[index]!.key, at[index]!.line) : null, text = line === '' ? ' ' : line;
-        return <Text key={index} wrap="truncate">{range ? highlightCells(text, range.start, range.end) : text}</Text>;
+        return <Text key={index} wrap="truncate">{range ? highlightCells(text, range.start, range.end, palette.selection) : text}</Text>;
       })}
       {search && labels.search ? <Text {...palette.accent} wrap="truncate-end">{fillTemplate(labels.search, { query: search.query, state: search.none ? labels.searchNone ?? '' : '' })}</Text>
         : below === null ? live : <Text {...palette.accent} wrap="truncate-end">{fresh > 0 && labels.newMessages

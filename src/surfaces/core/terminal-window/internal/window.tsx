@@ -264,7 +264,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       </Box>
       {noteText === null ? null : <Text {...palette.warning} wrap="truncate-end">{`! ${noteText}`}</Text>}
       {rows.slice(first, first + visible).map((row, index) => (ends => { const range = picked ? cardRowRange(picked, first + index) : null;
-        return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
+        return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end, palette.selection) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
       {footer ? <WindowInputContext.Provider value={acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}

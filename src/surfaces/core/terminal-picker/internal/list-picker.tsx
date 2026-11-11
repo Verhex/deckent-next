@@ -137,16 +137,17 @@ export function ListPicker(props: {
       const prefix = `${selected ? '>' : ' '} ${row.blocked !== null ? lock : ' '} `;
       const label = `${row.label}${row.section ? ` ${arrow}` : ''}`;
       const detail = `${row.detail ? `  ${row.detail}` : ''}${row.blocked !== null ? `  [${props.labels.blocked}]` : ''}`;
-      // Keep the name in terminal foreground even when selected; colour only the state glyph and detail.
+      // Brand selection uses normal foreground throughout; the glyph and words still carry the state.
       const room = Math.max(0, width - cells(prefix + (row.glyph ? `${row.glyph} ` : '') + label));
-      return <Text key={`${row.id}:${at}`} wrap="truncate"><Text {...(selected ? { bold: true } : {})}>{prefix}</Text>
-        <Text {...palette[row.tone]}>{row.glyph ? `${row.glyph} ` : ''}</Text><Text>{label}</Text>
-        <Text {...palette[row.tone]}>{room > 0 ? truncateEnd(detail, room, glyphs.ellipsis) : ''}</Text></Text>;
+      const stateTone = selected && palette.selection.backgroundColor ? {} : palette[row.tone];
+      return <Text key={`${row.id}:${at}`} wrap="truncate" {...(selected ? palette.selection : {})}><Text>{prefix}</Text>
+        <Text {...stateTone}>{row.glyph ? `${row.glyph} ` : ''}</Text><Text>{label}</Text>
+        <Text {...stateTone}>{room > 0 ? truncateEnd(detail, room, glyphs.ellipsis) : ''}</Text></Text>;
     }
     const text = `${selected ? '>' : ' '} ${row.blocked !== null ? lock : ' '} ${row.label}${row.section ? ` ${arrow}` : ''}${row.detail ? `  ${row.detail}` : ''}${row.blocked !== null ? `  [${props.labels.blocked}]` : ''}`;
     const tone = selected ? palette.selection : row.blocked !== null ? palette.muted : {};
     return <Text key={`${row.id}:${at}`} wrap="truncate" {...tone}>{modelProviderSpans(truncateEnd(text, width, glyphs.ellipsis), row.identity)
-      .map((part, index) => <Text key={index} {...spanStyle(part, palette)}>{part.text}</Text>)}</Text>;
+      .map((part, index) => <Text key={index} {...(selected && palette.selection.backgroundColor ? {} : spanStyle(part, palette))}>{part.text}</Text>)}</Text>;
   });
   if (embedded) {
     // One fixed height: the page (padded), one status row (the filter, the position, or blank), the reason rows (blank when none).

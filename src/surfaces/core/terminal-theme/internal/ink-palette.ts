@@ -5,13 +5,13 @@ import { THEME_PALETTES, THEME_TEXT_MINIMUM, type PaletteRole, type PaletteTheme
  * line (`userBar` rail, `userLabel`), the answer heading (`assistantLabel`), worker cards, windows, selection, diff marks and the mode indicator.
  * SW-1 (2026-10-08): information windows (`sectionHeader`, bold `keyLabel`, `mutedId`, the `chipOk`/`chipWarn`/`chipFail` states) and the
  * system summary line (`systemLabel`, `systemRail`), which must never look like the assistant's answer. TEMA S6 A (2026-10-30): connection
- * states (`stateConnected` dark green, `stateDisconnected` orange), always with a glyph and a word. */
+ * states (`stateConnected` success, `stateDisconnected` warning), always with a glyph and a word. */
 export type WorklineInkRole = 'model' | 'provider' | 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
   | 'userBar' | 'userLabel' | 'assistantLabel' | 'workerCard' | 'windowBorder' | 'windowTitle' | 'focus' | 'selection' | 'diffAdded' | 'diffRemoved'
   | 'modeIndicator' | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'systemLabel' | 'systemRail'
   | 'stateConnected' | 'stateDisconnected' | 'strong' | 'emphasis' | 'strike';
 
-export type InkRoleStyle = Readonly<{ color?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
+export type InkRoleStyle = Readonly<{ color?: string; backgroundColor?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
 
 export type WorklineInkPalette = Readonly<Record<WorklineInkRole, InkRoleStyle>>;
 
@@ -89,16 +89,18 @@ function readable(theme: PaletteTheme, role: PaletteRole, tier: ColorTier, backg
 function roleStyle(theme: PaletteTheme, role: PaletteRole, tier: ColorTier, background: string | undefined): InkRoleStyle {
   if (tier === 'none') return {};
   const entry = THEME_PALETTES[theme][role];
-  const style: { color?: string; bold?: boolean; underline?: boolean; inverse?: boolean } = {};
+  const style: { color?: string; backgroundColor?: string; bold?: boolean; underline?: boolean; inverse?: boolean } = {};
   const color = tierColor(theme, role, tier);
-  if (color !== undefined && (background === undefined || readable(theme, role, tier, background))) style.color = color;
+  const selectionBackground = entry.background && (tier === 'truecolor' || tier === 'ansi256');
+  if (selectionBackground && color !== undefined) style.backgroundColor = color;
+  else if (color !== undefined && (background === undefined || readable(theme, role, tier, background))) style.color = color;
   if (entry.attrs.includes('1')) style.bold = true;
   if (entry.attrs.includes('4')) style.underline = true;
-  if (entry.attrs.includes('7')) style.inverse = true;
+  if (entry.attrs.includes('7') && !selectionBackground) style.inverse = true;
   return style;
 }
 
-/** `theme` picks the truecolor/256 values and the ansi16 set; the dark theme is the palette before themes existed. `background` (`#RRGGBB`, the
+/** `theme` picks the truecolor/256 values and the ansi16 set; dark is the default. `background` (`#RRGGBB`, the
  * terminal's OSC 11 answer) turns on the contrast guard. */
 export function resolveWorklinePalette(tier: ColorTier, theme: PaletteTheme = 'dark', background?: string): WorklineInkPalette {
   const out: Partial<Record<WorklineInkRole, InkRoleStyle>> = {};

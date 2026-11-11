@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { highlightCells, mouseFilteredInput, osc52Copy, selectedText, takeMouseReports, type PointerEvent, type PointerListener, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
-import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import { resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 /**
@@ -37,6 +37,12 @@ describe('selection model', () => {
   it('highlights the selected cells in reverse video and keeps the reverse across the line\'s own colour codes', () => {
     expect(highlightCells('ab\u001b[2mcd\u001b[22mef', 1, 4)).toBe('a\u001b[7mb\u001b[2m\u001b[7mcd\u001b[22m\u001b[7me\u001b[27mf');
     expect(highlightCells('plain', 0, 4)).toBe('\u001b[7mplain\u001b[27m');
+    const styled = 'a\u001b[31mb\u001b[0mc';
+    expect(highlightCells(styled, 1, 1, resolveWorklinePalette('truecolor').selection))
+      .toBe('a\u001b[31m\u001b[0m\u001b[48;2;21;59;57m\u001b[1mb\u001b[0m\u001b[31m\u001b[0mc');
+    expect(highlightCells('plain', 0, 4, resolveWorklinePalette('ansi256', 'light').selection))
+      .toBe('\u001b[0m\u001b[48;5;254m\u001b[1mplain\u001b[0m');
+    expect(highlightCells('plain', 0, 4, resolveWorklinePalette('ansi16').selection)).toBe('\u001b[7mplain\u001b[27m');
   });
 });
 
