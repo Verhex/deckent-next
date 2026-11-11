@@ -8,7 +8,7 @@ import { DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, projectResultBrief, ta
 import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { runDetailLines } from '#surfaces/core/terminal-work/index.js';
+import { openingWorkText, runDetailLines } from '#surfaces/core/terminal-work/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
 
@@ -150,13 +150,20 @@ describe('SW-2 job windows', () => {
     expect(captured.entries).toEqual([]); await close(view); onlySummary(); expect(view.stdout.frame).not.toContain('MONITOR-BODY');
   });
   it('the opening snapshot leaves one system line for running work (I-5), never cards, and the window shows the rows', async () => {
+    const report = await ports().listWorkers(), source = report.sources[0]!, worker = source.workers[0]!;
+    const workers = { ...report, sources: [{ ...source, workers: [worker,
+      { ...worker, taskId: 'unknown-task', process: 'unknown' as const, terminal: null, files: null },
+      { ...worker, taskId: 'released-task', custody: 'released' as const }] }] };
     const ledger = ports({ followEvents: async function* (signal) {
       yield { control: 'start', scopeId: 'scope-a', cursors: { worker: 0, run: 0, approval: 0 } };
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
-    }, readSurfaceSnapshot: async () => ({ scopeId: 'scope-a', denied: [], runs: [run], workers: await ports().listWorkers(), approvals: [] }) });
+    }, readSurfaceSnapshot: async () => ({ scopeId: 'scope-a', denied: [], runs: [run], workers, approvals: [] }) });
     const view = await open('/tasks', ledger);
     await until(() => view.stdout.frame.includes('Fix checkout') && view.stdout.frame.includes('Task 1'), 'snapshot window');
-    expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work running: 1 runs, 1 workers · /runs /workers' });
+    expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work: 1 unfinished runs, 1 active workers, 1 workers unknown · /runs /workers' });
+    expect(openingWorkText([], 0, EN.jobs!, 1)).toBe('Work: 0 unfinished runs, 0 active workers, 1 workers unknown · /runs /workers');
+    expect(openingWorkText([], 0, workSurfaceLabels('tr').jobs!, 1)).toBe('İş durumu: 0 bitmemiş iş, 0 etkin işçi, 1 durumu bilinmeyen işçi · /runs /workers');
+    expect(openingWorkText([], 0, EN.jobs!, 0)).toBeNull();
     view.stdin.write(ESC); await until(() => captured.entries.length === 2, 'close summary');
     expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
