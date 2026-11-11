@@ -4,7 +4,7 @@ description: Relentless interview in rounds that sharpens a plan or idea until e
 disable-model-invocation: true
 ---
 
-# Deckent grill
+# deckent grill
 
 The owner wants a plan or idea stress-tested. Interview until there is a shared understanding. This skill asks;
 it admits no work and grants no authority. Adapted from mattpocock/skills `grilling` (MIT, see

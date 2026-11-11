@@ -1,4 +1,4 @@
-# Deckent — product development contract
+# deckent — product development contract
 
 The complete stable contract for Next work. Dated owner rules live in the laws
 (`.deckent/docs/core-memory/`) and the ARCHITECTURE decision log; this file points to them.

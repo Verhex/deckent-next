@@ -1,9 +1,9 @@
 ---
 name: deckent-skill-authoring
-description: Write or edit Deckent agent instructions - a SKILL.md, its agents/openai.yaml, a rule file under .claude/.codex/.cursor rules, or a doc an agent reaches by a pointer. Covers trigger-first descriptions, user- vs model-invocation, pruning and router upkeep.
+description: Write or edit deckent agent instructions - a SKILL.md, its agents/openai.yaml, a rule file under .claude/.codex/.cursor rules, or a doc an agent reaches by a pointer. Covers trigger-first descriptions, user- vs model-invocation, pruning and router upkeep.
 ---
 
-# Deckent skill authoring
+# deckent skill authoring
 
 Apply `deckent-next-refactor`. This skill shapes instruction text; it grants no authority and never moves a
 dated owner rule into a skill. Skills point to the law or record that owns a rule; when a rule changes, the
@@ -13,7 +13,7 @@ Adapted from mattpocock/skills `writing-for-agents` (MIT, see [LICENSE-mattpococ
 ## The description is a context pointer
 
 A model-invoked skill's `description` sits in every agent's context on every turn (Claude, Codex, Cursor and
-Deckent's own Claude workers, which clone the repository). It decides when the skill is reached.
+deckent's own Claude workers, which clone the repository). It decides when the skill is reached.
 
 - Lead with the trigger: the moment or object the agent will actually see ("Plan one owner-admitted outcome",
   "Write or edit ... SKILL.md"). Front-load the leading word; one trigger per distinct branch.

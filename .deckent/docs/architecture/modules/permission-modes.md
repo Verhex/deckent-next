@@ -97,7 +97,7 @@ has no OS boundary for any posture.
 call a full-auto relaxation let run (`ShellCallAuthority 'full-auto'`: an audited `permission-mode` event of mode full-auto; tier past the
 narrow set) in a realm that can keep writes aside (`ShellRealmResolution.writeSets`: bubblewrap whose selected launcher has the overlay
 options — `launcher.overlay` from the probe's version reading, ≥ 0.11.0; BWRAP-SELECT merge, eleventh batch) runs with the project as an overlay (`--overlay-src P --overlay <upper> <work>
-P`; `.git`, the floor's existing paths and the deny masks are bound over it as before). The upper/work directories are Deckent's own (0700;
+P`; `.git`, the floor's existing paths and the deny masks are bound over it as before). The upper/work directories are deckent's own (0700;
 host-shell `sandboxWriteSetRoot`: the project data root's `fileEffects/sandbox-writes`, else the global state root's; the first whose real path
 neither holds nor sits in the project — bubblewrap: overlay layers may not nest; none → the read-only posture with a result note). When the
 command exits (any code), the native lister `shell-overlay-scan` (reads the kernel's `user.overlay.opaque`; Node has no xattr API) and
@@ -154,7 +154,7 @@ the project's git-tracked files is shown and audited — never blocked, never a 
   from the project root with a fixed environment: no system/global config, `core.fsmonitor=false`, `core.hooksPath=/dev/null`,
   `GIT_OPTIONAL_LOCKS=0`. It reads the index only and hashes no content, so no filter or other repository-configured program runs.
   Each listed file is `lstat`ed before and after the call. Present before and gone after = deleted; inode, size, mtime or ctime
-  changed = overwritten. No git process runs after the command, so a rewritten `.git` cannot hide anything or make Deckent run anything.
+  changed = overwritten. No git process runs after the command, so a rewritten `.git` cannot hide anything or make deckent run anything.
 - **Output (protocol v18: result text only).** The result's first line starts with `[deckent] run_shell: tracked: deleted=N
   overwritten=M; …`, the first metadata after the tool prefix and before the realm marker, exit status and command, so neither the
   command's text nor its output can supply it. The finished tool line reads the counts only from there (`trackedChangesOfToolResult`)
@@ -185,7 +185,7 @@ configuration and process environments, and an existing conventional `~/.deckent
 product state still masked by the deny walk) — no name, existing or new, is created there (`.deckent/mcp.json` EROFS); a root outside it is an
 empty tmpfs remounted read-only after the scratch bind (bubblewrap copy, user MCP registry/trust, secrets hidden; man page: `--remount-ro`
 changes only that mount point). Owner Y (cef933a7, 2026-09-30): the sealed `.deckent` root takes no new name, but an EXISTING subdirectory
-that is not Deckent's state (`hardFloor.product`: every registry resource under the turn's and the default layout, the data root, the
+that is not deckent's state (`hardFloor.product`: every registry resource under the turn's and the default layout, the data root, the
 bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads; denied paths and protected anchors never) is bound writable
 over it — a tracked `.deckent/docs` checks out clean. Commits e376f546 + 46148e4f + cef933a7. A missing root is created empty (0700) first
 (bwrap would otherwise `mkdir` it on the host, measured 0.13). The Core credential patterns are masked in HOME over a bounded walk (depth 3,
@@ -199,7 +199,7 @@ bypass the write set) or read-only project (EROFS) view pins nothing. An owner-a
 HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`) refuses full-access shell calls with `SHELL_SANDBOX_UNAVAILABLE`, under every realm selection, including explicit host mode (W3, owner 2026-10-09). MCP server views are unchanged (`longLivedWritePosture`). Cost (this
 machine, empty project, wall clock with view resolution): open ≈ 55–63 ms, closed ≈ 11–13 ms. Open limits: HOME credential masking is by
 pattern and depth-bounded (deeper or hard-linked aliases outside the masks may remain open; a matched symlink credential carrier refuses the open view); the shared `credential-paths.json` registry now masks gh, Docker, kube, Codex, Git credentials, GnuPG and desktop keyrings and common cloud CLI directories; arbitrary custom locations and renamed SSH keys still require separate isolation; other projects' state and a
-missing `~/.deckent` under an override are not sealed; minimal `/dev`; Landlock has no open view; the view seals Deckent's state, not its
+missing `~/.deckent` under an override are not sealed; minimal `/dev`; Landlock has no open view; the view seals deckent's state, not its
 code (the service's node under HOME and a dogfood checkout's `dist/` are writable, so a full-access shell can change what the next restart
 runs); non-product FILES at the `.deckent` root and NEW subdirectories stay read-only (a commit adding one fails to check out there).
 **Mode status and `/mode` (T-L4 slice 4c, owner q7, protocol v15).** Two v15 operations, current version only (a v14 envelope is

@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Design DNA"
+  display_name: "deckent Design DNA"
   short_description: "Route design using current Next authority"
   default_prompt: "Use $deckent-design-dna to establish current Next design authority and route this task to the smallest relevant specialist set."
 policy:

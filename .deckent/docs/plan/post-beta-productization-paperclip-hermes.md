@@ -19,8 +19,8 @@ Ana oturumun [PLAN.md](../../../PLAN.md) içindeki mevcut **Masaüstü** maddesi
 
 | Kaynak | İncelenen kimlik | Kanıt türü |
 |---|---|---|
-| Deckent Next | `7eba8b1fdf2c380fecab844a2b45dd648fe45318` | Ana dal kaynakları ve PLAN; ayrı WIP dalları teslim edilmiş sayılmadı. |
-| Deckent Desktop | `6cf9bc087b1cf78c2bd7898581c589bd3169d77f` | Ayrı deponun kaynakları; README'de connect-only gözlem aşaması. |
+| deckent Next | `7eba8b1fdf2c380fecab844a2b45dd648fe45318` | Ana dal kaynakları ve PLAN; ayrı WIP dalları teslim edilmiş sayılmadı. |
+| deckent Desktop | `6cf9bc087b1cf78c2bd7898581c589bd3169d77f` | Ayrı deponun kaynakları; README'de connect-only gözlem aşaması. |
 | Paperclip | `66424362a85e80a9d8f1b1e2e94002eb1049b8ef` | UI → API → servis kaynak incelemesi, resmi belgeler; bazı geçmiş kabul raporları. |
 | Hermes | İlk referans `NousResearch/hermes-agent` | Başlangıç dokümantasyon taraması; tam kaynak/çalışan ürün karşılaştırması bu işin ilerideki girdisidir. Hermes adı bu proje olarak yorumlandı. |
 
@@ -30,7 +30,7 @@ Bu brief için ürün runtime'ı, kurulum, test, benchmark veya canlı connector
 
 - Paperclip doğrudan rakiptir; onboarding, ajan/görev/çıktı yönetimi, insan müdahalesi ve bağlantı kurulumu tek ürün yolculuğuna bağlanmış.
 - Paperclip'in policy katmanı yüzeysel değildir: scoped yetki, sorumlu insan bağlamı, araç izinleri, onay sonrası tekrar kontrol ve bütçe rezervasyonu var. “Bizde policy var” tek başına ayrışma değildir.
-- Deckent'in genel operasyon/effect sözleşmesi, belirli yürütme yollarındaki izolasyon ve mühürlü audit temeli güçlü karşılaştırma adaylarıdır. Native araç kapsamı, kurulum dışı audit doğrulaması ve gerçek ERP adapter kabulü ayrıca kanıt ister.
+- deckent'in genel operasyon/effect sözleşmesi, belirli yürütme yollarındaki izolasyon ve mühürlü audit temeli güçlü karşılaştırma adaylarıdır. Native araç kapsamı, kurulum dışı audit doğrulaması ve gerçek ERP adapter kabulü ayrıca kanıt ister.
 - Paperclip katalog genişliği bütün connector'ların güncel canlı kabulü değildir; deneysel özellikler ve sağlayıcı izinleri ayrı kontrol edilir. Hermes özellikleri de belge, kaynak bağlantısı ve gerçek kullanım kanıtına ayrılır.
 - Hedef: niyet → yetkili iş → görünür ilerleme → insan müdahalesi → doğrulanabilir çıktı → kalıcı etki → kabul/teslim zincirini daha az operatör yüküyle tamamlamak.
 
@@ -40,9 +40,9 @@ Bu brief için ürün runtime'ı, kurulum, test, benchmark veya canlı connector
 
 **Çözülecek sorun:** doküman, gelecek hedef, geliştirme dalı ve gerçek ürünün birbirine karışması.
 
-Paperclip ve Hermes'in o günkü sürüm/commit kimliğini sabitle. Her örneği kurulum → yapılandırma → ilk iş → müdahale → çıktı → yeniden giriş/kurtarma boyunca izle. Deckent'te önce mevcut application/adapter/surface zincirini ve devam eden işi bul; aynı mekanizmayı yeniden yazma. İsim benzerliğini yetenek eşitliği sayma; Hermes ajan yürütücüsü ile Paperclip ekip yönetim katmanının sorumluluklarını ayrı göster.
+Paperclip ve Hermes'in o günkü sürüm/commit kimliğini sabitle. Her örneği kurulum → yapılandırma → ilk iş → müdahale → çıktı → yeniden giriş/kurtarma boyunca izle. deckent'te önce mevcut application/adapter/surface zincirini ve devam eden işi bul; aynı mekanizmayı yeniden yazma. İsim benzerliğini yetenek eşitliği sayma; Hermes ajan yürütücüsü ile Paperclip ekip yönetim katmanının sorumluluklarını ayrı göster.
 
-**Çıktı:** kullanıcı sorunu, kaynak davranış, mevcut Deckent karşılığı, açık sınır, AL / UYARLA / ALMA, gerekçe, kazanç/kayıp, bağımlılık ve kabul kanıtı sütunlu matris. “AL” davranış örüntüsünü benimseme kararıdır; kaynak kod taşıma/lisans kararı değildir.
+**Çıktı:** kullanıcı sorunu, kaynak davranış, mevcut deckent karşılığı, açık sınır, AL / UYARLA / ALMA, gerekçe, kazanç/kayıp, bağımlılık ve kabul kanıtı sütunlu matris. “AL” davranış örüntüsünü benimseme kararıdır; kaynak kod taşıma/lisans kararı değildir.
 
 **Çıkış:** belge iddiası ile üretim bağlantısı ve gerçek yüzey gözlemi ayrı işaretlenmiş; seçilen ilk kullanıcı sonucu netleşmiş. Belirsiz karar için mevcut Jev yöntemi kullanılabilir; görüş PASS veya owner yetkisi değildir.
 
@@ -50,7 +50,7 @@ Paperclip ve Hermes'in o günkü sürüm/commit kimliğini sabitle. Her örneği
 
 **Paperclip örneği:** ortam kontrolü, ajan oluşturma, ilk proje/görev ve doğrudan görev konuşmasına geçiş. **Hermes araştırması:** kurulum/setup, provider seçimi, araç seçimi ve ilk oturumun ne kadar bağlam istediği.
 
-**Deckent'te araştırılacak akış:** kurulum seçimi veya oluşturma → kimlik/scope → desteklenen provider/abonelik/yerel seçenek → gerekli bütçe ve izin özeti → ilk güvenli görev → çıktı/teslim. İnsan ilk işine ulaşmadan gereksiz organizasyon ve mimari terimlerle karşılaşmamalı; yetki, maliyet ve sonuç gizlenmemeli. Bağlantı varlığı yetki verilmesi anlamına gelmez.
+**deckent'te araştırılacak akış:** kurulum seçimi veya oluşturma → kimlik/scope → desteklenen provider/abonelik/yerel seçenek → gerekli bütçe ve izin özeti → ilk güvenli görev → çıktı/teslim. İnsan ilk işine ulaşmadan gereksiz organizasyon ve mimari terimlerle karşılaşmamalı; yetki, maliyet ve sonuç gizlenmemeli. Bağlantı varlığı yetki verilmesi anlamına gelmez.
 
 Varyantlar: temiz kurulum; mevcut kuruluma bağlanma; davetli ekip üyesi; yerel model; desteklenen abonelik; ücretli API; ağ/kimlik doğrulama kesilmesi; yarıda bırakıp yeniden açma. Desteklenmeyen platform/provider açıkça belirtilir. Varsayılanlar registry/config'den gelir; sır yalnız uygun maskeli/secret-store yolundan alınır.
 
@@ -58,7 +58,7 @@ Varyantlar: temiz kurulum; mevcut kuruluma bağlanma; davetli ekip üyesi; yerel
 
 ### A2 — Desktop'ta tam yönetim yolculuğu
 
-**Paperclip örneği:** görev merkezli çalışma, contextual detail, müdahale kutusu ve çıktı inceleme. Güncel Deckent Desktop yönünü (sohbet öncelikli ana görünüm + detay panelleri, "Kâğıt ve Mürekkep" / "Gece Gölü", Atkinson Hyperlegible; tek kaynak [tasarım kararları](../../../.agents/skills/deckent-design-dna/references/current-owner-decisions.md)) yeniden açmadan bu davranışlardan öğren.
+**Paperclip örneği:** görev merkezli çalışma, contextual detail, müdahale kutusu ve çıktı inceleme. Güncel deckent Desktop yönünü (sohbet öncelikli ana görünüm + detay panelleri, "Kâğıt ve Mürekkep" / "Gece Gölü", Atkinson Hyperlegible; tek kaynak [tasarım kararları](../../../.agents/skills/deckent-design-dna/references/current-owner-decisions.md)) yeniden açmadan bu davranışlardan öğren.
 
 Desktop'tan iş başlatma, durumu ve bekleme nedenini anlama, doğru Run/Task/Attempt'i seçme, yetkili onay, pause/resume/cancel, gerektiğinde kullanıcı girdisi ve teslim zincirini mevcut tek typed application contract üzerinden bağla. Dashboard gözlem rolünde kalır. Renderer yeni policy, kimlik, state veya kabul otoritesi olamaz.
 
@@ -136,7 +136,7 @@ Rakipler aynı işi destekliyorsa eşdeğer hesap, model sınıfı, araç erişi
 
 Kabul paketi her sonuç için exact revision, ortam/workload, producer → application → adapter → yüzey bağı, ham kanıt, negatif yollar, mevcut açıklar ve geri dönüşü içerir. Yazar doğrulaması, bağımsız inceleme, hosted/live kabul ve owner kabulü ayrı kaydedilir. A0 araştırma raporu ürün kapanışı değildir.
 
-## İlk kaynaklar — Paperclip ve Deckent
+## İlk kaynaklar — Paperclip ve deckent
 
 Paperclip bağlantıları 2026-10-15 inceleme commit'ine sabittir:
 
@@ -149,23 +149,23 @@ Paperclip bağlantıları 2026-10-15 inceleme commit'ine sabittir:
 - [Tarihsel MCP kabul raporu](https://github.com/paperclipai/paperclip/blob/66424362a85e80a9d8f1b1e2e94002eb1049b8ef/doc/connections/REMOTE-MCP-LIVE-ACCEPTANCE.md#L15-L22): seçili geçmiş akışlar; güncel genel kabul değildir.
 - [Deneysel varsayılanlar](https://github.com/paperclipai/paperclip/blob/66424362a85e80a9d8f1b1e2e94002eb1049b8ef/server/src/services/instance-settings.ts#L278-L300), [plugin güven sınırı](https://github.com/paperclipai/paperclip/blob/66424362a85e80a9d8f1b1e2e94002eb1049b8ef/doc/plugins/PLUGIN_AUTHORING_GUIDE.md#L3-L22).
 
-Deckent başlangıç referansları: [PLAN](../../../PLAN.md), [architecture](../../../ARCHITECTURE.md), [tasarım kararları](../../../.agents/skills/deckent-design-dna/references/current-owner-decisions.md), [effect uygulaması](../../../src/engine/core/effect/internal/application.ts), [MCP effect sınırı](../../../src/adapters/core/mcp-client/internal/target.ts), [audit mühürleme](../../../src/engine/core/audit/internal/integrity.ts), [extension entry](../../../src/extensions.ts). Desktop için ayrı `deckent-desktop` deposunun `README.md`, `shell/src/connector.ts` ve `contract/` kaynakları güncel revizyonla yeniden okunur.
+deckent başlangıç referansları: [PLAN](../../../PLAN.md), [architecture](../../../ARCHITECTURE.md), [tasarım kararları](../../../.agents/skills/deckent-design-dna/references/current-owner-decisions.md), [effect uygulaması](../../../src/engine/core/effect/internal/application.ts), [MCP effect sınırı](../../../src/adapters/core/mcp-client/internal/target.ts), [audit mühürleme](../../../src/engine/core/audit/internal/integrity.ts), [extension entry](../../../src/extensions.ts). Desktop için ayrı `deckent-desktop` deposunun `README.md`, `shell/src/connector.ts` ve `contract/` kaynakları güncel revizyonla yeniden okunur.
 
 ## İlk kaynaklar — Hermes ve araştırılacak farklar
 
 Hermes başlangıç referansı [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) olarak doğrulandı. Aşağıdakiler 2026-10-15 erişimli resmi dokümantasyon bulgularıdır; çalışan kurulum veya tam kaynak audit'i yapılmadı. Beta sonrası başlamadan sürüm/commit sabitlenir ve belge iddiaları gerçek consumer yoluyla doğrulanır.
 
-- [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart): Desktop/CLI kurulum, provider seçimi, ilk gerçek araç kullanımı ve oturuma geri dönme örneklerini incele. Quick/Full/Blank Slate kurulum seçeneklerinin ilk iş başarısına katkısını ölç; Deckent'te tek güvenlik ve durum modeli üzerinden kademeli ayrıntı göster.
+- [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart): Desktop/CLI kurulum, provider seçimi, ilk gerçek araç kullanımı ve oturuma geri dönme örneklerini incele. Quick/Full/Blank Slate kurulum seçeneklerinin ilk iş başarısına katkısını ölç; deckent'te tek güvenlik ve durum modeli üzerinden kademeli ayrıntı göster.
 - [Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging): kaydedilmiş credential, çalışan gateway ve bağlı kanal ayrımını; duraklatma, yeniden başlatma ve kesinti dilini incele. Kanal değiştirmek principal veya onay yetkisi kazandırmamalı; aynı iş kimliği korunmalı.
 - [Skills System](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills): gerektiğinde yüklenen prosedür, kaynak bilgisiyle kurulum ve isteğe bağlı pending skill değişikliklerinin diff/approve/reject deneyimini araştır. Öğrenilmiş öneri ile kabul edilmiş etkin skill sürümünü ayır; kapsam, eval ve geri alma kanıtını iste.
-- [Tool Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway): merkezi girişle araç kurulumunu sadeleştirme ve çoklu hesap seçiminde belirsizliği açık ret ile çözme örneklerini araştır. Abonelik/managed servis kolaylığı ile bağımsız ve air-gapped Core koşulları ayrı değerlendirilir; bu belge Deckent için hizmet bağımlılığı seçmez.
-- [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security): komut onayı, timeout, mesajlaşma yetkisi, MCP credential filtering ve terminal backend sınırlarını kaynakta doğrula. Shell deny listesi OS izolasyonu sayılamaz; yardımcı LLM kararı Deckent'te deterministik yetki kapısının yerine geçemez. Container backend'ine göre atlanan kontroller varsa mevcut Deckent tabanını gevşetmeden karşılaştır.
+- [Tool Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway): merkezi girişle araç kurulumunu sadeleştirme ve çoklu hesap seçiminde belirsizliği açık ret ile çözme örneklerini araştır. Abonelik/managed servis kolaylığı ile bağımsız ve air-gapped Core koşulları ayrı değerlendirilir; bu belge deckent için hizmet bağımlılığı seçmez.
+- [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security): komut onayı, timeout, mesajlaşma yetkisi, MCP credential filtering ve terminal backend sınırlarını kaynakta doğrula. Shell deny listesi OS izolasyonu sayılamaz; yardımcı LLM kararı deckent'te deterministik yetki kapısının yerine geçemez. Container backend'ine göre atlanan kontroller varsa mevcut deckent tabanını gevşetmeden karşılaştır.
 
 Öğrenme hipotezi: Paperclip ekip/iş/entegrasyon yönetimini, Hermes kişisel ajan kurulumu ve oturum sürekliliğini farklı ağırlıklarla ele alıyor. Bu rol ayrımı başlangıç çerçevesidir; hangisinin hangi işi daha iyi çözdüğü eşdeğer senaryoyla ölçülecek.
 
 ## İki bakış
 
-**Dogfood:** Deckent'in kendi geliştirme işinde ilk kurulum, ajan koordinasyonu, müdahale, değişiklik inceleme ve güvenli teslim operatör yükünü azaltmalı. İzole aday üretimi, kabul ve çalışan sürüme geçiş birbirinin yerine geçmez; host geliştirme araçları ürün yeteneği sayılmaz.
+**Dogfood:** deckent'in kendi geliştirme işinde ilk kurulum, ajan koordinasyonu, müdahale, değişiklik inceleme ve güvenli teslim operatör yükünü azaltmalı. İzole aday üretimi, kabul ve çalışan sürüme geçiş birbirinin yerine geçmez; host geliştirme araçları ürün yeteneği sayılmaz.
 
 **Hedef ürün:** müşteri ERP/CRM, araştırma, içerik ve operasyon işlerinde aynı kaliteyi görmeli. Kabul modeli genel kriter ve kalıcı iş kanıtıdır. Git/test bu modelin bir adapter'ıdır; kod dışı işi kod testine çevirmek çözüm değildir. Enterprise/ERP ayrı paketleri Core'u fork etmeden ortak operation/approval/effect sözleşmelerini kullanır.
 

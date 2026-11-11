@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Enterprise UX"
+  display_name: "deckent Enterprise UX"
   short_description: "Design governed company and resource operations"
   default_prompt: "Use $deckent-enterprise-ux to design effective company/resource authority, policy, approval, audit and administration semantics."
 policy:

@@ -1,14 +1,14 @@
 ---
 name: deckent-product-design
-description: Deckent product model questions - philosophy, personas, jobs, journeys, capability model, information architecture, progressive disclosure and solo-to-enterprise complexity.
+description: deckent product model questions - philosophy, personas, jobs, journeys, capability model, information architecture, progressive disclosure and solo-to-enterprise complexity.
 ---
 
 
-# Deckent Product Design
+# deckent Product Design
 
 ## Objective
 
-Turn real Deckent capabilities into a coherent product model before arranging screens. The result
+Turn real deckent capabilities into a coherent product model before arranging screens. The result
 must work for a first solo run and for expert multi-project operation without becoming two
 different products.
 

@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Visual Language"
+  display_name: "deckent Visual Language"
   short_description: "Refine accepted visual roles and hierarchy"
   default_prompt: "Use $deckent-visual-language to refine accepted Desktop or inherited Terminal visual roles without reopening settled direction."
 policy:

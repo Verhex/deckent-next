@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Parallel Execution"
+  display_name: "deckent Parallel Execution"
   short_description: "Coordinate authorized Next lanes and fan-in"
   default_prompt: "Use $deckent-parallel-execution to coordinate these explicitly authorized independent Next lanes and verify their fan-in."
 policy:

@@ -23,10 +23,10 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   Servisi başlatın (`deckent`) ve `doctor`'ı yeniden çalıştırın.
 - **Ubuntu 24.04 ve sonrası.** Çekirdek, bubblewrap'ın ihtiyaç duyduğu ayrıcalıksız kullanıcı ad alanlarını kısıtlayabilir.
   `sysctl kernel.apparmor_restrict_unprivileged_userns` ile bakın: `1` kısıtlı demektir; WSL'de anahtar yoksa (`cannot stat`)
-  kısıt yoktur. Deckent o zaman kısıtı bildirir, görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder,
+  kısıt yoktur. deckent o zaman kısıtı bildirir, görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder,
   çünkü onlar açık bubblewrap sandbox'ı ister. Bir yönetici bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona
   `userns` izni veren bir AppArmor profiliyle kurabilir.
-- `npm link`'ten sonra Deckent kaynak dizininin dışındaki kendi proje klasörünüzde çalışın. Uzun ve boşluklu yollar çalışır:
+- `npm link`'ten sonra deckent kaynak dizininin dışındaki kendi proje klasörünüzde çalışın. Uzun ve boşluklu yollar çalışır:
   yerel soket, kuruluma özel kısa ve özel bir dizin kullanır.
 - **Platformlar.** Yerel runtime soketi ve doğrulanmış terminal tanığı yalnız Linux'ta (WSL dahil) vardır. macOS'ta runtime
   servisi henüz çalışmaz; bu yüzden sohbet, işler ve yedekleme kullanılamaz. Linux dışındaki her sistemde teslim, dala alma ve
@@ -68,7 +68,7 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   LM Studio gibi yerel bir sunucu ve fiyatı yayımlanmış OpenAI uyumlu bir uç nokta. Ücretsiz denemenin reddettiği anahtar asla
   saklanmaz. Ücretsiz denemesi olmayan sağlayıcıda anahtar doğrulanmadan saklanır; olası reddi ilk tur gösterir.
 - **Model bağla:** paketlenmiş kataloğu olan sağlayıcılar o modelleri sunar; kataloğu olmayanlarda önce adresi, sonra sınırlı
-  `/v1/models` listesinden birebir model kimliğini seçersiniz. Deckent bu kimliği aynen saklar. Yerel loopback modeller
+  `/v1/models` listesinden birebir model kimliğini seçersiniz. deckent bu kimliği aynen saklar. Yerel loopback modeller
   ücretsiz ölçülür; yayımlanmış fiyatı doğrulanmamış uzak model listelenir ama nedeni ve sonraki adımıyla kilitli kalır (Zhipu
   GLM Çin, fiyatları CNY olduğu için kilitli kalır). OpenRouter model bağlantıları sunar; ücretli çağrı için fiyat ve
   yönlendirme yine doğrulanmalıdır.
@@ -98,7 +98,7 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   harcama hesabını (üst sınır, ayrılan, kesinleşen) okumak için orada bir bütçe açın. Paranın nasıl ayrılıp kesinleştiği:
   [Harcamanın kesinleşmesi](#harcamanın-kesinleşmesi).
 - **Bugün abonelikler:** Claude aboneliğiyle, kendi CLI girişiniz üzerinden metin sohbeti desteklenir; araçların hazır olması
-  ayrıca denetlenir. Claude/Codex araçlı sohbeti yalnız aynı profilin doğrulamasından sonra Deckent'in yönetilen native ajan
+  ayrıca denetlenir. Claude/Codex araçlı sohbeti yalnız aynı profilin doğrulamasından sonra deckent'in yönetilen native ajan
   yolunu kullanır; doğrulama eksikse metin sohbeti açık kalır ve araçların neden hazır olmadığı gösterilir. Devir onayı, politika,
   kota ve sandbox kontrolleri her kullanımda geçerlidir. Abonelikli Brain planlaması `claude-cli-subscription` veya
   `codex-cli-subscription` ile kullanılabilir (bkz. [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)).
@@ -216,7 +216,7 @@ Teslim, Run'a sabitlenen `execution.deliveryMode` değerini izler. Ayar yoksa i�
 
 `working-tree` modunda teslim `y`'niz kabul edilen değişikliği güncel dosyalarınıza uygular; deponuza commit, Git nesnesi veya
 referans yazılmaz. Index, HEAD, dallar ve ilgisiz düzenlemeler korunur. Dokunulan bir dosya Run tabanından sonra değişmişse
-teslim hiçbir şey yazmadan reddedilir. Deckent eski dosyaları ve teslim günlüğünü saklar. Dosyaları geri alma ayrı bir kişi
+teslim hiçbir şey yazmadan reddedilir. deckent eski dosyaları ve teslim günlüğünü saklar. Dosyaları geri alma ayrı bir kişi
 kartıdır ve yalnız dokunulan her yol hâlâ teslim edilen içerikle eşleşiyorsa eski hâlleri geri koyar.
 
 `reference` modunda her adım ayrı `y` ister: teslim ayrı referans yazar, dala alma izinli dalı ilerletir, geri alma dalı geri
@@ -272,14 +272,14 @@ yolu olmadığı için reddedilir. Ayar değişikliği mevcut Run'ların değil,
   `--verification-run <run>` verin.
 - `reference` modunda teslim commit'leri görev başlığını, kimlikleri ve sınırlı bir kabul durumunu taşır. Yazar ve committer zamanı güvenilir
   teslim planlama saatinden alınır ve yeniden oynatmanın aynı commit'i yazması için teslim niyetinde sabitlenir. Varsayılan
-  kimlik Deckent'tir; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Önizleme Git nesneleri
+  kimlik `Deckent`'tir; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Önizleme Git nesneleri
   yanıttan önce yalnız adayda hazırlanır; bir ret deponuzda hiçbir Git nesnesi, ref, dal ya da teslim niyeti yazmaz.
 - Doğrulanmış terminal tanığı yalnız Linux'ta (WSL dahil) vardır; başka sistemlerde bu komutlar
   `DELIVERY_INTERACTIVE_REQUIRED` ile reddedilir.
 
 ### Teslim kuyruğu: inceleme ve geri alma
 
-Kayıtlı bir entegrasyon hedefi servis kuyruğunu kullanır. Kuyruk alpha.43'ten beri Deckent'in kendi geliştirmesinde gerçek
+Kayıtlı bir entegrasyon hedefi servis kuyruğunu kullanır. Kuyruk alpha.43'ten beri deckent'in kendi geliştirmesinde gerçek
 değişiklikleri teslim etti; bu henüz paketlenmiş, barındırılan ya da başka platformlardaki kullanımın kanıtı değildir, bunu
 beta göstermelidir. `/deliver` güncel tabanda hazırlar; taban ya da hedef reddinden sonra `r` yeniden hazırlama sunar. Son
 bilinen durumu `r` ile okuyun; yayın ve dala alma tam ve sabit partiyi ayrı gösterip ayrı bir `y/N` sorar. `/runs` ayrıntısı
@@ -336,10 +336,10 @@ Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index 
 ## Sandbox görünümleri
 
 - Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje, çağrının onay
-  kuralları içinde yazılabilir; `.git` salt okunur, ev klasörü gizli ve ağ kapalıdır. Onaylanan komutlar da Deckent'in yetki
+  kuralları içinde yazılabilir; `.git` salt okunur, ev klasörü gizli ve ağ kapalıdır. Onaylanan komutlar da deckent'in yetki
   dosyalarına yazamaz. Landlock ayrıca izin ve sahiplik değişikliklerini reddeder ve korunan yolları tutan dizinlerde giriş
   ekleyip silemez.
-- Tam erişim, kullanılabilir bir **açık bubblewrap sandbox'ı** ister: ağ ve ev klasörü açılır; Deckent durumu, ayarlar, kimlik
+- Tam erişim, kullanılabilir bir **açık bubblewrap sandbox'ı** ister: ağ ve ev klasörü açılır; deckent durumu, ayarlar, kimlik
   bilgisi kalıpları ve host Docker/oturum D-Bus soketleri maskeli ya da salt okunur kalır. Açık sandbox yoksa tam erişim kabuk
   çağrıları, açıkça `host` seçilmiş olsa bile reddedilir.
 - **Host'a düşme.** API profillerinde sandbox yoksa kapalı bir mod host'a düşer ve bunu söyler (`terminal.shell.realm`, varsayılan
@@ -352,7 +352,7 @@ Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index 
   maskelemesi sınırlıdır (3 derinlik, 20.000 giriş); özel konumlar, farklı dosya adları ve maskelerin dışındaki takma yollar
   ayrıca yalıtılmalıdır.
 - Tam otomatik `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) için yine sorar; ekleme (`>>`) değişiklik sayılır.
-- Sabit zemin (Deckent ayarları, policy, onaylar, denetim, sırlar ve MCP kayıt defteri) her sandbox modunda uygulanır.
+- Sabit zemin (deckent ayarları, policy, onaylar, denetim, sırlar ve MCP kayıt defteri) her sandbox modunda uygulanır.
 
 ## İzin modları
 
@@ -368,8 +368,8 @@ terminal iznin verilmediğini söyler. Sözleşme: [sahibin açtığı modlar](m
 | Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
 |---|---|---|
 | `core.secret-store.env@1` (hiçbir depo seçilmemişse) | hiçbir şey; ortam değişkeninden okunur | o ortamı devralan her program |
-| `core.secret-store.file@1` | düz metin, 0600 dosya | Deckent ve sizin hesabınızla çalışan diğer programlar |
-| `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
+| `core.secret-store.file@1` | düz metin, 0600 dosya | deckent ve sizin hesabınızla çalışan diğer programlar |
+| `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
 
 Sağlayıcı çağrıları anahtarı runtime'ın içinde çözer; anahtar isteme ya da shell ortamına konmaz ve işçiler asla anahtar
 almaz. Desteklenen sandbox görünümleri depoyu gizler; host realm'i ya da host'a düşen yol dosya sistemi yalıtımı sağlamaz.
@@ -387,10 +387,10 @@ seçimlerini korur.
    ister); `doctor` aynı adları gösterir. Komut her anahtarı kopyalar, doğrular, yeni depoyu seçer ve ardından eski kopyayı
    siler; daha zayıf bir depoya geçiş ikinci bir uyarı kartında onay ister. Kaydetme, silme ve geçiş tek bir kurulum geneli
    muhafaza bölümünü paylaşır.
-2. Diğer yapay zekâ araçlarını Deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
+2. Diğer yapay zekâ araçlarını deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
    dosyasında depo dosyaları için `Read` yasak kuralları. Bu, dosya araçlarını ve yaygın shell komutlarını durdurur, her betiği
    değil.
-3. Planlanan: Deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece
+3. Planlanan: deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece
    hesabınızdaki hiçbir program anahtarları okuyamaz.
 
 Dosya depoları native Windows'ta yok.
@@ -417,13 +417,13 @@ Sözleşme: [proje anahtar kasası](modules/permission-modes.md#pre-8-project-ke
 
 ## Harcamanın kesinleşmesi
 
-Her kapsamın tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce Deckent, geçerli olabilecek
+Her kapsamın tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce deckent, geçerli olabilecek
 en pahalı fiyat kademesinde çağrının tutabileceği en yüksek tutarı ayırır; sonra çağrıyı sağlayıcının son yanıtında bildirdiği
 kullanım ile doğrulanmış yayımlanmış fiyatın çarpımından kesinleştirir (`measured-tariff`). OpenRouter çağrıları istisnadır:
 OpenRouter'ın yanıtında bildirdiği ücretten kesinleşir. Sağlayıcı hangi fiyat kademesini kullandığını söylemiyorsa (DeepSeek)
 çağrı yayımlanmış en yüksek fiyattan kesinleşir ve üst sınır olarak işaretlenir. İlk ücretli OpenRouter çağrısından önce
 https://openrouter.ai/settings/plugins sayfasında hiçbir eklentinin "Prevent overrides" ile açık olmadığını kontrol edin ve
-OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde ayarlayın; Deckent bu iki ayarı göremez.
+OpenRouter kredi sınırını deckent bütçenizden yüksek olmayacak şekilde ayarlayın; deckent bu iki ayarı göremez.
 
 - Kapsamın ilk bütçesi `deckent models create-budget --scope <id> --usd <n>` ile ya da bütçe penceresiyle (`/provider`'ın ilk
   satırı) açılır, `deckent models revise-budget --scope <id> --usd <n>` ile değişir.
@@ -570,7 +570,7 @@ reddetmek ayrı bir karardır, buradaki bir tuş değildir.
 
 ## MCP ve kimlik
 
-- **Deckent'in ajanı için MCP sunucuları.** `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve
+- **deckent'in ajanı için MCP sunucuları.** `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve
   hiçbir şeyi başlatmaz; `--check` yalnız güvenilen sunucuları başlatır. Her güven kararı (`mcp approve`, yerel ya da kullanıcı
   kapsamına `mcp add`) kişinin terminalindeki bir karttır; terminal dışında reddedilir (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes`
   kartı atlamaz. Sunucuların nerede çalıştığı: [Sandbox görünümleri](#sandbox-görünümleri).
@@ -622,7 +622,7 @@ gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten
 - **Abonelik Brain'i.** Önce `deckent models login --connection claude-cli-subscription [--sso]` Brain'in kendi girişini açar
   (Claude CLI'nin kendi girişi, kendi terminalinizde); sonra `deckent models connect --scope <id> --connection claude-cli-subscription
   --command-id <id> --model <id> [--executable <mutlak yol>] [--config-dir <mutlak dizin>] [--delegate none|ai|system|ai,system]` onu
-  Brain planlaması için bağlar. Giriş Deckent'e aittir (global durum kökünde `headless/logins`, `deckent paths` gösterir); `--config-dir`
+  Brain planlaması için bağlar. Giriş deckent'e aittir (global durum kökünde `headless/logins`, `deckent paths` gösterir); `--config-dir`
   vermedikçe `~/.claude` kullanılmaz. Kullanılabilir bir bubblewrap korumalı alanı yoksa reddedilir. `--delegate`, AI ya da MCP üzerinden
   planlama ve arka plan rolleri (kurtarma kararı, hafıza değerlendirici) için onayınızdır; verilmezse önceki seçiminiz kalır.
   `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir. CLI'nin kendi yenileme kilidi varken ya da başka bir Brain çağrısı
@@ -633,7 +633,7 @@ gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten
   models connect --connection codex-cli-subscription --executable <mutlak yol> --config-dir <mutlak dizin> --delegate system` onu bağlar
   (her bayrak yukarıdaki gibi). Kabul edilmiş işçi imajı yoksa bağlantı yine de araçsız tek seferlik model çağrıları (BeUser) için başarılı olur
   ve hiçbir işçi modelinin etkinleştirilmediğini söyler.
-  Kotası ChatGPT planınızınkidir ve Deckent kendi çalıştırdığınız bir Codex oturumunun yenileme kilidini gözlemez.
+  Kotası ChatGPT planınızınkidir ve deckent kendi çalıştırdığınız bir Codex oturumunun yenileme kilidini gözlemez.
 - **Kota sorusu.** Kota beklemesi biten bir işçi Run'ı size sorar: `deckent run resume --quota wait` beklemeyi sürdürür,
   `deckent run resume --quota next-candidate` WorkClass listesindeki sıradaki adayı kullanır; Run'ı kapatmak ayrı bir seçimdir.
   Beklemeyi sürdürme en çok `runRuntime.quotaRecovery.maxRewaits` (3) kez sunulur, sonra `RUN_QUOTA_WAIT_LIMIT`.

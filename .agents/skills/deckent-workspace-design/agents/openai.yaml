@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Workspace Design"
+  display_name: "deckent Workspace Design"
   short_description: "Design Desktop focus, layout and persistence"
   default_prompt: "Use $deckent-workspace-design to design accepted Desktop layout, focus and persistence behavior while separating targets from shipped wiring."
 policy:

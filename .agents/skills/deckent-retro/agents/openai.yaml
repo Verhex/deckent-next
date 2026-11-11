@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Retro"
+  display_name: "deckent Retro"
   short_description: "Session retrospective on the agent environment"
   default_prompt: "Use $deckent-retro to review this session and list environment improvements, most severe first."
 policy:

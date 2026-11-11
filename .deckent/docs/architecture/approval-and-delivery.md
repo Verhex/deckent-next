@@ -195,7 +195,7 @@ Standard JSON Schema is vendored but unused until zod ≥ 4.2. The MCP `tools/li
 diff of that fixture. A root union or intersection of object variants is advertised as one merged object (`rootObjectSchema`, alpha.56 F3
 Ek A: clients that forward the schema to a model API keep a single root variant); each call is still parsed by the tool's exact zod schema.
 Every MCP tool error answers `{schemaVersion: 1, code, message}` (plus `note`/`params` where already given): the localized catalog message
-in the installation language, a Deckent error through its own localizer and redaction, a zod or unexpected failure with catalog text only
+in the installation language, a deckent error through its own localizer and redaction, a zod or unexpected failure with catalog text only
 (registered `MCP_INPUT_INVALID`, `MCP_TOOL_FAILED`, `MCP_BUSY`, `MCP_RESPONSE_LIMIT`); an error that would not fit drops back to the code.
 
 **Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
@@ -274,10 +274,10 @@ per-scope namespace (S4), a grant-editing surface for existing installations (`/
 (Since SEC-1, alpha.48: `deckent secret set` runs only on a person's terminal; a pipe, script, agent or CI caller is refused with
 `SECRET_SET_TERMINAL_REQUIRED` before stdin is read, and `set` names its vault. Grants for existing installations go through
 `deckent secret grant|revoke` and `deckent policy upgrade` on the person's terminal, not by hand-editing policy.json.)
-**MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
+**MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** deckent is an MCP client of the owner's
 local stdio servers, managed like Claude Code's scoped files (code.claude.com/docs/en/mcp, checked 2026-09-28: local/project/user,
 managed on top, `mcp add|add-json|list|get|remove`), never in configuration: project `<project>/.deckent/mcp.json` (shared;
-Claude-compatible `mcpServers`, plus Deckent `realm`/`timeoutMs`), personal `<Deckent global root>/mcp.json` (0600; top-level
+Claude-compatible `mcpServers`, plus deckent `realm`/`timeoutMs`), personal `<deckent global root>/mcp.json` (0600; top-level
 `mcpServers` = user, `projects.<real project path>.mcpServers` = local). The same name connects once from its highest scope, whole entry:
 managed > local > project > user; an invalid override blocks the name. The company policy is a read interface (`ManagedMcpPolicy`:
 servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads only the
@@ -296,7 +296,7 @@ answer of 2025-06-18, 2025-03-26 or 2024-11-05, YTK-40; on stdio the SDK probes 
 server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
 SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per stdio server (K4): the default is `sandbox-net`
 (bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`, with network and a private persistent HOME
-for that server, the project read-only, and the user's HOME, project secrets and Deckent state hidden; without a usable sandbox it does
+for that server, the project read-only, and the user's HOME, project secrets and deckent state hidden; without a usable sandbox it does
 not start); `prefer-sandbox`, `require-sandbox` and `host` are explicit choices, and only `prefer-sandbox` may run on the host, saying so;
 Landlock is not offered for MCP servers; an HTTP server has no local process and no realm. A launch-capable provider that wins after a preferred one
 was passed over adds the same `… instead of …` line to the server's posture (tools card, per-call approval card); the host fallback and a
@@ -351,7 +351,7 @@ service replaces the process on next use) and remove. The compiled `deckent-mcp`
 pinned-2026 modes (`mcp-eras-process.test.ts`).
 A sandboxed MCP server's long-lived bubblewrap view keeps the whole project read-only (C5, `longLivedWritePosture`: third-party code whose
 writes no card approves); the host realm is unchanged.
-The pool builds the SDK `Client` with `jsonSchemaValidator: new DeckentJsonSchemaValidator()` (Deckent's own validator,
+The pool builds the SDK `Client` with `jsonSchemaValidator: new DeckentJsonSchemaValidator()` (deckent's own validator,
 `src/platform/core/validate`; MCP-SCHEMA-VALIDATOR, eleventh batch, owner 2026-09-29 "problematic dependencies are not accepted"): a server's
 `outputSchema` is untrusted input and reaches neither the ajv 8.18 + fast-uri 3.1.0 copy bundled inside SDK 2.2.0 nor the SDK's
 @cfworker/json-schema provider (MCP-VALIDATOR, seventh batch, had used cf-worker). The validator implements the SDK's synchronous
@@ -370,19 +370,19 @@ a weighted step budget (5 000 000; historical ≈ 50 ms on the calibration machi
 an independent 5-million-iteration CPU control against its measured 6ms lane reference, log calibration and
 fail if the factor exceeds 10; deterministic NFA step-growth checks remain independent of host timing.
 No production step/depth/pattern limit changes. The SDK reports -32602, `kind: 'output-schema'`, answered, never re-sent). `format` is an annotation unless a checker is
-registered (none in Deckent's wiring) — a relaxation against cf-worker, which asserted formats; owner decision 2026-09-29 (Astra 2183 R4): keep the JSON Schema 2020-12 default (annotation only). The development tree still
-installs the SDK's bundled ajv/fast-uri copy (not loaded by Deckent). Since FASTURI-OUT (tenth batch) the published package does not contain
+registered (none in deckent's wiring) — a relaxation against cf-worker, which asserted formats; owner decision 2026-09-29 (Astra 2183 R4): keep the JSON Schema 2020-12 default (annotation only). The development tree still
+installs the SDK's bundled ajv/fast-uri copy (not loaded by deckent). Since FASTURI-OUT (tenth batch) the published package does not contain
 that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one `ajvProvider` import
 turned into a stub that throws `DeckentRemovedValidatorError` (`MCP_DEFAULT_VALIDATOR_REMOVED`); the build fails when the stub is not applied
 or when ajv/ajv-formats/fast-uri/json-schema-traverse or @cfworker/json-schema appear in the metafile, the shipped packages or the embedded
-components. Every SDK `Client` and `Server` is built with Deckent's validator (contract test
+components. Every SDK `Client` and `Server` is built with deckent's validator (contract test
 `tests/contracts/surfaces/mcp-json-schema-validator.test.ts`). Every `tools/call` carries the pinned
 definition (MCP-PIN-DEF, eighth batch, Jev 12e80d38, 2026-09-29): the pool keeps, per listing, the frozen digest-covered projection of each tool
 (name, title, description, input/output schema, annotations — nothing unpinned reaches the SDK) and passes a fresh copy as
 `callTool(..., { toolDefinition })` (SDK ≥ 2.2). The SDK then neither consults its response cache nor re-lists, so a HEADER_MISMATCH
 (-32020, SEP-2243) is answered as a typed error (`kind: 'header-mismatch'`) and never re-sent (C11; a deliberate deviation from spec
 2026-07-28's "SHOULD re-list and retry" — a retry is a new call with a new decision; a changed definition is re-pinned with
-`deckent mcp approve`). structuredContent is validated with Deckent's validator against the pinned outputSchema (MCP SHOULD): a result
+`deckent mcp approve`). structuredContent is validated with deckent's validator against the pinned outputSchema (MCP SHOULD): a result
 that does not conform, or is missing where an outputSchema is declared, is an answered -32602 error (`kind: 'output-schema'`; the SDK raises
 -32600 for "missing", normalized to -32602) — the server answered, so the effect may have happened: the C11 record settles as answered, the
 call is never retried and the model is told the result was withheld. A pinned outputSchema the validator cannot compile is refused before
@@ -391,8 +391,8 @@ SDK's post-send checks relies on SDK 2.2.0's message texts (a changed text degra
 tripwire: the `mcp-client.test.ts` -32602 cases). Not yet: a tool with an uncompilable pinned outputSchema is still offered (refused per
 call, not marked `unmappable` at open); with `toolDefinition` the SDK also scans the pinned inputSchema for `x-mcp-header` on every
 modern-era call (headers are ignored on stdio; untested path). The MCP server side validates schemas only in
-`elicitInput`, which Deckent does not use. The MCP server is given the same validator (`createMcpServer`); every `tools/list` inputSchema
-Deckent publishes compiles with it (contract test).
+`elicitInput`, which deckent does not use. The MCP server is given the same validator (`createMcpServer`); every `tools/list` inputSchema
+deckent publishes compiles with it (contract test).
 **Send authority (MCP-REVOKE, Astra 2174–2176, 2026-09-29).** A one-shot approval of a tool call never stands in for the server's trust.
 `McpToolTarget` (the one dispatch owner) requires an `admit` authority that `pool.call` asks last — after the approval wait and every local
 pre-send check, right before the request is handed to the SDK. `mcpSendAuthority` re-reads both registry files and the scope's trust record
@@ -417,7 +417,7 @@ already changed, and after `remove` the trust record stays (the same definition 
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,
-`ttlMs`/`cacheScope` on lists, `subscriptions/listen`, MRTR, Tasks as an extension). Deckent pins `@modelcontextprotocol/server` and
+`ttlMs`/`cacheScope` on lists, `subscriptions/listen`, MRTR, Tasks as an extension). deckent pins `@modelcontextprotocol/server` and
 `client` 2.2.0 (npm 2026-09-28T19:09Z; `core` 2.2.0 transitively; MCP-SDK-22). Since 2.1.0 (2026-09-23): stdio server transport closes on
 stdin EOF and drops in-flight requests, HTTP gets a 4 MiB body limit and requires `MCP-Protocol-Version` on 2026-07-28 POSTs, DPoP and
 OAuth scope challenges are added; 2.2.0: `listTools()` follows `nextCursor` (bounded by `listMaxPages`), no unhandled rejection when
@@ -441,13 +441,13 @@ intact, the recorded Task acceptance of that exact attempt, an existing branch a
 (checked explicitly: `update-ref` does not refuse it), its own policy action and a live session. A changed base is refused.
 Intent precedes the Git effect and an unsettled record blocks the target. Each target has a fence reference
 (`refs/deckent/adoption-fences/<sha256(target)>` → deterministic blob naming target, sequence and command); one `update-ref`
-transaction moves the branch and advances the fence from the previous sequence, so a stale duplicate of Deckent's own command
+transaction moves the branch and advances the fence from the previous sequence, so a stale duplicate of deckent's own command
 cannot move the branch after newer records (Astra 2039). Crash settlement reads exact fence ownership: this record's fence →
 settle only; previous fence with the branch at the base → move; anything else, including a foreign writer placing the same
 commit, is a conflict. A new effect re-checks the current allow-list. Rollback CASes back to the previous tip only while the
 adopted commit is still the tip and no later record exists. The basis is Task acceptance; an adoption reports `verification: not-verified` unless it binds a verification Run (B06-2b below).
 Live checkout/runtime activation (B07) is separate. Git writers outside
-Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
+deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
 complete keeps the target blocked until operator recovery (no abandon command yet).
 
 **Repository identity (BENIMSEME-DEPO-KIMLIGI, ledger v58).** The journal numbers adoptions per (repository, target), not per ref
@@ -662,7 +662,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
 - **Typed refusals** (engine `assertWorkTarget`, fixed order; service start before any custody/write and every acquisition):
   `WORK_TARGET_PATH_INVALID`, `WORK_TARGET_UNSAFE` (not owned by the service user, or group/other-writable), `WORK_TARGET_IN_DATA_ROOT`,
   `WORK_TARGET_IS_PROJECT`, `WORK_TARGET_NOT_WORKTREE`, `WORK_TARGET_SHARES_PROJECT_REPOSITORY` (same Git common dir as the running
-  project: Deckent never targets its running source), `WORK_TARGET_ALTERNATES`, `WORK_TARGET_BASE_MISSING`. Git runs only inside a
+  project: deckent never targets its running source), `WORK_TARGET_ALTERNATES`, `WORK_TARGET_BASE_MISSING`. Git runs only inside a
   canonical, owned, not group/other-writable directory, with the shared local invocation (no network/hooks/fsmonitor/system+global
   config; now owned by `git-workspace`, re-exported by `git-patch`).
 - **Named baseRef.** Run base = `baseRef` tip (not checkout HEAD); delivery `update-ref` verifies `baseRef`; the integration observation
@@ -1209,7 +1209,7 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 (`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
 also compares. The integration check reads the checkout's touched files (descriptor-relative, `O_NOFOLLOW`, owned plain files) against
 the Run's base and never the person's index or HEAD. Publication is Linux only (typed refusal elsewhere), serialized per checkout by the
-shared kernel file lock (`withExclusiveFileLock`, owner B1-12 2026-11-09) on `working-tree-locks/<checkout>` in Deckent's workspace root
+shared kernel file lock (`withExclusiveFileLock`, owner B1-12 2026-11-09) on `working-tree-locks/<checkout>` in deckent's workspace root
 (bounded wait, then PATCH_WORKING_TREE_BUSY; the kernel frees the lock when its holder dies, a live holder is never displaced). Before its
 journal reads `writing`, a writer enters durable custody (`working-tree-pending/<checkout>/<journal>`, directory fsynced) and leaves it once
 the journal reads `written` or `partial`; so under the lock a `writing` journal is a dead holder's, and every holder, before its own work,
@@ -1222,7 +1222,7 @@ at the lock's name are the typed refusal PATCH_WORKING_TREE_RECORD_UNSUPPORTED n
 written. Delivery writes nothing to the person's repository: no
 reference, no object, index and HEAD untouched. All touched paths are read first: all `before` = write, all `after` = already written,
 anything else = PATCH_CONFLICT with nothing written; a `before`/`after` mix is an interrupted delivery and is refused as
-PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in Deckent's
+PATCH_WORKING_TREE_PARTIAL naming written and unwritten paths, never completed blindly. The replaced bytes are kept in deckent's
 `working-tree-deliveries/<id>/` beside a journal (`writing` → `written`, or `partial`) that keeps each path's full `before`/`after` state
 (absent, or content digest and Git mode) and the token naming what it moves aside; crash settling uses the writer's own equality, so a
 mode-only change is never taken as written (Astra 3015 F2). Each path is written without ever writing over or unlinking a file the person
@@ -1230,16 +1230,16 @@ saved meanwhile (Astra 3015 F1): the new bytes go to a same-directory temporary 
 atomic rename (whatever is there at that instant keeps its inode) and compared; the new file goes in only by a no-clobber link. The person's
 file found at the take or saved into the empty name goes back or stays (link back, EEXIST leaves theirs in place) and the result is
 PATCH_CONFLICT; a write into the taken file through an editor's open handle is caught by a second comparison and the person's file returns
-over Deckent's. A taken file that cannot return because a newer file of the person's took its name is kept beside it and named
+over deckent's. A taken file that cannot return because a newer file of the person's took its name is kept beside it and named
 (PATCH_WORKING_TREE_KEPT). A taken file that still holds `before` leaves the checkout by a rename into the journal directory (the inode
 itself, so a write through a handle opened before the take still lands there). On another filesystem (EXDEV, e.g. a WSL `/mnt/c` project;
 never a refusal) it is never unlinked (Astra 3017 R1): it stays beside its name as `.deckent-<uuid>.aside`, the journal records its path,
 the state it was compared at and the time (`setAside`), and the result returns it so the terminal and CLI tell the person what it is; a
-stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. Deckent never deletes it (no automatic cleanup,
+stop names it with PATCH_WORKING_TREE_KEPT, whose text says only which version sits where. deckent never deletes it (no automatic cleanup,
 Astra 3019; the note says so): it stays until the person deletes it. A removal is the same take, comparison and
-departure. Settling a crashed journal first puts a taken file back into its empty name and removes Deckent's temporary name. An existing
+departure. Settling a crashed journal first puts a taken file back into its empty name and removes deckent's temporary name. An existing
 file keeps its permission bits; one with a setuid, setgid or sticky bit is refused before anything is written (PATCH_UNSAFE, owner B2-6
-2026-11-09). The trace is the Deckent delivery record and that journal.
+2026-11-09). The trace is the deckent delivery record and that journal.
 
 Rollback (alpha.63 L1c): `deckent task integration-rollback --scope --run [--task]` (no `--adoption-command-id`; the delivered task, its
 attempt and delivery are found as for the light adoption) puts a written delivery's `before` contents back through the same lock and writer
@@ -1264,21 +1264,21 @@ workspace root (`run-bases/<sha256(scope, run)>`). Only the objects reachable fr
 files, so no clean, smudge or process filter driver runs in the service. Every HEAD file (`ls-tree -l`), index entry (`ls-files --stage`;
 gitlinks keep HEAD) and untracked file outside `.gitignore`/`.git/info/exclude` (`ls-files --others --exclude-standard`; the person's
 global excludes file is not read) is opened through `readTreeFile` (descriptor-relative, `O_NOFOLLOW`, owner, one link, regular file); a
-file of its HEAD entry's mode and size is stream-hashed by Deckent (Git's blob id, not charged to the byte budget) and stays HEAD's entry
+file of its HEAD entry's mode and size is stream-hashed by deckent (Git's blob id, not charged to the byte budget) and stays HEAD's entry
 when equal; any other file is read and written into that repository only (`hash-object --no-filters --stdin`); the detached HEAD there
 is the base commit (HEAD itself on a clean tree). A filtered path (K-1 "Son commit'teki hâli"; M2 union: its `filter` attribute set in
 HEAD's `.gitattributes`, read by `check-attr --source <head>` inside the private repository, where neither the person's worktree,
 `.git/info/attributes` nor `core.attributesFile` apply, or in the person's own attribute view) is never opened: it keeps its HEAD blob
 (ciphertext, LFS pointer) and is withheld as `filter:<driver>`; a working-tree patch writing one is refused when delivery observes the
 checkout (`PATCH_WORKING_TREE_FILTERED`). A `filter.*` driver the repository's configuration defines but no attribute view names refuses
-the base (`PATCH_WORKING_TREE_FILTER`: its paths would come from an attribute file Deckent's Git does not read, such as the global one),
+the base (`PATCH_WORKING_TREE_FILTER`: its paths would come from an attribute file deckent's Git does not read, such as the global one),
 and so does a Git below 2.40.0, the first with `check-attr --source` (`PATCH_WORKING_TREE_GIT_VERSION`). A path on the S6 deny list
 (`workerTreeDenied`), under a patch exclusion, under a product-state root (layout root, configuration directory), a nested repository, a
 symlink, hard link, foreign-owned or special file, or one over the snapshot budget (`artifacts.maxBytes`, `patchPreview.maxEntries`) is
 withheld: never read or hashed anywhere; a tracked one keeps its HEAD version and is listed even when unchanged, an untracked one is
 absent. Each withheld path (path and
 rule) is audited as `worker-tree-excluded` with `by: working-tree-base` before the launch and reaches the worker as one data line
-`{"kind":"workspace-files-withheld",…}` after its context (workers that take Deckent's prompt context). The person's repository gets no
+`{"kind":"workspace-files-withheld",…}` after its context (workers that take deckent's prompt context). The person's repository gets no
 object, reference or index write. Concurrent first attempts build in fresh directories and rename into place; the loser uses the winner.
 
 The base's adapter version is 2 (`workingTreeSource`); the Run custody, the attempt lease and every patch carry it, so the mode is pinned
@@ -1294,7 +1294,7 @@ there is no fall back to a reference. The action needs no grant (default open: i
 or upgrade step exists for it. Reference mode (work target or adoption targets: live and N1) is unchanged: base HEAD of the person's
 repository, adapter version 1.
 
-Lifecycle and refusals (alpha.63 L1c). A Run's private base is Deckent data (uninstall classifies `workspaces/run-bases`,
+Lifecycle and refusals (alpha.63 L1c). A Run's private base is deckent data (uninstall classifies `workspaces/run-bases`,
 `working-tree-deliveries` and `working-tree-locks` as archive members). It is removed (verified private, owned, its record naming this Run;
 detached by rename, then removed recursively) once nothing of its Run can still be delivered: right after a working-tree delivery of a
 terminal Run whose other accepted tasks with work input have no retained patch, and at service start (bounded by

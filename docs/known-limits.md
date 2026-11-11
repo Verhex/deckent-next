@@ -10,34 +10,34 @@ Native worker input views (task artifacts, handoffs and dependency mounts) are c
 
 Native environment checks stop on Run cancellation or service shutdown. Run cancellation is observed at the configured progression interval; shutdown signals the check directly. A failed worker authority check revokes the tool session, preventing later calls. Unconfirmed cleanup remains unknown; revocation does not undo completed effects. Assembled-release acceptance remains open.
 
-The composed native runtime/driver binds Deckent tool calls and witnessed worker decisions to exact Run/Task/Attempt cards (K23). Source wiring is present; real-account and assembled-surface proof remain open. Worker cards currently offer one-time approval or denial; session and permanent scopes are not offered without a producer-owned standing answer. Self-source src/dist/scripts/assets writes still need approval even inside a separate Attempt workspace; static authority-floor writes by AI stay denied. Real-account and assembled-release acceptance remain open.
+The composed native runtime/driver binds deckent tool calls and witnessed worker decisions to exact Run/Task/Attempt cards (K23). Source wiring is present; real-account and assembled-surface proof remain open. Worker cards currently offer one-time approval or denial; session and permanent scopes are not offered without a producer-owned standing answer. Self-source src/dist/scripts/assets writes still need approval even inside a separate Attempt workspace; static authority-floor writes by AI stay denied. Real-account and assembled-release acceptance remain open.
 
-Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it. The Codex text profile (subscription text chat and Brain) keeps the CLI's own subagents on by owner choice (2026-11-03): gpt-6.x catalog models ignore `features.multi_agent=false`, so the model may open helper agents whose turns and quota use Deckent does not see. Deckent-governed CLI subagents in the natural CLI flow are the first item of the next package.
+Codex agent profiles disable subagents and plugins using version-sourced registry settings. Actual CLI subagent suppression remains to be verified in owner R / the assembled BeUser walk; fake CLI evidence does not prove it. The Codex text profile (subscription text chat and Brain) keeps the CLI's own subagents on by owner choice (2026-11-03): gpt-6.x catalog models ignore `features.multi_agent=false`, so the model may open helper agents whose turns and quota use deckent does not see. deckent-governed CLI subagents in the natural CLI flow are the first item of the next package.
 
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
 Since alpha.63 your own Claude or ChatGPT (Codex CLI) sign-in runs tool chat, workers and Brain; the limits are listed under Providers.
 
-This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
+This page says plainly what deckent does not do yet, what has not been tried, and what you should do instead. It
 describes the current pre-release (the version is in the [README](../README.md) and the top line of the
 [CHANGELOG](../CHANGELOG.md)). A limit leaves this page when the change that closes it has landed and been
 seen working, not before. Each item gives **what** the limit is, **the impact** on you and, where one exists, a
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each beta release carried at the time;
 [CHANGELOG-alpha.md](../CHANGELOG-alpha.md) preserves those of older alpha releases.
 
-Deckent is a pre-release. Nothing here is a promise of a date.
+deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The complete four-journey BeUser acceptance and the owner terminal test remain open during the beta line (owner, 2026-11-11). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
 
 
-- **Agent tools protect Deckent's global state before approval (alpha.63 K15/K15B/K15C).** Named global-state paths, including the login tree,
+- **Agent tools protect deckent's global state before approval (alpha.63 K15/K15B/K15C).** Named global-state paths, including the login tree,
   are refused before a shell card. Subscription turns never use the host shell: they require OS containment. Their project MCP tools are
   offered only in a sandbox that hides global state; host, remote and host-fallback tools are withheld with `SUBSCRIPTION_HOST_MCP_REFUSED`.
   API MCP tool selection stays unchanged. *Impact:* with global state present, host shell commands using `cd`/`pushd`/`popd`, `find`/`xargs`,
   command/parameter expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a warning card for each call:
-  “The working directory could not be verified; this command may reach Deckent's state folder.” No automatic or standing approval applies.
+  “The working directory could not be verified; this command may reach deckent's state folder.” No automatic or standing approval applies.
   The conservative check also warns on literal dollar/backtick text or operands named cd/find/xargs. This is the owner's 2026-11-03 warning-card
   decision, replacing K15B's pre-approval refusal; a person approving a computed path can expose global state. Explicit global-root names
   (absolute, `~`, `$HOME`, `$DECKENT_GLOBAL_HOME`, `$DECKENT_HOME`) remain hard refusals even with approval armed. Use an enforcing sandbox for isolation. Ordinary
@@ -59,7 +59,7 @@ Beta.1 is a candidate. The eight acceptance gates remain open during the beta li
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
 
-- **BeUser arranges only the start states it can reach without a witness (alpha.58).** A v3 journey profile names its branch's catalogued start states. Before the persona's first look, Deckent arranges them in the realm over an exec without a terminal (closed stdin, explicit user and locale), never through the persona's terminal, and reads each one back. The catalog arranges an installed Deckent (through `deckent init --yes --scope beuser-realm --json`), a Git project with a tracked file under `.deckent/`, an unknown file under `.deckent/`, a stopped service, a second installation, an unreadable ledger, an unsafe authority file, a hand-made launcher, an unproven install method, an empty cache, a fresh home, no Docker socket, a folder with the person's own files and the assembled candidate. The persona's language and accessibility needs come from its profile; `cancel` is the persona's own act. These stay unknown, and the report names each one with its reason: states that need a person's witness (managed policy and approvals `T2`/`S14`/`S14b`, global or relocated data `S10b`/`S25`, keys `S11`, an applied or interrupted uninstall `S15`/`S16`, a modified bridge `S21`, and model, price, role or budget setup), states outside the sealed realm (service managers and running services `S2`/`S4`/`S4b`/`K4`, active work and uncertain effects `S5`/`S8`, worker images `S12`, another platform `S18`, image preparation, worker questions, an unavailable realm or network), states with no witness-free producer (`S3`, parked work `S6`, pending approval `S7`, queued delivery `S9`, dispatch history `S23`), driver limits (pipe, CI and MCP `S17`, line mode) and Enterprise company scope. A branch that names any of them stops as `BEUSER_START_STATE_UNREACHABLE` before any step, and the persona does not start; a step that fails or does not read back stops it as `BEUSER_START_STATE_UNMET`. Both are unknown, never red. Nothing bypasses the witness. *Impact:* those branches are not walked, which is 18 of the 23 uninstall branches and 12 of the 21 onboarding branches. *Workaround:* keep the report's list of unarranged states; a v2 profile keeps the earlier empty realm.
+- **BeUser arranges only the start states it can reach without a witness (alpha.58).** A v3 journey profile names its branch's catalogued start states. Before the persona's first look, deckent arranges them in the realm over an exec without a terminal (closed stdin, explicit user and locale), never through the persona's terminal, and reads each one back. The catalog arranges an installed deckent (through `deckent init --yes --scope beuser-realm --json`), a Git project with a tracked file under `.deckent/`, an unknown file under `.deckent/`, a stopped service, a second installation, an unreadable ledger, an unsafe authority file, a hand-made launcher, an unproven install method, an empty cache, a fresh home, no Docker socket, a folder with the person's own files and the assembled candidate. The persona's language and accessibility needs come from its profile; `cancel` is the persona's own act. These stay unknown, and the report names each one with its reason: states that need a person's witness (managed policy and approvals `T2`/`S14`/`S14b`, global or relocated data `S10b`/`S25`, keys `S11`, an applied or interrupted uninstall `S15`/`S16`, a modified bridge `S21`, and model, price, role or budget setup), states outside the sealed realm (service managers and running services `S2`/`S4`/`S4b`/`K4`, active work and uncertain effects `S5`/`S8`, worker images `S12`, another platform `S18`, image preparation, worker questions, an unavailable realm or network), states with no witness-free producer (`S3`, parked work `S6`, pending approval `S7`, queued delivery `S9`, dispatch history `S23`), driver limits (pipe, CI and MCP `S17`, line mode) and Enterprise company scope. A branch that names any of them stops as `BEUSER_START_STATE_UNREACHABLE` before any step, and the persona does not start; a step that fails or does not read back stops it as `BEUSER_START_STATE_UNMET`. Both are unknown, never red. Nothing bypasses the witness. *Impact:* those branches are not walked, which is 18 of the 23 uninstall branches and 12 of the 21 onboarding branches. *Workaround:* keep the report's list of unarranged states; a v2 profile keeps the earlier empty realm.
 - **BeUser compares screens with their numbers masked when it looks for a stuck persona (alpha.58).** The same key or text a third time on a screen that came back through other screens and differs only in numbers (a revision, a counter, a clock) ends the walk as a `loop`, and a fourth look or wait in a row on such a screen ends it as `observing`; both are red `persona-stuck` findings. *Impact:* a journey that legitimately repeats one action three times through a screen that shows only changing numbers (for example adding three items to a list that shows just a count), or a product that stays on one screen through four looks or waits, is reported stuck. *Workaround:* read the finding's screen and evidence before treating it as a product defect; the thresholds are registry data in `assets/beuser/limits.json`.
 - **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
 
@@ -104,7 +104,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
-- **The terminal draws its first frame before Deckent has checked everything (alpha.60).** For bare `deckent` (or `--scope <id>`) on a
+- **The terminal draws its first frame before deckent has checked everything (alpha.60).** For bare `deckent` (or `--scope <id>`) on a
   terminal with the full-window layout, the frame appears in about a third of a second (0.34 s warm, 0.35 s cold, against 2.24 s and
   3.21 s before) and the Workline's mode row is drawn after 0.88 s warm and 1.76 s cold. Typing works from the first frame; a line you
   send waits (below) and goes once the runtime service has answered, about 3.6 s warm and 4.7 s cold in the same measurement. Only the
@@ -137,7 +137,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (OSC 52)** and were proven only on a Linux pseudo-terminal (a click on a collapsed tool-call line, alpha.59, only in an in-process
   terminal test), not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
   "Applications in terminal may access clipboard" is on; tmux needs `set -g set-clipboard on`, and for `/copy` also
-  `allow-passthrough on`). Deckent cannot ask the terminal whether it took the text, so `/copy` says "sent", never "copied". One
+  `allow-passthrough on`). deckent cannot ask the terminal whether it took the text, so `/copy` says "sent", never "copied". One
   request carries at most 64 KiB and `/copy` reaches back at most 99 answers; a larger answer is refused, and off an interactive
   terminal nothing is sent. Drag selection has no autoscroll and no double/triple click.
   *Impact:* after "Copied … characters" or "Sent answer …" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
@@ -174,12 +174,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Author evidence is limited to Linux/WSL synthetic PTY and a local fake model; real providers, other platforms and assembled-release acceptance remain separate.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
-  lists (checked 2026-10-19), with Docker's signing key shipped in Deckent. Unknown future codenames are refused with
-  guidance to update Deckent or check Docker's current support and install manually; they are never mapped to an older release.
+  lists (checked 2026-10-19), with Docker's signing key shipped in deckent. Unknown future codenames are refused with
+  guidance to update deckent or check Docker's current support and install manually; they are never mapped to an older release.
   Everything else (native Windows/macOS, Docker
   Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older
   `docker.list`, no network) only prints the next step. *Impact:* a real install has only been rehearsed with a recording
-  fake `sudo`, never run by Deckent's tests. If Docker changes its key, apt refuses the repository until a Deckent update
+  fake `sudo`, never run by deckent's tests. If Docker changes its key, apt refuses the repository until a deckent update
   ships the new key (fail closed). The key and source files are staged in a private folder under `$TMPDIR` that stays
   after a declined or print-only run. On WSL without systemd the engine may not start after the install; the next check
   then says the service is stopped. The Docker Desktop check on WSL looks for the Windows-side program (an observed
@@ -189,18 +189,18 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Isolation
 
-- **Docker tasks get a Node heap ceiling of 75 % of their memory limit.** Deckent sets `NODE_OPTIONS=--max-old-space-size` so Node-based
+- **Docker tasks get a Node heap ceiling of 75 % of their memory limit.** deckent sets `NODE_OPTIONS=--max-old-space-size` so Node-based
   checks (for example `tsc`) use the memory the container has. A task command that sets `NODE_OPTIONS` itself wins; an image that sets
   `NODE_OPTIONS` in its own environment is overridden. Several Node processes in one container share the limit and can still be stopped
   by it (exit 137).
 - **A Docker worker is not a virtual machine.** It shares the host kernel. *Impact:* a kernel-level escape is not
-  contained by Deckent. A microVM sandbox is planned, not built.
-- **A coding worker's own tools sit outside Deckent's model ingress.** Claude Code, Codex and Cursor use their own tools
-  inside the container. *Impact:* those tool calls are not decided by Deckent's per-call approval windows; what contains
+  contained by deckent. A microVM sandbox is planned, not built.
+- **A coding worker's own tools sit outside deckent's model ingress.** Claude Code, Codex and Cursor use their own tools
+  inside the container. *Impact:* those tool calls are not decided by deckent's per-call approval windows; what contains
   them is the container, the checkout and the delivery gate. *Workaround:* give workers only the checkout and the
   permissions the job needs.
 - **Ubuntu 24.04 and later can block the sandbox.** If `kernel.apparmor_restrict_unprivileged_userns` is `1`, bubblewrap cannot
-  start; Deckent falls back to Landlock visibly and refuses full-access shell calls. *Workaround:* an administrator installs
+  start; deckent falls back to Landlock visibly and refuses full-access shell calls. *Workaround:* an administrator installs
   bubblewrap root-owned as `/usr/local/bin/bwrap` with an AppArmor profile that allows `userns` for it (see
   [Get started](../README.md#get-started)).
 - **On a Landlock-only host a large `.gitignore`d folder can refuse the shell.** Landlock now checks folders named in
@@ -215,7 +215,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **The runtime service sees only the environment names it is started with (alpha.63.2).** The terminal's autostart passes the
   service base (path, home, locale, user, session bus, Node's CA file), every `DECKENT_` name, the agent and CI markers, the Docker
   client and native CLI home names, the names config fields read, the agent shell's `terminal.shell.environment` names, the names granted
-  to this project's main vault and the secret names the installation config references with `$DECK:`; Deckent's child processes
+  to this project's main vault and the secret names the installation config references with `$DECK:`; deckent's child processes
   get only the names they need, except the person's own editor, sign-in browser and init first commit. *Impact:* with the environment
   secret store, a `$DECK:` reference, grant or shell environment name added after the service started takes effect only after a restart; a tool that relied on another
   inherited variable no longer sees it. *Workaround:* `deckent runtime restart` after adding a reference; use the encrypted-file store.
@@ -284,14 +284,14 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   approved in a full-access turn, an MCP server run on the host, another agent) still reaches the socket and acts as you for
   everything except the authority changes above. *Workaround:* run untrusted servers and agents in a sandbox or under a
   separate account.
-- **An AI agent running on your own operating-system account is not contained by Deckent's approvals.** Approval and
+- **An AI agent running on your own operating-system account is not contained by deckent's approvals.** Approval and
   audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than
   a person, and your account can write the policy file. Where your account can use Docker or sudo, such an agent can in
-  practice do anything. *Impact:* approvals and policy hold against Deckent's own sandboxed workers, not against other
+  practice do anything. *Impact:* approvals and policy hold against deckent's own sandboxed workers, not against other
   agents you run as yourself. Audit checkpoints (`deckent audit verify`) show a changed policy or producer set and a cut
   or wiped audit trail; undoing both local histories together on your own account is only caught by a checkpoint export
   kept on a separate device. A separate approval channel, a fixed audit floor and the design for remote decisions are worked on during the beta process; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
-  separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
+  separate account without Docker or sudo, and keep deckent's workers in their sandbox.
 - **Opening full-auto or full-access is a person's act at their own terminal.** `deckent init policy --scope <id> --modes <list>|none`
   opens or closes the modes for the installation owner; AI tools, pipes and CI cannot. After an apply the policy has a new `a-…`
   revision, so `deckent doctor` no longer names it `first-run-template-v13` and a later `init policy --upgrade` takes the add-only path.
@@ -328,12 +328,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 - **Claude subscription chat (A62, tools since alpha.63):** `/model` uses the isolated Claude CLI connection for streamed replies,
   conversation history and cancellation without an API budget. Since alpha.63 the CLI's own tools stay off and it works only through
-  Deckent's tools, under Deckent's approvals, sandbox, policy and audit. Use your own account with Anthropic's unmodified binary and its own sign-in flow. Deckent does not collect, read,
+  deckent's tools, under deckent's approvals, sandbox, policy and audit. Use your own account with Anthropic's unmodified binary and its own sign-in flow. deckent does not collect, read,
   store or intermediate OAuth/session tokens, share the profile with another principal, resell usage or bill on others' behalf.
   Existing person witnesses and delegated-use checks still apply. See [Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance).
   Linux fixture/PTY checks are author evidence; real account access and assembled-release acceptance remain separate.
 
-- **Docker subscription workers (alpha.64, owner 2026-11-08).** Claude has no Docker subscription worker: Deckent no longer reads the local
+- **Docker subscription workers (alpha.64, owner 2026-11-08).** Claude has no Docker subscription worker: deckent no longer reads the local
   Claude CLI login or serves its token into a container ([Anthropic's conditions](https://code.claude.com/docs/en/legal-and-compliance)).
   New Claude Docker templates and prepared profiles are refused, and an existing Claude Docker template refuses at Run admission with
   `NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE`. *Workaround:* bind the template to the tokenless worker with
@@ -360,7 +360,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Real-account login and Windows Terminal acceptance still need the assembled-release walk.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
-  codex-cli-subscription` (it runs `codex login` into its own Deckent-owned directory, `headless/logins/codex`; `--config-dir` and
+  codex-cli-subscription` (it runs `codex login` into its own deckent-owned directory, `headless/logins/codex`; `--config-dir` and
   `--executable` name another login directory or binary; there is no `--sso`). Then `deckent models connect --connection
   codex-cli-subscription --executable <path> --config-dir <dir> --delegate system` connects it: without `--executable` the first `codex`
   on the PATH is used, without `--config-dir` the Brain's own login, and `--delegate none|ai|system|ai,system` states who besides you may
@@ -370,25 +370,25 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   or `deckent init registry --scope <id> --provider <cli-id> --connection <profile-id> --kind coding --pool <pool-id>
   --execution-slots <n> --in-flight-slots <n> --preview`; readiness/F08 checks still apply. Image/reconnect
   guidance applies only to eligible Docker activation, not Claude Docker (refused). The same bubblewrap sandbox, consent and one-spawn-per-login rules as the Claude connection apply (below), against your ChatGPT
-  plan's quota; Deckent does not observe the refresh lock of a Codex session you run yourself. *Impact:*
-  Deckent stops the Codex process when its output line shows more than the answer, but it acts on events the CLI reports, so this is
-  not a block before the effect: the read-only sandbox and Deckent's realm bound what could already have run. The model name is the one
-  Deckent passed, not one Codex reported, and the step has not been measured against a real Codex turn. Do not read a successful sign-in as proof that a Codex worker is available.
+  plan's quota; deckent does not observe the refresh lock of a Codex session you run yourself. *Impact:*
+  deckent stops the Codex process when its output line shows more than the answer, but it acts on events the CLI reports, so this is
+  not a block before the effect: the read-only sandbox and deckent's realm bound what could already have run. The model name is the one
+  deckent passed, not one Codex reported, and the step has not been measured against a real Codex turn. Do not read a successful sign-in as proof that a Codex worker is available.
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. Since alpha.55 the Brain (the planner behind `/do`)
   can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection. It signs in to its own
-  Deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
+  deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. The terminal's `/provider` does the same
   (alpha.60): it shows the login directory first, hands the terminal to the CLI's own sign-in (Ctrl+C stops it; the registry time
   bound ends it), connects, then asks who besides you may use the login (first connect defaults to you + AI; connected MCP
   clients share that AI actor; you may narrow to person-only, and system needs its own consent). It runs only where
-  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
+  deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
   sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 added text chat; since alpha.63
-  subscription chat uses Deckent tools under policy and approval. The CLI's built-in tools stay disabled; the Deckent MCP bridge is available after verification. *Workaround where the sandbox is missing:* use an Anthropic API key.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support Deckent tool chat;
+  subscription chat uses deckent tools under policy and approval. The CLI's built-in tools stay disabled; the deckent MCP bridge is available after verification. *Workaround where the sandbox is missing:* use an Anthropic API key.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
 - **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
-  worker bound to your connection runs in Deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
+  worker bound to your connection runs in deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
   bubblewrap, otherwise the worker is refused (`HEADLESS_ISOLATION_UNAVAILABLE`). Plain Docker workers and the ChatGPT browser sign-in (SIWC)
   worker still need Docker settings and an image (`EXECUTION_NOT_CONFIGURED`). *Impact:* adding a second provider from setup
   (`work.profile-add`) still needs a worker image; `deckent coding template --connection <profile> --image <id>` ignores the image when
@@ -403,7 +403,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   masked because their last character happened to match the token's first base64url character. The secret filter keeps its context.
 - **Brain plans and worker reports in your language are requested, not guaranteed (alpha.63, D4).** Brain template v5 (v6 keeps it) and the worker report
   instruction ask for titles, task text, criterion descriptions and the report summary in your language; JSON keys and ids stay unchanged.
-  This has not been measured on real models. *Impact:* a model may still answer in English; Deckent does not translate model text.
+  This has not been measured on real models. *Impact:* a model may still answer in English; deckent does not translate model text.
 - **The Brain chooses each task's WorkClass (F2-11, 2026-11-08).** Brain template v6 reads each WorkClass's planning description from the
   registry and asks for the narrowest class that fits; nothing checks the size of a task before it runs, and a kind's binding (`coding` →
   `feature`) is only the default. *Impact:* a model may still choose a wider class, and then an agent defined for a narrower class (for
@@ -415,30 +415,30 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `.git` present; a hermetic worker-shell check (`git rev-parse --is-inside-work-tree` in the contained view) passes. *Impact:* the cause is
   not known. *Workaround:* if you see it, keep the Run id and the worker's stderr and report it.
 - **Subscription custody depends on the route.** Connected Claude/Codex workers keep login inside the CLI's own realm;
-  Deckent does not read their tokens. Claude Docker is refused. Codex Docker keeps the real token on its host relay;
+  deckent does not read their tokens. Claude Docker is refused. Codex Docker keeps the real token on its host relay;
   Cursor retains its bounded credential projection. See the route-specific alpha.64 limits above, including same-account
   risk and subscription spend through the allowed relay. No universal token-copy or token-invisibility claim applies.
 - **Separate ChatGPT browser sign-in (SIWC) serves chat; its worker is still held.** Alpha.56 opens person sign-in for terminal
-  chat and Deckent's own features (`/provider` → ChatGPT, or `deckent models connect --connection chatgpt-login`, from your own
+  chat and deckent's own features (`/provider` → ChatGPT, or `deckent models connect --connection chatgpt-login`, from your own
   terminal). The session stays only in your own local encrypted store: Linux or WSL, a folder only you can open (0700) on this
   computer's local disk. A shared team host, a store on a network share or `/mnt/c`, or a folder other users can open is refused
-  before the browser opens; `deckent doctor` names the folder and the fix (for example `chmod 700 <folder>`), and Deckent never
+  before the browser opens; `deckent doctor` names the folder and the fix (for example `chmod 700 <folder>`), and deckent never
   changes permissions itself. macOS and native Windows are not supported yet. One sign-in per project; OpenAI offers no plan-limit
-  query, so Deckent shows only its own 30-day usage. Tools connected over MCP cannot use the plan as a raw API.
+  query, so deckent shows only its own 30-day usage. Tools connected over MCP cannot use the plan as a raw API.
   The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
   Worker activation stays on HOLD until real-binary N1 proof (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, reason `activation-hold`);
   missing isolation is a typed refusal, never a host/token-file fallback. While held, no Run is assigned this route and a
   Codex worker keeps its existing connection; a Run frozen on it closes `launch-refused` before any workspace or container.
-  OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental; Deckent's boundary
+  OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental; deckent's boundary
   proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination,
   and an unsupported combination stops with a typed refusal before any authenticated work. *Workaround:* use an already
   supported connection; do not treat successful sign-in as proof that a Codex worker is available.
 
 - **ChatGPT sign-in over SSH needs callback forwarding.** The CLI and terminal show the login URL, but the callback
-  still returns to loopback on the machine running Deckent; no device-code flow is provided. *Workaround:* forward that
-  callback port from your browser's machine, or sign in locally on the Deckent host.
+  still returns to loopback on the machine running deckent; no device-code flow is provided. *Workaround:* forward that
+  callback port from your browser's machine, or sign in locally on the deckent host.
 
-- **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
+- **No automatic fallback from a subscription to an API model.** deckent never switches to a paid API by itself when a subscription
   window is used up. Exception: a ChatGPT sign-in where you explicitly enabled continuation and chose an API model at connect may
   continue on that model from your budget at a confirmed plan limit; every switch is shown and recorded, and the permission is
   revocable. Temporary errors never switch billing paths. The Claude subscription never switches. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
@@ -455,7 +455,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `MODEL_CONNECT_TARIFF_UNVERIFIED`), never priced by guess. *Workaround:* register a catalog row with its price, or run the
   model server on this machine.
 - **A Codex worker's model is only client-reported, and a Cursor worker's model is checked by name only.** Only Claude Code reports
-  per-model usage (`verified`). Codex writes the model it resolved into its own session log inside the container; Deckent reads the
+  per-model usage (`verified`). Codex writes the model it resolved into its own session log inside the container; deckent reads the
   first turn's model from that log (bounded, no links followed; only the model and the Codex version leave the container) and records
   `client-reported` (Turkish: "istemci beyanı"). The admitted model, by its exact id or a catalog name of it, is accepted by its criteria
   with that label; another name reads `client-reported-mismatch` and the attempt is held for a person; no name stays `unverified` and is
@@ -481,10 +481,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `claude-sonnet-5-thinking-high` and `-xhigh`, `gpt-5.6-sol-high` and `-xhigh`, and `auto`. A worker is admitted only on an
   active `native-cli` catalog channel. *Workaround for other models:* write a catalog and register it with
   `deckent models catalog register --file`.
-- **Deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
+- **deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
 - **MCP trust from before alpha.48 is asked again once.** Trust for project and local MCP servers moved out of the project
-  folder into the Deckent global root, so a repository can no longer ship it. A server trusted before alpha.48 waits for its
+  folder into the deckent global root, so a repository can no longer ship it. A server trusted before alpha.48 waits for its
   card (`mcp list` reason `trust-moved`); `deckent mcp approve <name>` on a terminal shows it (`--yes` does not skip it), and
   off a terminal it is refused with `MCP_APPROVAL_NEEDS_TERMINAL`. The old `integrations/mcp-trust.json` in the data folder is
   left in place and never read as trust. *Workaround:* answer the card on first use in the terminal, or run `deckent mcp approve
@@ -572,10 +572,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   dearest applicable price, but there is no limit on the total a long-running API worker may spend. *Impact:* a Run on an
   API worker can use up the scope budget. *Workaround:* set a small scope budget and a credit limit at your provider.
 - **Subscription and local models are not metered by the USD budget.** A subscription or local model keeps working with no
-  budget. *Impact:* their limits are your provider plan's limits, not Deckent's.
+  budget. *Impact:* their limits are your provider plan's limits, not deckent's.
 - **Per-provider spend limits are not built.** There is one shared USD budget per scope. *Workaround:* set limits in each
   provider account.
-- **Settled spend is Deckent's own calculation,** from the usage the provider reports times a verified price (OpenRouter
+- **Settled spend is deckent's own calculation,** from the usage the provider reports times a verified price (OpenRouter
   calls settle from the cost OpenRouter reports). It is not the provider's invoice.
 - **A call that never reported final usage stays held** until you resolve it with `deckent models reconcile-spending`.
 
@@ -592,8 +592,8 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   result-report support and declared acceptance-check results. The `process-exit` evaluator does not independently judge
   semantic content or an arbitrary readback demanded in prose. Since alpha.50 surfaces qualify this as content not
   independently verified; aggregate “1/1 accepted” counts remain unqualified. An independent semantic evaluator is beta work.
-- **Deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
-  `environment.requirements`; Deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
+- **deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
+  `environment.requirements`; deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
   is unmet (no worker, no model call; fix it, then resume, which checks again). An undeclared missing tool is reported as a check that
   could not run (`acceptance-check-not-run`); that is the worker's claim, not proof of an environment defect. Requirements are frozen
   with the Run, so one added to the registry applies to new Runs after `deckent runtime restart`. Core ships coding probe kinds
@@ -646,7 +646,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   working on (often `main`) is refused. *Workaround:* create a separate branch (`git branch deckent/first-job HEAD`),
   list it in `execution.adoption.targets`, and merge it yourself.
 - **A stale prepared direct delivery to the same branch is refused** unless the branch is still at the delivery base
-  (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
+  (`ADOPTION_BASE_CHANGED`). deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.
 - **No rollback from alpha.64 to alpha.63.3 (owner 2026-11-09; last alpha).** Alpha.64 writes approval origin, delivery mode,
@@ -668,14 +668,14 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Working-tree delivery (solo projects) has open limits.** With no work target and no adoption targets, a delivery yes writes
   into your files (`execution.deliveryMode`; set `reference` to keep the Git reference path). It runs only on Linux and only when
   the project folder is the repository's top folder; elsewhere the Run is refused before it starts (`PATCH_WORKING_TREE_UNSUPPORTED`,
-  `PATCH_WORKING_TREE_SUBFOLDER`). No trace reference is written in your repository: the trace is Deckent's delivery record and its
+  `PATCH_WORKING_TREE_SUBFOLDER`). No trace reference is written in your repository: the trace is deckent's delivery record and its
   journal (owner decision 2026-11-06). The Run's base is built from your
   current files with the repository's `.gitignore` and `.git/info/exclude`; your global excludes file (`core.excludesFile`) is not
   read, so a file ignored only there enters the base unless the deny list or a size limit keeps it out. The names (not the contents)
   of withheld files reach the worker as one note line. A set-aside delivery result keeps its Run's private base through a return window of
   `execution.retention.setAsideDays` (default 14) days; after that, the start-of-service cleanup may remove the base when no other
   pending work still needs it. A result brought back after its base was removed can no longer be delivered
-  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window. Deckent builds the base without Git
+  (`WORKSPACE_RUN_BASE_REMOVED`; ask again with `/do`). A closed or cancelled Run's base has no such window. deckent builds the base without Git
   hashing your files (alpha.64), so no filter driver (Git LFS, git-crypt) runs in its service. A file your repository keeps
   through a Git filter (its `filter` attribute set in the last commit's `.gitattributes`, in your current `.gitattributes`,
   `.git/info/attributes` or `core.attributesFile`) enters the base as it is in the last commit: the LFS pointer or the encrypted
@@ -683,13 +683,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   refused at delivery (`PATCH_WORKING_TREE_FILTERED`). A filter attribute set only in your global attributes file
   (`~/.config/git/attributes`) is not read; a filter driver your repository's Git configuration defines but no attribute file
   above names refuses the Run (`PATCH_WORKING_TREE_FILTER`). A commit that removes the filter from `.gitattributes` makes the
-  repository keep those files unfiltered, and Deckent follows it. Starting from your current files needs Git 2.40.0 or later
+  repository keep those files unfiltered, and deckent follows it. Starting from your current files needs Git 2.40.0 or later
   (`PATCH_WORKING_TREE_GIT_VERSION`). The private base copies all of HEAD's history; a history over `execution.git.copyBytes`
   (unset: 8 GiB) refuses the Run (`PATCH_WORKING_TREE_COPY_LIMIT`). A file with a setuid, setgid or sticky bit is never delivered into
   (`PATCH_UNSAFE`, alpha.64). *Workaround:* `deckent config set execution.deliveryMode reference`.
-- **A cross-device aside is never deleted for you.** When Deckent's state and the project are on different filesystems (for
+- **A cross-device aside is never deleted for you.** When deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
-  `.deckent-<uuid>.aside`, and the note names it. Deckent never deletes it, so these files accumulate and show as untracked in
+  `.deckent-<uuid>.aside`, and the note names it. deckent never deletes it, so these files accumulate and show as untracked in
   `git status`. A delivery resumed after a crash does not repeat the note; the journal still names the file. *Workaround:* delete
   the aside files you do not need yourself.
 - **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
@@ -734,7 +734,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **`deckent operation execute` takes the command as JSON on a terminal too.** There is no guided flow yet (catalog operation →
   target → parameters from a schema → preview → approval → wait on one screen); `--schema` prints the contract and a bad document
   names its field; `--example` writes a starting command for this catalog. *Impact:* a person edits a JSON document.
-- **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
+- **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
   its evidence settles the record; if it cannot, the record stays unresolved. `EFFECT_OUTCOME_UNKNOWN` names this next step and
   `deckent operation inspect` shows it for an unknown or claimed record. `EFFECT_TARGET_BUSY` says an earlier operation on the same
@@ -798,7 +798,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   listed. "Last verified" comes only from this installation's sealed backup audit records for the same absolute set path, so a set
   verified under another spelling of its path shows "not on record". *Workaround:* name such a set with `--set`.
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
-- **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
+- **You cannot go back to an older deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
 - **Rollback from alpha.64 to alpha.63.3 is unsupported.** Alpha.64 writes the new persisted fields; recovery uses forward fixes.
   Keep the pre-upgrade backup for data recovery; it does not make a release downgrade supported.
@@ -912,18 +912,18 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Memory phases 3 and 4 open only after measurement.** Turning context or verification fully on is refused with
   `MEMORY_ROLLOUT_CRITERIA_UNMET` until the sealed records meet the criteria (for example 20 shadow admissions, or evaluator agreement of
   at least 90 % over 20 blind decisions). *Workaround:* `deckent memory rollout` shows each criterion with its numbers and the next command.
-- **The subscription Brain needs bubblewrap and shares your quota.** The `claude-cli-subscription` and `codex-cli-subscription` connections run only inside Deckent's
+- **The subscription Brain needs bubblewrap and shares your quota.** The `claude-cli-subscription` and `codex-cli-subscription` connections run only inside deckent's
   bubblewrap sandbox; without it the connection is refused (`HEADLESS_ISOLATION_UNAVAILABLE`), so native Windows and macOS cannot use it.
   It allows one call at a time per connection, and it uses the same subscription quota and login refresh as your own Claude sessions.
-  Deckent buys no credit and stops when the CLI reports that credits are required, but if extra usage is enabled on your account the CLI
-  may draw on it and Deckent cannot see that. AI or MCP planning and background roles use it only after your `--delegate` consent.
+  deckent buys no credit and stops when the CLI reports that credits are required, but if extra usage is enabled on your account the CLI
+  may draw on it and deckent cannot see that. AI or MCP planning and background roles use it only after your `--delegate` consent.
   The sandbox limits file size, open files, core dumps, CPU time (60 s per process), memory (2 GiB per process) and the number of
   processes (64); a CLI stopped by a bound is refused with `HEADLESS_LIMIT_REACHED`, and the turn may already count against your quota.
   These bounds come from measuring `--help` and `auth status`; a full turn's peak has not been measured yet. Connections the gateway
-  refused are counted with their host names on the `deckent doctor` Brain-login line. Deckent does not start the CLI while your own
+  refused are counted with their host names on the `deckent doctor` Brain-login line. deckent does not start the CLI while your own
   Claude session is renewing its login (its refresh lock is in the login directory) and runs one spawn per login directory at a time, so
   parallel Brain calls on one login wait and, past the wait, are refused with `HEADLESS_LOGIN_BUSY`; a lock left by a crashed Claude
-  session blocks it until you remove that lock, because Deckent never touches the login directory. Whether the CLI's own lock check is
+  session blocks it until you remove that lock, because deckent never touches the login directory. Whether the CLI's own lock check is
   safe across the sandbox's process namespace is not verified.
   *Workaround:* keep extra usage off in your Claude account if you do not want it used.
 - **The Brain's quota wait is short and only on a watching surface.** When the subscription quota is exhausted, `/do` and `deckent do`
@@ -969,10 +969,10 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
 - **Delete everything is complete only for a project-folder installation.** In a project's own `.deckent`, `--all` archives
-  (encrypted, verified before the first removal) and deletes the files whose names their Deckent owner writes. It also removes
+  (encrypted, verified before the first removal) and deletes the files whose names their deckent owner writes. It also removes
   `DECKENT.md` and the bridge init wrote: a file init created whole goes whole, otherwise only that exact line goes and every other
   byte stays. This folder's unshared vault slice (its own files) and its records in the instruction-trust store go too. Any
-  other file under a Deckent folder, and Git-tracked, linked or changed files, stay and are listed (and keep their folder). An
+  other file under a deckent folder, and Git-tracked, linked or changed files, stay and are listed (and keep their folder). An
   installation whose data root is the shared global home keeps the alpha.56 behaviour: only the backed-up authority files go.
   Instruction-trust records tied to a ref that no configured target names stay. This folder's entries in the shared legacy trust
   snapshot are forgotten and a restore does not bring them back: that trust is asked again. The ledger lock file goes only when Git
@@ -1071,12 +1071,12 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   `readme-clone-note (verify task)`; the terminal `/runs` window still says "Untitled run".
 - **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
   `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
-- **The background bell needs focus reports from your terminal.** With `terminal.notify` at `bell` (the default) Deckent asks the
+- **The background bell needs focus reports from your terminal.** With `terminal.notify` at `bell` (the default) deckent asks the
   terminal for focus reports (mode 1004) and rings the bell when work ends or a card waits, only after the window reported that it
   lost focus. A terminal or multiplexer that sends no reports (tmux without `focus-events on`) never rings; whether the bell sounds,
   flashes or does nothing is your terminal's setting. *Workaround:* `terminal.notify` `off` turns it off.
 - **Ctrl+G stops the terminal while your editor runs.** The draft goes to a private temporary file (folder 0700, file 0600) and
-  `$VISUAL`, else `$EDITOR`, runs on it with no shell. Until the editor exits, Deckent reads no key and draws nothing, so progress,
+  `$VISUAL`, else `$EDITOR`, runs on it with no shell. Until the editor exits, deckent reads no key and draws nothing, so progress,
   answers and cards appear only afterwards. An editor that returns at once (a GUI editor without its wait flag, such as `code`
   without `--wait`) gives the draft back unchanged; with neither variable set, after an editor error or above 1 MiB the draft is
   unchanged. *Workaround:* set `EDITOR` to a terminal editor or a GUI editor with its wait flag.
@@ -1122,4 +1122,4 @@ retain the `ai-policy` audit label with the person's principal and rule id; a se
 versioned decision-evidence migration remains required before beta.1. Safety holds,
 quota answers and scripted accept/reject keep their existing person/card floors.
 Agent shell authority commands keep the person's card in every mode; a same-user
-process launched outside Deckent remains part of the operating-system trust boundary.
+process launched outside deckent remains part of the operating-system trust boundary.

@@ -3,7 +3,7 @@ name: deckent-beuser
 description: Journey spec before building a person- or company-facing surface, and the BeUser walk on the assembled release - AI agents act as the persona on a real install, walk every branch and give the surface's acceptance verdict.
 ---
 
-# Deckent BeUser
+# deckent BeUser
 
 Apply `deckent-next-refactor`. This is a development method: it grants no authority, admits no work and changes
 no product state. A surface is accepted when the person's or company's whole journey works on the assembled

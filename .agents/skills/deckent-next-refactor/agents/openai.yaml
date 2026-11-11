@@ -1,6 +1,6 @@
 interface:
-  display_name: "Deckent Next Refactor"
-  short_description: "Shared Deckent Next development and review workflow"
-  default_prompt: "Use $deckent-next-refactor to handle this owner-admitted Deckent Next task with current authority, evidence and documentation reconciliation."
+  display_name: "deckent Next Refactor"
+  short_description: "Shared deckent Next development and review workflow"
+  default_prompt: "Use $deckent-next-refactor to handle this owner-admitted deckent Next task with current authority, evidence and documentation reconciliation."
 policy:
   allow_implicit_invocation: true

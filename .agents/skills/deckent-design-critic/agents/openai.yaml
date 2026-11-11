@@ -1,5 +1,5 @@
 interface:
-  display_name: "Deckent Design Critic"
+  display_name: "deckent Design Critic"
   short_description: "Review scoped design evidence in the assigned role"
   default_prompt: "Use $deckent-design-critic in the assigned role to review this exact artifact and evidence; implementer self-review cannot provide independent PASS."
 policy:

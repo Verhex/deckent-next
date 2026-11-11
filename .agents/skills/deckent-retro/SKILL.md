@@ -4,7 +4,7 @@ description: Session retrospective - lists improvements to the agent environment
 disable-model-invocation: true
 ---
 
-# Deckent retro
+# deckent retro
 
 The owner asked for a retrospective. Suggest changes to the **environment** that would have made this session
 faster or safer, not changes to product code. Findings are candidates for the owner (law 2: a finding is not

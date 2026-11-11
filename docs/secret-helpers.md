@@ -27,14 +27,14 @@ Install helper code and its dependencies outside worker-writable locations; the 
 arguments and working directory must contain no credentials. The helper receives an empty
 environment, including no inherited HOME, API keys, tokens, PATH or loader settings. Use an
 absolute executable and explicit non-secret locations for required assets. The helper retrieves
-its own credentials through its trusted external source; Deckent never passes a secret to it.
+its own credentials through its trusted external source; deckent never passes a secret to it.
 This is a trusted host adapter, not an untrusted worker or a general shell-execution surface.
 Worktree separation does not confine its filesystem/network access or protect against the same
 OS user replacing trusted helper code. Installation ownership must enforce those boundaries.
 
 ## Protocol v1 and bounds
 
-Deckent directly spawns the executable with the registered argument array, without a shell.
+deckent directly spawns the executable with the registered argument array, without a shell.
 It sends `NAME` followed by LF on stdin and closes stdin. The response on stdout is one UTF-8
 secret value, optionally followed by a single LF or CRLF. Empty output means the name is absent.
 An absent name never falls back to environment or another store. Multiple lines, NUL bytes,

@@ -1,14 +1,14 @@
 ---
 name: deckent-visual-language
-description: Deckent art direction - typography, color roles, density, spacing rhythm, hierarchy, motion, iconography, branding and visual state language, chosen after product states and interaction needs are known.
+description: deckent art direction - typography, color roles, density, spacing rhythm, hierarchy, motion, iconography, branding and visual state language, chosen after product states and interaction needs are known.
 ---
 
 
-# Deckent Visual Language
+# deckent Visual Language
 
 ## Objective
 
-Express Deckent as a precise operator instrument without generic AI-product theater. Load
+Express deckent as a precise operator instrument without generic AI-product theater. Load
 deckent-design-dna first and obtain the workflow/state contract from the relevant domain skill.
 
 ## Current direction

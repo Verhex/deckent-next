@@ -1,10 +1,10 @@
 <div align="center">
 
-# Deckent
+# deckent
 
 **Agent Control & Execution Plane**
 
-Deckent, insanların ve yapay zekâ ajanlarının isteklerini kendi makinelerinizde yetkili, yalıtılmış ve kayıtlı işlere dönüştürür.
+deckent, insanların ve yapay zekâ ajanlarının isteklerini kendi makinelerinizde yetkili, yalıtılmış ve kayıtlı işlere dönüştürür.
 
 *policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
@@ -13,9 +13,9 @@ Deckent, insanların ve yapay zekâ ajanlarının isteklerini kendi makinelerini
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[English](README.md) · [Deckent nedir](#deckent-nedir) · [Nasıl çalışır](#nasıl-çalışır) · [Başlarken](#başlarken) · [İlk iş](#adım-adım-ilk-işiniz) · [Gündelik kullanım](#gündelik-kullanım) · [Güvenlik](#güvenlik-ve-denetim) · [Bugün](#bugün-neler-çalışıyor) · [Yol haritası](#yol-haritası)
+[English](README.md) · [deckent nedir](#deckent-nedir) · [Nasıl çalışır](#nasıl-çalışır) · [Başlarken](#başlarken) · [İlk iş](#adım-adım-ilk-işiniz) · [Gündelik kullanım](#gündelik-kullanım) · [Güvenlik](#güvenlik-ve-denetim) · [Bugün](#bugün-neler-çalışıyor) · [Yol haritası](#yol-haritası)
 
-<img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki Deckent terminali: logo, sürüm, proje, model ve mod" width="880">
+<img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki deckent terminali: logo, sürüm, proje, model ve mod" width="880">
 
 </div>
 
@@ -30,28 +30,28 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 > [!NOTE]
 > Bu README geçerli sürüm adayını anlatır: **beta ön sürüm `1.0.0-beta.1`**. [CHANGELOG.md](CHANGELOG.md) beta
 > sürümlerini en yenisi başta listeler; eski sürümler [CHANGELOG-alpha.md](CHANGELOG-alpha.md) dosyasındadır.
-> Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta serisi içinde,
+> deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta serisi içinde,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil). Sekiz kabul kapısı beta serisinde açık kalır; beta kabulü ayrıca duyurulur.
 >
 > Alpha.64 son alpha'dır. Onay kökeni, teslim modu, Brain kökeni veya resource-key kayıtları yazıldıktan sonra
 > alpha.63.3 bunları okuyamaz: **alpha.63.3'e geri dönüş yoktur**. Kurtarma ileri sürüm düzeltmesi gerektirir;
 > yükseltme öncesi yedekleri veri kurtarma için saklayın. [Bilinen sınırlar](docs/known-limits.tr.md).
 
-## Deckent nedir
+## deckent nedir
 
 Yapay zekâ ajanları artık komut çalıştırabiliyor, kod değiştirebiliyor ve iş sistemlerini çağırabiliyor. Artık asıl
 zorluk onları çalıştırmak değil; zor olan, bir işe kimin izin verdiğini, nerede çalıştığını, kaça mal olduğunu ve nasıl geri
 alınacağını bilmektir. Çoğu araç bunu ekranın başındaki kişiye bırakır.
 
-Deckent bu soruları yanıtlayan katmandır. Onu kendi makinelerinize kurarsınız; her istek, ister terminaldeki bir kişiden ister
+deckent bu soruları yanıtlayan katmandır. Onu kendi makinelerinize kurarsınız; her istek, ister terminaldeki bir kişiden ister
 MCP üzerinden bir yapay zekâ ajanından ya da bir betikten gelsin, aynı kontrollerden geçer: kimlik, kapsam, policy, onay ve
 bütçe. İş sonra bir sandbox'ta ya da Docker işçisinde çalışır; her karar ve etki kalıcı bir deftere (ledger) yazılır.
-Örneğin Deckent ücretli bir model çağrısından önce çağrının tutabileceği en yüksek tutarı projenin bütçesinden ayırır; fiyat
+Örneğin deckent ücretli bir model çağrısından önce çağrının tutabileceği en yüksek tutarı projenin bütçesinden ayırır; fiyat
 bilinmiyorsa ya da bütçe yetmiyorsa çağrı, hiçbir şey gönderilmeden reddedilir.
 
 Aynı temel, dizüstü bilgisayarında çalışan tek bir kişiye de çok ekipli bir şirkete de hizmet edecek biçimde kuruldu. İlk kullanım yazılım
 işidir: kodlama işçileri bağlı Claude/Codex CLI ile bubblewrap alanında ya da uygun Docker profilinde çalışır;
-Deckent değişikliği proje dosyalarına ya da Git referansına teslim eder.
+deckent değişikliği proje dosyalarına ya da Git referansına teslim eder.
 ERP veya CRM gibi iş sistemleri de aynı sözleşmeyi kullanır: tanımlı bir operasyon, yalnız kayıt değişmemişse uygulanan
 bir yazma, asla iki kez uygulanamayan bir yeniden gönderme, kanıta dayalı kabul ve bir şeyin geri alınması gerektiğinde
 planlı bir geri alma (telafi). Core bu sözleşmeyi ve genel bir HTTP hedefini içerir;
@@ -63,14 +63,14 @@ bağlayıcıları orada yer alır. Aşağıda geçen kapsam (scope), Run ve onay
 
 ## Nasıl çalışır
 
-İsteğinizi düz bir cümleyle söylersiniz. Deckent bunu kontrol edilmiş, yalıtılmış adımlara çevirir; policy ve izin modunuz
+İsteğinizi düz bir cümleyle söylersiniz. deckent bunu kontrol edilmiş, yalıtılmış adımlara çevirir; policy ve izin modunuz
 izin vermedikçe hiçbir şey çalışmaz.
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Siz
-  participant T as Deckent terminali
+  participant T as deckent terminali
   participant R as Runtime servisi
   participant P as Policy ve onaylar
   participant B as Sandbox
@@ -136,11 +136,11 @@ Sizin adınıza kurulum yapan AI asistanı için [AI kurulum rehberini](docs/ai-
 ### Kaynaktan kurulum
 
 [Node.js indirme sayfasından](https://nodejs.org/en/download) desteklenen bir sürüm kurun; WSL2 için de Linux seçin.
-Aynı terminalde `node --version` ve `npm --version` ile kontrol edin. Ubuntu'daki `apt install nodejs`, Deckent'in
+Aynı terminalde `node --version` ve `npm --version` ile kontrol edin. Ubuntu'daki `apt install nodejs`, deckent'in
 çalışmadığı Node 18'i kurabilir. npm `EBADENGINE` bildirirse Node'u [package.json](package.json) aralığına yükseltin,
 yeni terminal açın ve klonun içinde `npm ci` komutunu yeniden çalıştırın.
 
-npm paketi yayımlanana kadar Deckent'i bir kez kaynaktan derleyin ve `deckent` komutunu bağlayın:
+npm paketi yayımlanana kadar deckent'i bir kez kaynaktan derleyin ve `deckent` komutunu bağlayın:
 
 ```sh
 git clone https://github.com/Verhex/deckent-next.git
@@ -167,7 +167,7 @@ Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter. `BUBBLE
 ulaşılamamıştır: rootless → `systemctl --user start docker` (sonraki oturumlar için `systemctl --user enable docker`); sistem Docker'ı → `sudo systemctl start docker`; WSL'de Docker Desktop → Desktop'ı başlatın ve Settings > Resources > WSL Integration'ı etkinleştirin.
 İki betik de uzun işten önce Docker'ı yoklar; hata, saptanan kuruluma uyan komutu (bilinmiyorsa üçünü) gösterir. İki `build-bwrap` komutunu yeni bir `--out` dizinle (örneğin
 `.pack/bwrap/second-build`) yeniden çalıştırın, sonra `npm run build`. Ubuntu 24.04 ve sonrasında çekirdek, bubblewrap'ın ihtiyaç
-duyduğu kullanıcı ad alanlarını engelleyebilir; Deckent bunu söyler ve Landlock'a düşer. İki durumu ve bir yöneticinin
+duyduğu kullanıcı ad alanlarını engelleyebilir; deckent bunu söyler ve Landlock'a düşer. İki durumu ve bir yöneticinin
 kısıtı nasıl kaldıracağını
 [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#kaynak-derleme-ve-sandbox-durumu) anlatır. Ön
 koşulları ve sağlayıcı anahtarı gerektirmeyen tek bir testi [katkıcı hızlı başlangıcı (EN)](CONTRIBUTING.md#a-30-minute-quickstart)
@@ -175,7 +175,7 @@ gösterir.
 
 ### Adım adım ilk oturum
 
-Bu adımlar sizi boş bir projeden yönetilen bir sohbete ve onun maliyetine, Deckent'ten çıkmadan götürür. Deckent kaynak dizininin dışındaki
+Bu adımlar sizi boş bir projeden yönetilen bir sohbete ve onun maliyetine, deckent'ten çıkmadan götürür. deckent kaynak dizininin dışındaki
 kendi proje klasörünüze geçin; bundan sonra her şey `deckent` ile yapılır.
 
 ```mermaid
@@ -190,7 +190,7 @@ flowchart LR
 
 1. **Proje başına bir kez kurun.** *Kapsam (scope)*, policy'yi, iş kayıtlarını ve harcamayı bu projeye bağlayan sabit addır;
    bir klasör ya da sandbox değildir. Size ait, başka hesapların yazamadığı bir klasör kullanın. Ubuntu gibi grup yazma
-   izniyle klasör oluşturan sistemlerde Deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
+   izniyle klasör oluşturan sistemlerde deckent, gerçek terminalde o klasörün iznini daraltmayı bir kez sorar.
    Evet yalnız o klasörün grup/diğer yazma iznini kaldırır; hayır klasörü değiştirmez ve `chmod go-w .` rehberini gösterir.
    `terminal attach --preview` için bu açık izin adımı salt okunur önizlemeden önce gelir; evetten sonra sonda gösterilen tam uygulama komutunu kopyalayıp çalıştırın.
    Komut `--scope <id> --apply --expect <özet> --command-id <uuid>` içerir; yeniden denerken aynı komut kimliğini koruyun.
@@ -212,7 +212,7 @@ flowchart LR
    `deckent config set --global language tr` ile kaydedin (İngilizce: `en`). `deckent init --lang tr` sırasında da seçebilirsiniz.
 3. **Sağlayıcı bağlayın**: `/provider`. **Claude ile giriş**, **ChatGPT ile giriş (Codex CLI)**, yerel model ya da
    **API anahtarıyla bağlan** yolunu seçin. Abonelik girişi terminalinizde CLI'ın kendi akışından geçer; API anahtarı
-   gizlenen alana yazılır ve Deckent'te saklanır. Bu kapsamda bağlanacak tam modeli seçin.
+   gizlenen alana yazılır ve deckent'te saklanır. Bu kapsamda bağlanacak tam modeli seçin.
    İlk abonelik onayı varsayılan olarak size ve AI aktörlerine açıktır; bağlı MCP istemcileri aynı AI kimliğini kullanır.
    Yalnız kendinize daraltabilirsiniz; arka plan/system kullanımı ayrı onay ister. 5. adım oturum modelini seçer.
 4. **Ücretli API çağrıları için bütçe belirleyin.** Her ücretli tur kapsamın ortak USD bütçesinden pay ayırır; bütçe
@@ -222,7 +222,7 @@ flowchart LR
    ve çözümüyle kilitli görünür.
 6. **Çalışın.** İsteğinizi düz bir cümleyle söyleyin. Araç çağrıları kurulumunuzun policy'sine ve izin modunuza uyar; size
    danışılması gereken her şey onay penceresini açar (bkz. [Güvenlik ve denetim](#güvenlik-ve-denetim)).
-7. **Kullanıma bakın**: `/usage` bu konuşmanın kullandığı token'ları ve kapsamın bütçelerini gösterir. Bu, Deckent'in
+7. **Kullanıma bakın**: `/usage` bu konuşmanın kullandığı token'ları ve kapsamın bütçelerini gösterir. Bu, deckent'in
    ölçümüdür; sağlayıcının faturası değildir.
 
 Bu ekranlar gerçek terminalden, alpha.53'te (120×36, varsayılan tam pencere düzeni) geçici bir projede ve küçük bir yerel
@@ -259,7 +259,7 @@ OpenAI uyumlu seçenekleri ve bugün abonelikle neyin çalıştığını
 
 ## Adım adım ilk işiniz
 
-Sohbet yalnız başlangıçtır. Deckent işi planlar, planı siz onaylarsınız ve işçi kendisine ayrılan korumalı alanda çalışır.
+Sohbet yalnız başlangıçtır. deckent işi planlar, planı siz onaylarsınız ve işçi kendisine ayrılan korumalı alanda çalışır.
 Çalışma ağacı kipinde teslimi onaylamak yamayı proje dosyalarınıza yazar. Referans kipi bir Git referansına yazar;
 dalı ilerletmek ayrı onaydır. İş hedefi ve dala alma hedefi yoksa varsayılan çalışma ağacıdır; yükseltilen kurulumlar da
 dahildir. Teslim kartı hangi etkiyi onayladığınızı söyler.
@@ -274,7 +274,7 @@ flowchart LR
 ```
 
 En az bir commit'i olan Git projesinde ve bağlı bir modelle başlayın; USD bütçesi yalnız ücretli API için gerekir.
-Abonelikte `/provider` ya da `deckent models login --connection <kind>` ile giriş yapıp Deckent üzerinden bağlanın;
+Abonelikte `/provider` ya da `deckent models login --connection <kind>` ile giriş yapıp deckent üzerinden bağlanın;
 işçi şablonunu o bağlantıya bağlayın. Bu ayrı bir CLI giriş alanıdır; mevcut host CLI girişi işçiyi hazır yapmaz.
 Native Claude/Codex işçileri Linux/WSL bubblewrap ister; uygun Docker profilleri Docker ve imaj ister. Claude'un eski
 Docker abonelik yolu reddedilir; ayrı ChatGPT tarayıcı girişi (SIWC) işçisi bekletilir. Gerçek hesap ve sıfırdan ilk iş
@@ -332,7 +332,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
 ### İşi çalıştırın
 
 1. **İsteyin.** Terminalde `/do` yazıp isteğinizi sade sözlerle yazın (komut satırında `deckent do --request "<metin>"`).
-   Bağlı bir model planlar; Deckent planı her görev için bir kabul satırıyla basar:
+   Bağlı bir model planlar; deckent planı her görev için bir kabul satırıyla basar:
 
    ```text
    Run <run-id> için plan · <durum>
@@ -356,7 +356,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
    teslimi reddeder; kendi değişikliklerinizi koruyup kartın sonraki adımını izleyin. Geri alma ayrı çalışma ağacı
    onayıdır ve sonraki değişikliklerle çatışırsa reddedilir. Referans kipinde `y`, `refs/deckent/deliveries/` altına yazar;
    çalışma dosyaları ve index değişmez, dalı ilerletmek ayrıdır.
-5. **Referans kipinde dalı ilerletin**, isterseniz ayrı bir `y` ile. Deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
+5. **Referans kipinde dalı ilerletin**, isterseniz ayrı bir `y` ile. deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
    ilerletir; bu yüzden önce bir dal açın:
 
    ```sh
@@ -377,7 +377,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
 ### Terminalde
 
 `deckent` etkileşimli terminali açar. Her slash komutu kendi penceresinde yanıt verir; <kbd>Esc</kbd> pencereyi kapatır ve
-konuşmada metin yığını yerine tek bir çerçeveli `Deckent sistemi` satırı bırakır. Ayarlar yazarak değil seçerek değişir:
+konuşmada metin yığını yerine tek bir çerçeveli `deckent sistemi` satırı bırakır. Ayarlar yazarak değil seçerek değişir:
 `/config` bölümden anahtara, oradan izin verilen değerlere ilerler; her değişiklik policy'den geçer ve bir onaya
 dönüşebilir. `/help` tüm komutları amaca göre listeler; en çok kullanılanlar şunlardır:
 
@@ -390,7 +390,7 @@ dönüşebilir. `/help` tüm komutları amaca göre listeler; en çok kullanıla
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı süre. Yanıtlar bir listedir; "bu oturum" ve "bu projede her zaman" yalnız policy sunduğunda görünür.</sub></td>
   </tr>
   <tr>
@@ -434,12 +434,12 @@ deckent models roles show                 # hangi model hangi rolde
 
 ### Bir yapay zekâ istemcisini MCP ile bağlayın
 
-MCP iki yönde çalışır. Deckent'in kendi ajanına bir MCP sunucusu vermek için onu `/mcp` ile ya da
+MCP iki yönde çalışır. deckent'in kendi ajanına bir MCP sunucusu vermek için onu `/mcp` ile ya da
 `deckent mcp add context7 -- npx -y @upstash/context7-mcp` ile ekleyin. Sunucu ancak siz ona güvendikten sonra başlar ve
 varsayılan olarak ağ erişimi ve kendi ev klasörü olan bir sandbox içinde çalışır; `host` için yapılandırılmış bir sunucu
 sandbox'sız çalışır, her birinin nerede çalıştığını `/mcp` gösterir.
 
-Dışarıdaki bir yapay zekâ istemcisinin Deckent'i kullanması için Deckent'in stdio MCP sunucusu `deckent-mcp`'yi o istemciye
+Dışarıdaki bir yapay zekâ istemcisinin deckent'i kullanması için deckent'in stdio MCP sunucusu `deckent-mcp`'yi o istemciye
 kaydedin; Claude Code'da bu `claude mcp add deckent -- deckent-mcp --project /proje/yolu` komutudur. Araçlarının çoğu runtime
 servisine ihtiyaç duyar; bu yüzden `deckent runtime serve` açık kalsın. İstemci, başlangıçta yalnız gözlem yapabilen ayrı bir
 MCP aktörü olarak çalışır. Daha fazlasına izin vermek için `/policy` penceresini (**MCP izinleri**) açın, bir kapsam ve bir yetki
@@ -475,7 +475,7 @@ flowchart LR
   C -->|Shift+Tab| A["Tam otomatik<br/><sub>sandbox'lı kabuk ve MCP çalışır</sub>"]
   A -->|Shift+Tab| F["Tam erişim<br/><sub>sahip izni · bu oturum · her çağrı denetimde</sub>"]
   F -->|Shift+Tab| S
-  H[["Sabit zemin · her modda kapalı<br/>Deckent durumu, policy, onaylar, denetim, kimlik bilgileri"]]
+  H[["Sabit zemin · her modda kapalı<br/>deckent durumu, policy, onaylar, denetim, kimlik bilgileri"]]
 ```
 
 | Mod | Sormadan çalışır | Önce sorar |
@@ -489,7 +489,7 @@ Tam otomatik ve tam erişimi kurulum sahibi kendi terminalinde
 `deckent init policy --scope <id> --modes full-auto,full-access --preview`, ardından `--apply` ile açar; yapay zekâ
 araçları, borular ve CI açamaz. Ajanın kabuk komutları sandbox içinde çalışır: ilk üç modda proje, çağrının onayı içinde
 yazılabilir; `.git` salt okunur, ev klasörünüz gizli ve ağ kapalıdır. Tam erişim açık bir bubblewrap sandbox'ı ister; bu
-sandbox ağı ve ev klasörünü açar ama Deckent'in kendi durumunu ve bilinen kimlik bilgisi dosyalarını yine gizler. Sandbox
+sandbox ağı ve ev klasörünü açar ama deckent'in kendi durumunu ve bilinen kimlik bilgisi dosyalarını yine gizler. Sandbox
 yoksa kapalı bir mod host'a düşer ve bunu söyler (varsayılan `terminal.shell.realm: prefer-sandbox`); bu yolun dosya
 sistemi sınırı yoktur, bu yüzden yalıtım şartsa `require-sandbox` seçin. Her görünümü ve sınırlarını
 [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#sandbox-görünümleri) anlatır.
@@ -516,12 +516,12 @@ açabilir. Deponuzu kimin okuyabileceğini `deckent doctor --verbose` söyler; d
 
 ### Harcama
 
-Her kapsamın, tüm API sağlayıcılarının ortak kullandığı tek bir USD bütçesi vardır. Deckent ücretli bir çağrıdan önce
+Her kapsamın, tüm API sağlayıcılarının ortak kullandığı tek bir USD bütçesi vardır. deckent ücretli bir çağrıdan önce
 çağrının tutabileceği en yüksek tutarı ayırır; sonra çağrıyı sağlayıcının bildirdiği kullanım ile doğrulanmış yayımlanmış
 fiyatın çarpımından kesinleştirir (OpenRouter çağrıları OpenRouter'ın bildirdiği ücretten kesinleşir). Fiyatı doğrulanmamış
 uzak bir model reddedilir. Son kullanımını hiç bildirmemiş bir çağrı, siz `deckent models reconcile-spending` ile çözene kadar
 ayrılmış kalır. Kesinleşen bir tutar ayrılandan fazla çıkarsa kapsam yeni ücretli çağrıları durdurur; dondurmayı
-`deckent models revise-budget --scope <id> --usd <n> --unfreeze` ile kaldırırsınız. Kesinleşen tutar Deckent'in kendi
+`deckent models revise-budget --scope <id> --usd <n> --unfreeze` ile kaldırırsınız. Kesinleşen tutar deckent'in kendi
 hesabıdır, sağlayıcının faturası değildir; bu yüzden sağlayıcı hesabınızda da bir harcama sınırı tutun. Fiyat kademelerini ve
 OpenRouter ayarlarını [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#harcamanın-kesinleşmesi)
 anlatır.

@@ -146,9 +146,9 @@ decided in shadow is not asked again after the switch to live. Every escalation 
 
 ## Headless subscription Brain and quota (S3-1…S3-5, S9, F3, F4)
 
-The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own Deckent-owned
+The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own deckent-owned
 login (s3c, owner 2026-10-24: layout resource `headlessLogins`, `headless/logins/claude` under the global state root, 0700, never backed
-up, never read by Deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
+up, never read by deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
 sign-in at their terminal; the person's `~/.claude` is not used, and `--config-dir` is the person's override): one turn, no tools, no MCP,
 `--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as `CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
 the binary, its version range, required flags (help-hidden flags proven by a parser refusal in an empty temporary config directory) and
@@ -171,7 +171,7 @@ The gateway keeps its refusals as counts and DNS host names (bounded by `provide
 beside the preflight record feeds the doctor Brain-login line. The CLI's OAuth refresh lock is a name beside its login in the login
 directory (registry `refreshLock.names`; none exists at rest and none appeared during in-realm `--version`, `--help` and `auth status`); the
 realm binds that directory itself, so file exclusion is shared with the person's own sessions, but a process-id staleness check would see
-across PID namespaces wrongly, and Deckent cannot serialize sessions it does not start. Deckent therefore starts no spawn while such a name
+across PID namespaces wrongly, and deckent cannot serialize sessions it does not start. deckent therefore starts no spawn while such a name
 exists and serializes its own spawns per login directory with a 0600 lock in the global headless root; past the registry wait it refuses
 with `HEADLESS_LOGIN_BUSY`. The S3-3 switch `models.headless.preview` is retired: the key still parses and is no longer offered.
 

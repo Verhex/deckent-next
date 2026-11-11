@@ -1,9 +1,9 @@
 ---
 name: design-tokens-pipeline
-description: Change Deckent semantic design tokens or the Next Terminal palette generation; inspect current consumers before claiming cross-surface outputs or drift checks.
+description: Change deckent semantic design tokens or the Next Terminal palette generation; inspect current consumers before claiming cross-surface outputs or drift checks.
 ---
 
-# Deckent Next Design Tokens Pipeline
+# deckent Next Design Tokens Pipeline
 
 ## Actual repository contract
 

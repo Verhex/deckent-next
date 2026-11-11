@@ -1,4 +1,4 @@
-# Deckent sözlüğü
+# deckent sözlüğü
 
 [English](glossary.md) · [Mimariye genel bakış](architecture-overview.tr.md) · [README](../README.tr.md)
 
@@ -50,7 +50,7 @@ MCP yüzeyi onayları listeler ve inceler; onay kararı veremez.
 
 ## Değişmez koruma sınırı (hard floor)
 
-İzin modunun gevşetemeyeceği korumalardır. Deckent ayarları, yetki politikası, onaylar,
+İzin modunun gevşetemeyeceği korumalardır. deckent ayarları, yetki politikası, onaylar,
 sırlar ve MCP kaydı hassas yollar ve işlemler arasındadır. İşleme göre açık onay gerekir
 veya hassas durum yürütmenin görebildiği alanın dışında tutulur. Kolaylık sağlayan modların
 kendi yetkisini değiştirmesini önler. Aynı işletim sistemi hesabıyla çalışan diğer programların
@@ -71,7 +71,7 @@ kapalı görünümündeki uygun çağrıları otomatikleştirir.
 yolu kapsam başına tüm sağlayıcıların paylaştığı tek bütçe kullanır. Hesap üst sınırı, ayrılan
 ve kesinleşen tutarları ayırır. Bütçe veya kullanılabilir tutar yoksa yeni ücretli çağrı
 reddedilir. İptal edilen ya da kesilen çağrı, uzlaştırılana kadar ayrılan tutarı tutabilir.
-Bu Deckent'in çağrı kabul denetimidir; sağlayıcı hesabındaki sınır veya fatura değildir.
+Bu deckent'in çağrı kabul denetimidir; sağlayıcı hesabındaki sınır veya fatura değildir.
 
 ## Ölçülen kullanıma dayalı tarife (measured tariff)
 
@@ -90,7 +90,7 @@ ele geçirilmiş bir ana makineyi güvenilir yapmaz.
 
 ## Protokol (protocol)
 
-Deckent istemcileri ile yerel yürütme servisi arasındaki sürümlü mesaj sözleşmesidir. Tipli
+deckent istemcileri ile yerel yürütme servisi arasındaki sürümlü mesaj sözleşmesidir. Tipli
 komut, sorgu, olay, hata ve sonuçları taşır. Protokol sürümü, ledger şeması ve paket sürümü
 ayrı kimliklerdir. Yaşam döngüsü uyumluluğu eski bir servisi tanımlamaya veya durdurmaya izin
 verebilir; uyumsuz istemciyle iş yürütmeye izin verdiği anlamına gelmez. Normal kullanımda
@@ -104,7 +104,7 @@ Kapsam üyeliği tek başına yeterli değildir. Model, persona veya eklenti ken
 
 ## Çekirdek katmanlar (core layers)
 
-Deckent'in işi daha az gözetimle yürütmesini sağlayan parçalar; alpha.55'te kod olarak eklendi, henüz kabul edilmiş davranış değildir:
+deckent'in işi daha az gözetimle yürütmesini sağlayan parçalar; alpha.55'te kod olarak eklendi, henüz kabul edilmiş davranış değildir:
 
 - **Brain:** `/do`'nun arkasındaki planlayıcı. İsteği görevlere böler ve her görevin **WorkClass**'ını (iş türünü) adlandırır;
   işçi modelini seçmez.

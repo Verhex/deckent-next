@@ -27,11 +27,11 @@ removes safe mode and the blanket MCP denial, and admits exactly one generated `
 and an admission-policy turn bound. Drivers must materialize that file only at the registry file name in the private run
 directory; the registry accepts no arbitrary MCP path or inline configuration. The init guard compares the exact session
 tool set and built-in plugin provenance; any other tool/plugin refuses sealing. Codex keeps the v1 argv and uses direct MCP
-tools (`omit_tools_from`) with `approve`; this value opens the route to Deckent's handler, never bypasses its approval.
+tools (`omit_tools_from`) with `approve`; this value opens the route to deckent's handler, never bypasses its approval.
 Native/unknown item types refuse; only the exact measured code-mode error is allowed (K3 also enforces stream counts/order).
 
 The shared bridge data describes topology R: HTTP MCP through the existing relay to a `.invalid` sentinel host/path,
-with a generation-bound **Deckent** turn token, not a subscription credential. Claude's HTTP entry uses headers and a
+with a generation-bound **deckent** turn token, not a subscription credential. Claude's HTTP entry uses headers and a
 millisecond timeout; Codex uses URL/bearer-token environment and seconds. Both timeouts derive from the session approval
 TTL; no CLI default supplies authority or a policy deadline. HTTP_PROXY stays in effect and NO_PROXY is cleared by schema.
 Body/frame limits are sourced provisional policy ceilings, not measured capacity. P is disabled fallback flag data only.
@@ -146,7 +146,7 @@ person line for the same principal's running turn (`queued`, `not-running` for a
 `full` past `CHAT_TURN_STEER_LINES` lines per turn or when one more id would not fit the turn's result bound whole; a repeated `steerId`
 is the same line; ids are identifier-shaped, at most 64 characters). The joined and returned ids are stored with the durable turn, so a
 replay answers the same. The result is fitted by its serialized size (`fitChatTurnResult`): the answer's repeat is left out first
-(`answerBytes` still names it), then Deckent's note is cut (`…`); notices and steer ids are never cut, because admission measures the
+(`answerBytes` still names it), then deckent's note is cut (`…`); notices and steer ids are never cut, because admission measures the
 largest result with no answer and no note. The loop takes waiting lines only at the
 model-call boundary — after every tool result of the round, before the next round is measured and sent — so a line never enters an
 approval or witness wait and never answers a card; each joins once as the person's `user` message (`message` event with its `steerId`),
@@ -204,7 +204,7 @@ admission. The summary answer is normalized into the bounded shape before valida
 field as one string): a string, scalars or objects become items, an absent list is empty, text longer than an item is split at a space
 (no text dropped), a count past the bound is named (`[N more items omitted by Deckent]`), a too long objective is cut with its length
 and digest; an answer without a string objective is unreadable. The `summarize` port distinguishes a summary, `unreadable` (the call
-answered, nothing usable) and `null` (the call failed). `unreadable` compacts with Deckent's mechanical excerpt, labelled not
+answered, nothing usable) and `null` (the call failed). `unreadable` compacts with deckent's mechanical excerpt, labelled not
 model-written (earlier assistant texts and tool results, each ≤ 400 characters with length and digest, newest within 12 000 characters;
 user messages and tool calls copied as before), and the turn's closure note says so (`AGENT_TURN_MECHANICAL_COMPACTION_NOTE`, shown in
 the footer). A failed call keeps the history unchanged and closes the turn with a note that says to send again or start a new
@@ -268,7 +268,7 @@ reported. No ledger schema or version change. Cost: O(retained rows) of the allo
 
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 10; W2 adds the running binary version/channel),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
-Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
+deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
 decide every call (runs, waits for the operator, or is denied; a denial is final), declared-parameters-only, bounded-result
 continuation (`hasMore=true` → `nextStartLine`), same-argument read references, and one short progress line between tool rounds.
@@ -282,7 +282,7 @@ System prompt **v3** (FETCH): the network line (`fetch_url`, allowlisted hosts �
 access: none`; every turn's request digest changes again.
 System prompt **v4** (TERM-FEEDBACK-1): one line naming the running model from the bound catalog definition (native id; provider and
 model reference with versions; "running inside Deckent"; answer identity questions with it), and the data-root line no longer points at
-the ledger and saved conversations: Deckent's own state and authority, keys and credential files are named protected (the tools and the
+the ledger and saved conversations: deckent's own state and authority, keys and credential files are named protected (the tools and the
 shell refuse them); the configuration is named readable. Every turn's request digest changes again.
 System prompt **v5** (LANG-CRASH): the reply language of the person's locale as the first rule and again as the last line
 (`AGENT_TURN_REPLY_LANGUAGES`: en → English, tr → Turkish (Türkçe); keyed like the catalog locales, so a new catalog locale without an entry
@@ -293,14 +293,14 @@ wire: terminal and service differ only for `terminal --lang` or a service starte
 the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
 v19 (v18 is released) and ships with the next protocol bundle. (Option A has not been added through protocol v29; the service locale still decides.)
 System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
-(the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed, the configuration written
+(the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, deckent state sealed, the configuration written
 only by an owner-approved call (Astra 2192 R9, historical; superseded by W3 on 2026-10-09: configuration remains read-only in every shell call); closed = no network; host; unavailable), and `Network access: none` stays only when the
 shell has no network. Every turn's request digest changes again.
 System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offered it names the per-answer output limit
 (`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.
 System prompt **v10** (NATIVE-BAGLAM, owner 2026-10-14, beta gate 3; live finding: "hangi moddayız" was answered by reading
 `.deckent/config.json`, one answer carried English reasoning): after the tools the segment carries the **session context v1**
-(`src/engine/core/agent-turn/internal/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): Deckent version, scope, session id, the permission mode as
+(`src/engine/core/agent-turn/internal/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): deckent version, scope, session id, the permission mode as
 the decision reads it (`principalPermissionMode`; a stored full-access start mode without a launched full-access turn reads standart;
 `askEdits` named) with a one-line meaning, thinking (`on` / `off` from `chatTurn.reasoning` / `model-default` when the catalog declares no
 `chat-template-enable-thinking`), the binding's supported catalog capabilities per protocol (≤ 4 protocols, ≤ 16 ids), each offered tool's
@@ -326,7 +326,7 @@ resources added later; TERM-FEEDBACK-1: the owner's live session listed and read
 under it, its sidecars (`rel*`: `ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary
 (`.policy.json.<id>.tmp`). The deny list's nested literal heads (`WorkspaceScope.protectedAnchors`: literal nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from `.deckent/host/**`); a pattern starting with a glob has none. A sandbox never grants their ancestors whole, even under an ignored tree; `.gitignore` cannot lift this deny-derived floor (Astra 2162).
 `.deckent/live-data/state/ledger.db`, `.deckent/host`, …) are protected together with their ancestors by both sandboxes even under an
-ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) — the ignored-tree exception never reaches Deckent's own state; a chain
+ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) — the ignored-tree exception never reaches deckent's own state; a chain
 through a symbolic link refuses the call. In the shell plan a `PATH_PROTECTED` verdict on one of these patterns is a hard floor
 (`PRODUCT_STATE_PROTECTED`, no card, no effect intent): product management is not opened by any approval (owner F2); the Core floor's
 other paths (`.env`, keys) keep asking and are then refused by the sandbox. Policy and bindings are authority sources and stay closed;
@@ -396,7 +396,7 @@ used by agent tools. Global-state path names are rejected as `PRODUCT_STATE_PROT
 profiles cannot resolve a usable host shell (`SUBSCRIPTION_HOST_SHELL_REFUSED`), whether host was configured or chosen as fallback.
 With global state present, host calls using directory changes (`cd`, `pushd`, `popd`), path-producing `find`/`xargs`, command or parameter
 expansion, dynamic tilde names, braces, process substitution or unparseable syntax require a per-call approval with a localized warning
-that the working directory could not be verified and the command may reach Deckent's state folder (owner 2026-11-03, K15C).
+that the working directory could not be verified and the command may reach deckent's state folder (owner 2026-11-03, K15C).
 The warning precedes the command in the bounded preview and is also carried in the structured shell reason. These host calls use the
 existing always-ask tier unless already destructive/authority; mode and standing approvals cannot allow them automatically. Explicit
 global-root names still refuse before any card; subscription host/fallback refusal is unchanged. K15B's prior hard refusal was a lead
@@ -500,7 +500,7 @@ Admitted task artifacts and predecessor handoffs appear only in tool views at `/
 dependency binds retain their admitted targets. Read tools use the shared scoped reader; shell calls and
 read-only environment probes use the shared bubblewrap view resolver/process owner with read-only aliases.
 NAT-3 amendment (owner 2026-11-09, B4(a)): receipts, original source roots, scope, byte/time/depth limits and link checks are
-validated once when admitting the input into bounded Deckent-owned private read-only copies. Later tool reads and shell
+validated once when admitting the input into bounded deckent-owned private read-only copies. Later tool reads and shell
 views validate and use the copies (custody, directory seals, bytes and digests), not the originals. A later source edit
 neither changes nor refuses an already admitted input; a changed copy is refused. Copies consume disk under the Attempt's
 custody and follow its retention/removal lifecycle, not a separate permanent input store. See

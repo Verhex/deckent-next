@@ -1,9 +1,9 @@
 ---
 name: deckent-next-refactor
-description: Entry point for any Deckent Next development, fix, refactor, review, diagnosis or handoff - current authority, bounded scope, evidence and document reconciliation, then the moment's specialist skill.
+description: Entry point for any deckent Next development, fix, refactor, review, diagnosis or handoff - current authority, bounded scope, evidence and document reconciliation, then the moment's specialist skill.
 ---
 
-# Deckent Next development workflow
+# deckent Next development workflow
 
 Shared, stable method for Codex, Claude and Cursor. Its name is kept for existing callers.
 Loading it grants no execution, delegation, commit, publication or runtime authority.

@@ -1,10 +1,10 @@
 ---
 name: deckent-terminal-design
-description: Deckent CLI/TUI ergonomics - information hierarchy, keyboard interaction, slash commands and palette, logs, worker trees, run inspection, ANSI color tiers, TTY behaviour, piping and Terminal/Desktop parity.
+description: deckent CLI/TUI ergonomics - information hierarchy, keyboard interaction, slash commands and palette, logs, worker trees, run inspection, ANSI color tiers, TTY behaviour, piping and Terminal/Desktop parity.
 ---
 
 
-# Deckent Terminal Design
+# deckent Terminal Design
 
 ## Objective
 
@@ -51,7 +51,7 @@ dependency. A browser mockup is evidence of hierarchy only.
   markers when Unicode/box-drawing width or encoding is not trustworthy.
 - Preserve main-screen native scrollback by default. Alternate-screen behavior is opt-in and can
   never be required for the primary workflow. At launch the rich surface clears the visible screen
-  and homes the cursor so Deckent starts at the top with its banner (owner 2026-10-07); earlier
+  and homes the cursor so deckent starts at the top with its banner (owner 2026-10-07); earlier
   output moves into scrollback and is never erased.
 - Model platform signals explicitly: POSIX SIGINT/SIGTERM and Windows SIGINT/SIGBREAK are different
   adapters. Escape closes focus; it never promises process cancellation without a real abort seam.

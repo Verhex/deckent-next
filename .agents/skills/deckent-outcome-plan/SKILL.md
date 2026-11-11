@@ -1,9 +1,9 @@
 ---
 name: deckent-outcome-plan
-description: Plan a Deckent Next package, wave, card or lane brief - one owner-admitted outcome as a bounded dependency DAG with ownership, law check, proof contract and owner question rounds, before implementation.
+description: Plan a deckent Next package, wave, card or lane brief - one owner-admitted outcome as a bounded dependency DAG with ownership, law check, proof contract and owner question rounds, before implementation.
 ---
 
-# Deckent Next Outcome Plan
+# deckent Next Outcome Plan
 
 ## Scope and authority
 
@@ -59,7 +59,7 @@ Every plan, card and lane brief carries the law check and two perspectives (full
     10. Enterprise katmanı — uyumlu / ilgisiz / çatışma: <neden>
     North star (güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans) — <neden>
     ## İki bakış
-    - Dogfood: Deckent kendini geliştirirken bu ne katar?
+    - Dogfood: deckent kendini geliştirirken bu ne katar?
     - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
       Kod/test'e özgü bir öğe kalıyorsa git adapter'ında mı?
 

@@ -1,4 +1,4 @@
-# Contributing to Deckent
+# Contributing to deckent
 
 Contributions in English or Turkish are welcome. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md).

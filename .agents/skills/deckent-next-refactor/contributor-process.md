@@ -4,7 +4,7 @@ Moved from CONTRIBUTING.md on 2026-10-09. This preserves the existing internal p
 it is not a new public contribution requirement. External contributors use
 [CONTRIBUTING.md](../../../CONTRIBUTING.md). Dated status remains historical.
 
-# Contributing to Deckent
+# Contributing to deckent
 
 Contributions in English or Turkish are welcome. Follow the [Code of Conduct](../../../CODE_OF_CONDUCT.md).
 Report vulnerabilities privately through [SECURITY.md](../../../SECURITY.md).
@@ -129,7 +129,7 @@ of the merge. Refresh affected docs and preserve proof before landing. No direct
 CODEOWNERS names the default owner; automatic review requests and enforcement depend on GitHub
 permissions, the base branch and repository protection settings. These files do not enable settings.
 
-## Deckent-worker branches and PRs — WORKER-GIT-PR
+## deckent-worker branches and PRs — WORKER-GIT-PR
 
 This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script
 (`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Its owner test and landing status is tracked in PLAN. The intended workflow is:

@@ -225,7 +225,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   never moves it); the release copies exactly the displayed (secret-projected) text, SGR and trailing padding removed, as one OSC 52 write
   (`osc52Copy`) from `runTerminalWorkline`, and the hint row shows `terminal.viewport.copied` for 4 s (fixed height). A plain click or any
   key but the scroll keys clears it; a press outside the drawn lines starts nothing; a drag past the view clamps (no autoscroll, no
-  double/triple click). Unlike Claude Code's local path (pbcopy / wl-copy / PowerShell `Set-Clipboard`), Deckent writes only OSC 52: no
+  double/triple click). Unlike Claude Code's local path (pbcopy / wl-copy / PowerShell `Set-Clipboard`), deckent writes only OSC 52: no
   process is spawned and nothing but the person's selection reaches the clipboard. Native selection stays on the terminal's modifier
   (Shift; Option in iTerm2) and `terminal.layout: inline` captures no mouse at all. Spacing (TERM-POLISH): `stepSpaceBefore`
   (terminal-work) is the one rule — a row gets one blank line above it when it is a tool step or follows one — used by `Static`, the
@@ -354,7 +354,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 on `wave/slash-windows`; released with alpha.15, PR #46):** `terminal-window` owns
   `InfoWindow` (projects every visible model word through the workline's known-secret / human-text projection before layout, choice ids
   unchanged — `projectInfoModel`; SW-3 list windows do the same through `projectSlashPickSpec` / `projectPickerTree`, Astra 2456 P1-2; typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
-  choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ Deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
+  choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
   truncates). Bare `/help` `/status` `/usage` `/doctor` `/scope` `/context` (SW-1) answer in information windows filled by terminal-admin
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
   whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
@@ -380,7 +380,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
   inference-metrics adapter (loopback only — the name `localhost` is resolved and every answer must be a valid 127.0.0.0/8 or `::1` address before contact, then connections go only to the checked addresses, in answer order after a connection failure; one total deadline covers resolution and every attempt, and a late answer starts no connection — the profile's metrics limits, no redirect follow) and never
-  through a surface fetch. Deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
+  through a surface fetch. deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
   is not Run admission. MCP `inference_plan` and `inference_budget` are the same read. The Desktop bridge
   snapshot carries work rows only (no chat content) and is not a live file channel. İzlemeler
   S18 üretim ledger takibiyle beslenir; `followWorkers` / `followRuns` portu bulunmayan tüketicide bounded single-flight poll kalır.
@@ -436,12 +436,12 @@ Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel
 `windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
 `light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
 nearest xterm-256 index for new primitives). A contract test measures WCAG 2.2 contrast (text 4.5:1, borders 3:1) of every truecolor value
-on each reference background of its theme; Deckent never sets the terminal background. Colour choice is split: `colorCapability`
+on each reference background of its theme; deckent never sets the terminal background. Colour choice is split: `colorCapability`
 (platform) reads `NO_COLOR`/`--no-color`/`FORCE_COLOR`/`TERM=dumb`/TTY, `COLORTERM` truecolor|24bit and a 256-colour `TERM`;
 `resolveTerminalTheme` (terminal-theme) applies `terminal.theme` (`auto|dark|light|dark-daltonized|light-daltonized|ansi`, default `auto`):
 `auto` uses the dark/light theme only when `COLORFGBG` reports the background and otherwise stays in ansi16 (the terminal's own palette);
 `colorTier` (monitor, crash report) keeps its background guard. The person's row is a left rail with the `You`/`Sen` label and the text in
-the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Mode colours (owner
+the terminal's own foreground; the answer heading is `● deckent` (`assistantLabel`); worker cards use `workerCard`. Mode colours (owner
 2026-10-18): standart `muted`, full-auto `modeIndicator` (its own token, no longer equal to `warning`), full-access `warning` bold with the
 calm mark `⏵⏵⏵` (ASCII `>>>`) and a factual line (`tui.panel.mode.fullAccessLine`); the launch notice is warning level. Security behaviour
 is unchanged. Opening (inline layout; the full window shows the banner as its first block instead): on a TTY the
@@ -578,7 +578,7 @@ System messages stay in the system prompt. No CLI session or credential is impor
 flag, auth, UID, delegated-use, bubblewrap, egress and resource checks; native tools and MCP remain off. Existing durable chat turns and
 model invocations own streaming, cancellation, usage, quota refusal and replay; subscription billing has no API budget gate. The connection
 is text-only; it offers no file or shell tools. Other headless families retain their existing admission until explicitly opted in by registry.
-The account belongs to the person using Anthropic's unmodified binary and sign-in; Deckent never handles the OAuth/session token or resells
+The account belongs to the person using Anthropic's unmodified binary and sign-in; deckent never handles the OAuth/session token or resells
 or shares that usage. Author fixture/PTY evidence is separate from an assembled-release BeUser walk.
 
 

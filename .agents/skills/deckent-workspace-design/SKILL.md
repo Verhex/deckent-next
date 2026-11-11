@@ -1,10 +1,10 @@
 ---
 name: deckent-workspace-design
-description: Deckent Desktop workspace architecture - docking, tabs, split panes, resizing, sidebars, inspectors, command palette, focus restoration, saved layouts, multi-window, multi-monitor and scale-factor behaviour.
+description: deckent Desktop workspace architecture - docking, tabs, split panes, resizing, sidebars, inspectors, command palette, focus restoration, saved layouts, multi-window, multi-monitor and scale-factor behaviour.
 ---
 
 
-# Deckent Workspace Design
+# deckent Workspace Design
 
 ## Objective
 

@@ -1,9 +1,9 @@
 ---
 name: deckent-authority-bootstrap
-description: Session start, after compaction or an authority change - take a read-only snapshot of Deckent Next owner authority, repository scope, work ownership and evidence freshness. Reads runtime only when the task needs it and admits no work.
+description: Session start, after compaction or an authority change - take a read-only snapshot of deckent Next owner authority, repository scope, work ownership and evidence freshness. Reads runtime only when the task needs it and admits no work.
 ---
 
-# Deckent Next authority bootstrap
+# deckent Next authority bootstrap
 
 ## Role and boundaries
 

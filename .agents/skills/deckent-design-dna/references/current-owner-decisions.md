@@ -1,6 +1,6 @@
-# Current Deckent Owner Design Decisions
+# Current deckent Owner Design Decisions
 
-This file is the single home of the Deckent design direction; other design skills point here.
+This file is the single home of the deckent design direction; other design skills point here.
 
 Authority, newest first (Alperen live design direction):
 - 2026-11-10: Tauri confirmed; Desktop is a simple chat app. The 2026-11-08 carrier decision
@@ -14,7 +14,7 @@ Authority, newest first (Alperen live design direction):
 
 These are product/design targets subject to live owner instructions and current ARCHITECTURE/PLAN. They do
 not prove a shipped Desktop, Terminal behavior or runtime health; verify actual wiring and platform evidence.
-Read this file before proposing or revising Deckent product, Desktop workspace or visual-language direction.
+Read this file before proposing or revising deckent product, Desktop workspace or visual-language direction.
 These are active decision constraints, not inspiration. Do not repackage a rejected direction under a new name.
 
 ## Desktop direction (2026-10-09 through 2026-11-10)
@@ -51,7 +51,7 @@ These are active decision constraints, not inspiration. Do not repackage a rejec
   same bounded dynamic region. It remains subject to real-terminal feasibility and platform proof.
 - Software delivery is one domain profile. Orders, production, ERP and other governed business
   processes use the same execution, permission, intervention, evidence and audit semantics.
-- Execution mediation is a cross-cutting capability of the one Deckent kernel, not a fourth product
+- Execution mediation is a cross-cutting capability of the one deckent kernel, not a fourth product
   face or an isolation-only product identity. The same product may execute directly in a canonical
   workspace or mediate AI through staged, isolated, brokered or remote realms according to
   installation topology, effective policy, task risk and platform capability evidence.
@@ -59,7 +59,7 @@ These are active decision constraints, not inspiration. Do not repackage a rejec
   resolved realm, workspace projection, effects, filesystem/network/secrets capabilities and
   landing policy; an unavailable stronger realm never silently downgrades to direct host effects.
 - Docker, Firecracker or another container/microVM/runtime is an execution-realm adapter, never a
-  separate Deckent edition, kernel or product identity.
+  separate deckent edition, kernel or product identity.
 - Desktop and Terminal share one object, state, permission and command model; disclosure never
   creates separate shells, runtimes, editions or products.
 - Terminal has one stable operator surface. Do not add disclosure modes, density variants or a

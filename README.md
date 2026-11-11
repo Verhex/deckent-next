@@ -1,10 +1,10 @@
 <div align="center">
 
-# Deckent
+# deckent
 
 **Agent Control & Execution Plane**
 
-Deckent turns what people and AI agents ask for into authorized, isolated and recorded work on your own machines.
+deckent turns what people and AI agents ask for into authorized, isolated and recorded work on your own machines.
 
 *policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
@@ -15,7 +15,7 @@ Deckent turns what people and AI agents ask for into authorized, isolated and re
 
 [Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How it works](#how-it-works) · [Get started](#get-started) · [First job](#your-first-job) · [Everyday use](#everyday-use) · [Safety](#safety-and-control) · [Today](#what-works-today) · [Roadmap](#roadmap)
 
-<img src=".github/assets/screenshots/en/01-startup.png" alt="Deckent terminal right after start: logo, version, project, model and mode" width="880">
+<img src=".github/assets/screenshots/en/01-startup.png" alt="deckent terminal right after start: logo, version, project, model and mode" width="880">
 
 </div>
 
@@ -30,7 +30,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 > [!NOTE]
 > This README describes **beta pre-release `1.0.0-beta.1`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists beta releases, newest first; older releases are in [CHANGELOG-alpha.md](CHANGELOG-alpha.md).
-> Deckent is not on npm yet: install it from source as shown in
+> deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned during the beta line, probably as `@verhex/deckent` (the name is
 > not final yet). The eight acceptance gates remain open during the beta line; beta acceptance is announced separately.
 >
@@ -38,20 +38,20 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 > alpha.63.3 cannot read them: **there is no rollback to alpha.63.3**. Recovery requires a forward fix;
 > keep pre-upgrade backups for data recovery. See [known limits](docs/known-limits.md).
 
-## What is Deckent
+## What is deckent
 
 AI agents can now run commands, change code and call business systems. Getting them to act is no longer the hard part.
 The hard part is knowing who allowed an action, where it ran, what it cost and how to undo it. Most tools leave that to
 the person watching the screen.
 
-Deckent is the layer that answers those questions. You install it on your own machines, and every request goes through
+deckent is the layer that answers those questions. You install it on your own machines, and every request goes through
 the same checks, whether it comes from a person at the terminal, an AI agent over MCP or a script: identity, scope,
 policy, approval and budget. The work then runs in a sandbox or a Docker worker, and every decision and effect is written
-to a durable ledger. For example, before a paid model call Deckent reserves the most the call could cost against the
+to a durable ledger. For example, before a paid model call deckent reserves the most the call could cost against the
 project's budget; if the price is unknown or the budget is too small, the call is refused before anything is sent.
 
 The same foundations are built to serve one person on a laptop and a company with many teams. Software work is the first use:
-coding workers use a connected Claude/Codex CLI in a bubblewrap sandbox or an eligible Docker profile, and Deckent delivers
+coding workers use a connected Claude/Codex CLI in a bubblewrap sandbox or an eligible Docker profile, and deckent delivers
 the change to project files or a Git reference. Business
 systems such as an ERP or a CRM use the same contract: a declared operation, a write that applies only if the record is
 unchanged, a resend that can never apply twice, acceptance on evidence, and a planned undo (compensation) when something
@@ -64,14 +64,14 @@ belong there. The [glossary](docs/glossary.md) explains the terms used below, su
 
 ## How it works
 
-You ask for something in plain words. Deckent turns it into checked, isolated steps, and nothing runs unless policy and
+You ask for something in plain words. deckent turns it into checked, isolated steps, and nothing runs unless policy and
 your permission mode allow it.
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor You
-  participant T as Deckent terminal
+  participant T as deckent terminal
   participant R as Runtime service
   participant P as Policy and approvals
   participant B as Sandbox
@@ -138,10 +138,10 @@ For an AI assistant installing on your behalf, use the [AI installation guide](d
 
 Install a supported Node version from the [Node.js download page](https://nodejs.org/en/download), choosing Linux for
 WSL2 too, then check `node --version` and `npm --version` in that terminal. Ubuntu's `apt install nodejs` may supply
-Node 18, which cannot run Deckent. If npm reports `EBADENGINE`, upgrade Node to the range in [package.json](package.json),
+Node 18, which cannot run deckent. If npm reports `EBADENGINE`, upgrade Node to the range in [package.json](package.json),
 open a new terminal and run `npm ci` again in the clone.
 
-Until the npm package is published, build Deckent once from source and link the `deckent` command:
+Until the npm package is published, build deckent once from source and link the `deckent` command:
 
 ```sh
 git clone https://github.com/Verhex/deckent-next.git
@@ -167,15 +167,15 @@ The build ends with `bubblewrap=present` or `bubblewrap=staged from …`. If it 
 Docker was not reachable: rootless → `systemctl --user start docker` (`systemctl --user enable docker` for future sessions); system Docker → `sudo systemctl start docker`; Docker Desktop on WSL → start Desktop and enable Settings > Resources > WSL Integration.
 Both scripts check Docker before long work; the error gives the detected setup's command (or all three when unknown). Run both `build-bwrap` commands again with a new `--out` directory (for example
 `.pack/bwrap/second-build`), then `npm run build`. On Ubuntu 24.04 and later the kernel may block the user
-namespaces bubblewrap needs; Deckent then says so and falls back to Landlock. The
+namespaces bubblewrap needs; deckent then says so and falls back to Landlock. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#source-build-and-sandbox-posture) explains both
 cases and how an administrator lifts the restriction. The [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart)
 lists the prerequisites again and runs one test without a provider key.
 
 ### Your first session
 
-This takes you from an empty project to a governed chat and its cost, without leaving Deckent. Change to your own project folder,
-outside the Deckent source checkout; from here on everything is `deckent`.
+This takes you from an empty project to a governed chat and its cost, without leaving deckent. Change to your own project folder,
+outside the deckent source checkout; from here on everything is `deckent`.
 
 ```mermaid
 flowchart LR
@@ -189,7 +189,7 @@ flowchart LR
 
 1. **Set up once per project.** A *scope* is the stable name that ties policy, work records and spending to this project;
    it is not a folder or a sandbox. Use a folder you own that other accounts cannot write to. On systems such as Ubuntu
-   that create group-writable folders, Deckent asks once on a real terminal whether to narrow that folder's permission.
+   that create group-writable folders, deckent asks once on a real terminal whether to narrow that folder's permission.
    Yes removes group/other write access from that folder only; no leaves it unchanged and shows `chmod go-w .` guidance.
    For `terminal attach --preview`, this explicit permission step happens before the read-only preview; after yes, copy and run the complete apply command printed at the end.
    It includes `--scope <id> --apply --expect <digest> --command-id <uuid>`; keep the same command id when retrying.
@@ -211,7 +211,7 @@ flowchart LR
    preference with `deckent config set --global language tr` (English: `en`). You can also choose it during `deckent init --lang tr`.
 3. **Connect a provider** with `/provider`. Choose **Sign in with Claude**, **Sign in with ChatGPT (Codex CLI)**,
    a local model, or **Connect with an API key**. Subscription sign-in uses the CLI's own flow at your terminal;
-   an API key goes into a masked field and is stored by Deckent. Choose the exact model to connect in this scope.
+   an API key goes into a masked field and is stored by deckent. Choose the exact model to connect in this scope.
    First subscription consent defaults to you and AI actors, including connected MCP clients sharing that AI identity.
    You may restrict it to yourself; background/system use needs its own consent. Step 5 selects the session's model.
 4. **Set a budget for priced API calls.** Every paid API turn reserves from the scope's shared USD budget and is refused
@@ -221,7 +221,7 @@ flowchart LR
    with the reason and the fix.
 6. **Work.** Ask in plain words. Tool calls follow your installation's policy and your permission mode; anything that needs
    you opens the approval window (see [Safety and control](#safety-and-control)).
-7. **Check usage** with `/usage`: the tokens this conversation used and the scope's budgets. It is Deckent's
+7. **Check usage** with `/usage`: the tokens this conversation used and the scope's budgets. It is deckent's
    measurement, not the provider's invoice.
 
 These screens come from the real terminal, recorded on alpha.53 (120×36, the default full-window layout) in a throwaway
@@ -258,7 +258,7 @@ of every provider, the local and OpenAI-compatible options and what works with a
 
 ## Your first job
 
-A chat is only the start. Deckent plans the job, you approve the plan and a worker runs in its assigned sandbox.
+A chat is only the start. deckent plans the job, you approve the plan and a worker runs in its assigned sandbox.
 In working-tree mode, confirming delivery writes the patch to your project files. Reference mode writes a Git reference;
 branch adoption is a separate confirmation. With no work target or adoption targets, working-tree mode is the default,
 including on upgraded installations. The delivery card tells you which effect you are approving.
@@ -274,7 +274,7 @@ flowchart LR
 
 Start in a Git project with at least one commit and a connected model (a USD budget is required only for paid APIs).
 For a connected subscription, sign in through `/provider` or `deckent models login --connection <kind>` and connect
-through Deckent, then bind the worker template to that connection. This uses a separate CLI login realm; an existing
+through deckent, then bind the worker template to that connection. This uses a separate CLI login realm; an existing
 host CLI login alone does not make the worker ready. Native Claude/Codex workers require Linux/WSL bubblewrap;
 eligible Docker profiles require Docker and an image. Claude's old Docker subscription route is refused; the separate
 ChatGPT browser-sign-in (SIWC) worker remains held. Real-account and clean-machine first-job acceptance remain open
@@ -332,7 +332,7 @@ what each preview checks, and what to do on an installation set up before the cu
 ### Run the job
 
 1. **Ask.** In the terminal type `/do` and your request in plain words (`deckent do --request "<text>"` from the command
-   line). A connected model plans it, and Deckent prints the plan with an acceptance line for each task:
+   line). A connected model plans it, and deckent prints the plan with an acceptance line for each task:
 
    ```text
    Plan for Run <run-id> · <status>
@@ -356,7 +356,7 @@ what each preview checks, and what to do on an installation set up before the cu
    conflicts refuse delivery; preserve your edits and follow the card's next step. Undo is a separate working-tree
    rollback confirmation and refuses conflicting later edits. In reference mode, `y` writes under
    `refs/deckent/deliveries/`; your working files and index stay unchanged, and branch adoption is separate.
-5. **Adopt in reference mode** into a branch if you want, with a separate `y`. Deckent moves only a branch you allowed and nobody has
+5. **Adopt in reference mode** into a branch if you want, with a separate `y`. deckent moves only a branch you allowed and nobody has
    checked out, so create one first:
 
    ```sh
@@ -378,7 +378,7 @@ what each preview checks, and what to do on an installation set up before the cu
 ### In the terminal
 
 `deckent` opens the interactive terminal. Every slash command answers in its own window; <kbd>Esc</kbd> closes it and leaves
-one framed `Deckent system` line in the conversation instead of a wall of text. Settings are changed by choosing, not
+one framed `deckent system` line in the conversation instead of a wall of text. Settings are changed by choosing, not
 typing: `/config` walks from section to key to the allowed values, and each change goes through policy and may become
 an approval. `/help` lists every command by purpose; the most used ones are:
 
@@ -391,7 +391,7 @@ an approval. `/help` lists every command by purpose; the most used ones are:
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under deckent"><br><sub><b>Chat.</b> Your lines and deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where, on whose behalf, scope, why, risk, undo and a live deadline. The answers are a list; "this session" and "always in this project" appear only where policy offers them.</sub></td>
   </tr>
   <tr>
@@ -435,12 +435,12 @@ deckent models roles show                 # which model serves which role
 
 ### Connect an AI client over MCP
 
-MCP works in two directions. To give Deckent's own agent an MCP server, add it with `/mcp` or
+MCP works in two directions. To give deckent's own agent an MCP server, add it with `/mcp` or
 `deckent mcp add context7 -- npx -y @upstash/context7-mcp`. It starts only after you trust it, and by default it runs in a
 sandbox with network access and its own home folder; a server configured for `host` runs without a sandbox, and `/mcp`
 shows where each one runs.
 
-To let an outside AI client use Deckent, register `deckent-mcp`, Deckent's stdio MCP server, in that client; in Claude
+To let an outside AI client use deckent, register `deckent-mcp`, deckent's stdio MCP server, in that client; in Claude
 Code that is `claude mcp add deckent -- deckent-mcp --project /path/to/project`. Most of its tools need the runtime
 service, so keep `deckent runtime serve` running. The client acts as a separate MCP actor that can only observe at
 first. To let it do more, open `/policy` (**MCP permissions**), choose a scope and a capability group and grant it after
@@ -476,7 +476,7 @@ flowchart LR
   C -->|Shift+Tab| A["Full auto<br/><sub>sandboxed shell and MCP run</sub>"]
   A -->|Shift+Tab| F["Full access<br/><sub>owner grant · this session · every call audited</sub>"]
   F -->|Shift+Tab| S
-  H[["Hard floor · closed in every mode<br/>Deckent state, policy, approvals, audit, credentials"]]
+  H[["Hard floor · closed in every mode<br/>deckent state, policy, approvals, audit, credentials"]]
 ```
 
 | Mode | Runs without asking | Asks first |
@@ -490,7 +490,7 @@ The installation owner opens full auto and full access with
 `deckent init policy --scope <id> --modes full-auto,full-access --preview` and then `--apply` at their own terminal;
 AI tools, pipes and CI cannot. Agent shell commands run in a sandbox: in the first three modes the project is writable
 within the call's approval, `.git` is read-only, your home folder is hidden and the network is off. Full access needs an
-open bubblewrap sandbox, which adds the network and your home folder but still hides Deckent's own state and known
+open bubblewrap sandbox, which adds the network and your home folder but still hides deckent's own state and known
 credential files. If no sandbox is available, a closed mode falls back to the host and says so (the default
 `terminal.shell.realm: prefer-sandbox`); that fallback has no filesystem boundary, so set `require-sandbox` when
 confinement is mandatory. The [operator reference](.deckent/docs/architecture/operator-reference.md#sandbox-views)
@@ -519,12 +519,12 @@ and a stricter setup.
 
 ### Spending
 
-Each scope has one USD budget shared by every API provider. Before a paid call Deckent reserves the most it could cost;
+Each scope has one USD budget shared by every API provider. Before a paid call deckent reserves the most it could cost;
 afterwards it settles the call from the usage the provider reported, multiplied by the verified published price
 (OpenRouter calls settle from the cost OpenRouter reports). A remote model without a verified price is refused. A call
 that never reported its final usage stays reserved until you resolve it with `deckent models reconcile-spending`. If a
 charge ever exceeds what was reserved, the scope stops new paid calls until you lift the freeze with
-`deckent models revise-budget --scope <id> --usd <n> --unfreeze`. The settled amount is Deckent's calculation, not the
+`deckent models revise-budget --scope <id> --usd <n> --unfreeze`. The settled amount is deckent's calculation, not the
 provider's invoice, so keep a spending limit in your provider account as well. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#spend-settlement) covers price tiers and
 OpenRouter settings.

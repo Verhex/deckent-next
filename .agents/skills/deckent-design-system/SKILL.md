@@ -1,10 +1,10 @@
 ---
 name: deckent-design-system
-description: Deckent component contracts, primitives, variants, design tokens, accessibility behaviour, component governance and Desktop/Terminal/Dashboard semantic parity - reusable system decisions rather than one-off mockups.
+description: deckent component contracts, primitives, variants, design tokens, accessibility behaviour, component governance and Desktop/Terminal/Dashboard semantic parity - reusable system decisions rather than one-off mockups.
 ---
 
 
-# Deckent Design System
+# deckent Design System
 
 ## Objective
 
@@ -16,7 +16,7 @@ component contract, then tokens.
 
 ## Component model
 
-Deckent's differentiating components represent agentic semantics, for example:
+deckent's differentiating components represent agentic semantics, for example:
 
 - run, flow and work-item summaries;
 - agent and worker nodes;

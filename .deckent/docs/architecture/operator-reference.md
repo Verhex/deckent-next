@@ -22,10 +22,10 @@ one section; other sections link to it.
   the host. Start the service (`deckent`) and run `doctor` again.
 - **Ubuntu 24.04 and later.** The kernel may restrict unprivileged user namespaces, which bubblewrap needs. Check with
   `sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted; on WSL a missing key (`cannot stat`) means there
-  is no restriction. Deckent then reports the restriction, falls back to Landlock visibly, and refuses full-access shell calls
+  is no restriction. deckent then reports the restriction, falls back to Landlock visibly, and refuses full-access shell calls
   because they need the open bubblewrap sandbox. An administrator can install bubblewrap root-owned as `/usr/local/bin/bwrap`
   together with an AppArmor profile that allows `userns` for it.
-- After `npm link`, work in your own project folder, outside the Deckent source checkout. Long paths and spaces work: the local
+- After `npm link`, work in your own project folder, outside the deckent source checkout. Long paths and spaces work: the local
   socket uses a short private directory per installation.
 - **Platforms.** The local runtime socket and the verified-terminal witness exist only on Linux (WSL included). On macOS the
   runtime service does not run yet, so chat, jobs and backup cannot be used; on any non-Linux system delivery, adoption and
@@ -66,7 +66,7 @@ one section; other sections link to it.
   vLLM, Ollama or LM Studio, and an OpenAI-compatible endpoint with published pricing. A key the free check rejects is never
   stored. Where a provider has no free check, the key is kept unverified and the first turn shows any rejection.
 - **Connect a model:** providers with a packaged catalog offer those models; for a provider without one, choose an address,
-  then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged. Local loopback models are
+  then select an exact ID from its bounded `/v1/models` list. deckent stores that ID unchanged. Local loopback models are
   free-measured; a remote model without a verified published price is listed but locked, with the reason and the next step
   (Zhipu GLM China stays locked because its prices are in CNY). OpenRouter offers model connections; paid calls still
   require verified pricing and routing.
@@ -95,7 +95,7 @@ one section; other sections link to it.
   open a budget there to read its spend account (limit, reserved, settled). How money is reserved and settled:
   [Spend settlement](#spend-settlement).
 - **Subscriptions today:** Claude subscription text chat is supported with your own CLI sign-in; tool readiness has separate
-  checks. Tool-bearing Claude/Codex chat uses Deckent's governed native-agent path only after its exact-profile verification;
+  checks. Tool-bearing Claude/Codex chat uses deckent's governed native-agent path only after its exact-profile verification;
   missing verification leaves text chat available with the tool-readiness reason. Consent, policy, quota and sandbox checks bind
   every use. Subscription Brain planning is available through `claude-cli-subscription` or `codex-cli-subscription` (see
   [Core layers](#core-layers-memory-agents-model-roles-recovery)). `/provider` shows Sign in with Claude and Sign in with ChatGPT;
@@ -214,7 +214,7 @@ selects `reference`; otherwise it selects `working-tree`. A work target always u
 
 In `working-tree`, your delivery `y` applies the accepted change to your current files without a commit, Git object or
 reference in your repository; index, HEAD, branches and unrelated edits stay unchanged. A touched file changed since the
-Run's base refuses the delivery without writing. Deckent keeps the replaced originals and a delivery journal. File rollback
+Run's base refuses the delivery without writing. deckent keeps the replaced originals and a delivery journal. File rollback
 is a separate person card and restores them only while every touched path still matches the delivered contents.
 
 In `reference`, each step has its own `y`: delivery writes a dedicated reference, adoption moves an allowed branch, and
@@ -269,7 +269,7 @@ is refused because this build has no second-approver path. Configuration changes
 - Adoption also requires `execution.adoption.targets`, policy, the task's acceptance and any configured verification; on the
   command line pass `--verification-run <run>`.
 - In `reference` mode, delivery commits carry the task title, ids and a bounded acceptance state. Author and committer time come from the trusted
-  delivery planning clock and are fixed in the delivery intent so a replay writes the same commit. Deckent is the default
+  delivery planning clock and are fixed in the delivery intent so a replay writes the same commit. `Deckent` is the default
   identity; `execution.git.deliveryIdentity` can set `authorName`/`authorEmail`. Preview Git objects are prepared only in the
   candidate before the answer; a refusal writes no Git object, ref, branch or delivery intent in your repository.
 - The verified-terminal witness exists only on Linux (WSL included); elsewhere these commands are refused with
@@ -277,7 +277,7 @@ is refused because this build has no second-approver path. Configuration changes
 
 ### Delivery queue: inspect and undo
 
-A registered integration target uses the service queue. It has delivered real changes in Deckent's own development since
+A registered integration target uses the service queue. It has delivered real changes in deckent's own development since
 alpha.43; that is not yet evidence for packaged, hosted or other-platform use, which the beta has to show. `/deliver` prepares
 on the current base; after a base or target refusal, `r` offers re-preparation. Inspect last-known state with `r`; publish and
 adopt each show their exact frozen batch and ask a separate `y/N`. `/runs` details show the authorized scope's position,
@@ -331,10 +331,10 @@ Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and w
 ## Sandbox views
 
 - In standard, careful and full auto, sandboxed shell commands get a **closed view**: the project is writable within the call's
-  approval rules, `.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write Deckent
+  approval rules, `.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write deckent
   authority files. Landlock also refuses permission and ownership changes, and cannot add or remove entries in directories
   holding protected paths.
-- Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while Deckent state, configuration,
+- Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while deckent state, configuration,
   credential patterns and host Docker/session D-Bus sockets remain masked or read-only. Without an open sandbox, full-access
   shell calls are refused, including an explicit `host` realm.
 - **Host fallback.** For API profiles, if no sandbox is available, a closed mode falls back to the host and says so (`terminal.shell.realm`,
@@ -346,7 +346,7 @@ Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and w
 - The shared credential registry covers gh, Docker, kube, Codex, Git credentials and common cloud CLIs. HOME masking is bounded
   (depth 3, 20,000 entries); custom locations, arbitrary filenames and aliases outside those masks need separate isolation.
 - Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and moves (`mv`); appends (`>>`) remain modifications.
-- The hard floor (Deckent configuration, policy, approvals, audit, secrets and the MCP registry) is enforced in every sandbox
+- The hard floor (deckent configuration, policy, approvals, audit, secrets and the MCP registry) is enforced in every sandbox
   mode.
 
 ## Permission modes
@@ -363,8 +363,8 @@ very next call no longer has the mode; the stored choice stays, and the terminal
 | Store (`secrets.store`) | On disk | Who can read the key |
 |---|---|---|
 | `core.secret-store.env@1` (when no store is selected) | nothing; read from the environment | every program that inherits that environment |
-| `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
-| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
+| `core.secret-store.file@1` | plain text, a 0600 file | deckent and other programs running as your user |
+| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | deckent; other programs running as your user can still open it |
 
 Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment, and workers never
 receive a key. Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement. A provider
@@ -380,9 +380,9 @@ installations keep their selection.
    config reference names missing in the target and asks yes/no (scripts require `--confirm-env-missing`); `doctor` shows the
    same names. It copies every key, checks it, selects the new store and then removes the old copy; a move to a weaker store
    asks for approval on a second warning card. Set, delete and switch share one installation-wide custody section.
-2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
+2. Keep other AI tools out of deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
    `~/.claude/settings.json`. This stops their file tools and common shell commands, not every script.
-3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the
+3. Planned: run the deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the
    keys.
 
 The file stores are not available on native Windows.
@@ -409,13 +409,13 @@ Contract: [project key vault](modules/permission-modes.md#pre-8-project-key-vaul
 
 ## Spend settlement
 
-Each scope has one shared budget in USD for every API provider. Before a paid call, Deckent reserves the most it could cost at
+Each scope has one shared budget in USD for every API provider. Before a paid call, deckent reserves the most it could cost at
 the dearest price tier that can apply; afterwards it settles the call from the usage the provider itself reported in its final
 answer, multiplied by the verified published price (`measured-tariff`). OpenRouter calls are the exception: they settle from
 the cost OpenRouter reports in its answer. Where a provider does not say which price tier it used (DeepSeek), the call settles
 at the published peak price and is labelled an upper bound. Before the first paid OpenRouter call, check
 https://openrouter.ai/settings/plugins that no plugin is enabled with "Prevent overrides", and set an OpenRouter credit limit no
-higher than your Deckent budget; Deckent cannot see either setting.
+higher than your deckent budget; deckent cannot see either setting.
 
 - The scope's first budget is created with `deckent models create-budget --scope <id> --usd <n>` or the budget window (the
   first row of `/provider`), and changed with `deckent models revise-budget --scope <id> --usd <n>`.
@@ -559,7 +559,7 @@ only a single typed `y` sends it. Accepting or rejecting a task is a separate de
 
 ## MCP and identity
 
-- **MCP servers for Deckent's agent.** `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and
+- **MCP servers for deckent's agent.** `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and
   starts nothing; `--check` starts trusted servers only. Every trust decision (`mcp approve`, `mcp add` to a local or user scope)
   is a card on a person's terminal; off a terminal it is refused (`MCP_APPROVAL_NEEDS_TERMINAL`), and `--yes` does not skip the
   card. Where servers run: [Sandbox views](#sandbox-views).
@@ -609,7 +609,7 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
 - **Subscription Brain.** `deckent models login --connection claude-cli-subscription [--sso]` first signs in the Brain's own login
   (the Claude CLI's own sign-in, at your terminal); then `deckent models connect --scope <id> --connection claude-cli-subscription
   --command-id <id> --model <id> [--executable <abs path>] [--config-dir <abs dir>] [--delegate none|ai|system|ai,system]` connects
-  it for Brain planning. The login is Deckent's own (`headless/logins` under the global state root, shown by `deckent paths`); your
+  it for Brain planning. The login is deckent's own (`headless/logins` under the global state root, shown by `deckent paths`); your
   `~/.claude` is not used unless you pass `--config-dir`. It is refused without a usable bubblewrap sandbox. `--delegate` is your
   consent for AI or MCP planning and for background roles (recovery decision, memory evaluator); absent keeps your earlier choice.
   `deckent doctor` shows a Brain login row per connection. While the CLI's own refresh lock exists or another Brain call holds the
@@ -619,7 +619,7 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
   [--executable <abs path>]` runs `codex login` (ChatGPT; no `--sso`) into the Brain's own `headless/logins/codex`, then `deckent models
   connect --connection codex-cli-subscription --executable <abs path> --config-dir <abs dir> --delegate system` connects it (each flag as above).
   Without an admitted worker image the connect still succeeds for tool-less one-shot model calls (BeUser) and says that no worker model was activated.
-  Its quota is your ChatGPT plan's, and Deckent does not observe the refresh lock of a Codex session you run yourself.
+  Its quota is your ChatGPT plan's, and deckent does not observe the refresh lock of a Codex session you run yourself.
 - **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
   `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
   Keeping the wait is offered at most `runRuntime.quotaRecovery.maxRewaits` (3) times, then `RUN_QUOTA_WAIT_LIMIT`.
@@ -776,7 +776,7 @@ revision explicitly.
 Patch capture compares the workspace with the base tree by Git object id and reads only changed base files; exhausted Git
 output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`, `git-timeout`, `time`, `bytes`,
 `entries`, `depth`, `path`, `git-copy`). `execution.git.outputBytes` defaults to 4 MiB. `execution.git.copyBytes` (unset: 8 GiB) bounds the
-objects one copy streams into a Deckent-owned private repository: an integration candidate's is `PATCH_LIMIT` `git-copy`, a working-tree
+objects one copy streams into a deckent-owned private repository: an integration candidate's is `PATCH_LIMIT` `git-copy`, a working-tree
 Run's base (HEAD's whole history) the permanent launch refusal `PATCH_WORKING_TREE_COPY_LIMIT`.
 
 For a retained workspace patch, `deckent task integration-check` checks the recorded base against HEAD and the affected

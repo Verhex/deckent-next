@@ -1,7 +1,7 @@
 
 # Contributor Covenant Code of Conduct
 
-Deckent adopts Contributor Covenant **2.1** as requested by the owner. Versioned official text
+deckent adopts Contributor Covenant **2.1** as requested by the owner. Versioned official text
 verified **2026-10-03**; 2.1 is the selected version, not a claim that it is the latest edition.
 Conduct reports use the same private channel as security reports (owner decision 2026-10-03).
 
