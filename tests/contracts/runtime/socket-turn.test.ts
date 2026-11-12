@@ -64,7 +64,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
       await new Promise(wake => setTimeout(wake, 50)); resolveGone();
       expect(await aborted).toBe(true);
       // A cancelled channel never blocks its producer.
-      await expect(channel!.drained()).resolves.toBeUndefined();
+      await expect(channel!.drained()).resolves.toBe(false);
     } finally { await server.dispose(); }
   });
 

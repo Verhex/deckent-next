@@ -23,7 +23,7 @@ const pin = { channelId: 'subscription-channel', modelId: 'native-model', auxili
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'business criterion', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 type Variant = 'claude-rate-limit' | 'codex-text' | 'exit-text';
-async function fixture(source: Variant = 'claude-rate-limit', options: { substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; maxWaitMs?: number; interrupted?: boolean; partial?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
+async function fixture(source: Variant = 'claude-rate-limit', options: { exit?: { code: number | null; signal: string | null; failure: string | null }; substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; maxWaitMs?: number; interrupted?: boolean; partial?: boolean; dropped?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-quota-')); roots.push(root); let now = 1000, sequence = 0;
   const path = join(root, 'ledger.db'), storage = { busyTimeoutMs: 100, journalMode: 'wal' as const, durability: 'full' as const };
   const store = await openSqliteAttemptStore(path, storage, { now: () => now, timeoutMs: 5000 }, 'allow', custodyProfiles); stores.push(store);
@@ -50,7 +50,7 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
   async function finish(identity: AttemptIdentity, resetsAtMs: number | null = source === 'claude-rate-limit' ? options.resetsAtMs === undefined ? 6000 : options.resetsAtMs : null) {
     const claim = { request: { protocolVersion: 1 as const, identity, workspace: '/fixture', argv: ['fixture'] }, owner: 'worker' };
     await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
-    const stdout = JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 1, signal: null, failure: 'capacity', outputBytes: 1 }) + '\n';
+    const stdout = JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...(options.exit ?? { code: 1, signal: null, failure: 'capacity' }), outputBytes: 1 }) + '\n';
     const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: options.partial ? 'partial' : 'complete', stdout, stderr: '' })));
     await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: identity.attemptId, exitCode: 1, interrupted: options.interrupted ?? false });
     const used = options.substituted ? 'different-model' : pin.modelId;
@@ -63,6 +63,7 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
       events.push(...native.map(event => ({ ...event, sequence: events.length + event.sequence })));
     }
     if (options.recoveredSession) events.push({ schemaVersion: 1, sequence: events.length + 1, atMs: 2, kind: 'session.ended', outcome: 'success', turns: 1, durationMs: 2, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 });
+    if (options.dropped) events.push({ schemaVersion: 1, sequence: events.length + 1, atMs: 2, kind: 'dropped', reason: 'event-cap', count: 1 });
     if (!options.noSeal) await sealAttemptWorkerEvents(identity, artifacts, store, { events, verification: { ...verifyWorkerModels({ evidenceCapability: provider === 'claude' ? 'session-events' : 'none', admitted: pin, startedModel: used, usedModels: [used] }), evidenceCapability: provider === 'claude' ? 'session-events' : 'none' },
       unreported: 0, projectionComplete: true, maxBytes: 65536 });
     return claim;
@@ -147,6 +148,30 @@ it.skipIf(process.platform === 'win32').each([{ interrupted: true }, { partial: 
   } else { await expect(f.evaluate()).rejects.toThrow(); expect(await f.store.loadRun('s', 'r')).toEqual(before); }
 });
 it.skipIf(process.platform === 'win32')('uses verified bootstrap exit fallback without a seal, zero retry config and scope-safe monitor wait projection', async () => {
+  // Retained exit evidence still parks the Attempt if the best-effort worker quota event was lost.
+  for (const exit of [
+    { code: null, signal: 'SIGKILL', failure: 'capacity' },
+    { code: null, signal: 'SIGKILL', failure: 'capacity:quota-stop-incomplete' },
+    { code: 0, signal: null, failure: 'capacity' }, // CLI exited just before its quota group's kill; bootstrap still exits 1.
+  ]) {
+    const f = await fixture('exit-text', { noSeal: true, exit });
+    const result = await f.evaluate();
+    expect(result.snapshot.state).toMatchObject({ kind: 'parked', reason: 'quota-exhausted' });
+    expect(result.snapshot.quotaWaits?.[0]).toMatchObject({ quota: { source: 'exit-text' } });
+    expect((await f.store.load('s', f.identity.attemptId))!.lastObservation?.result.kind).toBe('quota-exhausted');
+  }
+  const dropped = await fixture('exit-text', { dropped: true, exit: { code: null, signal: 'SIGKILL', failure: 'capacity' } });
+  expect((await dropped.evaluate()).snapshot.quotaWaits?.[0]).toMatchObject({ quota: { source: 'exit-text' } });
+  const weak = await fixture('claude-rate-limit', { dropped: true, exit: { code: null, signal: 'SIGKILL', failure: 'native' } });
+  expect((await weak.evaluate()).snapshot.quotaWaits).toBeUndefined();
+  for (const exit of [
+    { code: null, signal: 'SIGKILL', failure: 'native' },
+    { code: 0, signal: null, failure: null },
+  ]) {
+    const f = await fixture('exit-text', { noSeal: true, exit });
+    expect((await f.evaluate()).snapshot.quotaWaits).toBeUndefined();
+  }
+
   const f = await fixture('exit-text', { noSeal: true, maxResumes: 0 }); const parked = (await f.evaluate()).snapshot;
   expect(parked.quotaWaits?.[0]).toMatchObject({ maxResumes: 0, quota: { resetsAtMs: null, source: 'exit-text' } });
   expect(runSnapshotSchema.parse(parked)).toEqual(parked); expect(projectRunView(parked).quotaWaits).toEqual([{ taskId: 't', since: 1000, deadline: 11000, resetsAtMs: null, retryLimitReached: true }]);

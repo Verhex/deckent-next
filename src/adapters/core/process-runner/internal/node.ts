@@ -2,7 +2,7 @@ import { timedAsync } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { processCommandSchema, validateProcessEvidence, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
 /** A v2 stdout line consumer: complete lines in order (UTF-8, without the newline); `stop` ends the process group at once (reason `stopped`). */
-export type ProcessLineConsumer = (line: string) => 'stop' | void | Promise<'stop' | void>;
+export type ProcessLineConsumer = (line: string, signal?: AbortSignal) => 'stop' | void | Promise<'stop' | void>;
 /** Linux comparison profile: explicit environment, closed (v1) or bounded (v2) stdin, owned process group, raw bounded output.
  * This reports the command process, never the Docker container or a Task's success.
  */
@@ -26,6 +26,7 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
     let started = false, closed = false; let reason: ProcessEvidence['reason'] | undefined; let stdoutTruncated = false; let stderrTruncated = false;
     let grace: NodeJS.Timeout | undefined, lines = Promise.resolve();
     let interruptLine: (() => void) | undefined;
+    const consumer = new AbortController();
     const group = (name: NodeJS.Signals) => { if (!closed && child.pid) { try { process.kill(-child.pid, name); } catch { /* Exit evidence determines whether the command terminated. */ } } };
     const kill = () => {
       clearTimeout(grace); grace = undefined; group('SIGKILL');
@@ -33,7 +34,7 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
       out.destroy(); err.destroy();
     };
     const stop = (cause: ProcessEvidence['reason']) => {
-      const first = reason === undefined; reason ??= cause; interruptLine?.();
+      const first = reason === undefined; reason ??= cause; consumer.abort(); interruptLine?.();
       // v2 graceful stop for timeout/cancel only: SIGINT ends the turn, SIGKILL follows after the grace bound; limits and `stop` kill at once.
       if (first && v2?.interruptGraceMs && (cause === 'timeout' || cause === 'cancelled')) { group('SIGINT'); grace = setTimeout(kill, v2.interruptGraceMs); }
       else if (first || grace !== undefined) kill();
@@ -41,7 +42,7 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
     const line = async (bytes: Buffer) => {
       if (reason !== undefined) return;
       const interruption = new Promise<void>(resolve => { interruptLine = resolve; });
-      try { if (await Promise.race([onLine?.(bytes.toString('utf8')), interruption]) === 'stop') stop('stopped'); }
+      try { if (await Promise.race([onLine?.(bytes.toString('utf8'), consumer.signal), interruption]) === 'stop') stop('stopped'); }
       catch { stop('stopped'); }
       finally { interruptLine = undefined; }
     };

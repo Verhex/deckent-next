@@ -73,7 +73,7 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
   let paidExtraUsage: ClaudeRateLimit | null = null;
   let init = false, result: Extract<ClaudeStreamLine, { kind: 'result' }> | null = null;
   return {
-    line(raw) {
+    line(raw, signal) {
       const line = parseClaudeStreamLine(raw);
       if (line.kind === 'init') { const refusal = init ? reject('invalid-response', { refusal: 'guard', field: 'init' }) : initGuard(line, prepared, guards, preflight, runDir); init = true; if (!refusal) builtinPlugins = nativeBuiltinPlugins(line.plugins, guards.plugins)!; return refusal; }
       if (line.kind === 'system' && line.subtype === 'api_retry') return reject('invalid-response', { refusal: 'guard', field: 'api_retry' });
@@ -88,7 +88,7 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
           const stop = () => reject('http-status', { refusal: 'quota', field: limit.window, subtype: limit.status, resetsAtMs: limit.resetsAtMs, status: null });
           const deliver = prepared.onPaidUsage;
           if (!deliver) return stop();
-          return Promise.resolve().then(() => deliver(limit)).then(() => { paidExtraUsage ??= limit; return null; }, stop);
+          return Promise.resolve().then(() => deliver(limit, signal)).then(() => { if (signal?.aborted) return stop(); paidExtraUsage ??= limit; return null; }, stop);
         }
         if (limit.kind === 'credits-required') return reject('http-status', { refusal: 'credits-required', status: null });
         if (limit.kind === 'quota') return reject('http-status', { refusal: 'quota', field: limit.window, subtype: limit.status,
@@ -136,7 +136,7 @@ function stderrSummary(base64: string, rules: HeadlessEntry['headless']['stderrA
  * complete turn (crash, missing result, a refused argv) is incomplete evidence, so the outcome stays `unknown` with its exit and a redacted stderr tail.
  */
 export type NativeCliHeadlessPort = ModelInvocationNativePort & { preflight(profile: ModelInvocationProfile, signal?: AbortSignal): Promise<void> };
-export function createNativeCliHeadlessPort(options: { readonly now: () => number; readonly isolation: HeadlessIsolation; readonly knownSecrets?: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit' }): NativeCliHeadlessPort {
+export function createNativeCliHeadlessPort(options: { readonly now: () => number; readonly isolation: HeadlessIsolation; readonly knownSecrets?: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit' }): NativeCliHeadlessPort {
   const tokens = new WeakSet<object>();
   const target = (profileInput: unknown) => {
     const parsed = modelInvocationProfileSchema.safeParse(profileInput);
@@ -177,7 +177,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const runDir = await realpath(preflight.runDir), promptFile = join(preflight.runDir, headless.systemPromptFile);
       const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta, options.knownSecrets ?? EMPTY_KNOWN_SECRETS);
       let refusal: Refusal | null = null;
-      const onLine = async (raw: string): Promise<'stop' | void> => { refusal ??= await turn.line(raw); return refusal ? 'stop' : undefined; };
+      const onLine = async (raw: string, lineSignal?: AbortSignal): Promise<'stop' | void> => { refusal ??= await turn.line(raw, lineSignal); return refusal ? 'stop' : undefined; };
       let evidence;
       try {
         await emptyRunDir(preflight.runDir);

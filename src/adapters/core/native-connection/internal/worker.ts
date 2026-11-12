@@ -5,7 +5,7 @@ import { createServer, connect, type Socket } from 'node:net';
 import { lstat, mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 // Worker Event Contract v1 (domain/core/worker-event) produced here, inside the container: this file cannot import host packages,
@@ -877,6 +877,36 @@ export const finalTextReportInstruction = (schema: string, language?: string) =>
 export const reportLanguageInstruction = (language: string) => `### report:language@1\nWrite the report's text for the person (summary, openIssues, the handoff summary `
   + `and openQuestions, an exit question) in the language with ISO 639-1 code "${language}". JSON keys, enum values, file paths, commands and check ids stay exactly as they are.`;
 
+const NATIVE_QUOTA_CLOSE_MS = 1000;
+/** The standalone bootstrap owns this CLI group. Escaped pipe holders remain under the host container's deadline. */
+export function createNativeChildCustody(child: ChildProcess) {
+  let stopped = false, incomplete = false, settled = false, timer: NodeJS.Timeout | undefined;
+  let finish!: (result: { code: number | null; signal: string | null }) => void;
+  const result = new Promise<{ code: number | null; signal: string | null; failure: string | null }>(resolve => {
+    finish = value => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      resolve({ ...value, failure: stopped ? incomplete ? 'capacity:quota-stop-incomplete' : 'capacity' : null });
+    };
+    child.once('error', () => finish({ code: null, signal: null }));
+    child.once('close', (code, signal) => finish({ code, signal }));
+  });
+  return {
+    result, stopped: () => stopped,
+    stopAtQuota() {
+      if (stopped || settled) return;
+      stopped = true;
+      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') incomplete = true; }
+      timer = setTimeout(() => {
+        incomplete = true;
+        child.stdout?.destroy(); child.stderr?.destroy();
+        finish({ code: child.exitCode, signal: child.signalCode });
+      }, NATIVE_QUOTA_CLOSE_MS);
+    },
+  };
+}
+
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
   const capability = await readFile('/run/deckent-bootstrap.key', 'utf8');
@@ -985,9 +1015,10 @@ async function main() {
   if (!relayed) await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, '127.0.0.1', resolve); });
   const address = relayed ? null : relay.address(); if (!relayed && (!address || typeof address === 'string')) throw new Error();
   const proxy = address && typeof address !== 'string' ? `http://127.0.0.1:${address.port}` : null;
-  const child = spawn(executable, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...base(home), ...setup.environment,
+  const child = spawn(executable, argv, { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...base(home), ...setup.environment,
     ...(setup.credentialEnvironment && typeof setup.credential?.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),
     ...(proxy ? { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy, NO_PROXY: '', no_proxy: '' } : {}) } });
+  const custody = createNativeChildCustody(child);
   if (delivery) child.once('spawn', () => process.stdout.write(JSON.stringify({ schemaVersion: 1,
     kind: 'native-prompt-delivery', phase: 'spawned', channel: delivery.channel, sha256: delivery.sha256,
     argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(deliveredTask!), ...(context ? { dependencyContextSha256: context.sha256 } : {}),
@@ -1000,15 +1031,13 @@ async function main() {
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const clientModel = setup.capabilities.modelUsageEvidence === 'client-reported' ? createClientModelReport(setup.capabilities.eventStream, setup.provider, authRoot,
     setup.limits.clientModelReport, state, codex, events => channel.push(events)) : null;
-  const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
+  const capture = (part: Buffer) => { if (!custody.stopped()) { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); } };
   const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits, setup.capabilities.structuredReport?.channel) : undefined;
-  const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report, () => { child.kill('SIGKILL'); });
+  const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report, () => custody.stopAtQuota());
   const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);
-  const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {
-    child.on('error', () => resolve({ code: null, signal: null }));
-    child.on('close', (code, signal) => resolve({ code, signal }));
-  });
+  child.stdout.once('end', () => lineObserver.flush()); // Include a final quota line without a newline before sealing the exit.
+  const { failure: quotaFailure, ...result } = await custody.result;
   const failure = /unauthorized|authentication|log in|login|401|token.*expired/i.test(tail) ? 'authentication'
     : /quota|rate.limit|usage.limit|429/i.test(tail) ? 'capacity'
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
@@ -1023,9 +1052,9 @@ async function main() {
   }
   channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
-    failure: result.code === 0 ? null : failure }) + '\n');
+    failure: quotaFailure ?? (result.code === 0 ? null : failure) }) + '\n');
   for (const socket of sockets) socket.destroy(); relay.close(); shim?.close(); shim?.closeAllConnections();
-  process.exitCode = result.code === 0 ? 0 : 1;
+  process.exitCode = !custody.stopped() && result.code === 0 ? 0 : 1;
 }
 // Runs only as the mounted bootstrap (`node /run/deckent-bootstrap.mjs ...`); importing it for tests has no side effects.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

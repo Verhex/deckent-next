@@ -1,3 +1,9 @@
+import { spawn } from 'node:child_process';
+import type { Socket } from 'node:net';
+import { createClaudeAgentDriver, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
+import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/index.js';
+import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
+import { FAMILY, PINNED, rateLimitLine } from '../../fixtures/native-headless/stream.js';
 import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
@@ -93,7 +99,7 @@ async function fixture(askEdits = true) {
   const events: AgentTurnStreamEvent[] = [];
   let offer!: (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>) => void;
   const offered = new Promise<Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>>(resolve => { offer = resolve; });
-  const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => undefined,
+  const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => true,
     emit(event: AgentTurnStreamEvent) { events.push(event); if (event.kind === 'approval.requested') offer(event); } };
   const command = { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn', messages: [{ role: 'user', content: 'write the business result' }] };
   const run = (turnId = command.turnId) => runPeerConfiguredChatTurn(f.project, { ...command, turnId }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
@@ -409,4 +415,57 @@ it('delivers the paid-usage notice once after successful delivery and records it
       await expect(notifyNativePaidUsage({ ...value, window: 'x\n' }, language, {}, 'terminal', 's', () => { throw new Error('unsafe'); })).rejects.toThrow();
     }
   } finally { store.close(); }
+});
+
+it('retries paid notices dropped by the real channel and refuses cancelled late delivery', async () => {
+  // Real channel + Node pipe socket; only the provider stream is synthetic. No CLI or login runs.
+  const child = spawn(process.execPath, ['-e', 'process.stdin.resume()'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  const closed = new Promise<void>(resolve => child.once('close', () => resolve()));
+  const socket = child.stdin as Socket;
+  const entry = nativeCliAgent(FAMILY)!, session = {}, scopeId = 's';
+  const tools = toolSessionSchema.parse({ schemaVersion: 1, turnId: 'paid-delivery', generation: 1, tools: [], approvalTtlMs: 120000 });
+  const port: ToolSessionPort = { session: tools, propose: async () => { throw new Error('no tool expected'); },
+    cancel: async () => { throw new Error('unused'); }, revoke: async () => { throw new Error('unused'); } };
+  const event = JSON.stringify(rateLimitLine('rejected', { overageStatus: 'allowed' }));
+  let sinks = 0;
+  const start = (channel: ReturnType<typeof createServerTurnChannel>) => {
+    const driver = createClaudeAgentDriver({ entry, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192,
+      quotaPolicy: nativeQuotaPolicy(), onPaidUsage: (limit, signal) => notifyNativePaidUsage(limit, 'en', session, 'terminal', scopeId, async text => {
+        sinks++; channel.emit({ kind: 'text', text });
+        if (!await channel.drained()) throw new Error('notice-not-delivered');
+      }, signal) });
+    expect(driver.line(JSON.stringify(initLine({ model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir', tools: [],
+      mcp_servers: [{ name: entry.bridge.serverName, status: 'connected' }] })))).toBeUndefined();
+    return driver;
+  };
+  try {
+    for (const mode of ['error', 'aborted', 'finished', 'overflow', 'late-cancel', 'late-timeout'] as const) {
+      const channel = createServerTurnChannel(socket, mode, 8192, mode === 'overflow' ? 1 : 32768);
+      const driver = start(channel), before = sinks, controller = new AbortController();
+      if (mode === 'aborted') socket.emit('error', new Error('disconnected'));
+      if (mode === 'finished') channel.finish();
+      if (mode.startsWith('late-')) socket.cork();
+      const pending = driver.line(event, controller.signal);
+      // Let the actual sink enqueue the event, before the channel's scheduled write.
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      if (mode === 'error') socket.emit('error', new Error('disconnected'));
+      if (mode.startsWith('late-')) {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        controller.abort(new Error(mode));
+      }
+      expect(await pending).toBe('stop');
+      socket.uncork(); await new Promise<void>(resolve => setImmediate(resolve));
+      expect(sinks).toBe(before + 1); expect(driver.paidExtraUsage()).toBeNull();
+      expect(driver.line(JSON.stringify(assistantLine('must not be accepted')))).toBe('stop');
+      expect(driver.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false }))
+        .toMatchObject({ kind: 'refused', limit: { kind: 'quota' } });
+      channel.finish();
+    }
+    const channel = createServerTurnChannel(socket, 'retry', 8192, 32768), before = sinks;
+    const driver = start(channel);
+    expect(await driver.line(event)).toBeUndefined(); expect(sinks).toBe(before + 1);
+    expect(driver.paidExtraUsage()).toMatchObject({ kind: 'overage' });
+    expect(await start(channel).line(event)).toBeUndefined(); expect(sinks).toBe(before + 1);
+    channel.finish();
+  } finally { socket.uncork(); child.kill('SIGKILL'); await closed; }
 });

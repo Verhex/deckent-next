@@ -19,7 +19,7 @@ export interface NativeChatRuntime {
   resolveModelUse(profile: ModelInvocationProfile, actor: VerifiedPrincipal,
     check: { readonly action: 'pin' } | { readonly action: 'recheck'; readonly pin: object }): Promise<object | void | null>;
   /** K2 wraps proposals to correlate Claude tool_use; K3 retains the exact recorded call/result lookup. */
-  driver(input: { readonly profile: ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit' }): Promise<{
+  driver(input: { readonly profile: ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit' }): Promise<{
     readonly port: ToolSessionPort;
     admit(signal?: AbortSignal): Promise<void>;
     native(bridge: Bridge, secrets: { readonly configured: KnownSecretSnapshot; readonly turn: KnownSecretSnapshot }): ModelInvocationNativePort;
@@ -31,7 +31,7 @@ export interface NativeChatRuntime {
 /** Bridge lifetime is inside the governed invocation; K1 alone authorizes, executes and settles proposals. */
 export async function withNativeChatInvocation<T>(input: { readonly runtime: NativeChatRuntime; readonly profile: ModelInvocationProfile;
   readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly signal: AbortSignal;
-  readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit'; recheck(): Promise<void> },
+  readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit'; recheck(): Promise<void> },
   invoke: (binding: { readonly profileDigest: string; readonly port: ModelInvocationNativePort; admit(signal?: AbortSignal): Promise<void>;
     recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<T>): Promise<T> {
   const entry = nativeCliAgent(input.profile.protocol.family);

@@ -16,7 +16,7 @@ import { modelSpendRefusal } from './spend-refusal.js';
 type InvocationGuard = { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void };
 type ApplicationOptions = {
   context: Awaited<ReturnType<typeof loadInvocationContext>>; options: ConfigLoadOptions; host?: RuntimeModelInvocationHost | undefined;
-  onPaidUsage?: ((limit: ClaudeRateLimit) => Promise<void>) | undefined; snapshot?: ModelInspectionSnapshot; readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
+  onPaidUsage?: ((limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>) | undefined; snapshot?: ModelInspectionSnapshot; readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
   observeSpending?: InvocationGuard['spending'] | undefined; agent?: ModelInvocationNativeBinding | undefined;
 };
 type InvokeOptions = {
@@ -54,7 +54,7 @@ export async function invoke({ input, loadContext, options, signal, delivery, ho
   try {
     const command = parsedCommand(input), context = await loadContext(command.scopeId);
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
-    const onPaidUsage = onNotice ? (limit: ClaudeRateLimit) => notifyNativePaidUsage(limit, language, host ?? options, terminal ?? '', command.scopeId, onNotice) : undefined;
+    const onPaidUsage = onNotice ? (limit: ClaudeRateLimit, lineSignal?: AbortSignal) => notifyNativePaidUsage(limit, language, host ?? options, terminal ?? '', command.scopeId, onNotice, AbortSignal.any([...(signal ? [signal] : []), ...(lineSignal ? [lineSignal] : [])])) : undefined;
     const forCommand = (value: ModelInvocationCommand) => application({ context, options, host, entry, agent, onPaidUsage, observeSpending: guard?.spending,
       profileGuard: async profile => { await configuredContinuationPin(value)?.(profile); await guard?.profile(profile); } });
     const app = forCommand(input);
