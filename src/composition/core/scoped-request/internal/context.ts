@@ -89,7 +89,7 @@ export async function inspectConfiguredInstallationBinding(projectRoot: string, 
 }
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
-  const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
+  const { issuer, subject } = readLocalOsIdentity(), principal = { issuer, subject }, config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return readBootstrapIdentity(async () => {
     const lifecycle = attachmentLifecycle(config, options);
     await lifecycle.assert();
