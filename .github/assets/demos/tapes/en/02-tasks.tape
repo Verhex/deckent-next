@@ -1,7 +1,8 @@
 # 02 tasks and workers (EN): the chat model is chosen on camera (Anthropic API; with no Brain model chosen, /do plans with
 # the chat model). /do asks for three read-only tasks on this checkout. The plan card names each task's worker (gpt-6-luna
 # on the Codex subscription); the labelled synthetic person of this throwaway install approves it. The monitor's
-# Summary tab shows a task waiting for an execution slot and its Workers tab each task's state and worker model. Observed on
+# Summary tab shows a task waiting for an execution slot; its Workers tab lists worker rows with state and model
+# (older runs' rows included). Observed on
 # beta.1.2: one subscription sign-in is one capacity slot (assets/native-coding/commands.json, maxInFlight 1), so the three
 # Codex tasks run one after another although the pool allows 3; the recording does not claim parallel work. The take ends
 # on the completed Run (accepted on exit code) and its delivery card, left undecided. Waits are cut (Hide/Show); all output is deckent's own.

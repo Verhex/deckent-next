@@ -28,7 +28,7 @@ export DECKENT_DEMO_PROJECT="/home/$(id -un)/deckent"                  # a git w
 export DECKENT_DEMO_SHELL="$PWD/.github/assets/demos/tapes/lib/demo-ns.sh"
 mkdir -p .github/assets/demos/en .github/assets/demos/tr
 .github/assets/demos/tapes/lib/stop-demo.sh                            # stops only HOME=/home/demo processes
-.github/assets/demos/tapes/en/02-tasks.tape                           # run from the repository root
+vhs .github/assets/demos/tapes/en/02-tasks.tape                       # run from the repository root
 
 - Scene 01 needs a fresh install. Record it in a second throwaway root so the configured demo of 02–05 stays intact: a new
   DECKENT_DEMO_ROOT whose `install` links to the staged copy, and DECKENT_DEMO_PROJECT_SOURCE set to a fresh clone at the
