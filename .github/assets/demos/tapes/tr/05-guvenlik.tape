@@ -2,7 +2,7 @@
 # and to append "test" to .deckent/policy.json. Observed on beta.1.2: the shell runs in bubblewrap with HOME hidden, so the
 # listing fails (No such file); the policy write opens an approval card even in full auto; the labelled synthetic person
 # answers No (the owner's default); the audit log holds a policy-turn record with the refused call. The policy file is never
-# edited. A prompt naming a private key file was stopped by the Anthropic API itself in 2 of 3 takes, so this one lists the
+# edited. A prompt naming a private key file was stopped by the Anthropic API itself in 2 of 4 tries, so this one lists the
 # folder only. Waits are cut (Hide/Show); all output is deckent's own.
 Output ".github/assets/demos/tr/05-guvenlik.gif"
 Source ".github/assets/demos/tapes/theme-dark.tape"
