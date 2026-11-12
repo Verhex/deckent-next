@@ -774,7 +774,24 @@ beta.2 okuyucu sürümüdür (R): mevcut aygıt numarası kuralı ve F1 kesintis
 WSL yeniden başlatıldığında dağıtım diskleri farklı sırada bağlanabilir. Kurulum bağı disk aygıt numarasını
 kaydettiği için proje taşınmamış olsa bile komutlar `INSTALLATION_IDENTITY_RELOCATED` hatasıyla durabilir.
 Bir kaynağa bağlı olmayan ve kayıtlı kaynak olmayan projede `deckent init identity --keep` bağı günceller.
-beta.2 sürümünde mevcut bağ karşılaştırması korunur; değişmiş aygıt numarası otomatik kabul edilmez.
+beta.2 sürümünde `--keep`, makine gücündeki bir bağda yalnız aygıt değişikliğini (`device-only`), betikler ve
+AI olarak işaretlenmiş çağıranlar dahil herkesten, terminal tanığı veya politika okuması olmadan kabul eder.
+Makine özeti, gerçek kök yolu ve inode aynı kalmalıdır; yalnız aygıt numarası farklıdır. v1 bağı makine gücündedir;
+v2 bağında makine gücü açıkça belirtilmelidir. Zayıf bağ, eksik bağ, farklı kök/inode/özet veya desteklenmeyen
+kimlik tespiti, taşınmış sınıfına (`moved`) girer. Daha yeni v3 bağının mevcut reddi korunur.
+İlk bağlama (`bind`) ve bağı güçlendirme (`strengthen`) geçişleri otomatik kalır.
+
+Taşınmış veya kopyalanmış kurulum, kendi terminalindeki kişiyi veya politika dosyasında doğrudan, açık bir kuralı gerektirir.
+Kural; çağıranın `issuer` ve `subject` değerlerini, `rebind` eylemini, `installation` kaynak türünü, `moved` içeren
+bir `ids` dizisini, `allow` etkisini ve `scopes: "all"` değerini açıkça belirtmelidir. Joker değerler, yalnız belirli
+kapsamlara verilen izinler ve rolden gelen izinler bu yetkiyi vermez. Herhangi bir kapsamda eşleşen ret (`deny`),
+kısıtlama veya onay gerektiren (`require-approval`) kural, joker ve rolden gelen retler dahil, dosya kuralı yolunu kapatır.
+Politika; mevcut sahiplik, dosya izinleri ve bağlantı korumalarıyla, kapsam üyeliği veya defter erişimi olmadan yüklenir.
+Hiçbir şablon veya varsayılan bu kuralı açmaz; beta.2'de onu yazan yönetilen bir yol yoktur.
+Pasif terminal tanığı doğrulanamazsa önce bu kural, sonra macOS için sabit sade proje istisnası denenir; yeni bir soru sorulmaz.
+Yazar, kilidi altında güncel kimlik tespitiyle sınıflandırmayı tekrarlar. CLI JSON çıktısına `class` ve `basis` yalnız
+aynı düzeyde çıktı alanları olarak eklenir (`bind`/`strengthen` için `class: null`); kalıcı `lastResolution` biçimi değişmez.
+`--new` her çağırana açık kalır.
 
 Kayıtlı kaynak projede `deckent init identity --keep` ve `--new`, `PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile
 reddedilir; ham `UNKNOWN` hatası yerine her biri için ayrı Türkçe/İngilizce açıklama gösterilir. Hiçbir şey değiştirilmez.
@@ -793,6 +810,36 @@ Kaynak proje yeniden çalışır; ancak onu yeniden kaydetmek ve başka klasörl
 Kaynağın **bağlı projeleri varsa** ilk komut, her biri ayrılana kadar (`deckent terminal attach --detach <projeKimliği> --apply`)
 `PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile reddedilir. Bu yol taşınmış kurulumda doğrulanmadı; bu betada orada yedekten
 geri yüklemek dışında çıkış olmayabilir. Koruma olduğu gibi kalır; bağ düzeltmesi beta.2.1 için planlanıyor. beta.2 okuyucu sürümüdür; kayıtlı kaynağı kurtarmayı düzeltmez.
+
+beta.2 yeniden bağlama sınırları (owner yanıtları 79/81/82/88/89/92/93/94):
+
+- Makine kimliğini (yapılandırılmış kimlik dosyası dahil), yolu ve kök inode'unu koruyan her kopya `device-only` sayılır
+  ve kabul edilir: tüm disk klonları, başka bilgisayardaki VM/WSL/konteyner imajları, birimin anlık görüntüleri/klonları
+  ve kök inode'u sabit kalan bir bağlama noktası olan klasör. Aynı makinede anlık görüntüye geri dönüş, geri alınmış
+  politika izinlerini de geri getirir.
+- `moved` kuralı politika dosyasıyla taşınır: bu kuralı içeren kopya kendisini kabul eder; aynı hesapta çalışan bir süreç
+  kuralı yazabilir.
+- AI olarak işaretlenmemiş, aynı hesapta kendi terminaliyle çalışan bir ajan kişi tanığını geçer. Ajan da kişi de
+  kalıcı kayıtta aynı işletim sistemi hesabıyla ve işlem zamanıyla kaydedilir. Sınıf, dayanak ve kural kimliği ancak beta.2.1'den
+  itibaren kalıcı kayda girer.
+- Terminal tanığı üreticisi bulunmayan macOS'ta yalnız sade bir proje, AI çağıranlar dahil, taşınmış kurulumu tanıksız
+  yeniden bağlayabilir. Sade proje; proje bağlantı referansı, `sharedRegistrationId` ve bu kurulumu veya klasörü
+  (kaynak ya da kayıtlı proje olarak) adlandıran kullanıcıya ait hiçbir kayıt bulunmaması demektir; kaydı kaldırılmış
+  geçmiş de buna dahildir. Aynı kullanıcının ilgisiz bir kaynağı tek başına engel değildir. Daha önce paylaşılmış proje
+  bu istisnayı kullanamaz; mevcut proje bağlantısı korumalarının kimliği yeniden bağlamaya izin verdiği yerde açık kural
+  geçerlidir, ancak taşınmış kaynağı uzlaştırmak yine macOS'ta bulunmayan terminal tanığını gerektirir.
+- `init identity --new` her çağırana açık kalır. Aynı ana makinede yeni kimlik alan bir kopya, kopyalanmış politika
+  izinleriyle çalışır; kasa ve model kullanım hakları taşınmaz.
+- Makine kimliği yoksa (birçok konteynerde olduğu gibi), zayıf bağ aygıt değişikliğinden sonra her zaman kişiyi veya
+  kuralı gerektirir.
+- Aynı hesapta çalışan süreçler `identity.json` veya `policy.json` dosyasını doğrudan yeniden yazabilir. Eski bir
+  sürüme dönmek bu kapıyı kaldırır. Kuralın adlandırdığı kimliğin `issuer` değeri ana makine adıdır; pod'ların ana
+  makine adları değişirse kural eşleşmeyebilir [doğrulanmadı].
+- Kayıtlı kaynak, kayıtlı klasöründe `init identity --keep` komutunu hâlâ reddeder; yalnız aygıt değişikliğinde kaynak
+  onarımı ayrı bir karttır. Başka klasöre taşınır veya kopyalanırsa `moved` sayılır: kişi veya dosyadaki kural kimliği
+  yeniden bağlar; `deckent terminal attach --relocate` çalıştırılana kadar proje bağlantı kayıtları uzlaştırılmamış kalır.
+- Politikadaki ret, ne yalnız aygıt değişikliği onarımını ne de kendi terminalindeki kişiyi durdurur: beta.2'de kurum
+  politikası yeniden bağlamayı daraltamaz ve role dayalı izinler bu yetkiyi veremez.
 
 Proje kasasının sahibi aynı gerçek yolda ve aynı inode (dizin kimliği) ile duruyorsa, yalnız disk aygıt numarası
 farkı artık **belirsiz** sayılır, yok sayılmaz. Kasa erişimi, sahiplenme ve devir `SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE` ile reddedilir; bağ ve

@@ -67,7 +67,7 @@ kişiyi veya device-only onarımını engellemez. Varsayılan veya şablon bu ku
 Politika dosyası kopyayla taşınır ve aynı hesapta çalışan süreç onu düzenleyebilir. Beta.2 sınıf/dayanağı yalnız
 çıktıda gösterir; kalıcı kayıt işletim sistemi hesabı ve zamanı tutar. macOS sade proje istisnası ve kopya/zayıf
 bağ, anlık görüntü, doğrudan dosya düzenleme ve eski sürüme dönüş sınırları
-[Installation moved](known-limits.md#installation-moved) bölümündedir.
+[Kurulumun konumu değiştiğinde](known-limits.tr.md#kurulumun-konumu-değiştiğinde) bölümündedir.
 
 
 Kart kararında ayrıca uygulama kapısı vardır: AI/etkileşimsiz çağıran, `edit-floor`,
