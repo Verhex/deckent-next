@@ -1,11 +1,11 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { installationSecretRoot, listProjectVaults, mcpSecretUsers, openConfiguredSecretStore, openProjectVaultStore, openSecretGrantStore } from '#adapters/index.js';
+import { directoryLocation, installationSecretRoot, listProjectVaults, mcpSecretUsers, openConfiguredSecretStore, openProjectVaultStore, openSecretGrantStore } from '#adapters/index.js';
 import { configuredInvocationProfiles, authorizeSecretInventoryAll, buildSecretInventory, type SecretInventory, type SecretInventoryProject } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { openProjectSecrets } from './project.js';
 
 interface SecretInventoryView extends SecretInventory {
-  readonly schemaVersion: 1; readonly project: string | null; readonly mainStore: string; readonly all: boolean;
+  readonly schemaVersion: 1; readonly project: string | null; readonly workingFolder?: string; readonly mainStore: string; readonly all: boolean;
 }
 const credentialRef = (definition: Record<string, unknown>) => {
   const authentication = (definition['authentication'] ?? (definition['transport'] as Record<string, unknown> | undefined)?.['authentication']) as { type?: string; credentialRef?: string } | undefined;
@@ -18,6 +18,7 @@ const credentialRef = (definition: Record<string, unknown>) => {
  * `--all` (every project vault of this main vault) is the main vault's administration: the existing `secret`/`switch` cell.
  */
 export async function inspectConfiguredSecretInventory(projectRoot: string, scopeId: string, all: boolean, options: ConfigLoadOptions = {}): Promise<SecretInventoryView> {
+  projectRoot = (await directoryLocation(projectRoot))?.canonicalRoot ?? projectRoot;
   const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), env = options.env ?? process.env, platform = options.platform ?? process.platform;
   if (all) authorizeSecretInventoryAll(context.document, context.principal, scopeId);
   const main = openConfiguredSecretStore(context.config, env, platform);
@@ -35,5 +36,5 @@ export async function inspectConfiguredSecretInventory(projectRoot: string, scop
       grants: await openSecretGrantStore(root, anchor, context.config.configFile.writeLockTimeoutMs).read().catch(() => null) });
   }
   const inventory = buildSecretInventory({ mainNames, references, projects: [...current, ...others] });
-  return Object.freeze({ schemaVersion: 1, project: opened?.anchor.projectRoot ?? null, mainStore: main.descriptor.id, all, ...inventory });
+  return Object.freeze({ schemaVersion: 1, project: opened?.anchor.projectRoot ?? null, ...(opened && opened.anchor.projectRoot !== projectRoot ? { workingFolder: projectRoot } : {}), mainStore: main.descriptor.id, all, ...inventory });
 }

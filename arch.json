@@ -1556,6 +1556,7 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/engine/core/secret-store",
         "src/domain/core/model-invocation",
         "src/capabilities/core/run-planner",
         "src/surfaces/core/terminal-beuser",
@@ -5250,6 +5251,8 @@
     },
     "src/surfaces/core/terminal-provider": {
       "dependencies": [
+        "src/platform/core/output",
+        "src/engine/core/secret-store",
         "src/capabilities/core/native-agent-execution",
         "src/platform/core/config",
         "src/surfaces/core/cli-models",

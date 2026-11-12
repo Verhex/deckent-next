@@ -41,6 +41,7 @@ const streamTurn = (_messages, _signal, turn) => (async function* () {
   yield { kind: 'done', finish: 'stop' };
 })();
 const secretGrant = secretGrantCardPort(projectRoot, 'scope-a', options, locale, {
+  target: async () => ({ anchor: { projectRoot }, workingFolder: projectRoot }),
   offer: (where, loaded) => terminalSecretGrantOffer(where, loaded),
   grant: async (_where, _scope, name) => { writeFileSync(join(root, `grant-${name}`), 'card\n'); },
 }, home);

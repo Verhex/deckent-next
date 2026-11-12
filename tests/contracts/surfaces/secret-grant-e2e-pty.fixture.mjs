@@ -10,7 +10,7 @@ import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#s
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { secretGrantCardPort } from '#surfaces/core/cli-terminal/index.js';
 import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
-import { changeProjectSecretGrant, projectCredentialResolver } from '#composition/core/secrets/index.js';
+import { inspectSecretProjectTarget, changeProjectSecretGrant, projectCredentialResolver } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 
@@ -42,8 +42,9 @@ const streamTurn = (_messages, _signal, turn) => (async function* () {
   yield { kind: 'done', finish: 'stop' };
 })();
 const secretGrant = secretGrantCardPort(projectRoot, 'scope-a', options, locale, {
+  target: inspectSecretProjectTarget,
   offer: (where, loaded) => terminalSecretGrantOffer(where, loaded),
-  grant: (where, scope, name, loaded) => changeProjectSecretGrant(where, scope, name, 'grant', 'card', loaded).then(() => {}),
+  grant: (where, scope, name, loaded, target) => changeProjectSecretGrant(where, scope, name, 'grant', 'card', loaded, undefined, target).then(() => {}),
 }, home);
 const view = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
   context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope-a' },

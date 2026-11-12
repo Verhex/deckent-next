@@ -267,7 +267,7 @@
   "cli.secret.card.grantTitle": "Ana kasadaki {name} anahtarı {project} projesinde kullanılsın mı?",
   "cli.secret.card.revokeTitle": "Ana kasadaki {name} anahtarının {project} projesinde kullanımı kapatılsın mı?",
   "cli.secret.card.revokeUsers": "Burada kullananlar: {users}. Bir sonraki başlangıçta dururlar.",
-  "cli.secret.card.grantBody": "Değer ana kasada kalır; yalnız bu proje kullanabilir. Karar önce denetim kaydına yazılır. AI oturumları bu kartı yanıtlayamaz.",
+  "cli.secret.card.grantBody": "Değer ana kasada kalır; bu proje kullanabilir. Karar önce denetim kaydına yazılır. AI oturumları bu kartı yanıtlayamaz.",
   "cli.secret.card.handoverTitle": "Proje anahtar kasası {project} klasörüne taşınsın mı? (yalnız asıl klasör artık yoksa)",
   "cli.secret.card.vaultTitle": "{name} nerede saklansın?",
   "cli.secret.card.vaultMain": "ana kasa (kurulum; diğer projeler yalnız izinle kullanır)",

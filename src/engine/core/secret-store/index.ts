@@ -20,7 +20,7 @@ export { DECK_FILE, parseDeckDeclarations, deckDeclaration } from './internal/de
 export type { DeckDeclaration, DeckDeclarations, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DeckInvalidReason, SecretVault } from './internal/deck.js';
 export { PROJECT_VAULT, projectVaultAnchorSchema, projectVaultRecordSchema, projectVaultKey, assessProjectVaultOwnership, projectVaultHandover, projectVaultClaimed,
   /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ secretGrantSchema, secretGrantFileSchema, emptySecretGrantFile, findSecretGrant, decideCredentialSource, credentialSourceError } from './internal/project.js';
-export type { ProjectVaultLocation, ProjectVaultAnchor, ProjectVaultRecord, SecretGrant, SecretGrantFile, CredentialSource, CredentialSourceInput, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CredentialSourceRefusal,
+export type { SecretProjectTarget, ProjectVaultLocation, ProjectVaultAnchor, ProjectVaultRecord, SecretGrant, SecretGrantFile, CredentialSource, CredentialSourceInput, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CredentialSourceRefusal,
   ProjectCredentialResolver } from './internal/project.js';
 export { SECRET_GRANT_STORE_ID_PATTERN, CORE_SECRET_GRANT_STORE_ID, SecretGrantStoreRegistry } from './internal/grant.js';
 export type { SecretGrantStore, SecretGrantStoreContext, SecretGrantStoreFactory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SecretGrantStoreErrorCode } from './internal/grant.js';

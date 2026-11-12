@@ -47,7 +47,7 @@ import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTe
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
-import { assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
+import { inspectSecretProjectTarget, assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
 /** A host handler's failure leaves as a typed query failure: its registered code, never the raw cause. */
 // Source folders are local display facts only, never general query/service error parameters.
@@ -163,9 +163,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     // PRE-8 v2: the inventory, grants, project-vault changes and the handover run in this process at the person's witnessed terminal (no protocol op).
     inspectSecretInventory: (projectRoot, input, options) => typed(inspectConfiguredSecretInventory(projectRoot, input.scopeId, input.all, options)),
-    changeSecretGrant: (projectRoot, input, options) => typed(changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options)),
+    inspectSecretTarget: inspectSecretProjectTarget,
+    changeSecretGrant: (projectRoot, input, options) => typed(changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options, undefined, input.target)),
     setProjectSecret: (projectRoot, input, options) => typed(setProjectSecret(projectRoot, input.scopeId, input.name, input.value, options)),
-    handOverSecrets: (projectRoot, input, options) => typed(handOverProjectSecrets(projectRoot, input.scopeId, options)),
+    handOverSecrets: (projectRoot, input, options) => typed(handOverProjectSecrets(projectRoot, input.scopeId, options, undefined, input.target)),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
@@ -180,7 +181,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).
-    secretGrantCard: { offer: terminalSecretGrantOffer, grant: (root, scopeId, name, opts) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts).then(() => {}),
+    secretGrantCard: { offer: terminalSecretGrantOffer, target: inspectSecretProjectTarget, grant: (root, scopeId, name, opts, target) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts, undefined, target).then(() => {}),
       check: (root, scopeId, name, opts) => typed(assertConfiguredProjectCredential(root, scopeId, name, opts)) },
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady, toolClass: builtinAgentToolClass,

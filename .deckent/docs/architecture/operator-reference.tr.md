@@ -411,7 +411,9 @@ Dosya depoları native Windows'ta yok.
   başka her satır dosyanın tamamını reddeder (`DECK_FILE_INVALID`, yalnız satır numarasını söyler).
 - **İzinler.** İzin, kişinin kendi terminalindeki bir karttır: solo terminal sohbetindeki ilk kullanım kartı ya da
   `deckent secret grant AD --scope S`; `secret revoke AD --scope S` izni geri alır, yapay zekâ oturumları izin veremez. İkisi de
-  Linux terminal tanığını ister.
+  Linux terminal tanığını ister. Aynı deponun worktree’leri proje kasasını ve anahtar izinlerini paylaşır. Kart çözülmüş
+  ana projeyi adlandırır; farklı bir worktree’de paylaşımı açıklar ve çalışılan klasörü ayrıca gösterir. Hedef yazmadan
+  önce değişirse işlem reddedilir; hedefi kontrol etmek için kartı yeniden açın.
 - **Taşıma ve listeleme.** `secret handover --scope S`, proje klasörü taşındığında anahtar kasasını da götürür (özgün klasör
   kasayı hâlâ tutuyorsa reddedilir). `secret list` ad · kasa · proje · kullanan · `.deck` · izin · saklı bilgisini gösterir,
   değeri asla; `--all` bu ana kasanın tüm proje kasalarını listeler.

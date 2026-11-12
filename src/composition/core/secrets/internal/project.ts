@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
   localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openProjectVaultStore, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readProjectDeck } from '#adapters/index.js';
-import { assertPublicSecretName, assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
+import { assessProjectVaultOwnership, assertPublicSecretName, assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
   deckDeclaration, findSecretGrant, parseDeckDeclarations, policySecretChangeAuthorization, projectVaultAnchorSchema, projectVaultClaimed, type AuthorityWitness,
-  type CredentialSource, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
+  type CredentialSource, type SecretProjectTarget, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext, loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 
@@ -37,9 +37,30 @@ export async function resolveProjectVaultAnchor(context: ProjectSecretContext, o
     projectId = project.status === 'available' ? project.value.projectId : null;
     dataRoot = main.productLayout.root; anchorRoot = main.projectRoot;
   }
-  const binding = await directoryLocation(dataRoot);
-  if (installationId === null || projectId === null || binding === null) return null;
-  return projectVaultAnchorSchema.parse({ installationId, projectId, binding, repository: repository.kind === 'none' ? null : repository.repository, projectRoot: anchorRoot });
+  const binding = await directoryLocation(dataRoot), location = await directoryLocation(anchorRoot);
+  if (installationId === null || projectId === null || binding === null || location === null) return null;
+  return projectVaultAnchorSchema.parse({ installationId, projectId, binding, repository: repository.kind === 'none' ? null : repository.repository, projectRoot: location.canonicalRoot });
+}
+/** Read-only target shown before consent: no vault, identity or grant is created. */
+export async function inspectSecretProjectTarget(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<SecretProjectTarget> {
+  const workingFolder = (await directoryLocation(projectRoot))?.canonicalRoot ?? projectRoot;
+  const context = await loadConfiguredScopeContext(workingFolder, scopeId, options, 'read'), anchor = await resolveProjectVaultAnchor(context, options);
+  if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
+  return Object.freeze({ anchor, workingFolder });
+}
+function assertShownTarget(anchor: ProjectVaultAnchor | null, shown?: SecretProjectTarget): void {
+  if (shown && (!anchor || anchor.projectRoot !== shown.anchor.projectRoot || assessProjectVaultOwnership({ schemaVersion: 1, anchor: shown.anchor,
+    firstSeenAtMs: 0, handedOverAtMs: null }, anchor) !== 'match')) throw ErrorRegistry.createError('SECRET_PROJECT_TARGET_CHANGED');
+}
+/** Check before write admission can bootstrap identities or scope bindings, then again on the writer's own context. */
+async function secretWriteContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, shown?: SecretProjectTarget) {
+  if (shown) options = { ...options, force: true };
+  projectRoot = (await directoryLocation(projectRoot))?.canonicalRoot ?? projectRoot;
+  if (shown) assertShownTarget(await resolveProjectVaultAnchor(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), options), shown);
+  const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), anchor = await resolveProjectVaultAnchor(context, options);
+  assertShownTarget(anchor, shown);
+  if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
+  return { context, anchor };
 }
 /** The project's vault, read-only (also the inventory's current project): its anchor, directory (null: never written), `.deck`, store and grants. An existing vault of another owner is refused. */
 export async function openProjectSecrets(context: ProjectSecretContext, options: ConfigLoadOptions, snapshot?: ModelInspectionSnapshot) {
@@ -100,19 +121,18 @@ const ledgerOf = (context: ScopeContext) => async () => {
   try { return { store, audit: new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)) }; }
   catch (error) { store.close(); throw error; }
 };
-async function writerContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
-  const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), anchor = await resolveProjectVaultAnchor(context, options);
-  if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
+async function writerContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, shown?: SecretProjectTarget) {
+  const { context, anchor } = await secretWriteContext(projectRoot, scopeId, options, shown);
   const clock = new SystemTrustedClock(), root = globalRoot(options), directory = (await projectVaultDirectory(root, anchor, true))!;
   await admitProjectVault(directory, anchor, true, clock.sample().wallMs, lockMs(context));
   return { context, anchor, root, directory, clock, open: ledgerOf(context) };
 }
 /** `deckent secret grant|revoke NAME --scope S`: lend (or take back) main-vault key NAME to this project, decided on `secret`/`set` and sealed first. */
 export async function changeProjectSecretGrant(projectRoot: string, scopeId: string, name: string, action: 'grant' | 'revoke', source: 'card' | 'admin',
-  options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness) {
+  options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness, shown?: SecretProjectTarget) {
   assertPublicSecretName(name);
   await witnessed('secretGrant', witness);
-  const { context, anchor, root, clock, open } = await writerContext(projectRoot, scopeId, options), ledger = await open();
+  const { context, anchor, root, clock, open } = await writerContext(projectRoot, scopeId, options, shown), ledger = await open();
   try {
     const records = new AuthorityDecisionRecords(ledger.audit);
     const file = await decideSecretGrant({ principal: context.principal, scopeId, name, action, source, commandId: randomUUID() },
@@ -136,10 +156,9 @@ export async function setProjectSecret(projectRoot: string, scopeId: string, nam
 }
 /** `deckent secret handover`: a moved project takes its vault along — an intact record whose owner's data root is gone, authorized on `secret`/`set`
  * (resource `project-vault`) and sealed before the binding changes (Astra REVISE 2704 A). A lost record is refused, never recovered here. */
-export async function handOverProjectSecrets(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness) {
+export async function handOverProjectSecrets(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness, shown?: SecretProjectTarget) {
   await witnessed('secretHandover', witness);
-  const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), anchor = await resolveProjectVaultAnchor(context, options);
-  if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
+  const { context, anchor } = await secretWriteContext(projectRoot, scopeId, options, shown);
   const directory = await projectVaultDirectory(globalRoot(options), anchor, false);
   if (!directory) throw projectVaultClaimed(anchor);
   const clock = new SystemTrustedClock(), now = () => clock.sample().wallMs;
