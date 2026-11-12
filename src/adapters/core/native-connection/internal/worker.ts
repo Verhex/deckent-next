@@ -886,7 +886,7 @@ export function createNativeChildCustody(child: ChildProcess) {
     finish = value => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      resolve({ ...value, failure: stopped ? incomplete ? 'capacity:quota-stop-incomplete' : 'capacity' : null });
+      resolve({ ...value, failure: stopped ? incomplete ? 'capacity:quota-stop-incomplete' : 'capacity:quota-stop' : null });
     };
     child.once('error', () => finish({ code: null, signal: null }));
     child.once('close', (code, signal) => finish({ code, signal }));
