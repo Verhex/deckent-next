@@ -1,5 +1,7 @@
 # 01 kurulum (TR, deckent init --lang tr): a fresh throwaway installation; deckent --version, deckent init, then the first open.
-# Run from the repository root after lib/stop-demo.sh and lib/reset-demo.sh, with DECKENT_DEMO_SHELL=<abs path>/lib/demo-ns.sh.
+# Run from the repository root after lib/stop-demo.sh, with DECKENT_DEMO_SHELL=<abs path>/lib/demo-ns.sh, in a fresh throwaway
+# root: DECKENT_DEMO_ROOT=<new dir> (its install/ links to the staged copy) and DECKENT_DEMO_PROJECT_SOURCE=<a fresh clone>, which
+# demo-ns.sh shows at the usual project path; the configured demo of scenes 02-05 is not reset. One fresh root per take.
 # Waits for the runtime and for each applied step are cut (Hide/Show); everything shown is deckent's real output.
 Output ".github/assets/demos/tr/01-kurulum.gif"
 Source ".github/assets/demos/tapes/theme-dark.tape"

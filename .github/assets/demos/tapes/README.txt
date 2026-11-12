@@ -28,10 +28,12 @@ export DECKENT_DEMO_PROJECT="/home/$(id -un)/deckent"                  # a git w
 export DECKENT_DEMO_SHELL="$PWD/.github/assets/demos/tapes/lib/demo-ns.sh"
 mkdir -p .github/assets/demos/en .github/assets/demos/tr
 .github/assets/demos/tapes/lib/stop-demo.sh                            # stops only HOME=/home/demo processes
-.github/assets/demos/tapes/lib/reset-demo.sh                           # moves state aside; logins stay (01 only)
-vhs .github/assets/demos/tapes/en/01-install.tape                      # run from the repository root
+.github/assets/demos/tapes/en/02-tasks.tape                           # run from the repository root
 
-- Scene 01 needs a fresh install, so run `reset-demo.sh` before each 01 tape.
+- Scene 01 needs a fresh install. Record it in a second throwaway root so the configured demo of 02–05 stays intact: a new
+  DECKENT_DEMO_ROOT whose `install` links to the staged copy, and DECKENT_DEMO_PROJECT_SOURCE set to a fresh clone at the
+  release commit; `demo-ns.sh` shows that clone at the usual project path. Use a new root for every 01 take.
+  (`reset-demo.sh` resets the configured demo in place instead; it moves its state, including connections, aside.)
 - Scenes 02–05 need a configured install. Set it up with `deckent init`, then
   `deckent init policy --scope deckent --modes full-auto,full-access --apply` and
   `deckent pool set-capacity --execution-slots 3 --in-flight-slots 3`. The person places the API keys
@@ -44,11 +46,13 @@ vhs .github/assets/demos/tapes/en/01-install.tape                      # run fro
       --executable <abs path to codex> --config-dir /home/demo/.local/state/deckent-next-dev/headless/logins/codex --delegate ai
     deckent coding template --provider codex --kind coding \
       --connection codex-cli-subscription.codex-cli-subscription.gpt-6.1-sol.1 --apply   # workers on the Codex subscription
+    (scene 03 binds the same kind to the Claude subscription instead, with --provider claude and
+    --connection claude-cli-subscription.claude-cli-subscription.sonnet-5-5.1; see the beta.1.2 notes below)
     (connect codex again, and once more with --model gpt-6-luna: the `small` work class routes Codex work to gpt-6-luna)
 - Workers on this checkout (02, 03) also need the operator acknowledgements a deckent-next checkout declares by design
   (tests/contracts/adapters/worker-tree-gate-own-tree.test.ts); without them every worker stops with
   WORKER_TREE_SECRET_REFUSED. A person sets them on a terminal inside the namespace, then restarts the runtime:
-    deckent config set execution.secretGate.allowPatternPaths '["tests/**",".agents/**","src/platform/core/i18n/locales/**"]'
+    deckent config set execution.secretGate.allowPatternPaths '["tests/**","src/platform/core/i18n/locales/**",".agents/refactor/effort.test.mjs"]'
     deckent config set execution.secretGate.acknowledgedDenyPaths '[".npmrc"]'
 - The runtime admits only peers in its own namespaces, so each tape starts its own runtime: run `lib/stop-demo.sh` before
   and after every tape. The chat tapes first set full auto through `/mode` (a stored mode survives a take that stopped
@@ -60,4 +64,11 @@ vhs .github/assets/demos/tapes/en/01-install.tape                      # run fro
 - Waits for models and for the runtime are cut with Hide/Show; everything that is shown is deckent's real output.
 - VHS `Wait+Screen` reads the top of the terminal buffer. deckent's cards and appended setup boxes scroll past it, so the
   later steps use timed holds.
+- Observed on beta.1.2 (02, 03): one subscription sign-in is one capacity slot (assets/native-coding/commands.json,
+  maxInFlight 1), so Codex workers on one login run one at a time although the pool allows 3. A Codex worker that emits
+  an item outside its guard's allowed list (an `error` item from listing a missing folder, for example) stops; the two
+  later Codex write attempts in this demo stopped with NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED, so scene 03 uses the
+  Claude subscription worker. A request with "#" must not pass through `sed s#…#`.
+- A take that runs a few seconds long may have holds shortened afterwards with ffmpeg (`select` on frames inside a
+  static stretch, then a fresh palette); only identical frames are dropped.
 - Keep each GIF at 15–30 s and 5 MB or less, then check every frame: no key, token, email, account name or personal path.

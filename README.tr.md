@@ -380,14 +380,22 @@ Bağlantı kimlikleri, önizlemeler ve eski kurulumların adımları orada anlat
 
 ## Çalışırken görün
 
-Atılabilir bir kurulumda `1.0.0-beta.1.2` ile terminalden kaydedilmiş gerçek oturumlar. Her sahne modelini `/model` ile
-seçiyor, bu yüzden durum satırında modelin adı görünüyor. Onayları o kurulumdaki etiketli bir sentetik kişi veriyor;
-model ve runtime bekleme süreleri kesildi.
+Atılabilir bir kurulumda `1.0.0-beta.1.2` ile terminalden kaydedilmiş gerçek oturumlar. Model kullanan her sahne
+modelini `/model` ile seçiyor, bu yüzden durum satırında modelin adı görünüyor. Onayları o kurulumdaki etiketli bir
+sentetik kişi veriyor; model ve runtime bekleme süreleri kesildi.
 
 <table>
   <tr>
+    <td width="50%"><img src=".github/assets/demos/tr/01-kurulum.gif" alt="deckent --version, yeni bir kurulumda deckent init, ardından ilk açılış"><br><sub><b>Kurulum.</b> <code>deckent --version</code>, ardından yeni ve atılabilir bir kurulumda <code>deckent init</code>: dil, kapsam, kurulumu kimin kullandığı, ilk kurulum izinleri, komut korumalı alanı ve son kontrol. İlk <code>deckent</code> açılışı sohbetten önce yönetim haklarını, model bağlantısını ve kodlama CLI'ını öneriyor. Model kullanılmıyor.</sub></td>
+    <td width="50%"><img src=".github/assets/demos/tr/02-gorevler.gif" alt="/do üç salt-okunur görev planlıyor; izleyici yürütme için yer bekleyen bir görev gösteriyor; Run kabul ediliyor"><br><sub><b>Plan ve işçiler.</b> <code>/do</code> tek bir isteği üç salt-okunur göreve ayırıyor; plan kartı her görevin işçisini, Codex aboneliğinde gpt-6-luna'yı gösteriyor ve sentetik kişi onaylıyor. İzleyici bir görevin yürütme için yer beklediğini gösteriyor: bir abonelik girişi aynı anda bir işçi çalıştırıyor, bu yüzden görevler sırayla koşuyor. Run çıkış koduyla kabul ediliyor; içerik bağımsız olarak doğrulanmıyor. Planlayan: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/demos/tr/03-akis.gif" alt="Kabul ölçütüyle bir plan, çıkış koduyla kabul edilen işçi sonucu, teslim kartı ve commit'siz yazılan dosya"><br><sub><b>Plan, kanıt, teslim.</b> GPT-6.1 Sol (OpenAI API) tek bir görevi kabul ölçütüyle planlıyor ve sentetik kişi onaylıyor. Görev işçinin çıkış koduyla kabul ediliyor; teslim kartı farkı, işçinin raporunu kontrol edilmemiş bir beyan olarak ve “Sistem doğrulaması: kayıtlı değil” satırını gösteriyor. Sentetik kişi evet diyor ve dosya commit atılmadan çalışma kopyasına yazılıyor. İşçi: Claude Sonnet 5.5 (Claude aboneliği).</sub></td>
     <td width="50%"><img src=".github/assets/demos/tr/04-onay.gif" alt="Shift+Tab ile standart moda geçiş, bir kabuk komutu onay penceresini açıyor, ardından /mode"><br><sub><b>Onay ve modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> standart moda geçiriyor; bu yüzden bir kabuk komutu onay penceresini açıyor: ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı bir süre. Sentetik kişi bir kez izin veriyor; <code>/mode</code> aynı modları listeliyor. Model: DeepSeek V4.1 Flash (DeepSeek API).</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src=".github/assets/demos/tr/05-guvenlik.gif" alt="Sandbox ev klasörünü gizliyor; deckent politikasına kabukla yazma reddediliyor ve kayda geçiyor"><br><sub><b>Reddedildi ve kayda geçti.</b> Ajanın kabuğu, ev klasörünüzü gizleyen ve deckent yetki dosyalarını salt okunur tutan bir bubblewrap sandbox içinde çalışıyor. Politika dosyasına ekleme yapan kabuk komutu her zaman onay isteyen türden, tam otomatikte bile. Sentetik kişi Hayır diyor, hiçbir şey yazılmıyor ve denetim kaydı reddedilen çağrı için bir <code>policy-turn</code> kaydı tutuyor. Model: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+    <td width="50%"></td>
   </tr>
 </table>
 

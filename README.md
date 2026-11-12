@@ -380,14 +380,22 @@ It covers connection ids, previews and older installations.
 
 ## See it work
 
-Real sessions on `1.0.0-beta.1.2` in a throwaway installation, recorded from the terminal. Each scene chooses its model
-with `/model`, so the status bar names it. Approvals are answered by a labelled synthetic person in that installation,
-and waits for the model and the runtime are cut.
+Real sessions on `1.0.0-beta.1.2` in a throwaway installation, recorded from the terminal. Each scene that uses a model
+chooses it with `/model`, so the status bar names it. Approvals are answered by a labelled synthetic person in that
+installation, and waits for the model and the runtime are cut.
 
 <table>
   <tr>
+    <td width="50%"><img src=".github/assets/demos/en/01-install.gif" alt="deckent --version, deckent init in a fresh installation, then the first open"><br><sub><b>Install.</b> <code>deckent --version</code>, then <code>deckent init</code> in a fresh throwaway installation: language, scope, who uses it, the first-run permissions, the command sandbox and a final check. The first <code>deckent</code> then offers the management rights, a model connection and a coding CLI before the chat opens. No model is used.</sub></td>
+    <td width="50%"><img src=".github/assets/demos/en/02-tasks.gif" alt="/do plans three read-only tasks; the monitor shows a task waiting for an execution slot; the Run ends accepted"><br><sub><b>Plan and workers.</b> <code>/do</code> turns one request into three read-only tasks; the plan card names each task's worker, gpt-6-luna on the Codex subscription, and the synthetic person approves it. The monitor shows a task waiting for an execution slot: one subscription sign-in runs one worker at a time, so the tasks take turns. The Run ends accepted on exit code, with the content not independently verified. Planner: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/demos/en/03-flow.gif" alt="A plan with its acceptance criterion, a worker result accepted on exit code, a delivery card, and the file written with no commit"><br><sub><b>Plan, evidence, delivery.</b> GPT-6.1 Sol (OpenAI API) plans one task with its acceptance criterion and the synthetic person approves it. The task is accepted on the worker's exit code; the delivery card shows the diff, the worker's report as an unchecked claim and “System verification: none recorded”. The synthetic person says yes, and the file is written into the checkout with no commit. Worker: Claude Sonnet 5.5 (Claude subscription).</sub></td>
     <td width="50%"><img src=".github/assets/demos/en/04-approval.gif" alt="Shift+Tab to standard mode, a shell command opens the approval window, then /mode"><br><sub><b>Approval and modes.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> steps to standard, so a shell command opens the approval window: what, where, on whose behalf, scope, why, risk, undo and a live deadline. The synthetic person allows it once; <code>/mode</code> lists the same modes. Model: DeepSeek V4.1 Flash (DeepSeek API).</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src=".github/assets/demos/en/05-security.gif" alt="The sandbox hides the home folder; a shell write to deckent's policy is declined and recorded"><br><sub><b>Refused and recorded.</b> The agent's shell runs in a bubblewrap sandbox that hides your home folder and keeps deckent's authority files read-only. Its shell command that appends to the policy file is a kind that always asks, even in full auto; the synthetic person answers No, nothing is written, and the audit log keeps a <code>policy-turn</code> record of the refused call. Model: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+    <td width="50%"></td>
   </tr>
 </table>
 

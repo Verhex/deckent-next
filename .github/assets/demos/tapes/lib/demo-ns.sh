@@ -25,6 +25,9 @@ mount --rbind "/home/$ME" "$R/home/$ME"
 mount --bind "$DECKENT_DEMO_ROOT/home" "$R/home/demo"
 mount --bind "$DECKENT_DEMO_ROOT/etc/passwd" "$R/etc/passwd"
 mount --bind "$DECKENT_DEMO_ROOT/etc/group" "$R/etc/group"
+# Optional (scene 01): a second throwaway checkout shown at the usual project path, so a fresh install is recorded without
+# resetting the configured demo project.
+if [ -n "${DECKENT_DEMO_PROJECT_SOURCE:-}" ]; then mount --bind "$DECKENT_DEMO_PROJECT_SOURCE" "$R$DECKENT_DEMO_PROJECT"; fi
 mkdir "$R/.oldroot"; cd "$R"; pivot_root . .oldroot; umount -l /.oldroot; rmdir /.oldroot
 hostname deckent-demo
 exec unshare --user --map-user="$U" --map-group="$G" bash --noprofile --norc -c "source \"$LIB/demo-env.sh\"; cd \"\$DECKENT_DEMO_PROJECT\"; if [ \$# -gt 0 ]; then exec \"\$@\"; else exec bash --noprofile --norc; fi" demo "$@"
