@@ -185,7 +185,7 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
     expect(ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', 'en', refusedParams)?.message)
       .toContain(`hidden cannot start in the bubblewrap sandbox: the argument ${script} exists on this machine but not in the sandbox view`);
     expect(ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', 'tr', refusedParams)?.message)
-      .toContain(`hidden bubblewrap sandbox içinde başlatılamadı: argüman ${script} bu makinede var ama sandbox görünümünde yok`);
+      .toContain(`hidden bubblewrap yalıtım alanı içinde başlatılamadı: argüman ${script} bu makinede var ama yalıtım alanı görünümünde yok`);
     // A path written with a `${VAR}` is named as written (the cards' rule: never an expanded value).
     (w.env as Record<string, string>)['MCP_ELSEWHERE'] = elsewhere;
     const templated = await w.decide({ verb: 'add', scope: 'local', name: 'templated', approve: true, entry: { command: process.execPath, args: ['${MCP_ELSEWHERE}/server.mjs'] } }).catch((error: unknown) => error as { code: string; message: string });

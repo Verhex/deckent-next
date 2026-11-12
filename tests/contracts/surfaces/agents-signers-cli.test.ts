@@ -93,7 +93,7 @@ it('add, revoke (unique 12-character prefix, the card says committed rows stay m
 it('the list shows public facts in EN/TR and as JSON; a broken log is stated; nothing private is printed', async () => {
   const f = await project(), base = { root: f.root, env: f.env };
   const tr = capture(); await agentsCommand(['agents', 'signers', '--scope', 'scope', '--lang', 'tr'], { ...base, ...handlers([], 'broken'), stdout: tr.sink });
-  for (const text of ['İptal kaydı bozuk', 'eylemler', 'skill içe aktarma', 'harici anahtar', 'c'.repeat(12)]) expect(tr.text()).toContain(text);
+  for (const text of ['İptal kaydı bozuk', 'eylemler', 'beceri içe aktarma', 'harici anahtar', 'c'.repeat(12)]) expect(tr.text()).toContain(text);
   const json = capture(); await agentsCommand(['agents', 'signers', '--scope', 'scope', '--json'], { ...base, ...handlers([]), stdout: json.sink });
   expect(JSON.parse(json.text())).toMatchObject({ log: 'ok', items: [{ purpose: 'action', signedRows: 2 }, { purpose: 'import' }] });
   expect(json.text()).not.toMatch(/pkcs8|PRIVATE/i);

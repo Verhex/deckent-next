@@ -3,7 +3,7 @@
 [English](policy-and-ai.md) · [Mimari](architecture-overview.tr.md) · [Uyum raporu](reports/ai-floor-compliance.md)
 
 Kaynakla son karşılaştırma: 2026-10-23. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
-hangi eylemi yapabileceğini belirler. Grant (yetki kuralı), uygulamanın eylemi değerlendirmesine
+hangi eylemi yapabileceğini belirler. İzin (yetki kuralı), uygulamanın eylemi değerlendirmesine
 izin verir; durum kontrolü, onay, yalıtım, kabul kriteri ve kalıcı etki kanıtını kaldırmaz.
 Yönetici yalnız kendisinde bulunan yetkiyi devreder. AI aktör yetki yönetimi yapamaz.
 
@@ -12,19 +12,19 @@ Yönetici yalnız kendisinde bulunan yetkiyi devreder. AI aktör yetki yönetimi
 | Giriş | Kimlik ve kararın anlamı |
 |---|---|
 | İnsan terminali / CLI | Doğrulanmış OS kullanıcısı (`os-user`), servisçe doğrulanan etkileşimli kontrol terminaliyle insan kararı verebilir. Yalnız TTY bayrağı yeterli değildir. |
-| Etkileşimsiz CLI / SDK | Taşıma adı insan kanıtı değildir. Etkileşimsiz karar açık aktör/eylem hücresi ister. Workload veya token-verified principal AI sayılır. |
+| Etkileşimsiz CLI / SDK | Taşıma adı insan kanıtı değildir. Etkileşimsiz karar açık aktör/eylem hücresi ister. Workload veya token-verified kimlik AI sayılır. |
 | MCP | Daima ayrı AI aktör: issuer `<host>/mcp`, aynı OS subject, workload güvencesi. Eski MCP kimliği `os-user` dese de AI kalır. Owner yetkisi MCP yetkisine dönüşmez. |
 | SDK / yerel servis | Aynı doğrulanmış kimlik, politika ve uygulama kapılarını kullanır. İstemcinin yazdığı kimlik, persona veya channel bilgisi yetki vermez. |
 
 Aktör sınıflaması [principal.ts](../src/domain/core/principal/internal/principal.ts) içindedir.
 Servis tanıklığı bağlantı eşini, kontrol terminalini ve süreç kimliğini kontrol eder; biyolojik
 insan varlığını kanıtlamaz. Owner'ın OS hesabında çalışan ajan PTY üretebilir veya o hesabın
-dosyalarına erişebilir. Ayrı OS kimliği, sırların korunması ve gerçek sandbox sınırı önemlidir;
+dosyalarına erişebilir. Ayrı OS kimliği, sırların korunması ve gerçek yalıtım alanı sınırı önemlidir;
 politika hesap yalıtımı değildir.
 
 ## Devredilemeyen yetki tabanı
 
-Sürümlü güvenlik tabanı, açık allow ve full-access tercihi dahil sıradan grant'lerden önce
+Sürümlü güvenlik tabanı, açık allow ve full-access tercihi dahil sıradan izinlerden önce
 uygulanır. AI sonucu `deny / AI_NON_DELEGABLE` olur. İnsan için de politika yetkisi ve ilgili
 tanıklı onay gerekir. Aşağıdaki sınırlar politika kuralı ekleyerek devredilebilir hale gelmez.
 
@@ -39,23 +39,23 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Devredilemeyen sınır | Kaynaktaki hücreler | Neden |
 |---|---|---|
 | Sağlayıcı harcama uzlaştırması (settle, release, write-off) | `provider-spend-account/fixture-target/reconcile` | Owner Q-SPEND (b), 2026-10-26: eski izin olsa da hiçbir AI bekleyen harcamayı uzlaştıramaz. Olağan çağrı hesaplaşması devam eder. |
-| Politika yönetimi execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grant, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli. |
+| Politika yönetimi execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | İzin, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli. |
 | Yetki belgeleri, authenticator ve onay güvencesi: tüm değişimler | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | Aktör kendisini sınırlayan kimliği veya onay doğrulayıcısını değiştiremez; inspect/list politika kapsamındadır. |
 | Yedeği geri yükleme | `backup/fixture-backup/restore` | Geri yükleme yetki verisini değiştirebilir. |
-| Yürütme ortamı kurma ve kurulum onarımı | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | İkisi de sandbox dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19). |
+| Yürütme ortamı kurma ve kurulum onarımı | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | İkisi de yalıtım alanı dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19). |
 | Kurulumu kaldırma ve verisini silme | `installation/fixture-target/uninstall`, `installation/fixture-target/purge` | Kurulumu kaldırmayı ya da verisini silmeyi deckent geri alamaz; yalnız kendi terminalindeki kişi onaylar (alpha.56 U10B). |
 | Full access dahil izin kipi değiştirme | `permission-mode/standart/set`, `permission-mode/full-auto/set`, `permission-mode/full-access/set` | AI kendi izin kipini gevşetemez. |
 | Read/resolve dahil bütün sır işlemleri | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Kimlik bilgisini okumak, değiştirmek veya taşımak sır sınırını aşar; read/resolve savunma hücreleridir, açık sır-okuma API’leri değildir. |
 | Yetki onay kartları | `approval/identity-profile/decide`, `approval/policy-mcp-capability/decide`, `approval/policy-template-upgrade/decide`, `approval/audit-rebaseline/decide`, `approval/policy-recovery/decide` | Yetki kartını karara bağlamak da yetki değiştiren bir yoldur. |
-| Inspect/verify dışındaki audit işlemleri | `audit/fixture-scope/rebaseline`, `audit/fixture-scope/write`, `audit/fixture-scope/delete`, `audit/fixture-scope/future-action` | AI yetki kaymasını saptayan referans kaydını yeniden yazamaz. |
+| Inspect/verify dışındaki denetim işlemleri | `audit/fixture-scope/rebaseline`, `audit/fixture-scope/write`, `audit/fixture-scope/delete`, `audit/fixture-scope/future-action` | AI yetki kaymasını saptayan referans kaydını yeniden yazamaz. |
 | edit-authority, edit-floor ve mcp-floor araç çağrısı hücreleri | `agent-tool-call/edit-authority/invoke`, `agent-tool-call/edit-floor/invoke`, `agent-tool-call/mcp-floor/invoke` | Korunan sınırı düzenlemek ya da sabitlenmiş MCP taban çağrısını çalıştırmak operasyon kapısını dolanabilir. |
 | Hafıza doğrulama, emekliye ayırma, itiraz ve silme | `memory/fixture-target/verify`, `memory/fixture-target/retire`, `memory/fixture-target/contest`, `memory/fixture-target/purge` | Doğrulanmış hafıza bir kişi ya da bağımsız değerlendirme kaydı ister, AI kendisi asla (kanun denetimi madde 6); emekliye ayırmak da aynı bilgi değişikliğidir; içerik silme (purge) insanındır (S4B A11); doğrulama ve itiraz tabandan yalnız hafıza değerlendirici iş kimliği için geçer (S4B-3 A5); bu hücreler onu adlandırmaz. |
-| Nervous durdurma eylemi ya da kayıp görev devamı için kalıcı onay | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni Attempt ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir. |
+| Nervous durdurma eylemi ya da kayıp görev devamı için kalıcı onay | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni deneme ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir. |
 | Bir Nervous kuralını canlıya alma | `nervous-rule/container-gone@1/promote`, `nervous-rule/container-gone@1/future-action`, `nervous-rule/fixture-target/promote`, `nervous-rule/fixture-target/future-action` | Ölçülmüş bir kuralı ve sürümünü yalnız bir kişi canlıya alır (alpha.56 G2, owner Q-A1); bunu taşıyan bir AI kendi tespitleriyle işçileri durdurup bırakabilirdi. |
 | İmza anahtarı ekleme, kaydetme, iptal ve kayıt onarımı | `skill-signer/fixture-target/enrol`, `skill-signer/fixture-target/add`, `skill-signer/fixture-target/revoke`, `skill-signer/fixture-target/repair`, `skill-signer/fixture-target/future-action` | AI ve sistem kimliklerinin katalog eylemlerini imzaladığı anahtarları yalnız bir kişi ekler ya da iptal eder (S8-5, owner 2026-10-23); bunu taşıyan bir AI kendine imza yetkisi verirdi. |
 | Hub kaynağı ekleme ve kaldırma | `hub/fixture-target/sources.add`, `hub/fixture-target/sources.remove` | Bir Hub kaynağını (kök anahtarını) sabitlemek ya da kaldırmak kişinin güven kararıdır (BeUser E-05, owner 2026-10-28 "yalnız kişiye"); bunu taşıyan bir AI kendini her yayıncıya güvendirebilirdi. |
 | Katalog önerisi ve kural daraltması (katalog toplayıcı dışındaki her AI) | `agent-catalog/fixture-target/suggest`, `agent-catalog/fixture-target/narrow` | Önerileri ve otomatik daraltmayı yalnız katalog toplayıcı, kendi anahtarıyla imzalayarak yazar (S8-3, §9); bunları yazan başka bir AI hangi ajanın kartsız çalışacağını yönlendirebilirdi. |
-| Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `beuser`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Güvenlik, yalıtım, admission, operasyon, audit, kurtarma ve Nervous modları, shell ortamı ve ağ çıkışı ayarla gevşetilemez. |
+| Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `beuser`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Güvenlik, yalıtım, admission, operasyon, denetim, kurtarma ve Nervous modları, shell ortamı ve ağ çıkışı ayarla gevşetilemez. |
 <!-- ai-floor:end -->
 
 Kart kararında ayrıca uygulama kapısı vardır: AI/etkileşimsiz çağıran, `edit-floor`,
@@ -68,21 +68,21 @@ korumaları ayrı güvenlik testleriyle sınanır.
 
 ## Neler devredilebilir
 
-Bir hücre **principal (issuer + subject) × eylem × kaynak türü/kimliği × kapsam** seçer.
+Bir hücre **kimlik (issuer + subject) × eylem × kaynak türü/kimliği × kapsam** seçer.
 Rol ve rol bağları aynı hücreleri sağlar; istekte rol adı yazmak yetki vermez. Önce ret ve
-kısıtlama, sonra `require-approval`, sonra allow uygulanır; grant yoksa ret gelir. Kapsam
+kısıtlama, sonra `require-approval`, sonra allow uygulanır; izin yoksa ret gelir. Kapsam
 üyeliği de gerekir. `delegationWithin`, değiştirme ve geri alma dahil yönetimin dokunduğu her
 hücreyi sınar; onay gereğini koşulsuz allow'a çeviremez, yöneticinin kendi kısıtını kaldıramaz.
 
 | Adım | Gerekli politika hücresi ve diğer kontroller |
 |---|---|
-| Başarısızlıktan sonra devam / kapatma | Açık `run-decision` / Run kimliği / `resume` veya `close`; ayrıca `run/reserve` veya `run/cancel`. Durum ve revision geçişe izin vermeli. |
-| Görevi kabul / ret | Açık `task-decision` / Task kimliği / `accept` veya `reject`; ayrıca attempt `evaluate`. AI isteği yine komuta bağlı onay kartı açar; kararı approval `decide` ve eşleşen görev adımı ister. Kabul kriterleri korunur. |
-| Görev sorusunu yanıtlama | Açık `task-decision` / Task kimliği / `answer`; ayrıca attempt `evaluate`. Bekleyen soru, yanıt ve revision doğrulanır. |
+| Başarısızlıktan sonra devam / kapatma | Açık `run-decision` / çalışma kimliği / `resume` veya `close`; ayrıca `run/reserve` veya `run/cancel`. Durum ve revision geçişe izin vermeli. |
+| Görevi kabul / ret | Açık `task-decision` / Task kimliği / `accept` veya `reject`; ayrıca `attempt` `evaluate`. AI isteği yine komuta bağlı onay kartı açar; kararı approval `decide` ve eşleşen görev adımı ister. Kabul kriterleri korunur. |
+| Görev sorusunu yanıtlama | Açık `task-decision` / Task kimliği / `answer`; ayrıca `attempt` `evaluate`. Bekleyen soru, yanıt ve revision doğrulanır. |
 | Sıradan onay | Açık `approval` / onay kimliği / `decide`; güncel politika, oturum, istek özeti, süre, görev ayrılığı ve güvence. Korunan/riski bilinmeyen kartlar tabanda kalır. |
 | Operator hold durdurma / sürdürme | Sıradan operatör kontrolü `run/cancel` veya `run/reserve` kullanır; başarısızlıktan devam ayrı karar adımıdır. |
 | Tutulan sağlayıcı harcamasını uzlaştırma (settle, release, write-off) | `provider-spend-account/reconcile`, eski v1 harcama izinleri dahil bütün AI aktörleri için kod tabanıdır (owner Q-SPEND (b), 2026-10-26). Kişi yönetilen uzlaştırma yolunu kullanır; olağan çağrı hesaplaşması içeride devam eder. |
-| API bütçesini oluşturma, değiştirme ya da dondurmasını kaldırma; tutulan harcamayı uzlaştırma | `provider-spend-account/budget-revision` (ve `reconcile`) politika hücreleridir; MCP dışındaki her çağıran (CLI, terminal, SDK) ayrıca runtime servisinde kişinin terminal tanığına ihtiyaç duyar (2026-10-27): kabuktaki bir AI aracı, CI, boru ya da `--json` `AUTHORITY_WITNESS_REQUIRED` ile reddedilir ve hiçbir şey değişmez. Bir MCP istemcisini politika izni belirler (bütçe değişikliği tabanda değildir). |
+| API bütçesini oluşturma, değiştirme ya da dondurmasını kaldırma; tutulan harcamayı uzlaştırma | `provider-spend-account/budget-revision` (ve `reconcile`) politika hücreleridir; MCP dışındaki her çağıran (CLI, terminal, SDK) ayrıca deckent servisinde kişinin terminal tanığına ihtiyaç duyar (2026-10-27): kabuktaki bir AI aracı, CI, boru ya da `--json` `AUTHORITY_WITNESS_REQUIRED` ile reddedilir ve hiçbir şey değişmez. Bir MCP istemcisini politika izni belirler (bütçe değişikliği tabanda değildir). |
 | Admission, operasyon, havuz, model, diğer harcama eylemleri, iş hedefi | `deckent policy vocabulary --json` sözlüğündeki sıradan hücreler. Tabanda olmamak, her taşımanın eylemi sunduğunu veya uygulamanın izin verdiğini garanti etmez. |
 
 Karar adımında allow, aktörü ve eylemi açıkça adlandırmalıdır: `principals: "all"` veya
@@ -92,20 +92,20 @@ Genel `evaluate` veya `reserve`, kabul veya başarısızlıktan devam yetkisi de
 Yeni ilk kurulum politikası kuran insana yetki, MCP aktörüne gözlem kurallarını ve şablon v19'dan
 beri (owner 2026-11-05) kurulu kapsamda kişinin kendi araç kurallarını verir: model çağrısı, okuma ve
 karalama araçları, kartın arkasında düzenleme/kabuk araçları ve bunların üç operasyonu. Şablon v20'den
-beri (owner 2026-11-09) aktör bir Run ve üç ayardan birini (`language`, `output_mode`,
+beri (owner 2026-11-09) aktör bir çalışma ve üç ayardan birini (`language`, `output_mode`,
 `terminal.responseStyle`) de önerebilir; ikisi de moda açık olmayan `require-approval` kuralıdır, bu
-yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; önerilen Run'ın
+yüzden kişinin `/do` plan kartı ya da `/config` önce/sonra kartı her modda açılır; önerilen çalışmanın
 havuzu ve iş hedefi `allow`'dur (o kart olmadan etkisizdir). Mevcut kurulumlar bu dört kuralı bir sonraki
 servis başlangıcında bir kez ve denetim kaydıyla alır; hücresinin tamamını aktörün tek bir izninin (rol
 bağlaması da) zaten kapsadığı kural hariç. `/policy` onları kapatıp açmak için tek bir **Yapay zekâ önerileri**
 satırında gösterir ve onları kapsayan mevcut izni adlandırır. Yerel ajan ve
 dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, başka yapılandırma, sır, politika,
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
-grant'lerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
+izinlerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
 
 ## Mevcut yüzeylerle inceleme, yetki verme ve geri alma
 
-Kurulu projeden çalıştırın. `SCOPE_ID`, `GROUP_ID`, `PREVIEW_DIGEST` ve grant kimlikleri yer
+Kurulu projeden çalıştırın. `SCOPE_ID`, `GROUP_ID`, `PREVIEW_DIGEST` ve izin kimlikleri yer
 tutucudur; kurulumunuzda incelediğiniz gerçek değerlerle değiştirin. Yazımlar yöneticinin
 kendi yetkisini ve etkileşimli onayını ister. Uygulamadan önce inceleyin.
 
@@ -122,8 +122,8 @@ deckent policy mcp revoke --scope SCOPE_ID --group GROUP_ID --apply --expect PRE
 Her eylemin taze önizleme özetini kullanın. Bayat görünüm, eksik yetki, taban çatışması veya son
 yönetici ihlali değişikliği reddeder. Terminal `/policy` paneli aynı kayıtlı MCP gruplarını ve
 önizleme/onay yolunu sunar; genel politika editörü değildir. Grupları ve etkin durumu kopya
-örnekten değil `list` çıktısından alın. Geri alma yalnız grubun yönettiği grant'leri kaldırır;
-özel/rol grant'leri eyleme izin vermeyi sürdürebilir. Ardından **effective** (etkin) durumu
+örnekten değil `list` çıktısından alın. Geri alma yalnız grubun yönettiği izinleri kaldırır;
+özel/rol izinleri eyleme izin vermeyi sürdürebilir. Ardından **effective** (etkin) durumu
 inceleyin. Geri alma geçmiş etkileri silmez.
 
 Kalıcı araç izinleri ve şablon bakımı ayrı komutlardır:
@@ -143,7 +143,7 @@ kural için "—") ve sonraki sayfanın komutunu verir.
 Kendi terminalinizde `deckent policy` scope özetini (yöneticiler, kalıcı onaylarınız, AI adımları ve MCP grupları açık/kapalı)
 gösterir; `deckent policy mcp` / `deckent policy delegations` ile grup ya da adım seçer, değişikliğin önizlemesini kartta
 okur ve yukarıdaki komutlarla aynı yönetilen değişiklikle uygularsınız.
-`policy revoke` rastgele politika grant'ini değil, bu kayıtlardan birini kaldırır.
+`policy revoke` rastgele politika iznini değil, bu kayıtlardan birini kaldırır.
 TTY dışındaki kalıcı izin geri alımında `--yes` teyit bayrağı vardır; yetki, politika veya AI
 tabanını aşmaz.
 
@@ -175,26 +175,26 @@ deckent policy delegate --scope SCOPE_ID --step task-accept --resource TASK_ID
 
 Adımlar `run-resume`, `run-close`, `task-accept`, `task-reject`, `task-answer` ve
 `approval-decide` olur. Varsayılan ve desteklenen tek `--actor`, doğrulanmış insanın MCP
-kimliğine bağlı `mcp` değeridir. `--resource` hücreyi tek Run, Task veya onay kimliğine daraltır;
+kimliğine bağlı `mcp` değeridir. `--resource` hücreyi tek çalışma, Task veya onay kimliğine daraltır;
 yalnız o kapsamdaki bütün kaynak sınıfını devretmek istediğinizde kaldırın. Terminal bölümü
 kapsamın bütün sınıfını kullanır. Korunan adımlar listelenmez, korunan onay kimlikleri reddedilir;
 sınıfın bütünü devredilse de taban uygulanır. Diğer yürütme/onay hücreleri ayrıca bulunmalıdır;
 bu komut onları örtük olarak vermez.
 
-Liste **yönetilen grant** ile **etkin izni** ayırır. Undelegate yalnız aynı kapsam, adım ve
+Liste **yönetilen izin** ile **etkin izni** ayırır. Undelegate yalnız aynı kapsam, adım ve
 kaynak seçiminin yönetilen kuralını kaldırır; özel veya rol kuralı adıma izin vermeyi sürdürebilir.
 Eşzamanlı politika değişimi eski kartı reddeder; tekrar inceleyip onaylayın. Uygulanan her değişiklik
-`policy.administer@1`, beklenen revizyon, onay, yetki sınırı, audit ve arşiv yolundan geçer;
-onay/audit insana ait granter kimliğini kaydeder. Genel `deckent operation execute` ve açık SDK
+`policy.administer@1`, beklenen revizyon, onay, yetki sınırı, denetim ve arşiv yolundan geçer;
+onay/denetim insana ait granter kimliğini kaydeder. Genel `deckent operation execute` ve açık SDK
 yürütmesi `policy.administer@1` işlemini hâlâ `OPERATION_SURFACE_RESTRICTED` ile reddeder.
 Korunan yetki dosyalarını elle düzenlemeyin.
 
 ## Örnekler ve sınırları
 
-**“AI kendi başarısız Run'larını sürdürsün.”** AI kimliğini, kapsamı ve önceden incelenmiş Run
+**“AI kendi başarısız çalışmalarını sürdürsün.”** AI kimliğini, kapsamı ve önceden incelenmiş çalışma
 kimliklerini seçin. Aşağıdaki JSON, özel devir komutunun ürettiği hücreyi açıklar;
 çalıştırılabilir CLI girdisi değildir. `run/reserve` ayrıca verilmelidir; undelegate aynı
-kaynak seçimiyle yönetilen grant'i kaldırır. Dinamik “kendi Run'ları” koşulu veya gelecekteki Run
+kaynak seçimiyle yönetilen izni kaldırır. Dinamik “kendi çalışmaları” koşulu veya gelecekteki çalışma
 kimliklerine otomatik devir yoktur.
 
 ```json
@@ -215,7 +215,7 @@ hücresi olmadan devam edebilir; ortak AI girişi açık hücre ister.
 
 **“AI N tutarının altındaki görevleri kabul etsin.”** Politika hücresinde sayısal tutar/risk/
 kalite eşiği koşulu yoktur. İş kriterini ayrıca tanımlayın, kalıcı kanıtı inceleyin; belirli
-Task kimlikleri için `task-decision/accept` seçin, attempt `evaluate` ve approval `decide`
+Task kimlikleri için `task-decision/accept` seçin, deneme `evaluate` ve approval `decide`
 yetkilerini de sağlayın. Uygulanmayan eşik yerine wildcard kullanmayın. AI kabul/ret isteği
 yine kartından geçer; model görüşü, test başarısı veya politika allow tek başına iş kabulü
 değildir. Mevcut CLI:
@@ -228,16 +228,16 @@ değildir. Mevcut CLI:
 çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
 deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
 yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
-yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol grant'lerini de inceleyin. Başka
-grant'ler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;
-sıradan inceleme de uygun kapsam ve grant ister. MCP onay-karar aracı sunmaz.
+yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol izinlerini de inceleyin. Başka
+izinler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;
+sıradan inceleme de uygun kapsam ve izin ister. MCP onay-karar aracı sunmaz.
 
 ## Karar geçmişi ve bütünlük
 
 Karar kaydı v4, `deciderClass` taşır: `human-tty`, `ai-policy` veya `system`. Arayüz
-“Etkileşimli terminal”, “Policy üzerinden AI” veya “Sistem” gösterir; eski kararın sınıfı
+“Etkileşimli terminal”, “politika üzerinden AI” veya “Sistem” gösterir; eski kararın sınıfı
 bilinmeyebilir ve insan diye etiketlenmez. Kayıt aktörü, gerekçeyi, istek bağını ve politika
-revision'ını da korur. Run yaşam döngüsü kanıtı/audit, sınıfı ve kural veya onay kimliğini
+revision'ını da korur. Çalışma yaşam döngüsü kanıtı/audit, sınıfı ve kural veya onay kimliğini
 kaydeder. Sınıf, kararın hangi yetki yolundan geldiğini anlatır; iş sonucunun doğruluğunu değil.
 
 ```sh
@@ -249,12 +249,12 @@ deckent audit rebaseline --scope SCOPE_ID --reason "Reviewed authority change" -
 
 Verify; bilinmiyor/erişilemiyor/checkpoint yok dahil eşleşmeyen her durumda sıfır dışı çıkar.
 Okuma iyileştirme veya referans kaydı oluşturmaz. Politika/producer kayması, kırık zincir ve
-bazı silmeler mühürlü checkpoint'lerle saptanır. Dışa aktarılan tanığı yazılabilir hesabın
-dışında saklayın: aynı hesaba erişen saldırgan bütün marker ve checkpoint'leri kaldırırsa
+bazı silmeler mühürlü kontrol noktalarıyla saptanır. Dışa aktarılan tanığı yazılabilir hesabın
+dışında saklayın: aynı hesaba erişen saldırgan bütün marker ve kontrol noktaları kaldırırsa
 yerel görünüm yeni kurulum gibi olabilir. Rebaseline, sebep araştırıldıktan sonra yapılan,
 AI tabanında bulunan tanıklı insan y/N işlemidir; yeni referans kurar, geçmişi güvenli ilan
 etmez. Donanımla korunan FIDO2 onayı ve imzalı politika paketleri beta sonrası iştir, bugünkü
-koruma değildir. [Audit sınırları](architecture-overview.tr.md#audit-bütünlüğü-ve-pull-witness).
+koruma değildir. [denetim sınırları](architecture-overview.tr.md#audit-bütünlüğü-ve-pull-witness).
 
 ## Uyum raporu neyi kanıtlar
 
@@ -266,20 +266,20 @@ yazar; herhangi bir `İHLAL` veya kaydedilmiş çıktıyla fark testi kırar. Be
 fonksiyonundan bağımsızdır; sır korumasını silen yalıtılmış kaynak-yükleyici mutasyonu ihlal
 üretmeli ve sıfır dışı çıkmalıdır.
 
-Yayımlanmış her eylem ve floor ailesi; hücresiz AI, açık grant'li AI ve insan `os-user`
+Yayımlanmış her eylem ve floor ailesi; hücresiz AI, açık izinli AI ve insan `os-user`
 fixture'ı ile değerlendirilir; eski MCP, workload ve token aktörleri de sınanır. Açık adım
-testleri wildcard/yok/geri alınmış/yanlış kapsam grant'lerini, ret ve onay gereğini kapsar.
+testleri wildcard/yok/geri alınmış/yanlış kapsam izinlerini, ret ve onay gereğini kapsar.
 Açık uçlu kimlik ve ayar yolları sınır örnekleriyle temsil edilir. Bunlar saf değerlendirici
 kontrolleridir; gerçek TTY, servis, sır deposu, OS yalıtımı, ERP veya canlı kabul kanıtı değildir.
 Uygulama kartı güvenliği ayrıca sınanır. Dogfood'da Git testleri bir adapter'ın kanıtıdır;
 müşteri ERP/CRM sonucunu aynı kimlik/kapsam/operasyon/onay sözleşmeleriyle iş kriteri ve kalıcı
 makbuz üzerinden kabul eder.
 
-Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
-[MCP politikası](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli-run/internal/run.ts),
+Komut kaynakları: [politika grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
+[MCP politikası](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [çalışma](../src/surfaces/core/cli-run/internal/run.ts),
 [Task](../src/surfaces/core/cli-task/internal/task.ts), [onay](../src/surfaces/core/cli-approval/internal/approvals.ts),
-[audit](../src/surfaces/core/cli-admin/internal/audit.ts). Karar kuralları:
-[adım grant'i](../src/domain/core/policy/internal/decision-step.ts),
+[denetim](../src/surfaces/core/cli-admin/internal/audit.ts). Karar kuralları:
+[adım izni](../src/domain/core/policy/internal/decision-step.ts),
 [yaşam döngüsü broker'ı](../src/engine/core/runs/internal/decision-approval.ts),
 [kart yetkisi](../src/engine/core/approval/internal/application.ts).
 

@@ -32,7 +32,7 @@ describe('/help grouped', () => {
     expect(section(en, 'Settings')).toContain('  /mode ');
     expect(section(tr, 'Onaylar')).toContain('  /approvals [numara|kimlik|clear-session]  Bekleyen bir onayı seç ve karar ver');
     expect(section(tr, 'İşler')).toContain('  /cancel <run-kimliği>  Bir işi iptal et (önce y/N sorar)');
-    expect(section(tr, 'Ayar')).toContain('  /service-restart  Çalışma servisini bu derlemeden yeniden başlat (önce sorar)');
+    expect(section(tr, 'Ayar')).toContain('  /service-restart  deckent servisini bu derlemeden yeniden başlat (önce sorar)');
     expect(section(tr, 'Ayar')).toContain('  /mode ');
     for (const text of [en, tr]) expect(text).not.toMatch(/\n(Other|Diğer)\n/);
   });

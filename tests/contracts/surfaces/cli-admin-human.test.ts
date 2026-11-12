@@ -447,7 +447,7 @@ it('audit lists the refusal source and role, shows lower bounds and unresolved t
       expect(await main(['audit', 'list'], listed.context)).toBe(0);
       for (const text of ['access-refusal-summary', 'outside-workspace', source, t('cli.audit.refusal.operation.read', {}, language),
         t('cli.audit.refusal.joined', { sequences: '#9' }, language)]) expect(listed.out.text()).toContain(text);
-      if (source === 'cli-reported') expect(listed.out.text()).toContain(language === 'en' ? 'Deckent did not decide' : 'kararı Deckent vermedi');
+      if (source === 'cli-reported') expect(listed.out.text()).toContain(language === 'en' ? 'Deckent did not decide' : 'kararı deckent vermedi');
       const shown = io(f, handlers);
       expect(await main(['audit', 'show', '2'], shown.context)).toBe(0);
       for (const text of [t('cli.audit.refusal.countAtLeast', { count: 2 }, language), t('cli.audit.refusal.unresolved', {}, language),
