@@ -37,6 +37,12 @@ export const installationBindingSchema = z.union([writableInstallationBindingSch
 export type InstallationBinding = z.infer<typeof installationBindingSchema>;
 export type InstallationBindingCapture = z.infer<typeof installationBindingCaptureSchema>;
 export type WritableInstallationBinding = z.infer<typeof writableInstallationBindingSchema> | z.infer<typeof legacyInstallationBindingSchema>;
+/** Frozen beta.1.2 capture bytes/order for unversioned digests; additive observations need an explicit versioned opt-in. */
+export function installationBindingCaptureV2Projection(capture: InstallationBindingCapture): z.infer<typeof writableInstallationBindingSchema> {
+  return writableInstallationBindingSchema.parse({ schemaVersion: capture.schemaVersion, strength: capture.strength, source: capture.source,
+    ...(capture.strength === 'machine' ? { machineDigest: capture.machineDigest } : {}),
+    canonicalRoot: capture.canonicalRoot, device: capture.device, inode: capture.inode });
+}
 /**
  * The shape a capture is persisted in (expand/contract): a platform machine binding keeps the v1 shape so a rollback to a release that only
  * reads v1 stays valid; only bindings the v1 shape cannot express (configured source, weak) are written as v2.

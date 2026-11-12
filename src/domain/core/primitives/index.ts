@@ -1,4 +1,4 @@
-export { installationIdSchema, installationIdentitySchema, installationBindingSchema, installationBindingCaptureSchema, retainedInstallationBinding, installationIdentityChoiceSchema,
+export { installationIdSchema, installationIdentitySchema, installationBindingSchema, installationBindingCaptureSchema, installationBindingCaptureV2Projection, retainedInstallationBinding, installationIdentityChoiceSchema,
   installationIdentityResolutionSchema, boundInstallationIdentitySchema, installationIdentityRecordSchema, filesystemIdentitySchema } from './internal/installation-identity.js';
 export type { InstallationId, InstallationIdentity, InstallationBinding, InstallationBindingCapture, InstallationBindingStrength, InstallationBindingSourceKind, InstallationIdentityChoice, InstallationIdentityResolution,
   FilesystemIdentity, WritableInstallationBinding } from './internal/installation-identity.js';
