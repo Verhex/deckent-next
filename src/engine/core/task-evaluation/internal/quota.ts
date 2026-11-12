@@ -8,10 +8,14 @@ export function detectWorkerQuota(events: readonly WorkerEvent[] | null, stdout:
   if (structured) { const { source, resetsAtMs, window } = structured; return quotaExhaustedSchema.parse({ source, resetsAtMs, ...optionalField('window', window) }); }
   for (const line of stdout.trimEnd().split('\n').reverse()) {
     try { const data = JSON.parse(line) as Record<string, unknown>;
-      if (data.kind === 'native-coding-exit' && data.schemaVersion === 1) return (data.failure === 'capacity' || data.failure === 'capacity:quota-stop-incomplete')
-        // The bootstrap records the observed limit even if the CLI raced to exit 0 before the group signal.
-        && ((typeof data.code === 'number' && data.signal === null) || (data.code === null && data.signal === 'SIGKILL'))
-        ? { source: 'exit-text', resetsAtMs: null } : null;
+      if (data.kind === 'native-coding-exit' && data.schemaVersion === 1) {
+        const observedStop = data.failure === 'capacity:quota-stop' || data.failure === 'capacity:quota-stop-incomplete';
+        // Only an observed stop admits SIGKILL or the CLI exit-0 race; text guesses keep their old nonzero-exit rule.
+        const quota = observedStop
+          ? (typeof data.code === 'number' && data.signal === null) || (data.code === null && data.signal === 'SIGKILL')
+          : data.failure === 'capacity' && typeof data.code === 'number' && data.code !== 0 && data.signal === null;
+        return quota ? { source: 'exit-text', resetsAtMs: null } : null;
+      }
     } catch { /* Non-JSON output is never quota authority. */ }
   }
   return null;

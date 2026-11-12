@@ -227,7 +227,7 @@ it('uses the shared quota rule and never permits worker paid usage without a liv
       try {
         const result = await custody.result; observer.flush();
         expect(performance.now() - atLimit).toBeLessThan(2000);
-        expect(result).toEqual({ code: null, signal: 'SIGKILL', failure: mode === 'escaped' ? 'capacity:quota-stop-incomplete' : 'capacity' });
+        expect(result).toEqual({ code: null, signal: 'SIGKILL', failure: mode === 'escaped' ? 'capacity:quota-stop-incomplete' : 'capacity:quota-stop' });
         expect(signal).toHaveBeenCalledWith(-child.pid!, 'SIGKILL');
         expect(await readFile(effect, 'utf8')).toBe('kept');
         expect(kept).toEqual([expect.objectContaining({ kind: 'message', excerpt: 'partial output' }), expect.objectContaining({ kind: 'quota-exhausted' })]);
