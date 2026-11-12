@@ -24,7 +24,7 @@ const projectResponse = (value: unknown, known: KnownSecretSnapshot, field = '')
     ? Object.fromEntries(Object.entries(value).map(([key, item]) => [redactForRecord(key, known), projectResponse(item, known, key)])) : value;
 /** In-memory driver construction is pure. Admission probes and run files occur only inside the governed invocation. */
 export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['profile']; execution: NativeAgentExecution; session: ToolSessionPort;
-  now: () => number; isolation: HeadlessIsolation; onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; paidExtraUsage?: 'continue' | 'stop-at-limit' }>) {
+  now: () => number; isolation: HeadlessIsolation; onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; paidExtraUsage?: 'continue' | 'stop-at-limit' }>) {
   const { profile, entry, definition } = agentTarget(input.profile), execution = nativeAgentExecutionSchema.parse(input.execution);
   toolSessionSchema.parse(input.session.session);
   if (execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
@@ -95,7 +95,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               outputMaxBytes: profile.limits.responseMaxBytes }); dispose = launch.dispose;
             const evidence = await runHeadlessIsolated(entry, input.isolation, { ...launch.spawn, executable: preflight.executable, stateDir: definition.stateDir,
               mcp: bridge, now: input.now }, launch.bounds, claude ? AbortSignal.any([combined, claude.signal]) : combined,
-            raw => { if (claude) return claude.line(raw); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
+            (raw, lineSignal) => { if (claude) return claude.line(raw, lineSignal); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
             if (finished?.kind === 'refused') {
               const limit = finished.limit;

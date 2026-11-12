@@ -278,9 +278,12 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
       answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
     const deliveredPaidNotices = new Set<string>();
-    const onPaidUsage = (limit: ClaudeRateLimit) => notifyNativePaidUsage(limit, language, host.model, `${peer.uid}:${peer.pid}`, command.scopeId, async text => {
-      channel.emit({ kind: 'text', text }); await channel.drained(); deliveredPaidNotices.add(text);
-    });
+    const onPaidUsage = (limit: ClaudeRateLimit, lineSignal?: AbortSignal) => notifyNativePaidUsage(limit, language, host.model, `${peer.uid}:${peer.pid}`, command.scopeId, async text => {
+      channel.emit({ kind: 'text', text });
+      if (!await channel.drained()) throw new Error('notice-not-delivered');
+      signal.throwIfAborted(); lineSignal?.throwIfAborted();
+      deliveredPaidNotices.add(text);
+    }, AbortSignal.any([signal, ...(lineSignal ? [lineSignal] : [])]));
     const pluginNotices = new Set<string>(), cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
@@ -299,7 +302,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           };
           result = agent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, agent, text => { pluginNotices.add(text); })
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
-              async text => { channel.emit({ kind: 'text', text }); await channel.drained(); }); // Host notice bypasses the provider-prefix accumulator and model history.
+              async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
           // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? queryFailure(error).code };

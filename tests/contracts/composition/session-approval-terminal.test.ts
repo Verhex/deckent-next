@@ -97,7 +97,7 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
     const request = runtimeServiceRequestSchema.parse(input); requests.push(request);
     let settled!: () => void; const handler = new Promise<void>(resolve => { settled = resolve; }); turns.add(handler);
     const result = await runPeerConfiguredChatTurn(project, request.input, peer, { env }, { maxResultBytes: 65536 }, host,
-      { signal: signal ?? controller.signal, drained: async () => undefined, emit: event => { const checked = agentTurnStreamEventSchema.parse(event); events.push(checked); emit([checked]); } }).finally(settled);
+      { signal: signal ?? controller.signal, drained: async () => true, emit: event => { const checked = agentTurnStreamEventSchema.parse(event); events.push(checked); emit([checked]); } }).finally(settled);
     return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
   });
   const client = createConfiguredRuntimeClient(project, { env });

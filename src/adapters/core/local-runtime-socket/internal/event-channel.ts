@@ -4,14 +4,15 @@ import { RUNTIME_SERVICE_EVENT_FRAME_EVENTS, RUNTIME_SERVICE_SCHEMA_VERSION } fr
 import { encodeServiceFrame, ServiceFrameError } from './framing.js';
 
 /**
- * Required-data channel of one `chatTurn` request (v12). Events are never dropped: the producer awaits `drained()` between steps,
- * so what waits in memory is at most one step's output plus `pendingMaxBytes`. The channel fails closed instead: a peer that
+ * Required-data channel of one `chatTurn` request (v12). Events fail closed: the producer awaits `drained()` between steps,
+ * so what waits in memory is at most one step's output plus `pendingMaxBytes`. A peer that
  * disconnects, an event that cannot fit one frame, or a peer that stops reading past the pending bound aborts `signal`, and the
  * turn is cancelled by its owner. There is no bound on the stream as a whole (a turn has no budget).
  */
 export interface RuntimeServiceTurnChannel {
   emit(event: AgentTurnStreamEvent): void;
-  drained(): Promise<void>;
+  /** True only after pending frames were written to a live socket; not an acknowledgement that a person read them. */
+  drained(): Promise<boolean>;
   /** Bytes of events the channel can still take before failing closed: optional presentation (streamed command output) checks it
    * and is skipped, visibly, instead of cancelling the turn. */
   room(): number;
@@ -24,15 +25,15 @@ const textual = (event: Piece): event is Extract<Piece, { kind: 'text' | 'reason
 
 export function createServerTurnChannel(socket: Socket, requestId: string, maxFrameBytes: number, pendingMaxBytes: number): ServerTurnChannel {
   const controller = new AbortController();
-  let pending: Piece[] = [], pendingBytes = 0, sequence = 0, scheduled = false, waiting = false, finished = false;
-  let waiters: (() => void)[] = [];
+  let pending: Piece[] = [], pendingBytes = 0, sequence = 0, scheduled = false, waiting = false, finished = false, writes = 0;
+  let waiters: ((delivered: boolean) => void)[] = [];
   const envelope = Buffer.byteLength(JSON.stringify({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, kind: 'event',
     sequence: Number.MAX_SAFE_INTEGER, events: [] }), 'utf8') + 4;
   // Worst case JSON escapes one UTF-16 code unit as six bytes; the fixed text wrapper is under 32 bytes.
   const pieceUnits = Math.max(1, Math.floor((maxFrameBytes - envelope - 32) / 6));
-  const release = () => { const resume = waiters; waiters = []; for (const wake of resume) wake(); };
-  const fail = (reason?: ServiceFrameError) => { if (!controller.signal.aborted) controller.abort(reason); pending = []; pendingBytes = 0; release(); };
-  const idle = () => pending.length === 0 && !socket.writableNeedDrain;
+  const release = (delivered: boolean) => { const resume = waiters; waiters = []; for (const wake of resume) wake(delivered); };
+  const fail = (reason?: ServiceFrameError) => { if (!controller.signal.aborted) controller.abort(reason); pending = []; pendingBytes = 0; release(false); };
+  const idle = () => pending.length === 0 && writes === 0 && !socket.writableNeedDrain;
   const split = (event: Piece): Piece[] => {
     if (!textual(event)) return [event];
     const pieces: Piece[] = [];
@@ -67,7 +68,12 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
       try { bytes = encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, kind: 'event', sequence, events: frame }, maxFrameBytes); }
       catch { fail(); return false; }
       sequence += 1; frame = []; frameBytes = envelope;
-      try { socket.write(bytes); } catch { fail(); return false; }
+      writes += 1;
+      try { socket.write(bytes, error => {
+        writes -= 1;
+        if (error || socket.destroyed || !socket.writable) { fail(); return; }
+        if (idle() && !scheduled && !finished && !controller.signal.aborted) release(true);
+      }); } catch { writes -= 1; fail(); return false; }
       return true;
     };
     for (const piece of merged.flatMap(split)) {
@@ -78,8 +84,8 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
       frame.push(piece); frameBytes += bytes;
     }
     if (!send()) return;
-    if (idle()) release();
-    else if (!waiting) { waiting = true; socket.once('drain', () => { waiting = false; if (pending.length) write(false); else release(); }); }
+    if (idle()) release(!finished && !controller.signal.aborted);
+    else if (socket.writableNeedDrain && !waiting) { waiting = true; socket.once('drain', () => { waiting = false; if (pending.length) write(false); else if (idle()) release(!finished && !controller.signal.aborted); }); }
   };
   const disconnected = () => { if (!finished) fail(); };
   socket.once('close', disconnected);
@@ -97,13 +103,14 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
     },
     room() { return controller.signal.aborted || finished ? 0 : Math.max(0, pendingMaxBytes - pendingBytes); },
     drained() {
-      if (controller.signal.aborted || (idle() && !scheduled)) return Promise.resolve();
-      return new Promise<void>(resolve => { waiters.push(resolve); });
+      if (controller.signal.aborted || finished || socket.destroyed || !socket.writable) return Promise.resolve(false);
+      if (idle() && !scheduled) return Promise.resolve(true);
+      return new Promise<boolean>(resolve => { waiters.push(resolve); });
     },
     /** Writes what is pending so every event precedes the final frame; the channel then ignores further events. */
     finish() {
       if (finished) return;
-      write(true); finished = true; release();
+      write(true); finished = true; release(false);
       socket.off('close', disconnected); socket.off('error', disconnected);
     },
   });

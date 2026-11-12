@@ -46,6 +46,18 @@ describe.skipIf(process.platform !== 'linux')('process runner v2 (S3-2): stdin, 
     });
     expect(result).toMatchObject({ reason: 'exit', exitCode: 0 });
     expect(order).toEqual(['notice-delivered', 'answer']);
+    for (const cause of ['cancel', 'timeout']) {
+      const controller = new AbortController();
+      let release!: () => void, entered!: () => void, consumerSignal: AbortSignal | undefined;
+      const ready = new Promise<void>(resolve => { entered = resolve; });
+      const delivery = new Promise<void>(resolve => { release = resolve; });
+      const pending = runNodeProcess(await v2('process.stdout.write("paid\\nanswer\\n");setInterval(()=>{},1000)', { timeoutMs: cause === 'timeout' ? 200 : 5000 }),
+        controller.signal, async (_line, signal) => { consumerSignal = signal; entered(); await delivery; });
+      await ready;
+      if (cause === 'cancel') controller.abort();
+      expect(await pending).toMatchObject({ reason: cause === 'cancel' ? 'cancelled' : 'timeout' });
+      expect(consumerSignal?.aborted).toBe(true); release();
+    }
     const seen: string[] = [];
     expect(await runNodeProcess(await v2('process.stdout.write("paid\\nanswer\\n");setInterval(()=>{},1000)'), undefined, async line => {
       seen.push(line); throw new Error('delivery');

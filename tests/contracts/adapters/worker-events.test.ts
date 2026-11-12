@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
-import { expect, it } from 'vitest';
+import { mkdtemp, readFile, rmdir, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it, vi } from 'vitest';
 import { createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, secretValues, workerRedactText } from '#adapters/index.js';
-import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
+import { createNativeChildCustody, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { summarizeWorkerEvents, workerActivityPhase, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const fixture = new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url);
@@ -196,18 +198,64 @@ it('uses the shared quota rule and never permits worker paid usage without a liv
   }
   for (const status of ['allowed', 'allowed_warning', 'future'])
     expect(normalizeClaudeLine(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status } }), state, 1000)).toEqual([]);
-  // Real disposable Node child, not a provider CLI: a quota event kills it and a queued success cannot erase the limit.
-  const paid = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', overageInUse: true } });
-  const success = JSON.stringify({ type: 'result', subtype: 'success', is_error: false });
-  const child = spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(paid + '\n' + success + '\n')});setInterval(()=>{},1000)`], { stdio: ['ignore', 'pipe', 'ignore'] });
-  const kept: unknown[] = [];
-  const observer = createNativeLineObserver('claude-code-stream-json', state, createCodexState(), events => { kept.push(...events); }, undefined, () => { child.kill('SIGKILL'); });
-  child.stdout.on('data', part => observer.observe(part));
-  const exit = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
-    child.once('error', reject); child.once('close', (code, signal) => resolve({ code, signal }));
-  });
-  observer.flush();
-  expect(exit).toEqual({ code: null, signal: 'SIGKILL' });
-  expect(kept).toEqual([expect.objectContaining({ kind: 'quota-exhausted' })]);
-
+  // The real bootstrap custody, with a descendant holding both pipes (the 3090 reproduction).
+  const root = await mkdtemp(join(tmpdir(), 'deckent-quota-child-')), effect = join(root, 'partial-effect');
+  const signal = vi.spyOn(process, 'kill');
+  try {
+    for (const mode of ['group-paid', 'group-rejected', 'escaped'] as const) {
+      const info = mode === 'group-rejected' ? { status: 'rejected' } : { status: 'allowed', overageInUse: true };
+      const quota = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info });
+      const late = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'must-not-be-accepted' }] } });
+      const descendant = `process.stdout.write(JSON.stringify({pid:process.pid})+'\\n'+${JSON.stringify(quota)}+'\\n');setInterval(()=>process.stdout.write(${JSON.stringify(late)}+'\\n'),40)`;
+      const parent = `const {spawn}=require('node:child_process');require('node:fs').writeFileSync(${JSON.stringify(effect)},'kept');process.stdout.write(JSON.stringify({type:'assistant',message:{content:[{type:'text',text:'partial output'}]}})+'\\n');spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{detached:${mode === 'escaped'},stdio:['ignore',process.stdout,process.stderr]});setInterval(()=>{},1000)`;
+      const child = spawn(process.execPath, ['-e', parent], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const custody = createNativeChildCustody(child), kept: unknown[] = [], normalizer = createNormalizerState([], 0, nativeQuotaPolicy());
+      const observer = createNativeLineObserver('claude-code-stream-json', normalizer, createCodexState(), events => kept.push(...events), undefined, () => custody.stopAtQuota());
+      let pid: number | undefined, pending = '', atLimit = 0, afterLimit = 0;
+      child.stdout.on('data', (part: Buffer) => {
+        pending += part.toString();
+        for (let end = pending.indexOf('\n'); end >= 0; end = pending.indexOf('\n')) {
+          const line = pending.slice(0, end); pending = pending.slice(end + 1);
+          const value = JSON.parse(line) as { pid?: number };
+          if (value.pid) pid = value.pid;
+          if (custody.stopped()) afterLimit++;
+          observer.observe(Buffer.from(line + '\n'));
+          if (custody.stopped() && !atLimit) atLimit = performance.now();
+        }
+      });
+      child.stderr.resume();
+      try {
+        const result = await custody.result; observer.flush();
+        expect(performance.now() - atLimit).toBeLessThan(2000);
+        expect(result).toEqual({ code: null, signal: 'SIGKILL', failure: mode === 'escaped' ? 'capacity:quota-stop-incomplete' : 'capacity' });
+        expect(signal).toHaveBeenCalledWith(-child.pid!, 'SIGKILL');
+        expect(await readFile(effect, 'utf8')).toBe('kept');
+        expect(kept).toEqual([expect.objectContaining({ kind: 'message', excerpt: 'partial output' }), expect.objectContaining({ kind: 'quota-exhausted' })]);
+        expect(pid).toBeTypeOf('number');
+        if (mode === 'escaped') {
+          expect(afterLimit).toBeGreaterThan(0); // It outlived the signal; the observer refused its output.
+          expect(await readFile(`/proc/${pid}/stat`, 'utf8')).not.toMatch(/\) Z /u);
+          expect(child.stdout.destroyed && child.stderr.destroyed).toBe(true);
+          expect(performance.now() - atLimit).toBeGreaterThanOrEqual(950);
+        } else {
+          // A reparented zombie has terminated and holds no pipes; kill(pid,0) alone cannot distinguish it.
+          const stat = await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => 'gone');
+          expect(stat === 'gone' || /\) Z /u.test(stat)).toBe(true);
+          expect(afterLimit).toBe(0);
+        }
+      } finally {
+        if (pid) { try { process.kill(pid, 'SIGKILL'); } catch { /* Fixture may already have exited. */ } }
+        try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* Only this fixture's owned group. */ }
+        child.stdout.destroy(); child.stderr.destroy();
+      }
+    }
+    for (const code of [0, 7]) {
+      signal.mockClear();
+      const child = spawn(process.execPath, ['-e', `process.stdout.write('normal');process.exitCode=${code}`], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const custody = createNativeChildCustody(child);
+      child.stdout.resume(); child.stderr.resume();
+      expect(await custody.result).toEqual({ code, signal: null, failure: null });
+      expect(signal).not.toHaveBeenCalled();
+    }
+  } finally { signal.mockRestore(); await unlink(effect).catch(() => undefined); await rmdir(root); }
 });
