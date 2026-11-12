@@ -34,7 +34,27 @@ vhs .github/assets/demos/tapes/en/01-install.tape                      # run fro
 - Scene 01 needs a fresh install, so run `reset-demo.sh` before each 01 tape.
 - Scenes 02–05 need a configured install. Set it up with `deckent init`, then
   `deckent init policy --scope deckent --modes full-auto,full-access --apply` and
-  `deckent pool set-capacity --execution-slots 3 --in-flight-slots 3`, then connect a model.
+  `deckent pool set-capacity --execution-slots 3 --in-flight-slots 3`. The person places the API keys
+  (DECKENT_ANTHROPIC_KEY, DECKENT_OPENAI_KEY, DECKENT_DEEPSEEK_KEY) and creates the scope budget; then, on a terminal
+  inside the namespace (after `deckent runtime restart`):
+    deckent models connect --scope deckent --connection anthropic-api --model claude-sonnet-5-5
+    deckent models connect --scope deckent --connection openai-api --model gpt-6.1-sol
+    deckent models connect --scope deckent --connection deepseek-api --model deepseek-flash
+    deckent models connect --scope deckent --connection codex-cli-subscription --model gpt-6.1-sol \
+      --executable <abs path to codex> --config-dir /home/demo/.local/state/deckent-next-dev/headless/logins/codex --delegate ai
+    deckent coding template --provider codex --kind coding \
+      --connection codex-cli-subscription.codex-cli-subscription.gpt-6.1-sol.1 --apply   # workers on the Codex subscription
+    (connect codex again, and once more with --model gpt-6-luna: the `small` work class routes Codex work to gpt-6-luna)
+- Workers on this checkout (02, 03) also need the operator acknowledgements a deckent-next checkout declares by design
+  (tests/contracts/adapters/worker-tree-gate-own-tree.test.ts); without them every worker stops with
+  WORKER_TREE_SECRET_REFUSED. A person sets them on a terminal inside the namespace, then restarts the runtime:
+    deckent config set execution.secretGate.allowPatternPaths '["tests/**",".agents/**","src/platform/core/i18n/locales/**"]'
+    deckent config set execution.secretGate.acknowledgedDenyPaths '[".npmrc"]'
+- The runtime admits only peers in its own namespaces, so each tape starts its own runtime: run `lib/stop-demo.sh` before
+  and after every tape. The chat tapes first set full auto through `/mode` (a stored mode survives a take that stopped
+  elsewhere), then pick the scene's model on camera with `/model`.
+- `deckent audit list` pages oldest first (100 records per page); 05 passes `--after 150` to reach the newest records.
+  Check that the record shown carries the time of the take.
 - On the development host only, `demo-env.sh` points `DECKENT_NEXT_INSTALL_ROOT` at a copy of the staged release under
   `$DECKENT_DEMO_ROOT/install`, never at the live install root.
 - Waits for models and for the runtime are cut with Hide/Show; everything that is shown is deckent's real output.
