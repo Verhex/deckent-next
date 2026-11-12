@@ -72,7 +72,7 @@ describe('/mode window', () => {
     expect(view.frame()).toContain('standart · şu an');
     await view.press(`${DOWN}${DOWN}${DOWN}`);
     expect(view.frame()).toMatch(/x tam erişim/u); expect(view.frame()).toContain('[engellendi]');
-    expect(view.frame()).toContain('grant');
+    expect(view.frame()).toContain('izin gerekir');
     await view.press(ENTER);
     expect(selected).toEqual([]); expect(calls.closed).toBe(0);
     await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); // wraps to full-auto (standart → ask-edits → full-auto)
@@ -335,7 +335,7 @@ describe('TERM-PANEL: a window with a list draws one title and one key-hint row 
     await settle(80);
     const first = windowShape(view.frame(), 'İzin modu');
     await view.press(`${DOWN}${DOWN}${DOWN}`);
-    expect(view.frame()).toContain('grant');
+    expect(view.frame()).toContain('izin gerekir');
     expect([first, windowShape(view.frame(), 'İzin modu')]).toEqual([{ height, titles: 1, hints: 1 }, { height, titles: 1, hints: 1 }]);
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
   });

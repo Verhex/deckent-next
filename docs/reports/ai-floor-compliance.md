@@ -2408,11 +2408,11 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/scope.ts`: `83aae1c222a28bcc1897fa9791fb2bf161f07ad9155c4b26155a70829287ef26`
 - `src/domain/core/policy/internal/standing.ts`: `ed351fe03eec554d61a2ff881d2735218da8b74a70d608eecf92b6c8beb767ea`
 - `src/domain/core/policy/internal/vocabulary.ts`: `4ee0b8c760ef85bc22bd9b3f3319dc9200c468be71195ee40bb936ef528044b4`
-- `src/domain/core/primitives/index.ts`: `fb259c3984f2b9b28df918516db509b267e3f8fba554b8eaabbed198c517d865`
+- `src/domain/core/primitives/index.ts`: `41a4a74c60a13f1117b16a82fd9b6ce1300148ef5119aa3f7b80865e9fc75991`
 - `src/domain/core/primitives/internal/coded-error.ts`: `5a28f30f2ca3f0675eaf1dc1f33bcb8835c544124b5e3db1fa69078169fb1ce4`
 - `src/domain/core/primitives/internal/command-id.ts`: `bbc5912a26d45bd9fcd6d8fc6638686d0f5c8662a6063169b59ac6434f64e5f2`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `67896abeacb126b909190bec1c0337e6e508011ff64216155832bd0b656ec6d8`
-- `src/domain/core/primitives/internal/installation-identity.ts`: `760e9602ec890d86933263bcb53ba171a21ed300eef3561b51cea81ee8692098`
+- `src/domain/core/primitives/internal/installation-identity.ts`: `1b0aaea59fc77543f9cec1890faf0cc92522095e65bcb15d19468582828d0dc7`
 - `src/domain/core/primitives/internal/json.ts`: `c634bc38c8639b080a0f758f28ee6fec30c6a95b4e1cfdcbe3af776bc841a14b`
 - `src/domain/core/primitives/internal/persisted-schema.ts`: `18e9077657a87b04e44664330d13f5ab1da1ca0563dc09498f32456667692d31`
 - `src/domain/core/primitives/internal/project-identity.ts`: `0694258226a60829c63baa856cc5bf20ad3d1eced65a50d24be0e272dcc4f903`

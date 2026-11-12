@@ -746,7 +746,7 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   expect((await monitorSlash(root, '--verbose', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık kaydı yok');
   const denied = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'denied' as const, excerpt: [], truncated: false }, patch: { ...worker.human.patch, state: 'denied' as const, files: [], fileCount: null } } }] }] };
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
-  expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
+  expect(deniedText).toContain('politika izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
 });
 
