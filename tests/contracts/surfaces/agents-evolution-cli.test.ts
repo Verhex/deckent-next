@@ -102,7 +102,7 @@ describe('suggestions read', () => {
   it('lists and shows suggestions in the person\'s language with both labels; a hidden lesson is only counted; never a raw code or lesson text', async () => {
     const f = await project(), calls: unknown[] = [];
     for (const [lang, phrases] of [['en', ['association, not causation · acceptance rate, not accuracy', 'promote', 'new skill', 'open', '20 counted']],
-      ['tr', ['ilişki, nedensellik değil · kabul oranı, doğruluk değil', 'terfi', 'yeni skill', 'açık', '20 sayıldı']]] as const) {
+      ['tr', ['ilişki, nedensellik değil · kabul oranı, doğruluk değil', 'terfi', 'yeni beceri', 'açık', '20 sayıldı']]] as const) {
       const { text } = await run(f, ['suggestions', '--lang', lang], calls);
       for (const phrase of phrases) expect(text, phrase).toContain(phrase);
       expect(text).not.toMatch(/promote-agent|propose-skill|association-not-causation/u);

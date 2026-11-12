@@ -464,7 +464,7 @@ it('parses every doctor next-step command from the generated warning rows throug
     const context = { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global'), TERM: 'xterm' }, locale: 'en' as const,
       stdin: { isTTY: true } as never, stdout: { isTTY: true, write() {} }, stderr: { write: (s: string) => { errors.push(s); } },
       configApplication: () => ({ inspect: stopped, explain: stopped }) as never, openConfigPanel: async () => [], restartRuntimeService: stopped,
-      inspectModelCatalog: stopped, inspectModelRoles: stopped, assignModelRole: stopped, setSecret: stopped, setProjectSecret: stopped, changeSecretGrant: stopped, listSecretStores: stopped, inspectPolicyAdministration: stopped, listSecretNames: stopped, inspectSecretStore: stopped, initializeNativeCodingRegistry: stopped,
+      inspectModelCatalog: stopped, inspectModelRoles: stopped, assignModelRole: stopped, setSecret: stopped, setProjectSecret: stopped, changeSecretGrant: stopped, inspectSecretTarget: stopped, listSecretStores: stopped, inspectPolicyAdministration: stopped, listSecretNames: stopped, inspectSecretStore: stopped, initializeNativeCodingRegistry: stopped,
       installConfiguredExecutionPool: stopped, inspectPoolCapacity: stopped, verifyAudit: stopped, loginHeadless: stopped, connectModel: stopped, updateToolchains: stopped, inspectToolchainCurrency: stopped };
     await main(argv, context as never);
     expect(errors.join(''), command).not.toMatch(/CLI_USAGE|CLI_ARGUMENT_MISSING|CLI_CONFIG_VALUE_MISSING/u);
