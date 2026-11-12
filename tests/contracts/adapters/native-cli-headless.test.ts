@@ -25,14 +25,25 @@ const DENIED = headless.env.deny;
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native port with a fake CLI (no real CLI, no model call)', () => {
   it('continues paid extra usage by default, preserves unknown statuses and honors the shared stop setting', async () => {
     for (const info of [{ status: 'rejected', overageStatus: 'allowed' }, { status: 'allowed', overageInUse: true },
-      { status: 'new-status', isUsingOverage: true }]) {
+      { status: 'new-status', isUsingOverage: true },
+      ...['future', true, {}, '', null].map(overageStatus => ({ status: 'rejected', overageStatus }))]) {
       const c = await connection({ steps: [initLine(), rateLimitLine(info.status, info), resultLine('ok')].map(line => ({ line })) });
-      const port = (paidExtraUsage: 'continue' | 'stop-at-limit') => createNativeCliHeadlessPort({ now: Date.now, isolation: testIsolation, paidExtraUsage });
-      const run = async (paidExtraUsage: 'continue' | 'stop-at-limit') => { const p = port(paidExtraUsage); return p.send(await p.prepare(c.profile, binding, request())); };
+      const notices: unknown[] = [];
+      const port = (paidExtraUsage: 'continue' | 'stop-at-limit', visible = true) => createNativeCliHeadlessPort({ now: Date.now, isolation: testIsolation, paidExtraUsage,
+        ...(visible ? { onPaidUsage: async (limit: unknown) => { notices.push(limit); } } : {}) });
+      const run = async (paidExtraUsage: 'continue' | 'stop-at-limit', visible = true) => { const p = port(paidExtraUsage, visible); return p.send(await p.prepare(c.profile, binding, request())); };
       const result = await run('continue');
+      if (info.status === 'rejected' && info.overageStatus !== 'allowed') {
+        for (const result of [await run('stop-at-limit'), await run('continue', false)]) {
+          expect(result.kind).toBe('rejected');
+          if (result.kind === 'rejected') expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'quota' });
+        }
+        expect(result.kind).toBe('rejected'); expect(notices).toHaveLength(0); continue;
+      }
       expect(result).toMatchObject({ schemaVersion: 1 });
       if (info.status !== 'new-status') expect(result).toMatchObject({ native: { headless: { paidExtraUsage: { kind: 'overage', status: info.status } } } });
       else expect(JSON.stringify(result)).not.toContain('paidExtraUsage');
+      if (info.status !== 'new-status') { expect(notices).toHaveLength(1); expect((await run('continue', false)).kind).toBe('rejected'); }
       const stopped = await run('stop-at-limit');
       if (info.status === 'new-status') expect(stopped).toMatchObject({ schemaVersion: 1 });
       else { expect(stopped.kind).toBe('rejected'); if (stopped.kind === 'rejected') expect(readHeadlessRejection(stopped.evidence)).toMatchObject({ refusal: 'quota', subtype: info.status }); }

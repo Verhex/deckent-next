@@ -17,7 +17,7 @@ const matches = (patterns: readonly string[], text: string) => patterns.some(pat
  * own source) or login (registry patterns), otherwise invalid output. The answer is the last completed agent message (each completed message is
  * also a presentation delta). The stream names no model: the answer is attributed to the argv-pinned id (`modelEvidence: argv`).
  */
-export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): HeadlessTurn {
+export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): Omit<HeadlessTurn, 'line'> & { line(raw: string): Refusal | null } {
   const { guards } = prepared.entry.headless;
   if (!('allowedItems' in guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const quotaPatterns = nativeQuotaPolicy().codexPatterns;

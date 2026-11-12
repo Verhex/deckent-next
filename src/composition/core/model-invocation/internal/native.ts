@@ -1,4 +1,5 @@
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
+import type { ClaudeRateLimit } from '#capabilities/index.js';
 import { resolveConfiguredModelUse, modelUseNative } from '#composition/core/model-use/index.js';
 import { createSiwcResponsesPort, SIWC_INFERENCE, siwcResponsesDefinitionSchema, createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, shellSandboxCapabilities } from '#adapters/index.js';
 import { withConfiguredSiwcModel } from '#composition/core/siwc/index.js';
@@ -29,7 +30,7 @@ export const configuredBubblewrap = (options: ConfigLoadOptions = {}) => async (
 /** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
 const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
-export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false, agent?: ModelInvocationNativeBinding, snapshot?: ModelInspectionSnapshot) {
+export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false, agent?: ModelInvocationNativeBinding, snapshot?: ModelInspectionSnapshot, onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>) {
   const now = () => clock.sample().wallMs, isolation = configuredBubblewrap(options);
   const catalogTariff = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
@@ -67,7 +68,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
           (app, caller) => app.lease(id, caller, signal)) });
       }
           // 1b: the call's known secrets also redact a CLI's stderr summary (the evidence of an incomplete turn).
-      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config), paidExtraUsage: context.config.models.headless.paidExtraUsage });
+      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config), ...(onPaidUsage ? { onPaidUsage } : {}), paidExtraUsage: context.config.models.headless.paidExtraUsage });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
         const definition=parseDecisionHttpDefinition(profile.adapter.definition); return createDecisionHttpNativePort({resolveCredential:scopedInvocationCredentialResolver(context,profile,definition.authentication,options)});
       }

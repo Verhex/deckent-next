@@ -1,6 +1,8 @@
+import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, secretValues, workerRedactText } from '#adapters/index.js';
+import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { summarizeWorkerEvents, workerActivityPhase, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const fixture = new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url);
@@ -177,4 +179,35 @@ it('never lets a normalizer or delivery fault escape the bridge line observer, a
   expect(delivered).toContainEqual(expect.objectContaining({ kind: 'message', excerpt: 'after' }));
   expect(delivered).toContainEqual(expect.objectContaining({ kind: 'session.ended', outcome: 'success' }));
   expect(state.unmapped.get('normalizer-error')).toBe(1);
+});
+
+it('uses the shared quota rule and never permits worker paid usage without a live person notice', async () => {
+  const pure = await readFile(new URL('../../../src/capabilities/core/native-agent-execution/internal/quota-rule.ts', import.meta.url), 'utf8');
+  const worker = await readFile(new URL('../../../src/adapters/core/native-connection/internal/worker.ts', import.meta.url), 'utf8');
+  expect(worker).toContain(pure); // The standalone bootstrap cannot import host modules; reject classification drift.
+  const state = createNormalizerState([], 1000, nativeQuotaPolicy());
+  for (const info of [
+    { status: 'rejected' }, { status: 'rejected', overageStatus: 'allowed' },
+    { status: 'allowed', isUsingOverage: true }, { status: 'allowed_warning', overageInUse: true },
+    ...['future', true, {}, '', null].map(overageStatus => ({ status: 'rejected', overageStatus })),
+  ]) {
+    const events = normalizeClaudeLine(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { ...info, rateLimitType: 'five_hour', resetsAt: 1792773600 } }), state, 1000);
+    expect(events.map(event => workerEventSchema.parse(event))).toContainEqual(expect.objectContaining({ kind: 'quota-exhausted', window: 'five_hour', resetsAtMs: 1792773600000 }));
+  }
+  for (const status of ['allowed', 'allowed_warning', 'future'])
+    expect(normalizeClaudeLine(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status } }), state, 1000)).toEqual([]);
+  // Real disposable Node child, not a provider CLI: a quota event kills it and a queued success cannot erase the limit.
+  const paid = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', overageInUse: true } });
+  const success = JSON.stringify({ type: 'result', subtype: 'success', is_error: false });
+  const child = spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(paid + '\n' + success + '\n')});setInterval(()=>{},1000)`], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const kept: unknown[] = [];
+  const observer = createNativeLineObserver('claude-code-stream-json', state, createCodexState(), events => { kept.push(...events); }, undefined, () => { child.kill('SIGKILL'); });
+  child.stdout.on('data', part => observer.observe(part));
+  const exit = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+    child.once('error', reject); child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  observer.flush();
+  expect(exit).toEqual({ code: null, signal: 'SIGKILL' });
+  expect(kept).toEqual([expect.objectContaining({ kind: 'quota-exhausted' })]);
+
 });
