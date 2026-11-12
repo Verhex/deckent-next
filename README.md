@@ -19,9 +19,9 @@ deckent turns what people and AI agents ask for into authorized, isolated and re
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How it works](#how-it-works) · [Get started](#get-started) · [First job](#your-first-job) · [Everyday use](#everyday-use) · [Safety](#safety-and-control) · [Today](#what-works-today) · [Roadmap](#roadmap)
+[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How it works](#how-it-works) · [Get started](#get-started) · [First job](#your-first-job) · [See it work](#see-it-work) · [Everyday use](#everyday-use) · [Safety](#safety-and-control) · [Today](#what-works-today) · [Roadmap](#roadmap)
 
-<img src=".github/assets/screenshots/en/01-startup.png" alt="deckent terminal right after start: logo, version, project, model and mode" width="880">
+<img src=".github/assets/demos/en/05-security.gif" alt="An AI agent's shell command tries to list your home folder and write deckent's policy: the sandbox hides home, the write waits for approval, is declined and is recorded in the audit log" width="880">
 
 </div>
 
@@ -377,6 +377,19 @@ It covers connection ids, previews and older installations.
 <img src=".github/assets/screenshots/en/16-tasks.png" alt="/tasks live window with no work yet" width="880">
 
 <sub><b>/tasks.</b> Workers and Runs in one live window; cancelling asks for approval (empty here: no background work yet).</sub>
+
+## See it work
+
+Real sessions on `1.0.0-beta.1.2` in a throwaway installation, recorded from the terminal. Each scene chooses its model
+with `/model`, so the status bar names it. Approvals are answered by a labelled synthetic person in that installation,
+and waits for the model and the runtime are cut.
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/demos/en/04-approval.gif" alt="Shift+Tab to standard mode, a shell command opens the approval window, then /mode"><br><sub><b>Approval and modes.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> steps to standard, so a shell command opens the approval window: what, where, on whose behalf, scope, why, risk, undo and a live deadline. The synthetic person allows it once; <code>/mode</code> lists the same modes. Model: DeepSeek V4.1 Flash (DeepSeek API).</sub></td>
+    <td width="50%"><img src=".github/assets/demos/en/05-security.gif" alt="The sandbox hides the home folder; a shell write to deckent's policy is declined and recorded"><br><sub><b>Refused and recorded.</b> The agent's shell runs in a bubblewrap sandbox that hides your home folder and keeps deckent's authority files read-only. Its shell command that appends to the policy file is a kind that always asks, even in full auto; the synthetic person answers No, nothing is written, and the audit log keeps a <code>policy-turn</code> record of the refused call. Model: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+  </tr>
+</table>
 
 ## Everyday use
 

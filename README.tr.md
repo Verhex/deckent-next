@@ -19,9 +19,9 @@ deckent, insanların ve yapay zekâ ajanlarının isteklerini kendi makinelerini
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[English](README.md) · [deckent nedir](#deckent-nedir) · [Nasıl çalışır](#nasıl-çalışır) · [Başlarken](#başlarken) · [İlk iş](#adım-adım-ilk-işiniz) · [Gündelik kullanım](#gündelik-kullanım) · [Güvenlik](#güvenlik-ve-denetim) · [Bugün](#bugün-neler-çalışıyor) · [Yol haritası](#yol-haritası)
+[English](README.md) · [deckent nedir](#deckent-nedir) · [Nasıl çalışır](#nasıl-çalışır) · [Başlarken](#başlarken) · [İlk iş](#adım-adım-ilk-işiniz) · [Çalışırken görün](#çalışırken-görün) · [Gündelik kullanım](#gündelik-kullanım) · [Güvenlik](#güvenlik-ve-denetim) · [Bugün](#bugün-neler-çalışıyor) · [Yol haritası](#yol-haritası)
 
-<img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki deckent terminali: logo, sürüm, proje, model ve mod" width="880">
+<img src=".github/assets/demos/tr/05-guvenlik.gif" alt="Bir yapay zekâ ajanının kabuk komutu ev klasörünü listelemeye ve deckent politikasına yazmaya çalışıyor: sandbox ev klasörünü gizliyor, yazma onay bekliyor, reddediliyor ve denetim kaydına geçiyor" width="880">
 
 </div>
 
@@ -377,6 +377,19 @@ Bağlantı kimlikleri, önizlemeler ve eski kurulumların adımları orada anlat
 <img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi" width="880">
 
 <sub><b>/tasks.</b> İşçiler ve Run'lar tek bir canlı pencerede; iptal onay ister (burada boş: henüz arka plan işi yok).</sub>
+
+## Çalışırken görün
+
+Atılabilir bir kurulumda `1.0.0-beta.1.2` ile terminalden kaydedilmiş gerçek oturumlar. Her sahne modelini `/model` ile
+seçiyor, bu yüzden durum satırında modelin adı görünüyor. Onayları o kurulumdaki etiketli bir sentetik kişi veriyor;
+model ve runtime bekleme süreleri kesildi.
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/demos/tr/04-onay.gif" alt="Shift+Tab ile standart moda geçiş, bir kabuk komutu onay penceresini açıyor, ardından /mode"><br><sub><b>Onay ve modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> standart moda geçiriyor; bu yüzden bir kabuk komutu onay penceresini açıyor: ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı bir süre. Sentetik kişi bir kez izin veriyor; <code>/mode</code> aynı modları listeliyor. Model: DeepSeek V4.1 Flash (DeepSeek API).</sub></td>
+    <td width="50%"><img src=".github/assets/demos/tr/05-guvenlik.gif" alt="Sandbox ev klasörünü gizliyor; deckent politikasına kabukla yazma reddediliyor ve kayda geçiyor"><br><sub><b>Reddedildi ve kayda geçti.</b> Ajanın kabuğu, ev klasörünüzü gizleyen ve deckent yetki dosyalarını salt okunur tutan bir bubblewrap sandbox içinde çalışıyor. Politika dosyasına ekleme yapan kabuk komutu her zaman onay isteyen türden, tam otomatikte bile. Sentetik kişi Hayır diyor, hiçbir şey yazılmıyor ve denetim kaydı reddedilen çağrı için bir <code>policy-turn</code> kaydı tutuyor. Model: Claude Sonnet 5.5 (Anthropic API).</sub></td>
+  </tr>
+</table>
 
 ## Gündelik kullanım
 
