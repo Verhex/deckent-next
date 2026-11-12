@@ -904,6 +904,8 @@
   "error.LAYOUT_RESOURCE_UNKNOWN": "layout.resources names a resource this version does not define; remove it or correct the resource name.",
   "error.LAYOUT_PATH_UNEXPRESSIBLE": "The project root, data root or configuration path contains * or ?, which the workspace deny rules cannot name literally, so the product state under it could not be protected; rename the directory.",
   "error.INSTALLATION_IDENTITY_SOURCE_INVALID": "The configured machine identity source (installation.machineIdentity.source) is missing, unreadable or malformed. No identity was read, created or changed, and no weaker binding was used. Point it at a readable regular file holding a stable identity token (16-256 characters: letters, digits, '.', '_', ':', '-').",
+  "error.INSTALLATION_IDENTITY_REBIND_REQUIRED": "This installation was moved or copied. Accepting it needs the person at a terminal, or the explicit rebinding rule in the policy file (closed by default).",
+  "error.INSTALLATION_IDENTITY_REBIND_REQUIRED.macos": "This installation was moved or copied. Accepting it needs the explicit rebinding rule in the policy file (closed by default). A person check is not available on this platform yet.",
   "error.INSTALLATION_IDENTITY_NEWER_BINDING": "This installation's identity record was written by a newer deckent. Use that version or restore the older record from backup.",
   "error.INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED": "installation.requireMachineBinding is on, but this host has no machine identity (only a weak path binding is possible). Installation-bound writes are refused. Configure installation.machineIdentity.source or provide a platform machine identity; reads are unaffected.",
   "identity.profile.solo": "Solo",

@@ -1507,7 +1507,8 @@
         "src/platform/core/config-fields",
         "src/surfaces/core/cli-admin",
         "src/platform/core/utils",
-        "src/engine/core/uninstall"
+        "src/engine/core/uninstall",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1820,7 +1821,8 @@
         "src/engine/core/beuser-realm",
         "src/platform/core/common",
         "src/domain/core/project-attachment",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -1951,7 +1953,9 @@
         "src/platform/core/utils",
         "src/engine/core/dispatch",
         "src/adapters/core/attempt-store",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/domain/core/policy",
+        "src/engine/core/runtime"
       ],
       "plan": "PROVIDERS"
     },
@@ -5027,7 +5031,8 @@
     "src/engine/core/bootstrap-identity": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -5338,7 +5343,9 @@
         "src/platform/core/bootstrap-state",
         "src/adapters/core/installation-journal",
         "src/adapters/core/backup-store",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/policy",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "INSTALLATION"
     },

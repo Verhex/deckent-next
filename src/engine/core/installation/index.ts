@@ -3,7 +3,8 @@ export { configureNativeTemplate, initializeNativeRegistry, addNativeProfile } f
 export type { NativeTemplatePorts, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CodingTemplateRequest, CodingTemplateResult, InitialRegistryRequest } from './internal/native-template.js';
 export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
 export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';
-export { assessInstallationBinding } from '#engine/core/bootstrap-identity/index.js';
+export { assessInstallationBinding, classifyInstallationRebinding, policyRebindAdmission } from '#engine/core/bootstrap-identity/index.js';
+export type { RebindAdmission, InstallationIdentityResolutionInput, InstallationIdentityResolutionView } from '#engine/core/bootstrap-identity/index.js';
 export type { InstallationIdentityStore, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead,
   /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationBindingObservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationBindingAssessment } from '#engine/core/bootstrap-identity/index.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,

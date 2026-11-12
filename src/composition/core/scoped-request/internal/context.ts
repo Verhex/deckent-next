@@ -2,12 +2,13 @@ import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
-import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
+import { admitInstallationRebinding, plainMacosRebinding } from './rebind.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
 // The local OS identity is read after the policy loads: unsupported policy custody (native Windows) refuses POLICY_UNAVAILABLE before
 // any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
@@ -53,7 +54,8 @@ async function readBootstrapIdentity<T>(read: () => Promise<T>, identityChoice?:
   try { return await read(); }
   catch (error) {
     if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code, {
-      params: error.code === 'PROJECT_ATTACHMENT_SOURCE_REGISTERED' && identityChoice ? { identityChoice } : {} });
+      params: error.code === 'PROJECT_ATTACHMENT_SOURCE_REGISTERED' && identityChoice ? { identityChoice }
+        : error.code === 'INSTALLATION_IDENTITY_REBIND_REQUIRED' ? { platform: process.platform } : {} });
     throw error;
   }
 }
@@ -89,9 +91,22 @@ export async function inspectConfiguredInstallationBinding(projectRoot: string, 
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
   const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return readBootstrapIdentity(async () => {
-    await attachmentLifecycle(config, options).assert();
-    return new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
-      .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject });
+    const lifecycle = attachmentLifecycle(config, options);
+    await lifecycle.assert();
+    const store = new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation);
+    if (choice === 'new') return store.resolveRelocation({ choice }, principal);
+    const admission = await admitInstallationRebinding(config, options, store, principal);
+    const keep = async () => {
+      const registration = await new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs).registration();
+      const result = await store.resolveRelocation({ choice, admission }, principal);
+      return { ...result, ...(registration?.source.installationId === result.installationId && registration.source.projectRoot !== config.projectRoot
+        ? { attachmentRecordsUnreconciled: true as const } : {}) };
+    };
+    // Only the plain-project exception needs this hold; open-class and witnessed/rule paths keep their existing dependencies.
+    return admission.basis === 'macos-plain' ? lifecycle.hold(async () => {
+      if (!await plainMacosRebinding(config, options, (await store.inspectRebinding()).installationId)) throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+      return keep();
+    }) : keep();
   }, choice);
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */

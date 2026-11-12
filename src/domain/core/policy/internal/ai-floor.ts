@@ -30,7 +30,9 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  * standing grants), authority/authenticator/assurance records, permission modes incl. full access, backup restore, every secret action,
  * authority approval cards, audit baselines and security configuration (incl. `execution.secretGate` exclusions). Owner 2026-10-19 (I-POL v13):
  * host changes outside the sandbox — installing an execution environment (Docker group membership is root-equivalent) and repairing the
- * installation itself — are never an AI's, whatever a policy grants; the person runs them at a terminal. S4: memory verify/retire likewise (S4B-1:
+ * installation itself — remain the person's, whatever a policy grants. Owner 2026-11-12 answers 79/88/92 amend rebinding only:
+ * device-only is open to every caller; moved may use the explicit in-file rule through the separate `rebind` action.
+ * Other installation repair stays floored; the person runs it at a terminal. S4: memory verify/retire likewise (S4B-1:
  * purge and contest too; the memory distiller is held to its exact allow-list; S4B-3: the evaluator to its own, and only it may verify/contest).
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {

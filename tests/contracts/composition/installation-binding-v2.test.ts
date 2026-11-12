@@ -35,7 +35,8 @@ async function fixture(installation: Record<string, unknown> = {}) {
   const actor = readLocalOsIdentity(), output: string[] = [], sink = { write: (value: string) => { output.push(value); return true; } };
   await writeFile(join(project, '.deckent/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [],
     grants: [{ id: 'g', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
-      resource: { kind: 'scope', ids: 'all' } }] }), { mode: 0o600 });
+      resource: { kind: 'scope', ids: 'all' } }, { id: 'explicit-fixture-rebind', effect: 'allow', actions: ['rebind'], scopes: 'all',
+      principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'installation', ids: ['moved'] } }] }), { mode: 0o600 });
   const env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'global') }, options = { env };
   const configure = async (value: Record<string, unknown>) => {
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ terminal: { autostartService: false }, installation: value })); clearConfigCache();

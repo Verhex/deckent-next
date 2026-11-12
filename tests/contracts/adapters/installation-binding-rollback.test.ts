@@ -1,3 +1,4 @@
+import { REBIND_CLASS } from '#domain/index.js';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -77,7 +78,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
       await store.loadOrCreate(); await written(source === 'platform' ? 1 : 2);
       for (const choice of ['keep', 'new'] as const) {
         capture = installationBindingCaptureSchema.parse({ ...capture, device: choice === 'keep' ? '2050' : '2051' });
-        await store.resolveRelocation(choice, principal); await written(source === 'platform' ? 1 : 2);
+        await store.resolveRelocation(choice === 'keep' ? { choice, admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } } : { choice }, principal); await written(source === 'platform' ? 1 : 2);
       }
       // An actual alpha.6 parser refuses a future binding without attempting a repair.
       const record = JSON.parse(await readFile(f.path, 'utf8'));
@@ -106,7 +107,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
     const copy = join(f.parent, 'copy'); await cp(f.root, copy, { recursive: true });
     const store = new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: copy })), path = join(copy, '.deckent/installation-identity/identity.json');
     await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
-    await store.resolveRelocation(choice, principal);
+    await store.resolveRelocation(choice === 'keep' ? { choice, admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } } : { choice }, principal);
     expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ binding: { schemaVersion: 1 }, lastResolution: { choice } });
     expect(await alpha6(path)).toBe(true);
   });
