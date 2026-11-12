@@ -35,7 +35,10 @@ describe('glob matcher fast paths equal the documented glob meaning', () => {
   });
   it('the default deny list still denies what it protects and lets ordinary source through', () => {
     const denied = (path: string) => DEFAULT_WORKSPACE_READ_DENY.some(pattern => createGlobMatcher(pattern)(path));
-    for (const path of ['.env', 'pkg/.env.local', 'a/b/k.pem', '.git', '.git/config', 'sub/.git', '.brain/memory.db-wal', '.deckent/host/x', 'a/id_ed25519.pub', 'x/.npmrc']) expect(denied(path)).toBe(true);
-    for (const path of ['src/a.ts', 'README.md', 'environment.ts', '.gitignore', 'a/.environment', 'docs/keys.md']) expect(denied(path)).toBe(false);
+    for (const path of ['.env', 'pkg/.env.local', 'a/b/k.pem', '.git', '.git/config', 'sub/.git', '.brain/memory.db-wal', '.deckent/host/x', 'a/id_ed25519.pub', 'x/.npmrc',
+      '/home/person/.cursor-server/.0123456789abcdef0123456789abcdef01234567.token',
+      '/home/person/.vscode-server/.0123456789abcdef0123456789abcdef01234567.token']) expect(denied(path), path).toBe(true);
+    for (const path of ['src/a.ts', 'README.md', 'environment.ts', '.gitignore', 'a/.environment', 'docs/keys.md',
+      '/home/person/.cursor-server/bin/0123456789abcdef0123456789abcdef01234567/product.json']) expect(denied(path), path).toBe(false);
   });
 });
