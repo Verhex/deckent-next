@@ -5411,6 +5411,7 @@
       "dependencies": [
         "src/domain/core/principal",
         "src/domain/core/policy",
+        "src/domain/core/primitives",
         "src/engine/core/model-invocation",
         "src/engine/core/secret-store",
         "src/engine/core/oauth-connection",
