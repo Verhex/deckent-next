@@ -266,7 +266,7 @@ export function WorklineApp(props: WorklineProps) {
   const presentation = panel.presentation(state);
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
-  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
+  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), refreshWorkers = useRef(false);
   const [watchStatus, setWatchStatus] = useState('');
   const [watchStatusLines, setWatchStatusLines] = useState<readonly string[]>([]);
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
@@ -302,13 +302,15 @@ export function WorklineApp(props: WorklineProps) {
     const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
     if (signal.aborted) return [];
     if (snapshot.scopeId !== ledger.scopeId) return kinds;
-    let active = 0, unknown = 0;
+    let active = 0, unknown = 0, refresh = false;
     if (snapshot.workers) {
       for (const source of snapshot.workers.sources) for (const worker of source.workers) {
         const kind = workerKind(worker);
         if (kind === 'active') active++; else if (kind === 'unknown') unknown++;
+        // An unfinished ledger worker still needs sidecar refreshes when its process cannot yet be verified.
+        if (kind === 'active' || (kind === 'unknown' && worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited')) refresh = true;
       }
-      activeWorkers.current = active > 0;
+      refreshWorkers.current = refresh;
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
     }
@@ -324,7 +326,7 @@ export function WorklineApp(props: WorklineProps) {
       if (text) push([systemSummaryEntry(text)]);
     }
     return snapshot.denied;
-  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}:${completion.generation}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
+  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}:${completion.generation}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && refreshWorkers.current });
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
