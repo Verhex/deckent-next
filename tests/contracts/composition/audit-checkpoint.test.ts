@@ -92,7 +92,7 @@ it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share rea
     for (const locale of ['en', 'tr'] as const) {
       let human = ''; await runKernelCommand(['doctor', '--lang', locale], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { human += value; } } });
       expect(human.split('\n')[0]).toContain(locale === 'en' ? 'Status: needs attention' : 'Durum: ilgi bekliyor');
-      expect(human).toContain(locale === 'en' ? 'policy changed' : 'policy değişmiş');
+      expect(human).toContain(locale === 'en' ? 'policy changed' : 'politika değişmiş');
     }
     expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('policy-changed');
     expect((await inspect(f.root, query)).checkpoint).toEqual(sdk.checkpoint);

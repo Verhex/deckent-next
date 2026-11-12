@@ -483,9 +483,9 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     }
     expect(await slash(f)).toContainEqual(expect.stringContaining(`    MCP server fx did not start: the argument ${script}`));
     // `/mcp` renders the same record in the terminal's own locale.
-    expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
+    expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap yalıtım alanı görünümünde yok `
       + '(yalnız proje, sistem dizinleri ve PATH araç dizinleri görünür); projeye ya da bir PATH araç dizinine taşıyın veya sunucuyu --realm host ile yeniden ekleyin '
-      + '(o zaman sandbox dışında çalışır). İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
+      + '(o zaman yalıtım alanı dışında çalışır). İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
     await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
     expect((await slash(f)).some(line => line.includes('did not start'))).toBe(false);
     f.state.script = [{ content: 'Third.' }];
@@ -511,7 +511,7 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
       if (turnId === 'turn-trusted-2') { expect(result.notices).toEqual([]); expect(result.note).toBeNull(); continue; }
       expect(result.notices).toHaveLength(1); expect(result.note).toBeNull();
       const shown = renderMcpStartNotice(result.notices[0]!, 'tr');
-      expect(shown).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
+      expect(shown).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap yalıtım alanı görünümünde yok');
       expect(shown).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
       expect(JSON.stringify(result.notices)).not.toContain(dir); expect(JSON.stringify(result.notices)).not.toContain(join(f.project, 'tools'));
     }
@@ -547,9 +547,9 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(renderMcpStartNotice(notice(hidden, 'launch'), 'en')).toBe('MCP server fx did not start: the command /home/o/bin/srv -> /opt/srv exists on this machine but not '
       + 'in its bubblewrap sandbox view (only the project, system directories and PATH toolchain directories are visible); move it into the project or a PATH toolchain '
       + 'directory, or re-add the server with --realm host (it then runs unsandboxed). Its first-use card is not asked again until you run /mcp approve fx.');
-    expect(renderMcpStartNotice(notice(hidden, 'trusted'), 'tr')).toBe('MCP sunucusu fx başlamadı: komut /home/o/bin/srv -> /opt/srv bu makinede var ama bubblewrap sandbox '
+    expect(renderMcpStartNotice(notice(hidden, 'trusted'), 'tr')).toBe('MCP sunucusu fx başlamadı: komut /home/o/bin/srv -> /opt/srv bu makinede var ama bubblewrap yalıtım alanı '
       + 'görünümünde yok (yalnız proje, sistem dizinleri ve PATH araç dizinleri görünür); projeye ya da bir PATH araç dizinine taşıyın veya sunucuyu --realm host ile '
-      + 'yeniden ekleyin (o zaman sandbox dışında çalışır). Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
+      + 'yeniden ekleyin (o zaman yalıtım alanı dışında çalışır). Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
     expect(renderMcpStartNotice(notice({ kind: 'package-runner', runner: 'npx' }, 'trusted'), 'tr')).toMatch(/^MCP sunucusu fx başlamadı: npx sunucuyu başlarken indirir/u);
     expect(renderMcpStartNotice(notice({ kind: 'container-daemon', runner: 'docker' }, 'launch'), 'en'))
       .toBe('MCP server fx did not start: docker needs its daemon socket, which is outside its sandbox; re-add the server with --realm host (it then runs unsandboxed). '
@@ -573,9 +573,9 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(message({ kind: 'path-hidden', role: 'argument', path: '/home/o/s.mjs', target: '' }, 'en'))
       .toMatch(/^fx cannot start in the bubblewrap sandbox: the argument \/home\/o\/s\.mjs exists on this machine but not in the sandbox view \(/u);
     expect(message({ kind: 'path-hidden', role: 'command', path: '/home/o/srv', target: '/opt/srv' }, 'tr'))
-      .toMatch(/^fx bubblewrap sandbox içinde başlatılamadı: komut \/home\/o\/srv -> \/opt\/srv bu makinede var ama sandbox görünümünde yok .* Hiçbir şey onaylanmadı\.$/u);
+      .toMatch(/^fx bubblewrap yalıtım alanı içinde başlatılamadı: komut \/home\/o\/srv -> \/opt\/srv bu makinede var ama yalıtım alanı görünümünde yok .* Hiçbir şey onaylanmadı\.$/u);
     expect(message({ kind: 'package-runner', runner: 'uvx' }, 'en')).toMatch(/^fx cannot start in the bubblewrap sandbox: uvx downloads the server at start, .*Nothing was approved\.$/u);
-    expect(message({ kind: 'container-daemon', runner: 'podman' }, 'tr')).toBe('fx bubblewrap sandbox içinde başlatılamadı: podman daemon soketine ihtiyaç duyar ve soket sandbox '
-      + 'dışındadır. Sunucuyu --realm host ile yeniden ekleyin (o zaman sandbox dışında çalışır). Hiçbir şey onaylanmadı.');
+    expect(message({ kind: 'container-daemon', runner: 'podman' }, 'tr')).toBe('fx bubblewrap yalıtım alanı içinde başlatılamadı: podman daemon soketine ihtiyaç duyar ve soket yalıtım alanı '
+      + 'dışındadır. Sunucuyu --realm host ile yeniden ekleyin (o zaman yalıtım alanı dışında çalışır). Hiçbir şey onaylanmadı.');
   });
 });

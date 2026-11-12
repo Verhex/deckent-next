@@ -175,8 +175,8 @@ describe('the grant-refused notice (en, tr)', () => {
     // alpha.56 U5-S1 (d3fca0899): the neutral delegation reason, embedded as one clause of the sentence.
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'delegation' }, 'en')).toBe('MCP server fx is trusted, but its tools were not allowed: your own policy '
       + 'does not cover the requested authority; an administrator who holds it must review the policy. Calls to them are denied by policy.');
-    expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'unsupported' }, 'tr')).toBe('MCP sunucusu fx güvenilir, ama araçlarına izin verilmedi: kurulum policy '
-      + 'dosyası bu izni taşıyamıyor (policy v1 ya da okunamıyor). Bu araçlara yapılan çağrılar policy tarafından reddedilir.');
+    expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'unsupported' }, 'tr')).toBe('MCP sunucusu fx güvenilir, ama araçlarına izin verilmedi: kurulum politikası '
+      + 'dosyası bu izni taşıyamıyor (politika v1 ya da okunamıyor). Bu araçlara yapılan çağrılar politika tarafından reddedilir.');
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'POLICY_CHANGE_TOO_LARGE' }, 'en')).toContain('not allowed: POLICY_CHANGE_TOO_LARGE.');
   });
 });
