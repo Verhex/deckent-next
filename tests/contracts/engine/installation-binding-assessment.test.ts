@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { installationBindingSchema, installationBindingCaptureSchema, retainedInstallationBinding, type WritableInstallationBinding } from '#domain/index.js';
-import { assessInstallationBinding } from '#engine/index.js';
+import { assessInstallationBinding, classifyInstallationRebinding } from '#engine/index.js';
 
 const at = { canonicalRoot: '/srv/installation/.deckent', device: '2049', inode: '131' };
 const machine = (digest: string, source: 'platform' | 'configured' = 'platform') =>
@@ -10,6 +10,15 @@ const v1 = (digest: string) => installationBindingSchema.parse({ schemaVersion: 
 const filesystemIdentity = { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' };
 const current = (extra: object = {}) => installationBindingCaptureSchema.parse({ ...machine('a'), filesystemIdentity, ...extra });
 const v3 = installationBindingSchema.parse({ ...machine('a'), schemaVersion: 3, filesystemIdentity });
+
+it('opens only a machine-strength device-only relocation, including the platform v1 shape', () => {
+  const fresh = installationBindingCaptureSchema.parse({ ...machine('a'), device: '2050' });
+  for (const recorded of [v1('a'), machine('a')]) expect(classifyInstallationRebinding(recorded, fresh)).toBe('device-only');
+  for (const [recorded, capture] of [[weak(), fresh], [v1('a'), weak({ device: '2050' })], [null, fresh], [v1('a'), { status: 'unsupported' }],
+    [v1('a'), { ...fresh, canonicalRoot: '/srv/copied' }], [v1('a'), { ...fresh, inode: '132' }], [v1('a'), { ...fresh, machineDigest: 'b'.repeat(64) }]] as const) {
+    expect(classifyInstallationRebinding(recorded, capture)).toBe('moved');
+  }
+});
 
 it.each([
   ['v1 machine record, same machine', v1('a'), machine('a'), 'match'],

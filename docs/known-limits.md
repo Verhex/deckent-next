@@ -779,7 +779,22 @@ beta.2 is the reader release (R): the existing device-number rule and F1 interru
 On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
 number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
 In an unattached project that is not the registered source, `deckent init identity --keep` updates the binding.
-In beta.2 the current binding comparison stays in force; this release does not automatically accept a changed device number.
+In beta.2, `--keep` accepts a machine-strength device-only change for every caller, including scripts and
+AI-marked callers, without a witness or policy read. The machine digest, canonical root and inode must stay equal;
+only device differs. Binding v1 is machine strength; v2 must explicitly be machine strength. Weak bindings,
+a missing binding, another root/inode/digest or unsupported capture are moved-class evidence. A newer v3 binding
+keeps its existing refusal. Bind and strengthen transitions stay automatic.
+
+A moved or copied installation needs the person at a terminal or a direct, explicit rule in the policy file.
+The rule must name the caller (issuer and subject), action `rebind`, resource kind `installation`, an ids array
+containing `moved`, effect `allow` and `scopes: "all"`. Wildcards, scoped-only and role-derived permissions do
+not grant this. Any matching deny, restriction or require-approval rule, including wildcard and role-derived
+refusals at any scope, closes the rule path. Policy is loaded with its existing ownership/mode/link guards,
+without scope membership or ledger access. No template or default opens the rule; beta.2 has no managed writer.
+A failed passive terminal witness falls through to that rule, then the static macOS plain-project exception;
+there is no new prompt. The writer repeats classification with a fresh capture under its lock.
+CLI JSON adds `class` and `basis` as output siblings only (`class: null` for bind/strengthen); the durable
+`lastResolution` format is unchanged. `--new` stays open to every caller.
 
 In the registered source project, both `deckent init identity --keep` and `--new` are refused with
 `PROJECT_ATTACHMENT_SOURCE_REGISTERED`, with separate English/Turkish explanations instead of the raw `UNKNOWN` error.
@@ -799,6 +814,31 @@ When the source **has attached projects**, the first command is refused with `PR
 each one is detached (`deckent terminal attach --detach <projectId> --apply`). That path has not been confirmed for a moved
 installation; this beta may offer no way out there short of restoring a backup. The guard stays as it is; the binding fix
 is planned for beta.2.1. beta.2 is the reader release; it does not repair registered-source recovery.
+
+
+Beta.2 rebinding limits (owner answers 79/81/82/88/89/92/93/94):
+
+- Any copy retaining machine id (including a configured identity file), path and root inode passes as device-only:
+  whole-disk clones, VM/WSL/container images on another computer, volume snapshots/clones and a folder that is a
+  mount point with a constant root inode. A same-machine snapshot rollback also restores revoked policy grants.
+- The moved rule travels in the policy file: a copy carrying it accepts itself; a same-account process can write it.
+- An unmarked same-account agent with its own terminal passes the person witness. Both that agent and a person are
+  durably recorded as the same OS account plus time. Class, basis and rule id are durable only from beta.2.1.
+- On macOS without a witness producer only a plain project has witness-less moved rebinding, including AI callers.
+  Plain means no attachment reference, no sharedRegistrationId, and no per-user registration naming this installation
+  or folder (source or entry), including unregistered history. An unrelated source for the same user does not block it.
+  A previously shared project cannot use this exception; the explicit rule applies where existing attachment guards permit identity rebinding,
+  but moved source reconciliation still needs a witness unavailable on macOS.
+- `init identity --new` stays open to every caller. A same-host copy with a new identity runs under copied policy
+  grants; vault and model use do not carry over.
+- Without a machine id (many containers), a weak binding always needs the person or the rule after device changes.
+- Same-account processes can directly rewrite identity.json or policy.json. Rolling back to an older build removes
+  the gate. A rule names a principal whose issuer is the host name; changing pod host names may break it [not verified].
+- At its recorded folder a registered source still refuses `init identity --keep`; device-only source repair is a
+  separate card. Moved/copied to another folder it is moved: the person or the in-file rule rebinds the identity,
+  leaving attachment records unreconciled until `deckent terminal attach --relocate`.
+- A policy deny stops neither device-only repair nor the person at a terminal: organization policy cannot narrow
+  rebinding in beta.2, and role-based permissions cannot grant it.
 
 A project vault whose owner still exists at the same canonical path and inode but has a different disk device number
 is now **uncertain**, not gone. Vault access, claiming and handover are refused with `SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE`; the binding and grants

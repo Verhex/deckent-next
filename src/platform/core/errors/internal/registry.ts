@@ -185,6 +185,8 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
     : p['identityChoice'] === 'new' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.new', p, l) : t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED', p, l) }) },
   PROJECT_ATTACHMENT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_UNAVAILABLE', p, l) }) },
   PROJECT_ATTACHMENT_CHANGED: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_CHANGED', p, l) }) },
+  INSTALLATION_IDENTITY_REBIND_REQUIRED: { category: 'config', render: (p, l) => ({ message: p['platform'] === 'darwin'
+    ? t('error.INSTALLATION_IDENTITY_REBIND_REQUIRED.macos', p, l) : t('error.INSTALLATION_IDENTITY_REBIND_REQUIRED', p, l) }) },
 }, plainErrors('error.', {
   INSTALLATION_IDENTITY_RELOCATED: 'config', INSTALLATION_IDENTITY_RESOLUTION_INVALID: 'config', INSTALLATION_IDENTITY_INVALID: 'config',
   PROJECT_ATTACHMENT_INVALID: 'config', PROJECT_ATTACHMENT_READ_LIMIT: 'config',

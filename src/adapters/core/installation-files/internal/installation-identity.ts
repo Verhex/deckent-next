@@ -4,8 +4,8 @@ import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { BEUSER_GENESIS_PATH, parseBeuserRealmSeal, assertUnsealedInstallation, type BeuserRealmSeal } from '#engine/index.js';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
-  installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
-import { assessInstallationBinding, InstallationIdentityError, type InstallationBindingCapability, type InstallationIdentityStore,
+  installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, REBIND_CLASS, type RebindClass, type InstallationBindingCapture } from '#domain/index.js';
+import { assessInstallationBinding, classifyInstallationRebinding, InstallationIdentityError, type InstallationIdentityResolutionInput, type RebindAdmission, type InstallationBindingCapability, type InstallationIdentityStore,
   type InstallationBindingSource, type InstallationIdentityRead } from '#engine/index.js';
 import { productResourcePath, HOST_LIMITS_REGISTRY, type ProductLayout } from '#platform/index.js';
 import { IdentityFile } from './identity-file.js';
@@ -132,9 +132,23 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       return bound(current.installationId, fresh, current.schemaVersion !== 1 ? current.lastResolution : null, 'realmSeal' in current ? current.realmSeal : undefined);
     }));
   }
-  async resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }) {
+  /** Gate preflight only; the writer repeats this comparison with a fresh capture under its lock. */
+  async inspectRebinding() {
+    const source = this.source(), record = await this.file(() => source.capture()).load();
+    refuseNewerBindingWrite(record);
+    if (!record) return { class: null, installationId: null };
+    await this.checkSeal(record);
+    const captured = await source.capture();
+    if ('status' in captured) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
+    this.requireMachine(captured);
+    return { class: assess(record, captured) === 'relocated' ? classifyInstallationRebinding(record.schemaVersion === 1 ? null : record.binding, captured) : null,
+      installationId: record.installationId };
+  }
+  async resolveRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }) {
+    const choice = input?.choice;
     if (!installationIdentityChoiceSchema.safeParse(choice).success) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
     const source = this.source();
+    let change: RebindClass | null = null, basis: RebindAdmission['basis'] = 'open-class';
     // Refuse before creating a lock companion; repeat under the lock against a concurrent newer writer.
     refuseNewerBindingWrite(await this.file(() => source.capture()).load());
     const record = await this.file(() => source.capture()).update(async current => {
@@ -145,7 +159,15 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       if ('status' in captured) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
       this.requireMachine(captured); // `--keep` cannot bypass required machine binding by recording a weak one.
       // A second concurrent or repeated choice cannot silently rotate an already accepted identity.
-      if (assess(current, captured) === 'match') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+      const outcome = assess(current, captured);
+      if (outcome === 'match') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+      if (input.choice === 'keep' && outcome === 'relocated') {
+        change = classifyInstallationRebinding(current.schemaVersion === 1 ? null : current.binding, captured);
+        const admission = input.admission;
+        if (!admission || (change === REBIND_CLASS.moved && admission.class !== REBIND_CLASS.moved))
+          throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+        basis = admission.basis;
+      }
       const installationId = choice === 'keep' ? current.installationId : randomUUID();
       const parsed = installationIdentityResolutionSchema.safeParse({ schemaVersion: 1, choice, previousInstallationId: current.installationId,
         installationId, at: new Date().toISOString(), principal });
@@ -153,7 +175,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       return bound(installationId, captured, parsed.data);
     });
     if (record.schemaVersion !== 2 || !record.lastResolution) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
-    return record.lastResolution;
+    return { ...record.lastResolution, ...(choice === 'keep' ? { class: change, basis } : {}) };
   }
 }
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
+import { explicitRebindGrant, REBIND_CLASS } from '#domain/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
 const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
@@ -29,6 +30,8 @@ const decide = (policy: unknown, tool: string, cell: AgentToolCallCell, operatio
 
 describe('firstRunPolicyTemplate (domain, pure)', () => {
   it('is deterministic in (scopeId, principal): two calls with the same input produce byte-identical documents', () => {
+    const current = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(current.policy, current.bindings);
+    for (const change of [REBIND_CLASS.deviceOnly, REBIND_CLASS.moved]) expect(explicitRebindGrant(policy, me, change)).toBeNull();
     expect(firstRunPolicyTemplate(input)).toEqual(firstRunPolicyTemplate(input));
     expect(createHash('sha256').update(JSON.stringify(firstRunPolicyTemplate(history.input))).digest('hex'))
       .toBe('0491511dffb072f488d801c365746e7b8576b30bfb08a987946c4ad1fbd6b900');

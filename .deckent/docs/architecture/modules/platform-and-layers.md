@@ -187,3 +187,23 @@ alpha.47, evidence `deckent-refactor-work/proof/ALPHA47-2026-10-18/HANDOFF-S0-S1
 - **Service manager:** terminal/`runtime restart` refuses a service that systemd runs only when systemd confirms it: `/proc/<pid>/cgroup` names
   a candidate unit (a `<name>.service` leaf counts, `user@N.service` and `.scope` leaves do not) and `systemctl [--user] show -p MainPID` (2 s bound)
   must report this process; with no bus or no answer the check is off. It names `systemctl [--user] restart <unit>`.
+
+
+**bootstrap-identity — beta.2 yeniden bağlama tüketicisi (owner 79/88/92/94, 2026-11-12).**
+`classifyInstallationRebinding` yalnız relocated için tek saf sınıflandırıcıdır: makine gücündeki v1 veya
+v2 machine kayıt ve machine yakalama aynı digest/kök/inode, farklı device taşıyorsa device-only; diğerleri moved.
+V3 yazıcı çiti önce işler. `resolveRelocation` keep için zorunlu sınıf/dayanak alır, new açık kalır; kilit altında
+yeni yakalamada açık sınıfın moved'a dönüşmesi reddedilir, moved kabulü her iki sınıfı da karşılar.
+Bind/strengthen değişmez. Device-only policy okumadan herkese açıktır. Moved sırası aynı project.attach tanığı
+(iki env'de AI işareti), dosyada doğrudan adlandırılmış installation/rebind/moved allow + scopes all,
+statik macOS sade proje istisnası, tipli INSTALLATION_IDENTITY_REBIND_REQUIRED reddidir.
+Kural eşleştirmesi ledger/kapsam üyeliğini açmaz; FilePolicySource mevcut dosya güvenliğiyle taze revizyonu okur.
+Her kapsamda deny/restriction/require-approval, wildcard ve rol kaynaklı retler kuralı kapatır; roller izin vermez.
+MacOS sade koşulu attachment lifecycle kilidinde kurulum/kök/entry ve unregistered geçmişini denetler;
+aynı kullanıcının ilgisiz kaynağı istisnayı kaldırmaz. Yedek restore witnessed=true değeri terminal tanığı değildir:
+attachment keep portu yalnız açık sınıfı kabul eder; normal authorize edilmiş yol human-tty verir.
+CLI sınıf/dayanağı geçici kardeş alanlarda gösterir; lastResolution ve installationIdentityResolutionSchema
+aynıdır. Kayıtlı kaynak kendi klasöründe eski reddi korur; başka klasörde kişi/kural kimliği bağlar, bağlantı
+kayıtlarını uzlaştırmaz. Kurum politikası kişi/açık onarımı daraltamaz. Kopyayla taşınan kural, aynı hesapta
+işaretsiz PTY, doğrudan dosya düzenleme, weak bağ, clone/snapshot ve eski binary sınırları için
+[Installation moved](../../../../docs/known-limits.md#installation-moved) geçerlidir; bu sınırlar ürün kabulü değildir.

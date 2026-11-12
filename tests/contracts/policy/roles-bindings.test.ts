@@ -1,8 +1,9 @@
-import { chmod, link, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { evaluatePolicy, policyDeclaredScopes, policyHasResourceRules, policyScopeGrants, policySchema, resolvePolicyBindings } from '#domain/index.js';
+import { evaluatePolicy, policyDeclaredScopes, policyHasResourceRules, policyScopeGrants, policySchema, resolvePolicyBindings,
+  explicitRebindGrant, policyFileSchema, REBIND_CLASS, getPolicyVocabulary } from '#domain/index.js';
 import { FilePolicySource } from '#adapters/index.js';
 import { DispatchInventoryPolicyAuthorization, RunPolicyAuthorization, resolvePolicyScopeMembership, type ScopeRegistry } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
@@ -19,6 +20,33 @@ const policyV2 = (extra: Record<string, unknown> = {}) => ({ schemaVersion: 2, r
 const binding = (id: string, roles: string[], scopes: string[] | 'all' = ['proj'], principals = [alice]) => ({ id, principals, roles, scopes });
 const bindings = (...entries: unknown[]) => ({ schemaVersion: 1, revision: 'b1', bindings: entries });
 const effective = (policy: unknown = policyV2(), bound: unknown = bindings(binding('devs', ['viewer']))) => resolvePolicyBindings(policy, bound);
+
+it('bootstrap rebind requires a direct exact rule; scope-free refusals and role refusals always win', () => {
+  const grant = { id: 'rebind', effect: 'allow', actions: ['rebind'], scopes: 'all', principals: [alice], resource: { kind: 'installation', ids: ['moved'] } };
+  const v1 = (grants: unknown[] = [grant], restrictions: unknown[] = []) => policySchema.parse({ schemaVersion: 1, revision: 'p1', grants, restrictions });
+  expect(explicitRebindGrant(v1(), alice, REBIND_CLASS.moved)).toEqual({ ruleId: 'rebind', policyRevision: 'p1' });
+  expect(explicitRebindGrant(v1(), alice, REBIND_CLASS.deviceOnly)).toBeNull();
+  for (const extra of [{ resource: { kind: 'installation', ids: 'all' } }, { principals: 'all' }, { actions: 'all' }, { scopes: ['proj'] },
+    { resource: { kind: 'installation', ids: ['device-only'] } }, { effect: 'require-approval' }, { principals: [bob] }, { resource: { kind: 'scope', ids: ['moved'] } }]) {
+    expect(explicitRebindGrant(v1([{ ...grant, ...extra }]), alice, REBIND_CLASS.moved)).toBeNull();
+  }
+  for (const scopes of ['all', ['scope-with-no-allow']] as const) {
+    expect(explicitRebindGrant(v1([grant, { ...grant, id: 'deny', effect: 'deny', scopes, principals: 'all', actions: 'all' }]), alice, REBIND_CLASS.moved)).toBeNull();
+    const { effect: _effect, ...restriction } = { ...grant, id: 'restriction', scopes };
+    expect(_effect).toBe('allow');
+    expect(explicitRebindGrant(v1([grant], [restriction]), alice, REBIND_CLASS.moved)).toBeNull();
+    expect(explicitRebindGrant(v1([grant, { ...grant, id: 'ask', effect: 'require-approval', scopes }]), alice, REBIND_CLASS.moved)).toBeNull();
+  }
+  for (const effect of ['allow', 'deny', 'require-approval']) {
+    const roleFile = policyV2({ grants: effect === 'allow' ? [] : [grant], roles: [role('rebinder', permission('rebind', effect, ['rebind'], 'installation', ['moved']))] });
+    const resolved = effective(roleFile, bindings(binding('role', ['rebinder'], ['unrelated'])));
+    expect(explicitRebindGrant(resolved, alice, REBIND_CLASS.moved)).toBeNull();
+  }
+  for (const file of [v1(), policyV2({ grants: [grant] })]) {
+    const bytes = JSON.stringify(file); expect(policyFileSchema.parse(JSON.parse(bytes))).toEqual(file);
+  }
+  expect(getPolicyVocabulary().resources.find(resource => resource.kind === 'installation')?.actions).toContain('rebind');
+});
 
 describe('policy v2 evaluation (domain)', () => {
   it('a bound principal gets exactly its role permissions at its bound scopes; the derived rule names binding/role/permission', () => {
@@ -116,6 +144,13 @@ describe.skipIf(process.platform === 'win32')('bindings layout resource', () => 
     const v1 = await layoutFixture({ schemaVersion: 1, revision: 'solo', restrictions: [], grants: [] }, '{ not json');
     await chmod(v1.bindingsPath, 0o666);
     expect((await v1.source.load()).revision).toBe('solo');
+    const rebind = { id: 'explicit-rebind', effect: 'allow', principals: [alice], actions: ['rebind'], scopes: 'all', resource: { kind: 'installation', ids: ['moved'] } };
+    for (const file of [{ schemaVersion: 1, revision: 'rebind-v1', restrictions: [], grants: [rebind] }, policyV2({ grants: [rebind] })]) {
+      const kept = await layoutFixture(file, bindings());
+      const before = await readFile(kept.policyPath);
+      expect(explicitRebindGrant(await kept.source.load(), alice, REBIND_CLASS.moved)).toMatchObject({ ruleId: 'explicit-rebind' });
+      expect(await readFile(kept.policyPath)).toEqual(before);
+    }
   });
   it('an unknown role, a missing, unsafe, oversized or substituted bindings file is a typed refusal; gates fail closed', async () => {
     const unknown = await layoutFixture(policyV2(), bindings(binding('devs', ['admin'])));

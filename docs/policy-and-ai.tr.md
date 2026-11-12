@@ -42,7 +42,7 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Politika yönetimi execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | İzin, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli. |
 | Yetki belgeleri, authenticator ve onay güvencesi: tüm değişimler | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | Aktör kendisini sınırlayan kimliği veya onay doğrulayıcısını değiştiremez; inspect/list politika kapsamındadır. |
 | Yedeği geri yükleme | `backup/fixture-backup/restore` | Geri yükleme yetki verisini değiştirebilir. |
-| Yürütme ortamı kurma ve kurulum onarımı | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | İkisi de yalıtım alanı dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19). |
+| Yürütme ortamı kurma ve kurulum onarımı | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | İkisi de yalıtım alanı dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19). Değişiklik 2026-11-12 (79/88/92): rebind ayrıdır; device-only herkese açık, moved kişi veya dosyada açık kural ister. |
 | Kurulumu kaldırma ve verisini silme | `installation/fixture-target/uninstall`, `installation/fixture-target/purge` | Kurulumu kaldırmayı ya da verisini silmeyi deckent geri alamaz; yalnız kendi terminalindeki kişi onaylar (alpha.56 U10B). |
 | Full access dahil izin kipi değiştirme | `permission-mode/standart/set`, `permission-mode/full-auto/set`, `permission-mode/full-access/set` | AI kendi izin kipini gevşetemez. |
 | Read/resolve dahil bütün sır işlemleri | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Kimlik bilgisini okumak, değiştirmek veya taşımak sır sınırını aşar; read/resolve savunma hücreleridir, açık sır-okuma API’leri değildir. |
@@ -57,6 +57,18 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Katalog önerisi ve kural daraltması (katalog toplayıcı dışındaki her AI) | `agent-catalog/fixture-target/suggest`, `agent-catalog/fixture-target/narrow` | Önerileri ve otomatik daraltmayı yalnız katalog toplayıcı, kendi anahtarıyla imzalayarak yazar (S8-3, §9); bunları yazan başka bir AI hangi ajanın kartsız çalışacağını yönlendirebilirdi. |
 | Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `beuser`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Güvenlik, yalıtım, admission, operasyon, denetim, kurtarma ve Nervous modları, shell ortamı ve ağ çıkışı ayarla gevşetilemez. |
 <!-- ai-floor:end -->
+
+Yeniden bağlama, kurulum onarımından ayrıdır (owner 2026-11-12, 79/88/92/94). `init identity --keep`
+device-only onarımını politika veya terminal tanığı olmadan herkese açar. Taşınmış/kopyalanmış kurulumu kabul
+etmek için kişi veya politika dosyasında doğrudan açık izin gerekir: adlandırılmış kimlik, açık `rebind` eylemi,
+`installation` kaynağı, `moved` içeren kimlik dizisi ve `scopes: "all"`. Roller izin vermez; her kapsamda eşleşen
+ret, kısıtlama ve onay gerektiren kurallar yalnız dosya kuralı yolunu kapatır. Beta.2'de ret veya kurum politikası
+kişiyi veya device-only onarımını engellemez. Varsayılan veya şablon bu kuralı yazmaz. `init identity --new` açık kalır.
+Politika dosyası kopyayla taşınır ve aynı hesapta çalışan süreç onu düzenleyebilir. Beta.2 sınıf/dayanağı yalnız
+çıktıda gösterir; kalıcı kayıt işletim sistemi hesabı ve zamanı tutar. macOS sade proje istisnası ve kopya/zayıf
+bağ, anlık görüntü, doğrudan dosya düzenleme ve eski sürüme dönüş sınırları
+[Installation moved](known-limits.md#installation-moved) bölümündedir.
+
 
 Kart kararında ayrıca uygulama kapısı vardır: AI/etkileşimsiz çağıran, `edit-floor`,
 `edit-authority`, `mcp-floor`, yetki etkili kart, korunan ayar kartı, araç riski bildirilmemiş
