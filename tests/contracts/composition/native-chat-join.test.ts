@@ -61,10 +61,11 @@ async function fixture(askEdits = true) {
   });
   const call: AgentToolCall = { id: 'unused', name: 'write_file', argumentsJson: JSON.stringify({ path: 'result.txt', content: 'approved business result\n' }) };
   const runtime: NativeChatRuntime = { readiness, limits: { idleMs: 30_000, maxConnections: 4, replayMaxEntries: 8, replayMaxBytes: 16 * entry.bridge.frameMaxBytes }, resolveModelUse,
-    driver: async ({ session, paidExtraUsage }) => { expect(paidExtraUsage).toBe('continue'); return { port: session, admit: async () => undefined,
+    driver: async ({ session, paidExtraUsage, onPaidUsage }) => { expect(paidExtraUsage).toBe('continue'); return { port: session, admit: async () => undefined,
       native: (bridge, secrets) => ({ billingAxis: 'subscription', prepare: async (_profile, _definition, request) => { state.prompt = JSON.stringify(request); return {}; },
         async send(_prepared, signal) {
           state.calls++; state.token = bridge.turnToken;
+          if (state.paidExtraUsage) await onPaidUsage?.(state.paidExtraUsage as never);
           expect(redactForRecord(bridge.turnToken, secrets.turn)).not.toContain(bridge.turnToken);
           const server = createServer((req, res) => { void bridge.handle(req, res, () => true); }); state.servers.push(server);
           await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -386,15 +387,14 @@ it('finishes and records a turn with long, many and multiline builtin names with
 it('delivers the paid-usage notice once after successful delivery and records it in the existing turn note', async () => {
   const f = await brainProviderFixture(); cleanups.push(f.close);
   const store = await openSqliteAgentTurnStore(f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' });
-  const value = { ...pluginResult([]), response: { native: { headless: { paidExtraUsage: {
-    kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 } } } } } as unknown as ModelInvocationResult;
+  const value = { kind: 'overage' as const, status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 };
   try {
     for (const language of ['en', 'tr'] as const) {
       const session = {}, notes: string[] = [], claim = { scopeId: 's', turnId: `paid-${language}`, principalKey: 'fixture', requestDigest: 'a'.repeat(64), claimedAtMs: 1 };
-      await expect(notifyNativePaidUsage(value, language, session, 'terminal', () => { throw new Error('delivery-failed'); })).rejects.toThrow('delivery-failed');
+      await expect(notifyNativePaidUsage(value, language, session, 'terminal', 's', () => { throw new Error('delivery-failed'); })).rejects.toThrow('delivery-failed');
       const result = await runDurableAgentTurn({ claim, messages: [], tools: [], signal: new AbortController().signal, emit: () => undefined }, store, {
         async invokeRound() {
-          const notify = () => notifyNativePaidUsage(value, language, session, 'terminal', async text => { await Promise.resolve(); notes.push(text); });
+          const notify = () => notifyNativePaidUsage(value, language, session, 'terminal', 's', async text => { await Promise.resolve(); notes.push(text); });
           await Promise.all([notify(), notify()]); await notify();
           return { status: 'responded', content: 'finished', reasoning: '', toolCalls: [], finish: 'stop', usage: null };
         }, hostNote: () => notes.join(' '), authorize: async () => 'allow', describe: () => null,
@@ -403,12 +403,10 @@ it('delivers the paid-usage notice once after successful delivery and records it
       expect(notes).toHaveLength(1);
       expect(result.note).toContain(language === 'en' ? 'Paid extra usage of your provider account is in use' : 'Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
       expect(result.note).toContain(language === 'en' ? 'deckent cannot see the amount' : 'deckent tutarı göremez');
-      expect(result.note).toContain('deckent config set models.headless.paidExtraUsage stop-at-limit');
+      expect(result.note).toContain("deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'");
       expect(result.note).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|\{\w+\}/u);
       expect(await store.claim(claim)).toMatchObject({ status: 'finished', outcome: { note: result.note } });
-      await notifyNativePaidUsage({ ...value, replayed: true }, language, {}, 'terminal', () => { throw new Error('replay'); });
-      const malformed = { ...value, response: { native: { headless: { paidExtraUsage: { status: 'allowed', window: 'x\n', resetsAtMs: null } } } } } as unknown as ModelInvocationResult;
-      await notifyNativePaidUsage(malformed, language, {}, 'terminal', () => { throw new Error('unsafe'); });
+      await expect(notifyNativePaidUsage({ ...value, window: 'x\n' }, language, {}, 'terminal', 's', () => { throw new Error('unsafe'); })).rejects.toThrow();
     }
   } finally { store.close(); }
 });

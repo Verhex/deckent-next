@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { headlessEgressReasons, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationProfileDigest, createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
-import { nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
+import { nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type ClaudeRateLimit, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
 import { feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { createClaudeAgentDriver } from './claude-agent.js';
 import { codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
@@ -24,7 +24,7 @@ const projectResponse = (value: unknown, known: KnownSecretSnapshot, field = '')
     ? Object.fromEntries(Object.entries(value).map(([key, item]) => [redactForRecord(key, known), projectResponse(item, known, key)])) : value;
 /** In-memory driver construction is pure. Admission probes and run files occur only inside the governed invocation. */
 export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['profile']; execution: NativeAgentExecution; session: ToolSessionPort;
-  now: () => number; isolation: HeadlessIsolation; paidExtraUsage?: 'continue' | 'stop-at-limit' }>) {
+  now: () => number; isolation: HeadlessIsolation; onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; paidExtraUsage?: 'continue' | 'stop-at-limit' }>) {
   const { profile, entry, definition } = agentTarget(input.profile), execution = nativeAgentExecutionSchema.parse(input.execution);
   toolSessionSchema.parse(input.session.session);
   if (execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
@@ -82,7 +82,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           const delta: ModelInvocationDeltaSink = part => { if (part.kind !== 'text') return; text += part.text;
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
-            cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
+            cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',

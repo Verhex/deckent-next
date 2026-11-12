@@ -29,9 +29,9 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
   const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue') => {
+  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined) => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
-    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: port, now: Date.now, isolation: testIsolation, paidExtraUsage });
+    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: port, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
     close.push(() => driver.close());
     const configured = snapshotKnownSecrets(scenario.loginCanary ? [{ name: 'FIXTURE_LOGIN', value: scenario.loginCanary }] : []);
     const bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, knownSecrets: configured,
@@ -204,8 +204,15 @@ it('keeps paid extra usage in open native evidence and stops it only on the conf
   for (const info of [{ status: 'rejected', overageStatus: 'allowed', rateLimitType: 'five_hour', resetsAt: 1792773600 },
     { status: 'allowed', overageInUse: true }]) {
     const f = await fixture(families[0]!, { events: [{ type: 'rate_limit_event', rate_limit_info: info }] });
-    const continued = await f.start();
+    const delivered = vi.fn(async () => { expect(continued.deltas).toEqual([]); });
+    const continued = await f.start('continue', delivered);
     expect(await continued.run()).toMatchObject({ native: { headless: { paidExtraUsage: { kind: 'overage', status: info.status } } } });
+    expect(delivered).toHaveBeenCalledTimes(1);
+    const noNotice = await f.start('continue', null), refused = await noNotice.run();
+    expect(refused.kind).toBe('rejected');
+    if (refused.kind === 'rejected') expect(readHeadlessRejection(refused.evidence)).toMatchObject({ refusal: 'quota' });
+    const throws = await f.start('continue', async () => { throw new Error('delivery'); });
+    expect((await throws.run()).kind).toBe('rejected');
     const stopped = await f.start('stop-at-limit'), result = await stopped.run();
     expect(result.kind).toBe('rejected');
     if (result.kind === 'rejected') expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'quota', subtype: info.status });

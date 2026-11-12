@@ -129,5 +129,5 @@
   "headless.chat.quotaWindow.seven_day_opus": "weekly window for Opus",
   "headless.chat.quotaWindow.seven_day_sonnet": "weekly window for Sonnet",
   "headless.chat.quotaFallback": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.",
-  "headless.chat.paidExtraUsage": "The plan's usage limit is reached ({window}). Resets at: {reset} (local time). Paid extra usage of your provider account is in use; deckent cannot see the amount. To stop instead, run `deckent config set models.headless.paidExtraUsage stop-at-limit`."
+  "headless.chat.paidExtraUsage": "The plan's usage limit is reached ({window}). Resets at: {reset} (local time). Paid extra usage of your provider account is in use; deckent cannot see the amount. To stop instead, run `deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'`."
 }

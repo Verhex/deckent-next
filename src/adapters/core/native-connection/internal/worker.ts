@@ -303,6 +303,31 @@ const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookR
   Write: 'write', Bash: 'shell', BashOutput: 'shell', KillShell: 'shell', KillBash: 'shell', Grep: 'search', Glob: 'search', LS: 'search',
   WebFetch: 'network', WebSearch: 'network', Task: 'agent', Agent: 'agent' };
 const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
+// B2 GENERATED QUOTA BEGIN
+// Canonical: capabilities/native-agent-execution/internal/quota-rule.ts; scripts/sync-worker-quota.mjs --check
+export type ClaudeQuotaPolicy = Readonly<{ claudeRejectedStatuses: readonly string[]; claudeAllowedStatuses: readonly string[] }>;
+export type ClaudeRateLimit = Readonly<{ kind: 'allowed' | 'overage' | 'quota' | 'credits-required' | 'unknown'; status: string; window: string; resetsAtMs: number | null }>;
+/** Only bounded identifier values leave the CLI boundary; controls, whitespace and terminal escapes cannot reach records or rendering. */
+const identifier = (value: unknown, max: number) => typeof value === 'string' && value.length ? value.slice(0, max).replace(/[^A-Za-z0-9_.:-]/gu, '_') : '?';
+const TIMESTAMP_SCALE = 1000; // CLI Unix seconds become the receipt's milliseconds.
+/** Shared classification; callers keep their own unknown-status and notice policies. */
+export function classifyClaudeRateLimit(info: Readonly<Record<string, unknown>>, policy: ClaudeQuotaPolicy, creditsErrors: readonly string[], paidExtraUsage: 'continue' | 'stop-at-limit'): ClaudeRateLimit {
+  const status = typeof info.status === 'string' ? info.status : null, seconds = info.resetsAt;
+  const resetsAtMs = typeof seconds === 'number' && seconds >= 0 && Number.isSafeInteger(Math.round(seconds * TIMESTAMP_SCALE))
+    && Number.isFinite(new Date(Math.round(seconds * TIMESTAMP_SCALE)).getTime()) ? Math.round(seconds * TIMESTAMP_SCALE) : null;
+  const rejected = status !== null && policy.claudeRejectedStatuses.includes(status);
+  const allowed = status !== null && policy.claudeAllowedStatuses.includes(status);
+  const overage = info.isUsingOverage === true || info.overageInUse === true
+    || rejected && typeof info.overageStatus === 'string' && policy.claudeAllowedStatuses.includes(info.overageStatus);
+  const kind = typeof info.errorCode === 'string' && creditsErrors.includes(info.errorCode) ? 'credits-required'
+    : !rejected && !allowed ? 'unknown'
+      : overage ? paidExtraUsage === 'stop-at-limit' ? 'quota' : 'overage'
+        : rejected ? 'quota'
+          : 'allowed';
+  return { kind, status: identifier(status, 16), window: identifier(info.rateLimitType, 24), resetsAtMs };
+}
+
+// B2 GENERATED QUOTA END
 const NATIVE_TIMESTAMP_SCALE = 1000; // Native protocol reset timestamps are Unix seconds; contract uses milliseconds.
 export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly claudeAllowedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `bridgeTools` (F2-7): the class of each Deckent tool the worker reaches through the tool bridge, keyed by its Claude wire name
@@ -371,7 +396,7 @@ export function parseClaudeStreamLine(line: string): ClaudeStreamLine {
   return { kind: 'other', data, type };
 }
 /** Maps one line of Claude Code stream-json onto zero or more contract events. Thinking text and tool output content are never kept. */
-export function normalizeClaudeLine(line: string, state: NormalizerState, now = Date.now()): BridgeEvent[] {
+export function normalizeClaudeLine(line: string, state: NormalizerState, now = Date.now(), onQuotaExhausted?: () => void): BridgeEvent[] {
   const events: BridgeEvent[] = [];
   const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
   const miss = (type: string) => countUnmapped(state, type);
@@ -412,10 +437,11 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
         bytes: Buffer.byteLength(typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '')) });
     }
   } else if (parsed.kind === 'rate-limit') {
-    const info = parsed.info, resetsAt = parsed.resetsAt;
-    if (parsed.status !== null && state.quotaPolicy?.claudeRejectedStatuses.includes(parsed.status)) {
-      const resetsAtMs = typeof resetsAt === 'number' && Number.isSafeInteger(resetsAt * NATIVE_TIMESTAMP_SCALE) && resetsAt >= 0 ? resetsAt * NATIVE_TIMESTAMP_SCALE : null;
-      emit('quota-exhausted', { source: 'claude-rate-limit', resetsAtMs, ...(parsed.window !== null ? { window: red(parsed.window, 32) } : {}) });
+    const info = parsed.info, limit = state.quotaPolicy ? classifyClaudeRateLimit(info, state.quotaPolicy, [], 'stop-at-limit') : null;
+    // Workers have no live person-notice sink in beta.2: never continue on paid usage.
+    if (limit?.kind === 'quota') {
+      emit('quota-exhausted', { source: 'claude-rate-limit', resetsAtMs: limit.resetsAtMs, window: red(limit.window, 32) });
+      onQuotaExhausted?.();
     }
     for (const [window, value] of parsed.windows) {
       const utilization = typeof value.utilization === 'number' ? Math.min(1, Math.max(0, value.utilization)) : null;
@@ -729,20 +755,21 @@ function mapCursorLine(line: string, state: NormalizerState, cursor: CursorNorma
   } else miss(type);
 }
 /** Normalizers by the registry `eventStream` capability (data), so a new adapter id with a known stream format needs no code change. */
-const STREAM_NORMALIZERS: Readonly<Record<string, (state: NormalizerState, codex: CodexNormalizerState) => (line: string) => BridgeEvent[]>> = {
-  'claude-code-stream-json': state => line => normalizeClaudeLine(line, state),
+const STREAM_NORMALIZERS: Readonly<Record<string, (state: NormalizerState, codex: CodexNormalizerState, onQuotaExhausted?: () => void) => (line: string) => BridgeEvent[]>> = {
+  'claude-code-stream-json': (state, _codex, onQuotaExhausted) => line => normalizeClaudeLine(line, state, Date.now(), onQuotaExhausted),
   'codex-exec-json': (state, codex) => line => normalizeCodexLine(line, state, codex),
   'cursor-agent-stream-json': state => { const cursor = createCursorState(); return line => normalizeCursorLine(line, state, cursor); },
 };
 /**
- * Splits a native stdout stream into lines and normalizes each onto contract events (normalizer chosen by the registry `eventStream`). Observation never changes execution:
+ * Splits a native stdout stream into contract events (normalizer chosen by registry `eventStream`). The optional quota gate stops execution:
  * a normalizer or delivery fault is counted as unmapped and never thrown into the child process listeners (Astra 2066 R2).
  */
-export function createNativeLineObserver(stream: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void, report?: ReturnType<typeof finalReportCollector>) {
-  let pending = ''; let skipping = false;
+export function createNativeLineObserver(stream: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void, report?: ReturnType<typeof finalReportCollector>, onQuotaExhausted?: () => void) {
+  let pending = ''; let skipping = false, stopped = false;
   const decoder = new TextDecoder();
-  const normalize = Object.hasOwn(STREAM_NORMALIZERS, stream) ? STREAM_NORMALIZERS[stream]!(state, codex) : null;
+  const normalize = Object.hasOwn(STREAM_NORMALIZERS, stream) ? STREAM_NORMALIZERS[stream]!(state, codex, onQuotaExhausted ? () => { stopped = true; onQuotaExhausted(); } : undefined) : null;
   const normalizeLine = (line: string) => {
+    if (stopped) return;
     try {
       if (Buffer.byteLength(line) > 1_048_576) { report?.oversized(); countUnmapped(state, 'oversized-line'); return; }
       report?.observe(line);
@@ -975,7 +1002,7 @@ async function main() {
     setup.limits.clientModelReport, state, codex, events => channel.push(events)) : null;
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
   const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits, setup.capabilities.structuredReport?.channel) : undefined;
-  const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report);
+  const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report, () => { child.kill('SIGKILL'); });
   const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);
   const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {

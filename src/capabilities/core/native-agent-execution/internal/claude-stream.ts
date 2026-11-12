@@ -17,7 +17,7 @@ type ToolResult = Awaited<ReturnType<ToolSessionPort['propose']>>;
 type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string; limit?: ClaudeRateLimit }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string): 'stop' | void | Promise<'stop' | void>;
   finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[]; paidExtraUsage(): ClaudeRateLimit | null }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
@@ -33,7 +33,7 @@ function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGEN
 /** K4 wraps this ToolSessionPort, K1 remains its delegate. Feed stdout through line; pass signal to the existing isolated process runner.
  * Finish only after process exit. A facade call may precede its assistant tool_use (A0-4); both channels must agree before completion. */
 export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string;
-  outputMaxBytes: number; quotaPolicy: ClaudeQuotaPolicy; paidExtraUsage?: 'continue' | 'stop-at-limit'; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
+  outputMaxBytes: number; quotaPolicy: ClaudeQuotaPolicy; paidExtraUsage?: 'continue' | 'stop-at-limit'; onPaidUsage?: (limit: ClaudeRateLimit) => Promise<void>; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
   const { entry, port, model, cliVersion, runDir } = options, session = toolSessionSchema.parse(port.session), controller = new AbortController();
   if (entry.agent.transport.kind !== 'claude-mcp' || !Number.isSafeInteger(options.outputMaxBytes) || options.outputMaxBytes <= 0) invalid('definition');
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
@@ -72,7 +72,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (prior) prior.streamed = true; else calls.set(block.id, { name, input, streamed: true });
     return undefined;
   };
-  const line = (raw: string): 'stop' | void => {
+  const line = (raw: string): 'stop' | void | Promise<'stop' | void> => {
     if (failure) return 'stop';
     if (ended || terminal) return fail('after-result');
     if (Buffer.byteLength(raw) > entry.headless.limits.maxLineBytes || !charge(Buffer.byteLength(raw) + 1)) return fail('size');
@@ -125,7 +125,12 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (value.type === 'rate_limit_event') {
       const guards = entry.headless.guards;
       const limit = classifyClaudeRateLimit(record(value.rate_limit_info) ?? {}, options.quotaPolicy, 'creditsErrors' in guards ? guards.creditsErrors : [], options.paidExtraUsage);
-      if (limit.kind === 'overage') { paidUsage ??= limit; return; }
+      if (limit.kind === 'overage') {
+        const stop = () => fail('rate-limit', undefined, `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, { ...limit, kind: 'quota' });
+        const deliver = options.onPaidUsage;
+        if (!deliver) return stop();
+        return Promise.resolve().then(() => deliver(limit)).then(() => { paidUsage ??= limit; }, stop);
+      }
       return limit.kind === 'allowed' ? undefined : fail(limit.kind === 'unknown' ? 'rate-limit-status' : 'rate-limit', undefined,
         `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, limit);
     }

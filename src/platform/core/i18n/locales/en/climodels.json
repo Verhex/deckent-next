@@ -132,7 +132,7 @@
   "climodels.mcp.result.imported": "Imported untrusted (each asks on first use): {names}",
   "climodels.mcp.result.importedNone": "Nothing was imported.",
   "climodels.mcp.result.skipped": "Skipped {name}: {reason}",
-  "config.field.models": "Model settings: retirement warning days; models.headless.paidExtraUsage = continue (default) uses the provider account's paid extra usage with a notice, stop-at-limit ends text and tool turns when it is reported. Set with `deckent config set models.headless.paidExtraUsage stop-at-limit`.",
+  "config.field.models": "Model settings: retirement warning days; models.headless.paidExtraUsage = continue (default) uses the provider account's paid extra usage only after a live notice is delivered; stop-at-limit ends text and tool turns when it is reported. Set with `deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'`; restore the default with `deckent config set models.headless.paidExtraUsage '\"continue\"'`.",
   "climodels.models.heading": "Models you can use in scope {scope}",
   "climodels.models.empty": "No model is registered in the catalog yet. Connect one with: deckent models connect",
   "climodels.models.footer": "Switch one on or off: deckent models catalog activate|deactivate · declared by connected providers: deckent models --declared",

@@ -260,14 +260,14 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
       expect(nativeAgentInitReason(agent, bridge, session, { ...init, plugins: five, tools })).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
     }
   });
-  it('stops Claude limits using registry policy, preserves bounded v1 evidence and renders EN/TR without a realm', () => {
+  it('stops Claude limits using registry policy, preserves bounded v1 evidence and renders EN/TR without a realm', async () => {
     const { bridge } = nativeCliAgent(FAMILY)!;
     const init = initLine({ tools: session.tools.map(tool => bridge.toolPrefix + tool.name), mcp_servers: [{ name: bridge.serverName, status: 'connected' }] });
     const closure = { turnId: session.turnId, generation: 1, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
     const port: ToolSessionPort = { session, propose: async () => { throw new Error('no tool expected'); },
       cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-    const start = (quotaPolicy = nativeQuotaPolicy(), paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue') => {
-      const driver = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy, paidExtraUsage });
+    const start = (quotaPolicy = nativeQuotaPolicy(), paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: ((limit: unknown) => Promise<void>) | undefined = async () => undefined) => {
+      const driver = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
       driver.line(JSON.stringify({ ...init, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }));
       return driver;
     };
@@ -277,16 +277,21 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
       driver.line(JSON.stringify(resultLine('ok')));
       expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false }).kind).toBe('completed');
     }
-    const unrecognisedOverage = start();
-    expect(unrecognisedOverage.line(JSON.stringify(rateLimitLine('rejected', { overageStatus: 'future-overage' })))).toBeUndefined();
-    expect(unrecognisedOverage.paidExtraUsage()).toBeNull(); // Only registry-recognized paid availability produces the billing notice.
+    for (const overageStatus of ['future', true, {}, '', null]) {
+      for (const choice of ['continue', 'stop-at-limit'] as const) {
+        const driver = start(nativeQuotaPolicy(), choice);
+        expect(driver.line(JSON.stringify(rateLimitLine('rejected', { overageStatus })))).toBe('stop');
+        expect(driver.paidExtraUsage()).toBeNull();
+        expect(driver.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
+      }
+    }
     for (const info of [
       { status: 'rejected', overageStatus: 'allowed', rateLimitType: 'five_hour', resetsAt: 1792773600 },
       { status: 'allowed', isUsingOverage: true }, { status: 'allowed_warning', overageInUse: true },
       { status: 'rejected', isUsingOverage: true, overageStatus: 'rejected' },
     ]) {
       const driver = start();
-      expect(driver.line(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toBeUndefined();
+      expect(await driver.line(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toBeUndefined();
       expect(driver.paidExtraUsage()).toMatchObject({ kind: 'overage', status: info.status });
       driver.line(JSON.stringify(resultLine('ok')));
       expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false }).kind).toBe('completed');
@@ -295,6 +300,21 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
       expect(stopped.paidExtraUsage()).toBeNull();
       expect(stopped.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
     }
+    const event = JSON.stringify(rateLimitLine('rejected', { overageStatus: 'allowed' }));
+    // Explicitly construct without a callback (default helper is deliberately visible).
+    const noCallback = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy() });
+    noCallback.line(JSON.stringify({ ...init, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }));
+    expect(noCallback.line(event)).toBe('stop');
+    expect(noCallback.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
+    let delivered = 0;
+    const laterFailure = start(nativeQuotaPolicy(), 'continue', async () => { delivered++; });
+    expect(await laterFailure.line(event)).toBeUndefined();
+    expect(delivered).toBe(1);
+    expect(laterFailure.line(JSON.stringify({ ...resultLine('ok'), permission_denials: [{}] }))).toBe('stop');
+    expect(laterFailure.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'refused' });
+    const broken = start(nativeQuotaPolicy(), 'continue', () => { throw new Error('notice-failed'); });
+    expect(await broken.line(event)).toBe('stop');
+    expect(broken.paidExtraUsage()).toBeNull();
     for (const info of [
       { status: 'rejected', rateLimitType: 'five_hour', resetsAt: 1792773600 },
       { status: 'rejected', rateLimitType: 'seven_day_opus', overageStatus: 'rejected' },
