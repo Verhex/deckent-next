@@ -259,7 +259,7 @@ export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; 
  */
 export interface ProviderSecretGrantPort {
   offer(): Promise<boolean>;
-  question(name: string, project: string): Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
+  question(name: string, project: string): Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }> | Promise<Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>>;
   grant(name: string): Promise<void>;
   check?(name: string): Promise<void>;
 }

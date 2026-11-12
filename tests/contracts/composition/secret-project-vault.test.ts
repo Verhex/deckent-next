@@ -7,8 +7,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installationSecretRoot, listProjectVaults, observeOwnerRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
-import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
+import { createEncryptedFileSecretStore, installationSecretRoot, listProjectVaults, observeOwnerRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { inspectConfiguredSecretInventory, inspectSecretProjectTarget, changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -175,6 +175,10 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
 
   it('worktrees of one repository are one project (shared vault and grants); a copied worktree folder is refused', async () => {
     const { base, env } = await home(), root = await project(base, 'repo');
+    const globalPath = platform.resolveGlobalConfigPaths(env).platformPath;
+    await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
+    await writeFile(globalPath, JSON.stringify({ secrets: { store: 'core.secret-store.encrypted-file@1' } }), { mode: 0o600 });
+    await createEncryptedFileSecretStore({ root: dirname(globalPath), platform: 'linux' }).set('DECKENT_ANTHROPIC_KEY', MAIN_VALUE);
     await writeFile(join(root, 'README'), 'x\n');
     git(root, 'init', '-q', '-b', 'main'); git(root, 'add', 'README'); git(root, 'commit', '-q', '-m', 'init');
     const tree = join(base, 'repo-wt');
@@ -182,7 +186,36 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     await mkdir(join(tree, '.deckent'), { recursive: true, mode: 0o700 });
     for (const file of ['config.json', 'policy.json']) await cp(join(root, '.deckent', file), join(tree, '.deckent', file));
     await installed(tree);
-    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    await resolverOf(root, env); await resolverOf(tree, env); // existing identity bootstrap, before the read-only card preview
+    const target = await inspectSecretProjectTarget(tree, 'scope', { env });
+    expect(target).toMatchObject({ anchor: { projectRoot: root }, workingFolder: tree });
+    expect(await inspectSecretProjectTarget(root, 'scope', { env })).toMatchObject({ anchor: target.anchor, workingFolder: root });
+    const alias = join(base, 'alias'); await symlink(root, alias);
+    expect(await inspectSecretProjectTarget(alias, 'scope', { env })).toEqual({ anchor: target.anchor, workingFolder: root });
+    const granted = await changeProjectSecretGrant(tree, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human, target);
+    expect(granted).toMatchObject({ project: root, granted: true });
+    await writeFile(join(tree, '.deck'), 'DECK_FORMAT=1\nDECKENT_ANTHROPIC_KEY=main\n');
+    const inventory = await inspectConfiguredSecretInventory(tree, 'scope', false, { env });
+    expect(inventory.project).toBe(root); expect(inventory.workingFolder).toBe(tree);
+    expect((await inspectConfiguredSecretInventory(alias, 'scope', false, { env })).project).toBe(root); expect(inventory.rows.find(row => row.name === granted.name)?.grant.state).toBe('granted');
+    const vault = (await projectVaultDirectory(installationSecretRoot(env)!, target.anchor, false))!;
+    const grantsPath = join(vault, PROJECT_VAULT.grantsFile), grantsBefore = await readFile(grantsPath, 'utf8');
+    expect(JSON.parse(grantsBefore)).toMatchObject({ installationId: target.anchor.installationId, projectId: target.anchor.projectId });
+    const ownerPath = join(vault, PROJECT_VAULT.projectFile), ownerBefore = await readFile(ownerPath, 'utf8');
+    const audit = await openSqliteAuditStore(join(tree, '.deckent/state/ledger.db'), SQLITE, 'forbid');
+    const decisionsBefore = audit.page('scope', 0, 1_000).length;
+    expect(await code(changeProjectSecretGrant(tree, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human, { ...target,
+      anchor: { ...target.anchor, binding: { ...target.anchor.binding, inode: String(BigInt(target.anchor.binding.inode) + 1n) } } }))).toBe('SECRET_PROJECT_TARGET_CHANGED');
+    const identityPath = join(platform.productResourcePath(resolveProductLayout({ projectRoot: root }), 'projectIdentity'), 'identity.json'), identity = await readFile(identityPath, 'utf8');
+    await writeFile(identityPath, JSON.stringify({ ...JSON.parse(identity), projectId: randomUUID() })); clearConfigCache();
+    const changed = await changeProjectSecretGrant(tree, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human, target).catch((error: unknown) => error);
+    expect(changed).toMatchObject({ code: 'SECRET_PROJECT_TARGET_CHANGED' });
+    for (const locale of ['en', 'tr'] as const) expect((changed as platform.DeckentError).localize!(locale).message).toContain(locale === 'en' ? 'Nothing was granted' : 'İzin verilmedi');
+    expect(await readFile(grantsPath, 'utf8')).toBe(grantsBefore); expect(await readFile(ownerPath, 'utf8')).toBe(ownerBefore);
+    expect(audit.page('scope', 0, 1_000)).toHaveLength(decisionsBefore); audit.close();
+    expect(await code(handOverProjectSecrets(tree, 'scope', { env }, human, target))).toBe('SECRET_PROJECT_TARGET_CHANGED');
+    expect((await listProjectVaults(installationSecretRoot(env)!)).length).toBe(1);
+    await writeFile(identityPath, identity); clearConfigCache();
     await setProjectSecret(tree, 'scope', 'OWN_KEY', OWN_VALUE, { env }, human);
     await writeFile(join(root, '.deck'), 'DECK_FORMAT=1\nOWN_KEY=project\n'); await cp(join(root, '.deck'), join(tree, '.deck'));
     expect(await (await resolverOf(tree, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);

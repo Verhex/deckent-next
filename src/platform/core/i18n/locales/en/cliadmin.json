@@ -267,7 +267,7 @@
   "cli.secret.card.grantTitle": "Use the main key {name} in the project {project}?",
   "cli.secret.card.revokeTitle": "Stop using the main key {name} in the project {project}?",
   "cli.secret.card.revokeUsers": "Used here by: {users}. They stop at their next start.",
-  "cli.secret.card.grantBody": "The value stays in the main vault; only this project may use it. The decision is recorded in the audit log first. AI sessions cannot answer this card.",
+  "cli.secret.card.grantBody": "The value stays in the main vault; this project may use it. The decision is recorded in the audit log first. AI sessions cannot answer this card.",
   "cli.secret.card.handoverTitle": "Move the project key vault to {project}? (only when the original folder is gone)",
   "cli.secret.card.vaultTitle": "Where should {name} be stored?",
   "cli.secret.card.vaultMain": "main vault (the installation; other projects can use it only with a grant)",
