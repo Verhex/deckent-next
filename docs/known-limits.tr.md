@@ -847,6 +847,16 @@ izinler değişmez. Yeniden denemeden önce asıl diski kayıtlı aygıt numaras
 yedekten geri yükleyin. Sahip yolu yoksa veya inode farklıysa mevcut devir kuralları sürer. Bu değişiklik kişisel
 sır deposunu onarmaz ve proje güvenini yenilemez.
 
+### Yeniden bağlama denetim okuyucusu ve geri dönüş
+
+beta.2 `installation-rebind` v1 kaydını okur; beta.2.1 yazar. Her kapsam kendi mühürlü kopyasını okur. Ardından
+succeeded kaydı gelmeyen intent, başlıyor demektir; başarısız sayılmaz. Kaynağın başarısı yalnız kendi
+kayıtlarını kapsar; projeler hâlâ bekliyor olabilir. Eksik bir proje (hedef) kaydı yeniden başlatmadan sonra
+tespit edilemez. Bağ kimlikleri opaktır ve bu okuyucu tarafından çözümlenmez. beta.1.2'ye geri dönüşte denetim
+sayfasının tamamı `AUDIT_INTEGRITY` ile durur; bu kayıtları asla budamayın. Politika kural kimliği, diğer
+denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde denetim izine girer; kural kimliklerine
+özel metin koymayın.
+
 ## Kurtarma ve yükseltme
 
 - **Docker ayarı olmayan yapılandırmayı eski build okuyamaz (alpha.63, R8b).** `execution` yalnız `git` taşıdığında alpha.63 öncesi build

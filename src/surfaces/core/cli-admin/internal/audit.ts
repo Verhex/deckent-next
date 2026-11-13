@@ -1,6 +1,6 @@
 import { open } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { auditVerifyQuerySchema, auditRefusalMatchesPolicy, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
+import { auditVerifyQuerySchema, auditRefusalMatchesPolicy, type AuditEvent, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
 import { optionalField, emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -102,12 +102,33 @@ function refusalOperation(operation: 'read' | 'write' | 'execute' | 'invoke' | '
     execute: t('cli.audit.refusal.operation.execute', {}, locale), invoke: t('cli.audit.refusal.operation.invoke', {}, locale),
     connect: t('cli.audit.refusal.operation.connect', {}, locale), authority: t('cli.audit.refusal.operation.authority', {}, locale) }[operation];
 }
+type RebindSubject = Extract<AuditEvent['subject'], { kind: 'installation-rebind' }>;
+function rebindRow(subject: RebindSubject, locale: Locale): string {
+  const part = { source: t('cli.audit.rebind.part.source', {}, locale), target: t('cli.audit.rebind.part.target', {}, locale) }[subject.part];
+  const phase = { intent: t('cli.audit.rebind.phase.intent', {}, locale), succeeded: t('cli.audit.rebind.phase.succeeded', {}, locale),
+    failed: t('cli.audit.rebind.phase.failed', {}, locale), uncertain: t('cli.audit.rebind.phase.uncertain', {}, locale) }[subject.phase];
+  const change = subject.class === null ? t('cli.audit.rebind.class.none', {}, locale) : {
+    'device-only': t('cli.audit.rebind.class.device-only', {}, locale), moved: t('cli.audit.rebind.class.moved', {}, locale) }[subject.class];
+  const basis = subject.admission === null ? t('cli.audit.rebind.noBasis', {}, locale) : {
+    'open-class': t('cli.identity.basis.open-class', {}, locale), 'human-tty': t('cli.identity.basis.human-tty', {}, locale),
+    'macos-plain': t('cli.identity.basis.macos-plain', {}, locale), 'ai-policy': t('cli.identity.basis.ai-policy', {}, locale) }[subject.admission.basis];
+  return t('cli.audit.rebind.row', { kind: subject.kind, part, phase, class: change, basis }, locale);
+}
+function rebindDetails(subject: RebindSubject, locale: Locale): string[] {
+  return [subject.transition === 'keep' ? t('cli.audit.rebind.transition.keep', {}, locale) : t('cli.audit.rebind.transition.new', {}, locale),
+    ...(subject.admission?.basis === 'ai-policy' ? [t('cli.audit.rebind.policy', { rule: subject.admission.ruleId, revision: subject.admission.policyRevision }, locale)] : []),
+    ...(subject.failure === null ? [] : [t('cli.audit.rebind.failure', { code: subject.failure }, locale)]),
+    ...(subject.projectId === null ? [] : [t('cli.audit.rebind.project', { id: subject.projectId }, locale)]),
+    ...(subject.attachments === null ? [] : [t('cli.audit.rebind.waiting', { count: subject.attachments.waiting }, locale)]),
+    t('cli.audit.rebind.opaque', {}, locale)].map(terminalSafeText);
+}
 /** BeUser S-04: one audit record in words: its number, local time, who, what (the subject kind and its action when it names one) and the policy revision. */
 function auditLine(record: AuditListView['records'][number], locale: Locale, peers: AuditListView['records'] = []): string {
   const subject = record.event.subject, { kind, action: named } = subject as { kind: string; action?: unknown };
   let what = typeof named === 'string' ? `${kind} (${named})` : kind;
   if (subject.kind === 'access-refusal-summary') what = t('cli.audit.refusal.row', { kind, operation: refusalOperation(subject.operationClass, locale),
     source: refusalSource(subject.decisionSource, locale), role: subject.target.role }, locale);
+  if (subject.kind === 'installation-rebind') what = rebindRow(subject, locale);
   const joined = [...new Map(peers.map(peer => [peer.sequence, peer])).values()].filter(peer => auditRefusalMatchesPolicy(record.event, peer.event) || auditRefusalMatchesPolicy(peer.event, record.event));
   if (joined.length) what += ` · ${t('cli.audit.refusal.joined', { sequences: joined.map(peer => `#${peer.sequence}`).join(', ') }, locale)}`;
   return t('cli.audit.list.row', { sequence: record.sequence, at: formatClock(record.event.atMs, locale), who: terminalSafeText(`${record.event.principal.issuer}/${record.event.principal.subject}`),
@@ -141,6 +162,7 @@ async function auditListCommand(argv: readonly string[], context: AdminCommandCo
       { json, ...adminSinks(context), render: () => {
         const subject = record.event.subject;
         return [auditLine(record, locale, view.related),
+          ...(subject.kind === 'installation-rebind' ? rebindDetails(subject, locale) : []),
           ...(subject.kind === 'access-refusal-summary' ? [subject.countBasis === 'at-least' ? t('cli.audit.refusal.countAtLeast', { count: subject.count }, locale) : t('cli.audit.refusal.countExact', { count: subject.count }, locale),
             ...(subject.target.identity === null ? [t('cli.audit.refusal.unresolved', {}, locale)] : []),
             refusalSource(subject.decisionSource, locale)] : []),

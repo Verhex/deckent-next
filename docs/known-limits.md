@@ -846,6 +846,15 @@ are unchanged. Restore the original disk under its recorded device number or res
 A missing owner path or another inode keeps the existing handover rules. This does not repair the personal secret store
 or renew project trust.
 
+### Rebinding audit reader and rollback
+
+beta.2 reads `installation-rebind` v1; beta.2.1 writes it. Each scope reads its own sealed copy. An intent
+without a later succeeded record means starting, never failed. Source success covers only its own records;
+projects may still be waiting. A missing per-project (target) record cannot be detected after a restart. The
+binding identities are opaque and are not resolved by this reader. A rollback to beta.1.2 fails the whole audit
+page with `AUDIT_INTEGRITY`; never prune these records. A policy rule id appears in the audit trail as written
+in the policy file, as in every other audit record; do not put private text in rule ids.
+
 ## Recovery and upgrades
 
 - **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build

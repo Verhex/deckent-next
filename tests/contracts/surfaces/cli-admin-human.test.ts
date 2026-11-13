@@ -1,3 +1,6 @@
+import { randomBytes } from 'node:crypto';
+import { rebindEvent, rebindIds, sealFutureAuditFixture } from '../../fixtures/audit-rebind.js';
+import { createHmacIntegrity } from '#platform/index.js';
 import { refusalSubject } from '../../fixtures/audit-refusal.js';
 import type { AuditListView, AuditEvent } from '#domain/index.js';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -447,7 +450,7 @@ it('audit lists the refusal source and role, shows lower bounds and unresolved t
       expect(await main(['audit', 'list'], listed.context)).toBe(0);
       for (const text of ['access-refusal-summary', 'outside-workspace', source, t('cli.audit.refusal.operation.read', {}, language),
         t('cli.audit.refusal.joined', { sequences: '#9' }, language)]) expect(listed.out.text()).toContain(text);
-      if (source === 'cli-reported') expect(listed.out.text()).toContain(language === 'en' ? 'Deckent did not decide' : 'kararı deckent vermedi');
+      if (source === 'cli-reported') expect(listed.out.text()).toContain(language === 'en' ? 'deckent did not decide' : 'kararı deckent vermedi');
       const shown = io(f, handlers);
       expect(await main(['audit', 'show', '2'], shown.context)).toBe(0);
       for (const text of [t('cli.audit.refusal.countAtLeast', { count: 2 }, language), t('cli.audit.refusal.unresolved', {}, language),
@@ -464,6 +467,75 @@ it('audit lists the refusal source and role, shows lower bounds and unresolved t
       expect(exact.out.text()).toContain(t('cli.audit.refusal.countExact', { count: 2 }, language));
       expect(exact.out.text()).not.toContain(t('cli.audit.refusal.unresolved', {}, language));
       expect(exact.out.text()).toContain(t('cli.audit.refusal.correlationLimited', {}, language));
+    }
+  }
+});
+
+it('audit rebind list/show preserve source and target events in EN/TR, four bases and an unmatched starting record', async () => {
+  const integrity = createHmacIntegrity('fixture-key', randomBytes(32));
+  const events = [
+    rebindEvent(integrity, 'live', 1, { phase: 'intent' }),
+    rebindEvent(integrity, 'live', 2, { class: 'moved', admission: { basis: 'human-tty', witness: null } }),
+    rebindEvent(integrity, 'live', 3, { class: 'moved', admission: { basis: 'macos-plain' } }),
+    rebindEvent(integrity, 'live', 4, { class: 'moved', admission: { basis: 'ai-policy', ruleId: 'repair-rule', policyRevision: 'p7' } }),
+    rebindEvent(integrity, 'live', 5, { part: 'target', previousBinding: null, binding: null, projectId: rebindIds.project,
+      changedFields: ['attachment.location'], attachments: null }),
+    rebindEvent(integrity, 'live', 6, { transition: 'new', installationId: rebindIds.nextInstallation, class: null, admission: null, attachments: null }),
+    rebindEvent(integrity, 'live', 7, { phase: 'failed', failure: 'WRITE_FAILED' }),
+    rebindEvent(integrity, 'live', 8, { phase: 'uncertain', failure: 'WRITE_UNKNOWN' }),
+  ];
+  // Keep the first operation unmatched: no later succeeded event may silently turn its intent into a failure.
+  events[0] = rebindEvent(integrity, 'live', 1, { phase: 'intent', operationId: '00000000-0000-4000-8000-000000000099' });
+  const records = events.map((event, i) => {
+    const stored = sealFutureAuditFixture(event, i + 1, integrity);
+    return { sequence: stored.sequence, event: stored.event };
+  });
+  for (const language of ['en', 'tr'] as const) {
+    const f = await project(undefined, language);
+    const view: AuditListView = { schemaVersion: 1, scopeId: 'live', records, next: null };
+    const listed = io(f, { listAudit: async () => view });
+    expect(await main(['audit', 'list'], listed.context)).toBe(0);
+    const rows = language === 'en' ? [
+      'installation-rebind · source · starting · class: device number only · Basis: open repair class.',
+      'installation-rebind · source · done · class: moved or copied · Basis: person at a terminal.',
+      'installation-rebind · source · done · class: moved or copied · Basis: plain-project exception on macOS.',
+      'installation-rebind · source · done · class: moved or copied · Basis: explicit rebinding rule in the policy file.',
+      'installation-rebind · target · done · class: device number only · Basis: open repair class.',
+      'installation-rebind · source · done · class: no class · no basis',
+      'installation-rebind · source · failed · class: device number only · Basis: open repair class.',
+      'installation-rebind · source · uncertain · class: device number only · Basis: open repair class.',
+    ] : [
+      'installation-rebind · kaynak · başlıyor · sınıf: yalnız aygıt numarası · Dayanak: herkese açık onarım sınıfı.',
+      'installation-rebind · kaynak · bitti · sınıf: taşınmış veya kopyalanmış · Dayanak: terminal başındaki kişi.',
+      'installation-rebind · kaynak · bitti · sınıf: taşınmış veya kopyalanmış · Dayanak: macOS sade proje istisnası.',
+      'installation-rebind · kaynak · bitti · sınıf: taşınmış veya kopyalanmış · Dayanak: politika dosyasında açık yeniden bağlama kuralı.',
+      'installation-rebind · hedef · bitti · sınıf: yalnız aygıt numarası · Dayanak: herkese açık onarım sınıfı.',
+      'installation-rebind · kaynak · bitti · sınıf: sınıf yok · dayanak yok',
+      'installation-rebind · kaynak · başarısız · sınıf: yalnız aygıt numarası · Dayanak: herkese açık onarım sınıfı.',
+      'installation-rebind · kaynak · belirsiz · sınıf: yalnız aygıt numarası · Dayanak: herkese açık onarım sınıfı.',
+    ];
+    for (const row of rows) expect(listed.out.text()).toContain(row);
+    const exported = io(f, { listAudit: async () => view });
+    expect(await main(['audit', 'list', '--json'], exported.context)).toBe(0);
+    expect(JSON.parse(exported.out.text())).toEqual(view);
+    for (const [i, record] of records.entries()) {
+      const single: AuditListView = { ...view, records: [record] }, handler = { listAudit: async () => single };
+      const shown = io(f, handler);
+      expect(await main(['audit', 'show', String(record.sequence)], shown.context)).toBe(0);
+      expect(shown.out.text()).toContain(rows[i]);
+      expect(shown.out.text()).toContain(language === 'en' ? 'Each binding identity is opaque and is not resolved here.' : 'Her bağ kimliği opaktır; burada çözümlenmez.');
+      expect(shown.out.text()).toContain(language === 'en' ? i === 5 ? 'new installation identity' : 'keep installation identity' : i === 5 ? 'yeni kurulum kimliği' : 'kurulum kimliğini koru');
+      if (i === 0) {
+        expect(shown.out.text()).not.toMatch(/done|failed|bitti|başarısız/u);
+        expect(shown.out.text()).toContain(language === 'en' ? 'Projects waiting: 2.' : 'Bekleyen projeler: 2.');
+      }
+      if (i === 3) expect(shown.out.text()).toContain(language === 'en' ? 'Rule id: repair-rule; policy revision: p7.' : 'Kural kimliği: repair-rule; politika revizyonu: p7.');
+      if (i === 4) expect(shown.out.text()).toContain(language === 'en' ? `Project id: ${rebindIds.project}.` : `Proje kimliği: ${rebindIds.project}.`);
+      if (i >= 6) expect(shown.out.text()).toContain(language === 'en' ? `Failure code: ${i === 6 ? 'WRITE_FAILED' : 'WRITE_UNKNOWN'}.` : `Hata kodu: ${i === 6 ? 'WRITE_FAILED' : 'WRITE_UNKNOWN'}.`);
+      const json = io(f, handler);
+      expect(await main(['audit', 'show', String(record.sequence), '--json'], json.context)).toBe(0);
+      expect(JSON.parse(json.out.text())).toEqual(record);
+      expect(JSON.parse(json.out.text()).event).toEqual(events[i]);
     }
   }
 });

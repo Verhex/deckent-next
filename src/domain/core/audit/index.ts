@@ -9,3 +9,7 @@ export type { AuthorityDecisionSubject, AuthorityAdmission } from './internal/au
 export { auditFollowQuerySchema, auditFollowPageSchema } from './internal/follow.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditFollowQuery, AuditFollowPage } from './internal/follow.js';
 export { auditRefusalMatchesPolicy } from './internal/correlation.js';
+export { AUDIT_READER_ONLY_SUBJECTS, rebindAdmissionRecordSchema } from './internal/installation-rebind.js';
+export type { RebindAdmissionRecord } from './internal/installation-rebind.js';
+export { opaqueIdentitySchema } from './internal/opaque-identity.js';
+export type { OpaqueIdentity } from './internal/opaque-identity.js';

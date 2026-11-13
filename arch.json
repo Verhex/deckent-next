@@ -2982,7 +2982,8 @@
     "src/domain/core/audit": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/command"
+        "src/domain/core/command",
+        "src/domain/core/policy"
       ],
       "plan": "SECURITY"
     },
