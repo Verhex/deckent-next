@@ -117,6 +117,7 @@ The shared strict audit subject union reads `access-refusal-summary` v1 through 
 AuditFollow and Nervous re-parsing. This release has no producer, feature flag or backfill; both the audit application writer and the
 seal producer reject this subject. Existing subjects retain their schema and canonical bytes. Refusals remain best effort; this reader
 adds no seal-before-response or stop behaviour.
+Beta.2 reads `installation-rebind` v1 (four bases, fresh class, keyed opaque bindings, per-scope copies); beta.2.1 writes it.
 
 The subject carries `operationClass` (read/write/execute/invoke/connect/authority), optional registered `operation {id, version}` and
 `tool {name, version}`, `decisionSource` (deckent-decision/cli-reported/adapter-reported), open pattern-bounded `reasonCode` and

@@ -138,6 +138,7 @@ Brain context as sealed data (`memoryAutomation.*`, `deckent memory rollout`). A
 at most one `policy-turn` record (refusals and plain allows that ran; bounded lists with exact counts); a turn with no decision writes
 none, and the record is written after the turn, best effort: a refused audit write does not fail the turn. Beta.2 additionally reads strict v1 `access-refusal-summary` records (operation class, source, reason/evidence codes, role + keyed opaque target,
 observation times, exact/lower-bound counts, bounded call samples and overflow); no producer or backfill writes them until beta.2.1.
+Beta.2 reads `installation-rebind` v1 (four bases, fresh class, keyed opaque bindings, per-scope copies); beta.2.1 writes it.
 `audit list/show` distinguish `deckent-decision`, `cli-reported` (the CLI reported it; Deckent did not decide) and `adapter-reported`.
 Verified call identities join policy allows with boundary refusals without rewriting either sealed row; unresolved targets are explicit.
 A read-only auditor identity; safety holds only a person lifts. Nervous and recovery: deterministic detection, a broker that runs

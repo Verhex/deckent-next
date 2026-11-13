@@ -1,4 +1,4 @@
-import { auditEventSchema, AuditError, isAuditorPrincipal, isWorkloadPrincipalRef, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
+import { AUDIT_READER_ONLY_SUBJECTS, auditEventSchema, AuditError, isAuditorPrincipal, isWorkloadPrincipalRef, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { sealAuditRecord, verifyAuditRecord } from './integrity.js';
 import type { AuditStore } from './store.js';
@@ -20,8 +20,8 @@ export class AuditApplication {
     const parsed = auditEventSchema.safeParse(input);
     // S5: the read-only auditor writes no audit event (its own finding stream is a later, separate slice); an event naming it is refused.
     // S6R-2: a `recovery-detection` comes only from Nervous, and Nervous records nothing else (it writes no state).
-    // Reader-first release: no producer may emit this subject until beta.2.1.
-    if (!parsed.success || parsed.data.subject.kind === 'access-refusal-summary' || isAuditorPrincipal(parsed.data.principal)
+    // Reader-first release: no producer may emit these subjects until beta.2.1.
+    if (!parsed.success || AUDIT_READER_ONLY_SUBJECTS.includes(parsed.data.subject.kind) || isAuditorPrincipal(parsed.data.principal)
       || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')
       // S6R-4: a lost task's continuation comes only from the recovery principal; S6R-5: so does its decision seal. It records nothing else.
       || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-decision'
