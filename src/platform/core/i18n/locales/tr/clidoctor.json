@@ -1,4 +1,10 @@
 {
+  "doctor.check.plugins.unavailable": "Yerleşik eklenti kayıtları okunamadı; tarama tamamlanmadı.",
+  "doctor.check.plugins.name": "Kaydedilen yeni yerleşik eklenti: {name} (CLI {version}); kabul edildi, incelenmedi.",
+  "doctor.check.plugins.count": "{count} kayıtlı çağrı yeni yerleşik eklenti adı bildirdi; adlar için içerik okuma izni gerekir.",
+  "doctor.check.plugins.more": "+{count} kayıtlı ad daha",
+  "doctor.check.plugins.incomplete": "Yerleşik eklenti geçmişi tam değil (tarama tavanı veya silinmiş içerik).",
+  "doctor.check.plugins.none": "İncelenen çağrı kayıtlarında yeni yerleşik eklenti adı yok.",
   "cli.workers.heading": "İşçi gözlemi: {time}",
   "cli.workers.notice": "Yalnız gözlem. Canlılık sinyalinin tazeliği ve bildirilen sonuç görev kabulünü kanıtlamaz.",
   "cli.workers.source": "Kaynak {source} ({path}): {status}",

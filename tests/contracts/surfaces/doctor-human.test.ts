@@ -501,3 +501,19 @@ it('BeUser D-01: doctor never prescribes `runtime restart` while a worker image 
   const building = row({ imageBuilding: true });
   expect(building.next).toBe('/setup'); expect(building.text).toContain('a worker image build is running');
 });
+
+it('shows bounded recorded plugin names or blind call counts and never says none for incomplete history (EN/TR)', () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const nativePlugins = { calls: 2, hiddenCalls: 0, names: [{ cliVersion: '2.1.fixture', name: 'new-plugin' }], omitted: '0', complete: true };
+    const rows = (value: typeof nativePlugins) => doctorChecks(report, facts({ nativePlugins: value }), locale).filter(row => row.id === 'work.nativePlugins');
+    expect(rows(nativePlugins).map(row => row.text)).toEqual([t('doctor.check.plugins.name', { name: 'new-plugin', version: '2.1.fixture' }, locale)]);
+    const blind = rows({ ...nativePlugins, names: [], hiddenCalls: 2 });
+    expect(blind.map(row => row.text)).toEqual([t('doctor.check.plugins.count', { count: 2 }, locale)]);
+    expect(JSON.stringify(blind)).not.toContain('new-plugin');
+    expect(rows({ ...nativePlugins, names: [], calls: 0, complete: false }).map(row => row.text)).toEqual([t('doctor.check.plugins.incomplete', {}, locale)]);
+    const many = rows({ ...nativePlugins, names: Array.from({ length: 6 }, (_, i) => ({ cliVersion: '2.1.fixture', name: `plugin-${i}` })) });
+    expect(many).toHaveLength(6); expect(many.at(-1)!.text).toBe(t('doctor.check.plugins.more', { count: 1 }, locale));
+    const exact = rows({ ...nativePlugins, omitted: '27021597764222973', names: Array.from({ length: 6 }, (_, i) => ({ cliVersion: '2.1.fixture', name: `plugin-${i}` })) });
+    expect(exact.at(-1)!.text).toBe(locale === 'en' ? '+27021597764222974 more recorded names' : '+27021597764222974 kayıtlı ad daha');
+  }
+});

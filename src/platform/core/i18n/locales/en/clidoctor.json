@@ -1,4 +1,10 @@
 {
+  "doctor.check.plugins.unavailable": "Built-in plugin records could not be read; not complete.",
+  "doctor.check.plugins.name": "Recorded new built-in plugin: {name} (CLI {version}); accepted, not reviewed.",
+  "doctor.check.plugins.count": "{count} recorded calls named new built-in plugins; names need content-read permission.",
+  "doctor.check.plugins.more": "+{count} more recorded names",
+  "doctor.check.plugins.incomplete": "Built-in plugin history is not complete (scan ceiling or purged content).",
+  "doctor.check.plugins.none": "No new built-in plugin names in the inspected invocation records.",
   "cli.workers.heading": "Worker observation at {time}",
   "cli.workers.notice": "Observe only. Heartbeat freshness and a reported result do not prove task acceptance.",
   "cli.workers.source": "Source {source} ({path}): {status}",

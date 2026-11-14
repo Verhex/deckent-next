@@ -379,7 +379,12 @@
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/native-connection",
         "src/surfaces/core/terminal-provider",
-        "src/composition/core/model-inspection"
+        "src/composition/core/model-inspection",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/engine/core/authentication",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/composition/core/policy"
       ],
       "plan": "SURFACES"
     },
@@ -1465,7 +1470,8 @@
         "src/domain/core/provider-spend",
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
-        "src/surfaces/core/siwc"
+        "src/surfaces/core/siwc",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -2959,7 +2965,8 @@
     "src/domain/core/worker-event": {
       "dependencies": [
         "src/domain/core/provider-catalog",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation"
       ],
       "plan": "CONTRACT"
     },
@@ -3205,7 +3212,9 @@
         "src/adapters/core/recovery-case-store",
         "src/domain/core/recovery",
         "src/platform/core/validate",
-        "src/engine/core/workspace-patch-contract"
+        "src/engine/core/workspace-patch-contract",
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/i18n"
       ],
       "plan": "MONITOR"
     },
@@ -3258,7 +3267,8 @@
         "src/domain/core/work-cost",
         "src/surfaces/core/recovery-text",
         "src/surfaces/core/terminal-host",
-        "src/surfaces/core/terminal-kit-ink"
+        "src/surfaces/core/terminal-kit-ink",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "MONITOR",
       "ink": false

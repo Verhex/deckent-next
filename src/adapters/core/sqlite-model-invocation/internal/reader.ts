@@ -16,6 +16,19 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
   async loadReceipt(scopeInput: string, commandInput: string) {
     return loadInvocationCommandRecord(this.db, scopeInput, commandInput);
   }
+  async loadObservationPage(scopeInput: string, after: string | null, limit: number) {
+    const scopeId = invocationIdentity(scopeInput);
+    if (!Number.isSafeInteger(limit) || limit < 1 || after !== null && invocationIdentity(after) !== after) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+    return ledgerTransaction(this.db, async () => {
+      const rows = this.db.prepare(`SELECT i.invocation_id FROM model_invocations i JOIN model_invocation_plan_usage u
+        ON u.scope_id=i.scope_id AND u.invocation_id=i.invocation_id
+        WHERE i.scope_id=? AND (? IS NULL OR i.invocation_id>?) ORDER BY i.invocation_id LIMIT ?`).all(scopeId, after, after, limit + 1);
+      const selected = rows.slice(0, limit);
+      const records = [];
+      for (const row of selected) records.push((await this.loadInspection(scopeId, invocationIdentity(row.invocation_id)))!);
+      return { records, next: rows.length > limit ? invocationIdentity(selected.at(-1)!.invocation_id) : null };
+    }, { mode: 'read', join: true, unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
+  }
   async loadInspection(scopeInput: string, invocationInput: string) {
     const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
     // A read transaction binds control/outcome and financial rows to one snapshot without a writer lock.
@@ -43,7 +56,7 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
       const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending,
         ...(record.receipt.profile.schemaVersion !== 1 ? { planUsage } : {}) });
       return result;
-    }, { mode: 'read', unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
+    }, { mode: 'read', join: true, unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
   }
 
   close() { this.db.close(); }

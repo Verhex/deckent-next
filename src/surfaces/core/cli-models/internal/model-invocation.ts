@@ -1,7 +1,8 @@
+import { nativePaidUsageText } from '#capabilities/index.js';
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { readHeadlessEgress, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
-  type ModelInvocationPlanUsage, type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
+  type ModelInvocationPlanUsageRead, type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationInspection, ProviderSpendReservation } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -77,8 +78,25 @@ function renderEgress(item: ModelInvocationInspection, locale: Locale): string[]
   return egress ? [t('models.invocation.headlessEgress', { connected: egress.connected, refused: egress.refused, other: egress.other,
     hosts: Object.keys(egress.hosts).map(host => terminalSafeText(host)).join(', ') || '-' }, locale)] : [];
 }
+function renderObservation(usage: ModelInvocationPlanUsageRead | null | undefined, locale: Locale): string[] {
+  const observation = usage?.schemaVersion === 2 ? usage.observation : null;
+  if (!observation) return [];
+  const singleLine = (value: string, max: number) => {
+    const chars = [...terminalSafeText(value).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '')];
+    return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('') || '…';
+  };
+  const plugins = observation.builtinPlugins, shown = plugins?.names.slice(0, 4) ?? [];
+  return [
+    ...(observation.cliVersion ? [t('models.invocation.observationVersion', { version: singleLine(observation.cliVersion, 64) }, locale)] : []),
+    ...(shown.length ? [t('models.invocation.observationPlugins', { names: shown.map(name => singleLine(name, 128)).join(', ') }, locale)] : []),
+    ...(plugins && plugins.names.length + plugins.omitted > shown.length ? [shown.length
+      ? t('headless.agent.builtinPluginsMore', { count: plugins.names.length + plugins.omitted - shown.length }, locale)
+      : t('models.invocation.observationCount', { count: plugins.names.length + plugins.omitted }, locale)] : []),
+    ...(observation.paidExtraUsage ? [nativePaidUsageText(observation.paidExtraUsage, locale)] : []),
+  ];
+}
 function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null,
-  control?: ModelInvocationControlRecord | null, spending?: ProviderSpendReservation | null, historyIntegrity?: 'not-recorded', planUsage?: ModelInvocationPlanUsage | null): string {
+  control?: ModelInvocationControlRecord | null, spending?: ProviderSpendReservation | null, historyIntegrity?: 'not-recorded', planUsage?: ModelInvocationPlanUsageRead | null): string {
   if (!receipt) return [t('models.invocation.absent', {}, locale),
     ...(historyIntegrity === 'not-recorded' ? [t('models.invocation.historyIntegrityNotRecorded', {}, locale)] : [])].join('\n');
   const state = receipt.outcome === null ? t('models.invocation.claimed', {}, locale)
@@ -116,7 +134,7 @@ export async function modelInvocationCommand(argv: readonly string[], context: M
     let query; try { query = parseModelInvocationQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.inspectModelInvocation(root, query, options);
     emit(result, { ...sinks, json: args.json, render: item => [render(item.invocation, locale, undefined, item.purge, item.control, item.spending, item.historyIntegrity, item.planUsage),
-      ...renderEgress(item, locale)].join('\n') });
+      ...renderEgress(item, locale), ...renderObservation(item.planUsage, locale)].join('\n') });
   } else if (args.action === 'purge-content') {
     if (!context.purgeModelInvocationContent) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationPurgeCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
