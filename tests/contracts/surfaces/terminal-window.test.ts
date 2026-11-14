@@ -56,7 +56,7 @@ function Stacked({ log, typed }: { readonly log: string[]; readonly typed: strin
 describe('terminal window stack', () => {
   it('108: every navigation key ends typed text; Tab, Esc and Ctrl+C retain their owner meaning', async () => {
     const answers: string[] = [], seen: string[] = [];
-    const view = mount(createElement(DecisionArmLabelsContext.Provider, { value: { arming: 'ARMING', ignored: 'IGNORED', typedText: 'TEXT-IS-NOT-AN-ANSWER' } },
+    const view = mount(createElement(DecisionArmLabelsContext.Provider, { value: { arming: 'ARMING', ignored: 'IGNORED', typedText: 'TEXT-IS-NOT-AN-ANSWER', unchosen: 'NOTHING-CHOSEN' } },
       createElement(Window, { title: [span('Decision')], hints: 'CHOICES', position: '', decision: true,
         body: Array.from({ length: 40 }, (_, index) => ({ spans: [span(`ROW-${index}`)] })), onClose: () => { answers.push('closed'); },
         onInput: (input, key) => { if (key.tab) { seen.push('tab'); return true; } if (key.ctrl && input === 'c') { answers.push('no'); return true; }
@@ -71,6 +71,10 @@ describe('terminal window stack', () => {
       await view.press(recovery); expect(seen.at(-1)).toBe('navigation');
       await view.press('y'); expect(answers).toHaveLength(count + 1);
     }
+    await view.press('/'); await view.press('\r'); expect(view.frame()).toContain('NOTHING-CHOSEN'); expect(view.frame()).toContain('CHOICES');
+    await view.press('\u001bz'); expect(view.frame()).toContain('NOTHING-CHOSEN'); // An unhandled control chord does not clear the note.
+    await view.press('\t'); expect(view.frame()).not.toContain('NOTHING-CHOSEN'); // A taken key clears it.
+    await view.press('/'); await view.press(DOWN); expect(view.frame()).toContain('CHOICES'); expect(view.frame()).not.toContain('NOTHING-CHOSEN');
     await view.press('/'); await view.press(ESC); expect(answers.at(-1)).toBe('closed');
     await view.press('\u0003'); expect(answers.at(-1)).toBe('no');
   });

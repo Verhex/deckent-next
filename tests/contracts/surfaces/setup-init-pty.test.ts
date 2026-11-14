@@ -73,11 +73,11 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
       const home = await mkdtemp(join(tmpdir(), 'deckent-init-consent-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-consent-root-'));
       roots.push(home, root);
       await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'erp-demo' }));
-      const copy = locale === 'en' ? { keys: 'Enter confirm', folder: '> 3. Folder and scope', hint: 'Text typed here is not an answer.', profile: '> 5. Who uses this installation', yes: 'Yes (y)' }
-        : { keys: 'Enter onayla', folder: '> 3. Klasör ve kapsam', hint: 'Buraya yazılan metin bir cevap değildir.', profile: '> 5. Kurulumu kim kullanacak', yes: 'Evet (y)' };
+      const copy = locale === 'en' ? { keys: 'Enter confirm', folder: '> 3. Folder and scope', hint: 'Text typed here is not an answer.', unchosen: 'Nothing was chosen.', profile: '> 5. Who uses this installation', yes: 'Yes (y)' }
+        : { keys: 'Enter onayla', folder: '> 3. Klasör ve kapsam', hint: 'Buraya yazılan metin bir cevap değildir.', unchosen: 'Hiçbir şey seçilmedi.', profile: '> 5. Kurulumu kim kullanacak', yes: 'Evet (y)' };
       // DRIVER writes each character separately, waits for armed hints and leaves 150 ms between stdin reads.
       // A fresh home opens on the language step: Enter accepts its recommended answer, then the folder question takes the typed text.
-      const steps = [[copy.keys, '\r'], [copy.folder, '/task /policy\r'], [copy.hint, '\r'], [copy.profile, '\u001b']];
+      const steps = [[copy.keys, '\r'], [copy.folder, '/task /policy'], [copy.hint, '\r'], [copy.unchosen, '\r'], [copy.profile, '\u001b']];
       const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
       const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--lang', locale]), root],
         { env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
@@ -86,7 +86,8 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
       const screen = (mark: number) => terminalBuffers(run.output.slice(0, run.marks[mark]!), COLUMNS, ROWS).text;
       expect(screen(1)).toContain(copy.folder); expect(screen(1)).toContain(copy.yes);
       expect(screen(2)).toContain(copy.folder); expect(screen(2)).toContain(copy.hint); expect(screen(2)).toContain(copy.yes);
-      expect(screen(3)).toContain(copy.profile);
+      expect(screen(3)).toContain(copy.folder); expect(screen(3)).toContain(copy.unchosen); expect(screen(3)).toContain(copy.keys); expect(screen(3)).not.toContain(copy.hint);
+      expect(screen(4)).toContain(copy.profile);
       expect(await readdir(root)).toEqual(['package.json']);
     }
   }, 240_000);

@@ -6,7 +6,7 @@ import type { CardCopyLabels, DecisionArmLabels, QuestionOption } from '#surface
 
 /** Catalog feedback shared by standalone decision-card hosts. */
 export function decisionArmLabels(locale: Locale): DecisionArmLabels {
-  return { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale) };
+  return { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale), unchosen: t('terminal.decision.unchosen', {}, locale) };
 }
 
 /** One answer of a CLI card (the terminal's question option): a yes/no answer declares `role` (the card shows and takes (y)/(n)); others may show a `key`. */

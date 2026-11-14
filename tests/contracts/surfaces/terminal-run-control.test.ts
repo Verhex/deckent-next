@@ -4,7 +4,7 @@ import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.j
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli-terminal/index.js';
 import { runControlActions } from '#surfaces/core/terminal-work/index.js';
-import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { exitTypedText, mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 // Y1 (owner 2026-10-14): the Runs window's hold / resume / close keys. Each key opens a y/N card; only a single typed y sends the command to
 // the same lifecycle application as `deckent run hold|resume|close`, which authorizes it and checks the Run's state at the shown revision.
@@ -52,7 +52,9 @@ describe('Runs window control keys', () => {
     await press(h, 'h', 120);
     await until(() => h.stdout.frame.includes('Hold run 3f2a9c1e: Fix checkout?'), 'hold card');
     expect(h.stdout.frame).toContain(EN.runControl!.holdDetail.slice(0, 40)); expect(h.stdout.frame).toContain('State running · revision 7');
-    for (const keys of [CTRL_Y, `${ESC}y`, `${CTRL_O}y`]) { await press(h, keys, 100); expect(control).not.toHaveBeenCalled(); }
+    for (const keys of [CTRL_Y, `${ESC}y`]) { await press(h, keys, 100); expect(control).not.toHaveBeenCalled(); expect(h.stdout.frame).not.toContain('Text typed here'); }
+    await press(h, `${CTRL_O}y`, 100); expect(control).not.toHaveBeenCalled();
+    await exitTypedText(h, 'en', EN.runControl!.holdPrompt); expect(control).not.toHaveBeenCalled();
     expect(h.stdout.frame).toContain('Hold run 3f2a9c1e');
     await press(h, 'y', 150);
     await until(() => h.stdout.frame.includes('HELD-RESULT'), 'result as window status');

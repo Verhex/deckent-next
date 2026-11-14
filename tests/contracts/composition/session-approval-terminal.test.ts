@@ -1,3 +1,4 @@
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { appendFileSync } from 'node:fs';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -19,7 +20,7 @@ import { SessionStanding, RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceRequestS
 import { clearConfigCache, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
 import { agentTurnStreamEventSchema, type AgentTurnStreamEvent } from '#domain/index.js';
-import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { exitTypedText, mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 beforeEach(async context => {
@@ -110,7 +111,7 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   const context = { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' };
   const view = mountWorkline({ context, ledger, fullAccess: settings.fullAccess === true, sessions: { async save(input) { snapshots.set(input.sessionId, input.messages); },
     async list() { return [...snapshots].map(([sessionId, messages]) => ({ sessionId, messages: messages.length, updatedAtMs: Date.now(), preview: 'saved' })); },
-    async load(id) { return snapshots.get(id) ?? null; } }, labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) },
+    async load(id) { return snapshots.get(id) ?? null; } }, labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale), decisionArm: decisionArmLabels(locale) },
     streamTurn: (messages, signal, turn) => streamTerminalAgentTurn({ projectRoot: project, scopeId: 'scope', options: { env }, messages, signal,
       ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}),
       ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, { chatTurn: (_root, command, emit, _options, signal) => client.chatTurn(command, emit, signal),
@@ -144,6 +145,8 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## real producer approval window (${locale})\n${f.view.stdout.frame}\n`);
   // Slice 2: the card holds the keyboard by itself (arming is covered by terminal-decision-race); a scope it does not offer is no answer.
   await settle(60); await f.decide('a'); await settle(40);
+  expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
+  await exitTypedText(f.view, locale, locale === 'en' ? 'Enter confirm' : 'Enter onayla');
   expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
   await f.type('s');
   // T2 integration: notices name the short approval id (first 8 characters of the UUID); the full id is the detail line of the decision notice.
@@ -240,6 +243,7 @@ it('a static hard-floor card offers neither s nor always and rejects forged sess
     decision: 'allow', reason: 'Must refuse', standing: 'session', decisionCapability: card.decisionCapability })).rejects.toMatchObject({ code: 'APPROVAL_INVALID' });
   expect(f.rows('SELECT snapshot FROM approvals').map(row => JSON.parse(String(row.snapshot)).status)).toEqual(['pending']);
   const sent = f.requests.length; await settle(100); await f.decide('sa'); await settle(40); expect(f.requests.length).toBe(sent);
+  await exitTypedText(f.view); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
   await f.type('N'); await until(() => f.view.stdout.text.includes('Done 1.'), 'floor denied');
   await expect(readFile(join(f.project, 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 }, 20000);
@@ -260,6 +264,7 @@ it('company-required approval that standing cannot lower never offers a session 
   const card = f.events.find(e => e.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   expect(card.risk).toBe('edit-self-source'); expect(card.standing).toBeUndefined();
   await settle(100); await f.decide('s'); await settle(40); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
+  await exitTypedText(f.view); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
   await f.type('N'); await until(() => f.view.stdout.text.includes('Done 1.'), 'company denial');
 }, 20000);
 

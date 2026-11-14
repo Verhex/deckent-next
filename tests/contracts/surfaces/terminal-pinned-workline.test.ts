@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { render, Text } from 'ink';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
-import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { exitTypedText, mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -113,7 +113,7 @@ describe('pinned Workline terminal', () => {
     view.stdin.write(`${SWITCH}y`); await settle(60); expect(decisions).toEqual([]); expect(view.stdout.frame).toContain('INPUT-FOCUS');
     view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
     view.stdin.write('y'); await settle(60); expect(decisions).toEqual([]); // back on the card it re-arms: a key at once is no decision
-    await settle(DECISION_ARM_DEFAULT + 80); await until(() => view.stdout.frame.includes('Enter confirm'), 'card armed (its keys show)'); view.stdin.write('y');
+    await exitTypedText(view); expect(decisions).toEqual([]); expect(created).toBe(0); view.stdin.write('y');
     await until(() => decisions.length === 1, 'approve the original visible card');
     expect(decisions).toEqual(['allow']); await until(() => plans === 2, 'only then replay admission'); expect(created).toBe(1);
   });

@@ -50,8 +50,9 @@ wait('Enter confirm', after=out.index(b'remembered for npm test'))
 # TERMINAL-SABIT-DUZEN slice 2: the card takes the keyboard by itself; the 0.4 s quiet wait above outlasts its arming.
 for group in keys.split(';'):
     token, _, expect = group.partition('=')
+    since = len(out)
     typed(token)
-    if expect: wait(expect)
+    if expect: wait(expect, after=since)
     # Always drain the terminal while waiting: a full pty buffer would block the child's repaint and with it the next key.
     read_for(0.8)
 os.write(fd, b'\x03'); time.sleep(0.2); os.write(fd, b'\x03')
@@ -87,8 +88,8 @@ describe.skipIf(process.platform === 'win32')('scoped approval card on a real ps
     expect(result.decisions).toEqual(['appr-pty allow always']);
   });
   it('a scope the card did not offer is not a key (a does nothing), s is the session scope, and a refused save is shown with its reason', async () => {
-    const result = await run('a;s=S-NOT-SAVED-SESSION appr-pty STANDING_DELEGATION', { SCOPES: 'session', SAVED: 'no' });
-    for (const row of ['Yes, once (y)', 'Yes, for this session', 'No (n)']) expect(result.output).toContain(row); expect(result.output).not.toContain('Always allow in this project');
+    const result = await run('a=Text typed here is not an answer.;\r=Nothing was chosen.;s=S-NOT-SAVED-SESSION appr-pty STANDING_DELEGATION', { SCOPES: 'session', SAVED: 'no' });
+    for (const row of ['Text typed here is not an answer.', 'Nothing was chosen.', 'Enter confirm', 'Yes, once (y)', 'Yes, for this session', 'No (n)']) expect(result.output).toContain(row); expect(result.output).not.toContain('Always allow in this project');
     expect(result.decisions).toEqual(['appr-pty allow session']);
   });
   it('y stays a single allow without a scope', async () => {
