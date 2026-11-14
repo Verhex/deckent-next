@@ -488,7 +488,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
 }), {
   AUTHENTICATION_REQUIRED: { category: 'error', refusal: 'authentication', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
   AUTHENTICATION_SCOPE_DENIED: { category: 'error', refusal: 'authentication', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
-  POLICY_UNAVAILABLE: { category: 'error', refusal: 'policy-unavailable', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
+  POLICY_UNAVAILABLE: { category: 'error', refusal: 'policy-unavailable', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l), suggestion: t('remedy.POLICY_UNAVAILABLE', { ...p, scope: typeof p['scope'] === 'string' ? p['scope'] : '<id>' }, l) }) },
 }, plainErrors('error.', { POLICY_DELEGATION_STEP_INVALID: 'error', POLICY_DELEGATION_CONFLICT: 'error' }), {
   // BeUser ZEY-02/D-04/E-05: a CLI refusal may carry the missing cell (operation, or cell + founder family) and its founder-baseline next step; the code stays.
   POLICY_DENIED: { category: 'error', refusal: 'policy-denied', render: (p, l) => ({ message: p['operation'] !== undefined ? t('error.POLICY_DENIED.operation', p, l) : p['cell'] !== undefined ? t('error.POLICY_DENIED.founder', p, l) : t('error.POLICY_DENIED', p, l) }) },

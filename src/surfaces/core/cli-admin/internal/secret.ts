@@ -205,6 +205,8 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
     notice(); emit(removed, { ...sinks, render });
     return;
   }
+  // Readiness precedes custody preparation and the hidden value prompt; the writer still rechecks on send.
+  await context.describeRuntimeService?.(root, options);
   if (vault === 'main' && context.prepareMainSecret) {
     const custody = await context.prepareMainSecret(root, resolved.scopeId, options);
     if (custody.state !== 'ready') throw ErrorRegistry.createError(custody.code ?? 'SECRET_STORE_UNAVAILABLE', {

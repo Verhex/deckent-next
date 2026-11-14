@@ -1289,5 +1289,6 @@
   "error.MCP_TOOL_SUMMARY_UNAVAILABLE": "Sunucu {name} aracını listeliyor ancak tanım özeti mevcut değil. Sabitlemeden önce araç listesini yenileyin; güven kararı kaydedilmedi.",
   "error.SECRET_PROJECT_TARGET_CHANGED": "Bu anahtar izni için gösterilen proje değişti. İzin verilmedi, kasa devredilmedi. Kartı yeniden açıp projeyi kontrol edin.",
   "secret.project.sharedWorktrees": "Bu depo ve worktree’leri bu anahtar iznini paylaşır. Çalıştığınız klasör: {workingFolder}.",
-  "secret.project.workingFolder": "Çalıştığınız klasör: {workingFolder}."
+  "secret.project.workingFolder": "Çalıştığınız klasör: {workingFolder}.",
+  "remedy.POLICY_UNAVAILABLE": "Yeni bir klasörde politikayı `deckent init policy --scope {scope} --apply` ile kurun, ardından aynı kapsamla yeniden deneyin. Bu klasörde zaten politika varsa güvenilir politika ve bağlarını geri yükleyin; üzerlerine yazmayın."
 }

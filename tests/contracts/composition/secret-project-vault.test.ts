@@ -205,6 +205,16 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     git(root, 'init', '-q', '-b', 'main'); git(root, 'add', 'README'); git(root, 'commit', '-q', '-m', 'init');
     const tree = join(base, 'repo-wt');
     git(root, 'worktree', 'add', '-q', tree, '-b', 'side');
+    // First grant in a fresh worktree: the raw policy refusal must reach the person through the catalog, before a consent card.
+    const failure = await inspectSecretProjectTarget(tree, 'scope', { env }).catch(error => error);
+    expect(failure).toBeInstanceOf(platform.DeckentError);
+    for (const locale of ['en', 'tr'] as const) {
+      let text = '';
+      expect(await platform.reportFatal(failure, { root: tree, env, locale, stderr: { write: chunk => { text += chunk; } } })).toBe(1);
+      expect(text).toContain('[POLICY_UNAVAILABLE]'); expect(text).not.toContain('[UNKNOWN]');
+      expect(text).toContain('deckent init policy --scope scope --apply');
+      expect(text).toContain(platform.t('error.POLICY_UNAVAILABLE', {}, locale));
+    }
     await mkdir(join(tree, '.deckent'), { recursive: true, mode: 0o700 });
     for (const file of ['config.json', 'policy.json']) await cp(join(root, '.deckent', file), join(tree, '.deckent', file));
     await installed(tree);

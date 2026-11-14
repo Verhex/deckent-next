@@ -83,14 +83,14 @@ it('the recovery state line (doctor, monitor map) names both protected modes, th
   const state = (recovery: 'off' | 'shadow' | 'live', grant: 'present' | 'missing' | 'partial' | 'unknown') => recoveryModeState({ nervous: 'live', recovery }, grant);
   expect(state('live', 'present').continuation).toBe('automatic'); expect(state('live', 'missing').continuation).toBe('person');
   expect(state('shadow', 'missing').continuation).toBe('recorded'); expect(state('off', 'present').continuation).toBe('none');
-  expect(recoveryStateLines(state('live', 'missing'), 'en')).toEqual(['Lost-worker recovery: safety system live · recovery live · standing grant missing',
+  expect(recoveryStateLines(state('live', 'missing'), 'en')).toEqual(['Lost-worker recovery: safety system live · recovery live · standing grant missing.',
     'Without the standing grant every lost-worker case goes to a person.']);
   expect(recoveryStateLines(state('live', 'present'), 'tr')[0]).toContain('kalıcı onay var');
   const install = { id: 'current', path: '/p', status: 'ok', scopeIds: ['s'], service: null, ledgerVersion: 66, runs: [], workers: [], approvals: [], pools: [], diagnostics: [],
     map: { config: [], registry: { profiles: [], kinds: [] }, models: [], policy: null, memory: { available: false }, recovery: state('live', 'missing') } };
   const text = mapBlocks([install as never], 'en', { ok: '+', off: 'o', warn: '!', next: '->', sep: '|' })
     .flatMap(block => block.kind === 'line' ? [block.line.map(item => item.text).join('')] : []).join('\n');
-  expect(text).toContain('! Lost-worker recovery: safety system live · recovery live · standing grant missing');
+  expect(text).toContain('! Lost-worker recovery: safety system live · recovery live · standing grant missing.');
   expect(text).toContain('every lost-worker case goes to a person');
 });
 

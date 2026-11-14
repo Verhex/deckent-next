@@ -453,5 +453,6 @@
   "cli.audit.rebind.opaque": "Each binding identity is opaque and is not resolved here.",
   "cli.audit.rebind.policy": "Rule id: {rule}; policy revision: {revision}.",
   "cli.audit.rebind.failure": "Failure code: {code}.",
-  "cli.audit.rebind.project": "Project id: {id}."
+  "cli.audit.rebind.project": "Project id: {id}.",
+  "cli.runtime.restartWaiting": "Waiting for the deckent service to restart: draining any running service, then waiting for the new service to answer."
 }

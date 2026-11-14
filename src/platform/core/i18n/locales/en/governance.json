@@ -1289,5 +1289,6 @@
   "error.MCP_TOOL_SUMMARY_UNAVAILABLE": "The server lists tool {name}, but its definition summary is unavailable. Refresh the tool list before pinning it; no trust decision was saved.",
   "error.SECRET_PROJECT_TARGET_CHANGED": "The project shown for this key permission has changed. Nothing was granted or handed over. Open the card again and check the project.",
   "secret.project.sharedWorktrees": "This repository and its worktrees share this key permission. Current working folder: {workingFolder}.",
-  "secret.project.workingFolder": "Current working folder: {workingFolder}."
+  "secret.project.workingFolder": "Current working folder: {workingFolder}.",
+  "remedy.POLICY_UNAVAILABLE": "For a new folder, set up its policy with `deckent init policy --scope {scope} --apply`, then retry with the same scope. If this folder already has a policy, restore its trusted policy and bindings; do not replace them."
 }

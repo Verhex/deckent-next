@@ -1,7 +1,7 @@
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
+import { configuredSecretResolver, ErrorRegistry, isCodedError, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
   localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openProjectVaultStore, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readProjectDeck } from '#adapters/index.js';
 import { assessProjectVaultOwnership, assertPublicSecretName, assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
@@ -44,7 +44,11 @@ export async function resolveProjectVaultAnchor(context: ProjectSecretContext, o
 /** Read-only target shown before consent: no vault, identity or grant is created. */
 export async function inspectSecretProjectTarget(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<SecretProjectTarget> {
   const workingFolder = (await directoryLocation(projectRoot))?.canonicalRoot ?? projectRoot;
-  const context = await loadConfiguredScopeContext(workingFolder, scopeId, options, 'read'), anchor = await resolveProjectVaultAnchor(context, options);
+  const context = await loadConfiguredScopeContext(workingFolder, scopeId, options, 'read').catch(error => {
+    if (isCodedError(error, 'POLICY_UNAVAILABLE')) throw ErrorRegistry.createError('POLICY_UNAVAILABLE', { params: { scope: scopeId }, cause: error });
+    throw error;
+  });
+  const anchor = await resolveProjectVaultAnchor(context, options);
   if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
   return Object.freeze({ anchor, workingFolder });
 }
