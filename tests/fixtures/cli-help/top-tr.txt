@@ -1,13 +1,12 @@
 Kullanım: deckent <komut> [seçenekler]
 
-Yüzeyler (tek kurulum, aynı tipli işlemler):
-  deckent             gerçek terminalde etkileşimli terminal; pipe’ta bu
-                      yardım
+Kullanım yolları (tek kurulum, girdi ve sonuçları denetlenen aynı işlemler):
+  deckent             gerçek terminalde etkileşimli oturum; başka komuta
+                      boruyla (pipe) bağlandığında bu yardım
   deckent <komut>     bu CLI: bir çağrı, bir sonuç; insan için metin, betik ve
-                      AI ajanları için --json
-  deckent-mcp         MCP sunucusu: deckent işlemleri AI istemcilerine araç
-                      olarak; hangilerini kullanacaklarını
-                      yetki politikası izni belirler
+                      yapay zekâ (AI) ajanları için --json
+  deckent-mcp         MCP sunucusu: işlemleri yapay zekâ istemcilerine araç
+                      olarak sunar; araçları yetki politikası izni belirler
 
 Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
 
@@ -20,14 +19,14 @@ Başlarken:
       [--json] [--yes --scope <id>] [--preview] [--profile <dosya>]
 
 İzleme:
-  report      İş maliyet ve kabul kanıtını incele
+  report      Çalışmanın maliyet ve kabul kanıtını incele
       [--scope <id>] [--run <id>] [--verbose]
-  monitor     Kurulumları ve işleri izle
+  monitor     Kurulumları ve çalışmaları izle
       [--once|--json] [--scope <id>]
   workers     İşçileri listele veya izle (eylemsiz: list)
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
-  memory      Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler
+  memory      Kapsamın hafıza günlüğünü oku ve düzenle: bilgiler ve dersler
       search | inspect | propose | verify | retire | review | purge | rollout
       [--scope <id>] [--state <ad>] [--json]
   agents      Kapsamın ajan ve beceri (skill) tanımlarını oku ve tanımla
@@ -38,7 +37,7 @@ Başlarken:
       [--scope <id>] [--json]
 
 İş yürütme:
-  beuser      İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.
+  beuser      Yalıtılmış ürün yolculuğunu yürü veya kalıcı raporunu oku.
       setup | walk | report
       <setup|walk|report>
   hub         İmzalı Hub paketlerini ve kaynaklarını yönetin.
@@ -47,7 +46,7 @@ Başlarken:
       [--scope <id>] [--input <dosya|->]
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
       --request <metin> [--scope <id>]
-  run         İş oluştur ve yönet
+  run         Çalışma oluştur ve yönet
       list | create | propose | inspect-proposal | reserve | inspect | cancel |
       close | hold | resume
       [--scope <id>] [--id <id>]
@@ -79,7 +78,8 @@ Onaylar:
   approval    Onay isteklerini incele ve karara bağla (eylemsiz: list)
       list | inspect | decide | renew
       [--scope <id>] [--input <dosya|->]
-  recovery    Kaybolan işçi kurtarma: geçiş ilerlemesi ve kör incelemeniz
+  recovery    Kaybolan işçi kurtarma: ilerleme ve
+              modelin kararını görmeden incelemeniz
       review | [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | show | delegations | delegate | undelegate |
@@ -129,18 +129,19 @@ Geliştirici:
   inference   Yerel çıkarım kapasitesini incele
       plan | budget | metrics
       [--profile <id>]
-  operation   Tipli işlemleri yürüt veya incele
+  operation   Girdi ve sonuç türleri denetlenen işlemleri yürüt veya incele
       execute | compensate | inspect
       --input <dosya|-> [--wait <ms>]
 
 Seçenekler:
   -h, --help          yardım; tek komut için deckent <komut> [<eylem>] --help
   -v, --version       sürüm ve derleme
-  --json              stdout’ta makinece okunur tek sonuç; hatalar stderr’de
+  --json              standart çıktıda (stdout) makinece okunur tek sonuç;
+                      hatalar standart hata çıktısında (stderr)
   --lang en|tr        çıktı dili
   --no-color          renksiz düz metin
   --scope <id>        komutun çalıştığı kapsam (her komutun yardımına bakın)
-  --full-access       terminali tam erişim kipinde aç
+  --full-access       terminali tam erişim modunda açın
 
 Eylem verilmezse komut yukarıda adı geçen okumayı yapar, kendi işini yapar
 (terminal, init, monitor, models, config, doctor, paths) ya da eylemlerini

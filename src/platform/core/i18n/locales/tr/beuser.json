@@ -54,7 +54,7 @@
   "beuser.report.coverage": "Kritik {criterion}: yürünmüş {walked}, geçerli {valid}, geçersiz {invalid}, bilinmiyor {unknown}.",
   "beuser.report.unwalked": "Yürünmeyen {branch}: {reason}.",
   "beuser.report.unknownBranch": "Bilinmeyen dal {branch}: {reason}.",
-  "beuser.help.summary": "İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.",
+  "beuser.help.summary": "Yalıtılmış ürün yolculuğunu yürü veya kalıcı raporunu oku.",
   "beuser.help.family": "deckent beuser setup --profile <path> [--scope <id>] [--apply] [--json]\ndeckent beuser walk --journey <id> [--candidate <path>] [--scope <id>] [--json]\ndeckent beuser report [--run <id>] [--scope <id>] [--json]\nİzole yolculuk ve kalıcı rapor.",
   "beuser.help.walk.summary": "Sabitlenmiş yolculuğu izole alanda yürü.",
   "beuser.help.report.summary": "Kalıcı BeUser yolculuk raporunu oku.",
