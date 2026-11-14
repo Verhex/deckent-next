@@ -46,8 +46,12 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
     const actionLabel = { register: t('setup.attachment.register', {}, locale), apply: t('setup.attachment.apply', {}, locale),
       revoke: t('setup.attachment.revoke', {}, locale), 'lease-revoke': t('setup.attachment.leaseRevoke', {}, locale), detach: t('setup.attachment.detach', {}, locale),
       unregister: t('setup.attachment.unregister', {}, locale), relocate: t('setup.attachment.relocate', {}, locale), restore: t('setup.attachment.restore', {}, locale) };
+    const actionTitle = { register: t('setup.attachment.title.register', {}, locale), apply: t('setup.attach.title', {}, locale),
+      revoke: t('setup.attachment.title.revoke', {}, locale), 'lease-revoke': t('setup.attachment.title.leaseRevoke', {}, locale),
+      detach: t('setup.attachment.title.detach', {}, locale), unregister: t('setup.attachment.title.unregister', {}, locale),
+      relocate: t('setup.attachment.title.relocate', {}, locale), restore: t('setup.attachment.title.restore', {}, locale) };
     const action = parsed.data.action;
-    const answer = await askCliCard({ title: t('setup.attach.title', {}, locale), body: [t('setup.attachment.body', { action: action in actionLabel ? actionLabel[action as keyof typeof actionLabel] : action,
+    const answer = await askCliCard({ title: actionTitle[action as keyof typeof actionTitle], body: [t('setup.attachment.body', { action: action in actionLabel ? actionLabel[action as keyof typeof actionLabel] : action,
       path: terminalSafeText(root), scope: terminalSafeText(scopeId ?? revoke ?? '') }, locale)],
       options: [{ id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'no' },
     { locale, ...(context.env ? { env: context.env } : {}), ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),

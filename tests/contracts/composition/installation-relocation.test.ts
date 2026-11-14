@@ -91,8 +91,8 @@ describe('relocation producer to actual CLI surface', () => {
         const paths = [f.path, policyPath, projectPath], before = await Promise.all(paths.map(path => readFile(path)));
         expect(await main(['init', 'identity', '--keep', '--json', '--lang', lang], context)).toBe(78);
         expect(JSON.parse(f.output.join(''))).toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED', message: lang === 'en'
-          ? 'This installation was moved or copied. Accepting it needs the person at a terminal, or the explicit rebinding rule in the policy file (closed by default).'
-          : 'Bu kurulum taşındı veya kopyalandı. Kabul etmek için terminal başındaki kişi veya politika dosyasında açık yeniden bağlama kuralı gerekir (varsayılan olarak kapalı).' });
+          ? 'This installation was moved or copied. Accepting it needs the person at a terminal, or the explicit rebinding rule in the policy file (closed by default). In this folder, run `deckent init identity --keep` yourself at a terminal, or `deckent init identity --new` if this is a copy and the original is still in use.'
+          : 'Bu kurulum taşındı veya kopyalandı. Kabul etmek için terminal başındaki kişi veya politika dosyasında açık yeniden bağlama kuralı gerekir (varsayılan olarak kapalı). Bu klasörde terminal başında `deckent init identity --keep` komutunu siz çalıştırın; bu bir kopyaysa ve asıl kurulum hâlâ kullanılıyorsa `deckent init identity --new` çalıştırın.' });
         expect(await Promise.all(paths.map(path => readFile(path)))).toEqual(before);
         await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
         const policy = JSON.parse(await readFile(policyPath, 'utf8')), { issuer, subject } = readLocalOsIdentity();
