@@ -307,6 +307,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   **Card input (owner 2026-11-02, A62-FIX4):** every onboarding card ignores arrows and Enter for `presentation.json`
   `cardInputGuardMs` (initially 500 ms) after its first render flush; Esc still means Later. Only the welcome choice card yields to
   typing; permission, security and person-witness cards retain their authority and confirmation rules.
+  Owner decision 107 (2026-11-14): on choice-only onboarding cards, ignored typing or paste also blocks the next Enter and shows
+  an EN/TR hint; Enter again or an arrow followed by Enter chooses normally. Paste content never selects a choice. Welcome and
+  text-entry cards keep their input behavior; the render-flush guard is unchanged.
   Worker setup and Git are not prerequisites for ordinary terminal turns. A `/do` refusal may use the normal turn directly only when
   the existing `localRunOffer` predicate permits that exact refusal, with fresh policy/profile/pool-pause recheck before the turn.
   Missing model: a single `/provider` direction; other refusals keep their own path. Mode, sandbox, tool approvals and invocation

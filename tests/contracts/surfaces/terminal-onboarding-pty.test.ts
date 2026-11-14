@@ -3,9 +3,11 @@ import { cp, lstat, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'nod
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify, stripVTControlCharacters } from 'node:util';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { observeSetupPermissions } from '#composition/core/setup/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 /** Requires a fresh dist binary; synthetic-person PTYs use only their own disposable installs. No paid calls. */
 const execute = promisify(execFile), roots: string[] = [], cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -27,7 +29,8 @@ def read_once():
         out += data
     return True
 since = 0; sent = time.monotonic()
-for wanted, key in steps:
+for step in steps:
+    wanted, key = step[:2]
     end = time.monotonic() + 30
     while wanted.encode() not in out[since:]:
         if time.monotonic() > end or not read_once():
@@ -35,7 +38,7 @@ for wanted, key in steps:
     while termios.tcgetattr(fd)[3] & termios.ICANON:
         if time.monotonic() > end: os.kill(pid,9); raise RuntimeError('not raw')
         read_once()
-    time.sleep(.15); since=len(out); os.write(fd,key.encode()); sent=time.monotonic()
+    time.sleep(step[2] if len(step)>2 else .15); since=len(out); os.write(fd,key.encode()); sent=time.monotonic()
 end=time.monotonic()+30
 while time.monotonic()<end:
     read_once()
@@ -92,22 +95,33 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   expect(words(refused.output.slice(left))).toContain(words(old.output)); expect(words(old.output)).toContain(locale === 'tr' ? 'Asıl kurulum hâlâ kullanılıyorsa' : 'same installation');
   expect(await listing()).toBe(copied);
 }, 180_000);
-it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window opened from the Workline never reach the composer; Enter afterwards sends nothing', async () => {
+it.skipIf(process.platform !== 'linux')('107/N1 PTY: /help then Enter on Solo permissions shows the hint without mode/audit writes; Esc defers, keys never reach the composer', async () => {
   const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);
   const root = join(base, 'customer'), home = join(base, 'home'); await mkdir(root); await mkdir(home);
   const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), TERM: 'xterm-256color', LANG: 'en_US.UTF-8', NO_COLOR: '1' };
   await applyPolicyTemplateInstallation(root, 's', { env });
+  await mkdir(env.DECKENT_GLOBAL_HOME, { recursive: true });
+  await writeFile(join(env.DECKENT_GLOBAL_HOME, 'config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+  const before = await observeSetupPermissions(root, 's', { env });
+  expect(before).toMatchObject({ state: 'needs-confirmation', currentMode: 'standart', mode: 'full-auto' });
+  const auditCount = () => { const db = new DatabaseSync(join(root, '.deckent/state/ledger.db'), { readOnly: true });
+    try { return Number(db.prepare('SELECT count(*) AS n FROM audit_events').get()!['n']); } finally { db.close(); } };
+  const beforeAudit = auditCount();
   const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   // Attention notices stay on (the default): the Workline then reads the TTY through the filtered input the leak went through.
   config.language = 'en'; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline' };
   await writeFile(configPath, JSON.stringify(config));
   const steps = [['Step 1/', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/setup\r'],
-    ['Step 1/', 'abc'], ['', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
+    ['Step 1/', '/help', .7], ['', '\r'], ['Typing is not possible on this card.', '\u001b'],
+    ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
   expect(run.code).toBe(0);
+  expect(run.output).toContain('Typing is not possible on this card.');
+  expect(await observeSetupPermissions(root, 's', { env })).toMatchObject({ state: 'needs-confirmation', currentMode: 'standart' });
+  expect(auditCount()).toBe(beforeAudit);
   // Everything after the reopened window closed is the Workline: the typed text is not in its composer and no turn was sent.
-  expect(run.output.slice(run.output.lastIndexOf('Project instructions'))).not.toContain('abc');
+  expect(run.output.slice(run.output.lastIndexOf('Project instructions'))).not.toContain('/help');
 }, 180_000);
 
 it.skipIf(process.platform !== 'linux')('A62 PTY: models absent get /provider without first work in setup; saved conversations retain their return path in EN/TR', async () => {

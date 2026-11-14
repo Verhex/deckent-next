@@ -5,6 +5,7 @@
   "onboarding.session.applying": "Applying…",
   "onboarding.session.preparing": "Preparing…",
   "onboarding.session.busyKey": "keys ignored",
+  "onboarding.session.typingIgnored": "Typing is not possible on this card. Use arrow keys, then press Enter again to choose; Esc for later.",
   "onboarding.session.blocked": "This step is waiting",
   "onboarding.session.waiting": "The operation owner has not confirmed completion. Reopen with /setup.",
   "onboarding.session.unavailable": "First-run setup screens could not be shown ({code}); the workline opens without them.",
