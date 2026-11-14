@@ -16,16 +16,20 @@ export type DecisionArmLabels = Readonly<{ arming: string; ignored: string; type
 export const DecisionArmLabelsContext = createContext<DecisionArmLabels>(Object.freeze({ arming: '…', ignored: '… ×', typedText: '… × ↵ ↑↓', unchosen: '×' }));
 
 /**
- * `touch`: a key arrived while unarmed (restart the wait, and say so: `ignored`). `restart`: drop the armed state now and wait again (a
+ * `touch`: a key arrived while unarmed (restart the wait; Window owns the hint words). `restart`: drop the armed state now and wait again (a
  * rejected burst). `shown`: the armed state as render state, so the window shows its keys only once they count (CI 2026-10-18: a key sent
  * right after a card appeared was swallowed silently and the flow looked hung; the visible state is both the person's and a test's signal).
  */
-export function useQuietArming(active: boolean, ms: number, revision?: number): Readonly<{ armed: () => boolean; touch: () => void; restart: () => void; shown: boolean; ignored: boolean }> {
+export function useQuietArming(active: boolean, ms: number, revision?: number): Readonly<{ armed: () => boolean; touch: () => void; restart: () => void; shown: boolean }> {
   const armed = useRef(ms <= 0 && active), timer = useRef<ReturnType<typeof setTimeout> | null>(null), live = useRef(active);
-  const [shown, setShown] = useState(ms <= 0 && active), [ignored, setIgnored] = useState(false);
+  const [shown, setShown] = useState(ms <= 0 && active), seen = useRef(revision);
   live.current = active;
+  // A new question is unarmed from its first render: the effect below restarts the wait only after that frame is drawn, and the previous
+  // question's armed state must neither show its keys nor count one in between (e2e 2026-11-14: an Enter sent on that frame was lost).
+  if (ms > 0 && seen.current !== revision) armed.current = false;
+  seen.current = revision;
   const stop = () => { if (timer.current !== null) clearTimeout(timer.current); timer.current = null; };
-  const set = (value: boolean) => { armed.current = value; setShown(value); if (value) setIgnored(false); };
+  const set = (value: boolean) => { armed.current = value; setShown(value); };
   const start = () => {
     stop(); set(false);
     if (!live.current) return;
@@ -33,5 +37,5 @@ export function useQuietArming(active: boolean, ms: number, revision?: number): 
     timer.current = setTimeout(() => { timer.current = null; set(live.current); }, ms);
   };
   useEffect(() => { start(); return () => { stop(); armed.current = false; }; }, [active, ms, revision]);
-  return { armed: () => armed.current && live.current, touch: () => { if (!armed.current) { start(); setIgnored(true); } }, restart: start, shown: shown && active, ignored };
+  return { armed: () => armed.current && live.current, touch: () => { if (!armed.current) start(); }, restart: start, shown: shown && active && armed.current };
 }

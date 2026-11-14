@@ -351,7 +351,7 @@ async function setupWindowAt(model: import('#surfaces/core/project-instructions/
     expect(predicate(), text()).toBe(true);
   };
   await wait(() => text().includes(model.title));
-  const armed = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await wait(() => text().includes(model.hints) || text().includes(model.decisionArm.typedText)); };
+  const armed = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await wait(() => text().includes(model.hints) || text().includes(model.decisionArm.typedText) || text().includes(model.decisionArm.ignored)); };
   if (!options.early) await wait(() => text().includes(model.hints));
   return { text, sent, armed, wait, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
     close: async () => { if (!finished) { await armed(); stdin.write('\u001b'); } await closed; } };
@@ -395,8 +395,8 @@ it('107: individually typed text, a rejected burst or a paste (armed or early) e
       if (input.startsWith('early')) expect(view.text()).not.toContain(model.hints);
       if (input === 'typed') for (const char of '/help') await view.press(char); // Separate stdin reads, beyond the production arming wait.
       else await view.press(input.endsWith('paste') ? '\u001b[200~/help\r\ny1\u001b[201~' : input.endsWith('burst') ? '\u001b[Ay' : '/');
-      if (input !== 'typed') { expect(view.text()).toContain(input.startsWith('early') ? model.decisionArm.ignored : model.decisionArm.arming); expect(view.text()).not.toContain(model.decisionArm.typedText); }
-      await view.armed(); expect(view.text()).toContain(model.decisionArm.typedText);
+      if (input !== 'typed') { expect(view.text()).toContain(model.decisionArm.arming); expect(view.text()).not.toContain(model.decisionArm.typedText); }
+      await view.armed(); expect(view.text()).toContain(input === 'early-text' ? model.decisionArm.ignored : model.decisionArm.typedText);
       await view.press('\r');
       expect(view.sent, `${locale}/${input}`).toEqual([]); expect(run.applied).toEqual([]);
       expect(controller.model().rows).toEqual(model.rows);
@@ -428,7 +428,7 @@ it('108 probe 2: /policy typed in separate reads never answers the setup card by
   } finally { await view.close(); }
 });
 
-it('108: text typed during a slow apply follows the next setup question; an early y is text until Enter, then y answers', async () => {
+it('109: slow-apply text follows the next setup question; a lone early y repeats, never carries into question two', async () => {
   const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
   await controller.step('en'); const model = controller.model();
   let release!: () => void;
@@ -441,12 +441,14 @@ it('108: text typed during a slow apply follows the next setup question; an earl
     expect(view.text()).toContain('Next setup card');
     await view.press('\r'); expect(view.sent).toEqual(['yes']);
   } finally { release?.(); await view.close(); }
-  const early = await setupWindowAt(model, { early: true });
+  const early = await setupWindowAt(model, { early: true, step: async id => id === 'close' ? null : ({ ...model, title: 'Second question' }) });
   try {
-    await early.press('y'); expect(early.text()).toContain(model.decisionArm.ignored); expect(early.text()).not.toContain(model.decisionArm.typedText);
-    await early.armed(); await early.press('y'); expect(early.sent).toEqual([]);
-    await early.press('\r'); expect(early.sent).toEqual([]);
+    await early.press('y'); expect(early.sent).toEqual([]); expect(early.text()).toContain(model.decisionArm.arming); expect(early.text()).not.toContain(model.decisionArm.typedText);
+    await early.wait(() => early.text().includes(model.decisionArm.ignored));
     await early.press('y'); expect(early.sent).toEqual(['yes']);
+    await early.wait(() => early.text().includes('Second question') && early.text().includes(model.hints));
+    expect(early.text()).not.toContain(model.decisionArm.ignored);
+    await early.press('n'); expect(early.sent).toEqual(['yes', 'later']);
   } finally { await early.close(); }
 });
 
