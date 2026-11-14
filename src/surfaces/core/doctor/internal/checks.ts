@@ -4,6 +4,7 @@ import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
+export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
 import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
@@ -22,6 +23,7 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
@@ -207,6 +209,18 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
     scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
   if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
+  const plugins = f.nativePlugins;
+  if (plugins === null) rows.push(row('work', 'work.nativePlugins', 'untested', t('doctor.check.plugins.unavailable', {}, l)));
+  else if (plugins) {
+    const shown = plugins.names.slice(0, registry.nativePluginRowsShown);
+    const singleLine = (value: string) => terminalSafeText(value).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '');
+    for (const item of shown) rows.push(row('work', 'work.nativePlugins', 'ok', t('doctor.check.plugins.name', { name: singleLine(item.name), version: singleLine(item.cliVersion ?? '?') }, l)));
+    const more = BigInt(plugins.names.length - shown.length) + BigInt(plugins.omitted);
+    if (more > 0n) rows.push(row('work', 'work.nativePlugins', 'ok', t('doctor.check.plugins.more', { count: more.toString() }, l)));
+    if (plugins.hiddenCalls) rows.push(row('work', 'work.nativePlugins', 'ok', t('doctor.check.plugins.count', { count: plugins.hiddenCalls }, l)));
+    if (!plugins.complete) rows.push(row('work', 'work.nativePlugins', 'untested', t('doctor.check.plugins.incomplete', {}, l)));
+    else if (!plugins.calls) rows.push(row('work', 'work.nativePlugins', 'ok', t('doctor.check.plugins.none', {}, l)));
+  }
   // S3-3 doctor line "Brain girişi: hesap türü, dizin": which login the subscription Brain uses and whether its channel is open.
   for (const connection of f.siwcConnections ?? []) {
     const state = connection.code ? ErrorRegistry.get(connection.code, l, { reason: connection.reason ?? '' })?.message ?? connection.code

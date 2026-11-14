@@ -1,6 +1,6 @@
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import type { DatabaseSync } from 'node:sqlite';
-import { delegationOwner, modelInvocationPlanUsageSchema, type ModelInvocationReceipt, type ModelReference } from '#domain/index.js';
+import { delegationOwner, modelInvocationPlanUsageReadSchema, type ModelInvocationReceipt, type ModelReference } from '#domain/index.js';
 import { verifyModelInvocationReceipt, modelInvocationPlanUsageDigest, providerSpendOutcomeDigest, type SubscriptionUsageSummary } from '#engine/index.js';
 import { ledgerTransaction, openLedgerDatabase, requireLedgerVersion, MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 const MILLISECONDS_PER_DAY = 86_400_000;
@@ -26,7 +26,7 @@ export async function readSqliteSubscriptionUsageSummary(path: string, input: { 
         const observedAt = receipt.outcome?.observedAtMs;
         if (receipt.profile.adapter.id !== input.adapterId || receipt.profile.adapter.definition['connectionId'] !== input.connectionId
           || observedAt === undefined || observedAt < input.fromMs || observedAt > input.untilMs) continue;
-        const usage = modelInvocationPlanUsageSchema.parse(JSON.parse(String(row['usage'])));
+        const usage = modelInvocationPlanUsageReadSchema.parse(JSON.parse(String(row['usage'])));
         if (row['digest'] !== modelInvocationPlanUsageDigest(usage) || usage.scopeId !== input.scopeId || usage.invocationId !== receipt.claim.invocationId
           || usage.profileDigest !== receipt.profileDigest || usage.outcomeDigest !== providerSpendOutcomeDigest(receipt) || usage.observedAtMs !== receipt.outcome?.observedAtMs) throw new Error();
         const owner = delegationOwner(receipt.actor);

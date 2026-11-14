@@ -1,4 +1,8 @@
 import { openConfiguredModelInspection } from './model-inspection.js';
+import { openSqliteModelInvocationReader } from '#adapters/index.js';
+import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { nativeCliAgent } from '#adapters/index.js';
 import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
@@ -209,6 +213,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
     inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
+    inspectNativePlugins: async (root, scopeId, limits, options) => {
+      const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+      return new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(contextPolicySource(context)),
+        async () => openSqliteModelInvocationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })).inspectNativePlugins(scopeId, limits);
+    },
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, person(options)), assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels, inspectSubscriptionReadiness: inspectConfiguredNativeChat, // R8e: the seal a guarded turn wrote

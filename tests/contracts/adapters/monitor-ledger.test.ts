@@ -257,3 +257,32 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader scope (M-VI
       .toMatchObject({ scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: [] });
   });
 });
+
+it('reads retained observation excerpts as count/paid words in the selected language, with locale-separated cache entries', async () => {
+  const { FileArtifactStore } = await import('#adapters/index.js');
+  const { readMonitorWorkerContent } = await import('#adapters/core/monitor-ledger/index.js');
+  const { summarizeMonitorWorkerEvent } = await import('../../../src/adapters/core/monitor-ledger/internal/worker-content.js');
+  const { readWorkerEventTail } = await import('#adapters/core/worker-observation/index.js');
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'dn-monitor-observation-')); roots.push(root);
+  await mkdir(join(root, 'artifacts'), { mode: 0o700 });
+  const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 10000 });
+  const observation = { schemaVersion: 1, sequence: 1, atMs: 1, kind: 'cli.observation', observation: {
+    schemaVersion: 1, cliVersion: 'private-cli-version', builtinPlugins: { names: ['private-plugin-name'], omitted: 2 },
+    paidExtraUsage: { kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: null } } };
+  const events = await artifacts.put('s', Buffer.from(JSON.stringify(observation) + '\n' + JSON.stringify({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'dropped', reason: 'byte-cap', count: 1 }) + '\n' + JSON.stringify({ ...observation, sequence: 3 }) + '\n'));
+  const reader = FileArtifactStore.reader(async () => join(root, 'artifacts'), 10000);
+  const files = { identity: identity('s', 'r', 't'), output: null, events, workspace: null, failed: false, open: false, finished: true, sealed: true };
+  await writeFile(join(root, 'worker.events'), JSON.stringify({ receivedAt: 1, event: observation }) + '\n', { mode: 0o600 });
+  const live = await readWorkerEventTail(root, 'worker', 10000);
+  expect(live).toHaveLength(1);
+  for (const locale of ['tr', 'en', 'tr'] as const) {
+    const view = await readMonitorWorkerContent(reader, files, root, locale), text = JSON.stringify(view);
+    expect(summarizeMonitorWorkerEvent(live[0]!.event, locale)).toEqual(view.transcript.excerpt[0]);
+    expect(view.transcript.state).toBe('sealed');
+    expect(text).toContain(locale === 'en' ? '3 names; reading them needs content permission' : '3 ad; okumak için içerik izni gerekir');
+    expect(text).toContain(locale === 'en' ? 'Worker-reported' : 'İşçinin bildirdiği');
+    expect(text).toContain(locale === 'en' ? 'Paid extra usage of your provider account is in use' : 'Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
+    expect(text).not.toContain('private-plugin-name'); expect(text).not.toContain('private-cli-version');
+  }
+});

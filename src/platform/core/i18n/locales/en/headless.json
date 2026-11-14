@@ -1,4 +1,7 @@
 {
+  "models.invocation.observationVersion": "Reported CLI version: {version}",
+  "models.invocation.observationPlugins": "Recorded built-in plugins: {names}",
+  "models.invocation.observationCount": "{count} names; reading them needs content permission",
   "headless.agent.connection.reconnectRequired": "Reconnect this subscription from the owning person’s terminal in its original installation, company and scope. Its source or login resource binding is missing or unavailable.",
   "headless.agent.host.chatWarning": "The working directory could not be verified; this command may reach deckent's state folder. The host realm is not a security boundary. Approve only if you accept this risk.",
   "headless.agent.host.unresolved": "The host realm is not a security boundary. With global state present, directory changes, path-producing commands and unresolved shell expansions are refused before approval. Use an enforcing sandbox.",

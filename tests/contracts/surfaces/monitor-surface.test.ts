@@ -162,7 +162,8 @@ async function cli(argv: string[], handlers: Record<string, unknown>, root: stri
 describe('deckent monitor command', () => {
   it('--json prints the handler snapshot byte for byte; --once and a pipe print the text snapshot', async () => {
     const root = await project(); let calls = 0;
-    const handlers = { async inspectMonitor(at: string) { calls++; expect(at).toBe(root); return fullSnapshot; } };
+    const languages: (string | undefined)[] = [];
+    const handlers = { async inspectMonitor(at: string, options: { env?: Readonly<Record<string, string | undefined>> }) { calls++; languages.push(options.env?.['DECKENT_LANGUAGE']); expect(at).toBe(root); return fullSnapshot; } };
     const json = await cli(['monitor', '--json'], handlers, root);
     expect(json.code).toBe(0); expect(json.out).toBe(`${JSON.stringify(fullSnapshot)}\n`);
     const narrowed = await cli(['monitor', '--json', '--install', 'dogfood'], handlers, root);
@@ -171,7 +172,7 @@ describe('deckent monitor command', () => {
     expect(once.code).toBe(0); expect(once.out).toBe(`${surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 120, ascii: false })}\n`);
     const piped = await cli(['monitor', '--lang', 'en'], handlers, root, { COLUMNS: '90' });
     expect(piped.out).toBe(`${surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 90, ascii: false })}\n`);
-    expect(calls).toBe(4);
+    expect(calls).toBe(4); expect(languages.slice(-2)).toEqual(['tr', 'en']);
   });
   it('fails typed (MONITOR_UNAVAILABLE, en/tr) without a monitor handler and rejects unknown flags as usage', async () => {
     const root = await project();

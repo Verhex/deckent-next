@@ -84,7 +84,7 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   const config = await loadConfig(root, { ...options, heal: false });
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
-  const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
+  const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, { ...configOptions, env: { ...(configOptions.env ?? env), DECKENT_LANGUAGE: locale } }, query, memo);
   const own = [(config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, config.service.identity?.scopeId].filter((id): id is string => typeof id === 'string');
   const filters = { ...filtersOf(parsed), registered: own }, ascii = prefersAsciiGlyphs(env);
   let initial = parsed.scope ? await inspect(root, options) : undefined;
@@ -113,7 +113,7 @@ export async function runMonitorSlash(root: string, args: string, context: Monit
   const parsed = parse(['monitor', ...args.split(/\s+/).filter(Boolean)], 1);
   if (parsed.once || parsed.json || parsed.help || parsed.language || parsed.noColor) return [t('monitor.slash.usage', {}, locale)];
   if (!context.inspectMonitor) throw ErrorRegistry.createError('MONITOR_UNAVAILABLE');
-  const snapshot = await context.inspectMonitor(root, options, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
+  const snapshot = await context.inspectMonitor(root, { ...options, env: { ...(options.env ?? context.env ?? process.env), DECKENT_LANGUAGE: locale } }, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
   return [...renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose,
     slash: true }).split('\n'), ...(context.listRefusedRequests ? await refusedLine(context, root, options, await loadConfig(root, { ...options, heal: false }), locale) : [])];
 }

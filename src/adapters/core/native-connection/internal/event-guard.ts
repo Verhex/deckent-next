@@ -10,6 +10,14 @@ export function scrubWorkerEvent(event: WorkerEvent, known: KnownSecretSnapshot)
   const red = (value: string, max: number) => redactBounded(value, known, max);
   const nullable = (value: string | null, max: number) => value === null ? null : red(value, max);
   switch (event.kind) {
+    case 'cli.observation': {
+      const observation = event.observation, plugins = observation.builtinPlugins, paid = observation.paidExtraUsage;
+      const names = plugins ? [...new Set(plugins.names.map(name => red(name, 256)))] : [];
+      const identifier = (value: string, max: number) => { const clean = red(value, max); return /^[A-Za-z0-9_.:?-]+$/u.test(clean) ? clean : '?'; };
+      return { ...event, observation: { ...observation, cliVersion: nullable(observation.cliVersion, 64),
+        builtinPlugins: plugins ? { names, omitted: plugins.omitted + plugins.names.length - names.length } : null,
+        paidExtraUsage: paid ? { ...paid, status: identifier(paid.status, 16), window: identifier(paid.window, 24) } : null } };
+    }
     case 'session.started': return { ...event, model: nullable(event.model, 128), cliVersion: nullable(event.cliVersion, 64) };
     case 'message': return { ...event, excerpt: red(event.excerpt, 240) };
     case 'tool.call': return { ...event, toolId: red(event.toolId, 96), name: red(event.name, 64), target: nullable(event.target, 256), detail: nullable(event.detail, 240) };

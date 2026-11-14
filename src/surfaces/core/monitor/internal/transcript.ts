@@ -1,3 +1,4 @@
+import { nativePaidUsageText } from '#capabilities/index.js';
 import { t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult, WorkerModelView, WorkerToolClass } from '#domain/index.js';
 import { quotaWaitText } from './labels.js';
@@ -60,6 +61,14 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
     else if (event.kind === 'message' && !event.thinking && event.excerpt) lines.push(`${at}  ${JSON_MESSAGE.test(event.excerpt) ? t('cli.task.transcript.reportMessage', {}, locale) : `${t('cli.task.transcript.message', {}, locale)}  ${event.excerpt}`}`);
     else if (event.kind === 'limit') lines.push(`${at}  ${t('cli.task.transcript.limit', { limit: event.limit }, locale)}`);
     else if (event.kind === 'quota-exhausted') lines.push(`${at}  ${event.resetsAtMs === null ? t('run.quota.unknown', {}, locale) : quotaWaitText(event.resetsAtMs, true, locale)}`);
+    else if (event.kind === 'cli.observation') {
+      const observation = event.observation, plugins = observation.builtinPlugins;
+      const facts = [
+        ...(plugins ? [t('cli.task.transcript.pluginCount', { count: plugins.names.length + plugins.omitted }, locale)] : []),
+        ...(observation.paidExtraUsage ? [nativePaidUsageText(observation.paidExtraUsage, locale)] : []),
+      ];
+      lines.push(`${at}  ${t('cli.task.transcript.observation', { facts: facts.join(' · ') }, locale)}`);
+    }
     else if (event.kind === 'session.ended') lines.push(`${at}  ${phaseLabel(event.outcome === 'success' ? 'finished' : 'failed', locale)}`);
   }
   if (data.sealed?.projection === 'partial') lines.push(t('cli.task.transcript.projectionPartial', {}, locale));

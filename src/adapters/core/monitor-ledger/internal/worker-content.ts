@@ -1,5 +1,6 @@
-import { sameAttemptIdentity, readWorkerFinalReport, summarizeWorkerEvents, workerEventSchema } from '#domain/index.js';
-import { redactSensitive, terminalSafeText } from '#platform/index.js';
+import { sameAttemptIdentity, readWorkerFinalReport, summarizeWorkerEvents, workerEventSchema, type WorkerEvent } from '#domain/index.js';
+import { nativePaidUsageText } from '#capabilities/index.js';
+import { t, resolveLocale, redactSensitive, terminalSafeText, type Locale } from '#platform/index.js';
 import { parseRetainedOutputEnvelope, summarizeMonitorEvent, workspacePatchSchema, type MonitorWorkerContent } from '#engine/index.js';
 import type { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import type { MonitorAttemptFiles } from './reader.js';
@@ -33,18 +34,28 @@ async function readArtifact(files: MonitorAttemptFiles, namespace: string, kind:
 export const emptyWorkerContent = (state: 'missing' | 'denied' | 'unavailable'): MonitorWorkerContent => ({
   transcript: { state, excerpt: [], truncated: false }, patch: { state, files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: null,
 });
+/** The same count-only observation words on sealed excerpts and live/failed recent events. */
+export function summarizeMonitorWorkerEvent(event: WorkerEvent, locale: Locale) {
+  if (event.kind !== 'cli.observation') return summarizeMonitorEvent(event);
+  const plugins = event.observation.builtinPlugins;
+  return { kind: event.kind, summary: t('cli.task.transcript.observation', { facts: [
+    ...(plugins ? [t('cli.task.transcript.pluginCount', { count: plugins.names.length + plugins.omitted }, locale)] : []),
+    ...(event.observation.paidExtraUsage ? [nativePaidUsageText(event.observation.paidExtraUsage, locale)] : []),
+  ].join(' · ') }, locale) };
+}
 /** Only a retained, identity-bound artifact proves a patch/result. The caller gates every read, including hits, through read-output.
  * Production namespaces identify the installation's artifact root and read budget. Sealed reports remain claims, not evaluation. */
-export async function readMonitorWorkerContent(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles, namespace = ''): Promise<MonitorWorkerContent> {
+export async function readMonitorWorkerContent(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles, namespace = '', locale: Locale = resolveLocale()): Promise<MonitorWorkerContent> {
   const result: { -readonly [K in keyof MonitorWorkerContent]: MonitorWorkerContent[K] } = { ...emptyWorkerContent('missing') };
   const eventsReceipt = files.events, patchReceipt = files.patch, outputReceipt = files.output;
   if (eventsReceipt) {
     try {
-      Object.assign(result, await readArtifact(files, namespace, 'events', async () => {
+      Object.assign(result, await readArtifact(files, `${namespace}:${locale}`, 'events', async () => {
         if (eventsReceipt.byteLength > MAX_BYTES) throw new Error();
         const events = new TextDecoder('utf-8', { fatal: true }).decode(await artifacts.read(files.identity.scopeId, eventsReceipt))
           .split('\n').filter(Boolean).map(line => workerEventSchema.parse(JSON.parse(line)));
-        const transcript = { state: 'sealed' as const, excerpt: events.slice(-MAX_EXCERPTS).map(event => { const item = summarizeMonitorEvent(event); return { ...item, summary: scrub(item.summary) }; }), truncated: events.length > MAX_EXCERPTS };
+        const transcript = { state: 'sealed' as const, excerpt: events.slice(-MAX_EXCERPTS).map(event => {
+          const item = summarizeMonitorWorkerEvent(event, locale); return { ...item, summary: scrub(item.summary) }; }), truncated: events.length > MAX_EXCERPTS };
         const usage = summarizeWorkerEvents(events);
         return { transcript, usage: { ...usage, filesTouched: usage.filesTouched.map(scrub), model: usage.model === null ? null : scrub(usage.model),
           models: usage.models?.map(scrub) ?? null, costBasis: usage.costBasis === null ? null : scrub(usage.costBasis),

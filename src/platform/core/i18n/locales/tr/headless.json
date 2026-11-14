@@ -1,4 +1,7 @@
 {
+  "models.invocation.observationVersion": "Bildirilen CLI sürümü: {version}",
+  "models.invocation.observationPlugins": "Kaydedilen yerleşik eklentiler: {names}",
+  "models.invocation.observationCount": "{count} ad; okumak için içerik izni gerekir",
   "headless.agent.connection.reconnectRequired": "Bu aboneliği sahibinin terminalinden, özgün kurulum, şirket ve kapsam içinde yeniden bağlayın. Kaynak veya giriş dizini bağı eksik ya da kullanılamıyor.",
   "headless.agent.host.chatWarning": "Çalışma yeri doğrulanamadı; deckent durum klasörüne ulaşabilir. Host yalıtım alanı bir güvenlik sınırı değildir. Yalnız bu riski kabul ediyorsanız onaylayın.",
   "headless.agent.host.unresolved": "Host yalıtım alanı bir güvenlik sınırı değildir. Global durum kökü varken dizin değiştiren, yol üreten komutlar ve çözülemeyen kabuk açılımları onaydan önce reddedilir. Yalıtımı uygulayan bir yalıtım alanı kullanın.",

@@ -1,4 +1,6 @@
 {
+  "cli.task.transcript.pluginCount": "{count} ad; okumak için içerik izni gerekir",
+  "cli.task.transcript.observation": "İşçinin bildirdiği: {facts}",
   "cli.worker.phase.starting": "başlıyor",
   "cli.worker.phase.thinking": "düşünüyor",
   "cli.worker.phase.reading": "okuyor",
