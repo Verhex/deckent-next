@@ -76,16 +76,17 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
       const copy = locale === 'en' ? { keys: 'Enter confirm', folder: '> 3. Folder and scope', hint: 'Text typed here is not an answer.', profile: '> 5. Who uses this installation', yes: 'Yes (y)' }
         : { keys: 'Enter onayla', folder: '> 3. Klasör ve kapsam', hint: 'Buraya yazılan metin bir cevap değildir.', profile: '> 5. Kurulumu kim kullanacak', yes: 'Evet (y)' };
       // DRIVER writes each character separately, waits for armed hints and leaves 150 ms between stdin reads.
-      const steps = [[copy.keys, '/help\r'], [copy.hint, '\r'], [copy.profile, '\u001b']];
+      // A fresh home opens on the language step: Enter accepts its recommended answer, then the folder question takes the typed text.
+      const steps = [[copy.keys, '\r'], [copy.folder, '/help\r'], [copy.hint, '\r'], [copy.profile, '\u001b']];
       const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
       const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--lang', locale]), root],
         { env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
       const run = JSON.parse(stdout) as { status?: number | string; output: string; marks: number[]; timeout?: string };
       expect(run.timeout, run.output?.slice(-3000)).toBeUndefined(); expect(run.status, run.output?.slice(-2000)).toBe(0);
       const screen = (mark: number) => terminalBuffers(run.output.slice(0, run.marks[mark]!), COLUMNS, ROWS).text;
-      expect(screen(0)).toContain(copy.folder); expect(screen(0)).toContain(copy.yes);
-      expect(screen(1)).toContain(copy.folder); expect(screen(1)).toContain(copy.hint); expect(screen(1)).toContain(copy.yes);
-      expect(screen(2)).toContain(copy.profile);
+      expect(screen(1)).toContain(copy.folder); expect(screen(1)).toContain(copy.yes);
+      expect(screen(2)).toContain(copy.folder); expect(screen(2)).toContain(copy.hint); expect(screen(2)).toContain(copy.yes);
+      expect(screen(3)).toContain(copy.profile);
       expect(await readdir(root)).toEqual(['package.json']);
     }
   }, 240_000);
