@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configCommand, configSlash, renderConfigInspection, renderConfigExplanation } from '#surfaces/core/config/index.js';
-import { restartConfigDigest } from '#engine/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import { ConfigApplication, restartConfigDigest } from '#engine/index.js';
+import { createConfigFileDocuments, registerProviderConfig } from '#adapters/index.js';
 import { createConfiguredConfigApplication } from '#composition/core/config/index.js';
 import { clearConfigCache, type ConfigLoadOptions, loadConfig } from '#platform/index.js';
 import { homeEnv } from '../support/host-platform.js';
@@ -66,8 +66,56 @@ it('human configuration values cannot inject terminal control sequences', () => 
   expect(rendered).toContain('safe'); expect(rendered).toContain('value');
 });
 
-it('explain uses the requested locale for the registry description key', () => {
+it('unset removes the authored key and reports the remaining effective value and source in EN/TR', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'config-unset-surface-')); roots.push(root);
+  const global = join(root, 'global'), path = join(root, '.deckent/config.json');
+  await mkdir(join(root, '.deckent')); await mkdir(global);
+  const env = { DECKENT_GLOBAL_HOME: global, TERM: 'xterm' }, keyPath = 'models.headless.paidExtraUsage';
+  const authority = {
+    authorize: async () => 'test-policy', audit: async () => {}, witness: async () => {},
+  };
+  const output: string[] = [], ctx = { root, env, stdin: { isTTY: true }, stdout: { isTTY: true, write: (s: string) => { output.push(s); } },
+    configApplication: (at: string, options: ConfigLoadOptions) => new ConfigApplication(createConfigFileDocuments(at, options), authority),
+    resolveConfigPrincipal: fixture().ctx.resolveConfigPrincipal };
+  for (const locale of ['en', 'tr'] as const) {
+    await writeFile(path, JSON.stringify({ models: { headless: { paidExtraUsage: 'stop-at-limit' } } })); clearConfigCache();
+    output.length = 0;
+    await configCommand(['config', 'unset', keyPath, '--scope', 'scope-a', '--lang', locale], ctx);
+    expect(JSON.parse(await readFile(path, 'utf8')).models?.headless?.paidExtraUsage).toBeUndefined();
+    expect(output.join('')).toContain(locale === 'en'
+      ? `Removed ${keyPath} from project. Effective value: continue (source: default). Apply: live.`
+      : `${keyPath}, proje katmanından kaldırıldı. Geçerli değer: continue (kaynak: varsayılan). Uygulama: anında.`);
+    expect(output.join('')).not.toMatch(/Saved|kaydedildi/u);
+  }
+  // A project removal reveals the global override; a global removal still leaves a project override in force.
+  await writeFile(join(global, 'config.json'), JSON.stringify({ language: 'tr' }));
+  await writeFile(path, JSON.stringify({ language: 'en' })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'unset', 'language', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Effective value: tr (source: global)');
+  expect(JSON.parse(await readFile(path, 'utf8'))).not.toHaveProperty('language');
+  await writeFile(path, JSON.stringify({ language: 'en' })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'unset', 'language', '--global', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Removed language from global. Effective value: en (source: project)');
+  expect(JSON.parse(await readFile(join(global, 'config.json'), 'utf8'))).not.toHaveProperty('language');
+  output.length = 0;
+  await configCommand(['config', 'unset', 'language', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Effective value: not defined (source: default)');
+  await writeFile(path, JSON.stringify({ language: 'en' })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'unset', 'language', '--scope', 'scope-a', '--lang', 'en'], { ...ctx, env: { ...env, DECKENT_LANGUAGE: 'tr' } });
+  expect(output.join('')).toContain('Effective value: tr (source: env)');
+});
+
+it('explain uses the requested locale and the nested key’s own catalog description', async () => {
   expect(renderConfigExplanation(field, 'tr', 80)).toContain('kurulum tavanı');
+  const f = fixture(), app = createConfiguredConfigApplication(f.ctx.root, { env: HOME_ENV });
+  const view = await app.explain({ keyPath: 'models.headless.paidExtraUsage' });
+  expect(view.descriptionKey).toBe('config.field.models.headless.paidExtraUsage');
+  for (const locale of ['en', 'tr'] as const) {
+    const text = renderConfigExplanation(view, locale, 80);
+    expect(text).not.toMatch(/retirement|emeklilik/u);
+    expect(text).toContain('stop-at-limit'); expect(text).toContain('continue'); expect(text).toContain('config unset');
+    expect(text).toContain(locale === 'en' ? 'keeps the key in the file' : 'anahtarı dosyada tutar');
+  }
 });
 it('human explain preserves schema literal alternatives as allowed values', () => {
   const union = { ...field, schema: { anyOf: [{ type: 'string', const: 'none' }, { type: 'string', const: 'bearer' }] } };

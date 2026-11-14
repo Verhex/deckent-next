@@ -1,5 +1,4 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useWindowSize } from 'ink';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { layoutWindowLines, Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { PickerWindow, QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
@@ -63,7 +62,7 @@ function SlashPickWindow({ spec: raw, labels, onAnswer }: { readonly spec: Slash
   const known = useHumanTextSecrets();
   const spec = useMemo(() => projectSlashPickSpec(raw, text => projectHumanPickerText(text, known).label), [raw, known]);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
-  const room = usePickerRoom(spec.bodyRows ?? 2), columns = useWindowSize().columns || 80;
+  const room = usePickerRoom(spec.bodyRows ?? 2), columns = room.columns || 80;
   const shown = pickerView(spec.tree, state), focused = shown.rows[shown.pos]?.id ?? null;
   const answered = useRef(false);
   const answer = (id: string | null) => { if (answered.current) return; answered.current = true; onAnswer(id); };
