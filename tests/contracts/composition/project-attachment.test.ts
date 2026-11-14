@@ -355,6 +355,10 @@ it.skipIf(process.platform !== 'linux')('F2: registered-source identity recovery
       expect(output).toContain(choice === 'new' ? (language === 'en' ? 'break its project references' : 'proje bağlarını koparır')
         : (language === 'en' ? 'cannot yet repair' : 'henüz onaramaz'));
       expect(output).toContain('beta.2.1'); expect(output).toContain('known-limits');
+      expect(output).toContain('https://github.com/Verhex/deckent-next/blob/main/docs/known-limits');
+      expect(output).toContain('deckent terminal attach --relocate --scope <sourceScope> --apply');
+      expect(output).toContain(language === 'en' ? 'yourself at a terminal in this source folder' : 'bu kaynak klasöründe terminal başında');
+      expect(output).toContain(language === 'en' ? 'each attached project needs its own `--relocate`' : 'her bağlı projede kendi kapsamında, kendi klasöründe ayrıca `--relocate`');
     }
   }
   expect(await snapshotBytes(f.root)).toEqual(before);
