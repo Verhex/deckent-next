@@ -23,6 +23,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
   // M2: the same read view as `deckent models roles` (catalog models with no tier/role row: "new model: role pending"); read-soft.
   inspectNativePlugins?: (root: string, scopeId: string, limits: { pageSize: number; maxRecords: number }, options: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['nativePlugins']>>;
+  /** Source-only v3/lineage inventory; read-only folder observations, never reconciliation. */
+  inspectAttachmentFolders?: (root: string, options: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['attachmentFolders']> | null>;
   inspectModelRoles?: (root: string, query: ModelRoleQuery, options: ConfigLoadOptions) => Promise<ModelRoleInspection>;
   /** S3-3 doctor line: the scope's subscription Brain logins from the profiles section and their last preflight records (read-soft, no spawn). */
   inspectSiwcConnections?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly import('#domain/index.js').SubscriptionConnectionInspection[]>;

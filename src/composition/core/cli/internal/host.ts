@@ -2,7 +2,8 @@ import { openConfiguredModelInspection } from './model-inspection.js';
 import { openSqliteModelInvocationReader } from '#adapters/index.js';
 import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
+import { captureAttachmentLocation, inspectFilesystemIdentity } from '#adapters/index.js';
 import { nativeCliAgent } from '#adapters/index.js';
 import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
@@ -213,6 +214,19 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
     inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
+    inspectAttachmentFolders: async (root, options) => {
+      const readOptions = { ...options, heal: false }, config = await loadComposedConfig(root, readOptions);
+      const record = await configuredAttachmentStore(config, readOptions).registration();
+      if (record?.schemaVersion !== 3 || !record.lineage || record.source.projectRoot !== config.projectRoot) return null;
+      const observations = [];
+      for (const entry of record.entries) observations.push(entry.state !== 'active' ? null : await (async () => {
+        const location = await captureAttachmentLocation(entry.attachment.location.canonicalRoot);
+        if (!('filesystemIdentity' in entry.attachment.location)) return location;
+        const identity = await inspectFilesystemIdentity(location.canonicalRoot, location);
+        return { ...location, filesystemIdentity: identity.status === 'available' ? identity.identity : null };
+      })().catch(() => null));
+      return { record, projectRoot: config.projectRoot, observations };
+    },
     inspectNativePlugins: async (root, scopeId, limits, options) => {
       const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
       return new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(contextPolicySource(context)),

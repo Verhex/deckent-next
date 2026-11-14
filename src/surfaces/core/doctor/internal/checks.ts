@@ -8,6 +8,7 @@ export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan
 import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
+import { countMismatchedAttachments } from '#domain/index.js';
 import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
@@ -23,6 +24,8 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly attachmentFolders?: Readonly<{ record: Parameters<typeof countMismatchedAttachments>[0]; projectRoot: string;
+    observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
@@ -209,6 +212,9 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
     scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
   if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
+  const attached = f.attachmentFolders, mismatched = attached ? countMismatchedAttachments(attached.record, attached.projectRoot, attached.observations) : 0;
+  if (mismatched) rows.push(row('work', 'work.attachments', 'warning', t('doctor.check.attachments.mismatch', { count: mismatched }, l),
+    t('doctor.check.attachments.next', {}, l)));
   const plugins = f.nativePlugins;
   if (plugins === null) rows.push(row('work', 'work.nativePlugins', 'untested', t('doctor.check.plugins.unavailable', {}, l)));
   else if (plugins) {
