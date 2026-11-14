@@ -184,6 +184,7 @@
   "setup.apply.refused": "{stage}: refused ({code}); nothing more was applied.",
   "setup.window.title": "deckent setup",
   "setup.window.hints": "↑↓ choose · Enter confirm · Esc close",
+  "setup.window.typedText": "Text typed here is not an answer. Choose with ↑↓ or the shown letter, then press Enter again; Esc closes.",
   "setup.window.position": "{from}-{to} of {total}",
   "setup.window.applying": "Applying…",
   "setup.window.busyKey": "keys ignored",
