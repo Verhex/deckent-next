@@ -169,6 +169,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     const absent = context.describeRuntimeService ? await context.describeRuntimeService(root, options).then(() => false, (error: { code?: unknown } | null) => error?.code === 'LOCAL_RUNTIME_UNAVAILABLE') : false;
     const building = !absent && await context.runningImageBuild?.(root, options).catch(() => false) === true; // BeUser D-01: never stop a background image build silently
     if (!absent && interactive && !await confirmStop(context, root, options, locale, true, building)) return cancelled();
+    if (!json) emit(t('cli.runtime.restartWaiting', {}, locale), adminSinks(context));
     const restarted = await context.restartRuntimeService(root, options);
     output(restarted, () => [(params => absent ? t('cli.runtime.startedAbsent', params, locale) : t('cli.runtime.restarted', params, locale))({ pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }),
       ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n'));

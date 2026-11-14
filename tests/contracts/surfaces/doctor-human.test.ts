@@ -17,10 +17,10 @@ import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
 import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
 import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
-import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
-// the --json report unchanged, and the interactive fix offer only on a person's terminal through an existing operation.
+// the schema-2 --json report with additive health counts, and the interactive fix offer only on a person's terminal through an existing operation.
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project(config: unknown = {}) {
@@ -71,6 +71,8 @@ describe('doctor rows (pure)', () => {
       expect(unavailable[0]!.next).toContain('deckent coding template --kind missing-code --connection <id>');
       expect(unavailable[1]!.next).toContain('deckent coding --json'); expect(unavailable[1]!.next).not.toContain('--connection');
     }
+    expect(renderDoctorReport(report, [], 'tr')).toContain("deckent'in işçileri ve yalıtım alanı bu anahtarları okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir.");
+    expect(renderDoctorReport(report, [], 'en')).toContain("deckent's workers and sandbox cannot read them; other programs running as your user can.");
     const checks = doctorChecks(report, facts(), 'tr');
     for (const check of checks.filter(row => row.state === 'warning' || row.state === 'error')) expect(check.next, check.id).toBeTruthy();
     const budget = doctorChecks(report, facts({ budgetPeriodText: 'No API budget yet' }), 'en').find(row => row.id === 'work.budgetPeriod');

@@ -453,5 +453,6 @@
   "cli.audit.rebind.opaque": "Her bağ kimliği opaktır; burada çözümlenmez.",
   "cli.audit.rebind.policy": "Kural kimliği: {rule}; politika revizyonu: {revision}.",
   "cli.audit.rebind.failure": "Hata kodu: {code}.",
-  "cli.audit.rebind.project": "Proje kimliği: {id}."
+  "cli.audit.rebind.project": "Proje kimliği: {id}.",
+  "cli.runtime.restartWaiting": "deckent servisinin yeniden başlaması bekleniyor: çalışan servis varsa işleri tamamlanacak, ardından yeni servisin yanıtı beklenecek."
 }

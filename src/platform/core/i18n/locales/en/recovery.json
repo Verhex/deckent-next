@@ -35,7 +35,7 @@
   "recovery.grant.partial": "present in some scopes",
   "recovery.grant.missing": "missing",
   "recovery.grant.unknown": "not read",
-  "recovery.state.line": "Lost-worker recovery: safety system {nervous} · recovery {recovery} · standing grant {grant}",
+  "recovery.state.line": "Lost-worker recovery: safety system {nervous} · recovery {recovery} · standing grant {grant}.",
   "recovery.state.none": "Lost workers are not recovered automatically; their Runs wait for a person.",
   "recovery.state.recorded": "Recovery decisions are only recorded; nothing changes.",
   "recovery.state.automatic": "A lost worker's task may continue in a new attempt within its limits.",

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import * as cliHuman from '#surfaces/core/cli-human/index.js';
-import { t, clearConfigCache } from '#platform/index.js';
+import { t, clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { readPiped } from '#surfaces/core/cli-admin/index.js';
@@ -185,4 +185,23 @@ it('the grant, revoke and handover cards show the resolved project in both langu
     await main(['secret', 'grant', 'K', '--scope', 'scope'], { root: f.root, env: f.env, stdin, stdout: screen().sink, stderr: capture().sink, ...host });
     expect(seen).toHaveLength(before);
   } finally { ask.mockRestore(); stdin.destroy(); }
+});
+
+it('an absent service is reported before custody preparation or a hidden secret prompt (EN/TR)', async () => {
+  const f = await project('scope');
+  for (const locale of ['en', 'tr']) {
+    let raw = 0, prepared = 0;
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { raw++; return stdin; } });
+    const out = screen(), err = capture(), calls: Call[] = [];
+    try {
+      expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope', '--lang', locale], {
+        root: f.root, env: f.env, stdin, stdout: out.sink, stderr: err.sink, ...handlers(calls),
+        describeRuntimeService: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); },
+        prepareMainSecret: async () => { prepared++; return { state: 'ready', backend: null, code: null, path: null }; },
+      })).toBe(1);
+      expect(raw).toBe(0); expect(prepared).toBe(0); expect(calls).toEqual([]);
+      expect(err.text()).toContain('LOCAL_RUNTIME_UNAVAILABLE'); expect(err.text()).toContain('deckent runtime restart');
+      expect(err.text()).not.toContain('PROVIDER_TOKEN:');
+    } finally { stdin.destroy(); }
+  }
 });

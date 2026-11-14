@@ -334,9 +334,14 @@ export function doctorNeedsAttention(checks: readonly DoctorCheck[]): boolean {
   return checks.some(check => check.state === 'error' || check.needsAttention === true);
 }
 
-export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
+/** Counts shared by the CLI and the terminal window; sections are presentation, not health checks. */
+export function doctorCounts(checks: readonly DoctorCheck[]) {
   const count = (state: DoctorCheckState) => checks.filter(check => check.state === state).length;
-  const errors = count('error'), warnings = count('warning'), untested = count('untested');
+  return { ok: count('ok'), check: count('warning'), failed: count('error'), untested: count('untested') };
+}
+
+export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
+  const { failed: errors, check: warnings, untested } = doctorCounts(checks);
   return [doctorNeedsAttention(checks) ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
     ...(errors ? [t('doctor.summary.errors', { n: errors }, locale)] : []), ...(warnings ? [t('doctor.summary.warnings', { n: warnings }, locale)] : []),
     ...(untested ? [t('doctor.summary.untested', { n: untested }, locale)] : []), ...(!errors && !warnings ? [t('doctor.summary.clean', {}, locale)] : [])].join(' · ');

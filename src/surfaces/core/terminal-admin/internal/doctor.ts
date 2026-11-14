@@ -19,6 +19,7 @@ async function capture(run: (sink: OutputSink) => Promise<void>): Promise<string
 
 /** The fields of `deckent doctor --json` (schema 2) the window reads; every field is optional here and checked before use. */
 type DoctorJson = Partial<Readonly<{ schemaVersion: number; scope: string; platform: string; status: string;
+  summary: Readonly<{ ok: number; check: number; failed: number; untested: number }>;
   host: Readonly<{ cpuCores: number; totalMemMB: number; recommendedMaxWorkers: number }>; company: Readonly<{ companyId: string }>; principal: Readonly<{ id: string }>;
   secretStore: Readonly<{ backend: string; status: string; code?: string | null }> | null; serviceConfig: string | null;
   imageRefresh: Readonly<{ status: string; reason: string | null; imageVersion: string | null }> | null;
@@ -99,8 +100,7 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
       const words = prerequisite ? messageText(prerequisite.code, locale, prerequisite.params) ?? prerequisite.code : status === 'ready' ? t('doctor.poolReadiness.status.ready', {}, locale) : status === 'drift' ? t('doctor.poolReadiness.status.drift', {}, locale)
         : status === 'unavailable' ? t('doctor.poolReadiness.status.unavailable', {}, locale) : status === 'unconfigured' ? t('doctor.poolReadiness.status.unconfigured', {}, locale)
           : status === 'missing' ? t('doctor.poolReadiness.status.missing', {}, locale) : status; // I-S7: registry present, pool not set up yet
-      // Not configured is not a failure and not unknown: the chip says so in the readiness word itself.
-      sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: status === 'ready' ? chip('ok') : status === 'drift' ? chip('warn') : status === 'unavailable' ? chip('fail')
+      sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: status === 'ready' ? chip('ok') : ['drift', 'unconfigured', 'missing'].includes(status) ? { state: 'warn', text: words } : status === 'unavailable' ? chip('fail')
         : { state: 'neutral', text: words },
         rows: [{ key: t('terminal.info.doctor.key.readiness', {}, locale), value: words,
           ...(data.poolReadiness.code ? { chip: { state: 'neutral' as const, text: data.poolReadiness.code } } : {}) }],
@@ -121,9 +121,9 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
         chip: { state: entry.status === 'fresh' || entry.status === 'ahead' ? 'ok' as const : entry.status === 'stale' ? 'warn' as const : 'neutral' as const, text: entry.reason ? `${entry.status} (${entry.reason})` : entry.status } })) });
     }
   }
-  const states = sections.map(section => section.chip?.state);
-  const totals = { ok: states.filter(state => state === 'ok').length, check: states.filter(state => state === 'warn').length, failed: states.filter(state => state === 'fail').length };
+  const totals = data?.summary;
+  const hasTotals = totals && [totals.ok, totals.check, totals.failed, totals.untested].every(value => Number.isSafeInteger(value) && value >= 0);
   return { model: { title: t('terminal.info.doctor.title', {}, locale),
-    chips: data ? [chip('ok'), chip('warn'), chip('fail')].map((value, index) => ({ ...value, text: `${[totals.ok, totals.check, totals.failed][index]} ${value.text}` })) : [chip('neutral')],
-    summary: t('terminal.info.doctor.summary', totals, locale), sections } };
+    chips: hasTotals ? [chip('ok'), chip('warn'), chip('fail')].map((value, index) => ({ ...value, text: `${[totals.ok, totals.check, totals.failed][index]} ${value.text}` })) : [chip('neutral')],
+    summary: hasTotals ? t('terminal.info.doctor.summary', totals, locale) : t('terminal.info.chip.unknown', {}, locale), sections } };
 }

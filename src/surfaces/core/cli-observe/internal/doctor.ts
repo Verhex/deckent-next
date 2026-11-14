@@ -4,7 +4,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -96,7 +96,7 @@ function retiringModels(catalog: NonNullable<Awaited<ReturnType<NonNullable<Kern
   return [...byState, ...byDay];
 }
 
-/** One measurement: the collected report (the `--json` contract, unchanged) and the grouped rows the person reads. */
+/** One measurement: the collected report (`--json`), shared health counts and the grouped rows the person reads. */
 async function measure(call: KernelCall, context: KernelCommandContext) {
   const { args, root, env } = call;
   // C-DOCTOR: doctor only reads. A corrupt project config is reported (CONFIG_FILE_INVALID), never "healed" (rewritten) by a health check.
@@ -147,7 +147,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
   return { data: { ...data, status: doctorNeedsAttention(checks) ? 'degraded' as const : 'ready' as const,
-    providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
+    summary: doctorCounts(checks), providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
@@ -162,7 +162,7 @@ export async function doctorVerdict(root: string, context: KernelCommandContext,
 
 /**
  * `deckent doctor`: the read-only installation report, grouped (Kurulum / Güvenlik / Çalışma / Araçlar) with one next step per warning;
- * internals behind `--verbose`, the collected report (unchanged contract) with `--json`. On a person's terminal a fixable row is offered as
+ * internals behind `--verbose`, the collected report and shared health counts with `--json`. On a person's terminal a fixable row is offered as
  * a card and applied only through an existing product operation after the person confirms; pipe, agent and `--json` callers are never asked.
  */
 export async function doctorCommand(call: KernelCall, context: KernelCommandContext): Promise<void> {

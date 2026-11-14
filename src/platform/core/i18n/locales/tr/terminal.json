@@ -472,7 +472,7 @@
   "terminal.shell.queued": "{count} ileti gönderilmeyi bekliyor",
   "terminal.shell.dropped": "deckent hazırlanırken yalnız ilk {count} gönderilen satır tutulur; sonrakiler alınmadı.",
   "terminal.info.doctor.poolSetup": "İşçi havuzu kurulmadan iş başlayamaz. Eksik işçi ve havuz adımlarını tamamlamak için /setup açın; terminal dışında deckent doctor adımları listeler.",
-  "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır.",
+  "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. deckent servisi başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır.",
   "terminal.approval.background.assurance": "Bu arka plan çağrısı terminalde kişi tanığıyla karar ister; servis kartı şu an kullandığınız terminale bağlar.",
   "terminal.approval.background.call": "İşçi denemesi: {attempt} · argsDigest: {digest}",
   "terminal.approval.background.wait": "Onayınız bekleniyor · İş {run} · Görev {task} · Deneme {attempt} · {tool} → {target} · {reason} · {seconds} sn kaldı. /approvals açın.",
