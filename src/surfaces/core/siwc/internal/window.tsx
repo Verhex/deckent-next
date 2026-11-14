@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ErrorRegistry, t, terminalSafeText } from '#platform/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
-import { useMainScreenLine, Window, QuestionRows, hyperlinkEnds, questionStep, WINDOW_PRIORITY, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { DecisionArmLabelsContext, useMainScreenLine, Window, QuestionRows, hyperlinkEnds, questionStep, WINDOW_PRIORITY, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import type { SiwcResult, SiwcWindowPort } from './port.js';
 
 const SECOND_MS = 1000;
@@ -61,7 +62,7 @@ export default function SiwcWindow({ port, onClose, onError, onApi }: { readonly
     if (!abort.signal.aborted) { setResult(connected); setSelection({ at: 0, ticked: [] }); setStage('result'); }
   };
   // Each stage is a new question and re-arms (arming.ts): a key typed for the last answer never answers this one.
-  return <Window key={stage} title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true, link: url } : {}) }))}
+  return <DecisionArmLabelsContext.Provider value={decisionArmLabels(port.locale)}><Window key={stage} title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true, link: url } : {}) }))}
     hints={t('siwc.card.keys', {}, port.locale)} position="{from}-{to}/{total}" priority={WINDOW_PRIORITY.approval} decision footerRows={options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={selection} focused={owns} />} onClose={close}
     onInput={(input, key, meta) => {
@@ -75,5 +76,5 @@ export default function SiwcWindow({ port, onClose, onError, onApi }: { readonly
           setProblem(ErrorRegistry.get(code, port.locale, params)?.message ?? t('error.unknown', { code }, port.locale)); current.current = { at: 0, ticked: [] }; setSelection(current.current); setStage('result'); onError(ErrorRegistry.createError(code, { params })); }
       }).finally(() => { busy.current = false; }); return true; }
       return key.tab;
-    }} />;
+    }} /></DecisionArmLabelsContext.Provider>;
 }

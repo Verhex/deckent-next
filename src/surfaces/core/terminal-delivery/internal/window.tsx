@@ -250,6 +250,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         if (text === 'r' && !key.ctrl && !key.meta && redoable(visible) && input.redo) { input.redo(`/do ${visible.target.request}`); close(visible); return true; }
         if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
           if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '') && visible.queueBlocked === undefined) prepareCurrent(visible);
+          else return false;
           return true;
         }
         if (stage.kind === 'queue') { if (decision === 'yes') { confirmQueue(visible); return true; } if (decision === 'no') { close(visible); return true; } return false; }
@@ -276,6 +277,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
             if (key.escape) visible.diffScroll = null;
             else if (up) visible.diffScroll = Math.max(0, visible.diffScroll - 1);
             else if (down) visible.diffScroll = Math.min(room, visible.diffScroll + 1);
+            else return false;
             changed(); return true;
           }
           const count = Math.min(source.files.length, WINDOW.maxFiles);
@@ -291,7 +293,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           const options = verifyOptions(visible.preview, visible.verify), verify = visible.verify;
           if ((key.upArrow || key.downArrow) && options.length) { verify.selected = (verify.selected + (key.upArrow ? options.length - 1 : 1)) % options.length; changed(); return true; }
           if (key.return) return false;
-          if (decision === 'yes') { const chosen = options[verify.selected]; if (chosen !== undefined) adopt(visible, chosen ?? undefined); return true; }
+          if (decision === 'yes') { const chosen = options[verify.selected]; if (chosen === undefined) return false; adopt(visible, chosen ?? undefined); return true; }
           if (decision === 'no') { visible.stage = { kind: 'delivered' }; visible.verify = null; changed(); return true; }
           if (text === 'r' && !key.ctrl && !key.meta) { readVerification(visible); return true; }
           return false;
@@ -303,6 +305,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           // With a configured verification bar the branch's y opens the verification choice first (the CLI's --verification-run).
           else if (stage.kind === 'delivered' && visible.preview?.verification) { visible.stage = { kind: 'verify' }; visible.verify = null; readVerification(visible); }
           else if (stage.kind === 'delivered') adopt(visible);
+          else return false;
           return true;
         }
         if (decision === 'no') { close(visible); return true; }

@@ -2,7 +2,12 @@ import type { Readable } from 'node:stream';
 import { ErrorRegistry, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { detectCliMode } from './mode.js';
 import { lendHeldInput } from './input-hold.js';
-import type { CardCopyLabels, QuestionOption } from '#surfaces/core/terminal-window/index.js';
+import type { CardCopyLabels, DecisionArmLabels, QuestionOption } from '#surfaces/core/terminal-window/index.js';
+
+/** Catalog feedback shared by standalone decision-card hosts. */
+export function decisionArmLabels(locale: Locale): DecisionArmLabels {
+  return { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale) };
+}
 
 /** One answer of a CLI card (the terminal's question option): a yes/no answer declares `role` (the card shows and takes (y)/(n)); others may show a `key`. */
 export type CliCardOption = QuestionOption;

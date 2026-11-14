@@ -166,6 +166,8 @@ describe('the single approval card', () => {
     await until(() => view.stdout.frame.includes('… 39 more lines'), 'turn card');
     // Slice 2: the card takes the keyboard by itself; a y arriving at once is not counted (arming) and the card says so.
     view.stdin.write('y'); await settle(40); expect(decided).toEqual([]);
+    await settle(DECISION_ARM_DEFAULT + 80); view.stdin.write('y'); await settle(40); expect(decided).toEqual([]);
+    view.stdin.write('\u001b[B'); // End the carried text deliberately; this navigation key never approves.
     await until(() => view.stdout.frame.includes(DENY), 'card armed'); await settle(40);
     const frame = view.stdout.frame;
     // A 40-line heredoc keeps the facts on screen: its field shows three rows, the preview below has the whole command.
@@ -318,6 +320,8 @@ describe('the single approval card after Sol 2234', () => {
     view.stdin.write('n'); await settle(40); expect(decided).toEqual(['card-a:allow']);
     await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
     await settle(60);
+    await settle(DECISION_ARM_DEFAULT + 80); view.stdin.write('n'); await settle(40); expect(decided).toEqual(['card-a:allow']);
+    view.stdin.write('\u001b[B');
     await until(() => view.stdout.frame.includes(DENY), 'card B armed');
     expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).not.toContain('package.json');
     view.stdin.write('n');

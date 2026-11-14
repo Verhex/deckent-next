@@ -1102,6 +1102,7 @@
   "terminal.viewport.copyUnavailable": "Selection not sent: the terminal clipboard is unavailable. Use the terminal's own selection: Shift+drag.",
   "terminal.decision.arming": "Just opened · its keys work in a moment",
   "terminal.decision.ignored": "Key not counted: this card just opened · press it again",
+  "terminal.decision.typedText": "Text typed here is not an answer. Press Enter or an arrow key first, then choose.",
   "terminal.viewport.search": "Search this view: {query}{state} · Enter/↑ older · ↓ newer · Esc close",
   "terminal.viewport.searchNone": " · no match",
   "terminal.render.contextUnknown": "context ?",

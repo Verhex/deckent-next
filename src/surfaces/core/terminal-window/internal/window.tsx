@@ -34,6 +34,11 @@ function navigationKey(key: Key): boolean {
   return !key.ctrl && !key.meta && !key.shift && (key.pageUp || key.pageDown || key.home || key.end || key.upArrow || key.downArrow);
 }
 
+/** Printable text, including spaces; control chords and terminal key sequences are never text. */
+function printable(input: string, key: Key): boolean {
+  return !key.ctrl && !key.meta && !key.escape && !key.tab && /[^\p{C}]/u.test(input);
+}
+
 /** Frame rows around the body: two border rows, the title row and the key-hint row. */
 const FRAME_ROWS = 4;
 /** Border and inner padding columns on each side together. */
@@ -99,8 +104,8 @@ interface WindowProps {
   readonly onInput?: (input: string, key: Key, meta?: Readonly<{ burst: boolean }>) => boolean | void;
   /** Pasted text while this decision window holds the keyboard (never a decision; the owner may take it as text). */
   readonly onPaste?: (text: string) => void;
-  /** Notification only: this window swallowed printable input or a paste. It grants no input or decision to the owner. */
-  readonly onIgnoredText?: () => void;
+  /** A new question in the same frame re-arms, retaining text swallowed while the last answer was being applied. */
+  readonly inputRevision?: number;
   /** A decision window that takes plain text from a multi-event read right now (an open reason field); without it such a read is dropped
    * whole. Fail closed: a read of unknown shape never reaches a decision owner. */
   readonly burstText?: boolean;
@@ -119,7 +124,7 @@ interface WindowProps {
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
 export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
-  onFocusChange, onPaste, onIgnoredText, burstText = false, copyOptions = [] }: WindowProps) {
+  onFocusChange, onPaste, inputRevision, burstText = false, copyOptions = [] }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
@@ -132,7 +137,11 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   useEffect(() => { onFocusChange?.(focused); }, [focused, onFocusChange]);
   // A decision (a card, a question, any approval-priority window) counts keys only after a quiet arming period from the moment it became
   // the visible input owner; earlier keys are swallowed and restart the wait (arming.ts). Fail closed: nothing reaches its owner before.
-  const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext));
+  const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext), inputRevision);
+  // Owner 108: once text reaches a choice-only card, later letters/digits are text too; only Enter or navigation ends it.
+  const typed = useRef(false), [typedHint, setTypedHint] = useState(false);
+  const textState = (value: boolean, hint = value) => { typed.current = value; setTypedHint(hint); };
+  useEffect(() => { if (burstText) textState(false); }, [burstText]);
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
   const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
@@ -146,12 +155,13 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   body.forEach((line, index) => { const end = starts[index + 1] ?? rows.length;
     if (line.link) links.fill(line.link, starts[index], end);
     rowLines.fill({ line: index, exact: line.exact === true, labelled: Boolean(line.label?.length) }, starts[index], end); });
-  // A decision shows its keys only while they count: focused and armed. Until it is armed (it just appeared, or a key was ignored) the hint
+  // A decision shows its choice keys only while they count: focused and armed. Until it is armed (it just appeared, or a key was ignored) the hint
   // row says so; behind the composer (Ctrl+O back to input) the "Ctrl+O to decide" line speaks instead. Keys on screen ⇔ keys count — one
-  // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18).
+  // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18). Typed-text feedback is immediate, even while arming.
   const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
   const keyHints = copy && interactive ? `${hints} · ${copy.labels.hint}` : hints;
-  const hintText = !guarded || !interactive || arming.shown ? keyHints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
+  const hintText = guarded && interactive && !burstText && typedHint && !behind ? armLabels.typedText
+    : !guarded || !interactive || arming.shown ? keyHints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
@@ -164,8 +174,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, onIgnoredText, burstText, title, body, copy, copyOptions });
-  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, onIgnoredText, burstText, title, body, copy, copyOptions };
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions };
   const copyCard = () => {
     const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
     if (!writer) return;
@@ -204,7 +214,13 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   }), [pointer, known]);
   const deliver = (input: string, key: Key) => {
     const current = latest.current;
-    if (current.onInput?.(input, key) === true) return;
+    if (guarded && !current.burstText) {
+      if (typed.current && printable(input, key)) return;
+      if (typed.current && key.return && !key.ctrl && !key.meta && !key.shift) { textState(false, true); return; }
+      if (navigationKey(key) || !key.ctrl && !key.meta && !key.shift && (key.leftArrow || key.rightArrow)) textState(false);
+    }
+    if (current.onInput?.(input, key) === true) { if (!typed.current) setTypedHint(false); return; }
+    if (guarded && !current.burstText && printable(input, key)) textState(true);
     const scroll = scrollKeyOf(key);
     if (scroll) { setOffset(value => scrollBy(value, scroll, current.total, current.visible)); return; }
     if (key.escape && current.onClose) current.onClose();
@@ -212,15 +228,16 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // Security review 2026-10-18 (keystroke race): Ink parses one stdin read into several key events and dispatches them synchronously, so a
   // decision window gathers the events of one read and looks at them after the read: a single event is a key press; several (an escape
   // sequence plus a letter, "text⌫y", a coalesced burst) never decide. Focus or card changes during the read drop it. Fail closed.
-  const burst = useRef<{ events: Array<readonly [string, Key]>; owned: boolean } | null>(null);
+  const burst = useRef<{ events: Array<readonly [string, Key]>; owned: boolean; revision: number | undefined } | null>(null);
   const flush = () => {
     const read = burst.current; burst.current = null;
     if (!read) return;
     const ignoredText = () => {
-      if (read.owned && acceptsInput() && read.events.some(([input, key]) => !key.ctrl && !key.meta && /[^\p{C}]/u.test(input))) latest.current.onIgnoredText?.();
+      if (read.owned && acceptsInput() && !latest.current.burstText && read.events.some(([input, key]) => printable(input, key))) textState(true);
     };
     // A read of copy keys only copies and leaves the arming as it was; mixed with other keys it is one more event of a burst (never decides).
     if (read.events.every(([input, key]) => copyKey(input, key))) { if (read.owned && acceptsInput()) copyCard(); return; }
+    if (read.revision !== latest.current.inputRevision) { ignoredText(); arming.restart(); return; }
     if (!read.owned || !acceptsInput() || !arming.armed()) { ignoredText(); arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
     // A read of navigation keys only (held PgDn, a coalesced run of arrows) moves the view or the highlight and never decides: delivered.
@@ -230,7 +247,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!latest.current.burstText) { ignoredText(); arming.restart(); return; }
     for (const [input, key] of read.events) if (latest.current.onInput?.(input, key, { burst: true }) !== true) { ignoredText(); arming.restart(); return; }
   };
-  const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); } return burst.current; };
+  const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true, revision: latest.current.inputRevision }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
     // S5: adding a line never answers any window's choice or confirmation.
     if (key.return && (key.ctrl || key.meta)) { if (guarded) begin().owned = false; return; }
@@ -249,8 +266,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!acceptsInput()) return;
     // An entry window takes a paste only while it holds the keyboard (owner F2-18, Astra 3052 R1); a decision card never decides on one.
     if (!guarded) { latest.current.onPaste?.(text); return; }
-    if (!arming.armed()) { if (text.length) latest.current.onIgnoredText?.(); arming.touch(); return; }
-    if (!latest.current.onPaste && text.length) latest.current.onIgnoredText?.();
+    if (!arming.armed()) { if (text.length && !latest.current.burstText) textState(true); arming.touch(); return; }
+    if (!latest.current.onPaste && text.length) textState(true);
     if (latest.current.onPaste) latest.current.onPaste(text); else arming.restart();
   }, { isActive: focused && (guarded || onPaste !== undefined) });
   const first = clampScroll(offset, rows.length, visible);

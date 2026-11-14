@@ -314,6 +314,21 @@ describe('TTY card contract', () => {
     return { stdin, stdout, written };
   };
   const settledWithin = <T,>(work: Promise<T>, ms: number) => Promise.race([work, new Promise<'still-waiting'>(resolve => { setTimeout(() => resolve('still-waiting'), ms).unref(); })]);
+  it('108 probe 3: /policy typed in separate reads never answers a CLI card whose default is No', async () => {
+    const io = terminalPair(), controller = new AbortController();
+    let answer: string | null | undefined;
+    const asked = askCliCard({ title: 'Folder permission', initial: 'no', options: [{ id: 'yes', label: 'Yes', role: 'yes' }, { id: 'no', label: 'No', role: 'no' }] },
+      { locale: 'en', env: { NO_COLOR: '1' }, stdin: io.stdin, stdout: io.stdout, signal: controller.signal }).then(value => { answer = value; return value; });
+    const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    try {
+      for (let i = 0; i < 100 && !io.written.join('').includes('Enter confirm'); i++) await pause(20);
+      expect(io.written.join('')).toContain('Enter confirm');
+      for (const char of '/policy') { io.stdin.write(char); await pause(100); }
+      expect(answer).toBeUndefined();
+      io.stdin.write('\u001b[A'); await pause(100); io.stdin.write('\r');
+      expect(await settledWithin(asked, 2000)).toBe('yes');
+    } finally { controller.abort(); await asked; }
+  });
   it('Astra 2661 P2: a card cancelled while its view is still loading returns null at once, draws nothing and never waits for input', async () => {
     const request = { title: 'x', options: [{ id: 'a', label: 'A' }] }, io = terminalPair(), controller = new AbortController();
     const asked = askCliCard(request, { locale: 'en', env: {}, stdin: io.stdin, stdout: io.stdout, signal: controller.signal });

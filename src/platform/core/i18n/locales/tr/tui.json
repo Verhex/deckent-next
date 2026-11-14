@@ -1102,6 +1102,7 @@
   "terminal.viewport.copyUnavailable": "Seçim gönderilmedi: terminal panosuna erişilemiyor. Terminalin kendi seçimini kullanın: Shift+sürükle.",
   "terminal.decision.arming": "Yeni açıldı · tuşları birazdan çalışır",
   "terminal.decision.ignored": "Tuş sayılmadı: kart yeni açıldı · yeniden basın",
+  "terminal.decision.typedText": "Buraya yazılan metin bir cevap değildir. Önce Enter'a veya bir ok tuşuna basın, sonra seçin.",
   "terminal.viewport.search": "Bu görünümde ara: {query}{state} · Enter/↑ eski · ↓ yeni · Esc kapat",
   "terminal.viewport.searchNone": " · eşleşme yok",
   "terminal.render.contextUnknown": "bağlam ?",

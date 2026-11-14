@@ -6,9 +6,9 @@ import type { ModelConnectResult } from '#domain/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
-import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
-import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
+import { cardCopyLabels, decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { QuestionWindow, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { SettingsPanel, ProviderPanel, modelPanelTree, providerPanelTree, providerPanelPort, type ProviderWindowPort } from '#surfaces/core/terminal-provider/index.js';
@@ -54,7 +54,7 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false, copy
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const listeners = new Set<(event: PointerEvent) => void>();
   const pointerSource = { pointer: { subscribe: (listener: (event: PointerEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } }, copy: () => undefined };
-  const stack = createElement(PointerContext.Provider, { value: copy ? pointerSource : null }, createElement(WindowStackProvider, null, node));
+  const stack = createElement(DecisionArmLabelsContext.Provider, { value: decisionArmLabels('en') }, createElement(PointerContext.Provider, { value: copy ? pointerSource : null }, createElement(WindowStackProvider, null, node)));
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, copy ? createElement(CardCopyContext.Provider, { value: streamCardCopy(stdout, cardCopyLabels('en'), {}) }, stack) : stack) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
@@ -364,13 +364,18 @@ describe('/provider window', () => {
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
     // G2-3: a y in the same moment the question opened is swallowed (the arming period), never a disconnect.
     await view.press('y', 60); expect(removed).toEqual([]);
-    await armed(view.frame, 'y remove'); await view.press('n', 60);
+    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
+    await view.press('n', 60); expect(view.frame()).toContain('Disconnect Local server'); // Still text, not a decline.
+    await view.press(ENTER, 60); expect(view.frame()).toContain('Disconnect Local server');
+    await view.press('n', 60);
     expect(removed).toEqual([]);
     await view.press(`${ENTER}${DOWN}${ENTER}`, 60); // back on the same kind
     await armed(view.frame, 'y remove');
     // TERMINAL-UX: Ctrl+Y, Alt+y and a coalesced Ctrl+O y are not a typed y (nor a no): the question keeps waiting.
     for (const keys of ['\u0019', `${ESC}y`, '\u000fy']) { await view.raw(keys, 60); expect(removed).toEqual([]); }
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
+    await settle(DECISION_ARM_DEFAULT + 80); await view.press('y', 60); expect(removed).toEqual([]);
+    await view.press(DOWN, 60);
     await armed(view.frame, 'y remove'); await view.press('y', 100);
     expect(removed).toEqual(['local-openai']);
     // The answer is shown in the window, not in scrollback.
@@ -391,7 +396,10 @@ describe('QuestionWindow keys', () => {
     await view.raw('\u0019y', 40); expect(clipboardTexts(view.all())).toHaveLength(1);
     for (const keys of ['\u000e', `${ESC}y`, '\u000fy', 'yy', 'yes']) { await view.raw(keys, 40); expect(answers).toEqual([]); }
     expect(view.frame()).toContain('Trust files and pin these tools?');
-    await armed(view.frame, 'y/n'); await view.press('y', 40); await view.press('n', 40);
+    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
+    await view.press('y', 40); expect(answers).toEqual([]);
+    await view.press(ENTER, 40); expect(answers).toEqual([]); // Not even the default cancellation.
+    await view.press('y', 40); await view.press('n', 40);
     expect(answers).toEqual([true]);
   });
   it('a typed n says no; Enter and Ctrl+C give no answer (null)', async () => {
@@ -406,7 +414,9 @@ describe('QuestionWindow keys', () => {
     await view.press('y', 20); expect(answers).toEqual([]);
     expect(view.frame()).toContain('Trust files and pin these tools?'); expect(view.frame()).not.toContain('y/n'); // its keys are not shown until they count
     for (let elapsed = 0; elapsed < DECISION_ARM_DEFAULT * 2; elapsed += 30) { await view.raw('y', 30); expect(answers).toEqual([]); }
-    await armed(view.frame, 'y/n'); await view.press('y', 40);
+    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
+    await view.press('y', 40); expect(answers).toEqual([]);
+    await view.press(DOWN, 40); await armed(view.frame, 'y/n'); await view.press('y', 40);
     expect(answers).toEqual([true]);
   });
 });
@@ -1029,6 +1039,21 @@ it('model/provider windows open during startup but a resulting approval waits fo
 });
 
 const SIGN_IN = `https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid%20profile%20email%20offline_access&code_challenge=${'C'.repeat(43)}&code_challenge_method=S256&state=${'s'.repeat(43)}&originator=deckent&extra=${'x'.repeat(60)}`;
+it('108: sign-in typed text blocks letters and Enter with immediate EN/TR words; an arrow restores choosing', async () => {
+  const { default: SiwcWindow } = await (await import('#surfaces/core/siwc/index.js')).loadSiwcWindow();
+  for (const locale of ['en', 'tr'] as const) {
+    const requests: unknown[] = [];
+    const view = mount(createElement(SiwcWindow, { port: { locale, connection: 'fixture-plan', execute: async (request: unknown) => { requests.push(request); return { apiTargets: [] }; } } as never,
+      onClose: () => {}, onError: error => { throw error; } }));
+    await armed(view.frame, t('siwc.card.keys', {}, locale));
+    await view.press('/'); expect(view.frame()).toContain(t('terminal.decision.typedText', {}, locale));
+    for (const char of 'policy1n jk') await view.press(char);
+    await view.press(ENTER); expect(requests).toEqual([]);
+    await view.press(DOWN); await view.press(ENTER);
+    expect(requests).toEqual([{ operation: 'prepare' }]);
+    mounted.pop()!.unmount();
+  }
+});
 it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
   const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
   for (const key of [ENTER, ESC]) {

@@ -2,6 +2,7 @@ import { LOCALES, t, type Locale } from '#platform/index.js';
 import { IdentityProfileRegistry, WORK_KIND_STAGE_ID, WORK_PROVIDERS, type IdentityProfileListing, type SetupObservation, type SetupPlan, type SetupStage, SetupStageRegistry } from '#engine/index.js';
 import { orderedProfiles, profileLabel } from '#surfaces/core/cli-identity/index.js';
 import type { SetupWindowModel } from '#surfaces/core/project-instructions/index.js';
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { planFor, unattendedAnswers, type SetupFlags } from './command.js';
@@ -77,7 +78,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     const offered = choices(stage);
     return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
       initial: initialChoice(stage, offered),
-      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), typedText: t('setup.window.typedText', {}, locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
+      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), decisionArm: decisionArmLabels(locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
   const settle = async (stage: SetupStage, result: SetupApplyResult) => {

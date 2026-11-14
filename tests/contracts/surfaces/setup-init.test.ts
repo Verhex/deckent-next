@@ -1,3 +1,4 @@
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -316,7 +317,7 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const reason = 'my-project scope for HOST/1000 starts with the Solo profile in full-auto. Usual work follows the company policy; protected settings, secrets and destructive operations keep their own approval rules. Switch the mode with Shift+Tab or /mode at any time; nothing else changes.';
   const model = { title: 'deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'apply', label: 'Apply now' }],
-    optionRows: 2, initial: 0, hints: 'Esc close', typedText: MESSAGE_REGISTRY.catalogs.en['setup.window.typedText']!, applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
+    optionRows: 2, initial: 0, hints: 'Esc close', decisionArm: decisionArmLabels('en'), applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
   const sent: string[] = [];
   let release = () => {};
   const closed = mountSetupWindow(model, id => { sent.push(id); return sent.length > 1 ? Promise.resolve(null) : new Promise(resolve => { release = () => resolve({ ...model, rows: ['> 8. Final check · ready to apply', '', 'Next step', '', ''] }); }); },
@@ -332,7 +333,7 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
   // The next step's window re-arms: the key typed during the apply did not answer it; Enter after its arming does.
   release(); await pause(150); expect(text()).toContain('Next step'); expect(sent).toEqual(['apply']);
   await pause(DECISION_ARM_DEFAULT + 200); stdin.write('\r');
-  await closed; expect(sent).toEqual(['apply', 'apply']);
+  await Promise.race([closed, pause(2000).then(() => { throw new Error(`setup did not close: ${JSON.stringify(sent)} ${text()}`); })]); expect(sent).toEqual(['apply', 'apply']);
 });
 /** Mounts the real guided window on a fake TTY with one controller model; returns the drawn text and the answers the window sent. */
 async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel,
@@ -395,11 +396,12 @@ it('107: individually typed text, a rejected burst or a paste (armed or early) e
       if (input.startsWith('early')) expect(view.text()).not.toContain(model.hints);
       if (input === 'typed') for (const char of '/help') await view.press(char); // Separate stdin reads, beyond the production arming wait.
       else await view.press(input.endsWith('paste') ? '\u001b[200~/help\r\ny1\u001b[201~' : input.endsWith('burst') ? '\u001b[Ay' : '/');
+      expect(view.text()).toContain(model.decisionArm.typedText); // Visible immediately, including during arming.
       await view.armed();
       await view.press('\r');
       expect(view.sent, `${locale}/${input}`).toEqual([]); expect(run.applied).toEqual([]);
       expect(controller.model().rows).toEqual(model.rows);
-      expect(view.text()).toContain(model.typedText);
+      expect(view.text()).toContain(model.decisionArm.typedText);
       await view.press('\r'); expect(view.sent).toEqual(['yes']);
       // The next step has its own arming period and no inherited text flag.
       await view.armed(); await view.press('\r'); expect(view.sent).toEqual(['yes', 'core:solo']);
@@ -407,15 +409,67 @@ it('107: individually typed text, a rejected burst or a paste (armed or early) e
   }
 }, 30_000);
 
-it('107: arrows and j/k clear typed text; letters and digits still answer; an early Enter alone only needs repeating', async () => {
+it('108 probe 1: /task typed in separate reads then Enter never answers the highlighted setup row', async () => {
+  const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+  await controller.step('en');
+  const view = await setupWindowAt(controller.model());
+  try {
+    for (const char of '/task') await view.press(char);
+    await view.press('\r'); expect(view.sent).toEqual([]);
+  } finally { await view.close(); }
+});
+
+it('108 probe 2: /policy typed in separate reads never answers the setup card by its y', async () => {
+  const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+  await controller.step('en');
+  const view = await setupWindowAt(controller.model());
+  try {
+    for (const char of '/policy') await view.press(char);
+    expect(view.sent).toEqual([]);
+  } finally { await view.close(); }
+});
+
+it('108: text typed during a slow apply follows the next setup question; an early y is text until Enter, then y answers', async () => {
+  const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+  await controller.step('en'); const model = controller.model();
+  let release!: () => void;
+  const view = await setupWindowAt(model, { step: async id => id === 'close' ? null : new Promise(resolve => { release = () => resolve({ ...model, title: 'Next setup card' }); }) });
+  try {
+    await view.press('y'); expect(view.sent).toEqual(['yes']);
+    await view.press('e'); await view.press('s');
+    expect(view.text()).toContain(model.decisionArm.typedText);
+    release(); await view.armed();
+    expect(view.text()).toContain('Next setup card');
+    await view.press('\r'); expect(view.sent).toEqual(['yes']);
+  } finally { release?.(); await view.close(); }
+  const early = await setupWindowAt(model, { early: true });
+  try {
+    await early.press('y'); expect(early.text()).toContain(model.decisionArm.typedText);
+    await early.armed(); await early.press('y'); expect(early.sent).toEqual([]);
+    await early.press('\r'); expect(early.sent).toEqual([]);
+    await early.press('y'); expect(early.sent).toEqual(['yes']);
+  } finally { await early.close(); }
+});
+
+it('108: only arrows clear typed text; first-key letters/digits and early Enter keep their meaning', async () => {
   const run = harness(), controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
   await controller.step('en'); const model = controller.model();
   for (const key of ['\u001b[B', 'j', 'k', 'y', '1', 'n', '2']) {
     const view = await setupWindowAt(model);
     try {
       await view.press('/'); await view.press(key);
-      if (['\u001b[B', 'j', 'k'].includes(key)) { expect(view.sent).toEqual([]); await view.press('\r'); }
-      expect(view.sent).toEqual([['\u001b[B', 'j', 'n', '2'].includes(key) ? 'later' : 'yes']);
+      expect(view.sent).toEqual([]);
+      await view.press('\r');
+      if (key !== '\u001b[B') { expect(view.sent).toEqual([]); await view.press('\r'); }
+      expect(view.sent).toEqual([key === '\u001b[B' ? 'later' : 'yes']);
+    } finally { await view.close(); }
+  }
+  for (const [key, answer] of [['y', 'yes'], ['n', 'later'], ['1', 'yes'], ['j', 'later'], ['k', 'yes']] as const) {
+    const view = await setupWindowAt(model);
+    try {
+      await view.press(key);
+      if (key === 'j' || key === 'k') { expect(view.sent).toEqual([]); await view.press('\r'); }
+      expect(view.sent).toEqual([answer]);
     } finally { await view.close(); }
   }
   const early = await setupWindowAt(model, { early: true });

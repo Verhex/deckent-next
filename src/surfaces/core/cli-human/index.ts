@@ -6,7 +6,7 @@ export { cliTableStyle, renderCliTable, safeCell, textCells, type CliTableStyle 
 export { displayId, listRunIds, matchIdPrefix, requireIdPrefix } from './internal/short-id.js';
 export { resolveCommandScope, scopeLister, scopeNotice, type ScopeResolution } from './internal/scope.js';
 export { holdTerminalInput, lendHeldInput } from './internal/input-hold.js';
-export { askCliCard, cardCopyLabels, cliCardGate, standingCardOptions, type CliCardIo, type CliCardOption, type CliCardRequest } from './internal/card.js';
+export { askCliCard, cardCopyLabels, decisionArmLabels, cliCardGate, standingCardOptions, type CliCardIo, type CliCardOption, type CliCardRequest } from './internal/card.js';
 export { assertInputFields, renderInputSchema, schemaRequested, type InputSchema } from './internal/schema.js';
 export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';
 export { withFounderStep } from './internal/refusal.js';
