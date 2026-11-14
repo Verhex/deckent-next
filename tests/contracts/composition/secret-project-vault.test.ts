@@ -1,4 +1,5 @@
 import * as platform from '#platform/index.js';
+import * as adapters from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +7,7 @@ import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFi
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEncryptedFileSecretStore, installationSecretRoot, listProjectVaults, observeOwnerRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { inspectConfiguredSecretInventory, inspectSecretProjectTarget, changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
@@ -14,7 +15,12 @@ import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const cleanups: (() => Promise<void>)[] = [];
-afterEach(async () => { clearConfigCache(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+beforeEach(() => {
+  // A person accepts the moved identity at a terminal, as in installation-relocation.test.ts.
+  vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  vi.spyOn(platform, 'automationMarker').mockReturnValue(null);
+});
+afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 const MAIN_VALUE = 'synthetic-main-canary-7f3a', OWN_VALUE = 'synthetic-project-canary-91c2';
 const SQLITE = { busyTimeoutMs: 1_000, journalMode: 'wal' as const, durability: 'full' as const };
 const human = { attest: async () => true }, noTerminal = { attest: async () => false };
@@ -161,8 +167,24 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     const copy = join(base, 'copy');
     await cp(root, copy, { recursive: true });
     clearConfigCache();
-    expect(await code(resolverOf(copy, env))).toBe('INSTALLATION_IDENTITY_RELOCATED');
-    await resolveConfiguredInstallationIdentity(copy, 'keep', { env });
+    const relocated = await resolverOf(copy, env).catch((error: unknown) => error);
+    expect(relocated).toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    for (const locale of ['en', 'tr'] as const) {
+      const message = (relocated as platform.DeckentError).localize!(locale).message;
+      expect(message).toContain('deckent init identity --keep');
+      expect(message).toContain(locale === 'en' ? 'at your terminal' : 'terminalinizde');
+    }
+    const target = await inspectSecretProjectTarget(root, 'scope', { env });
+    const vault = join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(target.anchor));
+    const paths = [join(copy, '.deckent/installation-identity/identity.json'), join(copy, '.deckent/policy.json'),
+      join(vault, PROJECT_VAULT.projectFile), join(vault, PROJECT_VAULT.grantsFile)];
+    const before = await Promise.all(paths.map(path => readFile(path)));
+    vi.mocked(platform.automationMarker).mockImplementation(markedEnv => markedEnv['AI_AGENT'] === '1' ? 'agent' : null);
+    expect(await code(resolveConfiguredInstallationIdentity(copy, 'keep', { env: { ...env, AI_AGENT: '1' } })))
+      .toBe('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+    expect(await Promise.all(paths.map(path => readFile(path)))).toEqual(before);
+    vi.mocked(platform.automationMarker).mockReturnValue(null);
+    expect(await resolveConfiguredInstallationIdentity(copy, 'keep', { env })).toMatchObject({ class: 'moved', basis: 'human-tty' });
     expect(await code((await resolverOf(copy, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await code(handOverProjectSecrets(copy, 'scope', { env }, human))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
