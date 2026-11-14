@@ -5,6 +5,7 @@
   "onboarding.session.applying": "Uygulanıyor…",
   "onboarding.session.preparing": "Hazırlanıyor…",
   "onboarding.session.busyKey": "tuşlar işlenmez",
+  "onboarding.session.typingIgnored": "Bu karta yazı yazılamaz. Seçmek için ok tuşlarını kullanıp Enter'a tekrar basın; sonra dönmek için Esc.",
   "onboarding.session.blocked": "Bu adım bekliyor",
   "onboarding.session.waiting": "İşlemin sahibi tamamlandığını doğrulamadı. /setup ile yeniden açın.",
   "onboarding.session.unavailable": "İlk kurulum ekranları gösterilemedi ({code}); çalışma satırı onlarsız açılıyor.",

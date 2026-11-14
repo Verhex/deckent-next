@@ -25,12 +25,14 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
   const [at, select] = useState(initial), [text, setText] = useState(''), [empty, setEmpty] = useState(false), [bodyAt, scroll] = useState(0), done = useRef(false), busy = useRef(false);
   const [applying, setApplying] = useState(false), [refused, setRefused] = useState(false), [unavailable, setUnavailable] = useState(false), spinner = useSpinnerGlyph(applying);
+  const ignoredTyping = useRef(false), [typingHint, setTypingHint] = useState(false);
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
   const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), detail = question.choices[at]?.detail ?? [];
   const bodyLines = [...(unavailable ? [t('onboarding.session.unavailableChoice', {}, locale)] : question.body), ...detail].flatMap(line => wrapCells(terminalSafeText(line), width));
   const send = (answer: QuestionAnswer) => { if (done.current) return; done.current = true; if (finish(answer)) { busy.current = true; setApplying(true); } };
   const yieldToTyping = () => { if (!done.current && welcome) { welcome.typed(); send({ id: 'later' }); } };
-  usePaste(text => { if (text) yieldToTyping(); }, { isActive: welcome !== undefined });
+  const ignoreTyping = () => { ignoredTyping.current = true; setTypingHint(false); };
+  usePaste(text => { if (!text) return; if (done.current) { if (busy.current) setRefused(true); return; } if (welcome) yieldToTyping(); else ignoreTyping(); }, { isActive: welcome !== undefined || !question.text });
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
   const start = Math.max(0, at - height + 1);
@@ -38,7 +40,7 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
     if (done.current) { if (busy.current) setRefused(true); return; }
     if (welcome && !key.ctrl && !key.meta && /[^\p{C}]/u.test(input)) { yieldToTyping(); return; }
     if (guard && (key.upArrow || key.downArrow || key.return) && performance.now() - guard.openedAt() < guard.guardMs) return;
-    if (input.length > 1 && !question.text) return;
+    if (!question.text && (input.length > 1 || (!key.ctrl && !key.meta && /[^\p{C}]/u.test(input)))) { if (!welcome) ignoreTyping(); return; }
     if (copy && isCardCopyKey(input, key)) {
       // Astra 2834 R1: file names and error messages reach this body unprojected; the copy redacts like the Window cards' copy (patterns + known values).
       const text = humanRecordText(cardCopyText([{ text: question.title }], question.body.map(text => ({ spans: [{ text }] })),
@@ -47,6 +49,8 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
       return;
     }
     if (key.return && (key.ctrl || key.meta)) return;
+    if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) { ignoredTyping.current = false; setTypingHint(false); }
+    if (key.return && ignoredTyping.current) { ignoredTyping.current = false; setTypingHint(true); return; }
     if (key.escape) { send({ id: 'later' }); return; }
     if (key.ctrl && input === 'c') { send({ id: 'exit' }); return; }
     if (key.pageUp) { scroll(value => Math.max(0, value - bodyHeight)); return; }
@@ -71,7 +75,8 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
     </Box>
       : question.choices.slice(start, start + height).map((row, index) => <Text key={row.id}>{at === start + index ? '> ' : '  '}{truncateEnd(terminalSafeText(row.label), width - 2, '…')}</Text>)}
     <Text> </Text>{applying ? <Text>{spinner} {work === 'preparing' ? t('onboarding.session.preparing', {}, locale) : t('onboarding.session.applying', {}, locale)}{refused ? ` · ${t('onboarding.session.busyKey', {}, locale)}` : ''}</Text>
-      : <Text>{t('onboarding.session.continue', {}, locale)} · {t('onboarding.session.later', {}, locale)}{copy ? ` · ${copied ?? copy.labels.hint}` : ''}</Text>}
+      : typingHint ? <Text>{t('onboarding.session.typingIgnored', {}, locale)}</Text>
+        : <Text>{t('onboarding.session.continue', {}, locale)} · {t('onboarding.session.later', {}, locale)}{copy ? ` · ${copied ?? copy.labels.hint}` : ''}</Text>}
   </Box>;
 }
 /**
