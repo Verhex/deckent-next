@@ -243,7 +243,7 @@ it('a static hard-floor card offers neither s nor always and rejects forged sess
     decision: 'allow', reason: 'Must refuse', standing: 'session', decisionCapability: card.decisionCapability })).rejects.toMatchObject({ code: 'APPROVAL_INVALID' });
   expect(f.rows('SELECT snapshot FROM approvals').map(row => JSON.parse(String(row.snapshot)).status)).toEqual(['pending']);
   const sent = f.requests.length; await settle(100); await f.decide('sa'); await settle(40); expect(f.requests.length).toBe(sent);
-  await exitTypedText(f.view); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
+  await exitTypedText(f.view); expect(f.requests.length).toBe(sent); // Nothing was sent after the forged call above: neither `sa` nor the Enter decides.
   await f.type('N'); await until(() => f.view.stdout.text.includes('Done 1.'), 'floor denied');
   await expect(readFile(join(f.project, 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 }, 20000);

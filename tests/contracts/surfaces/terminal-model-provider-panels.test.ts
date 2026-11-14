@@ -364,8 +364,8 @@ describe('/provider window', () => {
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
     // G2-3: a y in the same moment the question opened is swallowed (the arming period), never a disconnect.
     await view.press('y', 60); expect(removed).toEqual([]);
-    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
-    await view.press('n', 60); expect(view.frame()).toContain('Disconnect Local server'); // Still text, not a decline.
+    await armed(view.frame, 'press it again');
+    await view.press('n', 60); expect(view.frame()).toContain('Text typed here'); expect(view.frame()).toContain('Disconnect Local server'); // Still text, not a decline.
     await view.press(ENTER, 60); expect(view.frame()).toContain('Disconnect Local server');
     await view.press('n', 60);
     expect(removed).toEqual([]);
@@ -410,6 +410,9 @@ describe('QuestionWindow keys', () => {
   // G2-3 (analysis 2026-10-18): the MCP trust, provider disconnect and profile apply questions were outside the approval cards' key-race guard,
   // so a y typed for the input just before the question appeared granted trust. Now it is swallowed, and a held key keeps the question unarmed.
   it('a y pressed as the question appears, or held through its arming, is swallowed; a deliberate y after the quiet period answers', async () => {
+    const once: (boolean | null)[] = [], lone = question(once);
+    await lone.press('y', 20); expect(once).toEqual([]);
+    await armed(lone.frame, 'press it again'); await lone.press('y', 40); expect(once).toEqual([true]);
     const answers: (boolean | null)[] = [], view = question(answers);
     await view.press('y', 20); expect(answers).toEqual([]);
     expect(view.frame()).toContain('Trust files and pin these tools?'); expect(view.frame()).not.toContain('y/n'); // its keys are not shown until they count

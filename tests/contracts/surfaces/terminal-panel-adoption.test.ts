@@ -84,9 +84,7 @@ describe('real identity producer → shared controller → private adapter → W
       await until(() => stdout.text.includes('Ask anything'), 'real CLI composer'); stdin.write('hello\r');
       await until(() => observed.controllers[0]?.snapshot().approval?.phase === 'pending' && stdout.text.includes('PRIVATE-PREVIEW'), 'private decision renderer'); await settle(40);
       stdin.write('y'); await settle(40); expect(decisions).toHaveLength(0); // A key at once cannot decide the card: it is still arming (slice 2).
-      await until(() => stdout.text.lastIndexOf('Text typed here is not an answer.') > stdout.text.lastIndexOf('Approval needed'), 'armed typed-text line');
-      const exitAt = stdout.text.length; stdin.write('\r');
-      await until(() => stdout.text.slice(exitAt).includes('Nothing was chosen.') && stdout.text.slice(exitAt).includes('Enter confirm'), 'nothing chosen and normal keys');
+      await until(() => stdout.text.lastIndexOf('press it again') > stdout.text.lastIndexOf('Approval needed'), 'armed same early key');
       expect(decisions).toHaveLength(0);
       stdin.write('y'); await until(() => observed.controllers[0]!.snapshot().approval?.phase === 'deciding', 'decision in flight'); stdin.write('y');
       await until(() => observed.controllers[0]?.snapshot().phase === 'idle' && stdout.text.includes('ANSWER'), 'one completed adapter invocation');

@@ -390,7 +390,7 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       expect(view.frame()).toContain('SECOND-CARD');
       await view.type('y'); await settle(40);
       expect(decided).toEqual(['approval-a:allow']); // A key at once never answers the new card (it is still arming).
-      await exitTypedText(view); expect(decided).toEqual(['approval-a:allow']); await view.type('y');
+      await until(() => view.frame().includes('press it again'), 'newer card armed for same y'); expect(decided).toEqual(['approval-a:allow']); await view.type('y');
       await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });

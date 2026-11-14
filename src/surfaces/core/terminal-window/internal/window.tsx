@@ -39,6 +39,26 @@ function printable(input: string, key: Key): boolean {
   return !key.ctrl && !key.meta && !key.escape && !key.tab && /[^\p{C}]/u.test(input);
 }
 
+/** Owner 109: a read that is exactly one printable character (never a paste, a multi-key or an ambiguous read). */
+function loneKey(events: ReadonlyArray<readonly [string, Key]>): string | null {
+  const [input, key] = events[0]!;
+  return events.length === 1 && printable(input, key) && [...input].length === 1 ? input : null;
+}
+
+/**
+ * Text that reached a choice-only card (owner 107–109). `typed`: every later letter and digit is text until a plain Enter or a navigation
+ * key. `early`: the one key swallowed while the card was opening; only its own repeat may follow as a first key, any other letter is text
+ * and a plain Enter chooses nothing. Only those keys clear it: a focus round trip, a re-arm or a new question keep both (never less strict).
+ */
+function useCardText(burstText: boolean) {
+  const typed = useRef(false), early = useRef<string | null>(null), [hint, setHint] = useState<'early' | 'text' | 'unchosen' | null>(null);
+  const set = (value: boolean, unchosen = false) => { early.current = null; typed.current = value; setHint(value ? 'text' : unchosen ? 'unchosen' : null); };
+  useEffect(() => { if (burstText) set(false); }, [burstText]);
+  return { typed, early, hint, set, remember: (input: string) => { early.current = input; setHint('early'); },
+    /** Drops the "nothing was chosen" note once it is stale; text and a remembered key stay. */
+    settle: () => { if (!typed.current && early.current === null) setHint(null); } };
+}
+
 /** Frame rows around the body: two border rows, the title row and the key-hint row. */
 const FRAME_ROWS = 4;
 /** Border and inner padding columns on each side together. */
@@ -139,10 +159,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // the visible input owner; earlier keys are swallowed and restart the wait (arming.ts). Fail closed: nothing reaches its owner before.
   const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext), inputRevision);
   // Owner 108: once text reaches a choice-only card, later letters/digits are text too; only Enter or navigation ends it.
-  const typed = useRef(false), [typedHint, setTypedHint] = useState<'text' | 'unchosen' | null>(null);
-  const textState = (value: boolean, unchosen = false) => { typed.current = value; setTypedHint(value ? 'text' : unchosen ? 'unchosen' : null); };
-  useEffect(() => { if (!typed.current) setTypedHint(null); }, [arming.shown, focused, inputRevision]);
-  useEffect(() => { if (burstText) textState(false); }, [burstText]);
+  const typing = useCardText(burstText);
+  useEffect(typing.settle, [arming.shown, focused, inputRevision]);
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
   const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
@@ -161,9 +179,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18). Typed-text exit instructions appear only once their keys count.
   const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
   const keyHints = copy && interactive ? `${hints} · ${copy.labels.hint}` : hints;
-  const armedHints = !burstText && typedHint === 'text' ? armLabels.typedText
-    : !burstText && typedHint === 'unchosen' ? `${armLabels.unchosen} ${keyHints}` : keyHints;
-  const hintText = !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : arming.ignored ? armLabels.ignored : armLabels.arming;
+  const armedHints = burstText || typing.hint === null ? keyHints : typing.hint === 'early' ? armLabels.ignored : typing.hint === 'text' ? armLabels.typedText : `${armLabels.unchosen} ${keyHints}`;
+  const hintText = !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
@@ -179,7 +196,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions });
   latest.current = { total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions };
   const copyCard = () => {
-    if (!typed.current) setTypedHint(null);
+    typing.settle();
     const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
     if (!writer) return;
     const text = humanRecordText(cardCopyText(shownTitle, shownBody, [...latest.current.copyOptions, ...[...optionLabels.current.values()].flat()]), known), result = writer.write(text);
@@ -218,12 +235,16 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const deliver = (input: string, key: Key) => {
     const current = latest.current;
     if (guarded && !current.burstText) {
-      if (typed.current && printable(input, key)) return;
-      if (typed.current && key.return && !key.ctrl && !key.meta && !key.shift) { textState(false, true); return; }
-      if (navigationKey(key) || !key.ctrl && !key.meta && !key.shift && (key.leftArrow || key.rightArrow)) textState(false);
+      if (typing.early.current !== null && printable(input, key)) {
+        if (input !== typing.early.current) { typing.set(true); return; }
+        typing.set(false);
+      }
+      if (typing.typed.current && printable(input, key)) return;
+      if ((typing.typed.current || typing.early.current !== null) && key.return && !key.ctrl && !key.meta && !key.shift) { typing.set(false, true); return; }
+      if (navigationKey(key) || !key.ctrl && !key.meta && !key.shift && (key.leftArrow || key.rightArrow)) typing.set(false);
     }
-    if (current.onInput?.(input, key) === true) { if (!typed.current) setTypedHint(null); return; }
-    if (guarded && !current.burstText && printable(input, key)) textState(true);
+    if (current.onInput?.(input, key) === true) { typing.settle(); return; }
+    if (guarded && !current.burstText && printable(input, key)) typing.set(true);
     const scroll = scrollKeyOf(key);
     if (scroll) { setOffset(value => scrollBy(value, scroll, current.total, current.visible)); return; }
     if (key.escape && current.onClose) current.onClose();
@@ -235,13 +256,16 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const flush = () => {
     const read = burst.current; burst.current = null;
     if (!read) return;
-    const ignoredText = () => {
-      if (read.owned && acceptsInput() && !latest.current.burstText && read.events.some(([input, key]) => printable(input, key))) textState(true);
+    // Owner 109: only the one unambiguous printable key of a whole unarmed period is remembered; any other swallowed text is typed text.
+    const ignoredText = (unarmed = false) => {
+      if (!read.owned || !acceptsInput() || latest.current.burstText || !read.events.some(([input, key]) => printable(input, key))) return;
+      const lone = unarmed && !typing.typed.current && typing.early.current === null ? loneKey(read.events) : null;
+      if (lone === null) typing.set(true); else typing.remember(lone);
     };
     // A read of copy keys only copies and leaves the arming as it was; mixed with other keys it is one more event of a burst (never decides).
     if (read.events.every(([input, key]) => copyKey(input, key))) { if (read.owned && acceptsInput()) copyCard(); return; }
     if (read.revision !== latest.current.inputRevision) { ignoredText(); arming.restart(); return; }
-    if (!read.owned || !acceptsInput() || !arming.armed()) { ignoredText(); arming.touch(); return; }
+    if (!read.owned || !acceptsInput() || !arming.armed()) { ignoredText(true); arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
     // A read of navigation keys only (held PgDn, a coalesced run of arrows) moves the view or the highlight and never decides: delivered.
     if (read.events.every(([, key]) => navigationKey(key))) { for (const [input, key] of read.events) deliver(input, key); return; }
@@ -269,8 +293,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!acceptsInput()) return;
     // An entry window takes a paste only while it holds the keyboard (owner F2-18, Astra 3052 R1); a decision card never decides on one.
     if (!guarded) { latest.current.onPaste?.(text); return; }
-    if (!arming.armed()) { if (text.length && !latest.current.burstText) textState(true); arming.touch(); return; }
-    if (!latest.current.onPaste && text.length) textState(true);
+    if (!arming.armed()) { if (text.length && !latest.current.burstText) typing.set(true); arming.touch(); return; }
+    if (!latest.current.onPaste && text.length) typing.set(true);
     if (latest.current.onPaste) latest.current.onPaste(text); else arming.restart();
   }, { isActive: focused && (guarded || onPaste !== undefined) });
   const first = clampScroll(offset, rows.length, visible);
