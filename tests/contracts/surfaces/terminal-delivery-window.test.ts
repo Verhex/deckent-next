@@ -351,7 +351,10 @@ describe('delivery window on the real Workline', () => {
     expect(squeeze(frame(h))).toContain(squeeze('› src.js')); expect(h.calls).toEqual(['preview:r', 'patch-only']);
     await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.failedDiffHints), 'diff keys');
     expect(frame(h)).not.toContain(WORDS.queue!.reprepare); await press(h, 'r');
-    await press(h, '\r', 100); await until(() => frame(h).includes('+WORKER LINE'), 'diff body');
+    await press(h, '\r', 100); expect(frame(h)).not.toContain('+WORKER LINE'); expect(h.calls).toEqual(['preview:r', 'patch-only']);
+    await press(h, DOWN); await press(h, '\r', 100); await until(() => frame(h).includes('+WORKER LINE'), 'diff body');
+    // Ignored text inside the diff cannot become a delivery answer when Esc returns to the file list.
+    await press(h, '/'); await press(h, 'y'); expect(h.calls).toEqual(['preview:r', 'patch-only']);
     await press(h, ESC, 100); expect(frame(h)).not.toContain('+WORKER LINE'); expect(frame(h)).toContain('What the worker changed');
     expect(h.calls).toEqual(['preview:r', 'patch-only']);
   });
@@ -530,7 +533,7 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain(WORDS.verifyHints); expect(frame(h)).not.toContain('Adopt without verification'); // required: no unverified row
     expect(frame(h)).toMatch(/› Run verify-run-1/u);
     for (const keys of [CTRL_Y, ALT_Y, COALESCED, '\r']) { await press(h, keys, 120); expect(h.adoptions).toEqual([]); }
-    expect(frame(h)).toContain(WORDS.verifyHints);
+    expect(frame(h)).toContain('… × ↵ ↑↓'); // Rejected printable input now keeps the text hint until a deliberate navigation key.
     await press(h, DOWN); expect(frame(h)).toMatch(/› Run verify-run-2/u); await press(h, UP); await press(h, DOWN);
     await press(h, 'y', 150);
     await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
@@ -547,6 +550,8 @@ describe('delivery window on the real Workline', () => {
     expect(flat).toMatch(/--delivery-command-idterminal-delivery-[0-9a-f-]{36};/u); expect(flat).toContain('deckentruncreate--scopes');
     await press(h, 'y', 120); expect(h.adoptions).toEqual([]);
     await press(h, 'r', 120);
+    expect(h.calls.filter(call => call === 'verification-runs')).toHaveLength(1); // The ignored y started text; r is text too.
+    await press(h, '\r'); expect(h.adoptions).toEqual([]); await press(h, 'r', 120);
     await until(() => frame(h).includes('Run verify-run-1 · task check · accepted'), 'read again');
     expect(h.calls.filter(call => call === 'verification-runs')).toHaveLength(2);
     await press(h, 'y', 150);
@@ -634,6 +639,7 @@ it('routes a registered target into the queue and asks each exact batch card wit
   state = 'awaiting-confirmation'; await press(h, 'r'); await press(h, 'y');
   await until(() => frame(h).includes('Publish delivery references'), 'exact publication card');
   await press(h, 'yy'); await press(h, '\u0019'); expect(phase).toBe(0);
+  await press(h, 'y'); expect(phase).toBe(0); await press(h, '\r'); expect(phase).toBe(0);
   await press(h, 'y'); await until(() => frame(h).includes('Adopt the verified prefix'), 'separate adoption card'); expect(phase).toBe(1);
   await press(h, 'y'); await until(() => frame(h).includes('Adopted'), 'retained queue result'); expect(phase).toBe(2);
   expect(h.calls).toContain('queue-settled');

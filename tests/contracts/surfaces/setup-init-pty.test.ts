@@ -67,7 +67,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (production entry)', () => {
-  it('107: separate typed keys then Enter leave the folder question open with an EN/TR hint; Enter again answers', async () => {
+  it('107/108: separate /task /policy keys then Enter leave the folder question open with an EN/TR hint; Enter again answers', async () => {
     await access(cli);
     for (const locale of ['en', 'tr'] as const) {
       const home = await mkdtemp(join(tmpdir(), 'deckent-init-consent-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-consent-root-'));
@@ -77,7 +77,7 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
         : { keys: 'Enter onayla', folder: '> 3. Klasör ve kapsam', hint: 'Buraya yazılan metin bir cevap değildir.', profile: '> 5. Kurulumu kim kullanacak', yes: 'Evet (y)' };
       // DRIVER writes each character separately, waits for armed hints and leaves 150 ms between stdin reads.
       // A fresh home opens on the language step: Enter accepts its recommended answer, then the folder question takes the typed text.
-      const steps = [[copy.keys, '\r'], [copy.folder, '/help\r'], [copy.hint, '\r'], [copy.profile, '\u001b']];
+      const steps = [[copy.keys, '\r'], [copy.folder, '/task /policy\r'], [copy.hint, '\r'], [copy.profile, '\u001b']];
       const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
       const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--lang', locale]), root],
         { env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));

@@ -202,13 +202,17 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   yes or no answer declares `role: 'yes' | 'no'` (never a hand `key`) and `optionKey` derives (y)/(n) in every locale for the row suffix and
   the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`
   window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
-  questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` (Enter cancels) and the onboarding question view are
-  separate and unchanged. Each step of the guided setup window (`setup-window.tsx`) and of the SIWC card mounts its own `Window` (keyed
-  per step), so every step re-arms and a digit plus Enter typed for one step never answers the next (alpha.58). In the setup window only,
-  ignored printable text or paste blocks the next Enter and shows `setup.window.typedText` (owner decision 107); Enter again or moving
-  the choice then Enter answers normally. `Window.onIgnoredText` only notifies setup of text swallowed during arming, a rejected burst
-  or a paste; arming, burst/paste rejection and other owners keep their behavior. The flag resets at each step and is never persisted;
-  shown letters/digits still answer immediately. In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
+  questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` retains Enter-as-cancel; onboarding has its separate
+  decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority) owns one ephemeral typed-text
+  state. Printable text swallowed by arming, a rejected burst, an unconsumed paste or an unhandled printable key starts it, immediately
+  showing `terminal.decision.typedText` through the shared EN/TR decision labels. Later printable keys (including answer letters, digits,
+  j/k and space) never reach the owner. Plain Enter ends this state without answering and keeps the explanation; arrows and PgUp/PgDn/
+  Home/End end it and are delivered normally. Esc, Ctrl+C, Tab, Ctrl+Y copy and Ctrl+O retain their meanings. An open reason field
+  (`burstText`) and non-guarded entry windows retain text editing. The first answer key on an armed card still answers immediately;
+  Enter without prior text still accepts the highlighted row. `armMs` (300), burst classification and paste rejection are unchanged.
+  Setup keeps its `Window` mounted and changes `inputRevision` to re-arm each new question, retaining text typed while an answer was
+  being applied; no setup-local flag or ignored-text callback remains. SIWC still mounts a new `Window` per stage. Workline, CLI-card,
+  setup, SIWC and standalone onboarding-provider hosts supply catalog words. No typed state is persisted. In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.
   Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
   https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line
