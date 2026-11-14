@@ -99,6 +99,8 @@ interface WindowProps {
   readonly onInput?: (input: string, key: Key, meta?: Readonly<{ burst: boolean }>) => boolean | void;
   /** Pasted text while this decision window holds the keyboard (never a decision; the owner may take it as text). */
   readonly onPaste?: (text: string) => void;
+  /** Notification only: this window swallowed printable input or a paste. It grants no input or decision to the owner. */
+  readonly onIgnoredText?: () => void;
   /** A decision window that takes plain text from a multi-event read right now (an open reason field); without it such a read is dropped
    * whole. Fail closed: a read of unknown shape never reaches a decision owner. */
   readonly burstText?: boolean;
@@ -117,7 +119,7 @@ interface WindowProps {
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
 export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
-  onFocusChange, onPaste, burstText = false, copyOptions = [] }: WindowProps) {
+  onFocusChange, onPaste, onIgnoredText, burstText = false, copyOptions = [] }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
@@ -162,8 +164,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy, copyOptions });
-  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy, copyOptions };
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, onIgnoredText, burstText, title, body, copy, copyOptions });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, onIgnoredText, burstText, title, body, copy, copyOptions };
   const copyCard = () => {
     const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
     if (!writer) return;
@@ -214,16 +216,19 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const flush = () => {
     const read = burst.current; burst.current = null;
     if (!read) return;
+    const ignoredText = () => {
+      if (read.owned && acceptsInput() && read.events.some(([input, key]) => !key.ctrl && !key.meta && /[^\p{C}]/u.test(input))) latest.current.onIgnoredText?.();
+    };
     // A read of copy keys only copies and leaves the arming as it was; mixed with other keys it is one more event of a burst (never decides).
     if (read.events.every(([input, key]) => copyKey(input, key))) { if (read.owned && acceptsInput()) copyCard(); return; }
-    if (!read.owned || !acceptsInput() || !arming.armed()) { arming.touch(); return; }
+    if (!read.owned || !acceptsInput() || !arming.armed()) { ignoredText(); arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
     // A read of navigation keys only (held PgDn, a coalesced run of arrows) moves the view or the highlight and never decides: delivered.
     if (read.events.every(([, key]) => navigationKey(key))) { for (const [input, key] of read.events) deliver(input, key); return; }
     // Several events in one read: only an owner taking plain text right now gets them (as text), and the first one it does not take ends
     // the read and re-arms; any other owner never sees such a read (security review 2026-10-18, fail-open burst handling).
-    if (!latest.current.burstText) { arming.restart(); return; }
-    for (const [input, key] of read.events) if (latest.current.onInput?.(input, key, { burst: true }) !== true) { arming.restart(); return; }
+    if (!latest.current.burstText) { ignoredText(); arming.restart(); return; }
+    for (const [input, key] of read.events) if (latest.current.onInput?.(input, key, { burst: true }) !== true) { ignoredText(); arming.restart(); return; }
   };
   const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
@@ -244,7 +249,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!acceptsInput()) return;
     // An entry window takes a paste only while it holds the keyboard (owner F2-18, Astra 3052 R1); a decision card never decides on one.
     if (!guarded) { latest.current.onPaste?.(text); return; }
-    if (!arming.armed()) { arming.touch(); return; }
+    if (!arming.armed()) { if (text.length) latest.current.onIgnoredText?.(); arming.touch(); return; }
+    if (!latest.current.onPaste && text.length) latest.current.onIgnoredText?.();
     if (latest.current.onPaste) latest.current.onPaste(text); else arming.restart();
   }, { isActive: focused && (guarded || onPaste !== undefined) });
   const first = clampScroll(offset, rows.length, visible);

@@ -8,6 +8,7 @@ import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 // I-S4: bare `deckent init` renders the I-S1 plan as JSON, plain lines or the window, and applies only what INIT-D5 allows.
 const base: SetupObservation = { schemaVersion: 2,
@@ -315,7 +316,7 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const reason = 'my-project scope for HOST/1000 starts with the Solo profile in full-auto. Usual work follows the company policy; protected settings, secrets and destructive operations keep their own approval rules. Switch the mode with Shift+Tab or /mode at any time; nothing else changes.';
   const model = { title: 'deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'apply', label: 'Apply now' }],
-    optionRows: 2, initial: 0, hints: 'Esc close', applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
+    optionRows: 2, initial: 0, hints: 'Esc close', typedText: MESSAGE_REGISTRY.catalogs.en['setup.window.typedText']!, applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
   const sent: string[] = [];
   let release = () => {};
   const closed = mountSetupWindow(model, id => { sent.push(id); return sent.length > 1 ? Promise.resolve(null) : new Promise(resolve => { release = () => resolve({ ...model, rows: ['> 8. Final check · ready to apply', '', 'Next step', '', ''] }); }); },
@@ -334,18 +335,26 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
   await closed; expect(sent).toEqual(['apply', 'apply']);
 });
 /** Mounts the real guided window on a fake TTY with one controller model; returns the drawn text and the answers the window sent. */
-async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel) {
+async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel,
+  options: { early?: boolean; step?: import('#surfaces/core/project-instructions/index.js').SetupWindowStep } = {}) {
   const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
   const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js');
-  let frame = '';
+  let frame = '', finished = false;
   const sent: string[] = [];
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 40 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
-  const closed = mountSetupWindow(model, async id => { sent.push(id); return null; }, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
-  await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 200));
-  const text = () => frame.replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, ''); // eslint-disable-line no-control-regex
-  return { text, sent, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 150)); },
-    close: async () => { if (!sent.length) stdin.write('\u001b'); await closed; } };
+  const closed = mountSetupWindow(model, async id => { sent.push(id); const next = options.step ? await options.step(id) : null; finished = next === null; return next; }, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
+  const text = () => terminalBuffers(frame, 100, 40).text.replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' ');
+  const wait = async (predicate: () => boolean) => {
+    const deadline = Date.now() + 5_000;
+    while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    expect(predicate(), text()).toBe(true);
+  };
+  await wait(() => text().includes(model.title));
+  const armed = async () => { await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 100)); };
+  if (!options.early) await wait(() => text().includes(model.hints));
+  return { text, sent, armed, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
+    close: async () => { if (!finished) { await armed(); stdin.write('\u001b'); } await closed; } };
 }
 it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "Not now" beside a real No stays letterless; language has no letters, Enter still sends', async () => {
   const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
@@ -354,6 +363,7 @@ it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "No
   try {
     expect(language.text()).toContain('2. Türkçe'); expect(language.text()).not.toMatch(/\d\. [^\n]* \([a-z]\)/u);
     await language.press('y'); expect(language.sent).toEqual([]);
+    await language.press('\r'); expect(language.sent).toEqual([]);
     await language.press('\r'); expect(language.sent).toEqual(['tr']);
   } finally { await language.close(); }
   await controller.step('en'); await controller.step('yes'); await controller.step('core:solo');
@@ -375,3 +385,43 @@ it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "No
     await view.press('n'); expect(view.sent).toEqual(['later']);
   } finally { await view.close(); }
 });
+
+it('107: individually typed text, a rejected burst or a paste (armed or early) each block one Enter, in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const input of ['typed', 'paste', 'burst', 'early-text', 'early-paste', 'early-burst']) {
+    const run = harness(), controller = createSetupController({ context: run.context, root: '/x', locale, observed: { observation: base, registry }, flags: { json: false, yes: false } });
+    await controller.step(locale);
+    const model = controller.model(), view = await setupWindowAt(model, { early: input.startsWith('early'), step: controller.step });
+    try {
+      if (input.startsWith('early')) expect(view.text()).not.toContain(model.hints);
+      if (input === 'typed') for (const char of '/help') await view.press(char); // Separate stdin reads, beyond the production arming wait.
+      else await view.press(input.endsWith('paste') ? '\u001b[200~/help\r\ny1\u001b[201~' : input.endsWith('burst') ? '\u001b[Ay' : '/');
+      await view.armed();
+      await view.press('\r');
+      expect(view.sent, `${locale}/${input}`).toEqual([]); expect(run.applied).toEqual([]);
+      expect(controller.model().rows).toEqual(model.rows);
+      expect(view.text()).toContain(model.typedText);
+      await view.press('\r'); expect(view.sent).toEqual(['yes']);
+      // The next step has its own arming period and no inherited text flag.
+      await view.armed(); await view.press('\r'); expect(view.sent).toEqual(['yes', 'core:solo']);
+    } finally { await view.close(); }
+  }
+}, 30_000);
+
+it('107: arrows and j/k clear typed text; letters and digits still answer; an early Enter alone only needs repeating', async () => {
+  const run = harness(), controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+  await controller.step('en'); const model = controller.model();
+  for (const key of ['\u001b[B', 'j', 'k', 'y', '1', 'n', '2']) {
+    const view = await setupWindowAt(model);
+    try {
+      await view.press('/'); await view.press(key);
+      if (['\u001b[B', 'j', 'k'].includes(key)) { expect(view.sent).toEqual([]); await view.press('\r'); }
+      expect(view.sent).toEqual([['\u001b[B', 'j', 'n', '2'].includes(key) ? 'later' : 'yes']);
+    } finally { await view.close(); }
+  }
+  const early = await setupWindowAt(model, { early: true });
+  try {
+    expect(early.text()).not.toContain(model.hints);
+    await early.press('\r'); expect(early.sent).toEqual([]);
+    await early.armed(); await early.press('\r'); expect(early.sent).toEqual(['yes']);
+  } finally { await early.close(); }
+}, 15_000);
