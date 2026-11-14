@@ -29,6 +29,12 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
 import { ProjectAttachmentApplication } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, DeckentError } from '#platform/index.js';
+import { assessAttachmentLocation, readableInstallationRegistrationSchema, installationRegistrationSchema,
+  normalizeAttachmentRegistration, attachmentRegistrationAllowance,
+  countMismatchedAttachments, installationIdentitySchema, type AttachmentRevocation, type ReadableInstallationRegistration } from '#domain/index.js';
+import { resolveInstallationProjectContext, settleRemovedAttachment, verifySharedAttachmentRestore, ProjectAttachmentRelocationApplication,
+  type InstallationContextPorts, type AttachmentRegistryPort } from '#engine/index.js';
+import registrationV3Fixture from '../../fixtures/attachment-registration-v3.json' with { type: 'json' };
 
 const personEffectWitness = vi.hoisted(() => ({ allowed: false }));
 // Synthetic disposable-person fixture only. The effect still uses the real session, broker and removal owners.
@@ -532,4 +538,219 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await writeFile(join(f.b, '.deckent/project-attachment.json'), '{}', { mode: 0o600 });
     await expect(loadConfiguredInstallationIdentity(f.b, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_INVALID' });
   });
+});
+
+function readerFixture() { return readableInstallationRegistrationSchema.parse(structuredClone(registrationV3Fixture)); }
+const jsonSize = (value: unknown) => Buffer.byteLength(platform.serializeJsonDocument(value));
+
+it('attachment reader: L2 assessment, frozen lineage rules, exact admission and the pure doctor count', async () => {
+  const record = readerFixture(), entry = record.entries[0]!, reference = entry.attachment, location = reference.location;
+  const identity = 'filesystemIdentity' in location ? location.filesystemIdentity : null;
+  const observed = { ...location, device: '20' };
+  expect(assessAttachmentLocation(location, observed)).toBe(true);
+  for (const patch of [{ filesystemIdentity: null }, { filesystemIdentity: { kind: 'other', value: identity!.value } },
+    { filesystemIdentity: { ...identity!, value: 'other' } }, { canonicalRoot: '/different' }, { inode: '3' }]) {
+    expect(assessAttachmentLocation(location, { ...observed, ...patch })).toBe(false);
+  }
+  const { filesystemIdentity: ignored, ...legacyLocation } = observed; void ignored;
+  expect(assessAttachmentLocation(location, legacyLocation)).toBe(false);
+  expect(assessAttachmentLocation({ ...legacyLocation, device: '10' }, observed)).toBe(false);
+  expect(assessAttachmentLocation(legacyLocation, observed)).toBe(true);
+  expect(readableInstallationRegistrationSchema.safeParse({ ...record, lineage: { ...registrationV3Fixture.lineage, headDevice: '99', pastDevices: ['77'] } }).success).toBe(true);
+  for (const patch of [{ pastDevices: ['10'] }, { pastDevices: ['11', '11'] }, { pastDevices: ['11', '12'] }, { headDevice: '1'.repeat(21) }]) {
+    expect(readableInstallationRegistrationSchema.safeParse({ ...record, lineage: { ...registrationV3Fixture.lineage, ...patch } }).success).toBe(false);
+  }
+  const legacyEntry = { ...reference, schemaVersion: 1, location: { ...legacyLocation, device: '1'.repeat(25) } };
+  expect(readableInstallationRegistrationSchema.safeParse({ ...record, entries: [{ ...entry, attachment: legacyEntry }] }).success).toBe(true);
+  const source = { ...record.source, location: { ...record.source.location, device: '20' } };
+  const identityRead = { status: 'available' as const, value: installationIdentitySchema.parse({ schemaVersion: 1, installationId: source.installationId }), bindingCapability: 'not-observed' as const };
+  const observe = vi.fn(async () => identity);
+  const ports: InstallationContextPorts = { registration: async () => record, attachment: async () => reference,
+    source: async () => ({ source, identity: identityRead }), target: async () => ({ ...observed, projectId: reference.projectId }),
+    legacy: async () => identityRead, observeFilesystemIdentity: observe };
+  const request = { registrationId: record.registrationId, companyId: source.companyId, actor: reference.actor, scopeId: reference.scopeId };
+  expect((await resolveInstallationProjectContext(ports, request)).kind).toBe('attached');
+  expect(observe).toHaveBeenCalledTimes(2);
+  observe.mockResolvedValueOnce(null);
+  await expect(resolveInstallationProjectContext(ports, request)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  await expect(resolveInstallationProjectContext({ ...ports, attachment: async () => ({ ...reference, location: observed }) }, request)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  const two = readableInstallationRegistrationSchema.parse({ ...record, entries: [entry, { ...entry, attachment: { ...reference,
+    projectId: '00000000-0000-4000-8000-000000000003', commandId: '00000000-0000-4000-8000-000000000003', location: { ...location, canonicalRoot: '/other' } } }] });
+  expect(countMismatchedAttachments(two, source.projectRoot, [null, null])).toBe(2);
+  expect(countMismatchedAttachments({ ...two, entries: two.entries.map(item => ({ ...item, state: 'revoked' })) }, source.projectRoot, [null, null])).toBe(0);
+  expect(countMismatchedAttachments(two, '/outside', [null, null])).toBe(0);
+  if (two.schemaVersion === 3) expect(countMismatchedAttachments({ ...two, lineage: undefined }, source.projectRoot, [null, null])).toBe(0);
+  const { lineage: ignoredLineage, ...legacyBase } = registrationV3Fixture; void ignoredLineage;
+  const legacyRecord = installationRegistrationSchema.parse({ ...legacyBase, schemaVersion: 2,
+    source: { ...source, location: legacyLocation }, entries: [{ ...entry, attachment: { ...reference, schemaVersion: 1, location: legacyLocation } }] });
+  observe.mockClear();
+  const legacyPorts = { ...ports, registration: async () => legacyRecord, attachment: async () => legacyRecord.entries[0]!.attachment,
+    source: async () => ({ source: legacyRecord.source, identity: identityRead }) };
+  expect((await resolveInstallationProjectContext(legacyPorts, request)).kind).toBe('attached');
+  expect(observe).not.toHaveBeenCalled();
+  expect(countMismatchedAttachments(legacyRecord, source.projectRoot, [null])).toBe(0);
+  expect(platform.ErrorRegistry.get('PROJECT_ATTACHMENT_NEWER_RECORD', 'en')?.message).toBe('This attachment record was written by a newer deckent. This version will not change it; use the newer version for this step.');
+  expect(platform.ErrorRegistry.get('PROJECT_ATTACHMENT_NEWER_RECORD', 'tr')?.message).toBe('Bu bağlantı kaydı daha yeni bir deckent sürümüyle yazıldı. Bu sürüm kaydı değiştirmez; bu adım için daha yeni sürümü kullanın.');
+});
+
+it('attachment reader: r7 cap admits the first legacy repair and all 104 transitions preserve retained bytes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-attachment-reader-')); roots.push(root);
+  const layout = platform.resolveProductLayout({ projectRoot: root });
+  const store = new FileProjectAttachmentStore(layout, { env: { DECKENT_GLOBAL_HOME: join(root, 'global') } }, 4096, 1000);
+  const path = await platform.prepareProductFile(store.global, 'installationRegistration');
+  expect(attachmentRegistrationAllowance(4096)).toBe(1190);
+  // Retained Astra 3115 witness; the first L1 repair must still fit without shrinking the input.
+  for (const [name, rawSize] of [['legacy-before', 4096], ['legacy-v3-candidate', 4530]] as const) {
+    const text = await readFile(new URL(`../../fixtures/attachment-r7/${name}.json`, import.meta.url), 'utf8');
+    const record = readableInstallationRegistrationSchema.parse(JSON.parse(text));
+    expect(platform.serializeJsonDocument(record)).toBe(text);
+    expect(Buffer.byteLength(text)).toBe(rawSize);
+    expect(jsonSize(normalizeAttachmentRegistration(record))).toBe(4096);
+    await writeFile(path, text);
+    expect(await store.registration()).toEqual(record);
+  }
+  for (const operation of ['revoke', 'detach', 'unregister-absent', 'unregister-false'] as const) {
+    const before = await readFile(new URL(`../../fixtures/attachment-r7/${operation}-before.json`, import.meta.url), 'utf8');
+    const record = readableInstallationRegistrationSchema.parse(JSON.parse(before));
+    const original = record.entries[0]!;
+    const leased = operation === 'detach';
+    const normalizedSize = operation === 'unregister-absent' ? 4095 : operation === 'unregister-false' ? 4070 : 4096;
+    expect(platform.serializeJsonDocument(record)).toBe(before);
+    expect(Buffer.byteLength(before)).toBe(4518);
+    expect(jsonSize(normalizeAttachmentRegistration(record))).toBe(normalizedSize);
+    await writeFile(path, before, { mode: 0o600 });
+    const change: AttachmentRevocation = operation.startsWith('unregister') ? { action: 'unregister' } : { action: leased ? 'detach' : 'revoke', projectId: original.attachment.projectId };
+    const expected = operation === 'unregister-absent' ? before.replace(`  "registrationId": "${record.registrationId}",\n`, `  "registrationId": "${record.registrationId}",\n  "unregistered": true,\n`)
+      : operation === 'unregister-false' ? before.replace('"unregistered": false', '"unregistered": true') : before.replaceAll('"state": "active"', '"state": "revoked"');
+    const app = new ProjectAttachmentApplication({ store, actor: record.source.owner, authorize: async () => {},
+      observeFilesystemIdentity: async () => registrationV3Fixture.source.location.filesystemIdentity,
+      source: async () => ({ source: { ...record.source, location: { ...record.source.location, device: '20' } }, identity: {
+        status: 'available', value: installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.source.installationId }), bindingCapability: 'not-observed' } }),
+      target: async () => { throw new Error('104 must not inspect a target'); }, ensureProject: async () => { throw new Error('104 must not create a project'); },
+      install: async () => { throw new Error('104 must not install'); } });
+    if (change.action === 'unregister') await app.unregister();
+    else if (change.action === 'detach') await app.detach(change.projectId);
+    else await app.revoke(change.projectId);
+    expect(await readFile(path, 'utf8')).toBe(expected);
+    const after = (await store.registration())!;
+    expect(normalizeAttachmentRegistration(after)).toEqual(normalizeAttachmentRegistration(record));
+    expect(jsonSize(normalizeAttachmentRegistration(after))).toBe(normalizedSize);
+    expect(jsonSize(after)).toBe(operation === 'revoke' ? 4519 : leased ? 4520 : operation === 'unregister-false' ? 4517 : 4542);
+    expect(jsonSize(after)).toBeLessThanOrEqual(5286);
+    const oversized = { ...after, source: { ...after.source, bootstrapConfigPath: after.source.bootstrapConfigPath + 'x'.repeat(4097 - normalizedSize) } };
+    await writeFile(path, platform.serializeJsonDocument(oversized));
+    await expect(store.registration()).rejects.toMatchObject({ code: 'INSTALLATION_FILE_UNSAFE', params: { reason: 'size' } });
+  }
+  const small = readerFixture(), canonical = platform.serializeJsonDocument(small);
+  await writeFile(path, canonical + ' '.repeat(5286 - Buffer.byteLength(canonical)));
+  expect((await store.registration())?.schemaVersion).toBe(3);
+  await writeFile(path, canonical + ' '.repeat(5287 - Buffer.byteLength(canonical)));
+  await expect(store.registration()).rejects.toMatchObject({ code: 'INSTALLATION_FILE_UNSAFE', params: { reason: 'size' } });
+  const base = readerFixture(), item = base.entries[0]!;
+  const { filesystemIdentity: ignored, ...legacy } = registrationV3Fixture.entries[0]!.attachment.location; void ignored;
+  const long = readableInstallationRegistrationSchema.parse({ ...base, entries: [{ ...item, attachment: { ...item.attachment, schemaVersion: 1,
+    location: { ...legacy, device: '1'.repeat(25) } } }] });
+  await writeFile(path, platform.serializeJsonDocument(long));
+  await store.hold(() => store.writeRevocation(long, { action: 'revoke', projectId: item.attachment.projectId }));
+  expect(await readFile(path, 'utf8')).toBe(platform.serializeJsonDocument(long).replace('"state": "active"', '"state": "revoked"'));
+  const before = await readFile(path, 'utf8');
+  await expect(store.hold(() => store.write(long, long))).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(await readFile(path, 'utf8')).toBe(before);
+  await writeFile(path, platform.serializeJsonDocument({ ...base, schemaVersion: 4 }));
+  await expect(store.registration()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  await writeFile(path, '{"schemaVersion":3}');
+  await expect(store.registration()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_INVALID' });
+  const { lineage: ignoredLineage, ...legacyBase } = registrationV3Fixture; void ignoredLineage;
+  const legacyRecord = installationRegistrationSchema.parse({ ...legacyBase, schemaVersion: 2, source: { ...base.source, location: legacy },
+    entries: [{ ...item, attachment: { ...item.attachment, schemaVersion: 1, location: legacy } }] });
+  const oldText = platform.serializeJsonDocument(legacyRecord);
+  const oldStore = new FileProjectAttachmentStore(layout, store.options, Buffer.byteLength(oldText) - 1, 1000);
+  await writeFile(path, oldText);
+  await expect(oldStore.registration()).rejects.toMatchObject({ code: 'INSTALLATION_FILE_UNSAFE', params: { reason: 'size' } });
+  const refPath = await platform.prepareProductFile(layout, 'projectAttachment');
+  await writeFile(path, platform.serializeJsonDocument(base));
+  await writeFile(refPath, platform.serializeJsonDocument(base.entries[0]!.attachment));
+  await fs.chmod(root, 0o775);
+  const confirm = vi.fn(async () => true);
+  const { prepareConfiguredAttachmentDirectory } = await import('#composition/core/installation/internal/attachment.js');
+  await expect(prepareConfiguredAttachmentDirectory(root, store.options, confirm)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(confirm).not.toHaveBeenCalled(); expect((await fs.lstat(root)).mode & 0o777).toBe(0o775);
+  await fs.chmod(root, 0o700);
+  await writeFile(refPath, platform.serializeJsonDocument({ ...base.entries[0]!.attachment, schemaVersion: 3 }));
+  await expect(store.attachment()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+});
+
+it('attachment reader: mutation prechecks fence both relocation branches, grants, restores and settlement before effects', async () => {
+  let record: ReadableInstallationRegistration = readerFixture();
+  const reference = record.entries[0]!.attachment, effect = vi.fn(async () => { throw new Error('fenced effect ran'); });
+  const port: AttachmentRegistryPort = { registration: async () => record, attachment: async () => reference, hold: async work => work(),
+    write: effect, writeRevocation: effect };
+  const identity = { status: 'available' as const, value: installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.source.installationId }), bindingCapability: 'not-observed' as const };
+  const app = new ProjectAttachmentApplication({ store: port, actor: record.source.owner, authorize: async () => {},
+    observeFilesystemIdentity: async () => registrationV3Fixture.source.location.filesystemIdentity,
+    source: async () => ({ source: record.source, identity }), target: async () => ({ location: reference.location, projectId: reference.projectId,
+      companyId: reference.companyId, configDigest: 'a'.repeat(64) }), install: effect, ensureProject: effect });
+  const preview = await app.preview(reference.scopeId);
+  for (const command of [() => app.apply(reference.scopeId, preview.planDigest, randomUUID()),
+    () => app.apply(reference.scopeId, record.entries[0]!.planDigest, reference.commandId),
+    () => app.restore(reference.projectId, preview.planDigest),
+    () => settleRemovedAttachment(port, record.registrationId, record.source.installationId, reference.location.canonicalRoot)]) {
+    await expect(command()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  }
+  await expect(app.unregister()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_SOURCE_REGISTERED' });
+  record = { ...record, unregistered: true };
+  const registrationPreview = await app.registrationPreview(record.source.projectRoot, record.source.scopeId);
+  await expect(app.register(record.source.projectRoot, record.source.scopeId, registrationPreview.planDigest)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  const config = await loadComposedConfig(await mkdtemp(join(tmpdir(), 'deckent-attachment-fence-')).then(root => { roots.push(root); return root; }),
+    { globalOnly: true, heal: false });
+  const { firstSessionTargets, firstSessionPublication } = await import('#adapters/core/installation-files/index.js');
+  const content = platform.serializeJsonDocument(reference), refTarget = { resource: 'projectAttachment' as const,
+    path: productResourcePath(config.productLayout, 'projectAttachment'), content, digest: platform.digestText(content) };
+  expect(await firstSessionTargets(config.productLayout, reference.scopeId, config.installation.profileMaxBytes, [refTarget], null, reference)).toEqual([refTarget]);
+  await expect(firstSessionPublication(config.productLayout, config.installation.profileMaxBytes).publish(refTarget, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  await expect(firstSessionPublication(config.productLayout, config.installation.profileMaxBytes).publish({ ...refTarget, content: '{' }, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_INVALID' });
+  const { relocateProjectAttachment } = await import('#adapters/core/project-attachment/index.js');
+  await expect(relocateProjectAttachment(config, reference, reference, effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  for (const attachment of [reference, null]) {
+    const relocate = new ProjectAttachmentRelocationApplication({ config, store: { ...port, attachment: async () => attachment }, actor: record.source.owner,
+      authorize: async () => {}, location: effect, projectId: effect, exists: effect, keepIdentity: effect, source: effect, publish: effect });
+    await expect(relocate.apply(record.source.scopeId, true)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  }
+  const { grantModelUse, revokeModelUse } = await import('#engine/core/model-use/index.js');
+  const modelPorts = { config: async () => config, store: () => port, authorize: async () => record.source.owner };
+  await expect(grantModelUse(modelPorts as Parameters<typeof grantModelUse>[0], config.projectRoot, reference.scopeId)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  await expect(revokeModelUse(modelPorts as Parameters<typeof revokeModelUse>[0], config.projectRoot, reference.projectId)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  const state = { schemaVersion: 3, installationId: record.source.installationId, sharedRegistrationId: record.registrationId,
+    entries: [{ resource: 'projectAttachment', path: '', content: Buffer.from(platform.serializeJsonDocument(reference)).toString('base64') }] };
+  await expect(verifySharedAttachmentRestore(config, state, config.projectRoot, reference.scopeId, { actor: reference.actor,
+    registration: async () => record, exists: effect, projectId: effect })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  const { filesystemIdentity: ignored, ...l1 } = registrationV3Fixture.entries[0]!.attachment.location; void ignored;
+  const { lineage: ignoredLineage, ...legacyBase } = registrationV3Fixture; void ignoredLineage;
+  const legacy = installationRegistrationSchema.parse({ ...legacyBase, schemaVersion: 2, source: { ...legacyBase.source, location: l1 },
+    entries: [{ ...legacyBase.entries[0], attachment: { ...reference, schemaVersion: 1, location: l1 } }] });
+  const legacyState = { ...state, entries: [{ ...state.entries[0]!, content: Buffer.from(platform.serializeJsonDocument(legacy.entries[0]!.attachment)).toString('base64') }] };
+  await expect(verifySharedAttachmentRestore(config, legacyState, config.projectRoot, reference.scopeId, { actor: reference.actor,
+    registration: async () => record, exists: effect, projectId: effect })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  await expect(verifySharedAttachmentRestore(config, state, config.projectRoot, reference.scopeId, { actor: reference.actor,
+    registration: async () => legacy, exists: effect, projectId: effect })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(await verifySharedAttachmentRestore({ company: { id: reference.companyId } }, legacyState, reference.location.canonicalRoot, reference.scopeId,
+    { actor: reference.actor, registration: async () => legacy, exists: effect, projectId: async () => null })).toBe(true);
+  expect(effect).not.toHaveBeenCalled();
+});
+
+it('attachment reader: public tier-all uninstall refuses before confirmation or backup and leaves the installation byte-identical', async () => {
+  const f = await fixture(), target = await f.make(f.b), preview = await target.app.preview('target');
+  await target.app.apply('target', preview.planDigest, randomUUID());
+  const registry = (await target.store.registration())!;
+  const current = readableInstallationRegistrationSchema.parse({ ...registry, schemaVersion: 3 });
+  const path = productResourcePath(target.store.global, 'installationRegistration');
+  await writeFile(path, platform.serializeJsonDocument(current));
+  const plan = await previewConfiguredUninstall(f.b, { schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, f.options);
+  const before = await snapshotBytes(f.root), confirm = vi.fn(async () => true), backupPassphrase = vi.fn(async () => 'unused fixture phrase');
+  for (const key of [...(await loadComposedConfig(f.b, f.options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  personEffectWitness.allowed = true;
+  await expect(applyConfiguredUninstall(f.b, { schemaVersion: 2, commandId: 'newer-record-fenced', planDigest: plan.planDigest },
+    { confirm, backupPassphrase }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(confirm).not.toHaveBeenCalled(); expect(backupPassphrase).not.toHaveBeenCalled();
+  expect(await snapshotBytes(f.root)).toEqual(before);
 });

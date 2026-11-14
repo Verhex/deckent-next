@@ -1,18 +1,21 @@
 import { isCodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { installationRegistrationSchema, projectAttachmentSchema, identitySchema, persistedUuid, type InstallationRegistration, type InstallationSource,
+import { installationRegistrationSchema, projectAttachmentSchema, identitySchema, persistedUuid, isNewAttachmentRegistration, isNewAttachment, type AttachmentRevocation, type FilesystemIdentity, type ReadableInstallationRegistration as InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type AttachmentLocation, type AttachmentPerson, type AttachmentPreparation } from '#domain/index.js';
-import { attachmentFailure, existingSharedIdentity, sameAttachmentPerson } from './context.js';
+import { attachmentFailure, existingSharedIdentity, sameAttachmentPerson, matchesObservedAttachmentSource } from './context.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
 
 export interface AttachmentRegistryPort {
   registration(): Promise<InstallationRegistration | null>;
   hold<T>(work: () => Promise<T>): Promise<T>;
+  writeRevocation(expected: InstallationRegistration, change: AttachmentRevocation): Promise<void>;
+  attachment?(): Promise<import('#domain/index.js').ReadableProjectAttachment | null>;
   write(expected: InstallationRegistration | null, next: InstallationRegistration): Promise<void>;
 }
 export interface ProjectAttachmentPorts {
   readonly store: AttachmentRegistryPort;
   readonly actor: AttachmentPerson;
+  observeFilesystemIdentity?(location: AttachmentLocation): Promise<FilesystemIdentity | null>;
   observe?<T>(work: () => Promise<T>): Promise<T>;
   authorize(): Promise<void>;
   source(root: string, scopeId: string, actor: AttachmentPerson): Promise<{ readonly source: InstallationSource; readonly identity: InstallationIdentityRead }>;
@@ -29,16 +32,19 @@ export class ProjectAttachmentApplication {
   private async currentSource(registration: InstallationRegistration) {
     if (!sameAttachmentPerson(registration.source.owner, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const observed = await this.ports.source(registration.source.projectRoot, registration.source.scopeId, this.ports.actor).catch((error: unknown) => { if (isCodedError(error, 'PROJECT_ATTACHMENT_READ_LIMIT')) throw error; return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE', registration.source.projectRoot); });
-    if (JSON.stringify(observed.source) !== JSON.stringify(registration.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED', registration.source.projectRoot);
+    if (!await matchesObservedAttachmentSource(this.ports, registration.source, observed.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED', registration.source.projectRoot);
     existingSharedIdentity(observed.identity, registration.source.projectRoot);
     return observed.identity;
+  }
+  private async assertWritable(registration: InstallationRegistration | null) {
+    if (isNewAttachmentRegistration(registration) || isNewAttachment(await this.ports.store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
   }
   registrationPreview(root: string, scopeId: string) { return this.ports.observe ? this.ports.observe(() => this.registrationPreviewCore(root, scopeId)) : this.registrationPreviewCore(root, scopeId); }
   private async registrationPreviewCore(root: string, scopeId: string) {
     const observed = await this.ports.source(root, scopeId, this.ports.actor);
     existingSharedIdentity(observed.identity);
     const current = await this.ports.store.registration();
-    if (current && JSON.stringify(current.source) !== JSON.stringify(observed.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    if (current && !await matchesObservedAttachmentSource(this.ports, current.source, observed.source)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     return Object.freeze({ schemaVersion: 1 as const, status: 'preview' as const, source: observed.source,
       planDigest: digest({ operation: 'installation.register.v1', source: observed.source, current }) });
   }
@@ -52,7 +58,9 @@ export class ProjectAttachmentApplication {
       if (currentPreview.planDigest !== expect) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
       const current = await this.ports.store.registration();
       if (current) { if (!current.unregistered) return current;
+        await this.assertWritable(current);
         const next = installationRegistrationSchema.parse({ ...current, unregistered: false }); await this.ports.store.write(current, next); return next; }
+      await this.assertWritable(current);
       const next = installationRegistrationSchema.parse({ schemaVersion: 1, registrationId: randomUUID(), source: preview.source, entries: [] });
       await this.ports.store.write(null, next); return next;
     });
@@ -85,6 +93,7 @@ export class ProjectAttachmentApplication {
     return this.ports.store.hold(async () => {
       let registration = await this.ports.store.registration();
       if (!registration || registration.unregistered) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
+      await this.assertWritable(registration);
       const current = await this.preview(scopeId);
       let entry = registration.entries.find(item => item.attachment.commandId === commandId);
       if (entry) {
@@ -100,7 +109,7 @@ export class ProjectAttachmentApplication {
         const next = installationRegistrationSchema.parse({ ...registration, ...(current.preparation ? { schemaVersion: 2 } : {}), entries: [...registration.entries, entry] });
         await this.ports.store.write(registration, next); registration = next;
       }
-      const attachment = entry.attachment;
+      const attachment = projectAttachmentSchema.parse(entry.attachment);
       await this.ports.ensureProject(attachment.projectId);
       await this.currentSource(registration);
       const result = entry.state === 'active' && this.ports.verify ? await this.ports.verify(attachment) : await this.ports.install(attachment, () => this.currentSource(registration!));
@@ -119,6 +128,7 @@ export class ProjectAttachmentApplication {
       if (!current) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
       await this.currentSource(current);
       if (!current.entries.some(item => item.attachment.projectId === projectId)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+      if (current.schemaVersion === 3) { await this.ports.store.writeRevocation(current, { action: 'revoke', projectId }); return { schemaVersion: 1 as const, status: 'revoked' as const, projectId }; }
       const next = installationRegistrationSchema.parse({ ...current, entries: current.entries.map(item => item.attachment.projectId === projectId ? { ...item, state: 'revoked' } : item) });
       await this.ports.store.write(current, next); return { schemaVersion: 1 as const, status: 'revoked' as const, projectId };
     });
@@ -128,6 +138,7 @@ export class ProjectAttachmentApplication {
     return this.ports.store.hold(async () => {
       const registry = await this.ports.store.registration(), entry = registry?.entries.find(item => item.attachment.projectId === projectId);
       if (!registry || registry.unregistered || !entry || !sameAttachmentPerson(entry.attachment.actor, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+      await this.assertWritable(registry);
       const current = await this.preview(entry.attachment.scopeId);
       if (JSON.stringify(entry.attachment.location) !== JSON.stringify(current.target.location) || current.target.projectId !== projectId) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
       const replay = entry.restoreDigest === expect && entry.state === 'active' && entry.modelLease?.state !== 'revoked';
@@ -135,7 +146,7 @@ export class ProjectAttachmentApplication {
       if (!replay) { const { modelLease: ignored, ...retained } = entry; void ignored;
         await this.ports.store.write(registry, installationRegistrationSchema.parse({ ...registry, schemaVersion: 2, entries: registry.entries.map(item => item === entry ? { ...retained,
           state: 'active', restoreDigest: expect, ...(current.preparation ? { preparationDigest: current.preparation.digest } : {}) } : item) })); }
-      return Object.freeze({ schemaVersion: 1 as const, status: 'attached' as const, attachment: entry.attachment, installationId: registry.source.installationId,
+      return Object.freeze({ schemaVersion: 1 as const, status: 'attached' as const, attachment: projectAttachmentSchema.parse(entry.attachment), installationId: registry.source.installationId,
         preparation: current.preparation, result: { status: 'restored' } });
     });
   }
@@ -146,6 +157,7 @@ export class ProjectAttachmentApplication {
       if (!current || !sameAttachmentPerson(current.source.owner, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
       const entry = current.entries.find(item => item.attachment.projectId === projectId);
       if (!entry || !sameAttachmentPerson(entry.attachment.actor, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+      if (current.schemaVersion === 3) { await this.ports.store.writeRevocation(current, { action: 'detach', projectId }); return { schemaVersion: 1, status: 'detached', projectId }; }
       const next = installationRegistrationSchema.parse({ ...current, schemaVersion: 2, entries: current.entries.map(item => item === entry ? { ...item, state: 'revoked',
         ...(item.modelLease ? { modelLease: { ...item.modelLease, state: 'revoked' } } : {}) } : item) });
       await this.ports.store.write(current, next); return { schemaVersion: 1, status: 'detached', projectId };
@@ -157,6 +169,7 @@ export class ProjectAttachmentApplication {
       const current = await this.ports.store.registration();
       if (!current || !sameAttachmentPerson(current.source.owner, this.ports.actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
       if (current.entries.some(item => item.state !== 'revoked')) return attachmentFailure('PROJECT_ATTACHMENT_SOURCE_REGISTERED');
+      if (current.schemaVersion === 3) { await this.ports.store.writeRevocation(current, { action: 'unregister' }); return { schemaVersion: 1, status: 'unregistered' }; }
       const next = installationRegistrationSchema.parse({ ...current, schemaVersion: 2, unregistered: true });
       await this.ports.store.write(current, next); return { schemaVersion: 1, status: 'unregistered' };
     });

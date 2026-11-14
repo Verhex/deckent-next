@@ -207,3 +207,19 @@ aynıdır. Kayıtlı kaynak kendi klasöründe eski reddi korur; başka klasörd
 kayıtlarını uzlaştırmaz. Kurum politikası kişi/açık onarımı daraltamaz. Kopyayla taşınan kural, aynı hesapta
 işaretsiz PTY, doğrudan dosya düzenleme, weak bağ, clone/snapshot ve eski binary sınırları için
 [Installation moved](../../../../docs/known-limits.md#installation-moved) geçerlidir; bu sınırlar ürün kabulü değildir.
+
+
+**project-attachment — beta.2 okuyucusu (r7, owner 78/81/96/104).** Domain eski kurucu şemaları ayrı tutar;
+okuma şemaları L2 (dosya sistemi kimliği zorunlu attachment v2), L1/L2 kaynak ve isteğe bağlı lineage taşıyan
+registration v3 kabul eder. Envanterin kimlik/şirket/tekillik kuralları korunur; lineage geçmişi tekildir,
+headDevice içermez ve uzunluğu max(1, entries.length) ile sınırlıdır. Saf L2 değerlendirmesi kök/inode/tür/değer
+ister; üretici yoksa aygıta düşmez. L1 aynı kök/device/inode kuralını korur. Yerel referans ile envanter kopyası
+birebir aynı kalmalıdır. Adapter tek gözlem portundan yalnız saklanan L2 için dosya sistemi kimliğini ister.
+V3 okuma ham cap+884+51·floor(cap/600) ve normalize cap koşullarını birlikte uygular; N lineage/unregistered
+alanlarını çıkarır, durumları active, en çok 20 basamaklı device değerlerini 0 sayar; uzun eski device metinleri
+aynen sayılır. Motor mutasyonları ilk etkiden önce, depo ve referans yazıcıları ikinci sınırda yeni biçimi
+PROJECT_ATTACHMENT_NEWER_RECORD ile reddeder. Tek istisna, kilitte yeniden okunan ham kayda uygulanan
+revoke/detach/unregister 104 yazıcısıdır: sürüm, anahtar sırası, lineage, kaynak ve diğer girdiler korunur;
+N değişmediği için yeni normalize boyut reddi yoktur. Shared backup v2 referans veya mevcut v3 envanterle
+publication öncesi reddedilir. Lineage onarım algoritması uygulanmaz; kaynakta uyuşmayan etkin girdilerin
+saf sayımı hazırdır, doctor yüzeyi PLG birleşmesi sonrası ATT-D kapsamındadır.
