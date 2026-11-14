@@ -930,7 +930,7 @@ export function WorklineApp(props: WorklineProps) {
 }
 
 const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
-const NEUTRAL_ARM_LABELS: DecisionArmLabels = Object.freeze({ arming: '…', ignored: '… ×', typedText: '… × ↵ ↑↓' });
+const NEUTRAL_ARM_LABELS: DecisionArmLabels = Object.freeze({ arming: '…', ignored: '… ×', typedText: '… × ↵ ↑↓', unchosen: '×' });
 const NEUTRAL_QUEUE_LABELS: QueueLabels = Object.freeze({ service: '…', window: '…', command: '…', withdraw: 'Alt+Up', more: '+{count}', steered: '+', steerFull: '{limit} × {text}',
   steerReturned: '→ {text}', steerBack: '← {text}' });
 /** The information row's context segment: the same measurement and words as `/context` (`terminal.render.context`); before one, "unknown". */

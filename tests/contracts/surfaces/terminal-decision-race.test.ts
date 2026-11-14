@@ -41,7 +41,7 @@ function mountCard(calls: unknown[][], gate: Promise<void>) {
 }
 const cardShown = (view: ReturnType<typeof mountWorkline>) => view.stdout.frame.includes('Approval needed');
 /** A decision counts keys once its key hints show (TERMINAL-SABIT-DUZEN: the visible armed state); the settle first lets a restart repaint. */
-async function armed(frame: () => string, hint: string) { await settle(ARM + 80); await until(() => frame().includes(hint) || frame().includes('Text typed here') || frame().includes('… × ↵ ↑↓'), `armed (${hint} or typed-text feedback)`); }
+async function armed(frame: () => string, hint: string) { await settle(); await until(() => frame().includes(hint) || frame().includes('Text typed here') || frame().includes('… × ↵ ↑↓'), `armed (${hint} or typed-text feedback)`); }
 
 it('108: typed letters never approve once/session/always; Enter is not No; an open reason field still takes text (EN/TR)', async () => {
   class Screen extends Writable { isTTY = true; rows = 40; columns = 120; frame = ''; override _write(chunk: Buffer, _encoding: string, done: () => void) { if (chunk.toString().includes('Approval')) this.frame = chunk.toString(); done(); } }
@@ -60,7 +60,8 @@ it('108: typed letters never approve once/session/always; Enter is not No; an op
       for (const char of word) await press(char);
       for (const char of 'asnyq12jk ') await press(char);
       expect(calls).toEqual([]); expect(stdout.frame).toContain(labels.typedText); expect(stdout.frame).toContain('› 4. No (n)');
-      await press('\r'); expect(calls).toEqual([]); expect(stdout.frame).toContain(labels.typedText);
+      await press('\r'); expect(calls).toEqual([]); expect(stdout.frame).toContain(locale === 'en' ? 'Nothing was chosen.' : 'Hiçbir şey seçilmedi.');
+      expect(stdout.frame).toContain('Enter confirm'); expect(stdout.frame).not.toContain(labels.typedText);
       if (word === '/policy') {
         await press('/'); // Tab must still open a reason while typed text is active.
         await press('\t'); expect(stdout.frame).toContain('Enter keeps reason');
@@ -275,18 +276,24 @@ describe('review 2026-10-18 (fail-open burst handling, focus return onto a decis
 describe('CI 2026-10-18: a key during arming is never a silent swallow', () => {
   it('the card shows "not counted" for a key that came too early and shows its keys once they count; a key after that decides', async () => {
     const gate = hold(), calls: unknown[][] = [];
-    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), decisionArm: { arming: 'ARMING-NOW', ignored: 'KEY-IGNORED', typedText: 'TEXT-IGNORED' } } as never,
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), decisionArm: { arming: 'ARMING-NOW', ignored: 'KEY-IGNORED', typedText: 'TEXT-IGNORED', unchosen: 'NOTHING-CHOSEN' } } as never,
       ledger: ledger(calls) as never, streamTurn: turn(gate.promise) as never, decisionArmMs: ARM } as never, 100, { rows: 40 });
     mounted.push(view.instance);
     try {
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
       await until(() => cardShown(view), 'card');
       expect(view.stdout.frame).toContain('ARMING-NOW'); expect(view.stdout.frame).not.toContain('Enter confirm');
-      view.stdin.write('y'); await until(() => view.stdout.frame.includes('TEXT-IGNORED'), 'typed feedback'); expect(calls).toEqual([]);
-      // Text feedback is immediate and stays through arming: later letters still cannot decide.
-      await settle(ARM + 80); expect(view.stdout.frame).toContain('TEXT-IGNORED');
+      view.stdin.write('y'); await until(() => view.stdout.frame.includes('KEY-IGNORED'), 'early key ignored'); expect(calls).toEqual([]);
+      expect(view.stdout.frame).not.toContain('TEXT-IGNORED');
+      // While unarmed, even Enter is swallowed; the typed-text words appear exactly when their exit key counts.
+      view.stdin.write('\r'); await settle(40); expect(calls).toEqual([]); expect(view.stdout.frame).toContain('KEY-IGNORED');
+      expect(view.stdout.frame).not.toContain('TEXT-IGNORED');
+      await until(() => view.stdout.frame.includes('TEXT-IGNORED'), 'armed typed-text feedback');
       view.stdin.write('n'); await settle(60); expect(calls).toEqual([]);
       view.stdin.write('\r'); await settle(60); expect(calls).toEqual([]);
+      expect(view.stdout.frame).toContain('NOTHING-CHOSEN'); expect(view.stdout.frame).toContain('Enter confirm'); expect(view.stdout.frame).not.toContain('TEXT-IGNORED');
+      view.stdin.write(CTRL_O); await settle(40); view.stdin.write(CTRL_O);
+      await until(() => view.stdout.frame.includes('Enter confirm'), 'normal keys after re-arm'); expect(view.stdout.frame).not.toContain('NOTHING-CHOSEN');
       view.stdin.write('n'); await until(() => calls.length === 1, 'decided'); expect(calls[0]![1]).toBe('deny');
     } finally { gate.release(); }
   });

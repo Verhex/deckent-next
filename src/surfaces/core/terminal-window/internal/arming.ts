@@ -11,9 +11,9 @@ export const DECISION_ARM_DEFAULT: number = DECISION.armMs;
 /** The arming delay in force (the test harness may set 0; production keeps the registry value). */
 export const DecisionArmContext = createContext<number>(DECISION_ARM_DEFAULT);
 
-/** The arming words a decision window shows on its hint row until it is armed (catalog `terminal.decision.*`); neutral marks without them. */
-export type DecisionArmLabels = Readonly<{ arming: string; ignored: string; typedText: string }>;
-export const DecisionArmLabelsContext = createContext<DecisionArmLabels>(Object.freeze({ arming: '…', ignored: '… ×', typedText: '… × ↵ ↑↓' }));
+/** Decision hint-row words (catalog `terminal.decision.*`): arming, typed text and an unchosen answer; neutral marks without them. */
+export type DecisionArmLabels = Readonly<{ arming: string; ignored: string; typedText: string; unchosen: string }>;
+export const DecisionArmLabelsContext = createContext<DecisionArmLabels>(Object.freeze({ arming: '…', ignored: '… ×', typedText: '… × ↵ ↑↓', unchosen: '×' }));
 
 /**
  * `touch`: a key arrived while unarmed (restart the wait, and say so: `ignored`). `restart`: drop the armed state now and wait again (a

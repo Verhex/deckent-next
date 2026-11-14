@@ -66,7 +66,7 @@ export function worklineLabels(locale: Locale, statusLine: string): WorklineLabe
     viewport: { below: t('terminal.viewport.below', {}, locale), newMessages: t('terminal.viewport.newMessages', {}, locale), search: t('terminal.viewport.search', {}, locale),
       searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale),
       copyTooLarge: t('terminal.viewport.copyTooLarge', {}, locale), copyUnavailable: t('terminal.viewport.copyUnavailable', {}, locale) },
-    decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale) },
+    decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale), unchosen: t('terminal.decision.unchosen', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
     copy: { sent: t('tuicopy.sent', {}, locale), none: t('tuicopy.none', {}, locale), range: t('tuicopy.range', {}, locale), usage: t('tuicopy.usage', {}, locale),
       tooLarge: t('tuicopy.tooLarge', {}, locale), unavailable: t('tuicopy.unavailable', {}, locale), card: { hint: t('tuicopy.card.hint', {}, locale),

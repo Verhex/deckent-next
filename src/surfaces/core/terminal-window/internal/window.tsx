@@ -139,8 +139,9 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // the visible input owner; earlier keys are swallowed and restart the wait (arming.ts). Fail closed: nothing reaches its owner before.
   const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext), inputRevision);
   // Owner 108: once text reaches a choice-only card, later letters/digits are text too; only Enter or navigation ends it.
-  const typed = useRef(false), [typedHint, setTypedHint] = useState(false);
-  const textState = (value: boolean, hint = value) => { typed.current = value; setTypedHint(hint); };
+  const typed = useRef(false), [typedHint, setTypedHint] = useState<'text' | 'unchosen' | null>(null);
+  const textState = (value: boolean, unchosen = false) => { typed.current = value; setTypedHint(value ? 'text' : unchosen ? 'unchosen' : null); };
+  useEffect(() => { if (!typed.current) setTypedHint(null); }, [arming.shown, focused, inputRevision]);
   useEffect(() => { if (burstText) textState(false); }, [burstText]);
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
@@ -157,11 +158,12 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     rowLines.fill({ line: index, exact: line.exact === true, labelled: Boolean(line.label?.length) }, starts[index], end); });
   // A decision shows its choice keys only while they count: focused and armed. Until it is armed (it just appeared, or a key was ignored) the hint
   // row says so; behind the composer (Ctrl+O back to input) the "Ctrl+O to decide" line speaks instead. Keys on screen ⇔ keys count — one
-  // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18). Typed-text feedback is immediate, even while arming.
+  // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18). Typed-text exit instructions appear only once their keys count.
   const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
   const keyHints = copy && interactive ? `${hints} · ${copy.labels.hint}` : hints;
-  const hintText = guarded && interactive && !burstText && typedHint && !behind ? armLabels.typedText
-    : !guarded || !interactive || arming.shown ? keyHints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
+  const armedHints = !burstText && typedHint === 'text' ? armLabels.typedText
+    : !burstText && typedHint === 'unchosen' ? `${armLabels.unchosen} ${keyHints}` : keyHints;
+  const hintText = !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : arming.ignored ? armLabels.ignored : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
@@ -177,6 +179,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions });
   latest.current = { total: rows.length, visible, onInput, onClose, onPaste, inputRevision, burstText, title, body, copy, copyOptions };
   const copyCard = () => {
+    if (!typed.current) setTypedHint(null);
     const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
     if (!writer) return;
     const text = humanRecordText(cardCopyText(shownTitle, shownBody, [...latest.current.copyOptions, ...[...optionLabels.current.values()].flat()]), known), result = writer.write(text);
@@ -219,7 +222,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       if (typed.current && key.return && !key.ctrl && !key.meta && !key.shift) { textState(false, true); return; }
       if (navigationKey(key) || !key.ctrl && !key.meta && !key.shift && (key.leftArrow || key.rightArrow)) textState(false);
     }
-    if (current.onInput?.(input, key) === true) { if (!typed.current) setTypedHint(false); return; }
+    if (current.onInput?.(input, key) === true) { if (!typed.current) setTypedHint(null); return; }
     if (guarded && !current.burstText && printable(input, key)) textState(true);
     const scroll = scrollKeyOf(key);
     if (scroll) { setOffset(value => scrollBy(value, scroll, current.total, current.visible)); return; }

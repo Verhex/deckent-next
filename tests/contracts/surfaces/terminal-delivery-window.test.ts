@@ -533,7 +533,7 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain(WORDS.verifyHints); expect(frame(h)).not.toContain('Adopt without verification'); // required: no unverified row
     expect(frame(h)).toMatch(/› Run verify-run-1/u);
     for (const keys of [CTRL_Y, ALT_Y, COALESCED, '\r']) { await press(h, keys, 120); expect(h.adoptions).toEqual([]); }
-    expect(frame(h)).toContain('… × ↵ ↑↓'); // Rejected printable input now keeps the text hint until a deliberate navigation key.
+    expect(frame(h)).toContain('Nothing was chosen.'); expect(frame(h)).toContain(WORDS.verifyHints); expect(frame(h)).not.toContain('Text typed here'); // The first Enter left typed text without adopting.
     await press(h, DOWN); expect(frame(h)).toMatch(/› Run verify-run-2/u); await press(h, UP); await press(h, DOWN);
     await press(h, 'y', 150);
     await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');

@@ -339,7 +339,6 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
 async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel,
   options: { early?: boolean; step?: import('#surfaces/core/project-instructions/index.js').SetupWindowStep } = {}) {
   const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
-  const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js');
   let frame = '', finished = false;
   const sent: string[] = [];
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 40 });
@@ -352,9 +351,9 @@ async function setupWindowAt(model: import('#surfaces/core/project-instructions/
     expect(predicate(), text()).toBe(true);
   };
   await wait(() => text().includes(model.title));
-  const armed = async () => { await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 100)); };
+  const armed = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await wait(() => text().includes(model.hints) || text().includes(model.decisionArm.typedText)); };
   if (!options.early) await wait(() => text().includes(model.hints));
-  return { text, sent, armed, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
+  return { text, sent, armed, wait, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
     close: async () => { if (!finished) { await armed(); stdin.write('\u001b'); } await closed; } };
 }
 it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "Not now" beside a real No stays letterless; language has no letters, Enter still sends', async () => {
@@ -396,12 +395,12 @@ it('107: individually typed text, a rejected burst or a paste (armed or early) e
       if (input.startsWith('early')) expect(view.text()).not.toContain(model.hints);
       if (input === 'typed') for (const char of '/help') await view.press(char); // Separate stdin reads, beyond the production arming wait.
       else await view.press(input.endsWith('paste') ? '\u001b[200~/help\r\ny1\u001b[201~' : input.endsWith('burst') ? '\u001b[Ay' : '/');
-      expect(view.text()).toContain(model.decisionArm.typedText); // Visible immediately, including during arming.
-      await view.armed();
+      if (input !== 'typed') { expect(view.text()).toContain(input.startsWith('early') ? model.decisionArm.ignored : model.decisionArm.arming); expect(view.text()).not.toContain(model.decisionArm.typedText); }
+      await view.armed(); expect(view.text()).toContain(model.decisionArm.typedText);
       await view.press('\r');
       expect(view.sent, `${locale}/${input}`).toEqual([]); expect(run.applied).toEqual([]);
       expect(controller.model().rows).toEqual(model.rows);
-      expect(view.text()).toContain(model.decisionArm.typedText);
+      expect(view.text()).toContain(model.decisionArm.unchosen); expect(view.text()).toContain(model.hints); expect(view.text()).not.toContain(model.decisionArm.typedText);
       await view.press('\r'); expect(view.sent).toEqual(['yes']);
       // The next step has its own arming period and no inherited text flag.
       await view.armed(); await view.press('\r'); expect(view.sent).toEqual(['yes', 'core:solo']);
@@ -438,13 +437,13 @@ it('108: text typed during a slow apply follows the next setup question; an earl
     await view.press('y'); expect(view.sent).toEqual(['yes']);
     await view.press('e'); await view.press('s');
     expect(view.text()).toContain(model.decisionArm.typedText);
-    release(); await view.armed();
+    release(); await view.wait(() => view.text().includes('Next setup card')); await view.armed();
     expect(view.text()).toContain('Next setup card');
     await view.press('\r'); expect(view.sent).toEqual(['yes']);
   } finally { release?.(); await view.close(); }
   const early = await setupWindowAt(model, { early: true });
   try {
-    await early.press('y'); expect(early.text()).toContain(model.decisionArm.typedText);
+    await early.press('y'); expect(early.text()).toContain(model.decisionArm.ignored); expect(early.text()).not.toContain(model.decisionArm.typedText);
     await early.armed(); await early.press('y'); expect(early.sent).toEqual([]);
     await early.press('\r'); expect(early.sent).toEqual([]);
     await early.press('y'); expect(early.sent).toEqual(['yes']);

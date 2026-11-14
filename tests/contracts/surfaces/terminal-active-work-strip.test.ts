@@ -10,7 +10,7 @@ import { formatDuration } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
-import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { exitTypedText, mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 
 // TERMINAL-SABIT slice 2 (owner 2026-10-14): "/do gibi yüzeyleri terminalin altına 'aktif run/do süreci' diye (monitördeki gibi) tıklayıp ayrıca
@@ -152,7 +152,7 @@ describe('active work strip on the real Workline', () => {
     await press(h, CTRL_T); expect(frame(h)).toContain(EN.activeWork!.focused); expect(frame(h)).toContain('› /do process order');
     await press(h, 'y'); expect(h.decisions).toEqual([]); // a letter in the strip is no decision either
     await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]); // Enter on /do = focus transfer only (re-arms)
-    await settle(DECISION_ARM_DEFAULT + 80); await until(() => frame(h).includes('Enter confirm'), 'card armed'); await press(h, 'y'); // the explicit key on the focused card
+    await exitTypedText(h.view); expect(h.decisions).toEqual([]); await press(h, 'y'); // the explicit key on the focused card
     await until(() => h.decisions.length === 1, 'decision on the card'); expect(h.decisions).toEqual(['allow']);
     await until(() => h.plans() === 2 && frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'admitted Run row');
   });

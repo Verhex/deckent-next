@@ -204,10 +204,13 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
   questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` retains Enter-as-cancel; onboarding has its separate
   decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority) owns one ephemeral typed-text
-  state. Printable text swallowed by arming, a rejected burst, an unconsumed paste or an unhandled printable key starts it, immediately
-  showing `terminal.decision.typedText` through the shared EN/TR decision labels. Later printable keys (including answer letters, digits,
-  j/k and space) never reach the owner. Plain Enter ends this state without answering and keeps the explanation; arrows and PgUp/PgDn/
-  Home/End end it and are delivered normally. Esc, Ctrl+C, Tab, Ctrl+Y copy and Ctrl+O retain their meanings. An open reason field
+  state. Printable text swallowed by arming, a rejected burst, an unconsumed paste or an unhandled printable key starts it. While unarmed,
+  the hint row keeps `terminal.decision.arming` / `.ignored`; only once armed does it show `terminal.decision.typedText` through the shared
+  EN/TR decision labels, so the requested Enter or arrow counts exactly when those words appear. Later printable keys (including answer letters, digits,
+  j/k and space) never reach the owner. Plain Enter ends this state without answering and shows `terminal.decision.unchosen`
+  (EN "Nothing was chosen." / TR "Hiçbir şey seçilmedi.") followed by the normal key hints, until the next handled key or re-arm; arrows
+  and PgUp, PgDn, Home and End end it and restore plain key hints, without that note, and are delivered normally. Esc, Ctrl+C, Tab, Ctrl+Y copy and Ctrl+O retain their meanings. Ctrl+Y and Alt+y alone are not text;
+  an ambiguous coalesced Ctrl+O+y read containing a printable letter starts typed text and never decides (fail closed). An open reason field
   (`burstText`) and non-guarded entry windows retain text editing. The first answer key on an armed card still answers immediately;
   Enter without prior text still accepts the highlighted row. `armMs` (300), burst classification and paste rejection are unchanged.
   Setup keeps its `Window` mounted and changes `inputRevision` to re-arm each new question, retaining text typed while an answer was
