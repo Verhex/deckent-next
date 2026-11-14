@@ -29,6 +29,9 @@ afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.
 describe('config public contract', () => {
   it('returns independent defaults and merges arrays/false/undefined without mutating either input', () => {
     const a = createDefaultConfig(), b = createDefaultConfig(); a.layout.resources['ledger'] = 'changed';
+    expect(b.models.headless.paidExtraUsage).toBe('continue');
+    expect(CONFIG_FIELDS.models.schema.parse({ headless: { paidExtraUsage: 'stop-at-limit' } }).headless.paidExtraUsage).toBe('stop-at-limit');
+    expect(CONFIG_FIELDS.models.schema.safeParse({ headless: { paidExtraUsage: 'unknown' } }).success).toBe(false);
     expect(b.layout.resources).toEqual({}); expect(b.enforce_principal_assurance).toBe(false);
     const coreParse = vi.spyOn(CORE_SCHEMA, 'parse');
     createDefaultConfig(); expect(coreParse).not.toHaveBeenCalled(); coreParse.mockRestore();

@@ -1,17 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
-import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationReport, type WorkerObservationSource, type WorkerProcessState } from '#engine/index.js';
+import { resolveWorkerUsage, workerKind, type WorkerKind, type WorkerObservation, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
-
-/** What a person needs to know about one worker: running now, finished (history), lost (no process and no result) or unknown (not verifiable). */
-type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
-// Exhaustive over the engine's process states (a new state fails the typecheck here instead of silently reading as running).
-const PROCESS_KIND: Readonly<Record<WorkerProcessState, WorkerKind>> = { running: 'active', paused: 'active', created: 'active', exited: 'finished',
-  missing: 'lost', 'absent-unverified': 'lost', unknown: 'unknown', 'present-unverified': 'unknown', denied: 'unknown' };
-
-/** A worker with a recorded end (terminal result) or released custody is history; otherwise its observed process decides. */
-function workerKind(worker: WorkerObservation): WorkerKind {
-  return workerFinished(worker) ? 'finished' : PROCESS_KIND[worker.process];
-}
 
 /** The newest instant this worker was heard from: its heartbeat, else its last resource sample, else its last reported event. */
 function lastSignalAt(worker: WorkerObservation, observedAt: number): number | null {
@@ -54,7 +43,7 @@ export function renderWorkersView(input: WorkersViewInput): string {
   const kinds = new Map(workers.map(worker => [worker, workerKind(worker)]));
   const count = (kind: WorkerKind) => workers.filter(worker => kinds.get(worker) === kind).length;
   const attention = count('lost') + count('unknown');
-  const lines = [t('cli.workers.summary', { scope: input.scopeLine, active: count('active'), attention, history: count('finished') }, locale)];
+  const lines = [t('cli.workers.summary', { scope: input.scopeLine, active: count('active'), unknown: count('unknown'), attention, history: count('finished') }, locale)];
   for (const source of report.sources) {
     if (source.status !== 'available') lines.push(t('cli.workers.sourceDown', { source: source.id, status: sourceStatusText(source.status, locale) }, locale));
     if (source.truncated) lines.push(t('cli.workers.more', { source: source.id,

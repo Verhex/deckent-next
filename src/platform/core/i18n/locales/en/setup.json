@@ -1,6 +1,11 @@
 {
   "cli.identity.keep": "Same installation (move/restore): identity kept, binding updated",
   "cli.identity.new": "New installation: new installationId, projects preserved",
+  "cli.identity.basis.open-class": "Basis: open repair class.",
+  "cli.identity.basis.human-tty": "Basis: person at a terminal.",
+  "cli.identity.basis.ai-policy": "Basis: explicit rebinding rule in the policy file.",
+  "cli.identity.basis.macos-plain": "Basis: plain-project exception on macOS.",
+  "cli.identity.attachmentsUnreconciled": "Attachment records were not reconciled. Run deckent terminal attach --relocate to reconcile them.",
   "cli.identity.resolved": "{choice}\nPrevious installationId: {previous}\nCurrent installationId: {current}",
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",

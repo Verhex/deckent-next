@@ -1,15 +1,15 @@
 import { userInfo } from 'node:os';
 import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
-  resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
+import { CONFIG_FIELDS, resolveLocale, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
+  resolveProductLayout, type Environment, type Locale, type ResolvedConfig } from '#platform/index.js';
 import { fullAutoGrant, isAiPrincipal, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
-import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
+import { emptyWorkerContent, readMonitorWorkerContent, summarizeMonitorWorkerEvent } from './worker-content.js';
 import { monitorRecoveryRollout } from './recovery.js';
 import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
@@ -20,15 +20,15 @@ const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MO
 // Content-addressed outputs never change, so a first failure is computed once per (scope, digest) and kept in a small bounded cache.
 const failures = new Map<string, { readonly line: string | null; readonly failedTests: MonitorFailedTests | null }>();
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
-const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[]): readonly MonitorEvent[] =>
-  Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorEvent(event) })));
+const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[], locale: Locale): readonly MonitorEvent[] =>
+  Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorWorkerEvent(event, locale) })));
 
 /** Capture one read-only ledger transaction and its file identities. Content is deferred until readShown:
  * only exact selected identities pass through read-output, then artifact/sidecar reads outside the transaction.
  * No product files, state or policy are created or healed. */
 export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
   expected?: { revision: number; layoutRevision: string }, scope?: MonitorReadScope) {
-  const layout = config.productLayout;
+  const layout = config.productLayout, locale = resolveLocale(undefined, env, config.language);
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}), ...(scope ? { scope } : {}) }, retained);
   // Reject stale/future result views before any output decision or read, including receipt observations.
@@ -52,13 +52,13 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
         if (!among(identities, files)) { const failure = await failureEvidence(artifacts, files);
           extra.set(key, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}) }); continue; }
-        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace) };
+        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace, locale) };
         if (files.failed) {
           const failure = await failureEvidence(artifacts, files);
-          Object.assign(found, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
+          Object.assign(found, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files, locale) } : {}) });
         }
         else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
-          .map(line => ({ atMs: line.receivedAt, event: line.event })));
+          .map(line => ({ atMs: line.receivedAt, event: line.event })), locale);
         if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
         if (Object.keys(found).length) extra.set(key, found);
       } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
@@ -114,9 +114,9 @@ async function failureEvidence(artifacts: ReturnType<typeof FileArtifactStore.re
   failures.set(key, found); return found;
 }
 /** The sealed (host-redacted) event log's last events; `atMs` is the worker's own clock there (untrusted, like the events). */
-async function sealedEvents(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles) {
+async function sealedEvents(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles, locale: Locale) {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(await artifacts.read(files.identity.scopeId, files.events!));
-  return recent(text.split('\n').filter(Boolean).map(line => { const event = workerEventSchema.parse(JSON.parse(line)); return { atMs: event.atMs, event }; }));
+  return recent(text.split('\n').filter(Boolean).map(line => { const event = workerEventSchema.parse(JSON.parse(line)); return { atMs: event.atMs, event }; }), locale);
 }
 
 /** Install map: config layers (top-level section names only, never values), execution registry, model catalog, policy summary, memory. */

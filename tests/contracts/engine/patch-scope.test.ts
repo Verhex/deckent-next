@@ -28,9 +28,9 @@ describe('patch scope classification (one deny grammar, exact full-path match)',
       expect(isPatchExcluded(path), path).toBe(true);
       expect(patchPathSchema.safeParse(path).success, path).toBe(false);
     }
-    for (const path of ['src/a.ts', 'certs/server.pem.txt', '.dockerignore', '.config/gh-other/config']) expect(isPatchExcluded(path), path).toBe(false);
+    for (const path of ['src/a.ts', 'certs/server.pem.txt', '.dockerignore', '.config/gh-other/config', '.config/cursor/cli-config.json']) expect(isPatchExcluded(path), path).toBe(false);
     for (const path of ['.gnupg', '.gnupg/private-keys-v1.d/key', '.docker', '.docker/config.json', '.config/gh', '.config/gh/hosts.yml', '.git-credentials', '.pypirc',
-      'server.pem', 'deploy.key', 'secrets.json', 'trust.jks']) {
+      'server.pem', 'deploy.key', 'secrets.json', 'trust.jks', '.claude/.credentials.json', '.config/cursor/auth.json']) {
       for (const rel of [path, `nested/${path}`]) {
         expect.soft(isPatchExcluded(rel), rel).toBe(true);
         expect.soft(patchPathSchema.safeParse(rel).success, rel).toBe(false);

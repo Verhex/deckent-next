@@ -162,7 +162,8 @@ async function cli(argv: string[], handlers: Record<string, unknown>, root: stri
 describe('deckent monitor command', () => {
   it('--json prints the handler snapshot byte for byte; --once and a pipe print the text snapshot', async () => {
     const root = await project(); let calls = 0;
-    const handlers = { async inspectMonitor(at: string) { calls++; expect(at).toBe(root); return fullSnapshot; } };
+    const languages: (string | undefined)[] = [];
+    const handlers = { async inspectMonitor(at: string, options: { env?: Readonly<Record<string, string | undefined>> }) { calls++; languages.push(options.env?.['DECKENT_LANGUAGE']); expect(at).toBe(root); return fullSnapshot; } };
     const json = await cli(['monitor', '--json'], handlers, root);
     expect(json.code).toBe(0); expect(json.out).toBe(`${JSON.stringify(fullSnapshot)}\n`);
     const narrowed = await cli(['monitor', '--json', '--install', 'dogfood'], handlers, root);
@@ -171,7 +172,7 @@ describe('deckent monitor command', () => {
     expect(once.code).toBe(0); expect(once.out).toBe(`${surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 120, ascii: false })}\n`);
     const piped = await cli(['monitor', '--lang', 'en'], handlers, root, { COLUMNS: '90' });
     expect(piped.out).toBe(`${surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 90, ascii: false })}\n`);
-    expect(calls).toBe(4);
+    expect(calls).toBe(4); expect(languages.slice(-2)).toEqual(['tr', 'en']);
   });
   it('fails typed (MONITOR_UNAVAILABLE, en/tr) without a monitor handler and rejects unknown flags as usage', async () => {
     const root = await project();
@@ -746,7 +747,7 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   expect((await monitorSlash(root, '--verbose', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık kaydı yok');
   const denied = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'denied' as const, excerpt: [], truncated: false }, patch: { ...worker.human.patch, state: 'denied' as const, files: [], fileCount: null } } }] }] };
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
-  expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
+  expect(deniedText).toContain('politika izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
 });
 

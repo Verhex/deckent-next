@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { installationBindingCaptureSchema } from '#domain/index.js';
 import { InstallationIdentityError, type InstallationBindingSource } from '#engine/index.js';
 import { getConfigFieldDefault, type ProductLayout, inheritedEnvironment } from '#platform/index.js';
+import { inspectFilesystemIdentity } from './filesystem-identity.js';
 
 type InstallationSettings = ReturnType<typeof getConfigFieldDefault<'installation'>>;
 /** The installation config subset the binding reads; omitted parts take the registry defaults. */
@@ -62,13 +63,15 @@ export function localInstallationBindingSource(layout: ProductLayout, settings: 
   return { async capture() {
     const machine = configured ? { source: 'configured' as const, machineDigest: await configuredDigest(configured, limits) }
       : await platformDigest(limits).then(value => value ? { source: 'platform' as const, machineDigest: value } : null);
-    let location;
+    let location: { canonicalRoot: string; device: string; inode: string };
     try {
       const canonicalRoot = await realpath(layout.root), info = await stat(canonicalRoot, { bigint: true });
       if (!info.isDirectory() || info.ino === 0n) return { status: 'unsupported' };
       location = { canonicalRoot, device: String(info.dev), inode: String(info.ino) };
     } catch { throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNAVAILABLE'); }
-    return installationBindingCaptureSchema.parse(machine ? { schemaVersion: 2, strength: 'machine', ...machine, ...location }
-      : { schemaVersion: 2, strength: 'weak', source: 'location', ...location });
+    const observed = await inspectFilesystemIdentity(location.canonicalRoot, location);
+    const filesystemIdentity = observed.status === 'available' ? { filesystemIdentity: observed.identity } : {};
+    return installationBindingCaptureSchema.parse(machine ? { schemaVersion: 2, strength: 'machine', ...machine, ...location, ...filesystemIdentity }
+      : { schemaVersion: 2, strength: 'weak', source: 'location', ...location, ...filesystemIdentity });
   } };
 }

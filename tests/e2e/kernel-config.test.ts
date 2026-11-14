@@ -77,9 +77,11 @@ describe('K1 real binary journeys', () => {
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
     // config requires machine strength (default false); no identity value or digest is shown.
     const strength = await hostBindingStrength();
-    expect(result.installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false }
-      : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false }
-        : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false } : null);
+    const filesystemIdentity = expect.objectContaining({ status: expect.stringMatching(/^(available|unavailable)$/u) });
+    expect(result.installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false, filesystemIdentity }
+      : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false, filesystemIdentity }
+        : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false, filesystemIdentity } : null);
+    if (result.installationBinding) expect(result.installationBinding.filesystemIdentity).not.toHaveProperty('value');
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     // SECRET-STORE-SWITCH (Astra 2456 N2): the other Core stores that cannot be listed now (here: the installation directory is not private,
     // so the file stores refuse it as unsafe) are `unverified`, never counted as empty; names are never read or shown.

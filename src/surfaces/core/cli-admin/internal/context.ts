@@ -10,7 +10,7 @@ import type { OperationEffectHandler, OperationInspectHandler } from './operatio
 import type { PoolCapacityApplyHandler, PoolCapacityInspectHandler, PoolHoldApplyHandler, PoolHoldInspectHandler, QuotaReleaseHandler } from './pool.js';
 import type { AdminPathsHandler, RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { SecretDeleteHandler, SecretNamesHandler, SecretSetHandler, SecretStoreInspectHandler } from './secret.js';
-import type { ProjectSecretHandler, SecretGrantHandler, SecretHandoverHandler, SecretInventoryHandler } from './secret-project.js';
+import type { SecretTargetHandler, ProjectSecretHandler, SecretGrantHandler, SecretHandoverHandler, SecretInventoryHandler } from './secret-project.js';
 import type { SecretStoreSwitchHandler, SecretStoresHandler } from './secret-store.js';
 import type { ToolchainUpdateHandler } from './toolchains.js';
 import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } from './worker-instructions.js';
@@ -51,6 +51,7 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   deleteSecret?: SecretDeleteHandler;
   // PRE-8 v2: the one secret inventory; grants, project-vault changes and the handover in this process at the person's terminal.
   inspectSecretInventory?: SecretInventoryHandler;
+  inspectSecretTarget?: SecretTargetHandler;
   changeSecretGrant?: SecretGrantHandler;
   setProjectSecret?: ProjectSecretHandler;
   handOverSecrets?: SecretHandoverHandler;

@@ -21,7 +21,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority, locale: resolveLocale(undefined, options.env ?? process.env, context.config.language),
     selfSource: selfSource ? isSelfSourceWriteFloored : () => false });
   const shell = createAgentShell({ worker: true, scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
-    channel: { signal, emit() {}, async drained() {}, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,
+    channel: { signal, emit() {}, async drained() { return false; }, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,
     globalStateRoots: agentGlobalStateRoots([env, process.env]), productState: agentProductStateDeny(request.workspace, context.layout, env), authority,
     selfSource, writeFloor, writeSetRoot: () => sandboxWriteSetRoot(request.workspace, context.layout, env), sealed: sealedRootEntryRefused(request.workspace, sandbox.hardFloor) });
   const tools = [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC], describe = describeAgentCall;

@@ -1,3 +1,4 @@
+import type { SecretProjectTarget } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, ResolvedConfig } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
@@ -75,7 +76,8 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
   setSecret?: TerminalSecretSetHandler;
   /** U1: custody is checked before key entry; the same governed connection keeps partial key/grant results. */
   prepareMainSecret?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ProviderCustodyView>;
-  connectProviderSecret?: (root: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean }>, options: ConfigLoadOptions) => Promise<Readonly<{
+  inspectSecretTarget?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<SecretProjectTarget>;
+  connectProviderSecret?: (root: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean; target?: SecretProjectTarget }>, options: ConfigLoadOptions) => Promise<Readonly<{
     name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
   deleteSecret?: TerminalSecretDeleteHandler;
 }

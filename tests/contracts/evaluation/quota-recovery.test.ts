@@ -1,9 +1,13 @@
 import { randomBytes } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { inventoryReadsPerCall, createNormalizerState, createCodexState, normalizeClaudeLine, normalizeCodexLine, FileArtifactStore, openSqliteAttemptStore, sealAttemptWorkerEvents, type SqliteAttemptStore } from '#adapters/index.js';
 import { AuditApplication, QuotaReleaseApplication, PoolControlPolicyAuthorization, TaskEvaluationApplication, RunLifecycleApplication, RunReservationApplication, projectMonitorRun, projectRunView } from '#engine/index.js';
@@ -23,7 +27,7 @@ const pin = { channelId: 'subscription-channel', modelId: 'native-model', auxili
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'business criterion', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 type Variant = 'claude-rate-limit' | 'codex-text' | 'exit-text';
-async function fixture(source: Variant = 'claude-rate-limit', options: { substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; maxWaitMs?: number; interrupted?: boolean; partial?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
+async function fixture(source: Variant = 'claude-rate-limit', options: { bootstrap?: { stdout: string; exitCode: number }; exit?: { code: number | null; signal: string | null; failure: string | null }; substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; maxWaitMs?: number; interrupted?: boolean; partial?: boolean; dropped?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-quota-')); roots.push(root); let now = 1000, sequence = 0;
   const path = join(root, 'ledger.db'), storage = { busyTimeoutMs: 100, journalMode: 'wal' as const, durability: 'full' as const };
   const store = await openSqliteAttemptStore(path, storage, { now: () => now, timeoutMs: 5000 }, 'allow', custodyProfiles); stores.push(store);
@@ -50,9 +54,9 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
   async function finish(identity: AttemptIdentity, resetsAtMs: number | null = source === 'claude-rate-limit' ? options.resetsAtMs === undefined ? 6000 : options.resetsAtMs : null) {
     const claim = { request: { protocolVersion: 1 as const, identity, workspace: '/fixture', argv: ['fixture'] }, owner: 'worker' };
     await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
-    const stdout = JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 1, signal: null, failure: 'capacity', outputBytes: 1 }) + '\n';
+    const stdout = options.bootstrap?.stdout ?? JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...(options.exit ?? { code: 1, signal: null, failure: 'capacity' }), outputBytes: 1 }) + '\n';
     const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: options.partial ? 'partial' : 'complete', stdout, stderr: '' })));
-    await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: identity.attemptId, exitCode: 1, interrupted: options.interrupted ?? false });
+    await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: identity.attemptId, exitCode: options.bootstrap?.exitCode ?? 1, interrupted: options.interrupted ?? false });
     const used = options.substituted ? 'different-model' : pin.modelId;
     const events: WorkerEvent[] = [ { schemaVersion: 1, sequence: 1, atMs: 0, kind: 'session.started', provider, model: used, cliVersion: 'fixture' } ];
     if (source !== 'exit-text') {
@@ -63,6 +67,7 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
       events.push(...native.map(event => ({ ...event, sequence: events.length + event.sequence })));
     }
     if (options.recoveredSession) events.push({ schemaVersion: 1, sequence: events.length + 1, atMs: 2, kind: 'session.ended', outcome: 'success', turns: 1, durationMs: 2, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 });
+    if (options.dropped) events.push({ schemaVersion: 1, sequence: events.length + 1, atMs: 2, kind: 'dropped', reason: 'event-cap', count: 1 });
     if (!options.noSeal) await sealAttemptWorkerEvents(identity, artifacts, store, { events, verification: { ...verifyWorkerModels({ evidenceCapability: provider === 'claude' ? 'session-events' : 'none', admitted: pin, startedModel: used, usedModels: [used] }), evidenceCapability: provider === 'claude' ? 'session-events' : 'none' },
       unreported: 0, projectionComplete: true, maxBytes: 65536 });
     return claim;
@@ -147,6 +152,32 @@ it.skipIf(process.platform === 'win32').each([{ interrupted: true }, { partial: 
   } else { await expect(f.evaluate()).rejects.toThrow(); expect(await f.store.loadRun('s', 'r')).toEqual(before); }
 });
 it.skipIf(process.platform === 'win32')('uses verified bootstrap exit fallback without a seal, zero retry config and scope-safe monitor wait projection', async () => {
+  // Retained exit evidence still parks the Attempt if the best-effort worker quota event was lost.
+  for (const exit of [
+    { code: null, signal: 'SIGKILL', failure: 'capacity:quota-stop' },
+    { code: null, signal: 'SIGKILL', failure: 'capacity:quota-stop-incomplete' },
+    { code: 0, signal: null, failure: 'capacity:quota-stop' }, // CLI exited just before its quota group's kill; bootstrap still exits 1.
+  ]) {
+    const f = await fixture('exit-text', { noSeal: true, exit });
+    const result = await f.evaluate();
+    expect(result.snapshot.state).toMatchObject({ kind: 'parked', reason: 'quota-exhausted' });
+    expect(result.snapshot.quotaWaits?.[0]).toMatchObject({ quota: { source: 'exit-text' } });
+    expect((await f.store.load('s', f.identity.attemptId))!.lastObservation?.result.kind).toBe('quota-exhausted');
+  }
+  const dropped = await fixture('exit-text', { dropped: true, exit: { code: null, signal: 'SIGKILL', failure: 'capacity:quota-stop' } });
+  expect((await dropped.evaluate()).snapshot.quotaWaits?.[0]).toMatchObject({ quota: { source: 'exit-text' } });
+  const weak = await fixture('claude-rate-limit', { dropped: true, exit: { code: null, signal: 'SIGKILL', failure: 'native' } });
+  expect((await weak.evaluate()).snapshot.quotaWaits).toBeUndefined();
+  for (const exit of [
+    { code: null, signal: 'SIGKILL', failure: 'native' },
+    { code: null, signal: 'SIGKILL', failure: 'capacity' },
+    { code: 0, signal: null, failure: 'capacity' },
+    { code: 0, signal: null, failure: null },
+  ]) {
+    const f = await fixture('exit-text', { noSeal: true, exit });
+    expect((await f.evaluate()).snapshot.quotaWaits).toBeUndefined();
+  }
+
   const f = await fixture('exit-text', { noSeal: true, maxResumes: 0 }); const parked = (await f.evaluate()).snapshot;
   expect(parked.quotaWaits?.[0]).toMatchObject({ maxResumes: 0, quota: { resetsAtMs: null, source: 'exit-text' } });
   expect(runSnapshotSchema.parse(parked)).toEqual(parked); expect(projectRunView(parked).quotaWaits).toEqual([{ taskId: 't', since: 1000, deadline: 11000, resetsAtMs: null, retryLimitReached: true }]);
@@ -156,6 +187,64 @@ it.skipIf(process.platform === 'win32')('uses verified bootstrap exit fallback w
   expect(monitor.blocker).toMatchObject({ detail: 'quota-retry-limit', deadlineMs: 11000 });
   expect(quotaWaitText(6000, false, 'tr')).toContain('bilinmiyor'); expect(quotaWaitText(6000, true, 'en')).toContain('resumes at');
   expect(quotaWaitText(6000, true, 'tr', true)).toContain('sınırına');
+});
+
+it.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('distinguishes observed quota stops from text guesses through the real bootstrap, retained output and evaluation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'quota-bootstrap-')); roots.push(root);
+  const docker = promisify(execFile), capability = 'f'.repeat(64); // Public fixture sentinel, no provider credentials.
+  const setup = { schemaVersion: 1, provider: 'fixture', capabilities: { eventStream: 'claude-code-stream-json', modelUsageEvidence: 'session-events' },
+    home: '.fixture', file: 'fixture.json', credential: {}, environment: {}, quotaPolicy, limits: { connections: 2, idleMs: 1000 } };
+  let events: WorkerEvent[] = [];
+  const gateway = createServer((request, response) => {
+    expect(request.headers.authorization).toBe(capability);
+    if (request.url === '/bootstrap') { response.end(JSON.stringify(setup)); return; }
+    let body = ''; request.on('data', part => { body += part; });
+    request.on('end', () => { events.push(...body.trim().split('\n').filter(Boolean).map(line => JSON.parse(line))); response.end('{}'); });
+  });
+  await writeFile(join(root, 'capability'), capability);
+  await new Promise<void>(resolve => gateway.listen(join(root, 'gateway.sock'), resolve));
+  try {
+    for (const mode of ['killed-text', 'observed', 'incomplete', 'text-nonzero', 'success'] as const) {
+      events = [];
+      const quota = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected' } }) + '\n';
+      const descendant = `process.stdout.write(${JSON.stringify(quota)});setInterval(()=>{},1000);`;
+      const cli = mode === 'killed-text' ? "process.stdout.write('quota calculation\\n',()=>process.kill(process.pid,'SIGKILL'));"
+        : mode === 'text-nonzero' ? "console.log('quota calculation');process.exitCode=7;"
+          : mode === 'success' ? "console.log('ordinary result');"
+            : mode === 'observed' ? descendant
+              : `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{detached:true,stdio:['ignore',process.stdout,process.stderr]});setInterval(()=>{},1000);`;
+      await writeFile(join(root, 'cli.cjs'), cli);
+      const name = `quota-evaluation-${process.pid}-${mode}`;
+      try {
+        const args = ['run', '--name', name, '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+          '--user', `${process.getuid!()}:${process.getgid!()}`, '--pids-limit', '32', '--memory', '268435456', '--cpus', '1', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16777216',
+          '--mount', `type=bind,src=${fileURLToPath(new URL('../../../src/adapters/core/native-connection/internal/worker.ts', import.meta.url))},dst=/run/deckent-bootstrap.ts,readonly`,
+          '--mount', `type=bind,src=${root}/gateway.sock,dst=/run/deckent-connection.sock`,
+          '--mount', `type=bind,src=${root}/capability,dst=/run/deckent-bootstrap.key,readonly`,
+          '--mount', `type=bind,src=${root}/cli.cjs,dst=/run/fixture-cli.cjs,readonly`,
+          '--entrypoint', 'node', process.env.DECKENT_TEST_DOCKER_IMAGE!, '/run/deckent-bootstrap.ts', '/usr/local/bin/node', '/run/fixture-cli.cjs'];
+        const completed = await docker('docker', args, { timeout: 10000 }).then(result => ({ ...result, exitCode: 0 }),
+          (error: { stdout: string; stderr: string; code: number }) => ({ stdout: error.stdout, stderr: error.stderr, exitCode: error.code }));
+        const exit = completed.stdout.trim().split('\n').map(line => JSON.parse(line)).find(record => record.kind === 'native-coding-exit');
+        expect(exit, completed.stderr).toBeDefined();
+        const observed = mode === 'observed' || mode === 'incomplete';
+        expect(events.some(event => event.kind === 'quota-exhausted')).toBe(observed);
+        expect(exit).toMatchObject(mode === 'success' ? { code: 0, signal: null, failure: null }
+          : mode === 'text-nonzero' ? { code: 7, signal: null, failure: 'capacity' }
+            : { code: null, signal: 'SIGKILL', failure: mode === 'killed-text' ? 'capacity' : mode === 'incomplete' ? 'capacity:quota-stop-incomplete' : 'capacity:quota-stop' });
+        // No event seal: only the actual bootstrap stdout retained by dispatch can authorize the fallback.
+        const f = await fixture('exit-text', { noSeal: true, bootstrap: completed }), result = await f.evaluate();
+        if (observed || mode === 'text-nonzero') {
+          expect(result.snapshot.state).toMatchObject({ kind: 'parked', reason: 'quota-exhausted' });
+          expect((await f.store.load('s', f.identity.attemptId))!.lastObservation?.result.kind).toBe('quota-exhausted');
+        } else {
+          expect(result.snapshot.quotaWaits).toBeUndefined();
+          expect(result.snapshot.progress[0]!.phase).toBe('failed');
+          expect(f.evaluator.evaluate).toHaveBeenCalledOnce();
+        }
+      } finally { await docker('docker', ['rm', '-f', name], { timeout: 10000 }); }
+    }
+  } finally { await new Promise<void>(resolve => gateway.close(() => resolve())); }
 });
 
 it.skipIf(process.platform === 'win32')('does not recycle an earlier rejection after a successful native session and a later unrelated process failure', async () => {

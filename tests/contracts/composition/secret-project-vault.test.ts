@@ -1,4 +1,5 @@
 import * as platform from '#platform/index.js';
+import * as adapters from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -6,15 +7,20 @@ import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFi
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installationSecretRoot, listProjectVaults, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
-import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createEncryptedFileSecretStore, installationSecretRoot, listProjectVaults, observeOwnerRoot, openLocalIntegrityAuthority, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { inspectConfiguredSecretInventory, inspectSecretProjectTarget, changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const cleanups: (() => Promise<void>)[] = [];
-afterEach(async () => { clearConfigCache(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+beforeEach(() => {
+  // A person accepts the moved identity at a terminal, as in installation-relocation.test.ts.
+  vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  vi.spyOn(platform, 'automationMarker').mockReturnValue(null);
+});
+afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 const MAIN_VALUE = 'synthetic-main-canary-7f3a', OWN_VALUE = 'synthetic-project-canary-91c2';
 const SQLITE = { busyTimeoutMs: 1_000, journalMode: 'wal' as const, durability: 'full' as const };
 const human = { attest: async () => true }, noTerminal = { attest: async () => false };
@@ -161,8 +167,24 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     const copy = join(base, 'copy');
     await cp(root, copy, { recursive: true });
     clearConfigCache();
-    expect(await code(resolverOf(copy, env))).toBe('INSTALLATION_IDENTITY_RELOCATED');
-    await resolveConfiguredInstallationIdentity(copy, 'keep', { env });
+    const relocated = await resolverOf(copy, env).catch((error: unknown) => error);
+    expect(relocated).toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    for (const locale of ['en', 'tr'] as const) {
+      const message = (relocated as platform.DeckentError).localize!(locale).message;
+      expect(message).toContain('deckent init identity --keep');
+      expect(message).toContain(locale === 'en' ? 'at your terminal' : 'terminalinizde');
+    }
+    const target = await inspectSecretProjectTarget(root, 'scope', { env });
+    const vault = join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(target.anchor));
+    const paths = [join(copy, '.deckent/installation-identity/identity.json'), join(copy, '.deckent/policy.json'),
+      join(vault, PROJECT_VAULT.projectFile), join(vault, PROJECT_VAULT.grantsFile)];
+    const before = await Promise.all(paths.map(path => readFile(path)));
+    vi.mocked(platform.automationMarker).mockImplementation(markedEnv => markedEnv['AI_AGENT'] === '1' ? 'agent' : null);
+    expect(await code(resolveConfiguredInstallationIdentity(copy, 'keep', { env: { ...env, AI_AGENT: '1' } })))
+      .toBe('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+    expect(await Promise.all(paths.map(path => readFile(path)))).toEqual(before);
+    vi.mocked(platform.automationMarker).mockReturnValue(null);
+    expect(await resolveConfiguredInstallationIdentity(copy, 'keep', { env })).toMatchObject({ class: 'moved', basis: 'human-tty' });
     expect(await code((await resolverOf(copy, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await code(handOverProjectSecrets(copy, 'scope', { env }, human))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
@@ -175,6 +197,10 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
 
   it('worktrees of one repository are one project (shared vault and grants); a copied worktree folder is refused', async () => {
     const { base, env } = await home(), root = await project(base, 'repo');
+    const globalPath = platform.resolveGlobalConfigPaths(env).platformPath;
+    await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
+    await writeFile(globalPath, JSON.stringify({ secrets: { store: 'core.secret-store.encrypted-file@1' } }), { mode: 0o600 });
+    await createEncryptedFileSecretStore({ root: dirname(globalPath), platform: 'linux' }).set('DECKENT_ANTHROPIC_KEY', MAIN_VALUE);
     await writeFile(join(root, 'README'), 'x\n');
     git(root, 'init', '-q', '-b', 'main'); git(root, 'add', 'README'); git(root, 'commit', '-q', '-m', 'init');
     const tree = join(base, 'repo-wt');
@@ -182,7 +208,36 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     await mkdir(join(tree, '.deckent'), { recursive: true, mode: 0o700 });
     for (const file of ['config.json', 'policy.json']) await cp(join(root, '.deckent', file), join(tree, '.deckent', file));
     await installed(tree);
-    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    await resolverOf(root, env); await resolverOf(tree, env); // existing identity bootstrap, before the read-only card preview
+    const target = await inspectSecretProjectTarget(tree, 'scope', { env });
+    expect(target).toMatchObject({ anchor: { projectRoot: root }, workingFolder: tree });
+    expect(await inspectSecretProjectTarget(root, 'scope', { env })).toMatchObject({ anchor: target.anchor, workingFolder: root });
+    const alias = join(base, 'alias'); await symlink(root, alias);
+    expect(await inspectSecretProjectTarget(alias, 'scope', { env })).toEqual({ anchor: target.anchor, workingFolder: root });
+    const granted = await changeProjectSecretGrant(tree, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human, target);
+    expect(granted).toMatchObject({ project: root, granted: true });
+    await writeFile(join(tree, '.deck'), 'DECK_FORMAT=1\nDECKENT_ANTHROPIC_KEY=main\n');
+    const inventory = await inspectConfiguredSecretInventory(tree, 'scope', false, { env });
+    expect(inventory.project).toBe(root); expect(inventory.workingFolder).toBe(tree);
+    expect((await inspectConfiguredSecretInventory(alias, 'scope', false, { env })).project).toBe(root); expect(inventory.rows.find(row => row.name === granted.name)?.grant.state).toBe('granted');
+    const vault = (await projectVaultDirectory(installationSecretRoot(env)!, target.anchor, false))!;
+    const grantsPath = join(vault, PROJECT_VAULT.grantsFile), grantsBefore = await readFile(grantsPath, 'utf8');
+    expect(JSON.parse(grantsBefore)).toMatchObject({ installationId: target.anchor.installationId, projectId: target.anchor.projectId });
+    const ownerPath = join(vault, PROJECT_VAULT.projectFile), ownerBefore = await readFile(ownerPath, 'utf8');
+    const audit = await openSqliteAuditStore(join(tree, '.deckent/state/ledger.db'), SQLITE, 'forbid');
+    const decisionsBefore = audit.page('scope', 0, 1_000).length;
+    expect(await code(changeProjectSecretGrant(tree, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human, { ...target,
+      anchor: { ...target.anchor, binding: { ...target.anchor.binding, inode: String(BigInt(target.anchor.binding.inode) + 1n) } } }))).toBe('SECRET_PROJECT_TARGET_CHANGED');
+    const identityPath = join(platform.productResourcePath(resolveProductLayout({ projectRoot: root }), 'projectIdentity'), 'identity.json'), identity = await readFile(identityPath, 'utf8');
+    await writeFile(identityPath, JSON.stringify({ ...JSON.parse(identity), projectId: randomUUID() })); clearConfigCache();
+    const changed = await changeProjectSecretGrant(tree, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human, target).catch((error: unknown) => error);
+    expect(changed).toMatchObject({ code: 'SECRET_PROJECT_TARGET_CHANGED' });
+    for (const locale of ['en', 'tr'] as const) expect((changed as platform.DeckentError).localize!(locale).message).toContain(locale === 'en' ? 'Nothing was granted' : 'İzin verilmedi');
+    expect(await readFile(grantsPath, 'utf8')).toBe(grantsBefore); expect(await readFile(ownerPath, 'utf8')).toBe(ownerBefore);
+    expect(audit.page('scope', 0, 1_000)).toHaveLength(decisionsBefore); audit.close();
+    expect(await code(handOverProjectSecrets(tree, 'scope', { env }, human, target))).toBe('SECRET_PROJECT_TARGET_CHANGED');
+    expect((await listProjectVaults(installationSecretRoot(env)!)).length).toBe(1);
+    await writeFile(identityPath, identity); clearConfigCache();
     await setProjectSecret(tree, 'scope', 'OWN_KEY', OWN_VALUE, { env }, human);
     await writeFile(join(root, '.deck'), 'DECK_FORMAT=1\nOWN_KEY=project\n'); await cp(join(root, '.deck'), join(tree, '.deck'));
     expect(await (await resolverOf(tree, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
@@ -292,6 +347,29 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is au
     const m = await moved(), before = await readFile(m.record, 'utf8');
     expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
     expect(await readFile(m.record, 'utf8')).toBe(before);
+    // Same canonical path and inode, only the recorded device differs: never evidence of an abandoned owner (owner 80).
+    const record = JSON.parse(before), grants = await readFile(m.grants, 'utf8');
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('present');
+    record.anchor.binding.device = String(BigInt(record.anchor.binding.device) + 1n);
+    await writeFile(m.record, JSON.stringify(record));
+    const uncertain = await readFile(m.record, 'utf8');
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('uncertain');
+    const failure = await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(platform.DeckentError);
+    expect(failure).toMatchObject({ code: 'SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', params: { reason: 'uncertain' } });
+    for (const locale of ['en', 'tr'] as const) {
+      expect((failure as platform.DeckentError).localize!(locale).message).toContain(locale === 'en' ? 'disk device number differs' : 'disk aygıt numarası farklı');
+    }
+    expect(await code((await resolverOf(m.root, m.env)).resolve('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE');
+    expect(await code(setProjectSecret(m.root, 'scope', 'OWN_KEY', OWN_VALUE, { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE');
+    expect(await readFile(m.record, 'utf8')).toBe(uncertain); expect(await readFile(m.grants, 'utf8')).toBe(grants);
+    // Other inode remains gone; removing the original still permits today's witnessed, authorized handover.
+    expect(await observeOwnerRoot({ ...record.anchor.binding, inode: String(BigInt(record.anchor.binding.inode) + 1n) })).toBe('gone');
+    await rm(m.root, { recursive: true, force: true });
+    expect(await observeOwnerRoot(record.anchor.binding)).toBe('gone');
+    await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human);
+    expect(JSON.parse(await readFile(m.record, 'utf8')).anchor.projectRoot).toBe(m.copy);
+    expect(await (await resolverOf(m.copy, m.env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
   });
   it('the decision cannot be written: nothing changes (binding and grants)', async () => {
     const m = await moved(), before = await readFile(m.record, 'utf8'), grants = await readFile(m.grants, 'utf8');

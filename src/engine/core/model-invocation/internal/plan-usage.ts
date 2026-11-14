@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationPlanUsageSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type JsonObject, type ModelInvocationPlanUsage } from '#domain/index.js';
+import { modelInvocationPlanUsageSchema, modelInvocationPlanUsageReadSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type JsonObject, type ModelInvocationPlanUsage, type ModelInvocationPlanUsageRead } from '#domain/index.js';
 import { providerSpendEvidenceDigest, providerSpendOutcomeDigest } from '#engine/core/provider-spend/index.js';
 import { ModelInvocationStoreError, type ModelInvocationRecord } from './port.js';
 
@@ -24,12 +24,17 @@ export function createModelInvocationPlanUsage(record: ModelInvocationRecord): M
     invocationId: receipt.claim.invocationId, profileDigest: receipt.profileDigest, outcomeDigest: providerSpendOutcomeDigest(receipt),
     observedAtMs: outcome.observedAtMs, source: reported ? 'provider-reported' : 'unavailable', counters: reported });
 }
-export const modelInvocationPlanUsageDigest = (usage: ModelInvocationPlanUsage) => providerSpendEvidenceDigest(usage);
-export function verifyModelInvocationPlanUsage(input: unknown, record: ModelInvocationRecord, checkCounters = true): ModelInvocationPlanUsage | null {
+export const modelInvocationPlanUsageDigest = (usage: ModelInvocationPlanUsageRead) => providerSpendEvidenceDigest(usage);
+export function verifyModelInvocationPlanUsage(input: unknown, record: ModelInvocationRecord, checkCounters = true): ModelInvocationPlanUsageRead | null {
   const expected = createModelInvocationPlanUsage(record);
   if (input === null && expected === null) return null;
-  const parsed = modelInvocationPlanUsageSchema.safeParse(input);
-  if (!expected || !parsed.success || (record.receipt.outcome?.state !== 'responded' && parsed.data.counters !== null) || !isDeepStrictEqual({ ...parsed.data, counters: null, source: null }, { ...expected, counters: null, source: null })
-    || (checkCounters && !record.purge && !isDeepStrictEqual(parsed.data, expected))) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+  const parsed = modelInvocationPlanUsageReadSchema.safeParse(input);
+  if (!expected || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+  // Validate the observation independently; every original field still has the original receipt/content checks.
+  const original = { ...parsed.data, schemaVersion: 1 as const };
+  Reflect.deleteProperty(original, 'observation');
+  if ((record.receipt.outcome?.state !== 'responded' && original.counters !== null)
+    || !isDeepStrictEqual({ ...original, counters: null, source: null }, { ...expected, counters: null, source: null })
+    || (checkCounters && !record.purge && !isDeepStrictEqual(original, expected))) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   return parsed.data;
 }

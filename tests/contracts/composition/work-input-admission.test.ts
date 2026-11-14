@@ -369,7 +369,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
       const view = surface.buildMonitorView(snapshot, lang, true);
       const detail = view.tabs.workers.filter(block => block.kind === 'table').flatMap(block => block.rows)
         .flatMap(row => row.detail().flat().map(cell => cell.text)).join(' ');
-      const expected = boundary ? (lang === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra registry hedefi gerekir')
+      const expected = boundary ? (lang === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra kayıt hedefi gerekir')
         : lang === 'en' ? `Reasoning effort: ultra (${choice === 'explicit' ? 'explicit' : 'policy default'}` : `Muhakeme eforu: ultra (${choice === 'explicit' ? 'açık istek' : 'politika varsayılanı'}`;
       expect(output).toContain(expected); expect(detail).toContain(expected);
       expect(output).toContain(lang === 'en' ? `Task text: ${TASK}` : `İş metni: ${TASK}`);

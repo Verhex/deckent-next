@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { afterEach, expect, it, vi } from 'vitest';
+import * as cliHuman from '#surfaces/core/cli-human/index.js';
+import { t, clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { readPiped } from '#surfaces/core/cli-admin/index.js';
@@ -124,7 +125,7 @@ it('PRE-8 v2: grant/revoke/handover need a person terminal before any handler; s
   const project_ = { setProjectSecret: async (_root: string, input: { scopeId: string; name: string; value: string | null }) => { seen.push({ project: input }); return { name: input.name, project: '/p', removed: false }; },
     changeSecretGrant: async (_root: string, input: { scopeId: string; name: string; action: string }) => { seen.push({ grant: input }); return { name: input.name, project: '/p', granted: input.action === 'grant', revision: 1 }; },
     handOverSecrets: async (_root: string, input: { scopeId: string }) => { seen.push({ handover: input }); return { project: '/p', handedOverAtMs: 1 }; },
-    inspectSecretInventory: async (_root: string, input: { scopeId: string; all: boolean }) => { seen.push({ list: input }); return { schemaVersion: 1 as const, project: '/p', mainStore: 'core.secret-store.env@1', all: input.all,
+    inspectSecretInventory: async (_root: string, input: { scopeId: string; all: boolean }) => { seen.push({ list: input }); return { schemaVersion: 1 as const, project: '/p', workingFolder: '/wt', mainStore: 'core.secret-store.env@1', all: input.all,
       rows: [{ name: 'DECKENT_ANTHROPIC_KEY', vault: 'main' as const, project: '/p', usedBy: ['claude@1'], deck: 'undeclared' as const, grant: { state: 'none' as const }, presence: 'unverified' as const }],
       findings: [{ kind: 'grant-required' as const, name: 'DECKENT_ANTHROPIC_KEY', project: '/p' }] }; } };
   for (const argv of [['secret', 'grant', 'K', '--scope', 'scope'], ['secret', 'revoke', 'K', '--scope', 'scope'], ['secret', 'handover', '--scope', 'scope']]) {
@@ -140,7 +141,7 @@ it('PRE-8 v2: grant/revoke/handover need a person terminal before any handler; s
   expect(await main(['secret', 'set', 'OWN', '--project', '--scope', 'scope', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: capture().sink, ...handlers([]), ...project_ })).toBe(0);
   const listed = capture();
   expect(await main(['secret', 'list'], { root: f.root, env: f.env, stdout: listed.sink, stderr: capture().sink, ...handlers([]), ...project_ })).toBe(0);
-  expect(listed.text()).toContain('DECKENT_ANTHROPIC_KEY'); expect(listed.text()).toContain('no grant');
+  expect(listed.text()).toContain('DECKENT_ANTHROPIC_KEY'); expect(listed.text()).toContain('no grant'); expect(listed.text()).toContain('Current working folder: /wt.');
   expect(listed.text()).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope <scope>');
   expect(seen).toEqual([{ grant: { scopeId: 'scope', name: 'K', action: 'grant' } }, { project: { scopeId: 'scope', name: 'OWN', value: CANARY } }, { list: { scopeId: 'scope', all: false } }]);
 });
@@ -155,4 +156,33 @@ it('U1 main-vault custody refusal is shown before the hidden reader starts or an
   })).toBe(1);
   expect(prepared).toBe(1); expect(raw).toBe(0); expect(calls).toEqual([]);
   expect(err.text()).toContain('SECRET_STORE_UNSAFE'); expect(err.text()).toContain('/synthetic/private-root');
+});
+
+it('the grant, revoke and handover cards show the resolved project in both languages and pass that exact target to the writer', async () => {
+  const f = await project('scope'), anchor = { installationId: 'installation', projectId: 'project', projectRoot: '/main-project',
+    binding: { canonicalRoot: '/main-project/.deckent', device: '1', inode: '2' }, repository: { canonicalRoot: '/main-project/.git', device: '1', inode: '3' } };
+  let target = { anchor, workingFolder: '/side-worktree' };
+  const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue('apply');
+  const seen: unknown[] = [], host = {
+    inspectSecretTarget: async () => target,
+    changeSecretGrant: async (_root: string, input: { name: string; action: string; target?: unknown }) => { seen.push(input.target); return { name: input.name, project: anchor.projectRoot, granted: input.action === 'grant', revision: 1 }; },
+    handOverSecrets: async (_root: string, input: { target?: unknown }) => { seen.push(input.target); return { project: anchor.projectRoot, handedOverAtMs: 1 }; },
+  };
+  const stdin = Object.assign(new PassThrough(), { isTTY: true });
+  try {
+    for (const locale of ['en', 'tr'] as const) for (const action of ['grant', 'revoke', 'handover']) {
+      const out = capture(), argv = ['secret', action, ...(action === 'handover' ? [] : ['K']), '--scope', 'scope', '--lang', locale];
+      expect(await main(argv, { root: f.root, env: f.env, stdin, stdout: Object.assign(out.sink, { isTTY: true }), stderr: capture().sink, ...host })).toBe(0);
+      const request = ask.mock.calls.at(-1)![0];
+      expect(request.title).toContain(anchor.projectRoot); expect(request.title).not.toContain(target.workingFolder);
+      expect(request.body).toContain(t('secret.project.sharedWorktrees', { workingFolder: target.workingFolder }, locale));
+      expect(out.text()).toContain(anchor.projectRoot); expect(seen.at(-1)).toBe(target);
+    }
+    target = { anchor: { ...anchor, repository: null as never }, workingFolder: anchor.projectRoot };
+    await main(['secret', 'grant', 'K', '--scope', 'scope'], { root: f.root, env: f.env, stdin, stdout: screen().sink, stderr: capture().sink, ...host });
+    expect(ask.mock.calls.at(-1)![0].body).toHaveLength(1);
+    ask.mockResolvedValue('cancel'); const before = seen.length;
+    await main(['secret', 'grant', 'K', '--scope', 'scope'], { root: f.root, env: f.env, stdin, stdout: screen().sink, stderr: capture().sink, ...host });
+    expect(seen).toHaveLength(before);
+  } finally { ask.mockRestore(); stdin.destroy(); }
 });

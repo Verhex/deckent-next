@@ -1,8 +1,14 @@
 # Known limits
 
+- **Claude subscription limits and paid extra usage.** Text chat, agent tool turns and workers share the registry classification. A rejected plan limit stops unless paid usage is explicitly active (`isUsingOverage` / `overageInUse` true, or a rejected status with a registry-allowed string `overageStatus`). Unknown or malformed overage availability never grants permission. On terminal text and tool paths with a live notice callback, the default is to continue only after the notice is delivered when the event arrives, once per session and scope. Delivery means a successful write to a live terminal socket, not proof that a person read it. Dropped, skipped, finished, overflowed or cancelled deliveries do not suppress the next notice. A missing callback or failed delivery stops at the limit. Planner, Brain, generic and worker calls stop at the limit; worker policy refuses paid continuation in beta.2. deckent cannot see the provider's paid amount. Use `deckent config set models.headless.paidExtraUsage '"stop-at-limit"'` to stop both chat paths instead, or `deckent config set models.headless.paidExtraUsage '"continue"'` to restore the default. Unknown/missing main statuses stop agent turns explicitly; text chat keeps them informational.
+- **Container worker quota stop.** At a reached limit, including an ordinary rejection without paid usage, the bootstrap kills the CLI's owned process group and waits up to one second for its pipes to close. If a descendant leaves that group and holds a pipe open, the bootstrap closes its pipe ends and writes the final quota exit evidence with `capacity:quota-stop-incomplete`; later output is ignored. Such an escaped process remains under the existing container stop at the deadline, rather than being stopped by the quota event. Partial output and effects already produced remain in the attempt's existing custody.
+- **beta.2 paid-usage evidence and rollback.** A turn that continued on paid extra usage and then ended by error, cancel or timeout showed the notice but left no record of the paid usage. Successful responses keep bounded status/window/reset facts in the existing open native response map; successful agent turns also keep the delivered notice in their existing note. beta.2 reads beta.2.1 plan-usage v2 observations and retained worker `cli.observation` lines, including failed endings; it keeps writing plan-usage v1 and emits no new worker observation. Full recording and worker coverage come in beta.2.1. A host crash mid-call, before settlement, leaves no deckent record of that call’s plugin or paid-usage facts; the provider bill shows the charge. `models.headless.paidExtraUsage` is a new config value that an older build's strict config reader does not accept: remove the setting before rolling back to an older version. Strict-policy presets are unchanged. Model-side percentages and Codex limit signals remain outside this change.
+
 The shell guard also refuses the single-quoted literal `'$DECKENT_HOME/x'`; this is a conservative false refusal because quote information is lost during parsing.
 
 Patch exclusions also use the workspace read credential floor. Patches now withhold credential paths including `.gnupg`, `.docker`, `.config/gh`, `.git-credentials`, `.pypirc`, `*.pem`, `*.key`, `secrets.json` and `*.jks`. Existing patch exclusions still apply.
+
+The credential read table protects the login files `.codex/auth.json`, `.claude/.credentials.json` and `.config/cursor/auth.json` in workspaces and at their exact HOME locations. Claude's filename is documented in [Claude Code authentication](https://code.claude.com/docs/en/authentication#credential-management); Cursor's filename was verified from the installed Cursor CLI version in November 2026, not from vendor documentation. The table also protects `**/.cursor-server/.*.token` (verified from the installed version on 2026-11-12: the server's `--connection-token-file` flag reads mode-600 files named after the server commit) and `**/.vscode-server/.*.token` (an inference from the same flag in the installed VS Code server; no matching token file was present on the checked machine). Platform keychain access is outside this file table. By the owner's login-files-only decision, the rest of these folders stays readable, including `.claude/settings.json` and `.config/cursor/cli-config.json`, subject to existing credential rules; no whole-folder read ban is added. Assembled-release and real-account acceptance remain open.
 
 The alpha.63 worker candidate verifies its first guarded Attempt before retaining worker evidence. An unreadable record or an unresolved verification claim keeps the worker waiting for reconciliation; it is never retried automatically. Task artifacts and predecessor outputs are read-only tool inputs and are absent from the CLI login realm. Real-account and assembled-release acceptance remain open.
 
@@ -55,9 +61,9 @@ Alpha.62 integration verification covers valid config versions 4–6 without rew
 
 Beta.1 is a candidate. The eight acceptance gates remain open during the beta line; beta acceptance is announced separately.
 
-Claude built-in plugins are trusted as a class, not by name (owner 2026-11-11): both guards require `path: builtin` AND source exactly `<name>@builtin`. User plugins, duplicate names, malformed entries and plugin errors still refuse. In this release a new built-in name is recorded and shown only when a terminal tool turn completes. When the turn ends by cancellation, timeout or an error, the name is not recorded. Planner (Brain/generic) calls record it on success but do not show it; worker runs neither record nor show it. Built-in plugins still pass on all these paths, and user plugins are still refused on all of them. The owner accepted these limits for beta.1.2; full coverage is planned for the next beta.
+Claude built-in plugins are trusted as a class, not by name (owner 2026-11-11): both guards require `path: builtin` AND source exactly `<name>@builtin`. User plugins, duplicate names, malformed entries and plugin errors still refuse. In this release a new built-in name is recorded and shown only when a terminal tool turn completes. When the turn ends by cancellation, timeout or an error, the name is not recorded. Planner (Brain/generic) calls record it on success but do not show it; worker runs neither record nor show it. Built-in plugins still pass on all these paths, and user plugins are still refused on all of them. The owner accepted these producer limits for beta.1.2 and beta.2; full coverage is planned for beta.2.1. beta.2 inspection reads plan-usage v2 observations and doctor reads those records plus successful `native.headless` metadata in the selected scope. Only callers with content-read permission for each record see names; other callers see a count. Worker human transcripts and monitor excerpts show only the count and paid-usage words; JSON transcripts hide names too. Worker names have no reading surface in beta.2, and doctor does not aggregate worker logs. Doctor is bounded and reports incomplete history after the scan ceiling or content purge. These are recorded observations of accepted plugins, not a review or a successful outcome.
 
-The terminal uses its existing turn note and notice path. Each displayed name is one line of at most 128 Unicode characters (the CLI version: 64), with `…` marking a cut; a notice lists at most four names and says `+N more`. The joined turn note stays within its existing 4096-character budget, preserving closure diagnostics first; full identities remain in successful private invocation evidence. Notice suppression is in memory per terminal process, scope, CLI version and original name until the runtime host restarts, and starts only after the notice callback succeeds. It is not an exactly-once screen-delivery guarantee. No persistent deduplication state is added.
+The terminal uses its existing turn note and notice path. Each displayed name is one line of at most 128 Unicode characters (the CLI version: 64), with `…` marking a cut; a notice lists at most four names and says `+N more`. The joined turn note stays within its existing 4096-character budget, preserving closure diagnostics first; full identities remain in successful private invocation evidence. Notice suppression is in memory per terminal process, scope, CLI version and original name until the runtime host restarts, and starts only after the notice callback succeeds. It is not an exactly-once screen-delivery guarantee. No persistent deduplication state is added; names may be shown again after a restart. After beta.2.1 has written plan-usage v2, rolling back to beta.1.2 makes those invocations fail strict verification with `MODEL_INVOCATION_CORRUPT` on read. A retained worker transcript containing `cli.observation` fails as a whole on beta.1.2; beta.2 can read both formats.
 
 deckent does not inspect what a built-in plugin does; it trusts the CLI binary's own plugins and continues checking the exact tool, skill and MCP surface. Agent init also checks slash commands; headless text relies on `--disable-slash-commands`. On the agent path, reported `system/hook_started`, `system/hook_progress`, `system/hook_response` and `system/plugin_install` events stop the turn. The headless path ignores unknown system lines, so hook invisibility is a headless-path limit. Init does not enumerate plugin hook implementations.
 
@@ -768,13 +774,35 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Installation moved
 
+Beta.2 also reads attachment v2 and registration v3 (including lineage) without repairing them. L2 locations require the same root, inode and filesystem identity; a missing producer never falls back to the device number. After rollback, revoke, detach and unregister remain available on v3 records, preserving their version and other fields. Attaching a new project, relocation (`--relocate`), re-registering after unregister, restoring a revoked project, changing model leases (including a lease-only revoke), tier-`all` uninstall in an attached folder and shared backup restore are refused with `PROJECT_ATTACHMENT_NEWER_RECORD`; use the newer version for these steps. A half-reconciled local reference still refuses with `PROJECT_ATTACHMENT_DENIED`. Stop all newer-version processes before rolling back. A disk renumbering still requires the person for a source with attached folders in beta.2; the complete person-free repair belongs to beta.2.1. The existing legacy v1/v2 size limit is unchanged: a near-cap record can still refuse revoke/detach (+1 byte per active state) or unregister (+24 bytes for an absent member).
+
+beta.2 is the reader release (R): the existing device-number rule and F1 interruption remain unchanged. It can read the machine-strength binding v3 prepared for beta.2.1 (R+1), comparing the persistent filesystem identity only where its producer is proven (Linux ext4). beta.2 never writes v3. After rolling back from R+1, a matching v3 record is read without rewriting it; `init identity --keep/--new` refuses it with `INSTALLATION_IDENTITY_NEWER_BINDING`. Use the newer version or restore the older identity record from backup. Doctor reports filesystem identity availability; it does not enable the new writer.
+
 On WSL, restarting can attach distro disks in a different order. The installation binding records the disk device
 number, so this can stop commands with `INSTALLATION_IDENTITY_RELOCATED` even when the project has not moved.
-In a project that is not the registered source, `deckent init identity --keep` is enough.
+In an unattached project that is not the registered source, `deckent init identity --keep` updates the binding.
+In beta.2, `--keep` accepts a machine-strength device-only change for every caller, including scripts and
+AI-marked callers, without a witness or policy read. The machine digest, canonical root and inode must stay equal;
+only device differs. Binding v1 is machine strength; v2 must explicitly be machine strength. Weak bindings,
+a missing binding, another root/inode/digest or unsupported capture are moved-class evidence. A newer v3 binding
+keeps its existing refusal. Bind and strengthen transitions stay automatic.
 
-In the registered source project `deckent init identity --keep` is currently refused with
-`PROJECT_ATTACHMENT_SOURCE_REGISTERED`. When the source has **no attached project** (none active or pending), run these
-commands in that folder, in this order:
+A moved or copied installation needs the person at a terminal or a direct, explicit rule in the policy file.
+The rule must name the caller (issuer and subject), action `rebind`, resource kind `installation`, an ids array
+containing `moved`, effect `allow` and `scopes: "all"`. Wildcards, scoped-only and role-derived permissions do
+not grant this. Any matching deny, restriction or require-approval rule, including wildcard and role-derived
+refusals at any scope, closes the rule path. Policy is loaded with its existing ownership/mode/link guards,
+without scope membership or ledger access. No template or default opens the rule; beta.2 has no managed writer.
+A failed passive terminal witness falls through to that rule, then the static macOS plain-project exception;
+there is no new prompt. The writer repeats classification with a fresh capture under its lock.
+CLI JSON adds `class` and `basis` as output siblings only (`class: null` for bind/strengthen); the durable
+`lastResolution` format is unchanged. `--new` stays open to every caller.
+
+In the registered source project, both `deckent init identity --keep` and `--new` are refused with
+`PROJECT_ATTACHMENT_SOURCE_REGISTERED`, with separate English/Turkish explanations instead of the raw `UNKNOWN` error.
+Nothing is changed. Creating a new identity would break the project references; `--keep` cannot yet reconcile them.
+An attachment refused because its source cannot be verified names the registered source folder locally.
+When the source has **no attached project** (none active or pending), run these commands in that folder, in this order:
 
 ```sh
 deckent terminal attach --unregister --apply
@@ -787,9 +815,75 @@ The source project then works again, but registering it again and attaching othe
 When the source **has attached projects**, the first command is refused with `PROJECT_ATTACHMENT_SOURCE_REGISTERED` until
 each one is detached (`deckent terminal attach --detach <projectId> --apply`). That path has not been confirmed for a moved
 installation; this beta may offer no way out there short of restoring a backup. The guard stays as it is; the binding fix
-is planned for the next beta.
+is planned for beta.2.1. beta.2 is the reader release; it does not repair registered-source recovery.
+
+
+Beta.2 rebinding limits (owner answers 79/81/82/88/89/92/93/94):
+
+- Any copy retaining machine id (including a configured identity file), path and root inode passes as device-only:
+  whole-disk clones, VM/WSL/container images on another computer, volume snapshots/clones and a folder that is a
+  mount point with a constant root inode. A same-machine snapshot rollback also restores revoked policy grants.
+- The moved rule travels in the policy file: a copy carrying it accepts itself; a same-account process can write it.
+- An unmarked same-account agent with its own terminal passes the person witness. Both that agent and a person are
+  durably recorded as the same OS account plus time. Class, basis and rule id are durable only from beta.2.1.
+- On macOS without a witness producer only a plain project has witness-less moved rebinding, including AI callers.
+  Plain means no attachment reference, no sharedRegistrationId, and no per-user registration naming this installation
+  or folder (source or entry), including unregistered history. An unrelated source for the same user does not block it.
+  A previously shared project cannot use this exception; the explicit rule applies where existing attachment guards permit identity rebinding,
+  but moved source reconciliation still needs a witness unavailable on macOS.
+- `init identity --new` stays open to every caller. A same-host copy with a new identity runs under copied policy
+  grants; vault and model use do not carry over.
+- Without a machine id (many containers), a weak binding always needs the person or the rule after device changes.
+- Same-account processes can directly rewrite identity.json or policy.json. Rolling back to an older build removes
+  the gate. A rule names a principal whose issuer is the host name; changing pod host names may break it [not verified].
+- At its recorded folder a registered source still refuses `init identity --keep`; device-only source repair is a
+  separate card. Moved/copied to another folder it is moved: the person or the in-file rule rebinds the identity,
+  leaving attachment records unreconciled until `deckent terminal attach --relocate`.
+- A policy deny stops neither device-only repair nor the person at a terminal: organization policy cannot narrow
+  rebinding in beta.2, and role-based permissions cannot grant it.
+
+A project vault whose owner still exists at the same canonical path and inode but has a different disk device number
+is now **uncertain**, not gone. Vault access, claiming and handover are refused with `SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE`; the binding and grants
+are unchanged. Restore the original disk under its recorded device number or restore a verified backup before retrying.
+A missing owner path or another inode keeps the existing handover rules. This does not repair the personal secret store
+or renew project trust.
+
+### Rebinding audit reader and rollback
+
+beta.2 reads `installation-rebind` v1; beta.2.1 writes it. Each scope reads its own sealed copy. An intent
+without a later succeeded record means starting, never failed. Source success covers only its own records;
+projects may still be waiting. A missing per-project (target) record cannot be detected after a restart. The
+binding identities are opaque and are not resolved by this reader. A rollback to beta.1.2 fails the whole audit
+page with `AUDIT_INTEGRITY`; never prune these records. A policy rule id appears in the audit trail as written
+in the policy file, as in every other audit record; do not put private text in rule ids.
 
 ## Recovery and upgrades
+
+- **Before rolling back from beta.2 to beta.1.2, remove the paid-usage key while still on beta.2.** In each project where you set it, run:
+
+  ```sh
+  deckent config unset models.headless.paidExtraUsage --scope <id>
+  ```
+
+  If you set it globally, also run `deckent config unset models.headless.paidExtraUsage --global --scope <id>`.
+  Use your installed scope id and complete any required approval before switching. `unset` removes the key from that
+  authored layer; setting it to its default (`"continue"`) leaves the key present. beta.1.2 rejects the key and does not run
+  until it is removed from every config layer that supplies it. This rollback step is needed even though the ledger remains
+  v75 and the runtime protocol remains v31.
+- **Upgrade in order: beta.2 → beta.2.1 → beta.2.2, without skipping a release.** beta.2 is the reader release; it creates none
+  of the new-format binding, attachment, audit or native-call observation records. Those writers come in beta.2.1; the
+  paid-usage config key and the narrow revocation edits to existing new-format records are explicit exceptions.
+  The personal secret store wave, delegation that does not travel with a copy, and control of `init identity --new` have
+  readers in beta.2.1 and writers in beta.2.2. beta.2.2 rolls back only to beta.2.1. beta.2 cannot enforce this release order.
+- **If you later roll back from beta.2.1 to beta.2, stop every beta.2.1 process first** (terminals, MCP servers and the runtime
+  service). New-format records stay readable, and cancel/revoke, detach and unregister still work. The refused changes are
+  listed under “Installation moved”; they need beta.2.1 again. Shared beta.2.1 backups cannot be restored on beta.2; an older
+  shared backup is also refused if the current registration is v3. An uninstall begun on beta.2.1 with its last step pending
+  keeps its hold. A crash between the registration and identity writes can leave the installation unusable on beta.2 until
+  beta.2.1 returns; a half-reconciled attached folder refuses with `PROJECT_ATTACHMENT_DENIED`. Replaying `init --policy --apply`
+  in a reconciled attached folder reports CHANGED on beta.2. Going further back to beta.1.2 makes every invocation recorded
+  with plan-usage v2 fail on read with `MODEL_INVOCATION_CORRUPT`, whole audit pages with the new subjects fail with
+  `AUDIT_INTEGRITY`, and worker transcripts containing `cli.observation` fail as a whole. Never prune the new audit records.
 
 - **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build
   before alpha.63 refuses the config with its strict schema and does not open. *Workaround:* to go back, restore the pre-upgrade backup.

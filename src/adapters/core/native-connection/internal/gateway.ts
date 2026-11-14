@@ -77,7 +77,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
         const parsed = workerEventSchema.safeParse(value);
         const event = parsed?.success ? scrubWorkerEvent(parsed.data, known) : null;
         const bytes = event ? Buffer.byteLength(JSON.stringify(event) + '\n') : 0;
-        if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
+        if (!parsed?.success || parsed.data.kind === 'cli.observation' || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
         lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
         if (parsed.data.kind === 'session.started' && !reported.startSeen) { reported.startSeen = true; reported.started = parsed.data.model; }
         else if (parsed.data.kind === 'session.ended') { reported.ended = true; reported.used = parsed.data.models ?? null; }

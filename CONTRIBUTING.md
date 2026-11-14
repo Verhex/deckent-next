@@ -216,7 +216,7 @@ node scripts/lint-docs.mjs
 |---|---|
 | A dependency direction or private import violation | Import the unit's public entry and move the responsibility to the correct layer; see [ARCHITECTURE.md](ARCHITECTURE.md) for detailed contracts. |
 | A new mutable policy literal | Reuse the registry or configuration contract. Protocol and security invariants remain versioned code. |
-| A missing translation | Add matching `en` and `tr` catalog entries through the shared renderer. Mention translation help needed in the PR. |
+| A missing translation | Add matching `en` and `tr` catalog entries through the shared renderer. Follow the [Turkish glossary](docs/glossary.tr.md) for Turkish wording. Mention translation help needed in the PR. |
 | An unapproved Markdown path | Propose the exact new documentation path in `arch.json`'s Markdown allowlist; explain its purpose. |
 | A file or unit size violation | Split by responsibility, preserving behavior and coverage; do not remove capabilities to satisfy the limit. |
 

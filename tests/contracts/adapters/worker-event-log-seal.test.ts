@@ -62,3 +62,40 @@ it('seals stamped production host verdicts as v2 while preserving v1 recorded ve
   expect(workerEventSchema.parse(sealed[1])).toEqual(sealed[1]);
   expect(summarizeWorkerEvents(sealed.map(line => workerEventSchema.parse(line))).modelVerification).toEqual({ status: 'substituted', unexpected: ['model-b'] });
 });
+
+it('reads beta.2.1 body/live/suffix observations without changing phase or model verdict, while beta.2 direct ingress drops them', async () => {
+  const { createWorkerEventCollector } = await import('../../../src/engine/core/worker-observation/internal/events.js');
+  const { workerActivityPhase } = await import('#domain/index.js');
+  const { readWorkerEventTail } = await import('#adapters/core/worker-observation/index.js');
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const observation = workerEventSchema.parse({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'cli.observation', observation: {
+    schemaVersion: 1, cliVersion: 'fixture-version', builtinPlugins: { names: ['fixture-plugin'], omitted: 1 },
+    paidExtraUsage: { kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: null } } });
+  const original = sealWorkerEventLog([event(1)], verdict, 2, 1_000_000).map(line => workerEventSchema.parse(JSON.parse(line)));
+  const recorded = [observation, ...original, { ...observation, sequence: original.length + 2 }].map((event, index) => workerEventSchema.parse({ ...event, sequence: index + 1 }));
+  expect(summarizeWorkerEvents(recorded)).toEqual({ ...summarizeWorkerEvents(original), events: recorded.length });
+  expect(workerActivityPhase(recorded)).toEqual(workerActivityPhase(original));
+  const accepted: WorkerEvent[] = [], collector = createWorkerEventCollector({ provider: 'claude', admitted: null, evidenceCapability: 'session-events' }, 10000, events => accepted.push(...events));
+  collector.accept([observation]); expect(accepted).toEqual([]); expect(collector.statistics().eventsUnreported).toBe(1);
+  const root = await mkdtemp(join(tmpdir(), 'dn-observation-reader-'));
+  try {
+    await writeFile(join(root, 'worker.events'), recorded.map(event => JSON.stringify({ receivedAt: 100, event })).join('\n') + '\n', { mode: 0o600 });
+    const live = await readWorkerEventTail(root, 'worker', 65536);
+    expect(live.map(item => item.event)).toEqual(recorded);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('scrubs every observation text field independently of the beta.2 ingress drop', async () => {
+  const { scrubWorkerEvent } = await import('../../../src/adapters/core/native-connection/internal/event-guard.js');
+  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  const secret = 'fixture-secret', input = workerEventSchema.parse({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'cli.observation',
+    observation: { schemaVersion: 1, cliVersion: secret, builtinPlugins: { names: [secret, 'other-secret'], omitted: 0 },
+      paidExtraUsage: { kind: 'overage', status: secret, window: secret, resetsAtMs: null } } });
+  const scrubbed = scrubWorkerEvent(input, snapshotKnownSecrets([{ name: null, value: secret }, { name: null, value: 'other-secret' }]));
+  expect(JSON.stringify(scrubbed)).not.toContain(secret);
+  expect(JSON.stringify(scrubbed)).not.toContain('other-secret');
+  expect(workerEventSchema.parse(scrubbed)).toMatchObject({ observation: { cliVersion: '[REDACTED]',
+    builtinPlugins: { names: ['[REDACTED]'], omitted: 1 }, paidExtraUsage: { status: '?', window: '?' } } });
+});

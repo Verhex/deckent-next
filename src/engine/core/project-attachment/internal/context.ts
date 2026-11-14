@@ -1,22 +1,24 @@
 import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { delegationOwner, installationRegistrationSchema, projectAttachmentSchema, type AttachmentPerson, type InstallationRegistration, type InstallationSource,
-  type ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
+import { delegationOwner, readableInstallationRegistrationSchema, readableProjectAttachmentSchema, assessAttachmentLocation, type AttachmentPerson, type ReadableInstallationRegistration as InstallationRegistration, type ReadableInstallationSource as InstallationSource, type AttachmentLocation, type ReadableAttachmentLocation, type FilesystemIdentity,
+  type ReadableProjectAttachment as ProjectAttachment, type InstallationIdentity } from '#domain/index.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
 
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ProjectAttachmentErrorCode = 'PROJECT_ATTACHMENT_NEWER_RECORD' | 'PROJECT_ATTACHMENT_INVALID' | 'PROJECT_ATTACHMENT_UNAVAILABLE' | 'PROJECT_ATTACHMENT_CHANGED'
   | 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_REVOKED' | 'PROJECT_ATTACHMENT_INCOMPLETE' | 'PROJECT_ATTACHMENT_LIFECYCLE_BLOCKED' | 'PROJECT_ATTACHMENT_SOURCE_REGISTERED'
   | 'PROJECT_ATTACHMENT_PERSON_MISMATCH' | 'MODEL_USE_NOT_ACTIVE' | 'MODEL_USE_BINDING_CHANGED';
 export class ProjectAttachmentError extends CodedError {
-  constructor(override readonly code: ProjectAttachmentErrorCode) { super(code); this.name = 'ProjectAttachmentError'; }
+  // Transient local display context; general query mapping deliberately keeps only the code.
+  constructor(override readonly code: ProjectAttachmentErrorCode, readonly sourceRoot?: string) { super(code); this.name = 'ProjectAttachmentError'; }
 }
-export const attachmentFailure = (code: ProjectAttachmentErrorCode): never => { throw new ProjectAttachmentError(code); };
+export const attachmentFailure = (code: ProjectAttachmentErrorCode, sourceRoot?: string): never => { throw new ProjectAttachmentError(code, sourceRoot); };
 export const sameAttachmentPerson = (a: AttachmentPerson, b: AttachmentPerson) => a.issuer === b.issuer && a.subject === b.subject;
 export interface InstallationContextPorts {
   registration(): Promise<InstallationRegistration | null>;
   attachment(): Promise<ProjectAttachment | null>;
   source(source: InstallationSource): Promise<{ readonly identity: InstallationIdentityRead; readonly source: InstallationSource }>;
   target(): Promise<{ readonly canonicalRoot: string; readonly device: string; readonly inode: string; readonly projectId: string | null }>;
+  observeFilesystemIdentity?(location: AttachmentLocation): Promise<FilesystemIdentity | null>;
   legacy(): Promise<InstallationIdentityRead>;
 }
 export interface InstallationProjectContext {
@@ -32,9 +34,9 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
     return Object.freeze({ kind: 'legacy', identity: await ports.legacy(), source: null, attachment: null });
   }
   if (!raw) return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
-  const attachment = projectAttachmentSchema.parse(raw), registry = await ports.registration();
+  const attachment = readableProjectAttachmentSchema.parse(raw), registry = await ports.registration();
   if (!registry || registry.unregistered) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
-  const registration = installationRegistrationSchema.parse(registry);
+  const registration = readableInstallationRegistrationSchema.parse(registry);
   if (registration.registrationId !== request.registrationId || attachment.registrationId !== registration.registrationId
     || request.companyId !== registration.source.companyId || attachment.companyId !== request.companyId
     || (request.scopeId !== undefined && attachment.scopeId !== request.scopeId)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
@@ -45,21 +47,31 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   if (entry.state === 'revoked') return attachmentFailure('PROJECT_ATTACHMENT_REVOKED');
   if (entry.state !== 'active') return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   const target = await ports.target();
-  if (target.projectId !== attachment.projectId || target.canonicalRoot !== attachment.location.canonicalRoot
-    || target.device !== attachment.location.device || target.inode !== attachment.location.inode) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+  if (target.projectId !== attachment.projectId || !await matchesObservedAttachmentLocation(ports, attachment.location, target)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   const observed = await ports.source(registration.source).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
-  if (JSON.stringify(observed.source) !== JSON.stringify(registration.source) || observed.identity.status !== 'available'
+  if (!await matchesObservedAttachmentSource(ports, registration.source, observed.source) || observed.identity.status !== 'available'
     || observed.identity.pendingWrite || observed.identity.value.installationId !== registration.source.installationId
     || observed.identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
   return Object.freeze({ kind: 'attached', identity: observed.identity, source: registration.source, attachment });
 }
 /** Only the existing identity is returned; losing the reference target never creates a replacement. */
-export function existingSharedIdentity(identity: InstallationIdentityRead): InstallationIdentity {
-  if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
+export function existingSharedIdentity(identity: InstallationIdentityRead, sourceRoot?: string): InstallationIdentity {
+  if (identity.status !== 'available' || identity.pendingWrite || identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE', sourceRoot);
   return identity.value;
 }
 
 /** Location changes only through witnessed relocation; every authority identity remains exact. */
 export function sameProjectAttachmentAuthority(left: ProjectAttachment, right: ProjectAttachment) {
   const { location: ignoredLeft, ...a } = left, { location: ignoredRight, ...b } = right; void ignoredLeft; void ignoredRight; return isDeepStrictEqual(a, b);
+}
+
+export async function matchesObservedAttachmentLocation(ports: Pick<InstallationContextPorts, 'observeFilesystemIdentity'>,
+  retained: ReadableAttachmentLocation, observed: AttachmentLocation) {
+  return assessAttachmentLocation(retained, { ...observed, ...('filesystemIdentity' in retained
+    ? { filesystemIdentity: await ports.observeFilesystemIdentity?.(observed) ?? null } : {}) });
+}
+export async function matchesObservedAttachmentSource(ports: Pick<InstallationContextPorts, 'observeFilesystemIdentity'>,
+  retained: InstallationSource, observed: InstallationSource) {
+  const { location, ...rest } = retained, { location: fresh, ...current } = observed;
+  return JSON.stringify(rest) === JSON.stringify(current) && await matchesObservedAttachmentLocation(ports, location, fresh);
 }

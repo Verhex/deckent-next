@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { highlightCells, mouseFilteredInput, osc52Copy, selectedText, takeMouseReports, type PointerEvent, type PointerListener, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { highlightCells, mouseFilteredInput, selectedText, takeMouseReports, type PointerEvent, type PointerListener, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { createClipboardWriter, clipboardRequest, CLIPBOARD_LIMITS } from '#surfaces/core/terminal-host/index.js';
 import { resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
@@ -22,7 +23,15 @@ describe('mouse selection reports', () => {
   });
 
   it('OSC 52 carries exactly the selected text, base64 encoded, to the terminal clipboard', () => {
-    expect(osc52Copy('şu satır\nnext')).toBe(`\u001b]52;c;${Buffer.from('şu satır\nnext', 'utf8').toString('base64')}\u0007`);
+    const writes: string[] = [];
+    const copy = createClipboardWriter({ isTTY: true, write: (chunk: string) => { writes.push(chunk); return true; } } as never, { TMUX: 'fixture' });
+    expect(copy('şu satır\nnext')).toEqual({ ok: true, bytes: Buffer.byteLength('şu satır\nnext') });
+    const request = clipboardRequest('şu satır\nnext', { TMUX: 'fixture' });
+    expect(request.ok && request.sequence).toBe(writes[0]);
+    expect(writes[0]!.startsWith('\u001bPtmux;')).toBe(true);
+    expect(copy('ş'.repeat(CLIPBOARD_LIMITS.maxBytes / 2))).toEqual({ ok: true, bytes: CLIPBOARD_LIMITS.maxBytes });
+    expect(copy('ş'.repeat(CLIPBOARD_LIMITS.maxBytes / 2) + 'x')).toEqual({ ok: false, reason: 'too-large', bytes: CLIPBOARD_LIMITS.maxBytes + 1 });
+    expect(writes).toHaveLength(2);
   });
 });
 
@@ -79,7 +88,7 @@ describe('spacing between tool steps and answer text', () => {
       // The full window's mouse: SGR reports through the host's own filter (mouse.ts), as a terminal sends them.
       const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
       const mouse = mouseFilteredInput(real);
-      const view = mountWorkline({ streamTurn: turns, fullscreen, ...(fullscreen ? { pointer: mouse.pointer, copyText: () => {} } : {}),
+      const view = mountWorkline({ streamTurn: turns, fullscreen, ...(fullscreen ? { pointer: mouse.pointer, copyText: () => ({ ok: true, bytes: 0 }) } : {}),
         labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}' } } }, 80, { rows: 40, debug: true });
       mounted.push(view.instance, { unmount: mouse.close });
       view.stdin.write('go'); await settle(20); view.stdin.write('\r');
@@ -158,8 +167,12 @@ describe('click-and-drag selection in the full window', () => {
 
   it('drag over the answer highlights it, the release copies exactly the shown text once, the hint row says so and the bar stays put', async () => {
     const pointer = fakePointer(), copies: string[] = [];
-    const view = mountWorkline({ streamTurn: scripted(answer), fullscreen: true, pointer: pointer.source, copyText: text => { copies.push(text); },
-      labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}', copied: 'COPIED {count}' } } }, 80, { rows: 24, debug: true });
+    let refuse: 'too-large' | 'unavailable' | null = null;
+    const view = mountWorkline({ streamTurn: scripted(answer), fullscreen: true, pointer: pointer.source, copyText: text => {
+      if (refuse) return { ok: false, reason: refuse, bytes: CLIPBOARD_LIMITS.maxBytes + 1 };
+      copies.push(text); return { ok: true, bytes: Buffer.byteLength(text) };
+    }, labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}', copied: 'COPIED {count}',
+      copyTooLarge: 'TOO-LARGE {bytes} > {max}', copyUnavailable: 'COPY-UNAVAILABLE' } } }, 80, { rows: 24, debug: true });
     mounted.push(view.instance);
     view.stdin.write('go'); await settle(20); view.stdin.write('\r');
     await until(() => view.stdout.frame.includes('beta line two') && view.stdout.frame.includes('READY'), 'answer');
@@ -184,6 +197,13 @@ describe('click-and-drag selection in the full window', () => {
     expect(view.stdout.frame).not.toContain('\u001b[7m'); expect(view.stdout.frame).toContain('> x');
     pointer.send({ kind: 'press', column: 4, row: first }); pointer.send({ kind: 'release', column: 4, row: first }); await settle(30);
     expect(copies).toHaveLength(1);
+    for (const reason of ['too-large', 'unavailable'] as const) {
+      refuse = reason;
+      pointer.send({ kind: 'press', column: column(first, 'line one'), row: first });
+      pointer.send({ kind: 'release', column: column(second, 'beta') + 3, row: second });
+      await until(() => view.stdout.frame.includes(reason === 'too-large' ? `TOO-LARGE ${CLIPBOARD_LIMITS.maxBytes + 1} > ${CLIPBOARD_LIMITS.maxBytes}` : 'COPY-UNAVAILABLE'), 'copy refusal');
+      expect(view.stdout.frame).not.toContain('COPIED 16'); expect(copies).toHaveLength(1);
+    }
   });
 
   it('while an answer streams under a full view (the column clipped at the top), a press on the top row selects the line shown there', async () => {
@@ -193,7 +213,7 @@ describe('click-and-drag selection in the full window', () => {
       if (messages.at(-1)?.content === 'fill') { yield { kind: 'text', text: Array.from({ length: 40 }, (_, i) => `fill-line-${i}`).join('\n\n') + '\n' }; yield { kind: 'done', finish: 'stop' }; return; }
       yield { kind: 'text', text: 'streaming one\nstreaming two\nstreaming three' }; await gate; yield { kind: 'done', finish: 'stop' };
     };
-    const view = mountWorkline({ streamTurn, fullscreen: true, pointer: pointer.source, copyText: text => { copies.push(text); },
+    const view = mountWorkline({ streamTurn, fullscreen: true, pointer: pointer.source, copyText: text => { copies.push(text); return { ok: true, bytes: Buffer.byteLength(text) }; },
       labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}', copied: 'COPIED {count}' } } }, 80, { rows: 24, debug: true });
     mounted.push(view.instance);
     view.stdin.write('fill'); await settle(20); view.stdin.write('\r');

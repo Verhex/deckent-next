@@ -42,7 +42,7 @@ it.each((['en', 'tr'] as const).flatMap(locale => [false, true].map(ultraBoundar
   const rows = view.tabs.workers.filter(block => block.kind === 'table').flatMap(block => block.rows);
   const detail = rows.flatMap(row => row.detail().flat().map(cell => cell.text)).join(' ');
   if (ultraBoundary) {
-    expect(detail).toContain(locale === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra registry hedefi gerekir');
+    expect(detail).toContain(locale === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra kayıt hedefi gerekir');
     expect(detail).toContain(locale === 'en' ? 'CLI default' : 'CLI varsayılanı');
   } else expect(detail).toContain(locale === 'en' ? 'Reasoning effort: max (policy default' : 'Muhakeme eforu: max (politika varsayılanı');
 });

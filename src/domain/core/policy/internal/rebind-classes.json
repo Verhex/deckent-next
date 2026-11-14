@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "classes": ["device-only", "moved"],
+  "open": ["device-only"],
+  "delegable": ["moved"]
+}

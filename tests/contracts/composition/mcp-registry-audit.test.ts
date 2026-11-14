@@ -43,7 +43,7 @@ describe.skipIf(process.platform !== 'linux')('MCP registry writes follow the au
     const error = await w.run({ verb: 'add', name: 'blocked', scope: 'user', entry }).catch(error => error) as DeckentError;
     expect(error).toMatchObject({ code: 'MCP_SANDBOX_UNAVAILABLE', params: expect.objectContaining({ realm: 'sandbox-net', reason: 'no sandbox mechanism is available' }) });
     expect(error.message).toContain('--realm <realm>');
-    expect(error.localize?.('tr').message).toContain('sandbox-net realm içinde başlatılamıyor');
+    expect(error.localize?.('tr').message).toContain('sandbox-net yalıtım alanı içinde başlatılamıyor');
     expect(w.read(w.files.personal)).toBeNull();
   });
   it('a failing audit leaves the registry and the trust record untouched on add (personal and project scope)', async () => {

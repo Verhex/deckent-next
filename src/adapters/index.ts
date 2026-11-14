@@ -38,7 +38,7 @@ export { probeDockerImageAvailability, DockerImageProbeError } from '#adapters/c
 
 export { withInstallationJournal, InstallationJournalError } from '#adapters/core/installation-journal/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationJournalOptions, InstallationJournalSession, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
-export { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
+export { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
 export { initializeInstallationLedger, verifyInstallationLedger, InstallationLedgerError } from '#adapters/core/attempt-store/index.js';
 export { openSqliteModelActivationStore, openSqliteModelActivationReader, openSqliteModelCatalogStore, openSqliteModelCatalogReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';

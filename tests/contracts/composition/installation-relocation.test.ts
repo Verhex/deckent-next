@@ -1,9 +1,12 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, chmod, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
+import * as engine from '#engine/index.js';
+import * as platform from '#platform/index.js';
+import { plainMacosRebinding } from '#composition/core/scoped-request/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIdentity, readScopeCompanies } from '#adapters/index.js';
 import { clearConfigCache, loadConfig, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext,
@@ -79,10 +82,29 @@ describe('relocation producer to actual CLI surface', () => {
     expect(await readFile(f.path, 'utf8')).toBe(bytes);
   });
   it.each(['en', 'tr'])('keeps or replaces the installation identity while preserving project bytes (%s)', async lang => {
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(false);
     for (const choice of ['keep', 'new'] as const) {
       const f = await fixture(), projectPath = join(f.project, '.deckent/project-identity/identity.json');
-      const projectBytes = await readFile(projectPath, 'utf8');
-      expect(await main(['init', 'identity', `--${choice}`, '--lang', lang], f.context)).toBe(0);
+      const projectBytes = await readFile(projectPath, 'utf8'), policyPath = join(f.project, '.deckent/policy.json');
+      const context = { ...f.context, env: { ...f.context.env, AI_AGENT: '1' } };
+      if (choice === 'keep') {
+        const paths = [f.path, policyPath, projectPath], before = await Promise.all(paths.map(path => readFile(path)));
+        expect(await main(['init', 'identity', '--keep', '--json', '--lang', lang], context)).toBe(78);
+        expect(JSON.parse(f.output.join(''))).toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED', message: lang === 'en'
+          ? 'This installation was moved or copied. Accepting it needs the person at a terminal, or the explicit rebinding rule in the policy file (closed by default).'
+          : 'Bu kurulum taşındı veya kopyalandı. Kabul etmek için terminal başındaki kişi veya politika dosyasında açık yeniden bağlama kuralı gerekir (varsayılan olarak kapalı).' });
+        expect(await Promise.all(paths.map(path => readFile(path)))).toEqual(before);
+        await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
+        const policy = JSON.parse(await readFile(policyPath, 'utf8')), { issuer, subject } = readLocalOsIdentity();
+        policy.grants.push({ id: 'explicit-rebind', effect: 'allow', actions: ['rebind'], scopes: 'all', principals: [{ issuer, subject }],
+          resource: { kind: 'installation', ids: ['moved'] } });
+        await writeFile(policyPath, JSON.stringify(policy)); f.output.length = 0;
+      }
+      const policyBytes = await readFile(policyPath);
+      expect(await main(['init', 'identity', `--${choice}`, '--lang', lang], context)).toBe(0);
+      if (choice === 'keep') expect(f.output.join('')).toContain(lang === 'en'
+        ? 'Basis: explicit rebinding rule in the policy file.' : 'Dayanak: politika dosyasında açık yeniden bağlama kuralı.');
+      expect(await readFile(policyPath)).toEqual(policyBytes);
       const observed = await loadConfiguredInstallationIdentity(f.project, f.options);
       expect(observed.status).toBe('available'); if (observed.status !== 'available') throw new Error('IDENTITY_NOT_CREATED');
       const identity = observed.value;
@@ -94,6 +116,7 @@ describe('relocation producer to actual CLI surface', () => {
       const record = JSON.parse(await readFile(f.path, 'utf8'));
       expect(record.lastResolution).toMatchObject({ choice, previousInstallationId: f.identity.installationId, installationId: identity.installationId,
         principal: { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject } });
+      expect(Object.keys(record.lastResolution.principal).sort()).toEqual(['issuer', 'subject']);
       f.output.length = 0;
       expect(await main(['terminal', 'status', '--json'], f.context)).toBe(0);
       expect(JSON.parse(f.output.join(''))).toMatchObject({ installationId: identity.installationId, projectId: f.projectIdentity.projectId });
@@ -120,12 +143,17 @@ describe('relocation producer to actual CLI surface', () => {
     expect(JSON.parse(f.output.join(''))).toHaveProperty('resources'); f.output.length = 0;
     expect(await composedMain(['policy', '--lang', 'tr', 'vocabulary', '--json'])).toBe(0); // an option value is not a positional (kernel parser)
     expect(JSON.parse(f.output.join(''))).toHaveProperty('resources'); f.output.length = 0;
+    vi.stubEnv('AI_AGENT', '1'); // --new stays open even for an explicitly marked, non-TTY caller without a rule.
+    const projectPath = join(f.project, '.deckent/project-identity/identity.json'), projectBytes = await readFile(projectPath);
     expect(await composedMain(['init', 'identity', '--new', '--json'])).toBe(0);
     const result = JSON.parse(f.output.join(''));
     expect(result.schemaVersion).toBe(1); expect(result.previousInstallationId).toBe(f.identity.installationId);
     expect(await loadConfiguredInstallationIdentity(f.project, f.options)).toMatchObject({ status: 'available', value: { installationId: result.installationId } });
     expect(result.installationId).not.toBe(result.previousInstallationId);
     expect(result).not.toHaveProperty('binding');
+    expect(result.principal).toEqual({ issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
+    expect(await readFile(owned[1]!)).toEqual(before[1]); expect(await readFile(projectPath)).toEqual(projectBytes);
+    await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('does not pin a scope in a copied ledger or change ledger/policy/project bytes when selecting new', async () => {
     const f = await fixture(), opened = await openConfiguredAttemptStore(f.original, f.options); opened.store.close();
@@ -202,4 +230,89 @@ describe('relocation producer to actual CLI surface', () => {
     expect(await readFile(f.path, 'utf8')).toBe(before);
     await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
+});
+
+it('keeps device-only open to AI without policy or witness; moved needs the exact fresh file rule', async () => {
+  const f = await fixture(), record = JSON.parse(await readFile(f.path, 'utf8'));
+  // A live/N1-like platform v1 record: retain machine/path/inode, change only recorded device.
+  record.binding.canonicalRoot = join(f.project, '.deckent');
+  const location = await stat(join(f.project, '.deckent'), { bigint: true });
+  record.binding.inode = String(location.ino); record.binding.device = '0';
+  await writeFile(f.path, JSON.stringify(record));
+  const witness = vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(false);
+  const loadPolicy = vi.spyOn(adapters.FilePolicySource.prototype, 'load');
+  const policyPath = join(f.project, '.deckent/policy.json'), policyBytes = await readFile(policyPath);
+  await chmod(policyPath, 0o644); // FilePolicySource custody refuses this unreadable-as-authority policy.
+  const aiOptions = { env: { ...f.options.env, AI_AGENT: '1' } };
+  expect(await resolveConfiguredInstallationIdentity(f.project, 'keep', aiOptions)).toMatchObject({ class: 'device-only', basis: 'open-class' });
+  expect(witness).not.toHaveBeenCalled();
+  expect(loadPolicy).not.toHaveBeenCalled();
+  // A moved root remains refused even if a marker-bearing caller owns a terminal.
+  const next = JSON.parse(await readFile(f.path, 'utf8')); next.binding.canonicalRoot = f.original;
+  await writeFile(f.path, JSON.stringify(next)); witness.mockResolvedValue(true);
+  const before = await readFile(f.path);
+  const actualMarker = platform.automationMarker;
+  const markers = vi.spyOn(platform, 'automationMarker').mockImplementation((env, names) => actualMarker({ AI_AGENT: env['AI_AGENT'] }, names));
+  vi.stubEnv('AI_AGENT', undefined);
+  await expect(resolveConfiguredInstallationIdentity(f.project, 'keep', aiOptions)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });
+  vi.stubEnv('AI_AGENT', '1');
+  await expect(resolveConfiguredInstallationIdentity(f.project, 'keep', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });
+  markers.mockRestore();
+  expect(await readFile(f.path)).toEqual(before);
+  const actor = readLocalOsIdentity(), rule = { id: 'explicit-rebind', effect: 'allow', actions: ['rebind'], scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }],
+    resource: { kind: 'installation', ids: ['moved'] } };
+  await chmod(policyPath, 0o600);
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'fresh', restrictions: [], grants: [{ ...rule, resource: { ...rule.resource, ids: 'all' } }] }), { mode: 0o600 });
+  await expect(resolveConfiguredInstallationIdentity(f.project, 'keep', aiOptions)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'fresh-exact', restrictions: [], grants: [rule] }), { mode: 0o600 });
+  const exact = await readFile(policyPath);
+  f.output.length = 0;
+  expect(await main(['init', 'identity', '--keep', '--json'], { ...f.context, env: aiOptions.env })).toBe(0);
+  expect(JSON.parse(f.output.join(''))).toMatchObject({ class: 'moved', basis: 'ai-policy' });
+  expect(await readFile(policyPath)).toEqual(exact);
+  expect(JSON.parse(await readFile(f.path, 'utf8')).lastResolution).not.toHaveProperty('class');
+  next.binding.canonicalRoot = f.original; await writeFile(f.path, JSON.stringify(next));
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'deny-person', restrictions: [], grants: [{ ...rule, effect: 'deny' }] }));
+  loadPolicy.mockClear(); vi.spyOn(platform, 'automationMarker').mockReturnValue(null);
+  expect(await resolveConfiguredInstallationIdentity(f.project, 'keep', f.options)).toMatchObject({ class: 'moved', basis: 'human-tty' });
+  expect(loadPolicy).not.toHaveBeenCalled();
+  // Neither proof rewrites policy; restore is fixture-only.
+  await writeFile(policyPath, policyBytes);
+});
+
+it('does not gate bind or strengthen, and macOS plain excludes only this installation or folder', async () => {
+  const f = await fixture(), record = JSON.parse(await readFile(f.path, 'utf8'));
+  const location = await stat(join(f.project, '.deckent'), { bigint: true });
+  const weak = { schemaVersion: 2, strength: 'weak', source: 'location', canonicalRoot: join(f.project, '.deckent'), device: String(location.dev), inode: String(location.ino) };
+  await writeFile(f.path, JSON.stringify({ ...record, binding: weak }));
+  expect(await resolveConfiguredInstallationIdentity(f.project, 'keep', { env: { ...f.options.env, AI_AGENT: '1' } })).toMatchObject({ class: null, basis: 'open-class' });
+  const config = await loadConfig(f.project, f.options);
+  const attachment = vi.spyOn(adapters.FileProjectAttachmentStore.prototype, 'attachment').mockResolvedValue(null);
+  const registration = vi.spyOn(adapters.FileProjectAttachmentStore.prototype, 'registration').mockResolvedValue(null);
+  const plain = (platform: NodeJS.Platform = 'darwin', producer = false) => plainMacosRebinding(config, f.options, record.installationId, platform, producer);
+  expect(await plain()).toBe(true); expect(await plain('linux')).toBe(false); expect(await plain('darwin', true)).toBe(false);
+  attachment.mockResolvedValue({} as never); expect(await plain()).toBe(false); attachment.mockResolvedValue(null);
+  expect(await plainMacosRebinding({ ...config, installation: { ...config.installation, sharedRegistrationId: 'registered' } }, f.options, record.installationId, 'darwin', false)).toBe(false);
+  registration.mockResolvedValue({ source: { installationId: 'unrelated', projectRoot: '/unrelated' }, entries: [] } as never);
+  expect(await plain()).toBe(true);
+  for (const source of [{ installationId: record.installationId, projectRoot: '/unrelated' }, { installationId: 'unrelated', projectRoot: f.project }]) {
+    registration.mockResolvedValue({ source, entries: [], unregistered: true } as never); expect(await plain()).toBe(false);
+  }
+  registration.mockResolvedValue({ source: { installationId: 'unrelated', projectRoot: '/unrelated' }, entries: [{ attachment: { location: { canonicalRoot: f.project } } }], unregistered: true } as never);
+  expect(await plain()).toBe(false);
+  expect(platform.ErrorRegistry.createError('INSTALLATION_IDENTITY_REBIND_REQUIRED', { locale: 'en', params: { platform: 'darwin' } }).message)
+    .toBe('This installation was moved or copied. Accepting it needs the explicit rebinding rule in the policy file (closed by default). A person check is not available on this platform yet.');
+});
+
+it('the adapter keep port refuses moved identity in the witnessed=true backup-restore path', async () => {
+  const f = await fixture(), bytes = await readFile(f.path);
+  // Shared restores normally take the reference branch or DENIED. Exercise the otherwise unreachable keep port itself.
+  vi.spyOn(engine.ProjectAttachmentRelocationApplication.prototype, 'apply').mockImplementation(async function (this: engine.ProjectAttachmentRelocationApplication, _scope, witnessed) {
+    expect(witnessed).toBe(true);
+    const ports = (this as unknown as { ports: { keepIdentity(): Promise<string> } }).ports;
+    await ports.keepIdentity(); throw new Error('MOVED_BACKUP_KEEP_MUST_REFUSE');
+  });
+  await expect(adapters.relocateInstallationProjectReference(f.project, 's', f.options, async () => { throw new Error('SOURCE_MUST_NOT_RUN'); }, true))
+    .rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });
+  expect(await readFile(f.path)).toEqual(bytes);
 });

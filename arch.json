@@ -77,6 +77,7 @@
   "units": {
     "src/capabilities/core/native-agent-execution": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/platform/core/i18n",
         "src/domain/core/agent-tool",
         "src/domain/core/model-invocation",
@@ -307,6 +308,9 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/project-attachment",
+        "src/adapters/core/installation-files",
+        "src/platform/core/output",
         "src/surfaces/core/cli-human",
         "src/engine/core/secret-store",
         "src/adapters/core/native-cli-registry",
@@ -377,7 +381,12 @@
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/native-connection",
         "src/surfaces/core/terminal-provider",
-        "src/composition/core/model-inspection"
+        "src/composition/core/model-inspection",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/engine/core/authentication",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/composition/core/policy"
       ],
       "plan": "SURFACES"
     },
@@ -1250,7 +1259,8 @@
         "src/engine/core/worker-observation",
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/terminal-ledger",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/doctor"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1293,6 +1303,7 @@
     },
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
+        "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
@@ -1373,6 +1384,7 @@
     },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/engine/core/worker-observation",
         "src/platform/core/errors",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
@@ -1460,13 +1472,15 @@
         "src/domain/core/provider-spend",
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
-        "src/surfaces/core/siwc"
+        "src/surfaces/core/siwc",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES",
       "ink": false
     },
     "src/surfaces/core/doctor": {
       "dependencies": [
+        "src/domain/core/project-attachment",
         "src/engine/core/provider-spend",
         "src/engine/core/secret-store",
         "src/engine/core/toolchain-currency",
@@ -1502,7 +1516,8 @@
         "src/platform/core/config-fields",
         "src/surfaces/core/cli-admin",
         "src/platform/core/utils",
-        "src/engine/core/uninstall"
+        "src/engine/core/uninstall",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1551,6 +1566,7 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/engine/core/secret-store",
         "src/domain/core/model-invocation",
         "src/capabilities/core/run-planner",
         "src/surfaces/core/terminal-beuser",
@@ -1814,7 +1830,8 @@
         "src/engine/core/beuser-realm",
         "src/platform/core/common",
         "src/domain/core/project-attachment",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -1945,7 +1962,9 @@
         "src/platform/core/utils",
         "src/engine/core/dispatch",
         "src/adapters/core/attempt-store",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/domain/core/policy",
+        "src/engine/core/runtime"
       ],
       "plan": "PROVIDERS"
     },
@@ -2160,6 +2179,7 @@
     },
     "src/composition/core/model-invocation": {
       "dependencies": [
+        "src/capabilities/core/native-agent-execution",
         "src/platform/core/output",
         "src/adapters/core/provider-connect",
         "src/adapters/core/local-keyring",
@@ -2948,7 +2968,8 @@
     "src/domain/core/worker-event": {
       "dependencies": [
         "src/domain/core/provider-catalog",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation"
       ],
       "plan": "CONTRACT"
     },
@@ -2971,7 +2992,8 @@
     "src/domain/core/audit": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/command"
+        "src/domain/core/command",
+        "src/domain/core/policy"
       ],
       "plan": "SECURITY"
     },
@@ -3193,7 +3215,9 @@
         "src/adapters/core/recovery-case-store",
         "src/domain/core/recovery",
         "src/platform/core/validate",
-        "src/engine/core/workspace-patch-contract"
+        "src/engine/core/workspace-patch-contract",
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/i18n"
       ],
       "plan": "MONITOR"
     },
@@ -3246,7 +3270,8 @@
         "src/domain/core/work-cost",
         "src/surfaces/core/recovery-text",
         "src/surfaces/core/terminal-host",
-        "src/surfaces/core/terminal-kit-ink"
+        "src/surfaces/core/terminal-kit-ink",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "MONITOR",
       "ink": false
@@ -4614,6 +4639,7 @@
     },
     "src/adapters/core/native-cli-headless": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/capabilities/core/native-agent-execution",
         "src/adapters/core/host-shell",
         "src/adapters/core/native-cli-registry",
@@ -5019,7 +5045,8 @@
     "src/engine/core/bootstrap-identity": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -5243,6 +5270,8 @@
     },
     "src/surfaces/core/terminal-provider": {
       "dependencies": [
+        "src/platform/core/output",
+        "src/engine/core/secret-store",
         "src/capabilities/core/native-agent-execution",
         "src/platform/core/config",
         "src/surfaces/core/cli-models",
@@ -5328,7 +5357,9 @@
         "src/platform/core/bootstrap-state",
         "src/adapters/core/installation-journal",
         "src/adapters/core/backup-store",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/policy",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "INSTALLATION"
     },
@@ -5394,6 +5425,7 @@
       "dependencies": [
         "src/domain/core/principal",
         "src/domain/core/policy",
+        "src/domain/core/primitives",
         "src/engine/core/model-invocation",
         "src/engine/core/secret-store",
         "src/engine/core/oauth-connection",

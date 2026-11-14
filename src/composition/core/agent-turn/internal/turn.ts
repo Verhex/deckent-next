@@ -17,13 +17,13 @@ import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, age
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { withNativeChatInvocation, nativeChatReasonText, nativeChatPreflightReason, type NativeChatRuntime } from './native.js';
-import type { NativeAgentExecution } from '#capabilities/index.js';
+import { nativeQuotaText, type ClaudeRateLimit, type NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
 import { createAgentProposals, type AgentProposalViews } from './proposals.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
-import { invokePeerConfiguredAgentModel, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
+import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { terminalModelHere, inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -277,6 +277,13 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.
     const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
       answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
+    const deliveredPaidNotices = new Set<string>();
+    const onPaidUsage = (limit: ClaudeRateLimit, lineSignal?: AbortSignal) => notifyNativePaidUsage(limit, language, host.model, `${peer.uid}:${peer.pid}`, command.scopeId, async text => {
+      channel.emit({ kind: 'text', text });
+      if (!await channel.drained()) throw new Error('notice-not-delivered');
+      signal.throwIfAborted(); lineSignal?.throwIfAborted();
+      deliveredPaidNotices.add(text);
+    }, AbortSignal.any([signal, ...(lineSignal ? [lineSignal] : [])]));
     const pluginNotices = new Set<string>(), cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
@@ -295,7 +302,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           };
           result = agent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, agent, text => { pluginNotices.add(text); })
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
-              async text => { channel.emit({ kind: 'text', text }); await channel.drained(); }); // Host notice bypasses the provider-prefix accumulator and model history.
+              async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
           // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? queryFailure(error).code };
@@ -314,7 +321,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
               invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null);
             const content = inspected?.responseContent;
             const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
-            if (body?.refusal === 'quota') return { status: 'failed', state: cliSubscription ? t('headless.chat.quota', {}, language) : t('siwc.usage.limit', {}, language) };
+            const limitText = cliSubscription && body ? nativeQuotaText(body, language) : null;
+            if (limitText) return { status: 'failed', state: limitText };
+            if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
             if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
             if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
             if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };
@@ -346,6 +355,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         if (message.reasoning.length > shownReasoning.length) onDelta({ kind: 'reasoning', text: message.reasoning.slice(shownReasoning.length) });
         if (message.content.length > shownText.length) onDelta({ kind: 'text', text: message.content.slice(shownText.length) });
         const usage = openAiChatUsageFromInvocation(result);
+        for (const text of deliveredPaidNotices) pluginNotices.add(text);
         return { status: 'responded', content: message.content, reasoning: message.reasoning, toolCalls: message.toolCalls,
           ...(message.continuation ? { continuation: message.continuation } : {}), ...(message.providerStop ? { providerStop: message.providerStop } : {}),
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
@@ -354,7 +364,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     const ports: AgentTurnPorts = {
       invokeRound,
       ...(native && runtime ? { invokeAgent: (input: Parameters<NonNullable<AgentTurnPorts['invokeAgent']>>[0],
-        onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile,
+        onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile, onPaidUsage, paidExtraUsage: config.models.headless.paidExtraUsage,
           execution: native.execution, session: input.session, signal: agentSignal, knownSecrets: getConfigKnownSecrets(context.config), recheck: recheckNative },
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'

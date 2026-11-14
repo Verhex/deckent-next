@@ -27,6 +27,10 @@ export class WorkerTranscriptApplication {
     const model = run ? projectAttemptWorkerModels(run, identity.taskId, events) : null;
     if (!log || !events) return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: null, summary: null, activity: null, events: Object.freeze([]), model });
     return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: Object.freeze({ eventCount: log.eventCount, sealedAt: log.sealedAt, projection: log.projection ?? 'complete' }),
-      summary: summarizeWorkerEvents(events), activity: workerActivityPhase(events), events, model });
+      summary: summarizeWorkerEvents(events), activity: workerActivityPhase(events), events: Object.freeze(events.map(event => {
+        if (event.kind !== 'cli.observation' || !event.observation.builtinPlugins) return event;
+        const plugins = event.observation.builtinPlugins;
+        return { ...event, observation: { ...event.observation, builtinPlugins: { names: [], omitted: plugins.names.length + plugins.omitted } } };
+      })), model });
   }
 }

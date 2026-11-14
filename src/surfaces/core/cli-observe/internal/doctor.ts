@@ -4,7 +4,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -59,6 +59,8 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
     recoveryMode, recoveryRollout,
+    attachmentFolders: context.inspectAttachmentFolders ? await context.inspectAttachmentFolders(root, options).catch(() => null) : null,
+    nativePlugins: context.inspectNativePlugins && scopeId ? await context.inspectNativePlugins(root, scopeId, DOCTOR_NATIVE_PLUGIN_SCAN, options).catch(() => null) : null,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
     // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.

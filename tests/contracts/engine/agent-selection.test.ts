@@ -133,12 +133,12 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     expect(task.assignment).toMatchObject({ workClass: 'small' }); // the system still assigns the worker from the class list
     const card = (locale: 'en' | 'tr') => renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph: answer('small') },
       { graph: answer('small'), execution } as never, { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, locale);
-    expect(card('tr')).toContain('iş sınıfı: small'); expect(card('tr')).toContain('ajan: not-yazici (sürüm 1, aday)'); expect(card('tr')).toContain("skill'ler: satir-ekle (sürüm 1)");
+    expect(card('tr')).toContain('iş sınıfı: small'); expect(card('tr')).toContain('ajan: not-yazici (sürüm 1, aday)'); expect(card('tr')).toContain("beceriler: satir-ekle (sürüm 1)");
     expect(card('en')).toContain('skills: satir-ekle (revision 1)');
     // Job detail: the frozen Run's view carries the bound agent and its pinned skills, and run inspect names them in the card's words.
     const view = projectRunView(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, answer('small'), 1, execution));
     expect(view.tasks[0]!.agent).toEqual({ agentId: 'not-yazici', revision: 1, workClass: 'small', standing: 'candidate', skills: [{ skillId: 'satir-ekle', revision: 1, digest: k.contentDigest }] });
-    expect(renderRunInspect({ run: view, models: [] }, 'tr', false)).toContain("ajan: not-yazici (sürüm 1, aday)\n    skill'ler: satir-ekle (sürüm 1)");
+    expect(renderRunInspect({ run: view, models: [] }, 'tr', false)).toContain("ajan: not-yazici (sürüm 1, aday)\n    beceriler: satir-ekle (sürüm 1)");
   });
   it('negative: two active agents of one WorkClass in a scope is a corrupt catalog, never a silent choice', async () => {
     const f = await fixture(); await f.agent('one'); await f.agent('two');

@@ -66,13 +66,13 @@ describe('/config window port', () => {
       locks: { project: { blocked: null, note: null }, global: { blocked: null, note: null } }, unsettable: false });
     expect(field('max_workers')).toMatchObject({ free: false, unsettable: true, apply: 'yeniden başlatınca', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
     expect(field('max_workers').locks.global.blocked).toContain('bu katmanda değiştirmenize izin vermiyor');
-    expect(field('language').locks.project.blocked).toContain('policy');
+    expect(field('language').locks.project.blocked).toContain('Şirketinizin politikası');
     expect(field('secrets.token')).toMatchObject({ sensitive: true, locks: { project: { blocked: 'Sırlar buradan değil, deckent secret ile değiştirilir.' } } });
     // The tree: a key every layer refuses is a locked row with its reason; one open layer keeps it open and the scope step locks the other.
     const labels = terminalPanelLabels('tr').config;
     const tree = configPanelTree(view, labels, 'max_workers');
     const general = tree.items.find(item => item.id === labels.general)!;
-    expect(general.children!.find(item => item.id === 'language')!.blocked?.reason).toContain('policy');
+    expect(general.children!.find(item => item.id === 'language')!.blocked?.reason).toContain('Şirketinizin politikası');
     expect(general.children!.find(item => item.id === 'max_workers')!.blocked).toBeUndefined();
     expect(tree.scopes!.find(scope => scope.id === 'global')!.blocked?.reason).toContain('bu katmanda değiştirmenize izin vermiyor');
     expect(tree.scopes!.find(scope => scope.id === 'project')!.label).toContain('onay ister');

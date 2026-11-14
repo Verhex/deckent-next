@@ -1,5 +1,5 @@
 import { attestLocalInteractiveTerminal, installationSecretRoot, localPrincipalChannel, localPrincipalPeer, openConfiguredSecretStore } from '#adapters/index.js';
-import { assertAuthorityWitness, type AuthorityWitness } from '#engine/index.js';
+import { assertAuthorityWitness, type SecretProjectTarget, type AuthorityWitness } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { defaultSecretStore } from '#composition/core/installation/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -46,11 +46,11 @@ export interface ProviderSecretHost {
   grant(name: string): Promise<unknown>;
 }
 /** Custody → key → grant. A grant refusal preserves the stored key and its typed partial result. */
-export async function connectProvider(projectRoot: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean }>, options: ConfigLoadOptions = {},
+export async function connectProvider(projectRoot: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean; target?: SecretProjectTarget }>, options: ConfigLoadOptions = {},
   host: ProviderSecretHost = { prepare: () => prepareProviderSecret(projectRoot, input.scopeId, options),
     set: (name, value) => createConfiguredRuntimeClient(projectRoot, options).setSecret({ schemaVersion: 1, scopeId: input.scopeId, name, value }),
     offer: () => terminalSecretGrantOffer(projectRoot, options),
-    grant: name => changeProjectSecretGrant(projectRoot, input.scopeId, name, 'grant', 'card', options) }): Promise<ProviderSecretResult> {
+    grant: name => changeProjectSecretGrant(projectRoot, input.scopeId, name, 'grant', 'card', options, undefined, input.target) }): Promise<ProviderSecretResult> {
   const custody = await host.prepare(), skipped: ProviderSecretStep = { state: 'skipped' };
   const result = { name: input.name, backend: custody.backend, custody, key: skipped, grant: skipped };
   if (custody.state !== 'ready') return result;

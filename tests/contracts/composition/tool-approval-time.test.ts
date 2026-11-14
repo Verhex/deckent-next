@@ -225,7 +225,7 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     await runPeerConfiguredChatTurn('/unused', { schemaVersion: 1, scopeId: 'scope', turnId: 'producer-turn',
       messages: [{ role: 'user', content: 'Read' }] }, { pid: process.pid } as Parameters<typeof runPeerConfiguredChatTurn>[2], {},
     { maxResultBytes: 4096 } as Parameters<typeof runPeerConfiguredChatTurn>[4], host, {
-      signal: controller.signal, drained: async () => undefined, emit: event => {
+      signal: controller.signal, drained: async () => true, emit: event => {
         events.push(event);
         // Time spent showing a preview counts against the producer's original budget even if the wall floor stalls.
         if (event.kind === 'approval.requested') {

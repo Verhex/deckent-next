@@ -1,4 +1,5 @@
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
+import { nativePaidUsageText, type ClaudeRateLimit } from '#capabilities/index.js';
 import { z } from 'zod';
 import { type ModelInvocationResult } from '#engine/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
@@ -31,5 +32,32 @@ export async function notifyNativeBuiltinPlugins(result: ModelInvocationResult, 
     for (const item of unseen) seen.add(item.key);
   });
   state.pending = delivered.catch(() => undefined);
+  await delivered;
+}
+
+const paidUsage = z.object({ status: z.string().regex(/^[A-Za-z0-9_.:-]{1,16}$/u), window: z.string().regex(/^[A-Za-z0-9_.:?-]{1,24}$/u),
+  resetsAtMs: z.number().int().nonnegative().refine(value => Number.isFinite(new Date(value).getTime())).nullable() });
+/** Event-time delivery; once per terminal session and scope, marked shown only after the sink delivers. */
+export async function notifyNativePaidUsage(limit: ClaudeRateLimit, language: Locale, session: object, terminal: string, scopeId: string,
+  notice: (text: string) => void | Promise<void>, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  const parsed = paidUsage.parse(limit);
+  let state = sessions.get(session);
+  if (!state) { state = { seen: new Set(), pending: Promise.resolve() }; sessions.set(session, state); }
+  const current = state, key = JSON.stringify(['paid-extra-usage', terminal, scopeId]);
+  const delivered = current.pending.then(async () => {
+    signal?.throwIfAborted();
+    if (current.seen.has(key)) return;
+    let abort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(signal?.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+    });
+    try { await Promise.race([notice(nativePaidUsageText(parsed, language)), cancelled]); }
+    finally { if (abort) signal?.removeEventListener('abort', abort); }
+    signal?.throwIfAborted();
+    current.seen.add(key);
+  });
+  current.pending = delivered.catch(() => undefined);
   await delivered;
 }

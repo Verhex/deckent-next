@@ -590,6 +590,19 @@ it('U1 provider port blocks unknown/grantless keys and renders custody refusal o
   const connected = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: false });
   expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
   expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
+  const target = { anchor: { installationId: 'installation', projectId: 'project', projectRoot: '/main-project',
+    binding: { canonicalRoot: '/main-project/.deckent', device: '1', inode: '2' }, repository: { canonicalRoot: '/main-project/.git', device: '1', inode: '3' } }, workingFolder: '/side-worktree' };
+  let written: unknown;
+  for (const locale of ['en', 'tr'] as const) {
+    const consent = providerPanelPort('/side-worktree', 'scope', { providerConnect: connectHost('ok'), inspectSecretTarget: async () => target,
+      prepareMainSecret: async () => ({ state: 'ready', backend: 'core.secret-store.encrypted-file@1' }), connectProviderSecret: async (_root, input) => {
+        written = input.target; return { name: input.name, backend: 'core.secret-store.encrypted-file@1', custody: { state: 'ready' }, key: { state: 'stored' }, grant: { state: 'granted' } };
+      } }, options, locale, errorText, { offer: async () => true, question: () => ({ title: '', lines: [], prompt: '' }), grant: async () => {} });
+    const shown = await consent.prepareKey!('anthropic-api', null);
+    expect(shown.grant).toBe(true); expect(shown.lines[0]!.text).toContain('/main-project'); expect(shown.lines[0]!.text).not.toContain('/side-worktree');
+    expect(shown.lines[1]!.text).toContain('/side-worktree');
+    await consent.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: true }); expect(written).toBe(target);
+  }
   // SETUPTEXT: the wired key card must retain the store resolved by the preceding permission card.
   let wiredPort: NonNullable<Parameters<typeof terminalSurface.runTerminalWorkline>[0]['panels']>['ports']['provider'];
   const draw = vi.spyOn(terminalSurface, 'runTerminalWorkline').mockImplementation(async view => { wiredPort = view.panels!.ports.provider; });

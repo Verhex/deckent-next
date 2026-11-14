@@ -2,11 +2,11 @@ import { isCodedError } from '#platform/index.js';
 import { relocateConfiguredProjectAttachment } from '#composition/core/attachment-lifecycle/index.js';
 import { applyConfiguredProviderSpendTemplate } from '#composition/core/provider-spend/index.js';
 import { inspectModelUsePreparation } from '#composition/core/model-use/index.js';
-import { configuredInvocationProfiles, modelInvocationBillingAxis, ProjectAttachmentApplication } from '#engine/index.js';
+import { configuredInvocationProfiles, modelInvocationBillingAxis, ProjectAttachmentApplication, attachmentMutationFenced } from '#engine/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { localProjectAttachmentPorts, prepareAttachmentDirectory, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
+import { localProjectAttachmentPorts, captureAttachmentLocation, prepareAttachmentDirectory, readAttachmentBootstrapConfig, withSideEffectFreeSqliteReads } from '#adapters/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
@@ -22,6 +22,7 @@ export async function configuredProjectAttachment(root: string, options: ConfigL
 /** Optional interaction belongs only to the trusted local CLI; SDK/MCP callers have no repair answer port. */
 export async function prepareConfiguredAttachmentDirectory(root: string, options: ConfigLoadOptions, confirm?: (path: string) => Promise<boolean>) {
   const config = await loadComposedConfig(root, { ...options, globalOnly: true, heal: false, force: true }), store = configuredAttachmentStore(config, options);
+  if (await attachmentMutationFenced(store)) return captureAttachmentLocation(root);
   return prepareAttachmentDirectory(root, localProjectAttachmentPorts(config, options, store).authorize, confirm);
 }
 export async function executeConfiguredProjectAttachment(root: string, input: unknown, options: ConfigLoadOptions = {}, confirm?: (path: string) => Promise<boolean>) {

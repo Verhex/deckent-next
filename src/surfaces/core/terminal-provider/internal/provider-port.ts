@@ -1,6 +1,7 @@
+import type { SecretProjectTarget } from '#engine/index.js';
 import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
-import { isCodedError, DeckentError, ErrorRegistry, loadConfig, messageText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isCodedError, DeckentError, ErrorRegistry, loadConfig, messageText, terminalSafeText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { configuredInvocationProfiles, buildInferenceServingPlan, modelInvocabilityText, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
@@ -102,6 +103,7 @@ function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host[
 }
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
   errorText: (error: unknown) => string, secretGrant?: ProviderSecretGrantPort): ProviderWindowPort {
+  let consentTarget: SecretProjectTarget | undefined;
   const connect = host.providerConnect; let backend = '-', isolation: unknown = null; // PV 2a: the last isolation refusal read for the list
   const subscriptionReadiness = subscriptionReadinessPort(root, scopeId, host, options);
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
@@ -201,13 +203,18 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     ...(host.siwc ? { siwc: { connection: host.siwc.connection, locale, execute: (request, presentation) => host.siwc!.execute(root, { ...request, scopeId }, options, presentation) } } : {}),
     ...(secretGrant ? { secretGrant } : {}),
     ...(host.prepareMainSecret ? { async prepareKey(kind: string, endpoint: string | null) {
+      consentTarget = undefined;
       const custody = await host.prepareMainSecret!(root, scopeId, options);
       if (custody.state !== 'ready') throw ErrorRegistry.createError(custody.code ?? 'SECRET_STORE_UNAVAILABLE', {
         params: { backend: custody.backend ?? '-', path: custody.path ?? '' } });
       backend = custody.backend ?? '-';
-      const grant = Boolean(host.connectProviderSecret && await secretGrant?.offer());
+      consentTarget = await host.inspectSecretTarget?.(root, scopeId, options);
+      const project = terminalSafeText(consentTarget?.anchor.projectRoot ?? root);
+      const grant = Boolean(consentTarget && host.connectProviderSecret && await secretGrant?.offer());
       const name = connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? '-';
-      return { grant, lines: [{ label: t('tui.provider.field.key', {}, locale), text: grant ? t('tui.provider.key.projectUse', { project: root }, locale) : t('tui.provider.key.adminGrant', { project: root, scope: scopeId, name }, locale) },
+      return { grant, lines: [{ label: t('tui.provider.field.key', {}, locale), text: grant ? t('tui.provider.key.projectUse', { project }, locale) : t('tui.provider.key.adminGrant', { project, scope: scopeId, name }, locale) },
+        ...(consentTarget && consentTarget.workingFolder !== consentTarget.anchor.projectRoot ? [{ label: '', text: consentTarget.anchor.repository ? t('secret.project.sharedWorktrees', { workingFolder: terminalSafeText(consentTarget.workingFolder) }, locale)
+          : t('secret.project.workingFolder', { workingFolder: terminalSafeText(consentTarget.workingFolder) }, locale) }] : []),
         { label: t('tui.provider.field.storage', {}, locale), text: custodyText(backend, locale), tone: 'muted' as const }] };
     } } : {}),
     async inspect(progress, signal) {
@@ -350,14 +357,14 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       else {
         try {
           if (host.connectProviderSecret) {
-            const result = await host.connectProviderSecret(root, { scopeId, name, value: request.key, grant: request.grant === true }, options);
+            const result = await host.connectProviderSecret(root, { scopeId, name, value: request.key, grant: request.grant === true && consentTarget !== undefined, ...(consentTarget ? { target: consentTarget } : {}) }, options);
             stored = result.key.state === 'stored'; backend = result.backend ?? backend;
             const failed = result.custody.state === 'refused' ? result.custody : result.key.state === 'refused' ? result.key : result.grant;
             const lines: PanelLine[] = [check, ...where, { label: t('tui.provider.field.key', {}, locale),
               text: stored ? t('tui.provider.key.stored', { name, backend }, locale) : t('tui.provider.key.notStored', {}, locale), tone: stored ? 'success' : 'warning' }];
             if (failed.code) lines.push({ label: t('tui.provider.field.next', {}, locale), text: failed.state === 'admin'
-              ? t('tui.provider.key.adminGrant', { project: root, scope: scopeId, name }, locale)
-              : errorText(ErrorRegistry.createError(failed.code, { params: { path: failed.path ?? '', name, project: root, scopeId, backend } })), tone: 'warning' });
+              ? t('tui.provider.key.adminGrant', { project: consentTarget?.anchor.projectRoot ?? root, scope: scopeId, name }, locale)
+              : errorText(ErrorRegistry.createError(failed.code, { params: { path: failed.path ?? '', name, project: consentTarget?.anchor.projectRoot ?? root, scopeId, backend } })), tone: 'warning' });
             const title = !stored ? t('tui.provider.result.refused', { kind: label }, locale) : result.grant.state === 'granted'
               ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.grantMissing', { kind: label }, locale);
             const workspaces = stored && result.grant.state === 'granted' ? (await pullModels(kind, request.endpoint, lines, probe.workspaceRequired === true)).workspaces : undefined;

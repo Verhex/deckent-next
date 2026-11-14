@@ -51,17 +51,22 @@ custodyIt('[requires Linux /proc/self/fd custody] reads the owner-case file (1.2
 });
 
 custodyIt('[requires Linux /proc/self/fd custody] keeps every read inside the workspace: traversal, absolute paths, symlink escapes and protected paths are refused', async () => {
-  const { base, root } = await workspace({ 'src/a.ts': 'export const a = 1;\n', '.env': 'TOKEN=secret\n', 'keys/server.pem': 'PEM\n', '.git/config': '[core]\n' });
+  const { base, root } = await workspace({ 'src/a.ts': 'export const a = 1;\n', '.env': 'TOKEN=secret\n', 'keys/server.pem': 'PEM\n', '.git/config': '[core]\n',
+    '.claude/.credentials.json': 'synthetic secret\n', '.config/cursor/auth.json': 'synthetic secret\n',
+    '.claude/settings.json': 'ordinary settings\n', '.config/cursor/cli-config.json': 'ordinary settings\n' });
   await writeFile(join(base, 'outside.txt'), 'outside secret\n');
   await symlink(join(base, 'outside.txt'), join(root, 'link.txt'));
   await symlink(join(root, '.env'), join(root, 'env-link'));
   const tools = await createWorkspaceReadTools(root);
   for (const [path, error] of [['../outside.txt', 'path-outside-workspace'], [join(base, 'outside.txt'), 'path-outside-workspace'], ['link.txt', 'path-outside-workspace'],
-    ['.env', 'path-denied'], ['env-link', 'path-denied'], ['keys/server.pem', 'path-denied'], ['.git/config', 'path-denied'], ['missing.ts', 'not-found']] as const) {
+    ['.env', 'path-denied'], ['env-link', 'path-denied'], ['keys/server.pem', 'path-denied'], ['.git/config', 'path-denied'],
+    ['.claude/.credentials.json', 'path-denied'], ['.config/cursor/auth.json', 'path-denied'], ['missing.ts', 'not-found']] as const) {
     const result = await tools.execute('read_file', { path });
     expect(result, path).toMatchObject({ status: 'error' }); expect(result.text, path).toContain(`error=${error}`);
     expect(result.text).not.toContain('secret');
   }
+  for (const path of ['.claude/settings.json', '.config/cursor/cli-config.json'])
+    expect(await tools.execute('read_file', { path }), path).toMatchObject({ status: 'ok', text: expect.stringContaining('ordinary settings') });
   const listing = await tools.execute('list_dir', {});
   expect(listing.text.split('\n')).toEqual(expect.arrayContaining(['src/', 'keys/', 'link.txt@']));
   expect(listing.text).not.toMatch(/^\.env$/m); expect(listing.text).toMatch(/protected entr/);

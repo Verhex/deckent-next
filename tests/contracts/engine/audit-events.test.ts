@@ -1,6 +1,10 @@
+import { rebindIds, rebindSubject } from '../../fixtures/audit-rebind.js';
+import type { RebindAdmissionRecord } from '#domain/index.js';
+import type { RebindAdmission } from '#engine/core/bootstrap-identity/index.js';
+import { refusalSubject } from '../../fixtures/audit-refusal.js';
 import { randomBytes } from 'node:crypto';
-import { expect, it } from 'vitest';
-import { AUDIT_EVENT_SCHEMA_VERSION, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
+import { expect, expectTypeOf, it } from 'vitest';
+import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_POLICY_TURN_LIMITS, AUDIT_REFUSAL_TOKEN_MAX_CHARS, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
 import { AuditApplication, deliveryDismissalEvent, dismissedDeliveries, runRequestRefusedEvent, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
 import { createHmacIntegrity, snapshotKnownSecrets } from '#platform/index.js';
 
@@ -90,4 +94,72 @@ it('BeUser M-33: the latest dismissal record of a task wins; a restored task is 
   mark('t1', 'dismiss', 5);
   expect(dismissedDeliveries(audit, 'scope', 200).map(row => row.taskId).sort()).toEqual(['t1', 't2']);
   expect(dismissedDeliveries(audit, 'other', 200)).toEqual([]);
+});
+
+it('refusal summary v1 keeps bounded open catalog tokens and strict nested shapes, opaque targets and honest observation/count facts', () => {
+  const valid = { ...base, subject: refusalSubject };
+  expect(auditEventSchema.parse(valid)).toEqual(valid);
+  for (const decisionSource of ['deckent-decision', 'cli-reported', 'adapter-reported'])
+    expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, decisionSource } }).success).toBe(true);
+  expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, target: { role: 'erp:invoice', identity: { keyId: 'scope-key-v2', digest: 'e'.repeat(64) } } } }).success).toBe(true);
+  for (const invalid of [
+    { schemaVersion: 2 }, { operationClass: 'other' }, { decisionSource: 'other' },
+    { reasonCode: 'Bearer secret' }, { evidenceBasis: 'https://customer/private' }, { reasonCode: 'x'.repeat(AUDIT_REFUSAL_TOKEN_MAX_CHARS + 1) },
+    { tool: { name: 'read_file', version: 0 } }, { operation: { id: 'read', version: 1, raw: 'secret' } },
+    { target: { role: '/customer/invoice', identity: null } }, { target: { role: 'credential', identity: { keyId: 'k', digest: 'guessable' } } },
+    { target: { role: 'credential', identity: null, path: '/private' } }, { call: { ...refusalSubject.call, path: '/private' } },
+    { samples: Array.from({ length: AUDIT_POLICY_TURN_LIMITS.refusedMax + 1 }, () => refusalSubject.call) },
+    { samples: [{ ...refusalSubject.call, round: 0 }] }, { count: 0 }, { count: Number.MAX_SAFE_INTEGER + 1 },
+    { countBasis: 'unknown' }, { firstObservedAtMs: 21 }, { turnId: 'other' },
+    { count: 1, countBasis: 'exact', overflow: true }, { count: 1, samples: [refusalSubject.call, refusalSubject.call] },
+    { runId: undefined }, { taskId: undefined }, { attemptId: undefined }, { generation: 0 }, { raw: 'secret' },
+  ]) expect(auditEventSchema.safeParse({ ...valid, subject: { ...refusalSubject, ...invalid } }).success, JSON.stringify(invalid)).toBe(false);
+});
+
+it('rebind v1 reads exactly the frozen source, target and common rules and all four durable bases', () => {
+  expectTypeOf<RebindAdmissionRecord['basis']>().toEqualTypeOf<RebindAdmission['basis']>();
+  const source = rebindSubject(integrity, 'scope');
+  const parse = (changes: Record<string, unknown>) => auditEventSchema.safeParse({ ...base, subject: { ...source, ...changes } });
+  for (const admission of [{ basis: 'open-class' }, { basis: 'human-tty', witness: null }, { basis: 'human-tty', witness: source.binding },
+    { basis: 'macos-plain' }, { basis: 'ai-policy', ruleId: '/synthetic/policy-rule', policyRevision: '/synthetic/revision' }]) {
+    expect(parse({ admission, class: admission.basis === 'open-class' ? 'device-only' : 'moved' }).success).toBe(true);
+  }
+  expect(parse({ class: null, previousBinding: null, binding: null, changedFields: [], attachments: null }).success).toBe(true);
+  const allFields = ['bindingVersion', 'bindingStrength', 'bindingSource', 'machineDigest', 'canonicalRoot', 'device', 'inode',
+    'filesystemIdentity.kind', 'filesystemIdentity.value', 'source.projectRoot', 'source.layoutRoot', 'source.bootstrapConfigPath',
+    'source.layoutRevision', 'source.location', 'attachment.location'];
+  expect(parse({ changedFields: allFields, attachments: null }).success).toBe(true);
+  const oversized = parse({ changedFields: [...allFields, 'device'] });
+  expect(oversized.success).toBe(false);
+  if (!oversized.success) expect(JSON.stringify(oversized.error.issues)).toContain('"code":"too_big"');
+  expect(parse({ phase: 'intent', attachments: { waiting: 0 } }).success).toBe(true);
+  expect(parse({ phase: 'failed', failure: 'WRITE_FAILED' }).success).toBe(true);
+  for (const failure of [null, 'WRITE_UNKNOWN']) expect(parse({ phase: 'uncertain', failure }).success).toBe(true);
+  const fresh = { transition: 'new', installationId: rebindIds.nextInstallation, class: null, admission: null, attachments: null };
+  expect(parse(fresh).success).toBe(true);
+  const target = { part: 'target', previousBinding: null, binding: null, projectId: rebindIds.project, changedFields: ['attachment.location'], attachments: null };
+  expect(parse(target).success).toBe(true);
+  expect(parse({ ...target, changedFields: [] }).success).toBe(true);
+  // Each row is a separate frozen rule; no extra coupling between success/bindings or waiting/changedFields.
+  for (const invalid of [
+    { projectId: rebindIds.project },
+    { installationId: rebindIds.nextInstallation }, { admission: null },
+    { class: null, admission: { basis: 'human-tty', witness: null } }, { class: 'moved' },
+    { ...fresh, installationId: rebindIds.installation }, { ...fresh, class: 'device-only' },
+    { ...fresh, admission: { basis: 'open-class' } }, { ...fresh, attachments: { waiting: 0 } },
+    { ...target, transition: 'new', installationId: rebindIds.nextInstallation }, { ...target, installationId: rebindIds.nextInstallation },
+    { ...target, class: 'moved' }, { ...target, admission: null },
+    { ...target, binding: source.binding }, { ...target, previousBinding: source.previousBinding },
+    { ...target, changedFields: ['device'] }, { ...target, projectId: null }, { ...target, attachments: { waiting: 1 } },
+    { ...target, admission: { basis: 'macos-plain' } },
+    { phase: 'intent', failure: 'WRITE_FAILED' }, { phase: 'succeeded', failure: 'WRITE_FAILED' }, { phase: 'failed' },
+    { raw: '/private' }, { admission: { basis: 'open-class', class: 'device-only' } }, { admission: { basis: 'unknown' } },
+    { phase: 'unknown' }, { class: 'unknown' }, { changedFields: ['unknown'] }, { changedFields: ['device', 'device'] },
+    { binding: { keyId: 'k', digest: '/private/root' } }, { previousBinding: { keyId: '/private/key', digest: 'a'.repeat(64) } },
+    { admission: { basis: 'human-tty', witness: 'account-name' } },
+    { admission: { basis: 'human-tty', witness: { keyId: 'k', digest: 'a'.repeat(64), account: 'private' } } },
+    { attachments: { waiting: -1 } }, { attachments: { waiting: 1, path: '/private' } },
+    { operationId: '/private/root' }, { previousInstallationId: 'machine-value' }, { installationId: 'account-name' },
+    { ...target, projectId: '/private' }, { failure: 'Bearer private' },
+  ]) expect(parse(invalid).success, JSON.stringify(invalid)).toBe(false);
 });

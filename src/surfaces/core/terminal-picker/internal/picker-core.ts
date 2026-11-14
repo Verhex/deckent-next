@@ -6,8 +6,7 @@ import { filterSearchEntries } from '#surfaces/core/terminal-kit/index.js';
  * on the surface. A result is a typed value; applying it (config write, model switch) stays with the caller's own authority path.
  */
 
-import type { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
-type WorklineInkRole = keyof ReturnType<typeof useWorklinePalette>;
+import type { WorklineInkRole } from '#surfaces/core/terminal-kit/index.js';
 import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 /** A row. `children` makes it a section that opens a lower level; `blocked.reason` is the already localized why (the row shows it). */
 export type PickerNode = Readonly<{

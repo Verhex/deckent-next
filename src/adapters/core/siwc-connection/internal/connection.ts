@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { type VerifiedPrincipal, type policySchema } from '#domain/index.js';
+import { installationBindingCaptureV2Projection, type VerifiedPrincipal, type policySchema } from '#domain/index.js';
 import { subscriptionActor, oauthContextOwner, personalCustodyProfile, OAuthConnectionApplication, OAuthConnectionError, assertAuthorityWitness,
   policySecretChangeAuthorization, type OAuthConnectionOwner, type AuditApplication } from '#engine/index.js';
 import { createInstallationSecretCustody, openConfiguredSecretStore } from '#adapters/core/contract/index.js';
@@ -38,7 +38,7 @@ export async function withSiwcConnection<T, C extends SiwcConnectionContext>(sco
       const location = await localInstallationBindingSource(fresh.layout, fresh.config.installation).capture();
       if ('status' in location) throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL');
       return { owner, actor: invokingActor, ...(peer && peerWitness ? { peer: { pid: peer.pid, uid: peer.uid, witness: peerWitness } } : {}), profile,
-        locationDigest: createHash('sha256').update(JSON.stringify(location)).digest('hex') };
+        locationDigest: createHash('sha256').update(JSON.stringify(installationBindingCaptureV2Projection(location))).digest('hex') };
     },
   });
   return ports.audit(context, audit => {

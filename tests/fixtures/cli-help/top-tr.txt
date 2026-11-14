@@ -30,7 +30,7 @@ Başlarken:
   memory      Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler
       search | inspect | propose | verify | retire | review | purge | rollout
       [--scope <id>] [--state <ad>] [--json]
-  agents      Kapsamın ajanlarını ve skill'lerini oku ve tanımla
+  agents      Kapsamın ajan ve beceri (skill) tanımlarını oku ve tanımla
       inspect | use | skills | skill | define | define-skill | signers |
       enrol-signer | add-signer | revoke-signer | repair-signers |
       import-skill | stats | suggestions | promote | demote | restore | retire |
@@ -88,12 +88,12 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
-  uninstall   deckent’i bu klasörden kaldırır;
+  uninstall   deckent'i bu klasörden kaldırır;
               verileriniz varsayılan olarak korunur.
       [--keep-data|--keep-work|--all] [--force] [--disable-unit]
       [--yes] [--dry-run [--verbose]] [--json]
-  audit       Denetim kaydını (kim ne yaptı, ne zaman) ve checkpoint'lerini oku
-              ve doğrula (eylemsiz: verify)
+  audit       Denetim kaydını (kim ne yaptı, ne zaman) ve kontrol noktalarını
+              oku ve doğrula (eylemsiz: verify)
       verify | list | show | rebaseline
       [--scope <id>]
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
@@ -121,7 +121,7 @@ Geliştirici:
       [--scope <id>] [--after <id>] [--limit <n>]
   paths       Kurulum yollarını incele
       [--global]
-  runtime     Yerel çalışma servisini yönet (eylemsiz: describe)
+  runtime     Yerel deckent servisini yönet (eylemsiz: describe)
       serve | describe | shutdown | restart
   coding      Yerel kodlama profillerini hazırla
       prepare | template | instructions status|trust|revoke
