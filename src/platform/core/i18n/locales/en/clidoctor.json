@@ -1,4 +1,6 @@
 {
+  "doctor.check.attachments.mismatch": "{count} attached projects no longer match their recorded folder.",
+  "doctor.check.attachments.next": "This record was written by a newer deckent, so only that version can reconcile them (some may then need `terminal attach --relocate`).",
   "doctor.check.plugins.unavailable": "Built-in plugin records could not be read; not complete.",
   "doctor.check.plugins.name": "Recorded new built-in plugin: {name} (CLI {version}); accepted, not reviewed.",
   "doctor.check.plugins.count": "{count} recorded calls named new built-in plugins; names need content-read permission.",

@@ -308,6 +308,8 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/project-attachment",
+        "src/adapters/core/installation-files",
         "src/platform/core/output",
         "src/surfaces/core/cli-human",
         "src/engine/core/secret-store",
@@ -1478,6 +1480,7 @@
     },
     "src/surfaces/core/doctor": {
       "dependencies": [
+        "src/domain/core/project-attachment",
         "src/engine/core/provider-spend",
         "src/engine/core/secret-store",
         "src/engine/core/toolchain-currency",

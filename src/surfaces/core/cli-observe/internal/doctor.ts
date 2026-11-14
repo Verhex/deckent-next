@@ -59,6 +59,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
     recoveryMode, recoveryRollout,
+    attachmentFolders: context.inspectAttachmentFolders ? await context.inspectAttachmentFolders(root, options).catch(() => null) : null,
     nativePlugins: context.inspectNativePlugins && scopeId ? await context.inspectNativePlugins(root, scopeId, DOCTOR_NATIVE_PLUGIN_SCAN, options).catch(() => null) : null,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,

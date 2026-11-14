@@ -1,4 +1,6 @@
 {
+  "doctor.check.attachments.mismatch": "{count} bağlı proje artık kayıtlı klasörüyle eşleşmiyor.",
+  "doctor.check.attachments.next": "Bu kayıt daha yeni bir deckent sürümüyle yazıldı; bu yüzden projeleri yalnız o sürüm uzlaştırabilir (bazıları için o sürümde `terminal attach --relocate` gerekebilir).",
   "doctor.check.plugins.unavailable": "Yerleşik eklenti kayıtları okunamadı; tarama tamamlanmadı.",
   "doctor.check.plugins.name": "Kaydedilen yeni yerleşik eklenti: {name} (CLI {version}); kabul edildi, incelenmedi.",
   "doctor.check.plugins.count": "{count} kayıtlı çağrı yeni yerleşik eklenti adı bildirdi; adlar için içerik okuma izni gerekir.",

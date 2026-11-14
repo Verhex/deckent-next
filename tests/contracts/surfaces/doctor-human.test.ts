@@ -1,11 +1,17 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as surface from '#surfaces/index.js';
 import { main } from '#surfaces/core/cli/index.js';
-import { ErrorRegistry, t, clearConfigCache } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import { ErrorRegistry, t, clearConfigCache, productResourcePath, serializeJsonDocument } from '#platform/index.js';
+import { registerProviderConfig, captureAttachmentLocation } from '#adapters/index.js';
+import { readableInstallationRegistrationSchema } from '#domain/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
+import { main as cliMain } from '#composition/core/cli/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
 import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
@@ -516,4 +522,73 @@ it('shows bounded recorded plugin names or blind call counts and never says none
     const exact = rows({ ...nativePlugins, omitted: '27021597764222973', names: Array.from({ length: 6 }, (_, i) => ({ cliVersion: '2.1.fixture', name: `plugin-${i}` })) });
     expect(exact.at(-1)!.text).toBe(locale === 'en' ? '+27021597764222974 more recorded names' : '+27021597764222974 kayıtlı ad daha');
   }
+});
+
+it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with a true newer-version step (EN/TR)', async () => {
+  const root = await project(), options = { env: { HOME: join(root, 'h') }, heal: false };
+  let inspectAttachmentFolders!: NonNullable<Parameters<typeof runKernelCommand>[1]['inspectAttachmentFolders']>;
+  // Capture the real host through its public composition entry; dispatch only the new read seam below.
+  const dispatch = vi.spyOn(surface, 'main').mockImplementation(async (_argv, context) => {
+    inspectAttachmentFolders = (await context!.loadHost!()).inspectAttachmentFolders!; return 0;
+  });
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
+  vi.stubEnv('HOME', options.env.HOME); vi.stubEnv('DECKENT_GLOBAL_HOME', join(options.env.HOME, '.deckent'));
+  try { expect(await cliMain(['doctor', '--lang', 'en'])).toBe(0); }
+  finally { dispatch.mockRestore(); cwd.mockRestore(); vi.unstubAllEnvs(); }
+  if (process.platform === 'win32') {
+    await expect(inspectAttachmentFolders(root, options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_UNAVAILABLE' });
+    return; // The existing registration reader refuses before filesystem access on native Windows.
+  }
+  const matched = join(root, 'matched'); await mkdir(matched, { mode: 0o700 });
+  const location = await captureAttachmentLocation(matched);
+  const replaced = join(root, 'replaced'); await mkdir(replaced, { mode: 0o700 });
+  const old = await captureAttachmentLocation(replaced);
+  const base = readableInstallationRegistrationSchema.parse(JSON.parse(await readFile(new URL('../../fixtures/attachment-registration-v3.json', import.meta.url), 'utf8')));
+  const entry = base.entries[0]!;
+  const record = readableInstallationRegistrationSchema.parse({ ...base, source: { ...base.source, projectRoot: root },
+    entries: [
+      { ...entry, attachment: { ...entry.attachment, location: { ...entry.attachment.location, canonicalRoot: join(root, 'missing') } } },
+      ...(['active', 'active', 'revoked', 'pending'] as const).map((state, i) => ({ ...entry, state, attachment: { ...entry.attachment, schemaVersion: 1,
+        projectId: randomUUID(), commandId: randomUUID(), location: i === 0 ? { ...old, inode: String(BigInt(old.inode) + 1n) }
+          : i === 1 ? location : { ...location, canonicalRoot: join(root, state) } } })),
+    ] });
+  if (record.schemaVersion !== 3) throw new Error('Expected the frozen registration v3 fixture');
+  // The replaced folder has a different inode; the unreachable folder cannot be promised automatic completion.
+  const store = configuredAttachmentStore(await loadComposedConfig(root, options), options), path = productResourcePath(store.global, 'installationRegistration');
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const run = async (locale: 'en' | 'tr') => {
+    const out: string[] = [];
+    await runKernelCommand(['doctor', '--lang', locale], { root, env: options.env, inspectAttachmentFolders,
+      stdout: { write: (value: string) => { out.push(value); } }, stderr: { write() {} } });
+    return out.join('');
+  };
+  const check = async (value: unknown, count: number) => {
+    await writeFile(path, serializeJsonDocument(value), { mode: 0o600 });
+    const before = await readFile(path), names = await readdir(dirname(path));
+    const attachmentFolders = await inspectAttachmentFolders(root, options);
+    for (const locale of ['en', 'tr'] as const) {
+      const text = await run(locale);
+      const sentence = locale === 'en' ? '2 attached projects no longer match their recorded folder.' : '2 bağlı proje artık kayıtlı klasörüyle eşleşmiyor.';
+      const row = doctorChecks(report, facts({ attachmentFolders }), locale).filter(item => item.id === 'work.attachments');
+      if (!count) { expect(row).toHaveLength(0); expect(text).not.toContain(t('doctor.check.attachments.next', {}, locale)); continue; }
+      expect(text.split(sentence)).toHaveLength(2);
+      expect(text).toContain(locale === 'en'
+        ? 'This record was written by a newer deckent, so only that version can reconcile them (some may then need `terminal attach --relocate`).'
+        : 'Bu kayıt daha yeni bir deckent sürümüyle yazıldı; bu yüzden projeleri yalnız o sürüm uzlaştırabilir (bazıları için o sürümde `terminal attach --relocate` gerekebilir).');
+      expect(row).toHaveLength(1); expect(row[0]).toMatchObject({ state: 'warning', text: sentence }); expect(row[0]!.fix).toBeUndefined();
+      // Even an unreachable or foreign recorded folder is not promised automatic completion or a runnable repair on beta.2.
+      expect(row[0]!.next).not.toBe('terminal attach --relocate');
+      expect(JSON.stringify(row)).not.toMatch(/they finish|will (?:finish|complete)|automatically|kendiliğinden|otomatik/u);
+    }
+    expect(await readFile(path)).toEqual(before); expect(await readdir(dirname(path))).toEqual(names);
+  };
+  await check(record, 2);
+  await check({ ...record, source: { ...record.source, projectRoot: join(root, 'outside') } }, 0);
+  const { lineage: ignored, ...withoutLineage } = record; void ignored;
+  await check(withoutLineage, 0);
+  const legacy = { ...withoutLineage, schemaVersion: 2, source: { ...record.source, location }, entries: record.entries.map(item => ({ ...item,
+    attachment: { ...item.attachment, schemaVersion: 1, location: { canonicalRoot: item.attachment.location.canonicalRoot,
+      device: item.attachment.location.device, inode: item.attachment.location.inode } } })) };
+  await check(legacy, 0);
+  await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
 });
