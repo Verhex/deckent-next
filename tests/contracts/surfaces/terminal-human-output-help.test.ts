@@ -20,8 +20,8 @@ describe('/help grouped', () => {
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // /cancel is the window lane's text and is not pinned here.
     expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırla', '  /workers  İşçileri ve her birinin ne yaptığını listele',
-      '  /tasks  Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
-      "  /runs  Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat, a işçinin sorusunu cevapla (her biri kendi y'siyle)", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dalı ilerlet', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
+      '  /tasks  Arka plan çalışmaları: işçiler ve çalışmalar tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir çalışmayı ayrıntılı gösterin',
+      "  /runs  Bu kapsamın tüm çalışmaları; h bekletme, r sürdürme, c bekleyen çalışmayı kapatma, a işçinin sorusunu yanıtlama; her işlem kendi kartında y ile onaylanır", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim edin; seçilen doğrulama çalışmasıyla Git dalını teslim edilen sürüme taşıyın', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
   });
   it('puts the window and mode commands under their headings, one short line each (T2 integration)', () => {
     const section = (text: string, heading: string) => text.split('\n').slice(1).join('\n').split('\n\n').find(part => part.startsWith(`${heading}\n`)) ?? '';
@@ -31,7 +31,7 @@ describe('/help grouped', () => {
     expect(section(en, 'Settings')).toContain('  /service-restart  Restart the runtime service from this build (asks first)');
     expect(section(en, 'Settings')).toContain('  /mode ');
     expect(section(tr, 'Onaylar')).toContain('  /approvals [numara|kimlik|clear-session]  Bekleyen bir onayı seç ve karar ver');
-    expect(section(tr, 'İşler')).toContain('  /cancel <run-kimliği>  Bir işi iptal et (önce y/N sorar)');
+    expect(section(tr, 'İşler')).toContain('  /cancel <run-kimliği>  Bir çalışmayı iptal edin (önce y/N sorar)');
     expect(section(tr, 'Ayar')).toContain('  /service-restart  deckent servisini bu derlemeden yeniden başlat (önce sorar)');
     expect(section(tr, 'Ayar')).toContain('  /mode ');
     for (const text of [en, tr]) expect(text).not.toMatch(/\n(Other|Diğer)\n/);

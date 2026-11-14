@@ -697,7 +697,7 @@
   "resource.cost.summary": "İş {run}, ölçüme dahil işler: {accepted} kabul, {failed} başarısız, {unknown} bilinmeyen. Örneklenen CPU {cpu}; ölçülen API alt toplamı {api} ({missing} bilinmeyen). {withheld} deneme gösterilmedi.",
   "resource.cost.partial": "Maliyet kısmi. API parası, abonelik kullanımı, makine kaynakları ve insan emeği ayrı eksenlerdir. Abonelik limiti veya gelecek kalite garantisi çıkarılmaz.",
   "resource.cost.attempt": "Görev {task} / Deneme {attempt} · iş sınıfı {workClass} · profil {profile} · istenen model {model} / efor {effort} · sonuç {outcome}\n  örneklenen CPU {cpu} · tepe {peak} · duvar süresi {wall} · ölçülen API {api}\n  gözlenen abonelik çağrısı {subscription} / {subscriptionMs} · yerel model çağrısı {local} · insan müdahalesi {human} · yeniden iş {rework} · geri alma {rollback}",
-  "resource.cost.help.summary": "İş maliyet ve kabul kanıtını incele",
+  "resource.cost.help.summary": "Çalışmanın maliyet ve kabul kanıtını incele",
   "resource.cost.help": "deckent report [--scope <id>] [--run <id>] [--verbose] [--json] [--lang en|tr]\nMevcut inspect yetkisiyle salt okunur maliyet ve kalite raporu. Bilinen: sonuç, kabulün dayandığı kanıt, süre, CPU, bellek, model. Ölçülemeyen: her alan nedeniyle. Ham değerler ve tam kimlikler: --verbose.\n--run yoksa kapsamın son işleri (terminalde birini seçin). --run kısa kimlik alır.",
   "resource.cost.outcome.accepted": "kabul edildi",
   "resource.cost.outcome.failed": "başarısız",
