@@ -15,7 +15,7 @@ import { runtime } from '../support/chat-turn-harness.js';
 import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { resolveConfiguredModelUse, configuredModelProfiles } from '#composition/core/model-use/index.js';
-import { ModelBindingApplication } from '#engine/index.js';
+import { ModelBindingApplication, type PolicyTemplateInstallationPorts } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
@@ -703,12 +703,10 @@ it('attachment reader: mutation prechecks fence both relocation branches, grants
   await expect(app.register(record.source.projectRoot, record.source.scopeId, registrationPreview.planDigest)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
   const config = await loadComposedConfig(await mkdtemp(join(tmpdir(), 'deckent-attachment-fence-')).then(root => { roots.push(root); return root; }),
     { globalOnly: true, heal: false });
-  const { firstSessionTargets, firstSessionPublication } = await import('#adapters/core/installation-files/index.js');
+  const { firstSessionTargets } = await import('#adapters/core/installation-files/index.js');
   const content = platform.serializeJsonDocument(reference), refTarget = { resource: 'projectAttachment' as const,
     path: productResourcePath(config.productLayout, 'projectAttachment'), content, digest: platform.digestText(content) };
   expect(await firstSessionTargets(config.productLayout, reference.scopeId, config.installation.profileMaxBytes, [refTarget], null, reference)).toEqual([refTarget]);
-  await expect(firstSessionPublication(config.productLayout, config.installation.profileMaxBytes).publish(refTarget, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
-  await expect(firstSessionPublication(config.productLayout, config.installation.profileMaxBytes).publish({ ...refTarget, content: '{' }, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_INVALID' });
   const { relocateProjectAttachment } = await import('#adapters/core/project-attachment/index.js');
   await expect(relocateProjectAttachment(config, reference, reference, effect)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
   for (const attachment of [reference, null]) {
@@ -736,6 +734,50 @@ it('attachment reader: mutation prechecks fence both relocation branches, grants
   expect(await verifySharedAttachmentRestore({ company: { id: reference.companyId } }, legacyState, reference.location.canonicalRoot, reference.scopeId,
     { actor: reference.actor, registration: async () => legacy, exists: effect, projectId: async () => null })).toBe(true);
   expect(effect).not.toHaveBeenCalled();
+});
+
+it('first-session composition fences incoming and retained v2 references before effects and at the real publication dispatch', async () => {
+  const f = await fixture(), reference = readerFixture().entries[0]!.attachment;
+  const { filesystemIdentity: ignored, ...location } = reference.location; void ignored;
+  const legacy = { ...reference, schemaVersion: 1 as const, location };
+  const identity = await loadConfiguredInstallationIdentity(f.a, f.options);
+  const shared = { attachment: legacy, identity: async () => identity };
+  const before = await snapshotBytes(f.root);
+  await expect(applyPolicyTemplateInstallation(f.b, reference.scopeId, f.options,
+    { ...shared, attachment: reference as unknown as typeof legacy })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(await snapshotBytes(f.root)).toEqual(before);
+  const layout = platform.resolveProductLayout({ projectRoot: f.b }), path = await platform.prepareProductFile(layout, 'projectAttachment');
+  const content = platform.serializeJsonDocument(reference);
+  await writeFile(path, content);
+  const retained = await snapshotBytes(f.root);
+  await expect(applyPolicyTemplateInstallation(f.b, legacy.scopeId, f.options, shared)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(await snapshotBytes(f.root)).toEqual(retained);
+  await fs.unlink(path);
+
+  const engine = await import('#engine/index.js'), Original = engine.PolicyTemplateInstallationApplication;
+  let publish!: PolicyTemplateInstallationPorts['publish'];
+  // Capture the real composition port without replacing the application's preparation or effect ordering.
+  const application = vi.spyOn(engine, 'PolicyTemplateInstallationApplication').mockImplementation(class extends Original {
+    constructor(ports: PolicyTemplateInstallationPorts) { super(ports); publish = ports.publish; }
+  });
+  const target = await f.make(f.b), preview = await target.app.preview('target'), commandId = randomUUID();
+  const attached = await target.app.apply('target', preview.planDigest, commandId);
+  expect(attached.attachment.schemaVersion).toBe(1);
+  expect(await target.store.attachment()).toEqual(attached.attachment);
+  const legacyInstalled = await snapshotBytes(f.root);
+  expect(await target.app.apply('target', preview.planDigest, commandId)).toMatchObject({ status: 'attached', attachment: attached.attachment });
+  expect(await snapshotBytes(f.root)).toEqual(legacyInstalled);
+  application.mockRestore();
+  const refTarget = { resource: 'projectAttachment' as const, path, content, digest: platform.digestText(content) };
+  const installed = await snapshotBytes(f.root);
+  await expect(publish(refTarget, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  await expect(publish({ ...refTarget, content: '{' }, randomUUID())).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_INVALID' });
+  expect(await snapshotBytes(f.root)).toEqual(installed);
+  await writeFile(path, content);
+  const retainedAtPublication = await snapshotBytes(f.root), legacyContent = platform.serializeJsonDocument(attached.attachment);
+  await expect(publish({ ...refTarget, content: legacyContent, digest: platform.digestText(legacyContent) }, randomUUID()))
+    .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
+  expect(await snapshotBytes(f.root)).toEqual(retainedAtPublication);
 });
 
 it('attachment reader: public tier-all uninstall refuses before confirmation or backup and leaves the installation byte-identical', async () => {

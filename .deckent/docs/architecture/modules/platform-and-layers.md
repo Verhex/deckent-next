@@ -217,9 +217,10 @@ ister; üretici yoksa aygıta düşmez. L1 aynı kök/device/inode kuralını ko
 birebir aynı kalmalıdır. Adapter tek gözlem portundan yalnız saklanan L2 için dosya sistemi kimliğini ister.
 V3 okuma ham cap+884+51·floor(cap/600) ve normalize cap koşullarını birlikte uygular; N lineage/unregistered
 alanlarını çıkarır, durumları active, en çok 20 basamaklı device değerlerini 0 sayar; uzun eski device metinleri
-aynen sayılır. Motor mutasyonları ilk etkiden önce, depo ve referans yazıcıları ikinci sınırda yeni biçimi
-PROJECT_ATTACHMENT_NEWER_RECORD ile reddeder. Tek istisna, kilitte yeniden okunan ham kayda uygulanan
+aynen sayılır. Motor mutasyonları ve ilk oturum hazırlığı ilk etkiden önce, depo ve gerçek yayına bağlanmış
+ilk oturum referans yazıcısı ikinci sınırda yeni biçimi PROJECT_ATTACHMENT_NEWER_RECORD ile reddeder.
+Referans yazıcısı hem gelen hem saklı attachment v2 kaydını korur. Tek istisna, kilitte yeniden okunan ham kayda uygulanan
 revoke/detach/unregister 104 yazıcısıdır: sürüm, anahtar sırası, lineage, kaynak ve diğer girdiler korunur;
 N değişmediği için yeni normalize boyut reddi yoktur. Shared backup v2 referans veya mevcut v3 envanterle
 publication öncesi reddedilir. Lineage onarım algoritması uygulanmaz; kaynakta uyuşmayan etkin girdilerin
-saf sayımı hazırdır, doctor yüzeyi PLG birleşmesi sonrası ATT-D kapsamındadır.
+saf sayımı ve ATT-D doctor satırı kaynakta bağlıdır; birleştirilmiş sürümün kabulü release yürüyüşündedir.
