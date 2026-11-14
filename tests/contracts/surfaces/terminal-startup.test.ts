@@ -14,6 +14,7 @@ import { useTerminalHandover } from '#surfaces/core/terminal-render-ink/index.js
 import { runTerminalWorkline } from '#surfaces/core/terminal/index.js';
 import { worklineLabels } from '#surfaces/core/terminal-labels/index.js';
 import { settle, until } from '../support/workline-harness.js';
+import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 // eslint-disable-next-line no-restricted-imports -- Existing streaming VT renderer supplies real resize and screen state.
 import { BeuserScreenRenderer } from '#adapters/core/beuser-surface/internal/screen.js';
 
@@ -22,6 +23,30 @@ const facts = { version: '1.0.0-alpha.9', project: 'deckent-next', path: '~/deck
 const startup = (locale: 'en' | 'tr', options: Partial<WorklineStartup> = {}, ascii = false): WorklineStartup =>
   ({ clear: true, banner: 'full', ...terminalStartupLabels(locale, facts, ascii), ...options });
 const plain = resolveWorklinePalette('none');
+
+it('opening and closing a slash window repeatedly releases resize listeners and stays within the stream limit', async () => {
+  let text = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { text += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 30 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const baseline = stdout.listenerCount('resize'); let peak = baseline;
+  stdout.on('newListener', event => { if (event === 'resize') peak = Math.max(peak, stdout.listenerCount('resize') + 1); });
+  const labels = { ...worklineLabels('en', ''), windows: SLASH_WINDOW_TEST_LABELS }, controller = new AbortController();
+  const host = await openTerminalHost({ palette: plain, stdout: stdout as never, stdin: stdin as never, view: () => createElement(Text, null, 'ready') });
+  const running = runTerminalWorkline({ labels, shell: { host, take: () => ({ draft: null, queued: [], armedAt: null }) }, palette: plain, signal: controller.signal,
+    context: { installationId: 'i', projectId: 'p', scopeId: 's' }, target: 'scope', systemPrompt: 'system', historyMessages: 40,
+    completeTurn: async () => 'unused', errorText: String, decisionArmMs: 0 });
+  try {
+    await host.flushed(); await settle(80);
+    const closed = stdout.listenerCount('resize');
+    for (let index = 0; index < 12; index++) {
+      text = ''; stdin.write('/reasoning\r'); await until(() => text.includes(labels.windows!.reasoning.title), 'reasoning window'); await host.flushed();
+      stdin.write('\u001b'); await until(() => stdout.listenerCount('resize') === closed, 'closed window listeners released'); await host.flushed();
+      expect(stdout.listenerCount('resize')).toBe(closed);
+    }
+    expect(peak).toBeLessThanOrEqual(stdout.getMaxListeners());
+  } finally { controller.abort(); await host.close(); await running; }
+  expect(stdout.listenerCount('resize')).toBe(baseline);
+});
 // Owner-approved mark-art.json, pasted here as an independent art oracle (B11-MARK).
 const smallMark = [
   '      ⣿⣿',

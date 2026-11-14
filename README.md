@@ -187,14 +187,18 @@ Fetch the available revisions, replace `<revision>` with the wanted tag or commi
 git fetch origin --tags
 git checkout <revision>
 npm ci
-node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/update-build
-node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/update-build
+mkdir -p .pack/bwrap
+bwrap_build=$(mktemp -d .pack/bwrap/update-build.XXXXXX)
+node scripts/build-bwrap.mjs --arch all --out "$bwrap_build"
+node scripts/build-bwrap.mjs --stage-dev "$bwrap_build"
 npm run build
 npm link
 deckent --version
 ```
 
-Use a fresh `--out` directory each time, or stage an existing completed build that matches the checked-out bubblewrap lock.
+`mktemp` creates a fresh, empty build directory each time; the build script refuses to overwrite a non-empty one.
+Run both build steps in the same shell so they use the same directory. Keep a failed build for diagnosis and start again with a fresh directory.
+You can also stage an existing completed build that matches the checked-out bubblewrap lock.
 Then run `deckent doctor` in each existing project folder.
 If doctor reports `INSTALLATION_IDENTITY_RELOCATED`, see [the known limit](docs/known-limits.md#installation-moved): `deckent init identity --keep` is enough in a project that is not the registered source; the registered source needs more steps and has limits in this beta.
 

@@ -188,14 +188,18 @@ Uzak revizyonları alın, `<revision>` yerine istediğiniz etiketi veya commit'i
 git fetch origin --tags
 git checkout <revision>
 npm ci
-node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/update-build
-node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/update-build
+mkdir -p .pack/bwrap
+bwrap_build=$(mktemp -d .pack/bwrap/update-build.XXXXXX)
+node scripts/build-bwrap.mjs --arch all --out "$bwrap_build"
+node scripts/build-bwrap.mjs --stage-dev "$bwrap_build"
 npm run build
 npm link
 deckent --version
 ```
 
-Her seferinde yeni bir `--out` dizini kullanın veya seçtiğiniz revizyondaki bubblewrap kilidiyle eşleşen, tamamlanmış bir derlemeyi stage edin.
+`mktemp` her seferinde yeni, boş bir derleme dizini oluşturur; derleme betiği dolu bir dizinin üzerine yazmayı reddeder.
+İki derleme adımını da aynı kabukta çalıştırın; böylece aynı dizini kullanırlar. Başarısız derlemeyi tanılama için koruyun ve yeni bir dizinle başlayın.
+Seçtiğiniz revizyondaki bubblewrap kilidiyle eşleşen, tamamlanmış bir derlemeyi de stage edebilirsiniz.
 Ardından mevcut proje klasörlerinin her birinde `deckent doctor` çalıştırın.
 Doctor `INSTALLATION_IDENTITY_RELOCATED` bildirirse [bilinen sınıra](docs/known-limits.tr.md#kurulumun-konumu-değiştiğinde) bakın: kayıtlı kaynak olmayan projede `deckent init identity --keep` yeter; kayıtlı kaynakta ek adımlar gerekir ve bu betada sınırları vardır.
 

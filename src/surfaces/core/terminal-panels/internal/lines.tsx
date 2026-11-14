@@ -53,9 +53,10 @@ const WINDOW_CHROME_ROWS = 4, PICKER_CHROME_ROWS = 5, FALLBACK_ROWS = 24;
  * How many list rows fit under a window body of `bodyRows` (owner 2026-10-07: a window's height is capped to the terminal): the terminal's rows
  * minus what the rest of the live area keeps, the window's chrome, its body and the list's chrome. The list never goes below its minimum.
  * For a list that draws its own path and hints (not embedded); the settings panels use `PickerWindow` (one title, one hint row, one height).
+ * Width shares this resize subscription with height, so the window needs no second size listener.
  */
-export function usePickerRoom(bodyRows: number): Readonly<{ rows: number; footerRows: number }> {
+export function usePickerRoom(bodyRows: number): Readonly<{ rows: number; footerRows: number; columns: number }> {
   const size = useWindowSize(), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
   const rows = Math.max(LIST_PICKER_MIN_ROWS, (size.rows || FALLBACK_ROWS) - reserved - WINDOW_CHROME_ROWS - bodyRows - PICKER_CHROME_ROWS);
-  return { rows, footerRows: rows + PICKER_CHROME_ROWS };
+  return { rows, footerRows: rows + PICKER_CHROME_ROWS, columns: size.columns };
 }

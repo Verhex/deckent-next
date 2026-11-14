@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
-import { isSensitiveConfigKey, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
+import { isSensitiveConfigKey, redactSensitive, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { configServiceState, configWriteOperation, isProtectedConfigWrite, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import { applyOperationsBaseline, operationsBaselineOffer, registersOperations, type OwnerBaselineOpener } from './operations-baseline.js';
-import { applyWord, fieldDescription, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
+import { applyWord, configValueWord, fieldDescription, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
 import { configValueModel } from './choices.js';
 import { configChoiceWords, narrowConfigPanel, renderConfigKeyList, renderConfigLeaves, renderConfigOverrides, type ConfigPanelOpener } from './cli-view.js';
 
@@ -123,9 +123,10 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const outcome = await app.submit(action, action === 'set' ? { ...input, value } : input);
   if (outcome.status === 'approval-pending') { emit(outcome, { ...sinks, render: () => renderConfigPending(outcome, locale, 'cli').join('\n') }); return; }
   const { result } = outcome;
+  const remaining = action === 'unset' ? await app.explain({ keyPath }) : undefined;
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
-  emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale).join('\n') });
+  emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale, remaining).join('\n') });
   if (!parsed.json && registersOperations(keyPath) && person()) await offerOperationsBaseline(context, root, options, locale, sinks);
 }
 /** BeUser ZEY-02: after registering operations the person who lacks their cells gets the founder-baseline card at once (the installer's own plan). */
@@ -187,8 +188,11 @@ async function openPanel(context: ConfigCommandContext, root: string, options: C
   if (lines.length) emit(lines.join('\n'), { ...sinks, json: false });
 }
 function renderConfigChanged(keyPath: string, layer: 'project' | 'global', apply: 'live' | 'restart', result: { readonly backupPath: string | null; readonly overridden: boolean },
-  service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale): string[] {
-  return [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale), backup: result.backupPath ?? '-' }, locale),
+  service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale, remaining?: ConfigFieldView): string[] {
+  const values = { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale), backup: result.backupPath ?? '-' };
+  return [remaining ? t('config.surface.removed', { ...values, value: remaining.value === undefined ? t('config.surface.notDefined', {}, locale)
+    : terminalSafeText(configValueWord(remaining.value, remaining.redacted, locale)), source: sourceWord(remaining.source, locale) }, locale)
+    : t('config.surface.changed', values, locale),
     ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : []),
     ...(service ? [{ current: t('config.surface.service.current', {}, locale), stale: t('config.surface.service.stale', {}, locale),
       unknown: t('config.surface.service.unknown', {}, locale), stopped: t('config.surface.service.stopped', {}, locale) }[service]] : [])];
@@ -244,7 +248,7 @@ export async function terminalConfigWrite(root: string, request: Omit<ConfigWrit
   }
   pendingWrites.delete(key);
   const field = await context.configApplication!(root, options).explain({ keyPath: request.keyPath });
-  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field.apply, outcome.result, null, locale), approvalId: outcome.approvalId };
+  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field.apply, outcome.result, null, locale, request.action === 'unset' ? field : undefined), approvalId: outcome.approvalId };
 }
 
 /** `/config key=value` (T3 L4 shortcut): the key's schema reads the text (the text itself, else its JSON); the project layer is written. */
