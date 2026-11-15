@@ -29,6 +29,19 @@ class Screen extends Writable {
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
 /** G2-3: a panel question is a decision window — it counts keys once its key hints show after the quiet arming period (arming.ts). */
+/**
+ * Enter on a list row that only opens the next level. Hosted CI 2026-11-15 (run 43689872264, three attempts; the same shape as the red on
+ * b21cfe78c): an Enter sent the moment a list's first rows are drawn can be lost, and the next level never opens. Navigation only (never a
+ * confirmation): press again until the next level shows.
+ */
+async function enterUntil(press: (keys: string) => Promise<void>, shows: () => boolean, label: string) {
+  for (let tries = 0; tries < 6; tries++) {
+    await press(ENTER);
+    for (let waited = 0; waited < 100 && !shows(); waited++) await settle(10);
+    if (shows()) return;
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
 async function armed(frame: () => string, hint: string) {
   await settle(DECISION_ARM_DEFAULT + 80);
   for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
@@ -907,10 +920,8 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const ui = mount(panel('provider', { provider }).element, 120, 40);
     await until(() => ui.frame().includes('Fixture subscription'), 'subscription kind loaded');
-    await ui.press(ENTER);
-    await until(() => ui.frame().includes('Sign in'), 'subscription actions loaded');
-    await ui.press(ENTER);
-    await until(() => ui.frame().includes('Login directory'), 'login directory loaded');
+    await enterUntil(ui.press, () => ui.frame().includes('Sign in'), 'subscription actions loaded');
+    await enterUntil(ui.press, () => ui.frame().includes('Login directory'), 'login directory loaded');
     await ui.press(ENTER); // default directory; fake login in suspended Ink
     await until(() => ui.frame().includes('Who may use this login now:'), 'delegation loaded after login');
     expect(ui.frame()).toContain('Who may use this login now:');
@@ -945,9 +956,9 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const { element, calls } = panel('provider', { provider }, locale), ui = mount(element, 180, 45);
     // Wait for each real screen (CI 41293916929 shard 15: three Enters 120 ms apart outran the login directory screen).
-    await until(() => ui.frame().includes(kind.label), 'subscription kind loaded'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(t('tui.provider.login.action', {}, locale).replace('…', '')), 'subscription actions loaded'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(kind.label), 'subscription kind loaded');
+    await enterUntil(ui.press, () => ui.frame().includes(t('tui.provider.login.action', {}, locale).replace('…', '')), 'subscription actions loaded');
+    await enterUntil(ui.press, () => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
     await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent with the config policy loaded');
     expect(ui.frame()).toContain(subscription.words.configPolicy);
     await armed(ui.frame, t('tui.picker.hint_confirm', {}, locale));
@@ -1055,9 +1066,12 @@ it('model/provider windows open during startup but a resulting approval waits fo
     const press = async (key: string) => { view.stdin.write(key); await settleWorkline(40); };
     await press(`/${kind}${ENTER}`);
     await until(() => view.stdout.frame.includes(kind === 'model' ? 'Models · scope' : 'Providers'), 'local window before readiness');
-    await press(ENTER); await press(DOWN); await press(ENTER);
-    if (kind === 'provider') {
-      await until(() => view.stdout.frame.includes('model to connect'), 'provider models'); await press(ENTER);
+    // Every key waits for the step it acts on (hosted CI 2026-11-15: three keys 40 ms apart outran the list).
+    if (kind === 'model') {
+      await enterUntil(press, () => view.stdout.frame.includes(SCOPE_KEYS), 'scope step'); await press(DOWN); await press(ENTER);
+    } else {
+      await enterUntil(press, () => /Providers › OpenAI API/u.test(view.stdout.frame), 'provider level'); await press(DOWN);
+      await enterUntil(press, () => view.stdout.frame.includes('model to connect'), 'provider models'); await press(ENTER);
       await until(() => view.stdout.frame.includes('Waiting for approval'), 'connection result'); await press(ENTER);
     }
     await until(() => view.stdout.text.includes('OPENING-WAIT'), 'approval waits');
@@ -1196,9 +1210,9 @@ it('K13: the provider and onboarding subscription window offers the registry met
         cli: { configDir: '/fixture/login', owned: true, delegate: [] } }) as never }, {}, locale, () => 'REFUSED');
     const { port } = providerPort(), subscription = source.subscription!;
     const ui = mount(panel('provider', { provider: { ...port, subscription, inspect: async () => ({ ...KINDS, kinds: [kind] }) } as ProviderWindowPort }, locale).element);
-    await until(() => ui.frame().includes(kind.label), 'subscription listed'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(subscription.words.action.replace('…', '')), 'subscription action'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(kind.label), 'subscription listed');
+    await enterUntil(ui.press, () => ui.frame().includes(subscription.words.action.replace('…', '')), 'subscription action');
+    await enterUntil(ui.press, () => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
     await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice');
     expect(ui.frame()).toContain(locale === 'en' ? 'Sign in with a device code' : 'Cihaz kodu ile giriş');
     await ui.press(ESC); expect(requests).toEqual([]);
