@@ -203,7 +203,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`
   window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
   questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` retains Enter-as-cancel; onboarding has its separate
-  decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority) owns one ephemeral typed-text
+  decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority; the project-instruction trust and
+  init windows are `decision` windows too, so no choice card stays outside) owns one ephemeral typed-text
   state. A rejected burst, an unconsumed paste or an unhandled printable key starts it. Owner decision 109 (2026-11-14) refines early input:
   exactly one printable character swallowed as a single-key read during the entire unarmed period is remembered. Once armed, only the
   same character is delivered as a first key; another printable key starts typed text, and an unhandled repeat does too. Two or more
