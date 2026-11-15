@@ -330,6 +330,8 @@ it.skipIf(process.platform === 'win32')('107: ignored typing and paste cannot co
         expect(await observeSetupPermissions(root, 's', options)).toMatchObject({ currentMode: 'standart', state: 'needs-confirmation' });
         expect(await readFile(policyPath, 'utf8')).toBe(before);
       }
+      // Shift+Enter is a new line, never an answer (Astra 3134): alone it applies nothing.
+      stdin.write('\u001b[13;2u'); await settle(60); expect(applied).toEqual([]); expect(auditCount()).toBe(beforeAudit);
       // Both ways of making a deliberate choice: Enter again, or new typing followed by an arrow and Enter.
       if (locale === 'tr') { stdin.write('x'); await settle(20); stdin.write('\u001b[B'); await settle(20); }
       stdin.write('\r'); expect(await result).toBe('applied');

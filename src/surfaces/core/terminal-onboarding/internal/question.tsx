@@ -48,7 +48,7 @@ function OnboardingQuestionView({ question, locale, finish, copy = null, known, 
       setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
       return;
     }
-    if (key.return && (key.ctrl || key.meta)) return;
+    if (key.return && (key.ctrl || key.meta || key.shift)) return; // a new line never answers a card (Shift+Enter too, as on every Window)
     if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) { ignoredTyping.current = false; setTypingHint(false); }
     if (key.return && ignoredTyping.current) { ignoredTyping.current = false; setTypingHint(true); return; }
     if (key.escape) { send({ id: 'later' }); return; }
