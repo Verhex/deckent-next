@@ -452,7 +452,7 @@ it('109: slow-apply text follows the next setup question; a lone early y repeats
   } finally { await early.close(); }
 });
 
-it('108: only arrows clear typed text; first-key letters/digits and early Enter keep their meaning', async () => {
+it('108/111: only arrows clear typed text; first-key y, n and digits and early Enter keep their meaning; a first j or k is text', async () => {
   const run = harness(), controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
   await controller.step('en'); const model = controller.model();
   for (const key of ['\u001b[B', 'j', 'k', 'y', '1', 'n', '2']) {
@@ -465,12 +465,18 @@ it('108: only arrows clear typed text; first-key letters/digits and early Enter 
       expect(view.sent).toEqual([key === '\u001b[B' ? 'later' : 'yes']);
     } finally { await view.close(); }
   }
-  for (const [key, answer] of [['y', 'yes'], ['n', 'later'], ['1', 'yes'], ['j', 'later'], ['k', 'yes']] as const) {
+  for (const [key, answer] of [['y', 'yes'], ['n', 'later'], ['1', 'yes']] as const) {
+    const view = await setupWindowAt(model);
+    try { await view.press(key); expect(view.sent).toEqual([answer]); } finally { await view.close(); }
+  }
+  // Owner 111 (2026-11-15): j and k are ordinary letters on a card. As a first key they move nothing and start typed text, so the Enter
+  // after them chooses nothing (before, j + Enter answered "Not now" and k + Enter the row above); the next Enter takes the highlighted row.
+  for (const key of ['j', 'k']) {
     const view = await setupWindowAt(model);
     try {
-      await view.press(key);
-      if (key === 'j' || key === 'k') { expect(view.sent).toEqual([]); await view.press('\r'); }
-      expect(view.sent).toEqual([answer]);
+      await view.press(key); expect(view.sent).toEqual([]); expect(view.text()).toContain(model.decisionArm.typedText);
+      await view.press('\r'); expect(view.sent).toEqual([]);
+      await view.press('\r'); expect(view.sent).toEqual(['yes']);
     } finally { await view.close(); }
   }
   const early = await setupWindowAt(model, { early: true });
