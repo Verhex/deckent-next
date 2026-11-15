@@ -19,11 +19,12 @@ const key = (patch: Partial<Key> = {}): Key => ({ upArrow: false, downArrow: fal
 
 describe('question model', () => {
   const options: QuestionOption[] = [{ id: 'a', label: 'A', key: 'y' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C', key: 'n' }];
-  it('moves with arrows and j/k, submits with Enter, a shown number or an option letter (yes/no letters derived from the answer role), cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
+  it('moves with arrows (j and k are ordinary letters: owner 111), submits with Enter, a shown number or an option letter (yes/no letters derived from the answer role), cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
     const at = (n: number) => ({ at: n, ticked: [] as string[] });
     expect(questionStep('single', options, at(0), '', key({ downArrow: true }))).toEqual({ kind: 'move', state: at(1) });
-    expect(questionStep('single', options, at(2), 'j', key())).toEqual({ kind: 'move', state: at(2) });
-    expect(questionStep('single', options, at(2), 'k', key())).toEqual({ kind: 'move', state: at(1) });
+    expect(questionStep('single', options, at(1), '', key({ upArrow: true }))).toEqual({ kind: 'move', state: at(0) });
+    // Owner 111 (2026-11-15): `k` then Enter used to answer the row above the default; j and k are no moves any more.
+    for (const letter of ['j', 'k']) for (const kind of ['single', 'multi'] as const) expect(questionStep(kind, options, at(2), letter, key())).toEqual({ kind: 'ignored' });
     // Owner 2026-10-29: the number a row shows answers a single-choice question at once; a number past the last row does nothing.
     expect(questionStep('single', options, at(0), '3', key())).toEqual({ kind: 'submit', ids: ['c'] });
     expect(questionStep('single', options, at(0), '4', key())).toEqual({ kind: 'ignored' });

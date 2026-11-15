@@ -8,7 +8,7 @@ import { WINDOW_PRIORITY } from './window-stack.js';
 
 /**
  * One question contract for the terminal (TERMINAL-SABIT-DUZEN slice 2, owner 2026-10-18): approvals, single-choice and multi-choice
- * questions share these keys — ↑↓ or j/k move, Space toggles (multi), Enter submits the highlighted option (single) or the ticked ones (multi),
+ * questions share these keys — ↑↓ move, Space toggles (multi), Enter submits the highlighted option (single) or the ticked ones (multi),
  * Esc and Ctrl+C cancel. A single-choice question is also answered at once by a shown number 1–9 (owner 2026-10-29) or an option's own letter
  * (`s`, `a`, `q`, …); on a multi-choice question a number only moves. A digit beyond the option count is ignored. A yes/no
  * question's answers declare `role` instead of a letter (BeUser walk16): `optionKey` derives `y`/`n` in every locale, so every yes/no question
@@ -31,8 +31,9 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
   const last = Math.max(0, options.length - 1), move = (at: number): QuestionStep => ({ kind: 'move', state: { ...state, at: Math.min(last, Math.max(0, at)) } });
   if (key.escape || (key.ctrl && input === 'c')) return { kind: 'cancel' };
   if (key.ctrl || key.meta) return { kind: 'ignored' };
-  if (key.upArrow || input === 'k') return move(state.at - 1);
-  if (key.downArrow || input === 'j') return move(state.at + 1);
+  // Owner 111 (2026-11-15): `j` and `k` are ordinary letters on a card, never a move — `k` then Enter used to answer the row above "No".
+  if (key.upArrow) return move(state.at - 1);
+  if (key.downArrow) return move(state.at + 1);
   if (key.return) {
     if (kind === 'multi') return { kind: 'submit', ids: options.filter(option => state.ticked.includes(option.id)).map(option => option.id) };
     const option = options[state.at];

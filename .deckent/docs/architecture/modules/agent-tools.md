@@ -42,7 +42,7 @@ a missing integrity key is reported, never created); the host reports `tool-call
 evaluation (a deny since the request wins). Outcomes are typed call results: `ok` after the run, `denied` (owner or policy),
 `approval-expired`, `cancelled`, or `approval-required` when no approval could be obtained; nothing but an explicit, re-authorized
 allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; the answers are a list —
-Yes once, for the session or always where offered, and No — chosen with ↑↓/j/k/1–9 and Enter or the option's letter; the highlight
+Yes once, for the session or always where offered, and No — chosen with ↑↓/1–9 and Enter or the option's letter; the highlight
 starts on No and Esc denies) and closes it when the approval settles elsewhere; a late answer to one decision closes only its
 own card, never a newer call's (Astra 2092 R1). v14 also carries `tool.output` for slice 3.
 **Agent file edits as C11 effects (T-L4 slice 2).** `edit_file` (exact `old_string` → `new_string`, unique unless `replace_all`; no

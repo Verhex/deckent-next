@@ -265,11 +265,11 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
         }
-        // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, ↑↓/j/k scroll them, the page keys scroll the
+        // Read-only diff of the changed files (ready step only): ↑↓ choose a file, Enter opens its hunks, ↑↓ scroll them (no letter moves: owner 111), the page keys scroll the
         // window, Esc goes back. No key here delivers, adopts or declines.
         const source = stage.kind === 'ready' ? visible.preview : stage.kind === 'failed' && !visible.preview ? visible.patch : undefined, diffs = source?.diffs;
         if (diffs?.length && source && !key.ctrl && !key.meta) {
-          const up = key.upArrow || text === 'k', down = key.downArrow || text === 'j', file = visible.fileSel ?? 0;
+          const up = key.upArrow, down = key.downArrow, file = visible.fileSel ?? 0;
           if (visible.diffScroll !== null && visible.diffScroll !== undefined) {
             // The page keys stay the Window's own scroll, so a short terminal still reaches the page's last rows; every other key stays here and never decides.
             if (key.pageUp || key.pageDown || key.home || key.end) return false;

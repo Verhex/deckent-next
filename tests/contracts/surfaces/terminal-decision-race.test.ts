@@ -134,6 +134,29 @@ it('109: one early character only repeats itself on a real approval card and a q
   }
 }, 45_000);
 
+it('111: j and k are ordinary letters on the real approval card: k then Enter, k then a and j then s decide nothing', async () => {
+  class Screen extends Writable { isTTY = true; rows = 40; columns = 120; frame = ''; override _write(chunk: Buffer, _encoding: string, done: () => void) { if (chunk.toString().includes('JK-CARD')) this.frame = chunk.toString(); done(); } }
+  for (const [first, second] of [['k', '\r'], ['k', 'a'], ['j', 's']] as const) {
+    const labels = decisionArmLabels('en'), calls: unknown[][] = [], stdout = new Screen();
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => stdin, ref: () => stdin, unref: () => stdin });
+    const instance = render(createElement(DecisionArmLabelsContext.Provider, { value: labels }, createElement(WindowStackProvider, { composerDefault: true }, createElement(DecisionCard, {
+      title: { spans: [{ text: 'JK-CARD' }], fields: [] }, projectedLines: [], prompt: 'Enter confirm', pendingText: 'Pending',
+      scopes: ['session', 'always'], choices: { once: 'Once', session: 'Session', always: 'Always', no: 'No' }, onDecide: (...args: unknown[]) => { calls.push(args); } }))),
+      { stdout: stdout as never, stdin: stdin as never, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
+    mounted.push(instance);
+    const press = async (input: string) => { stdin.write(input); await settle(35); };
+    try {
+      await until(() => stdout.frame.includes('Enter confirm'), `${first}${second}: armed`);
+      // Before owner 111 the first key moved the highlight off "No": k + Enter approved the row above it, k + a / j + s reached a standing shortcut.
+      await press(first); await until(() => stdout.frame.includes(labels.typedText), `${first}: typed text`);
+      await press(second); expect(calls, `${first} then ${JSON.stringify(second)}`).toEqual([]);
+      if (second !== '\r') { await press('\r'); expect(calls).toEqual([]); }
+      await until(() => stdout.frame.includes(labels.unchosen), 'nothing chosen'); await press('n');
+      expect(calls).toEqual([[false, undefined, undefined]]);
+    } finally { instance.unmount(); }
+  }
+}, 20_000);
+
 describe('decision card keystroke race (real Workline, production arming)', () => {
   it('keys typed for the input before the card appeared stay in the draft and decide nothing', async () => {
     const gate = hold(), calls: unknown[][] = [], view = mountCard(calls, gate.promise);

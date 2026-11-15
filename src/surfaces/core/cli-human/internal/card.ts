@@ -47,7 +47,7 @@ export function standingCardOptions(locale: Locale, offer: Readonly<{ session?: 
 }
 
 /**
- * Ask one question on the person's terminal with the terminal's own window and question keys (↑↓ or j/k, 1–9, Enter, the option letter;
+ * Ask one question on the person's terminal with the terminal's own window and question keys (↑↓, 1–9, Enter, the option letter;
  * Esc/Ctrl+C cancel; armed against keys typed before it appeared). Returns the chosen option id, or null when cancelled or aborted, so the
  * caller applies nothing. `cliCardGate` refuses first (TERMINAL_TTY_REQUIRED / CLI_USAGE). Ink loads only here, never at CLI start.
  */
