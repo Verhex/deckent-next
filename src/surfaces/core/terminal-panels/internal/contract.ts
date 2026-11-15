@@ -1,6 +1,7 @@
 import type { PermissionModeView } from '#domain/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
+import type { DecisionArmLabels } from '#surfaces/core/terminal-window/index.js';
 import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 /**
@@ -333,6 +334,8 @@ export interface BudgetPanelLabels {
   readonly belowSettled?: string;
 }
 export interface PanelLabels {
+  /** Hint-row words of a confirmation step for a host outside the Workline (`deckent config`); the Workline provides its own. */
+  readonly decisionArm?: DecisionArmLabels;
   readonly policy?: PolicyPanelLabels;
   readonly picker: PickerLabels;
   readonly position: string;
