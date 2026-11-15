@@ -50,7 +50,9 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false) {
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, createElement(WindowStackProvider, null, node)) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); } };
+  return { frame: () => stdout.frame, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+    /** One stdin chunk, as a terminal sends a modified key. */
+    raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
 const VIEW: PermissionModeView = { schemaVersion: 1, scopeId: 'scope', supported: true, mode: 'standart', askEdits: false, revision: 'r1', eligible: true, fullAccess: false } as PermissionModeView;
 type Calls = { notices: PanelNotice[]; errors: unknown[]; closed: number; approvals: string[] };
@@ -75,7 +77,10 @@ describe('/mode window', () => {
     expect(view.frame()).toContain('izin gerekir');
     await view.press(ENTER);
     expect(selected).toEqual([]); expect(calls.closed).toBe(0);
-    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); // wraps to full-auto (standart → ask-edits → full-auto)
+    await view.press(`${DOWN}${DOWN}${DOWN}`); // wraps to full-auto (standart → ask-edits → full-auto)
+    // Shift+Enter is a new line, never a selection, also in a catalog list (its own key handler; Astra 3136).
+    await view.raw('\u001b[13;2u', 60); expect(selected).toEqual([]); expect(calls.closed).toBe(0);
+    await view.press(ENTER);
     expect(selected).toEqual(['full-auto']); expect(calls.closed).toBe(1);
   });
   it('a load that lasts a second or more shows its live elapsed seconds (FIX8a R26)', async () => {

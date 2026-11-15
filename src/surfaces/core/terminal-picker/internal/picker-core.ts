@@ -223,7 +223,8 @@ export function pickerActionOf(input: string, key: PickerKeyEvent, stage: Picker
   if (key.ctrl) return input === 'c' && !key.meta ? { type: 'cancel' } : input === 'u' && stage === 'list' ? { type: 'clearFilter' } : null;
   if (key.meta) return null;
   if (key.escape) return { type: 'escape' };
-  if (key.return) return { type: 'enter' };
+  // Shift+Enter is a new line, never a selection (Astra 3136): the list's own key handler is not behind the Window's gate.
+  if (key.return) return key.shift ? null : { type: 'enter' };
   if (key.upArrow) return { type: 'move', direction: 'up' };
   if (key.downArrow) return { type: 'move', direction: 'down' };
   if (stage === 'scope') {
