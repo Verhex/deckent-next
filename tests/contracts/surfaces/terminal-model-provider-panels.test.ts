@@ -34,6 +34,8 @@ async function armed(frame: () => string, hint: string) {
   for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
   expect(frame()).toContain(hint);
 }
+/** Owner 108: the armed hint row of a list's scope step and of a confirm list (the scope hint also ends in "Enter confirm"). */
+const SCOPE_KEYS = 'choose scope', CONFIRM_KEYS = '↑↓ choose · Enter confirm', CONFIRM_KEYS_TR = '↑↓ seç · Enter onayla';
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 function splitKeys(keys: string): string[] {
@@ -104,6 +106,10 @@ describe('/model window', () => {
     // The scope step: this session, or (locked here: no governed default write is bound) also the default.
     expect(view.frame()).toContain('This session only (from the next turn)');
     expect(view.frame()).toContain('This session, and make it my default');
+    // Owner 108: the scope step is a decision window. Typed text and its Enter pin nothing; the next Enter confirms.
+    await armed(view.frame, SCOPE_KEYS);
+    await view.press('x'); expect(view.frame()).toContain('Text typed here');
+    await view.press(ENTER); expect(pins).toEqual([]); expect(calls.closed).toBe(0); expect(view.frame()).toContain('Nothing was chosen.');
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
@@ -111,7 +117,7 @@ describe('/model window', () => {
     const rapid = modelPort(MODELS), next = panel('model', { model: rapid.port }), coalesced = mount(next.element, 100, 40);
     await settle(80); await coalesced.raw('fast\r', 60);
     expect(coalesced.frame()).toContain('This session only (from the next turn)');
-    expect(rapid.pins).toEqual([]); await coalesced.press(ENTER);
+    expect(rapid.pins).toEqual([]); await armed(coalesced.frame, SCOPE_KEYS); await coalesced.press(ENTER);
     expect(rapid.pins).toEqual(['fast']); expect(next.calls.closed).toBe(1);
   });
 
@@ -152,6 +158,7 @@ describe('/model window', () => {
     const view = mount(element, 100, 40);
     await settle(80);
     await view.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(pins).toEqual([]); await armed(view.frame, SCOPE_KEYS);
     await view.press(`${DOWN}${ENTER}`, 80);
     expect(pins).toEqual(['fast']); expect(written).toEqual(['fast']);
     expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
@@ -169,9 +176,11 @@ describe('/model window', () => {
       const view = mount(element, 100, 40);
       await settle(80);
       await view.press(`${DOWN}${DOWN}${ENTER}`);
-      await view.press(`${DOWN}${ENTER}`, 80);
+      // The Enter that answers the scope step, pressed twice, never answers the list that follows it: that list arms anew.
+      await armed(view.frame, SCOPE_KEYS); await view.press(`${DOWN}${ENTER}${ENTER}`, 80);
       expect(view.frame()).toContain('This project names its own model (team-model); it wins over your default here.');
       expect(view.frame()).toContain("Remove the project's model (your default applies)"); expect(view.frame()).toContain("Make the project's model this one too");
+      expect(asked).toEqual([]); await armed(view.frame, CONFIRM_KEYS);
       await view.press(keys, 80);
       expect(asked).toEqual(expected ? [expected] : []);
       expect(calls.closed).toBe(1);
@@ -602,11 +611,16 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(ENTER);
     expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
     expect(budget.applied).toEqual([]);
-    await screen.press(ESC);
+    // Owner 108: the confirm list is a decision window with no filter. A typed n is text (it used to filter, and Enter then sent the
+    // "confirm" row left on top); its Enter sends nothing and neither does Esc.
+    await armed(screen.frame, CONFIRM_KEYS);
+    await screen.press('n'); expect(screen.frame()).toContain('Text typed here');
+    await screen.press(ENTER, 80); expect(budget.applied).toEqual([]); expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
+    await screen.press(ESC); expect(budget.applied).toEqual([]);
     await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
     expect(budget.applied).toEqual([]);
-    await screen.press(ENTER, 80);
+    await armed(screen.frame, CONFIRM_KEYS); await screen.press(ENTER, 80);
     expect(budget.applied).toEqual([{ action: 'create', usd: 25, unfreeze: false }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
   });
@@ -627,12 +641,13 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await settle(80);
     await screen.press(ENTER); await screen.press(`${UP}${ENTER}`);
     expect(screen.frame()).toContain('Budget in USD (whole dollars)');
+    await armed(screen.frame, '←→ step'); // owner 108: the stepper and the confirm list after it are decision windows
     await screen.press(`99${RIGHT}${RIGHT}${RIGHT}${RIGHT}`);
     // 5 → 7: the bound stops the step; the typed 9s changed nothing.
     expect(screen.frame()).toContain('7'); expect(screen.frame()).not.toContain('99');
     await screen.press(ENTER);
     expect(screen.frame()).toContain("Set this scope's shared budget to 7 USD?");
-    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([]); await armed(screen.frame, CONFIRM_KEYS); await screen.press(ENTER, 80);
     expect(budget.applied).toEqual([{ action: 'create', usd: 7, unfreeze: false }]); expect(calls.closed).toBe(1);
   });
 
@@ -649,10 +664,10 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
     expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
-    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(`${DOWN}${DOWN}${ENTER}`); // owner 108: the confirm list arms each time it opens
     expect(budget.applied).toEqual([]);
     expect(screen.frame()).toMatch(/>.*25 USD/u);
-    await screen.press(`${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    await screen.press(`${DOWN}${ENTER}`); await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
@@ -668,7 +683,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       const screen = mount(element, 140, 40); await settle(80);
       expect(screen.frame()).toContain('Güncel protokole geç');
       await screen.press(ENTER); expect(screen.frame()).toContain('API anahtarı korunur'); expect(applied).toEqual([]);
-      await screen.press(confirm ? ENTER : ESC, 80);
+      await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(confirm ? ENTER : ESC, 80);
       expect(applied).toEqual(confirm ? [1] : []); expect(calls.approvals).toEqual(confirm ? ['protocol-approval'] : []); expect(pins).toEqual([]);
     }
   });
@@ -688,6 +703,10 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     await screen.press(ENTER);
     expect(screen.frame()).toContain('Turn on prompt cache (5 min)?'); expect(screen.frame()).toContain('1.25× the input price');
     expect(screen.frame()).toContain('Yes, turn it on (5 min)'); expect(cache.applied).toEqual([]);
+    // Owner 108: the confirm list is a decision window. Typed text and its Enter write nothing; the next Enter is the answer.
+    await armed(screen.frame, CONFIRM_KEYS);
+    await screen.press('yes'); await screen.press(ENTER, 80);
+    expect(cache.applied).toEqual([]); expect(calls.closed).toBe(0); expect(screen.frame()).toContain('Nothing was chosen.');
     await screen.press(ENTER, 80);
     expect(cache.applied).toEqual([1]); expect(calls.notices).toEqual([{ level: 'info', text: 'Prompt cache (5 min) turned on for 1 model(s).' }]);
     expect(calls.closed).toBe(1); expect(pins).toEqual([]);
@@ -697,7 +716,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     const cancel = cachePort(), { port } = modelPort(MODELS);
     const first = panel('model', { model: { ...port, cache: cancel.port } });
     const screen = mount(first.element, 140, 40); await settle(80);
-    await screen.press(ENTER); await screen.press(`${DOWN}${ENTER}`, 80);
+    await screen.press(ENTER); await armed(screen.frame, CONFIRM_KEYS); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(cancel.applied).toEqual([]); expect(first.calls.closed).toBe(1);
     const held = cachePort('approval-pending');
     const provider: ProviderPanelPort = { inspect: async () => ({ title: 'Sağlayıcılar', kinds: [], notes: [] }), endpoint: () => ({ ok: false, reason: '-' }),
@@ -706,7 +725,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     const tr = mount(second.element, 140, 40); await settle(80);
     expect(tr.frame()).toContain('Önbelleği aç (5 dk)');
     await tr.press(ENTER); expect(tr.frame()).toContain('Evet, aç (5 dk)');
-    await tr.press(ENTER, 80);
+    expect(held.applied).toEqual([]); await armed(tr.frame, CONFIRM_KEYS_TR); await tr.press(ENTER, 80);
     expect(held.applied).toEqual([1]); expect(second.calls.approvals).toEqual(['approval-cache']);
   });
 
@@ -724,17 +743,17 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       expect(pins).toEqual([]);
       expect(screen.frame()).toContain('New context');
       expect(screen.frame()).toContain('Continue (the whole history');
-      await screen.press(answer, 60);
+      await armed(screen.frame, SCOPE_KEYS); await screen.press(answer, 60);
       expect(pins).toEqual([{ model: 'fast', fresh }]);
       expect(calls.notices.map(item => item.text).join('\n')).toContain(fresh ? 'New context for fast' : 'fast continues with the whole history');
     }
     const esc = switchPort(60_000), escaped = panel('model', { model: esc.port });
     const screen = mount(escaped.element, 140, 40); await settle(80);
-    await screen.press(`${DOWN}${DOWN}${ENTER}${ESC}`, 60);
+    await screen.press(`${DOWN}${DOWN}${ENTER}`); await armed(screen.frame, SCOPE_KEYS); await screen.press(ESC, 60); // an Esc that counts
     expect(esc.pins).toEqual([]);
     const small = switchPort(null), quiet = panel('model', { model: small.port });
     const other = mount(quiet.element, 140, 40); await settle(80);
-    await other.press(`${DOWN}${DOWN}${ENTER}${ENTER}`, 60);
+    await other.press(`${DOWN}${DOWN}${ENTER}`); await armed(other.frame, SCOPE_KEYS); await other.press(ENTER, 60);
     expect(small.pins).toEqual([{ model: 'fast', fresh: false }]);
   });
 
@@ -795,7 +814,8 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
     await settle(80);
     const shapes = [windowShape(view.frame(), 'Models · scope')];
     await view.press(DOWN); expect(view.frame()).toContain('NOT-ACTIVE'); shapes.push(windowShape(view.frame(), 'Models · scope'));
-    await view.press(`\u001B[A${ENTER}`); expect(view.frame()).toContain('This session only'); shapes.push(windowShape(view.frame(), 'Models · scope'));
+    // Owner 108: the scope step shows its key-hint row once it is armed.
+    await view.press(`\u001B[A${ENTER}`); expect(view.frame()).toContain('This session only'); await armed(view.frame, SCOPE_KEYS); shapes.push(windowShape(view.frame(), 'Models · scope'));
     expect(shapes.every(shape => shape.titles === 1 && shape.hints === 1 && shape.height === shapes[0]!.height), JSON.stringify(shapes)).toBe(true);
   });
   it('budget (amount, then confirm with its question as the title) and the cache confirm', async () => {
@@ -804,13 +824,13 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
     const view = mount(panel('model', { model: { ...modelPort(MODELS).port, budget } }).element);
     await settle(80); await view.press(ENTER);
     const amount = windowShape(view.frame(), 'Create budget');
-    await view.press(ENTER);
+    await view.press(ENTER); await armed(view.frame, CONFIRM_KEYS); // owner 108: a confirm list shows its key-hint row once it is armed
     const confirm = windowShape(view.frame(), "Set this scope's shared budget to 5 USD?");
     expect([amount, confirm]).toEqual([{ height: amount.height, titles: 1, hints: 1 }, { height: amount.height, titles: 1, hints: 1 }]);
     const cache = { inspect: async () => ({ detail: 'one', lines: [{ label: '', text: 'WHAT-CHANGES' }] }),
       apply: async (): Promise<ConfigPanelOutcome> => ({ status: 'applied', lines: ['on'], approvalId: null }) };
     const cached = mount(panel('model', { model: { ...modelPort(MODELS).port, cache } }).element);
-    await settle(80); await cached.press(ENTER);
+    await settle(80); await cached.press(ENTER); await armed(cached.frame, CONFIRM_KEYS);
     expect(windowShape(cached.frame(), 'Turn on prompt cache (5 min)?')).toMatchObject({ titles: 1, hints: 1 });
   });
   it('workspace: the profiles, the Loading frame while the list is read and the workspaces', async () => {
@@ -894,6 +914,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     await ui.press(ENTER); // default directory; fake login in suspended Ink
     await until(() => ui.frame().includes('Who may use this login now:'), 'delegation loaded after login');
     expect(ui.frame()).toContain('Who may use this login now:');
+    await armed(ui.frame, CONFIRM_KEYS); // owner 108: the consent list is a decision window; it stays armed while boxes are ticked
     await ui.press(`${DOWN}${ENTER}`, 60); // tick/untick system
     expect(requests).toEqual([null]);
     await ui.press(`\u001B[A${ENTER}`, 60); // confirm selection
@@ -929,6 +950,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     await until(() => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
     await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent with the config policy loaded');
     expect(ui.frame()).toContain(subscription.words.configPolicy);
+    await armed(ui.frame, t('tui.picker.hint_confirm', {}, locale));
     const reason = policy === 'unknown' ? t('tui.provider.login.policyUnread', {}, locale)
       : t('tui.provider.login.policyBlocked', { policy: 'company-profile-write', layer: 'project' }, locale);
     for (const actor of ['system', 'ai'] as const) {
@@ -947,7 +969,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     expect(calls.errors).toEqual([]);
     mounted.pop()!.unmount();
   }
-});
+}, 90_000); // 18 mounts, each waiting for the consent list to arm (owner 108): well above the default on a slow runner
 
 it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {
   const { port, requests } = providerPort();
@@ -979,6 +1001,10 @@ it('a blocked model offers its governed repair, writes only after the card, and 
   const view = mount(element, 80, 35, true);
   await settle(80); await view.press(ENTER); await view.press(ENTER);
   expect(view.frame()).toContain('Apply state change'); expect(fixed).toEqual([]);
+  // Owner 108: the apply/keep list is a decision window. Typed text and its Enter call no repair; the next Enter applies it.
+  await armed(view.frame, 'choose · Enter confirm');
+  await view.press('ok'); await view.press(ENTER, 80);
+  expect(fixed).toEqual([]); expect(pins).toEqual([]); expect(view.frame()).toContain('Apply state change');
   await view.press(ENTER); await settle(80);
   expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
 });
@@ -998,7 +1024,7 @@ it('reloading partly loaded model/provider windows ignores the old generation su
     const window = panel(kind, ports), ui = mount(window.element);
     await until(() => ui.frame().includes(kind === 'model' ? 'coder' : 'Providers'), 'partly loaded window');
     if (kind === 'model') {
-      await ui.press(`${ENTER}${ENTER}`); expect(ui.frame()).toContain('Apply state change'); await ui.press(ENTER);
+      await ui.press(`${ENTER}${ENTER}`); expect(ui.frame()).toContain('Apply state change'); await armed(ui.frame, CONFIRM_KEYS); await ui.press(ENTER);
     } else {
       // Enter the first provider's action list, then back out of its masked key entry to reload.
       await ui.press(`${ENTER}${ENTER}`); await ui.press(ESC);
@@ -1190,7 +1216,7 @@ it('R2a: /model pins an unverified (unknown) subscription model; its first turn 
   const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect: unknown, inspectMany: async (_surface, refs) => Promise.all(refs.map(unknown)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
-  await ui.press(ENTER + ENTER);
+  await ui.press(ENTER); await armed(ui.frame, SCOPE_KEYS); await ui.press(ENTER);
   await until(() => model.pins.length > 0, 'unknown model pinned');
   expect(calls.errors).toEqual([]);
 });
@@ -1204,7 +1230,7 @@ it('K13: /model rechecks subscription readiness at confirmation and does not pin
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
   ready = false;
-  await ui.press(ENTER + ENTER);
+  await ui.press(ENTER); await armed(ui.frame, SCOPE_KEYS); await ui.press(ENTER);
   await until(() => calls.errors.length > 0, 'revocation reported');
   expect(model.pins).toEqual([]);
   expect(calls.errors[0]).toMatchObject({ code: 'TERMINAL_MODEL_SWITCH_REFUSED' });

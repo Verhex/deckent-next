@@ -89,7 +89,8 @@ describe('record window Ink render and keyboard boundary', () => {
       inspect: async () => ({ title: 'Configuration', notes: [], fields: [{ key: 'execution.adoption.targets', section: 'execution', description: 'Adoption targets', value: '[]', source: 'project', apply: 'restart', expected: 'array', choices: [], records: true, free: false, unsettable: false, sensitive: false,
         locks: { project: { blocked: null, note: null }, global: { blocked: 'denied', note: null } } }] }) };
     const view = mount(createElement(SettingsPanel, { kind: 'config', ports: { config }, labels: terminalPanelLabels('en'), push: next => { notices.push(...next); }, onError: () => undefined, errorText: String, onClose: () => undefined, openApproval: id => { approvals.push(id); } }));
-    await pause(); await view.press(ENTER, ENTER, ENTER, ENTER); expect(view.frame()).toContain('Add a member');
+    // The layer step is a decision window (owner 108): its Enter counts once its key hints show.
+    await pause(); await view.press(ENTER, ENTER, ENTER); await vi.waitFor(() => expect(view.frame()).toContain('choose scope')); await view.press(ENTER); expect(view.frame()).toContain('Add a member');
     await view.press(ENTER, ENTER, ENTER, DOWN, ENTER); await vi.waitFor(() => expect(view.frame()).toContain('Enter confirms')); await view.press(ENTER);
     await vi.waitFor(() => expect(approvals).toEqual(['approval-1'])); expect(notices).toEqual([{ level: 'warning', text: 'Config: Nothing written' }]);
   });

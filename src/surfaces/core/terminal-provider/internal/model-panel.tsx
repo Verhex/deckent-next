@@ -158,7 +158,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
     }).catch(error => { if (mounted.current) { onError(error); onClose(); } }).finally(() => { preparingRef.current = false; if (mounted.current) setPreparing(false); });
   };
-  if (fix) return <PickerWindow pickerKey={`fix:${keyOf(fix.choice.reference)}:${fix.action}`} title={[span(fix.choice.label)]} bodyRows={BODY_ROWS} labels={labels.picker} listHints={words.hints} position={labels.position}
+  if (fix) return <PickerWindow confirm pickerKey={`fix:${keyOf(fix.choice.reference)}:${fix.action}`} title={[span(fix.choice.label)]} bodyRows={BODY_ROWS} labels={labels.picker} listHints={words.hints} position={labels.position}
     tree={{ title: fix.choice.label, items: [{ id: 'apply', label: view.fixApply ?? fix.choice.fixes?.find(row => row.id === fix.action)?.label ?? fix.action, unscoped: true },
       { id: 'keep', label: view.fixKeep ?? words.shadowKeep, unscoped: true }] }} body={[{ spans: [span(fix.choice.detail)] }, { spans: [span(fix.choice.exact)] }]}
     onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
@@ -178,7 +178,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
         if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
       }, error => { onError(error); onClose(); });
     };
-    return <PickerWindow title={[span(tree.title, { bold: true })]} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} listHints={words.hints} position={labels.position}
+    return <PickerWindow confirm title={[span(tree.title, { bold: true })]} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} listHints={words.hints} position={labels.position}
       pickerKey="shadow" onResult={answer} />;
   }
   const shown = pickerView(tree, state), focused = shown.stage === 'list' ? view.choices.find(item => keyOf(item.reference) === shown.rows[shown.pos]?.id) : undefined;

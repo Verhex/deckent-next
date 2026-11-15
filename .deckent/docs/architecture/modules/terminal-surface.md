@@ -206,10 +206,15 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority) owns one ephemeral typed-text
   state. Every step that confirms or applies an effect is such a window: the project-instruction trust and init windows, the `/policy`
   preview (its rows are chosen through the Window, not through a child picker's own key handler), the `/config` protected-value
-  preview, operations-baseline offer and record preview, and an `InfoWindow` with choices (budget confirm, write-off). A confirmation
-  owner returns `true` only for keys it acted on, so the Window sees every other letter. Selection lists and steppers are not
-  confirmation steps: a filter list takes typing as its filter, and a list or stepper without one still selects its highlighted row
-  on Enter (`/config` layer and number steps, `/model` scope); see the known limits. Each guarded window owns one typed-text
+  preview, operations-baseline offer and record preview, an `InfoWindow` with choices (budget confirm, write-off), the number stepper
+  (`ConfigNumberWindow`), and in every `PickerWindow` the scope stage (`/config` layer, `/model` scope) and every stage of a `confirm`
+  list (budget confirm, cache migration, `/model` fix and shadow lists, the subscription consent list). A guarded list stage takes its
+  keys only through the Window (`ListPicker` `guarded` + `keys`: its own key handler ignores that stage, read from the state ref, so a
+  second Enter of the same stdin read cannot pass) and has no type-to-filter. A confirmation owner returns `true` only for keys it
+  acted on, so the Window sees every other letter. Shift+Enter, like Ctrl/Alt+Enter, is a new line and never reaches a window's owner.
+  Not confirmation steps: catalog and command lists with a filter (`/mode`, `/theme`, `/reasoning`, `/model` and `/provider` rows,
+  `/mcp` actions), where typing is the filter and Enter takes the highlighted row of the filtered list, some at once; see the known
+  limits. A window that stops being a decision forgets typed text. Each guarded window owns one typed-text
   state. A rejected burst, an unconsumed paste or an unhandled printable key starts it. Owner decision 109 (2026-11-14) refines early input:
   exactly one printable character swallowed as a single-key read during the entire unarmed period is remembered. Once armed, only the
   same character is delivered as a first key; another printable key starts typed text, and an unhandled repeat does too. Two or more

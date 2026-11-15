@@ -130,6 +130,7 @@
   "tui.picker.fact.via.api": "via API",
   "tui.picker.fact.via.host_cli": "via host CLI",
   "tui.picker.fact.via.local": "local",
+  "tui.picker.hint_confirm": "↑↓ choose · Enter confirm · Esc back",
   "tui.picker.hint_filter": "filter: {query}",
   "tui.picker.hint_filter_esc": "↑↓ move · Backspace edit · Enter select · Esc clears the filter",
   "tui.picker.hint_pick": "↑↓ move · type to filter · PgUp/PgDn page · Enter select · Esc back",
