@@ -1,0 +1,5 @@
+{
+  "$comment": "The read tools bound their own result (bytes). A caller's wider cap of another kind, such as the service transport cap, is narrowed to this range; a value outside it was a RangeError that stopped every native worker start (2026-11-15).",
+  "schemaVersion": 1,
+  "resultBytes": { "min": 1024, "max": 1048576 }
+}

@@ -1,6 +1,6 @@
 import { prepareNativeWorkerInputs, nativeWorkerViewSandboxes } from './worker-inputs.js';
 import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { agentWorkspaceDeny, createWorkspaceReadTools, agentAuthorityPaths, agentTurnWriteFloor, isSelfSourceProject,
+import { agentWorkspaceDeny, createWorkspaceReadTools, workspaceReadResultBytes, agentAuthorityPaths, agentTurnWriteFloor, isSelfSourceProject,
   agentShellSandboxLayout, shippedShellSandboxes, nativeCodingEnvironmentProbes, nativeCliAgent, resolveShellRealm, shellSandboxCapabilities, withLocalPrincipalChannel,
   type NativeCliWorkerPorts, type ShellCapabilities, type ShellSandbox } from '#adapters/index.js';
 import { nativeWorkerEnvironmentProbe, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, nativeWorkerToolBounds } from '#capabilities/index.js';
@@ -19,9 +19,11 @@ export async function nativeWorkerToolFloor(root: string, request: Parameters<Op
     async freshConfig() { const config = await loadComposedConfig(root, { ...options, heal: false });
       if (JSON.stringify(config.productLayout) !== JSON.stringify(loaded.layout)) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); return config; } };
   const env = options.env ?? process.env, known = getConfigKnownSecrets(context.config);
+  // `service.responseMaxBytes` is the transport cap and may be wider than a read result (2026-11-15: a 4 MiB transport cap failed every native dispatch on a RangeError).
+  const readResultBytes = workspaceReadResultBytes(context.config.service.responseMaxBytes);
   const workspace = await createWorkspaceReadTools(request.workspace, { deny: agentWorkspaceDeny(request.workspace, context.layout, false, env),
-    limits: { maxResultBytes: context.config.service.responseMaxBytes } });
-  const inputs = await prepareNativeWorkerInputs(resources, scopeId, root, request.workspace, context.layout, context.config.execution?.secretGate, context.config.artifacts.maxBytes, context.config.service.responseMaxBytes);
+    limits: { maxResultBytes: readResultBytes } });
+  const inputs = await prepareNativeWorkerInputs(resources, scopeId, root, request.workspace, context.layout, context.config.execution?.secretGate, context.config.artifacts.maxBytes, readResultBytes);
   const authority = agentAuthorityPaths(request.workspace, context.layout);
   const selfSource = await isSelfSourceProject(root), writeFloor = agentTurnWriteFloor(authority, false, selfSource);
   const sandbox = nativeWorkerContainedLayout(agentShellSandboxLayout(request.workspace, context.layout, workspace.scope, writeFloor, false, null, env), context.layout.root, productResourcePath(context.layout, 'workspaces'));
