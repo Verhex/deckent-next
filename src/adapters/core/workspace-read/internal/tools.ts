@@ -5,6 +5,7 @@ import { compileSearchPattern, metaPattern, renderReadFileView, resolveReadFileB
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
   type WorkspacePathDiagnostic, type WorkspacePathError, type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
+import LIMITS from './limits.json' with { type: 'json' };
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Read/search tools of the terminal tool loop (T-L1), ported from the legacy native tools minus their defects. Every result, on
  * every branch, is cut to the byte cap with a stated marker; grep never answers "no matches" when content was skipped; long lines
@@ -94,9 +95,11 @@ function argumentProblem(args: Record<string, unknown>): string | null {
   if (glob !== undefined && Buffer.byteLength(glob, 'utf8') > MAX_GLOB_ARG_BYTES) return `argument-too-long name=glob limit=${MAX_GLOB_ARG_BYTES}`;
   return null;
 }
+/** A caller's own wider cap (the service transport cap) narrowed to the read tools' upper bound (limits.json); a smaller cap is never raised and stays refused below the lower bound. */
+export function workspaceReadResultBytes(cap: number): number { return Math.min(cap, LIMITS.resultBytes.max); }
 function validLimits(limits: WorkspaceReadLimits): WorkspaceReadLimits {
   const ok = (value: number, min: number, max: number) => Number.isSafeInteger(value) && value >= min && value <= max;
-  if (!ok(limits.maxResultBytes, 1024, 1024 * 1024) || !ok(limits.maxFileBytes, 1, 256 * 1024 * 1024)) throw new RangeError('WORKSPACE_READ_LIMITS_INVALID');
+  if (!ok(limits.maxResultBytes, LIMITS.resultBytes.min, LIMITS.resultBytes.max) || !ok(limits.maxFileBytes, 1, 256 * 1024 * 1024)) throw new RangeError('WORKSPACE_READ_LIMITS_INVALID');
   return limits;
 }
 
