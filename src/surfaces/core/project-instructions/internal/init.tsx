@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from 'ink';
 import { ErrorRegistry, emit, resolveLocale, colorCapability, loadConfigTerminalLaunch, type ConfigLoadOptions, type Locale, type OutputSink } from '#platform/index.js';
 import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
-import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { DecisionArmLabelsContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
 import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
@@ -20,8 +20,8 @@ export function InstructionInitWindow(props: { readonly port: ProjectInstruction
     try { done(await props.port.initialize(props.initial)); } catch (error) { done(null, error); }
   };
   const body = props.initial.changes.flatMap(change => [change.path, ...humanRecordText(change.append).split('\n')]);
-  return <WindowStackProvider><InstructionChoiceWindow title={props.labels.initTitle}
-    labels={props.labels} choices={applying ? [] : [props.labels.cancel, props.labels.confirm]} body={body} onChoice={index => { void onChoice(index); }} /></WindowStackProvider>;
+  return <DecisionArmLabelsContext.Provider value={props.labels.decisionArm}><WindowStackProvider><InstructionChoiceWindow title={props.labels.initTitle}
+    labels={props.labels} choices={applying ? [] : [props.labels.cancel, props.labels.confirm]} body={body} onChoice={index => { void onChoice(index); }} /></WindowStackProvider></DecisionArmLabelsContext.Provider>;
 }
 
 export async function instructionInitCommand(argv: readonly string[], context: { readonly root?: string; readonly env?: NodeJS.ProcessEnv; readonly stdout?: OutputSink;
