@@ -36,12 +36,25 @@ const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
  * first frame (budget, cache and custody rows), so: wait until the window shows `ready` and has stopped changing, press once, then only
  * observe. A timeout reports the screen, so the next red says what was on it.
  */
-async function enterWhenStill(ui: { frame(): string; press(keys: string, ms?: number): Promise<void> }, ready: string, shows: () => boolean, label: string) {
-  for (let still = 0, last = ''; still < 8;) { await settle(25); const now = ui.frame(); still = now === last && now.includes(ready) ? still + 1 : 0; last = now; }
+async function enterWhenStill(ui: { frame(): string; press(keys: string, ms?: number): Promise<void> }, ready: string, shows: () => boolean, label: string, samples = 400) {
+  let still = 0;
+  for (let sample = 0, last = ''; sample < samples && still < 8; sample++) { await settle(25); const now = ui.frame(); still = now === last && now.includes(ready) ? still + 1 : 0; last = now; }
+  // Bounded (Astra 3142): a level that never shows `ready`, or never stops changing, ends here with no key sent.
+  if (still < 8) throw new Error(`no Enter sent for ${label}: "${ready}" not shown and still; screen:\n${ui.frame().slice(-1800)}`);
   await ui.press(ENTER);
   for (let waited = 0; waited < 500 && !shows(); waited++) await settle(10);
   if (!shows()) throw new Error(`timed out waiting for ${label}; screen:\n${ui.frame().slice(-1800)}`);
 }
+it('enterWhenStill sends no key when its level never shows or never settles, and one key when it does', async () => {
+  const sent: string[] = [], press = async (keys: string) => { sent.push(keys); };
+  await expect(enterWhenStill({ frame: () => 'Loading', press }, 'READY', () => false, 'never ready', 12)).rejects.toThrow(/no Enter sent for never ready[\s\S]*Loading/u);
+  let tick = 0;
+  await expect(enterWhenStill({ frame: () => `READY ${tick++}`, press }, 'READY', () => false, 'never still', 12)).rejects.toThrow(/no Enter sent for never still/u);
+  expect(sent).toEqual([]);
+  let opened = false;
+  await enterWhenStill({ frame: () => 'READY', press: async keys => { sent.push(keys); opened = true; } }, 'READY', () => opened, 'opens');
+  expect(sent).toEqual([ENTER]);
+});
 async function armed(frame: () => string, hint: string) {
   await settle(DECISION_ARM_DEFAULT + 80);
   for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
