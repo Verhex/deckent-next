@@ -12,8 +12,11 @@ class Screen extends Writable {
   frame = '';
   readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString('utf8'); done(); }
+  // A window with choices is a decision window: it turns bracketed paste on and off around its frames; that mode switch is not a frame.
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } // eslint-disable-line no-control-regex
 }
+/** A window with choices counts keys once its key hints show (the quiet arming period, arming.ts). */
+async function armed(frame: () => string) { for (let tries = 0; tries < 80 && !frame().includes('PICK-HINTS'); tries++) await settle(20); expect(frame()).toContain('PICK-HINTS'); }
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', UP = '\u001B[A';
 const mounted: Array<{ unmount(): void }> = [];
@@ -79,12 +82,14 @@ describe('InfoWindow (SW-1)', () => {
     const closed: Array<string | null> = [];
     const view = mount(createElement(InfoWindow, { model, labels: LABELS, onClose: choice => closed.push(choice) }), 80, 24);
     await settle();
-    expect(view.frame()).toContain('› /command-0'); expect(view.frame()).toContain('PICK-HINTS'); expect(view.frame()).not.toContain('/command-25');
+    expect(view.frame()).toContain('› /command-0'); expect(view.frame()).not.toContain('/command-25'); await armed(view.frame);
     for (let index = 0; index < 25; index++) await view.press(DOWN);
     expect(view.frame()).toContain('› /command-25');
     await view.press(UP);
     expect(view.frame()).toContain('› /command-24');
     for (const bytes of ['\u001b[13;5u', '\u001b\r']) { await view.press(bytes); expect(closed).toEqual([]); }
+    // Owner 108: a choice may confirm an effect, so text typed here and its Enter pick nothing; the next Enter picks.
+    await view.press('x'); await view.press('\r'); expect(closed).toEqual([]);
     await view.press('\r');
     expect(closed).toEqual(['cmd-24']);
   });
@@ -93,7 +98,10 @@ describe('InfoWindow (SW-1)', () => {
     const closed: Array<string | null> = [];
     const model: InfoWindowModel = { title: 'Usage', summary: '', sections: [{ choices: [{ id: 'b1', label: 'Budget b1' }] }] };
     const view = mount(createElement(InfoWindow, { model, labels: LABELS, onClose: choice => closed.push(choice) }));
-    await settle(); await view.press('q');
+    // Just opened: the key is not counted; once the window is armed it asks for the same key again (owner 109), and that q closes.
+    await settle(); await view.press('q'); expect(closed).toEqual([]);
+    for (let tries = 0; tries < 80 && !view.frame().includes('… ×'); tries++) await settle(20);
+    expect(view.frame()).toContain('… ×'); await view.press('q');
     expect(closed).toEqual([null]);
   });
 

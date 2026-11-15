@@ -13,7 +13,8 @@ import type { ConfigRecordPort } from '#surfaces/core/config/index.js';
 class Screen extends Writable {
   frame = ''; writes = 0; readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString(); this.writes++; done(); }
+  // The confirmation step is a decision window: it turns bracketed paste on and off around its frames; that mode switch is not a frame.
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString(); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) { this.frame = text; this.writes++; } done(); } // eslint-disable-line no-control-regex
 }
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
@@ -45,7 +46,7 @@ function port(key: string, calls: string[]): ConfigRecordPort {
 }
 describe('record window Ink render and keyboard boundary', () => {
   for (const key of ['provider_spending.budgets', 'inspection.workers.sources', 'execution.adoption.targets', 'execution.workTargets.targets', 'layout.resources']) {
-    it(`${key}: selection opens a before/after preview; typing creates no value or write; Enter commits once`, async () => {
+    it(`${key}: selection opens a before/after preview; typing creates no value or write and its Enter commits nothing; the next Enter commits once`, async () => {
       const calls: string[] = [], outcomes: unknown[] = [], errors: unknown[] = [];
       const view = mount(createElement(ConfigRecordWindow, { port: port(key, calls), keyPath: key, title: 'Selected records', layer: 'project', labels: terminalPanelLabels('en'), onResult: outcome => { outcomes.push(outcome); }, onError: error => { errors.push(error); }, onClose: () => undefined }), 40);
       await pause(); expect(view.frame()).toContain('Add a member'); for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
@@ -55,7 +56,8 @@ describe('record window Ink render and keyboard boundary', () => {
       await view.press(DOWN, ENTER); await vi.waitFor(() => expect(calls).toEqual(['preview']));
       await vi.waitFor(() => { expect(view.frame()).toContain('Before'); expect(view.frame()).toContain('After'); expect(view.frame()).toContain('Enter confirms'); });
       if (process.env['W2_RENDER_DIR']) await writeFile(`${process.env['W2_RENDER_DIR']}/${key}.txt`, view.frame());
-      await view.press('123'); expect(calls).toEqual(['preview']); await view.press(ENTER); await vi.waitFor(() => expect(calls).toEqual(['preview', 'commit']));
+      await view.press('123'); expect(calls).toEqual(['preview']); await view.press(ENTER); expect(calls).toEqual(['preview']); expect(view.frame()).toContain('Enter confirms');
+      await view.press(ENTER); await vi.waitFor(() => expect(calls).toEqual(['preview', 'commit']));
       await vi.waitFor(() => expect(outcomes).toHaveLength(1)); expect(calls).toEqual(['preview', 'commit']); expect(errors).toEqual([]);
     });
   }
@@ -77,6 +79,7 @@ describe('record window Ink render and keyboard boundary', () => {
     const view = mount(createElement(ConfigRecordWindow, { port: port('operations.targets', calls), keyPath: 'operations.targets', title: 'Operation targets', layer: 'project', labels: terminalPanelLabels('tr'), onResult: () => undefined, onError: () => undefined, onClose: () => { closed++; } }));
     await pause(); expect(view.frame()).toContain('dosyayı içe aktar'); expect(view.frame()).not.toContain('Kayıt ekle');
     await view.press(ENTER, ENTER); expect(calls).toEqual(['import']); expect(view.frame()).toContain('Önce'); expect(view.frame()).toContain('Sonra');
+    await vi.waitFor(() => expect(view.frame()).toContain(terminalPanelLabels('tr').config.previewHint)); // armed: its keys count
     await view.press(ESC, ESC); expect(closed).toBe(1); expect(calls).not.toContain('commit');
   });
   it('/config integrates the record editor and pending approval leaves one system summary', async () => {
@@ -87,6 +90,7 @@ describe('record window Ink render and keyboard boundary', () => {
         locks: { project: { blocked: null, note: null }, global: { blocked: 'denied', note: null } } }] }) };
     const view = mount(createElement(SettingsPanel, { kind: 'config', ports: { config }, labels: terminalPanelLabels('en'), push: next => { notices.push(...next); }, onError: () => undefined, errorText: String, onClose: () => undefined, openApproval: id => { approvals.push(id); } }));
     await pause(); await view.press(ENTER, ENTER, ENTER, ENTER); expect(view.frame()).toContain('Add a member');
-    await view.press(ENTER, ENTER, ENTER, DOWN, ENTER, ENTER); expect(approvals).toEqual(['approval-1']); expect(notices).toEqual([{ level: 'warning', text: 'Config: Nothing written' }]);
+    await view.press(ENTER, ENTER, ENTER, DOWN, ENTER); await vi.waitFor(() => expect(view.frame()).toContain('Enter confirms')); await view.press(ENTER);
+    await vi.waitFor(() => expect(approvals).toEqual(['approval-1'])); expect(notices).toEqual([{ level: 'warning', text: 'Config: Nothing written' }]);
   });
 });

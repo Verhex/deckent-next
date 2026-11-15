@@ -132,16 +132,22 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
       void (apply && port.operationsBaseline ? port.operationsBaseline.apply(offer) : Promise.resolve([offer.later]))
         .then(lines => push(lines.map(text => ({ level: apply ? 'info' as const : 'warning' as const, text }))), onError).finally(() => { busy.current = false; cancelStep(); });
     };
-    return <Window title={[span(offer.title, { bold: true })]} body={offer.lines.map(text => ({ spans: [span(text)] }))} hints={words.baselineHint} position={labels.position}
+    // A confirmation step is a decision window (owner 108): only its own keys count as handled, so typed text never reaches `y`.
+    return <Window decision title={[span(offer.title, { bold: true })]} body={offer.lines.map(text => ({ spans: [span(text)] }))} hints={words.baselineHint} position={labels.position}
       onClose={() => answer(false)} onInput={(input, key) => {
-        if (/^y$/iu.test(input)) answer(true); else if (/^n$/iu.test(input) || key.escape) answer(false);
-        return !key.pageUp && !key.pageDown && !key.home && !key.end;
+        if (/^y$/iu.test(input)) { answer(true); return true; }
+        if (/^n$/iu.test(input) || key.escape) { answer(false); return true; }
+        return false;
       }} />;
   }
-  if (step.kind === 'preview') return <Window title={[span(words.preview, { bold: true })]} body={[...focusLines(step.field, words),
+  if (step.kind === 'preview') return <Window decision title={[span(words.preview, { bold: true })]} body={[...focusLines(step.field, words),
     ...(step.field.guard ?? []).map(text => ({ spans: [span(text, { role: 'warning' as const })] })),
     { spans: [span(step.field.sensitive ? step.field.value : JSON.stringify(step.value), { bold: true })] }]} hints={words.previewHint} position={labels.position} onClose={cancelStep}
-    onInput={(input, key) => { if (key.escape || key.ctrl && input === 'c') cancelStep(); else if (key.return) void write({ action: 'set', keyPath: step.field.key, value: step.value, layer: step.layer }, state); return true; }} />;
+    onInput={(input, key) => {
+      if (key.escape || key.ctrl && input === 'c') { cancelStep(); return true; }
+      if (key.return) { void write({ action: 'set', keyPath: step.field.key, value: step.value, layer: step.layer }, state); return true; }
+      return false;
+    }} />;
   if (step.kind === 'entry') {
     const at = state;
     return <EntryWindow title={fillTemplate(words.entryTitle, { key: step.field.key, expected: step.field.expected })} body={focusLines(step.field, words)}
