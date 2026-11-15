@@ -59,6 +59,6 @@ export function BudgetWindow({ port, view, labels, push, onDone }: { readonly po
   // The confirm step's question is its title (the embedded list draws no title of its own); the body keeps the current budget and the warning.
   return <PickerWindow title={step.kind === 'confirm' ? [span(tree.title, { bold: true })] : title}
     body={[...(view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []), ...warning]} bodyRows={BODY_ROWS}
-    tree={tree} labels={labels.picker} position={labels.position} pickerKey={step.kind}
+    tree={tree} labels={labels.picker} position={labels.position} pickerKey={step.kind} confirm={step.kind === 'confirm'}
     initial={{ ...PICKER_INITIAL, pos: step.kind === 'amount' ? Math.max(0, view.presets.indexOf(view.start)) : 0 }} onResult={answer} />;
 }

@@ -5,7 +5,7 @@
  * fixed height at every level, with or without a filter and a blocked row's reason (`LIST_PICKER_EMBEDDED_CHROME_ROWS` + its page).
  */
 import { useId, useRef, useState, type ReactNode } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { useCardCopyOptions, useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { cells, fillTemplate, truncateEnd, wrapCells, modelProviderSpans, useRenderGlyphs, spanStyle } from '#surfaces/core/terminal-render-ink/index.js';
@@ -15,6 +15,8 @@ import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerVie
 /** Words of the picker; the caller fills them from the catalog (`pickerLabels`). `{from}`, `{to}`, `{total}` in `position`; `{query}` in `filter`. */
 export interface PickerLabels {
   readonly hintList: string;
+  /** A confirm list (no filter): its keys. Absent: the caller's own list hints. */
+  readonly hintConfirm?: string;
   readonly hintFilter: string;
   readonly hintScope: string;
   readonly filter: string;
@@ -81,6 +83,13 @@ export function ListPicker(props: {
   readonly pageKeys?: boolean;
   /** Non-decision /model and /provider navigation only: one plain filter followed by one CR also selects. Default false. */
   readonly submitFilter?: boolean;
+  /**
+   * Owner 108: a stage whose Enter confirms or applies an effect (the scope step, a confirm list) takes its keys only through the decision
+   * window around it, which calls `keys.current`; the list's own key handler ignores that stage, and typing never filters there (an
+   * unhandled letter is typed text for the window). `keys.current` answers whether the key did something.
+   */
+  readonly guarded?: (state: PickerState) => boolean;
+  readonly keys?: { current: ((input: string, key: Key) => boolean) | null };
 }): ReactNode {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
@@ -106,20 +115,27 @@ export function ListPicker(props: {
   const pageRef = useRef(layout.listRows);
   pageRef.current = layout.listRows;
 
-  useInput((input, key) => {
-    if (closed.current || !acceptsInput()) return;
-    const submit = latest.current.submitFilter && stateRef.current.stage === 'list' && !key.ctrl && !key.meta
+  // `routed`: the key came through the decision window. The stage is read from the ref, so a second Enter of the same stdin read that
+  // already moved the list into a guarded stage is not taken here, and the window (not yet a decision window in that read) does not route it.
+  const handle = (input: string, key: Key, routed: boolean): boolean => {
+    if (closed.current || !acceptsInput()) return false;
+    const guarded = latest.current.guarded?.(stateRef.current) ?? false;
+    if (guarded !== routed) return false;
+    const submit = !guarded && latest.current.submitFilter && stateRef.current.stage === 'list' && !key.ctrl && !key.meta
       && input.length > 1 && input.endsWith('\r') && !/\p{C}/u.test(input.slice(0, -1));
     const action = submit ? { type: 'type' as const, text: input.slice(0, -1) } : pickerActionOf(input, key, stateRef.current.stage);
-    if (!action || action.type === 'page' && latest.current.pageKeys === false) return;
+    if (!action || action.type === 'page' && latest.current.pageKeys === false || guarded && (action.type === 'type' || action.type === 'backspace')) return false;
     const before = stateRef.current, typed = pickerReduce(latest.current.tree, before, action, { pageSize: pageRef.current });
     const next = submit ? pickerReduce(latest.current.tree, typed.state, { type: 'enter' }, { pageSize: pageRef.current }) : typed;
     stateRef.current = next.state;
     setState(next.state);
     if (next.state !== before) latest.current.onState?.(next.state);
-    if (next.outcome.kind === 'done') { closed.current = true; latest.current.onResult(next.outcome.result); return; }
+    if (next.outcome.kind === 'done') { closed.current = true; latest.current.onResult(next.outcome.result); return true; }
     if (next.outcome.kind !== 'continue') latest.current.onOutcome?.(next.outcome);
-  }, { isActive: (props.active ?? true) && (!windowed || owns) });
+    return true;
+  };
+  if (props.keys) props.keys.current = (input, key) => handle(input, key, true);
+  useInput((input, key) => { handle(input, key, false); }, { isActive: (props.active ?? true) && (!windowed || owns) });
 
   const listRows = layout.listRows;
   const first = pickerFirstRow(view.pos, view.rows.length, listRows);

@@ -258,7 +258,7 @@ export function runtimeBuildSkew(own: { readonly sourceTreeSha256: string } | nu
 
 /** Catalog words of the list picker (filter, paging, scope step, blocked rows); one set for every picker, EN and TR. */
 export function pickerLabels(locale: Locale): PickerLabels {
-  return { hintList: t('tui.picker.hint_pick', {}, locale), hintFilter: t('tui.picker.hint_filter_esc', {}, locale), hintScope: t('tui.picker.hint_scope', {}, locale),
+  return { hintList: t('tui.picker.hint_pick', {}, locale), hintConfirm: t('tui.picker.hint_confirm', {}, locale), hintFilter: t('tui.picker.hint_filter_esc', {}, locale), hintScope: t('tui.picker.hint_scope', {}, locale),
     filter: t('tui.picker.hint_filter', {}, locale), noMatches: t('tui.picker.no_matches', {}, locale), empty: t('tui.picker.empty', {}, locale),
     blocked: t('tui.picker.state.blocked', {}, locale), position: t('tui.picker.position', {}, locale) };
 }

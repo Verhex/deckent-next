@@ -126,11 +126,15 @@ describe('/config window', () => {
     await view.press(ENTER); // theme
     expect(view.frame()).toContain('Colour theme');
     await view.press(`${DOWN}${ENTER}`); // dark → scope step
+    await armed(view.frame, 'choose scope'); // owner 108: the layer step is a decision window; its keys count once its hints show
     await view.press(DOWN); // the user layer: locked, with the policy's reason under the cursor
     expect(view.frame()).toContain('GLOBAL-LOCKED');
     await view.press(ENTER, 60);
     expect(writes).toEqual([]);
-    await view.press(`${DOWN}${ENTER}`, 80); // back on project
+    await view.press(DOWN); // back on project
+    await view.press('x'); await view.press(ENTER, 60); // typed text and its Enter choose no layer
+    expect(writes).toEqual([]); expect(view.frame()).toContain('choose scope');
+    await view.press(ENTER, 80);
     expect(writes).toEqual([{ action: 'set', keyPath: 'terminal.theme', value: 'dark', layer: 'project' }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Config: saved terminal.theme' }]);
     expect(view.frame()).toContain('theme'); // the key list again, ready for the next change
@@ -144,7 +148,7 @@ describe('/config window', () => {
     expect(view.frame()).toContain('Adjust with arrows');
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-values.txt`, view.frame());
     expect(view.frame()).not.toContain('New value');
-    await view.press(`${ENTER}${ENTER}`, 80);
+    await view.press(ENTER); await armed(view.frame, 'choose scope'); await view.press(ENTER, 80);
     expect(writes).toEqual([{ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' }]);
     expect(calls.notices).toEqual([{ level: 'warning', text: 'Config: Nothing was written; appr-1 waits' }]);
     expect(calls.approvals).toEqual(['appr-1']); expect(calls.closed).toBe(1);
@@ -268,14 +272,17 @@ describe('CS-1 number window', () => {
       position: '{pos} of {count}', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }), 40, 24, true);
     await settle(60);
     expect(view.frame()).toContain('2 s'); expect(view.frame()).toContain('1 s'); expect(view.frame()).toContain('5 s');
+    await armed(view.frame, 'adjust'); // owner 108: a decision window; the 40-column hint row wraps, its first words show once keys count
     await view.press('999'); expect(view.frame()).toContain('2 s'); expect(selected).toEqual([]);
+    await view.press(ENTER); expect(selected).toEqual([]); expect(view.frame()).toContain('2 s'); // digits are typed text: their Enter selects nothing
     await view.press('-----'); expect(view.frame()).toContain('1 s');
     await view.press('++++++'); expect(view.frame()).toContain('5 s');
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/number-window.txt`, view.frame());
+    await view.press('9'); await view.press(ENTER); expect(selected).toEqual([]); expect(view.frame()).toContain('5 s');
     await view.press(`${ENTER}${ENTER}`); expect(selected).toEqual([5000]);
     const escape = mount(createElement(ConfigNumberWindow, { title: 'Timeout', stepper, hints: 'Esc', position: '-', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }));
-    await settle(60); await escape.press(ESC); expect(canceled).toBe(1); expect(selected).toEqual([5000]);
+    await armed(escape.frame, 'Esc'); await escape.press(ESC); expect(canceled).toBe(1); expect(selected).toEqual([5000]);
   });
   it('ignores a forged free-entry flag for any field outside the allowed-entry registry', () => {
     const forged = { ...CONFIG, fields: [{ ...CONFIG.fields[1]!, free: true }] };
@@ -292,7 +299,7 @@ describe('CS-1 allowed new value preview', () => {
       parse: (_key: string, text: string) => text.startsWith('https://') ? { ok: true as const, value: text } : { ok: false as const, reason: 'INVALID-URL' } };
     const { element, calls } = panel('config', { config: port }), view = mount(element, 80, 24, true);
     await settle(80);
-    await view.press(`${ENTER}${ENTER}${ENTER}${ENTER}`);
+    await view.press(`${ENTER}${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER); // section → key → new value → layer
     expect(view.frame()).toContain('New value');
     await view.press(`bad${ENTER}`); expect(view.frame()).toContain('INVALID-URL'); expect(writes).toEqual([]);
     await view.press(`\u007f\u007f\u007fhttps://registry.example.com${ENTER}`);
@@ -300,7 +307,8 @@ describe('CS-1 allowed new value preview', () => {
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-preview.txt`, view.frame());
     // The preview is a decision window (owner 108): it arms first, and text typed on it and its Enter write nothing.
     await armed(view.frame, 'Enter confirms'); await view.press(ESC); expect(writes).toEqual([]);
-    await view.press(`${ENTER}${ENTER}${ENTER}https://registry.example.com${ENTER}`); await armed(view.frame, 'Enter confirms');
+    await view.press(`${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER); expect(view.frame()).toContain('New value'); // key → new value → layer
+    await view.press(`https://registry.example.com${ENTER}`); await armed(view.frame, 'Enter confirms');
     await view.press(`ok${ENTER}`); expect(writes).toEqual([]); expect(view.frame()).toContain('Preview change');
     await view.press(ENTER);
     expect(writes).toEqual([{ action: 'set', keyPath: urlField.key, value: 'https://registry.example.com', layer: 'project' }]);
@@ -335,7 +343,7 @@ describe('owner 108: the confirmation steps of the settings panels are decision 
       operationsBaseline: { offer: async () => ({ scopeId: 'scope', digest: 'digest', title: 'BASELINE-OFFER', lines: ['what it grants'], later: 'LATER' }), apply: async () => { baseline.push('applied'); return ['BASELINE-APPLIED']; } } };
     const { element, calls } = panel('config', { config: port }), view = mount(element, 100, 30, true);
     await settle(80);
-    await view.press(`${ENTER}${ENTER}${ENTER}${ENTER}`, 120); // section → key → value → layer: written, then the offer
+    await view.press(`${ENTER}${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER, 120); // section → key → value → layer: written, then the offer
     expect(writes).toHaveLength(1); expect(view.frame()).toContain('BASELINE-OFFER'); await armed(view.frame, 'y apply');
     await view.press('/policy'); await view.press(ENTER); expect(baseline).toEqual([]); expect(view.frame()).toContain('BASELINE-OFFER');
     await view.press('y', 80); expect(baseline).toEqual(['applied']); expect(calls.errors).toEqual([]);
@@ -358,8 +366,11 @@ describe('TERM-PANEL: a window with a list draws one title and one key-hint row 
     expect(windowShape(loading.frame(), 'Loading')).toEqual({ height, titles: 1, hints: 1 });
     const view = mount(panel('config', { config: configPort([]) }).element);
     await settle(80);
-    const shapes = [windowShape(view.frame(), 'Configuration · acme')];
-    for (const keys of ['th', '\u007f\u007f', ENTER, ENTER, ENTER, DOWN]) { await view.press(keys); shapes.push(windowShape(view.frame(), 'Configuration · acme')); }
+    const shape = () => windowShape(view.frame(), 'Configuration · acme'), shapes = [shape()];
+    for (const keys of ['th', '\u007f\u007f', ENTER, ENTER]) { await view.press(keys); shapes.push(shape()); }
+    // Owner 108: the layer step is a decision window; it shows its key-hint row (and takes the arrow) once it is armed.
+    await view.press(ENTER); await armed(view.frame, 'choose scope'); shapes.push(shape());
+    await view.press(DOWN); shapes.push(shape());
     expect(view.frame()).toContain('GLOBAL-LOCKED'); expect(view.frame()).toContain('Configuration · acme › terminal › terminal.theme');
     expect(shapes).toEqual(shapes.map(() => ({ height, titles: 1, hints: 1 })));
   });

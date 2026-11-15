@@ -35,6 +35,6 @@ export function CacheWindow({ port, view, labels, words = labels.cache, push, op
       if (outcome.status === 'approval-pending' && outcome.approvalId && openApproval) openApproval(outcome.approvalId);
     }, error => { onError(error); onDone(); });
   };
-  return <PickerWindow title={title} body={panelWindowLines(view.lines)} bodyRows={view.lines.length} tree={cacheConfirmTree(words)} labels={labels.picker} listHints={words.hints}
+  return <PickerWindow confirm title={title} body={panelWindowLines(view.lines)} bodyRows={view.lines.length} tree={cacheConfirmTree(words)} labels={labels.picker} listHints={words.hints}
     position={labels.position} onResult={answer} />;
 }

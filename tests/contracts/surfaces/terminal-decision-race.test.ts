@@ -286,6 +286,21 @@ describe('queued decisions (one shown, "n/total"), each armed when it becomes vi
     stdin.write('y'); await until(() => answers.length === 1, 'a deliberate key answers question two'); expect(answers).toEqual(['1:y']);
   });
 
+  it('Shift+Enter is a new line, never an answer: it does not get past typed text, which only a plain Enter ends (Astra 3134)', async () => {
+    const answers: string[] = [], SHIFT_ENTER = '\u001b[13;2u';
+    const stdout = new Tty(), stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    // An owner that takes every Return, as a confirmation step does.
+    const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(WindowStackProvider, { composerDefault: true },
+      createElement(Window, { title: [{ text: 'CONFIRM' }], hints: 'HINT', position: '{from}-{to}/{total}', decision: true, onInput: (_input: string, key: { return?: boolean }) => { if (key.return) { answers.push('applied'); return true; } return false; } }))),
+      { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
+    mounted.push(instance);
+    await armed(() => stdout.frame, 'HINT');
+    stdin.write(SHIFT_ENTER); await settle(60); expect(answers).toEqual([]);
+    stdin.write('x'); await settle(40); stdin.write(SHIFT_ENTER); await settle(60); expect(answers).toEqual([]);
+    stdin.write('\r'); await settle(60); expect(answers).toEqual([]); // the plain Enter ends typed text and chooses nothing
+    await armed(() => stdout.frame, 'HINT'); stdin.write('\r'); await until(() => answers.length === 1, 'a deliberate plain Enter applies once');
+  });
+
   it('a card replaced while a key is in flight (new revision) starts disarmed: the key never answers the replacement', async () => {
     const answers: string[] = [];
     let replace!: () => void;

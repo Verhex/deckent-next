@@ -161,6 +161,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // Owner 108: once text reaches a choice-only card, later letters/digits are text too; only Enter or navigation ends it.
   const typing = useCardText(burstText);
   useEffect(typing.settle, [arming.shown, focused, inputRevision]);
+  // A window that stops being a decision (a list leaving its confirm stage) forgets typed text: its next confirm stage starts clean and arms anew.
+  useEffect(() => { if (!guarded) typing.set(false); }, [guarded]);
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
   const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
@@ -276,8 +278,9 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   };
   const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true, revision: latest.current.inputRevision }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
-    // S5: adding a line never answers any window's choice or confirmation.
-    if (key.return && (key.ctrl || key.meta)) { if (guarded) begin().owned = false; return; }
+    // S5: adding a line never answers any window's choice or confirmation. Shift+Enter is a new line too (Astra 3134: an owner that takes
+    // every Return would otherwise answer on it after typed text, which only a plain Enter ends).
+    if (key.return && (key.ctrl || key.meta || key.shift)) { if (guarded) begin().owned = false; return; }
     // Any key clears a finished mouse selection (the key itself still goes on as usual).
     if (pickedRef.current && !pickedRef.current.dragging) setPicked(null);
     // A focus switch inside a read taints the whole read (it is dropped), whichever order the events came in.
