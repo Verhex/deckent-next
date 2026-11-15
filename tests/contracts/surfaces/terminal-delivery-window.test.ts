@@ -759,19 +759,22 @@ describe('read-only diff view in the delivery window', () => {
     await until(() => frame(h).includes(WORDS.hints), 'window keys');
     return h;
   }
-  it('Enter opens the selected file; j/k and arrows choose and scroll; Esc goes back to the list and then closes only on the next Esc; nothing is delivered', async () => {
+  it('Enter opens the selected file; arrows choose and scroll, j and k are ordinary letters (owner 111); Esc goes back to the list and then closes only on the next Esc; nothing is delivered', async () => {
     const h = await ready();
     expect(frame(h)).toContain(WORDS.diffListHints); expect(frame(h)).toContain('› one.txt | +1 -1');
-    await press(h, 'j'); expect(frame(h)).toContain('› big.bin'); await press(h, 'k'); expect(frame(h)).toContain('› one.txt');
+    // Owner 111: k is text on a card, so k then y delivers nothing and moves nothing; the Enter after it opens nothing.
+    await press(h, 'k'); await press(h, 'y', 120); await press(h, '\r'); expect(frame(h)).toContain('› one.txt | +1 -1'); expect(frame(h)).not.toContain('one.txt (1/3)');
+    expect(h.calls).toEqual(['preview:r']); expect(h.views).toEqual([]);
+    await press(h, DOWN); expect(frame(h)).toContain('› big.bin'); await press(h, '\u001b[A'); expect(frame(h)).toContain('› one.txt');
     await press(h, '\r'); expect(frame(h)).toContain('one.txt (1/3)'); expect(frame(h)).toContain('-old-one'); expect(frame(h)).toContain('+new-one'); expect(frame(h)).toContain(WORDS.diffHints);
     expect(frame(h)).toContain('attempt a#1'); expect(frame(h)).toContain(`base ${BASE.slice(0, 12)}`); expect(frame(h)).toContain('proposal PPPPPPPPPPPP');
     await press(h, ESC); expect(frame(h)).toContain(WORDS.diffListHints); expect(frame(h)).toContain(windowTitle);
     await press(h, DOWN); await press(h, DOWN); await press(h, '\r'); expect(frame(h)).toContain('+row-0'); expect(frame(h)).not.toContain('+row-30');
-    await press(h, 'j'); await press(h, 'j'); expect(frame(h)).not.toContain('+row-0\n'); expect(frame(h)).toContain('diff lines 3-20 of 40');
+    await press(h, DOWN); await press(h, DOWN); expect(frame(h)).not.toContain('+row-0\n'); expect(frame(h)).toContain('diff lines 3-20 of 40');
     expect(frame(h)).toContain('+7 more diff lines'); await press(h, ESC);
     expect(h.calls).toEqual(['preview:r']);
   });
-  it('a 24-row full window: PgUp/PgDn page the window to the diff page\'s last rows; j/k still scroll the diff, y still never delivers', async () => {
+  it('a 24-row full window: PgUp/PgDn page the window to the diff page\'s last rows; the arrows still scroll the diff, y still never delivers', async () => {
     const PGUP = '\u001b[5~', PGDN = '\u001b[6~';
     const h = await ready({ fullscreen: true, rows: 24 }); await press(h, DOWN); await press(h, DOWN); await press(h, '\r');
     await until(() => frame(h).includes('long.txt (3/3)'), 'diff of long.txt');
@@ -780,13 +783,13 @@ describe('read-only diff view in the delivery window', () => {
     await press(h, PGDN); await press(h, PGDN); await press(h, PGDN);
     await until(() => frame(h).includes('diff lines 1-18 of 40') && frame(h).includes('+7 more diff lines'), 'window paged to the end of the diff page');
     expect(frame(h)).toContain('+row-17');
-    await press(h, 'j'); await until(() => frame(h).includes('diff lines 2-19 of 40'), 'j scrolls the diff'); expect(frame(h)).toContain('+row-18');
+    await press(h, DOWN); await until(() => frame(h).includes('diff lines 2-19 of 40'), 'Down scrolls the diff'); expect(frame(h)).toContain('+row-18');
     await press(h, PGUP); await press(h, PGUP); await press(h, PGUP); expect(frame(h)).toContain('long.txt (3/3)');
     await press(h, 'y', 120); expect(h.calls).toEqual(['preview:r']); expect(h.views).toEqual([]);
     await press(h, ESC); expect(frame(h)).toContain('› long.txt'); expect(h.calls).toEqual(['preview:r']);
   });
   it('a binary or too-large file says it cannot be shown instead of an empty or partial diff', async () => {
-    const h = await ready(); await press(h, 'j'); await press(h, '\r');
+    const h = await ready(); await press(h, DOWN); await press(h, '\r');
     expect(frame(h)).toContain('big.bin (2/3)'); expect(frame(h)).toContain(WORDS.diffUnavailable); expect(h.calls).toEqual(['preview:r']);
   });
   it('seeing a diff never delivers: y, n and Enter inside the diff do nothing, and only the list step y delivers once', async () => {

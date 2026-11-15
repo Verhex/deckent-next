@@ -52,7 +52,7 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   İki plan da yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
-  Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, satırda gösterilen numara o satırla
+  Kurulum penceresinde ve kartlarında ↑↓ gezer, Enter vurgulu yanıtı gönderir, satırda gösterilen numara o satırla
   yanıtlar, Esc kapatır; her evet/hayır sorusu (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
 - `deckent init --preview`, `AGENTS.md` ve `CLAUDE.md` yoksa bir `AGENTS.md` talimat dosyasını önizler; host köprüsü eklemez.
   Terminal okuyucusu `DECKENT.md` dosyasını eski kurulumlar için son seçenek olarak korur. İşçi talimatları ayrıca seçilir:
@@ -238,7 +238,7 @@ yolu olmadığı için reddedilir. Ayar değişikliği mevcut Run'ların değil,
   `working-tree` bu dosyaları commit atmadan yazar, eski hâllerini saklar; `reference` yalnız
   `refs/deckent/deliveries/` yazar (dallar, index ve çalışma ağacı değişmez). Yalnız `reference` modunda
   `execution.adoption.targets` yapılandırılmışsa sonraki ayrı seçim olarak hedef dallar sunulur.
-- **Farkı görmek.** ↑↓/j/k dosya seçer, Enter hunk'ları önizlemenin kurulduğu deneme, taban ve öneri kimliğiyle açar, Esc
+- **Farkı görmek.** ↑↓ dosya seçer, Enter hunk'ları önizlemenin kurulduğu deneme, taban ve öneri kimliğiyle açar, Esc
   listeye döner. Fark gövdeleri `deliver-port.json` ile sınırlıdır (`maxDiffFiles`, `maxDiffLinesPerFile`,
   `maxDiffBytesPerFile`); ikili ya da aşırı büyük dosya "Gösterilemez: ikili veya çok büyük" der, kesilen satırlar sayılır. Her
   satır pencerenin geri kalanıyla aynı redaksiyon ve terminal metni temizliğinden geçer. Görmek hazırlamaz, teslim etmez, dala
@@ -468,7 +468,7 @@ OpenRouter kredi sınırını deckent bütçenizden yüksek olmayacak şekilde a
   kapsamın Run'larını listeler; Escape `/tasks` penceresini kapatır ve gözlemi durdurur.
 - **Onay kartları.** Onay kartı (ve her soru) klavyeyi kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez.
   Yanıtları bir listedir — "Evet, bu sefer (y)", "Evet, bu oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis
-  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓ ya da j/k ile seçilir, Enter
+  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓ ile seçilir (`j` ve `k` kartta sıradan harftir), Enter
   ile onaylanır ya da satırın numarası veya harfiyle yanıtlanır; seçim Hayır'da başlar, Esc reddeder. "Hep izin ver" sizin kalıcı izninizdir
   (`deckent policy grants --mine`, `deckent policy revoke` ile kaldırılır). Bekleyen birden çok karar tek tek gelir ("1/3").
 - **Kartlarda tuş güvenliği.** Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş
