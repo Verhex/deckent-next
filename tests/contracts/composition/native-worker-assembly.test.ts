@@ -35,7 +35,7 @@ it('K27: production environment checks the default native requirements inside st
     await expect(runtime.checkEnvironment!(request, {} as NativeCliWorkerBinding, { schemaVersion: 1,
       requirements: [{ id: 'absent-node', kind: 'executable', target: '/missing-k27/node' }] }, {}, new AbortController().signal))
       .rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
-    // A service response cap above the read tools' own bound still starts a worker (2026-11-15: 4 MiB parked every native dispatch on a RangeError).
+    // The environment check also passes under a service response cap above the read tools' own bound (2026-11-15: 4 MiB failed it with a RangeError on every native dispatch).
     const configPath = join(f.project, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8')) as { service?: object };
     await writeFile(configPath, JSON.stringify({ ...config, service: { ...config.service, responseMaxBytes: 4_194_304 } })); clearConfigCache();
     await runtime.checkEnvironment!(request, {} as NativeCliWorkerBinding, requirements, {}, new AbortController().signal);

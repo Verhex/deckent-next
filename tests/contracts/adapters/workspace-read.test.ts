@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
+import { createGlobMatcher, createWorkspaceReadTools, workspaceReadResultBytes, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
   WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 import { agentToolSpecSchema } from '#domain/index.js';
@@ -141,6 +141,9 @@ custodyIt('[requires Linux /proc/self/fd custody] stops a catastrophic regular e
 
 it('validates argument sizes and configured limits before any descriptor read (Astra 2072 R3)', async () => {
   await expect(createWorkspaceReadTools('/never-opened', { limits: { maxResultBytes: 10 } })).rejects.toThrow('WORKSPACE_READ_LIMITS_INVALID');
+  // A wider cap of the caller is narrowed to the upper bound; a smaller one is never raised, so the refusal above still holds for it.
+  expect([workspaceReadResultBytes(4_194_304), workspaceReadResultBytes(512)]).toEqual([1_048_576, 512]);
+  await expect(createWorkspaceReadTools('/never-opened', { limits: { maxResultBytes: workspaceReadResultBytes(512) } })).rejects.toThrow('WORKSPACE_READ_LIMITS_INVALID');
   const tools = await createWorkspaceReadTools(process.cwd(), { limits: { maxResultBytes: 1024 } });
   expect((await tools.execute('read_file', { path: 'z'.repeat(5000) })).text).toContain('argument-too-long name=path');
 });
