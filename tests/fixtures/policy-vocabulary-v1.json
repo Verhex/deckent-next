@@ -253,6 +253,7 @@
       "kind": "installation",
       "actions": [
         "repair",
+        "rebind",
         "inspect",
         "uninstall",
         "purge"

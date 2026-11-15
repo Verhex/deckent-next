@@ -37,6 +37,35 @@ describe.skipIf(process.platform !== 'linux')('process runner v2 (S3-2): stdin, 
     expect(lines).toEqual(['one', 'two']);
     expect(Date.now() - started).toBeLessThan(30000);
   });
+  it('awaits event-time notices before later output and bounds a stuck or failed delivery', async () => {
+    const order: string[] = [];
+    const input = await v2('process.stdout.write("paid\\nanswer\\n")');
+    const result = await runNodeProcess(input, undefined, async line => {
+      if (line === 'paid') { await new Promise(resolve => setTimeout(resolve, 20)); order.push('notice-delivered'); }
+      else { expect(order).toEqual(['notice-delivered']); order.push(line); }
+    });
+    expect(result).toMatchObject({ reason: 'exit', exitCode: 0 });
+    expect(order).toEqual(['notice-delivered', 'answer']);
+    for (const cause of ['cancel', 'timeout']) {
+      const controller = new AbortController();
+      let release!: () => void, entered!: () => void, consumerSignal: AbortSignal | undefined;
+      const ready = new Promise<void>(resolve => { entered = resolve; });
+      const delivery = new Promise<void>(resolve => { release = resolve; });
+      const pending = runNodeProcess(await v2('process.stdout.write("paid\\nanswer\\n");setInterval(()=>{},1000)', { timeoutMs: cause === 'timeout' ? 200 : 5000 }),
+        controller.signal, async (_line, signal) => { consumerSignal = signal; entered(); await delivery; });
+      await ready;
+      if (cause === 'cancel') controller.abort();
+      expect(await pending).toMatchObject({ reason: cause === 'cancel' ? 'cancelled' : 'timeout' });
+      expect(consumerSignal?.aborted).toBe(true); release();
+    }
+    const seen: string[] = [];
+    expect(await runNodeProcess(await v2('process.stdout.write("paid\\nanswer\\n");setInterval(()=>{},1000)'), undefined, async line => {
+      seen.push(line); throw new Error('delivery');
+    })).toMatchObject({ reason: 'stopped' });
+    expect(seen).toEqual(['paid']);
+    expect(await runNodeProcess(await v2('process.stdout.write("paid\\nanswer\\n")', { timeoutMs: 200 }), undefined, () => new Promise(() => undefined)))
+      .toMatchObject({ reason: 'timeout' });
+  });
   it('refuses a line over the line bound and a stderr flood over its own bound', async () => {
     expect(await runNodeProcess(await v2('process.stdout.write("x".repeat(1000));setInterval(()=>{},1000)'), undefined, () => undefined))
       .toMatchObject({ reason: 'line-limit', signal: 'SIGKILL' });

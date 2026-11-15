@@ -43,7 +43,7 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 | Policy administration execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grants, bindings, delegation, restrictions, duties and standing grants must not let an AI enlarge its own authority. |
 | Authority documents, authenticators and approval assurance: all mutations | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | An actor cannot replace the identity or approval verifier that constrains it; inspect/list remain policy governed. |
 | Backup restore | `backup/fixture-backup/restore` | A restore can replace authority data. |
-| Execution environment install and installation repair | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19). |
+| Execution environment install and installation repair | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19). Amendment 2026-11-12 (79/88/92): rebind is separate; device-only is open, moved needs the person or an explicit in-file rule. |
 | Installation uninstall and purge | `installation/fixture-target/uninstall`, `installation/fixture-target/purge` | Removing the installation or purging its data cannot be undone by deckent; only the person at their own terminal confirms it (alpha.56 U10B). |
 | Permission mode set, including full access | `permission-mode/standart/set`, `permission-mode/full-auto/set`, `permission-mode/full-access/set` | An AI must not choose a weaker permission mode for itself. |
 | Every secret action, including read/resolve | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Reading, changing or moving credentials would bypass the secret boundary; read/resolve are defensive cells, not public secret-read APIs. |
@@ -58,6 +58,17 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 | Catalog suggestions and rule narrowing (every AI but the catalog aggregator) | `agent-catalog/fixture-target/suggest`, `agent-catalog/fixture-target/narrow` | Only the catalog aggregator writes suggestions and the automatic narrowing, each signed by its own key (S8-3, §9); another AI writing them could steer which agent runs without a card. |
 | Protected configuration subtrees, descendants and whole-object ancestors | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `beuser`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Security, isolation, admission, operations, audit, the recovery and Nervous modes, shell environment and network egress cannot be weakened through configuration. |
 <!-- ai-floor:end -->
+
+Rebinding is separate from installation repair (owner 2026-11-12, answers 79/88/92/94). `init identity --keep`
+opens device-only repair to every caller without policy or a terminal witness. Moved/copy acceptance needs the
+person or an explicit direct allow in the policy file: named principal, named `rebind` action, `installation`
+resource, ids array containing `moved`, and `scopes: "all"`. Roles never grant it; matching deny, restriction and
+require-approval rules at any scope close only the rule path. Neither deny nor organization policy stops the
+person or device-only repair in beta.2. No default or template writes the rule. `init identity --new` stays open.
+The policy file travels with copies and a same-account process can edit it. Class/basis are output only in beta.2;
+the durable record retains OS account and time. The macOS plain-project exception and all copy/weak-binding,
+snapshot, direct-edit and rollback limits are listed in [Installation moved](known-limits.md#installation-moved).
+
 
 There is also an application gate when deciding cards: AI/noninteractive callers cannot
 allow `edit-floor`, `edit-authority`, `mcp-floor`, an authority-effect card, a protected

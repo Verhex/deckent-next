@@ -281,7 +281,7 @@ it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and ap
     await until(() => frame.includes('Esc · Later'), 'profile card');
     stdin.write('\r'); await settle(80); expect(previews).toBe(0); expect(applied).toEqual([]); expect(main()).toContain('Choose a profile');
     await waitForCard(() => frame, 'Choose a profile'); stdin.write('\r');
-    await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\r'); await until(() => frame.includes('keys ignored'), 'ignored key note');
+    await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\u001b[200~ignored\r\u001b[201~'); await until(() => frame.includes('keys ignored'), 'ignored paste note'); stdin.write('\r');
     expect(previews).toBe(1);
     release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); stdin.write('\r'); await settle(80);
     expect(applied).toEqual([]); expect(main().split('Step 1/2').length - 1).toBe(1); expect(main()).not.toContain('Choose a profile');
@@ -289,6 +289,57 @@ it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and ap
     for (const modified of ['\u001b[13;5u', '\u001b\r']) { stdin.write(modified); await settle(60); expect(applied).toEqual([]); }
     stdin.write('\r'); expect(await result).toBe('applied'); expect(applied).toEqual(['p'.repeat(64)]); expect(main()).not.toContain('Step 1/2');
   } finally { stdin.destroy(); stdout.destroy(); }
+});
+// The real installer principal requires POSIX custody, as in initial-registry.test.ts; synthetic input tests remain cross-platform.
+it.skipIf(process.platform === 'win32')('107: ignored typing and paste cannot consent to Solo permissions or write an audit row; a fresh Enter or arrow then Enter can', async () => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { mkdtemp, mkdir, readFile, rm, writeFile } = await import('node:fs/promises'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
+  const { DatabaseSync } = await import('node:sqlite');
+  const { applyPolicyTemplateInstallation } = await import('#composition/core/installation/index.js');
+  const { observeSetupPermissions, applySetupPermissions } = await import('#composition/core/setup/index.js');
+  const { guideScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/guides.js');
+  const { clearConfigCache, t } = await import('#platform/index.js');
+  const { terminalBuffers } = await import('../../fixtures/terminal-screen.js');
+  for (const locale of ['en', 'tr'] as const) {
+    const root = await mkdtemp(join(tmpdir(), 'onboarding-consent-')), global = join(root, 'global'), options = { env: { DECKENT_GLOBAL_HOME: global, PATH: '', LANG: 'C.UTF-8' } };
+    let frame = '', result: Promise<unknown> | undefined;
+    const stop = new AbortController();
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, next) { frame += String(chunk); next(); } }), { isTTY: true, columns: 200, rows: 30 });
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    try {
+      await applyPolicyTemplateInstallation(root, 's', options);
+      await mkdir(global, { recursive: true }); await writeFile(join(global, 'config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+      const permissions = await observeSetupPermissions(root, 's', options);
+      expect(permissions).toMatchObject({ state: 'needs-confirmation', currentMode: 'standart', mode: 'full-auto' });
+      const policyPath = join(root, '.deckent/policy.json'), before = await readFile(policyPath, 'utf8');
+      const auditCount = () => { const db = new DatabaseSync(join(root, '.deckent/state/ledger.db'), { readOnly: true });
+        try { return Number(db.prepare('SELECT count(*) AS n FROM audit_events').get()!['n']); } finally { db.close(); } };
+      const beforeAudit = auditCount(), applied: string[] = [];
+      const port = { assertPerson: async () => {}, permissions: async (digest: string) => { applied.push(digest); await applySetupPermissions(root, 's', digest, options, { attest: async () => true }); } } as unknown as OnboardingPort;
+      result = guideScreen({ schemaVersion: 1, completed: 0, total: 1, steps: [], snapshot: { ...snapshot, permissions } }, 'permissions', port,
+        { locale, stdin: stdin as never, stdout: stdout as never, env: { TERM: 'xterm-256color' }, signal: stop.signal });
+      await waitForCard(() => frame, t('onboarding.permissions.title', {}, locale));
+      for (const chunks of [['/', 'h', 'e', 'l', 'p'], ['/help'], ['/help\r'], ['\u001b[200~/help\r\n\u001b[201~'], ['\u001b[200~\r\u001b[201~']]) {
+        for (const chunk of chunks) { stdin.write(chunk); await settle(20); }
+        const hintAt = frame.length; stdin.write('\r');
+        await until(() => frame.slice(hintAt).includes(t('onboarding.session.typingIgnored', {}, locale)), 'ignored typing hint');
+        const screen = terminalBuffers(frame.replace(/\n/gu, '\r\n'), 200, 30).main;
+        expect(screen).toContain(t('onboarding.permissions.title', {}, locale)); expect(screen).toContain(t('onboarding.session.typingIgnored', {}, locale));
+        expect(screen).not.toContain('/help');
+        expect(applied).toEqual([]); expect(auditCount()).toBe(beforeAudit);
+        expect(await observeSetupPermissions(root, 's', options)).toMatchObject({ currentMode: 'standart', state: 'needs-confirmation' });
+        expect(await readFile(policyPath, 'utf8')).toBe(before);
+      }
+      // Shift+Enter is a new line, never an answer (Astra 3134): alone it applies nothing.
+      stdin.write('\u001b[13;2u'); await settle(60); expect(applied).toEqual([]); expect(auditCount()).toBe(beforeAudit);
+      // Both ways of making a deliberate choice: Enter again, or new typing followed by an arrow and Enter.
+      if (locale === 'tr') { stdin.write('x'); await settle(20); stdin.write('\u001b[B'); await settle(20); }
+      stdin.write('\r'); expect(await result).toBe('applied');
+      // The first apply opens the policy grant and changes the mode: one audit row for each.
+      expect(applied).toEqual([permissions.digest]); expect(auditCount()).toBe(beforeAudit + 2);
+      expect(await observeSetupPermissions(root, 's', options)).toMatchObject({ state: 'applied', effectiveMode: 'full-auto' });
+    } finally { stop.abort(); await result; stdin.destroy(); stdout.destroy(); clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  }
 });
 it('A62: first work is never a setup step; the separate welcome routes describe, scan and typed work to ordinary chat', async () => {
   const done = { ...snapshot, budget: { ...snapshot.budget, needed: false }, deferred: ['onboarding:first-task:done'] };

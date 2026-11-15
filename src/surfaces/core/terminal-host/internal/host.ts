@@ -7,7 +7,7 @@ import { resolveRenderGlyphs, RenderGlyphsContext, TerminalHandoverContext } fro
 import type { TerminalHandover } from './handoff.js';
 import { createResizeOwnership, ResizeFrame } from './resize-frame.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
-import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
+import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
   type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import LIMITS from './host-limits.json' with { type: 'json' };
 
@@ -29,7 +29,7 @@ export interface TerminalHostContext {
   /** Present only in the full window on a real TTY. */
   readonly wheel?: WheelSource;
   readonly pointer?: PointerSource;
-  readonly copyText?: (text: string) => void;
+  readonly copyText?: (text: string) => ClipboardResult;
   /** Rings the terminal bell (BEL) only while the terminal has reported that its window lost focus; never when focus is unknown. Present only when attention notices are on. */
   readonly notify?: () => void;
   /** T1 `/copy`: the clipboard request writer (OSC 52, tmux-wrapped, byte-capped); present on every real TTY, not only in the full window. */
@@ -122,9 +122,10 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   let view = options.view;
   const repaint = () => { if (request) palette = drawn(); if (open) instance.rerender(tree(view, palette)); };
   const theme: TerminalHostContext['theme'] = { background: () => reported ?? null, apply: next => { setting = next; repaint(); } };
-  const context: TerminalHostContext = { fullscreen, transcriptExit, theme, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
+  const clipboard = createClipboardWriter(out);
+  const context: TerminalHostContext = { fullscreen, transcriptExit, theme, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard } : {}),
     ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
-    ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) };
+    ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: clipboard } : {}) };
   const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
       createElement(TerminalHandoverContext.Provider, { value: handover ?? null },

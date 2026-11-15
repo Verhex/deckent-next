@@ -146,7 +146,7 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
       return [result.approved ? t('tui.panel.mcp.approved', { name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale) : t('tui.panel.mcp.notApproved', { name }, locale)];
     },
     ...(card ? { async grantKey(name: string, key: string, ask: McpTrustAsk) { if (!await card.offer()) return [t('terminal.mcp.status.secretRefused', { key }, locale)]; // KER-17 audit: the person-only first-use card
-      if (await ask(card.question(key, root)) !== true) return [t('mcp.grant.notNow', { key }, locale)]; await card.grant(key); return [t('mcp.grant.given', { key, name }, locale)]; } } : {}),
+      if (await ask(await card.question(key, root)) !== true) return [t('mcp.grant.notNow', { key }, locale)]; await card.grant(key); return [t('mcp.grant.given', { key, name }, locale)]; } } : {}),
     async reconnect(name) { await call({ verb: 'reconnect', name }); return [t('terminal.mcp.reconnect', { name }, locale)]; },
     async remove(name) {
       const removed = (await call({ verb: 'remove', name })) as { removed?: { scope?: string } };

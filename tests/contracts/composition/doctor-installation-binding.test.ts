@@ -36,9 +36,9 @@ it('doctor says installation binding is not supported and relocation detection i
 // IDENTITY-BINDING-V2: strength and source kind (machine via platform or configured source, weak, unusable configured source) and the
 // requireMachineBinding consequence, in EN and TR. Never a machine value, digest or configured path value.
 it.each([
-  [{ capability: 'supported', strength: 'machine', source: 'platform', required: false }, 'Installation binding: machine (platform machine identity)', 'Kurulum bağı: makine (platform makine kimliği)'],
+  [{ capability: 'supported', strength: 'machine', source: 'platform', required: false, filesystemIdentity: { status: 'available', kind: 'linux.ext4.statfs-fsid.v1' } }, 'Installation binding: machine (platform machine identity)', 'Kurulum bağı: makine (platform makine kimliği)'],
   [{ capability: 'supported', strength: 'machine', source: 'configured', required: true }, 'machine (configured source installation.machineIdentity.source)', 'makine (yapılandırılmış kaynak installation.machineIdentity.source)'],
-  [{ capability: 'supported', strength: 'weak', source: 'location', required: false }, 'Installation binding: weak (path, device and inode', 'Kurulum bağı: zayıf (yol, cihaz ve inode'],
+  [{ capability: 'supported', strength: 'weak', source: 'location', required: false, filesystemIdentity: { status: 'unavailable', reason: 'filesystem-unproven' } }, 'Installation binding: weak (path, device and inode', 'Kurulum bağı: zayıf (yol, cihaz ve inode'],
   [{ capability: 'source-invalid', strength: null, source: 'configured', required: false }, 'INSTALLATION_IDENTITY_SOURCE_INVALID; no fallback', 'INSTALLATION_IDENTITY_SOURCE_INVALID ile durur; daha zayıf bağa düşülmez'],
 ] as const)('doctor renders binding %j in EN and TR', async (report, en, tr) => {
   const f = await fixture();
@@ -47,6 +47,15 @@ it.each([
     await runKernelCommand(['doctor', '--verbose', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => report });
     expect(out.lines.join('')).toContain(text);
     expect(out.lines.join('')).not.toMatch(/requireMachineBinding (is on|açık)/u); // required is satisfied or off in these rows
+    if ('filesystemIdentity' in report) {
+      expect(out.lines.join('')).toContain(report.filesystemIdentity.status === 'available' ? 'linux.ext4.statfs-fsid.v1'
+        : language === 'en' ? 'filesystem not yet proven' : 'dosya sistemi henüz doğrulanmadı');
+      const human = capture(), json = capture();
+      await runKernelCommand(['doctor', '--lang', language], { root: f.project, env: f.env, stdout: human.sink, inspectInstallationBinding: async () => report });
+      expect(human.lines.join('')).toContain(language === 'en' ? 'Filesystem identity:' : 'Dosya sistemi kimliği:');
+      await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: json.sink, inspectInstallationBinding: async () => report });
+      expect(JSON.parse(json.lines.join('')).installationBinding.filesystemIdentity).toEqual(report.filesystemIdentity);
+    }
   }
 });
 
@@ -69,7 +78,10 @@ it('doctor omits the line when unwired', async () => {
 it('the composed doctor reading follows the product capture on this host and writes nothing', async () => {
   const f = await fixture(), out = capture(), strength = await hostBindingStrength();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: inspectConfiguredInstallationBinding });
-  expect(JSON.parse(out.lines.join('')).installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false }
+  const observed = JSON.parse(out.lines.join('')).installationBinding, { filesystemIdentity, ...machine } = observed;
+  expect(machine).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false }
     : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false } : { capability: 'unsupported', strength: null, source: null, required: false });
+  expect(filesystemIdentity).toMatchObject({ status: 'unavailable', reason: process.platform === 'linux' ? 'mount-unavailable' : 'platform-unsupported' });
+  expect(filesystemIdentity).not.toHaveProperty('value');
   expect(await readdir(f.project)).toEqual([]);
 });

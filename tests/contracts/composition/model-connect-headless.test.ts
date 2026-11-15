@@ -222,10 +222,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       await settleOnboarding(platform.resolveProductLayout({ projectRoot: h.f.project, root: h.f.data }));
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
+      // The PTY wraps long notices; wait for the catalog's first sentence, including the fixture's window.
+      const quota = platform.t('headless.chat.quota', { window: platform.t('headless.chat.quotaWindow.five_hour', {}, 'en') }, 'en').split('. ')[0]!;
       const steps = [['deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
         ['Ready', '/provider\r', 'fresh'], ['deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
         ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
-        ['CLAUDE-CHAT-SECOND', 'quota please\r'], ['Your subscription usage limit', '/exit\r', 'fresh']];
+        ['CLAUDE-CHAT-SECOND', 'quota please\r'], [quota, '/exit\r', 'fresh']];
       const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),
         JSON.stringify(steps), 'tty', 'until-exit'], { cwd: h.f.project, env: { ...h.f.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' },
         timeout: 120_000, maxBuffer: 8 * 1024 * 1024 });

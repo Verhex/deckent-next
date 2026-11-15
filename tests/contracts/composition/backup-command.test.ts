@@ -1,3 +1,4 @@
+import { REBIND_CLASS } from '#domain/index.js';
 import { PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { Worker } from 'node:worker_threads';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -90,7 +91,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   const db = new DatabaseSync(productResourcePath(restored, 'ledger'), { readOnly: true });
   expect(db.prepare('SELECT n FROM backup_count').get()?.n).toBe(count); db.close();
   await expect(new FileInstallationIdentityStore(restored, 2000).read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
-  await new FileInstallationIdentityStore(restored, 2000).resolveRelocation('keep', { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
+  await new FileInstallationIdentityStore(restored, 2000).resolveRelocation({ choice: 'keep', admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } }, { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
   expect((await new FileInstallationIdentityStore(restored, 2000).read())).toMatchObject({ value: { installationId: f.installationId } });
   for (const name of ['MANIFEST.sha256','ledger.db','ledger.fingerprint.json','state.archive.json.gz','authority.key.enc']) expect((await stat(join(f.set,name))).mode & 0o777).toBe(0o600);
   // S1 O6: create, verify and restore leave no SQLite sidecar in the set.

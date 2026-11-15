@@ -51,6 +51,10 @@ describe('project instruction trust on the real Ink workline', () => {
     const f = await fixture(), calls: string[] = [];
     const view = mountWorkline({ projectInstructions: { port: f.port, labels: projectInstructionLabels('en') }, completeTurn: async messages => { calls.push(JSON.stringify(messages)); return 'done'; } }); mounted.push(view);
     await settle(60); view.stdin.write('hello\r'); await until(() => view.stdout.frame.includes('Project instruction trust'), 'trust window');
+    // Owner 108 (every card): text typed here and its Enter choose nothing, not even the highlighted "skip"; the turn keeps waiting.
+    view.stdin.write('o'); await settle(); view.stdin.write('k'); await settle(); view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('Nothing was chosen.'), 'typed text chose nothing'); expect(calls).toEqual([]);
+    expect(await f.port.inspect()).toMatchObject({ status: 'trust-required' });
     view.stdin.write('\u001b[B'); await settle(); view.stdin.write('\r'); await until(() => calls.length === 1, 'accepted turn');
     expect(calls[0]).toContain('PROJECT-ONLY-CONTEXT');
     expect(await (await openProjectInstructionReader(f.root, f.trust)).inspect()).toMatchObject({ status: 'ready' });
@@ -103,6 +107,10 @@ describe('project instruction trust on the real Ink workline', () => {
     cleanup.push(() => { view.unmount(); stdin.end(); });
     await until(() => frame.includes('Preview project instructions'), 'init preview');
     expect(frame).toContain('init-derived'); expect(frame).toContain('npm run test'); expect(written).toEqual([]);
+    // The standalone window is a decision card too: once its keys count, text typed here and its Enter are not "cancel" (the highlighted row).
+    const labels = projectInstructionLabels('en'); await until(() => frame.includes(labels.hints), 'init window armed');
+    stdin.write('x'); await until(() => frame.includes(labels.decisionArm.typedText), 'typed text row'); stdin.write('\r');
+    await until(() => frame.includes(labels.decisionArm.unchosen), 'nothing chosen'); expect(finished).toBe(false);
     stdin.write('\u001b'); await until(() => finished, 'init escaped'); expect(written).toEqual([]);
   });
 });

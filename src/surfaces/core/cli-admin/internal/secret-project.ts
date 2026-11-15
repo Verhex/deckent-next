@@ -1,19 +1,24 @@
 import { ErrorRegistry, emit, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { SecretGrantState, SecretInventory, SecretInventoryFinding, SecretInventoryRow } from '#engine/index.js';
+import type { SecretProjectTarget, SecretGrantState, SecretInventory, SecretInventoryFinding, SecretInventoryRow } from '#engine/index.js';
 import { cliMode, cliTableStyle, renderCliTable, scopeNotice, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions } from './io.js';
 
 /** PRE-8 v2: the one inventory (`secret list [--all]`, the terminal provider panel): names and metadata only, never a value. */
-interface SecretInventoryView extends SecretInventory { readonly schemaVersion: 1; readonly project: string | null; readonly mainStore: string; readonly all: boolean }
+interface SecretInventoryView extends SecretInventory { readonly schemaVersion: 1; readonly project: string | null; readonly workingFolder?: string; readonly mainStore: string; readonly all: boolean }
 export type SecretInventoryHandler = (root: string, input: { readonly scopeId: string; readonly all: boolean }, options: ConfigLoadOptions) => Promise<SecretInventoryView>;
 interface SecretGrantView { readonly name: string; readonly project: string; readonly granted: boolean; readonly revision: number }
 /** `secret grant|revoke` in this process at the person's terminal (witnessed, decided on `secret`/`set`, sealed before the grant record). */
-export type SecretGrantHandler = (root: string, input: { readonly scopeId: string; readonly name: string; readonly action: 'grant' | 'revoke' }, options: ConfigLoadOptions) => Promise<SecretGrantView>;
+export type SecretGrantHandler = (root: string, input: { readonly scopeId: string; readonly name: string; readonly action: 'grant' | 'revoke'; readonly target?: SecretProjectTarget }, options: ConfigLoadOptions) => Promise<SecretGrantView>;
 /** `secret set|delete --project`: the project's own vault, in this process at the person's terminal (value null: delete). */
 export type ProjectSecretHandler = (root: string, input: { readonly scopeId: string; readonly name: string; readonly value: string | null }, options: ConfigLoadOptions)
   => Promise<{ readonly name: string; readonly project: string; readonly removed: boolean }>;
-export type SecretHandoverHandler = (root: string, input: { readonly scopeId: string }, options: ConfigLoadOptions) => Promise<{ readonly project: string; readonly handedOverAtMs: number | null }>;
+export type SecretHandoverHandler = (root: string, input: { readonly scopeId: string; readonly target?: SecretProjectTarget }, options: ConfigLoadOptions) => Promise<{ readonly project: string; readonly handedOverAtMs: number | null }>;
+
+export type SecretTargetHandler = (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<SecretProjectTarget>;
+const workingFolderRows = (target: SecretProjectTarget, locale: Locale) => target.workingFolder === target.anchor.projectRoot ? []
+  : [target.anchor.repository ? t('secret.project.sharedWorktrees', { workingFolder: terminalSafeText(target.workingFolder) }, locale)
+    : t('secret.project.workingFolder', { workingFolder: terminalSafeText(target.workingFolder) }, locale)];
 
 type Sinks = ReturnType<typeof adminSinks> & { readonly json: boolean };
 /** The authority commands need a person's terminal before anything is read (the composition checks the witness again). */
@@ -33,26 +38,34 @@ export async function projectKeyUsers(context: AdminCommandContext, root: string
 export async function secretGrantCommand(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, sinks: Sinks,
   input: { readonly scope: ScopeResolution; readonly name: string; readonly action: 'grant' | 'revoke' }): Promise<'cancelled' | void> {
   if (!context.changeSecretGrant) throw ErrorRegistry.createError('CLI_USAGE');
+  let target: SecretProjectTarget | undefined;
   if (adminInteractive(context, sinks.json)) {
-    const params = { name: input.name, project: terminalSafeText(root) }, users = input.action === 'revoke' ? await projectKeyUsers(context, root, input.scope.scopeId, input.name, options, locale) : [];
+    if (!context.inspectSecretTarget) throw ErrorRegistry.createError('CLI_USAGE');
+    target = await context.inspectSecretTarget(root, input.scope.scopeId, options);
+    const params = { name: input.name, project: terminalSafeText(target.anchor.projectRoot) }, users = input.action === 'revoke' ? await projectKeyUsers(context, root, input.scope.scopeId, input.name, options, locale) : [];
     const revokeUsers = async () => users.length ? [t('cli.secret.card.revokeUsers', { users: users.join(', ') }, locale)] : [];
     const answer = await askAdminCard(context, locale, { title: input.action === 'grant' ? t('cli.secret.card.grantTitle', params, locale) : t('cli.secret.card.revokeTitle', params, locale),
-      body: [t('cli.secret.card.grantBody', {}, locale), ...await revokeUsers()], options: confirmOptions(locale) });
+      body: [t('cli.secret.card.grantBody', {}, locale), ...workingFolderRows(target, locale), ...await revokeUsers()], options: confirmOptions(locale) });
     if (answer !== 'apply') return 'cancelled';
   }
-  const view = await context.changeSecretGrant(root, { scopeId: input.scope.scopeId, name: input.name, action: input.action }, options);
+  const view = await context.changeSecretGrant(root, { scopeId: input.scope.scopeId, name: input.name, action: input.action, ...(target ? { target } : {}) }, options);
   if (!sinks.json) emit(scopeNotice(input.scope, locale), adminSinks(context));
   const params = { name: view.name, project: terminalSafeText(view.project) };
-  emit(view, { ...sinks, render: () => view.granted ? t('cli.secret.done.granted', params, locale) : t('cli.secret.done.revoked', params, locale) });
+  emit(view, { ...sinks, render: () => [view.granted ? t('cli.secret.done.granted', params, locale) : t('cli.secret.done.revoked', params, locale), ...(target ? workingFolderRows(target, locale) : [])].join('\n') });
 }
 
 /** `deckent secret handover --scope <S>`: a moved project takes its vault along (refused while the original folder still holds it). */
 export async function secretHandoverCommand(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, sinks: Sinks, scope: ScopeResolution): Promise<'cancelled' | void> {
   if (!context.handOverSecrets) throw ErrorRegistry.createError('CLI_USAGE');
-  if (adminInteractive(context, sinks.json) && await askAdminCard(context, locale, { title: t('cli.secret.card.handoverTitle', { project: terminalSafeText(root) }, locale),
-    options: confirmOptions(locale) }) !== 'apply') return 'cancelled';
-  const view = await context.handOverSecrets(root, { scopeId: scope.scopeId }, options);
-  emit(view, { ...sinks, render: () => t('cli.secret.done.handedOver', { project: terminalSafeText(view.project) }, locale) });
+  let target: SecretProjectTarget | undefined;
+  if (adminInteractive(context, sinks.json)) {
+    if (!context.inspectSecretTarget) throw ErrorRegistry.createError('CLI_USAGE');
+    target = await context.inspectSecretTarget(root, scope.scopeId, options);
+    if (await askAdminCard(context, locale, { title: t('cli.secret.card.handoverTitle', { project: terminalSafeText(target.anchor.projectRoot) }, locale),
+      body: workingFolderRows(target, locale), options: confirmOptions(locale) }) !== 'apply') return 'cancelled';
+  }
+  const view = await context.handOverSecrets(root, { scopeId: scope.scopeId, ...(target ? { target } : {}) }, options);
+  emit(view, { ...sinks, render: () => [t('cli.secret.done.handedOver', { project: terminalSafeText(view.project) }, locale), ...(target ? workingFolderRows(target, locale) : [])].join('\n') });
 }
 
 const vaultCell = (vault: SecretInventoryRow['vault'], locale: Locale) => vault === 'main' ? t('cli.secret.inventory.vault.main', {}, locale) : t('cli.secret.inventory.vault.project', {}, locale);
@@ -78,6 +91,7 @@ export function renderSecretInventory(view: SecretInventoryView, installationUse
     t('cli.secret.inventory.column.stored', {}, locale)].map(header => ({ header }));
   const findings = view.findings.map(finding => `  ${findingLine(finding, locale)}`), params = { project: terminalSafeText(view.project ?? '-'), store: terminalSafeText(view.mainStore) };
   return [view.all ? t('cli.secret.inventory.titleAll', params, locale) : t('cli.secret.inventory.title', params, locale),
+    ...(view.workingFolder ? [t('secret.project.workingFolder', { workingFolder: terminalSafeText(view.workingFolder) }, locale)] : []),
     ...(rows.length ? ['', renderCliTable(columns, rows, style)] : [t('cli.secret.list.empty', {}, locale)]),
     ...(findings.length ? ['', t('cli.secret.inventory.findings', {}, locale), ...findings] : []), '', t('cli.secret.inventory.never', {}, locale)].join('\n');
 }

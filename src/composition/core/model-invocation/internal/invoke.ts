@@ -1,4 +1,5 @@
-import { notifyNativeBuiltinPlugins } from './plugin-notices.js';
+import type { ClaudeRateLimit } from '#capabilities/index.js';
+import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './plugin-notices.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -15,7 +16,7 @@ import { modelSpendRefusal } from './spend-refusal.js';
 type InvocationGuard = { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void };
 type ApplicationOptions = {
   context: Awaited<ReturnType<typeof loadInvocationContext>>; options: ConfigLoadOptions; host?: RuntimeModelInvocationHost | undefined;
-  snapshot?: ModelInspectionSnapshot; readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
+  onPaidUsage?: ((limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>) | undefined; snapshot?: ModelInspectionSnapshot; readOnly?: boolean; entry?: 'raw' | 'feature'; profileGuard?: InvocationGuard['profile'] | undefined;
   observeSpending?: InvocationGuard['spending'] | undefined; agent?: ModelInvocationNativeBinding | undefined;
 };
 type InvokeOptions = {
@@ -52,11 +53,15 @@ export async function invokePeerConfiguredModel(projectRoot: string, input: Mode
 export async function invoke({ input, loadContext, options, signal, delivery, host, onDelta, entry = 'raw', onNotice, guard, agent, terminal }: InvokeOptions) {
   try {
     const command = parsedCommand(input), context = await loadContext(command.scopeId);
-    const forCommand = (value: ModelInvocationCommand) => application({ context, options, host, entry, agent, observeSpending: guard?.spending,
+    const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
+    const onPaidUsage = onNotice ? (limit: ClaudeRateLimit, lineSignal?: AbortSignal) => notifyNativePaidUsage(limit, language, host ?? options, terminal ?? '', command.scopeId, onNotice, AbortSignal.any([...(signal ? [signal] : []), ...(lineSignal ? [lineSignal] : [])])) : undefined;
+    const forCommand = (value: ModelInvocationCommand) => application({ context, options, host, entry, agent, onPaidUsage, observeSpending: guard?.spending,
       profileGuard: async profile => { await configuredContinuationPin(value)?.(profile); await guard?.profile(profile); } });
     const app = forCommand(input);
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
-    if (onNotice) await notifyNativeBuiltinPlugins(result, resolveLocale(undefined, options.env ?? process.env, context.config.language), host ?? options, terminal ?? '', onNotice);
+    if (onNotice) {
+      await notifyNativeBuiltinPlugins(result, language, host ?? options, terminal ?? '', onNotice);
+    }
     if (agent || entry !== 'feature' || !onDelta || !onNotice) return result;
     const next = await prepareConfiguredSiwcContinuation(context, options, command, result, value => app.preview(value, undefined, signal),
       reference => onNotice(`${t('siwc.switch.notice', { model: reference.modelId }, context.config.language)}\n`), signal);
@@ -82,9 +87,9 @@ function parsedCommand(input: ModelInvocationCommand) {
   if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return parsed.data as ModelInvocationCommand;
 }
-export function application({ context, options, host, readOnly = false, entry = 'raw', profileGuard, observeSpending, agent, snapshot }: ApplicationOptions) {
+export function application({ context, options, host, readOnly = false, entry = 'raw', profileGuard, observeSpending, agent, snapshot, onPaidUsage }: ApplicationOptions) {
   // One trusted clock for pricing and durable invocation records (I40).
-  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly, agent, readOnly ? snapshot : undefined);
+  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly, agent, readOnly ? snapshot : undefined, onPaidUsage);
   const verifier = verifiedPrincipal(context.principal), bindings = readOnly && snapshot ? snapshot.bindings : new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),

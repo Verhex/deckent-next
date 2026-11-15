@@ -111,6 +111,7 @@
   },
   "quotaPolicy": {
     "schemaVersion": 1,
+    "claudeAllowedStatuses": ["allowed", "allowed_warning"],
     "claudeRejectedStatuses": [
       "rejected"
     ],

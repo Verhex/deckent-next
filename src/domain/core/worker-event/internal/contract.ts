@@ -1,5 +1,6 @@
 import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
+import { nativeCallObservationSchema } from '#domain/core/model-invocation/index.js';
 import { quotaExhaustedSchema } from './quota.js';
 import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 
@@ -16,6 +17,7 @@ const tokens = z.strictObject({ input: count, output: count, cacheRead: count, c
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type WorkerTokens = z.infer<typeof tokens>;
 const base = { schemaVersion: z.literal(WORKER_EVENT_SCHEMA_VERSION), sequence: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), atMs: count };
 const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ ...base, kind: z.literal('cli.observation'), observation: nativeCallObservationSchema }),
   z.strictObject({ ...base, get kind() { return z.literal('session.started'); }, provider: workerProviderSchema, get model() { return text(128).nullable(); }, get cliVersion() { return text(64).nullable(); } }),
   z.strictObject({ ...base, get kind() { return z.literal('message'); }, get role() { return z.enum(['assistant']); }, textBytes: count, get thinking() { return z.boolean(); }, get excerpt() { return text(240); } }),
   z.strictObject({ ...base, get kind() { return z.literal('tool.call'); }, get toolId() { return text(96); }, get name() { return text(64); }, toolClass: workerToolClassSchema,

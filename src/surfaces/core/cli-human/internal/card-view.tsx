@@ -3,9 +3,9 @@ import { useApp } from 'ink';
 import { colorCapability, loadConfigTerminalLaunch, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
 import { humanRecordText, prefersAsciiGlyphs, span } from '#surfaces/core/terminal-render/index.js';
-import { CardCopyContext, QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DecisionArmLabelsContext, QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
 import { openTerminalHost, streamCardCopy } from '#surfaces/core/terminal-host/index.js';
-import { cardCopyLabels, type CliCardRequest } from './card.js';
+import { decisionArmLabels, cardCopyLabels, type CliCardRequest } from './card.js';
 
 /** The card body: the terminal's bounded window and question rows, answered once; Esc, Ctrl+C or the window's close give no answer. */
 function CliCard({ request, hints, known, finish }: { readonly request: CliCardRequest; readonly hints: string; readonly known?: KnownSecretSnapshot | undefined;
@@ -43,7 +43,7 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
   const host = await openTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout: io.stdout, stdin: io.stdin,
     ...(io.signal ? { signal: io.signal } : {}), ascii: prefersAsciiGlyphs(io.env), clearScreen: false, fullscreen: false,
     view: () => <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
-      <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
+      <DecisionArmLabelsContext.Provider value={decisionArmLabels(io.locale)}><WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider></DecisionArmLabelsContext.Provider>
     </CardCopyContext.Provider> });
   const eof = () => { ended = true; chosen = null; void host.close(); };
   io.stdin.once('end', eof); io.stdin.once('close', eof);

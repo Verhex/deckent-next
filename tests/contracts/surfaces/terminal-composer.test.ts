@@ -315,11 +315,11 @@ async function until(check: () => boolean, label: string) {
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 
-function mount(props: Partial<ComposerProps> = {}, columns = 120, tier: Parameters<typeof resolveWorklinePalette>[0] = 'none') {
+function mount(props: Partial<ComposerProps> = {}, columns = 120, tier: Parameters<typeof resolveWorklinePalette>[0] = 'none', theme?: Parameters<typeof resolveWorklinePalette>[1]) {
   const stdout = new Screen(columns);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const sent: string[] = [], calls = { exit: 0, cancel: 0 };
-  const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette(tier), children: createElement(Composer, {
+  const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette(tier, theme), children: createElement(Composer, {
     prompt: '> ', labels, busy: false, onSubmit: value => sent.push(value), onCancel: () => calls.cancel++, onExit: () => calls.exit++, ...props,
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
@@ -446,8 +446,10 @@ describe('composer rendered by Ink (no colour tier)', () => {
       await until(() => view.stdout.text.slice(mark).includes(HINT), 'placeholder back');
     });
 
-    it('shows the hint without a marker space in a colour tier (dim needs a colour-capable stream, so it is not asserted here)', async () => {
-      const view = mount({ ...withHint, caret: 'inverse' }, 120, 'ansi16');
+    it('uses the colour tier for the caret even when the resolved accent is empty', async () => {
+      const palette = resolveWorklinePalette('ansi16', 'neutral-ansi');
+      expect(palette.accent).toEqual({}); expect(palette.tier).toBe('ansi16');
+      const view = mount(withHint, 120, 'ansi16', 'neutral-ansi');
       await until(() => view.stdout.text.includes(HINT), 'placeholder');
       expect(view.stdout.text).not.toContain(`| ${HINT}`);
     });

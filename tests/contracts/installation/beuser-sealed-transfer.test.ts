@@ -55,7 +55,7 @@ it('trusted genesis creates fresh durable sealed identity; flags, reopen and rel
   const path = join(productResourcePath(f.layout, 'installationIdentity'), 'identity.json');
   expect(installationIdentityRecordSchema.parse(JSON.parse(await readFile(path, 'utf8')))).toMatchObject({ schemaVersion: 3, realmSeal: seal });
   expect((await new FileInstallationIdentityStore(f.layout, undefined, source, { requireMachineBinding: false }).loadOrCreate()).realmSeal).toEqual(seal);
-  await expect(store.resolveRelocation('new', { issuer: 'fixture', subject: 'owner' })).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' });
+  await expect(store.resolveRelocation({ choice: 'new' }, { issuer: 'fixture', subject: 'owner' })).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' });
   const before = await readFile(path, 'utf8');
   await file(path, JSON.stringify({ schemaVersion: 1, installationId: identity.installationId }));
   await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });

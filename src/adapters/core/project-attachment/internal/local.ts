@@ -6,11 +6,11 @@ import { FileProjectIdentityStore, FileInstallationIdentityStore, readInstallati
 import { readLocalOsIdentity, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 import { automationMarker, productResourcePath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { readAttachmentBootstrapConfig } from './bootstrap.js';
-import { FileProjectAttachmentStore, captureAttachmentLocation } from './store.js';
+import { FileProjectAttachmentStore, captureAttachmentLocation, observeAttachmentFilesystemIdentity } from './store.js';
 /** Only metadata/bootstrap ports. Provider, policy and config mutation stay with their existing applications. */
-export function localProjectAttachmentPorts(config: ResolvedConfig, options: ConfigLoadOptions, store: FileProjectAttachmentStore): Pick<ProjectAttachmentPorts, 'actor' | 'authorize' | 'target' | 'ensureProject'> {
+export function localProjectAttachmentPorts(config: ResolvedConfig, options: ConfigLoadOptions, store: FileProjectAttachmentStore): Pick<ProjectAttachmentPorts, 'actor' | 'authorize' | 'target' | 'ensureProject' | 'observeFilesystemIdentity'> {
   const root = config.projectRoot, { issuer, subject } = readLocalOsIdentity();
-  return { actor: { issuer, subject },
+  return { observeFilesystemIdentity: observeAttachmentFilesystemIdentity, actor: { issuer, subject },
     async authorize() {
       const env = options.env ?? process.env;
       await assertAuthorityWitness('project.attach', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), { attest: async () =>

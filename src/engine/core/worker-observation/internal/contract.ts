@@ -44,6 +44,13 @@ export interface WorkerObservation {
 }
 /** PRE-34: a worker with a recorded end (terminal result) or released custody has finished, whatever its last usage summary says. */
 export const workerFinished = (worker: Pick<WorkerObservation, 'terminal' | 'custody'>): boolean => !!worker.terminal || worker.custody === 'released';
+/** Only a verified process is active; a retained end or released custody is history. */
+export type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
+const PROCESS_KIND: Readonly<Record<WorkerProcessState, WorkerKind>> = { running: 'active', paused: 'active', created: 'active', exited: 'finished',
+  missing: 'lost', 'absent-unverified': 'lost', unknown: 'unknown', 'present-unverified': 'unknown', denied: 'unknown' };
+export function workerKind(worker: Pick<WorkerObservation, 'terminal' | 'custody' | 'process'>): WorkerKind {
+  return workerFinished(worker) ? 'finished' : PROCESS_KIND[worker.process];
+}
 /** Shared selection for monitor and workers: rejected sealed evidence never admits the sidecar usage fallback. */
 export function resolveWorkerUsage(worker: Pick<WorkerObservation, 'usage' | 'usageEvidence' | 'files'>): WorkerEventSummary | null {
   if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return null;

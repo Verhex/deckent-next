@@ -200,7 +200,7 @@ export function Composer(props: ComposerProps): ReactNode {
   }, { isActive: active });
   usePaste(text => { if (latest.current.acceptsInput?.() !== false) dispatch({ type: 'paste', text }); }, { isActive: active });
 
-  const marker = (props.caret ?? (Object.keys(palette.accent).length === 0 ? 'marker' : 'inverse')) === 'marker';
+  const marker = (props.caret ?? (palette.tier === 'none' ? 'marker' : 'inverse')) === 'marker';
   const menu = composerMenu(state);
   const indent = ' '.repeat(displayWidth(prompt));
   // Border (2) and padding (2) plus one cell so the caret after a full row never wraps.
@@ -215,7 +215,7 @@ export function Composer(props: ComposerProps): ReactNode {
   // Dim only in a colour tier: the `none` tier (NO_COLOR) renders the hint as plain text without ANSI codes.
   const steerWords = props.steer && props.onSteer ? labels.steerPlaceholder : undefined;
   const placeholder = state.text !== '' ? '' : steerWords ? (kitty ? steerWords.kitty : steerWords.other) : labels.placeholder ?? '';
-  const dimmable = Object.keys(palette.accent).length > 0;
+  const dimmable = palette.tier !== 'none';
   const match = state.search ? searchMatches(state)[state.search.skip]?.text ?? '' : '';
   return (
     <Box flexDirection="column" flexShrink={0}>

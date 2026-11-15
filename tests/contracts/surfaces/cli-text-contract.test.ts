@@ -12,7 +12,7 @@ it('keeps localized CLI help ordered, pipe-safe, and explicit about output and e
   }
   expect(t('cli.run.desc', {}, 'en')).not.toContain('directives');
   expect(t('cli.run.inspect.task', { task: 't', kind: 'k' }, 'tr')).toContain('Görev');
-  expect(t('inventory.row', { run: 'r', task: 't', attempt: 'a', owner: 'o', state: 's', cancel: 'n', output: 'x' }, 'tr')).toContain('Attempt');
+  expect(t('inventory.row', { run: 'r', task: 't', attempt: 'a', owner: 'o', state: 's', cancel: 'n', output: 'x' }, 'tr')).toContain('deneme');
 });
 
 it('maps registry categories to the documented CLI exit codes', () => {

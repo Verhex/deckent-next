@@ -1,4 +1,5 @@
-import { ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t, type Locale } from '#platform/index.js';
+import type { RebindAdmission } from '#engine/index.js';
 import type { InstallationIdentityChoice } from '#domain/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -27,5 +28,16 @@ export async function identityCommand(argv: readonly string[], context: Installa
   const result = await context.resolveInstallationIdentity(root, choice, options);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}),
     render: value => t('cli.identity.resolved', { previous: value.previousInstallationId, current: value.installationId,
-      choice: value.choice === 'keep' ? t('cli.identity.keep', {}, locale) : t('cli.identity.new', {}, locale) }, locale) });
+      choice: value.choice === 'keep' ? t('cli.identity.keep', {}, locale) : t('cli.identity.new', {}, locale) }, locale)
+      + (value.basis ? `\n${basisText(value.basis, locale)}` : '')
+      + (value.attachmentRecordsUnreconciled ? `\n${t('cli.identity.attachmentsUnreconciled', {}, locale)}` : '') });
+}
+
+function basisText(basis: RebindAdmission['basis'], locale: Locale) {
+  switch (basis) {
+    case 'open-class': return t('cli.identity.basis.open-class', {}, locale);
+    case 'human-tty': return t('cli.identity.basis.human-tty', {}, locale);
+    case 'ai-policy': return t('cli.identity.basis.ai-policy', {}, locale);
+    case 'macos-plain': return t('cli.identity.basis.macos-plain', {}, locale);
+  }
 }

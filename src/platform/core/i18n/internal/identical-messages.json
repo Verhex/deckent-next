@@ -55,8 +55,6 @@
   "kpi.header_kpi",
   "limits.no_reset",
   "native-context.measurement.reason_suffix",
-  "native-context.request.purpose_checkpoint",
-  "native-context.slash.checkpoint",
   "native.tool_elapsed",
   "native_permission.round_item",
   "nervous.dashboard_title",

@@ -1,4 +1,9 @@
 import { openConfiguredModelInspection } from './model-inspection.js';
+import { openSqliteModelInvocationReader } from '#adapters/index.js';
+import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { loadConfiguredScopeContext, configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
+import { captureAttachmentLocation, inspectFilesystemIdentity } from '#adapters/index.js';
 import { nativeCliAgent } from '#adapters/index.js';
 import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
@@ -39,7 +44,7 @@ import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalH
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, t, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, t, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -47,10 +52,15 @@ import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTe
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
-import { assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
+import { inspectSecretProjectTarget, assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
 /** A host handler's failure leaves as a typed query failure: its registered code, never the raw cause. */
-const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) => { throw queryFailure(error); });
+// Source folders are local display facts only, never general query/service error parameters.
+const typed = <T>(work: Promise<T>): Promise<T> => work.catch((error: unknown) => {
+  if ((isCodedError(error, 'PROJECT_ATTACHMENT_UNAVAILABLE') || isCodedError(error, 'PROJECT_ATTACHMENT_CHANGED'))
+    && 'sourceRoot' in error && typeof error.sourceRoot === 'string') throw ErrorRegistry.createError(error.code, { params: { source: terminalSafeText(error.sourceRoot) } });
+  throw queryFailure(error);
+});
 const installationProfile = (path: string) => readInstallationProfileFile(path, getConfigFieldDefault('installation').profileMaxBytes);
 
 /** The call's settings the light entry resolved before any host module loaded. */
@@ -120,7 +130,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
     ensureTerminalIdentity: (projectRoot, scopeId, options) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options)),
-    resolveInstallationIdentity: resolveConfiguredInstallationIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
+    resolveInstallationIdentity: (root, choice, options) => typed(resolveConfiguredInstallationIdentity(root, choice, options)),
+    loadInstallationIdentity: (root, options) => typed(loadConfiguredInstallationIdentity(root, options)), loadProjectIdentity: (root, options) => typed(loadConfiguredProjectIdentity(root, options)),
     stopRuntimeService: (projectRoot, options, reason) => stopConfiguredRuntimeService(projectRoot, options, reason), inspectBackupSets: inspectConfiguredBackupSets, inspectAdminPaths: inspectConfiguredAdminPaths,
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
@@ -157,16 +168,17 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     // PRE-8 v2: the inventory, grants, project-vault changes and the handover run in this process at the person's witnessed terminal (no protocol op).
     inspectSecretInventory: (projectRoot, input, options) => typed(inspectConfiguredSecretInventory(projectRoot, input.scopeId, input.all, options)),
-    changeSecretGrant: (projectRoot, input, options) => typed(changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options)),
+    inspectSecretTarget: inspectSecretProjectTarget,
+    changeSecretGrant: (projectRoot, input, options) => typed(changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options, undefined, input.target)),
     setProjectSecret: (projectRoot, input, options) => typed(setProjectSecret(projectRoot, input.scopeId, input.name, input.value, options)),
-    handOverSecrets: (projectRoot, input, options) => typed(handOverProjectSecrets(projectRoot, input.scopeId, options)),
+    handOverSecrets: (projectRoot, input, options) => typed(handOverProjectSecrets(projectRoot, input.scopeId, options, undefined, input.target)),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
     openModelInspection: openConfiguredModelInspection,
-    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry, addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,
@@ -174,7 +186,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).
-    secretGrantCard: { offer: terminalSecretGrantOffer, grant: (root, scopeId, name, opts) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts).then(() => {}),
+    secretGrantCard: { offer: terminalSecretGrantOffer, target: inspectSecretProjectTarget, grant: (root, scopeId, name, opts, target) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts, undefined, target).then(() => {}),
       check: (root, scopeId, name, opts) => typed(assertConfiguredProjectCredential(root, scopeId, name, opts)) },
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady, toolClass: builtinAgentToolClass,
@@ -202,6 +214,24 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
     inspectSiwcConnections: inspectConfiguredSiwcConnections,
     inspectBrainModels: inspectConfiguredBrainModels, // R9b: /model marks the Brain's models
+    inspectAttachmentFolders: async (root, options) => {
+      const readOptions = { ...options, heal: false }, config = await loadComposedConfig(root, readOptions);
+      const record = await configuredAttachmentStore(config, readOptions).registration();
+      if (record?.schemaVersion !== 3 || !record.lineage || record.source.projectRoot !== config.projectRoot) return null;
+      const observations = [];
+      for (const entry of record.entries) observations.push(entry.state !== 'active' ? null : await (async () => {
+        const location = await captureAttachmentLocation(entry.attachment.location.canonicalRoot);
+        if (!('filesystemIdentity' in entry.attachment.location)) return location;
+        const identity = await inspectFilesystemIdentity(location.canonicalRoot, location);
+        return { ...location, filesystemIdentity: identity.status === 'available' ? identity.identity : null };
+      })().catch(() => null));
+      return { record, projectRoot: config.projectRoot, observations };
+    },
+    inspectNativePlugins: async (root, scopeId, limits, options) => {
+      const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+      return new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(contextPolicySource(context)),
+        async () => openSqliteModelInvocationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })).inspectNativePlugins(scopeId, limits);
+    },
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, person(options)), assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels, inspectSubscriptionReadiness: inspectConfiguredNativeChat, // R8e: the seal a guarded turn wrote
@@ -222,11 +252,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     projectAttachment: (root, input, options, interaction) => typed(executeConfiguredProjectAttachment(root, input, options, path => narrowDirectory(path, interaction?.json))),
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => typed(previewPolicyTemplateInstallation(projectRoot, scopeId)),
     applyPolicyTemplateInstallation: (projectRoot, scopeId, interaction) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId, {}, path => narrowDirectory(path, interaction?.json))),
-    openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),
-    openPermissionModesInstallation: (projectRoot, scopeId, input) => openPermissionModesInstallation(projectRoot, scopeId, input),
+    openOwnerBaselineInstallation: (projectRoot, scopeId, input) => typed(openOwnerBaselineInstallation(projectRoot, scopeId, input)),
+    openPermissionModesInstallation: (projectRoot, scopeId, input) => typed(openPermissionModesInstallation(projectRoot, scopeId, input)),
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => typed(installConfiguredExecutionPool(projectRoot, scopeId, apply)),
-    inspectOwnerBaseline: inspectOwnerBaselineInstallation,
+    inspectOwnerBaseline: (root, scopeId, options) => typed(inspectOwnerBaselineInstallation(root, scopeId, options)),
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options), inspectAnchoredPolicyTemplate,
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,

@@ -1,3 +1,4 @@
+import { secretGrantCardPort } from '#surfaces/core/cli-terminal/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ErrorRegistry } from '#platform/index.js';
 import { credentialSourceError } from '#engine/index.js';
@@ -165,4 +166,22 @@ describe('PRE-8 first-use card: the workline window', () => {
     expect(view!.stdout.text).not.toContain('GRANT-CARD');
     expect(calls.grant).toEqual([]);
   });
+});
+
+it('the first-use card resolves and retains the target it shows, with worktree disclosure in EN/TR and no duplicate plain-project row', async () => {
+  const anchor = { installationId: 'installation', projectId: 'project', projectRoot: '/main-project',
+    binding: { canonicalRoot: '/main-project/.deckent', device: '1', inode: '2' }, repository: { canonicalRoot: '/main-project/.git', device: '1', inode: '3' } };
+  let target = { anchor, workingFolder: '/side-worktree' }, written: unknown;
+  for (const locale of ['en', 'tr'] as const) {
+    const port = secretGrantCardPort('/side-worktree', 'scope', {}, locale, { offer: async () => true,
+      target: async () => target, grant: async (_root, _scope, _name, _options, shown) => { written = shown; } });
+    await expect(port.grant('K')).rejects.toMatchObject({ code: 'SECRET_PROJECT_TARGET_CHANGED' });
+    const question = await port.question('K', '/stale-project');
+    expect(question.lines[0]!.text).toBe('/main-project');
+    expect(question.lines[1]!.text).toContain(locale === 'en' ? 'worktrees share this key permission' : 'anahtar iznini paylaşır');
+    expect(question.lines[1]!.text).toContain('/side-worktree');
+    await port.grant('K'); expect(written).toBe(target);
+    const shared = target; target = { anchor, workingFolder: anchor.projectRoot };
+    expect((await port.question('K', '/stale-project')).lines).toHaveLength(4); target = shared;
+  }
 });

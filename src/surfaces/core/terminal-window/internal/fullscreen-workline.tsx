@@ -3,7 +3,7 @@ import { Box, Text, useBoxMetrics, useInput, useWindowSize, type DOMElement } fr
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider, WINDOW_PRIORITY, useFocusOwner } from './window-stack.js';
-import { MainScreenContext } from './card-copy.js';
+import { MainScreenContext, type CardCopy } from './card-copy.js';
 import { promptJump, scrollViewport, searchViewport, viewportLines, viewportStart, type SearchableBlocks, type ViewportAnchor } from './viewport.js';
 import type { PointerEvent, PointerSource, WheelSource } from './mouse.js';
 import { highlightCells, lineRange, selectedText, type SelectionPoint } from './selection.js';
@@ -52,7 +52,7 @@ export type ChatViewportLabels = Readonly<{ below: string; newMessages?: string;
   /** Transcript search row (harness gap 4): `{query}`, `{state}` (empty, or `searchNone`). Absent: no search. */
   search?: string; searchNone?: string;
   /** TERM-POLISH: the hint row after a mouse selection was copied (`{count}` characters); names the terminal's own selection key. */
-  copied?: string }>;
+  copied?: string; copyTooLarge?: string; copyUnavailable?: string }>;
 /** The full window's mouse wheel (mouse.ts); absent where the mouse is not captured. */
 export const WheelContext = createContext<WheelSource | null>(null);
 /** The full window's left-button pointer (mouse.ts) and the host's clipboard write for the selected text; absent where the mouse is not captured. */
@@ -61,15 +61,15 @@ export const PointerContext = createContext<PointerSelection | null>(null);
 type Selection = Readonly<{ anchor: SelectionPoint; focus: SelectionPoint; dragging: boolean }>;
 /** How long the "copied" line stays in the hint row after a selection is copied. */
 const COPIED_NOTICE_MS = 4_000;
-const NEUTRAL_COPIED = '{count} copied (OSC 52) · Shift+drag';
+const NEUTRAL_COPIED = '{count} sent (OSC 52) · Shift+drag';
 
 /** The host's pointer and clipboard write as the viewport's selection context, and the copied character count for the hint row (it clears
  * itself after a moment; characters are counted as the person sees them). Without a pointer or a clipboard write there is no selection. */
-export function usePointerCopy(pointer: PointerSource | undefined, copyText: ((text: string) => void) | undefined): Readonly<{ selection: PointerSelection | null; copied: number | null }> {
-  const [copied, setCopied] = useState<number | null>(null);
-  useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_NOTICE_MS); return () => clearTimeout(timer); }, [copied]);
-  const selection = useMemo(() => pointer && copyText ? { pointer, copy: (text: string) => { copyText(text); setCopied([...text].length); } } : null, [pointer, copyText]);
-  return { selection, copied };
+export function usePointerCopy(pointer: PointerSource | undefined, copyText: CardCopy['write'] | undefined) {
+  const [result, setResult] = useState<(ReturnType<CardCopy['write']> & { count: number }) | null>(null);
+  useEffect(() => { if (result === null) return undefined; const timer = setTimeout(() => setResult(null), COPIED_NOTICE_MS); return () => clearTimeout(timer); }, [result]);
+  const selection = useMemo(() => pointer && copyText ? { pointer, copy: (text: string) => { setResult({ ...copyText(text), count: [...text].length }); } } : null, [pointer, copyText]);
+  return { selection, copied: result?.ok ? result.count : null, refused: result && !result.ok && result.reason !== 'empty' ? result : null };
 }
 
 /** The hint row's "copied" line (`terminal.viewport.copied`; it names the terminal's own selection key for a terminal that blocks OSC 52). */

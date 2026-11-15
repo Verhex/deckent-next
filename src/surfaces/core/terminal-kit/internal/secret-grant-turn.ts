@@ -10,7 +10,7 @@ export type SecretGrantQuestion = Readonly<{ title: string; lines: readonly Read
  */
 export interface SecretGrantCardPort {
   offer(): Promise<boolean>;
-  question(name: string, project: string): SecretGrantQuestion;
+  question(name: string, project: string): SecretGrantQuestion | Promise<SecretGrantQuestion>;
   grant(name: string): Promise<void>;
   /** PRE-8 v2 (`/provider`): the typed `SECRET_GRANT_REQUIRED` when this project may not use main-vault key NAME yet; resolves otherwise (no value read). */
   check?(name: string): Promise<void>;
@@ -43,7 +43,7 @@ export async function* secretGrantTurn(start: () => AsyncIterable<TurnDelta>, ca
       const refused = started || asked || signal.aborted || bound() ? null : refusedGrant(error);
       if (refused === null || !await card.offer()) throw error;
       asked = true;
-      if (!await ask(card.question(refused.name, refused.project), signal) || signal.aborted) throw error;
+      if (!await ask(await card.question(refused.name, refused.project), signal) || signal.aborted) throw error;
       await card.grant(refused.name);
     }
   }
@@ -57,7 +57,7 @@ export async function offerMcpGrants(keys: () => Promise<readonly Readonly<{ nam
   const granted: string[] = [];
   for (const key of await keys().catch(() => [])) {
     if (offered.has(key.name)) continue; offered.add(key.name);
-    if (!await card.offer() || !await ask(card.question(key.name, key.project))) continue;
+    if (!await card.offer() || !await ask(await card.question(key.name, key.project))) continue;
     await card.grant(key.name); granted.push(given(key.name));
   }
   return granted;

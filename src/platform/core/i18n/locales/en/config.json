@@ -20,6 +20,8 @@
   "config.surface.redacted": "[REDACTED]",
   "config.surface.valid": "Configuration is valid.",
   "config.surface.changed": "Saved {key} in {layer}. Apply: {apply}. Backup: {backup}",
+  "config.surface.removed": "Removed {key} from {layer}. Effective value: {value} (source: {source}). Apply: {apply}. Backup: {backup}",
+  "config.surface.notDefined": "not defined",
   "config.surface.service.current": "The running service already uses this configuration.",
   "config.surface.service.stale": "Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).",
   "config.surface.service.unknown": "Whether the running service uses this value could not be determined (it reports no configuration fingerprint). Restart it with `deckent runtime restart` to be sure.",

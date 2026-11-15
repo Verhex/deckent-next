@@ -2,7 +2,7 @@ import { configuredInvocationProfiles } from '#engine/core/provider-catalog/inde
 import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { installationRegistrationSchema, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
+import { installationRegistrationSchema, isNewAttachmentRegistration, isNewAttachment, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
 import { attachmentFailure, sameAttachmentPerson } from '#engine/core/project-attachment/index.js';
 import { modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 import { ModelActivationApplication } from '#engine/core/model-activation/index.js';
@@ -19,6 +19,7 @@ export async function grantModelUse(ports: ModelUseWritePorts, root: string, sco
   const actor = await ports.authorize(config);
   return store.hold(async () => {
     let registry = await store.registration();
+    if (isNewAttachmentRegistration(registry) || isNewAttachment(await store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
     const context = await ports.shared(config, scopeId, actor);
     if (!registry || !context.source || !context.attachment || !sameAttachmentPerson(registry.source.owner, actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const attachment = context.attachment, entry = registry.entries.find(item => item.attachment.projectId === attachment.projectId)!;
@@ -66,6 +67,7 @@ export async function revokeModelUse(ports: ModelUseWritePorts, root: string, pr
   const config = await ports.config(root), store = ports.store(config);
   const actor = await ports.authorize(config);
   return store.hold(async () => { const current = await store.registration(), entry = current?.entries.find(item => item.attachment.projectId === projectId);
+    if (isNewAttachmentRegistration(current) || isNewAttachment(await store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
     if (!current || !entry?.modelLease) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     if (!sameAttachmentPerson(actor, current.source.owner)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const next = installationRegistrationSchema.parse({ ...current, entries: current.entries.map(item => item === entry ? { ...item, modelLease: { ...item.modelLease!, state: 'revoked' } } : item) });

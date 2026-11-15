@@ -4,11 +4,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { notifyNativeBuiltinPlugins } from '#composition/core/model-invocation/index.js';
-import { ModelInvocationApplication, type ModelInvocationNativePort } from '#engine/core/model-invocation/index.js';
+import { ModelInvocationApplication, createModelInvocationPlanUsage, type ModelInvocationNativePort } from '#engine/core/model-invocation/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding, openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
-import { isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
+import { createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
 import { bubblewrapObservation } from '#adapters/index.js';
 import { binding as definition, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
@@ -22,8 +22,12 @@ const expectedBinding = { encodingVersion: 1 as const, algorithm: 'sha256' as co
 const principal = { id: 'person', issuer: 'test', subject: '1', assurance: 'os-user' as const, scopeIds: ['scope'] };
 const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance }, authorization = { revision: 'policy', ruleId: 'invoke' };
 const steps = (text: string) => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
-async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}, bound = true, native?: ModelInvocationNativePort) {
+async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}, bound = true, native?: ModelInvocationNativePort, observed?: { timeoutMs: number; onPaidUsage: () => Promise<void> }) {
   const c = await connection({ steps: lines }, {}, expectedBinding.digest, isolation), path = join(c.root, 'ledger.db');
+  if (observed) {
+    c.profile = { ...c.profile, limits: { ...c.profile.limits, timeoutMs: observed.timeoutMs } };
+    c.port = createNativeCliHeadlessPort({ now: Date.now, isolation, paidExtraUsage: 'continue', onPaidUsage: observed.onPaidUsage });
+  }
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const admitted = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding }, actor, authorization, admittedAtMs: 1, definition }); activations.close();
@@ -127,4 +131,32 @@ it.skipIf(!sandbox)('invokes an alpha.62-shaped connection without a capacity bi
     expect(db.prepare('SELECT count(*) AS n FROM capacity_resources').get()?.n).toBe(1);
     expect(db.prepare('SELECT count(*) AS n FROM model_invocation_spend_reservations').get()?.n).toBe(0);
   } finally { db.close(); }
+});
+
+it.skipIf(!sandbox)('keeps v1 settlement bytes and current rejection bodies after unseen-plugin/paid input on response, guard, cancel and timeout', async () => {
+  for (const end of ['responded', 'guard', 'cancel', 'timeout'] as const) {
+    const controller = new AbortController(); let paid = false;
+    const plugin = { name: 'fixture-unseen', path: 'builtin', source: 'fixture-unseen@builtin' };
+    const prefix = [uiLine(), initLine({ plugins: [plugin] }), rateLimitLine('rejected', { isUsingOverage: true })].map(line => ({ line }));
+    const tail = end === 'responded' ? [{ line: assistantLine('ok') }, { line: resultLine('ok') }]
+      : end === 'guard' ? [{ line: { type: 'system', subtype: 'api_retry' } }] : [{ hang: true }];
+    const f = await fixture([...prefix, ...tail], testIsolation, () => {}, true, undefined, { timeoutMs: end === 'timeout' ? 600 : 5000,
+      async onPaidUsage() { paid = true; if (end === 'cancel') setTimeout(() => controller.abort(), 20); } });
+    const result = await f.app.invoke(f.command, undefined, controller.signal);
+    expect(paid).toBe(true);
+    expect(result.receipt.outcome?.state).toBe(end === 'responded' ? 'responded' : end === 'guard' ? 'rejected' : 'unknown');
+    const store = await openSqliteModelInvocationStore(f.path, sqlite, 'forbid');
+    const record = (await store.loadInvocation('scope', 'invocation'))!; store.close();
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try {
+      const bytes = String(db.prepare('SELECT record FROM model_invocation_plan_usage').get()!.record);
+      expect(bytes).toBe(JSON.stringify(createModelInvocationPlanUsage(record)));
+      expect(JSON.parse(bytes).schemaVersion).toBe(1); expect(JSON.parse(bytes)).not.toHaveProperty('observation');
+    } finally { db.close(); }
+    if (record.content?.kind === 'response-body') {
+      const body = JSON.parse(Buffer.from(record.content.data, 'base64').toString('utf8'));
+      expect(JSON.stringify(body)).not.toContain('fixture-unseen'); expect(body).not.toHaveProperty('observation');
+      expect(body.schemaVersion ?? 1).toBeLessThanOrEqual(5);
+    }
+  }
 });

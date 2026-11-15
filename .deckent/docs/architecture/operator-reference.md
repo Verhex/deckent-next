@@ -403,7 +403,9 @@ The file stores are not available on native Windows.
   line refuses the whole file (`DECK_FILE_INVALID`, naming only the line number).
 - **Grants.** A grant is a card at the person's own terminal: the first-use card in the solo terminal chat, or
   `deckent secret grant NAME --scope S`; `secret revoke NAME --scope S` takes it back, and AI sessions cannot grant. Both need
-  the Linux terminal witness.
+  the Linux terminal witness. Worktrees of one repository share the project vault and key permissions. The card names
+  the resolved main project and, in a different worktree, explains that sharing and shows the current working folder.
+  If the target changes before the write, the operation refuses; reopen the card to check the target.
 - **Moving and listing.** `secret handover --scope S` takes the key vault along when a project folder moves (refused while the
   original folder still holds it). `secret list` shows name · vault · project · used by · `.deck` · grant · stored, never a
   value; `--all` lists every project vault of this main vault.

@@ -62,7 +62,7 @@ zaman aşımı reddedilmiş bir işlemi izin verilmiş hale getirmez.
 AI karar adımı açık kimlik/eylem hücresi ister; yetki değiştiren işlemler allow ile bile
 devredilemez. Terminal tanıklığı etkileşim gereğidir, insan varlığı kanıtı değildir.
 
-İstemci/servis protokolü, ledger şeması ve paket sürümü birbirinden bağımsızdır. Normal
+İstemci/servis protokolü, defter şeması ve paket sürümü birbirinden bağımsızdır. Normal
 işlemler uyumlu istemci ve servis gerektirir. Sınırlı yaşam döngüsü uyumluluğu komşu sürümler
 arasında inceleme veya durdurmaya izin verebilir; normal yürütmeye izin vermez. Veri
 geçişleri açık göç ve yedek gereksinimleriyle yapılır. Yeni çalıştırılabilir dosya eski
@@ -72,13 +72,13 @@ Politika ayrıntıları: [insan ve AI yetkisi, devir ve uyum kanıtı](policy-an
 
 ## İşin yaşam döngüsü ve kalıcı etkiler
 
-Bir **yürütme (Run)**, **görev (Task)** grafiğini kabul eder. Her **deneme (Attempt)** tek
+Bir **çalışma**, **görev (Task)** grafiğini kabul eder. Her **deneme** tek
 çalıştırma denemesini, işçiyi, çalışma alanını ve kanıtı kaydeder. Uygulamalar kapasite
 ayırır, bağımlılıklara ve politikaya uyar, çalıştırma gözlemlerini kaydeder ve çıktıyı
 değerlendirir. İşin kabulü, yama entegrasyonu ve teslim süreç sonlanmasından ayrıdır.
 Başarısız ön koşul, bağımlı görevleri atlanmış olarak kapatabilir; bu görevler başarıyla
 çalışmış sayılmaz. `deckent do` (terminalde `/do`), bağlı ve etkin bir modelden (Brain) bir niyeti
-Run önerisine dönüştürmesini ister; plan mevcut kabul ve onay kapılarından geçer, kendisi yetki
+çalışma önerisine dönüştürmesini ister; plan mevcut kabul ve onay kapılarından geçer, kendisi yetki
 vermez. Kayıtlı bir Git entegrasyon hedefine teslim o hedefin kuyruğundan geçer: yayımlama ve
 benimseme dondurulmuş partilerini gösterir ve ayrı onay ister; geri alma ayrıca onaylanan bir işlemdir.
 
@@ -147,7 +147,7 @@ Güvenilir bir dağıtım, aynı SecretStore portu üzerinden isteğe bağlı bi
 [sır yardımcısı (EN)](secret-helpers.md) kaydedebilir. Komutu ve sınırları kayıtta sabitlenir;
 ayarlar yalnız kimliğini seçer. Her okuma bir uygulama yetki kararı gerektirir; süre ve çıktı
 sınırlıdır, hatalar arındırılır. Yardımcı salt okunurdur, dış ad listelemesi yapmaz ve bir
-sandbox değildir. Mevcut depo taşıma kısıtları ve platform sınırları geçerliliğini korur.
+yalıtım alanı değildir. Mevcut depo taşıma kısıtları ve platform sınırları geçerliliğini korur.
 
 Ayrı paket, Core'u değiştirmeden mevcut etki sözleşmesiyle hedef adaptörü veya portuyla
 sır deposu sağlayabilir. Bu, her iç kayıt dizininin dışa açıldığı anlamına gelmez. Dağıtım
@@ -163,7 +163,7 @@ build kilitli bubblewrap'ı yerleştirir (build `bubblewrap=present` ya da `bubb
 `BUBBLEWRAP_BUILD_REQUIRED` ile durur, yalnız Linux dışında `bubblewrap=absent (not Linux)` basar.
 [Katkıcı hızlı başlangıcına (EN)](../CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
-`1.0.0-alpha.55` paketi çekirdek katmanları ekler: işçi modellerinin sistemce atanması ve tek bir model rol registry'si, bağımsız
+`1.0.0-alpha.55` paketi çekirdek katmanları ekler: işçi modellerinin sistemce atanması ve tek bir model rol kaydı, bağımsız
 doğrulamalı kapsamlı bir hafıza günlüğü, mühürlü Auditor kayıtları, kaybolan işçi kurtarmalı Nervous tespiti, bubblewrap alanında
 headless abonelik Brain'i ve istatistik, öneri ve imza anahtarlarıyla sürümlü ajanlar. Bunlar koddur, henüz kabul edilmiş davranış
 değildir. Her anahtar (hafıza, Nervous, kurtarma, ajan istatistiği) bir kişi açana kadar kapalı başlar; `shadow` (gölge) kipi hiçbir
@@ -178,19 +178,21 @@ Benimsemeden önce seçili sağlayıcı, işlem ve yalıtım ayarlarının gerç
 iptal ve kurtarma yollarını değerlendirin. Denenmemiş, yapılmamış ya da hâlâ açık olanların sade listesi
 [Bilinen sınırlar](known-limits.tr.md) sayfasındadır.
 
-## Audit bütünlüğü ve pull witness
+<a id="audit-bütünlüğü-ve-pull-witness"></a>
 
-`deckent audit verify --scope <id> --json` saklanan olay mühürlerini, sıra sürekliliğini, checkpoint zincirini ve audit başlarını tutarlı bir okuma snapshotında doğrular. SDK `verifyAudit(root, {schemaVersion: 1, scopeId}, options)` ve salt okunur MCP `verify_audit` aynı policy kontrollü okumayı kullanır; scope için approval `inspect` izni gerekir. Doctor ve servisin `audit-integrity` raporu bozulmayı gösterir; doğrulanmamış her durum (henüz kayıt yok, hata veren veya erişilemeyen doğrulayıcı, hiçbir scope doğrulamamış servis) nedeniyle birlikte unknown/degraded görünür, asla sağlıklı sayılmaz ve `audit verify` 1 ile çıkar. Checkpoint config ile kapatılamaz. Aynı OS hesabından çalışan ajanın yerel dosyaları değiştirmesini önlemez; saklanan kanıta göre değişimi tespit eder.
+## Denetim bütünlüğü ve pull tanık
 
-`deckent audit verify --scope <id> --export-checkpoint` son kayıtlı checkpointi stdout üzerinde JSON olarak verir; yoksa `null`. Ayrı cihaz özgün çıktıyı bağımsız saklamalıdır. Sonradan `--checkpoint <dosya>` veya stdin için `--checkpoint -` ile karşılaştırılır; SDK/MCP aynı nesneyi `witness` alanında alır. Servise çıktı yolu veya witness ağ adresi verilmez.
+`deckent audit verify --scope <id> --json` saklanan olay mühürlerini, sıra sürekliliğini, kontrol noktası zincirini ve denetim başlarını tutarlı bir okuma snapshotında doğrular. SDK `verifyAudit(root, {schemaVersion: 1, scopeId}, options)` ve salt okunur MCP `verify_audit` aynı politika kontrollü okumayı kullanır; scope için approval `inspect` izni gerekir. Doctor ve servisin `audit-integrity` raporu bozulmayı gösterir; doğrulanmamış her durum (henüz kayıt yok, hata veren veya erişilemeyen doğrulayıcı, hiçbir scope doğrulamamış servis) nedeniyle birlikte unknown/degraded görünür, asla sağlıklı sayılmaz ve `audit verify` 1 ile çıkar. Kontrol noktası config ile kapatılamaz. Aynı OS hesabından çalışan ajanın yerel dosyaları değiştirmesini önlemez; saklanan kanıta göre değişimi tespit eder.
+
+`deckent audit verify --scope <id> --export-checkpoint` son kayıtlı kontrol noktasını stdout üzerinde JSON olarak verir; yoksa `null`. Ayrı cihaz özgün çıktıyı bağımsız saklamalıdır. Sonradan `--checkpoint <dosya>` veya stdin için `--checkpoint -` ile karşılaştırılır; SDK/MCP aynı nesneyi `witness` alanında alır. Servise çıktı yolu veya tanık ağ adresi verilmez.
 Özel yerel dosya için `deckent audit verify --scope <id> --export-checkpoint <file>` kullanın: 0600 izinle yalnız yeni
-dosya oluşturulur; mevcut dosya veya checkpoint yokluğu reddedilir. Dosya adı servise gönderilmez; ayrı cihazda saklama gereği sürer.
+dosya oluşturulur; mevcut dosya veya kontrol noktası yokluğu reddedilir. Dosya adı servise gönderilmez; ayrı cihazda saklama gereği sürer.
 
-Sürüm-1 çıktı `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpoint, digest}` biçimindedir. Strict checkpoint alanları `schemaVersion`, `installationId`, `scopeId`, `sequence`, `atMs`, `head: {sequence, digest}`, `policyDigest`, `producersDigest`, `previousDigest`, `keyId`, `mac`tır. Digest/MAC küçük harf SHA-256 hex biçimindedir; çıktı digest'i canonical mühürlü checkpointten hesaplanır. Audit başı scope bağlı boş baştan başlayarak tam mühürlü olayları sıra ile bağlar. Checkpoint HMAC'i unsigned canonical projeksiyonu, predecessor digest önceki mühürlü checkpointi bağlar. Özgün kurulum anahtarı erişilebilir kalmalıdır; sır veya policy içeriği dışa aktarılmaz.
+Sürüm-1 çıktı `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpoint, digest}` biçimindedir. Strict kontrol noktası alanları `schemaVersion`, `installationId`, `scopeId`, `sequence`, `atMs`, `head: {sequence, digest}`, `policyDigest`, `producersDigest`, `previousDigest`, `keyId`, `mac`tır. Digest/MAC küçük harf SHA-256 hex biçimindedir; çıktı digest'i canonical mühürlü kontrol noktasından hesaplanır. Denetim başı scope bağlı boş baştan başlayarak tam mühürlü olayları sıra ile bağlar. Kontrol noktası HMAC'i unsigned canonical projeksiyonu, predecessor digest önceki mühürlü kontrol noktasını bağlar. Özgün kurulum anahtarı erişilebilir kalmalıdır; sır veya politika içeriği dışa aktarılmaz.
 
-Sonuçlar `match`, `truncated`, `possible-wipe`, `policy-changed`, `producers-changed`, `chain-broken`, `unknown` ayrımını korur; `deckent audit verify` `match` dışındaki her sonuçta 1 ile çıkar. Özgün anahtar yoksa, witness başka kuruluma/scope'a aitse veya config tarama sınırı aşılmışsa bilinmiyor kalır; eski ledger için `no-checkpoint-yet` döner. Her checkpoint aynı işlemde yazılan mühürlü bir `audit-checkpoint` audit olayıyla duyurulur ve bu olay checkpointin başıdır. Checkpointi kaybolmuş bir işaret (silinmiş satırlar, kesilmiş kuyruk) `possible-wipe` / `checkpoints-missing` verir; güncel ledgerda silinmiş checkpoint tablosu `chain-broken` olur. İkisi de hiçbir zaman yeni baseline ile örtülmez; yalnız checkpointi ve işareti olmayan scope ilk checkpointini alır. Tek açık geri dönüş `deckent audit rebaseline --scope <id> --reason <metin>` komutudur: `audit-rebaseline` üzerinde scope approval `decide` izni (AI aktörleri için reddedilir), doğrulanmış etkileşimli terminal ve gösterilen durum için y/N gerekir; yalnız policy/üretici değişimini veya olası silmeyi kabul eder ve nedeni yeni işarete mühürler. Önceden dışa aktarılan witness'lar artık eşleşmez. İşaretleri de silmek audit kaydını onların gerisine kadar kesmek demektir; iki yerel geçmişin birlikte silinmesi veya tam silme dış cihazdaki özgün witness ile tespit edilir. Checkpointler arasındaki son bölüm henüz sabitlenmemiştir; tüm yerel kanıtın silinmesi veya eski sürüme döndürülmesi yalnız yerel kanıtla dışlanamaz. Revision etiketi değişmeden policy içeriği değişirse de tespit edilir. Yönetilen policy değişimi (`policy.administer`, `/mode`, kurucu şablon yükseltmesi) değiştirdiği ve ürettiği policy'nin digest'lerini audit olayına mühürler; doğrulama yalnız son checkpointten kesintisiz zinciri kabul eder; `match` kalır ve sonraki checkpoint onu benimser; bant dışı dosya düzenlemesi — ardından yönetilen bir değişiklik gelse bile — kişi yeniden baseline alana kadar `policy-changed` okunur. Yeniden baseline kartı audit başını ve digest'leri gösterir; yanıttan sonra biri değişirse yazma reddedilir ve yeniden sorulur.
+Sonuçlar `match`, `truncated`, `possible-wipe`, `policy-changed`, `producers-changed`, `chain-broken`, `unknown` ayrımını korur; `deckent audit verify` `match` dışındaki her sonuçta 1 ile çıkar. Özgün anahtar yoksa, tanık başka kuruluma/scope'a aitse veya config tarama sınırı aşılmışsa bilinmiyor kalır; eski defter için `no-checkpoint-yet` döner. Her kontrol noktası aynı işlemde yazılan mühürlü bir `audit-checkpoint` denetim olayıyla duyurulur ve bu olay kontrol noktasının başıdır. Kontrol noktasını kaybolmuş bir işaret (silinmiş satırlar, kesilmiş kuyruk) `possible-wipe` / `checkpoints-missing` verir; güncel defterde silinmiş kontrol noktası tablosu `chain-broken` olur. İkisi de hiçbir zaman yeni temel durumla örtülmez; yalnız kontrol noktasını ve işareti olmayan scope ilk kontrol noktasını alır. Tek açık geri dönüş `deckent audit rebaseline --scope <id> --reason <metin>` komutudur: `audit-rebaseline` üzerinde scope approval `decide` izni (AI aktörleri için reddedilir), doğrulanmış etkileşimli terminal ve gösterilen durum için y/N gerekir; yalnız politika/üretici değişimini veya olası silmeyi kabul eder ve nedeni yeni işarete mühürler. Önceden dışa aktarılan tanıklar artık eşleşmez. İşaretleri de silmek denetim kaydını onların gerisine kadar kesmek demektir; iki yerel geçmişin birlikte silinmesi veya tam silme dış cihazdaki özgün tanık ile tespit edilir. Kontrol noktaları arasındaki son bölüm henüz sabitlenmemiştir; tüm yerel kanıtın silinmesi veya eski sürüme döndürülmesi yalnız yerel kanıtla dışlanamaz. Revision etiketi değişmeden politika içeriği değişirse de tespit edilir. Yönetilen politika değişimi (`policy.administer`, `/mode`, kurucu şablon yükseltmesi) değiştirdiği ve ürettiği politikanın digest'lerini denetim olayına mühürler; doğrulama yalnız son kontrol noktasından kesintisiz zinciri kabul eder; `match` kalır ve sonraki kontrol noktası onu benimser; bant dışı dosya düzenlemesi — ardından yönetilen bir değişiklik gelse bile — kişi yeni temel durumu kabul edene kadar `policy-changed` okunur. Yeni temel durum kabul kartı denetim başını ve digest'leri gösterir; yanıttan sonra biri değişirse yazma reddedilir ve yeniden sorulur.
 
-Checkpointi servis başlangıçta ve config aralığında üretir. Tarama `audit.pageSize`, `audit.maxRecords` (olay ve checkpoint), `audit.maxScopes` ile sınırlıdır; sınıra ulaşınca tam doğrulandı demez. Okumalar yazma, migration, healing veya eksik anahtar/kimlik üretimi yapmaz. Ayrı pull cihazı uygulaması beta sonrasıdır; FIDO2 imzalı policy paketi ilk beta sonrası iştir. Kaynak testleri canlı veya bağımsız kabul değildir.
+Kontrol noktasını servis başlangıçta ve config aralığında üretir. Tarama `audit.pageSize`, `audit.maxRecords` (olay ve kontrol noktası), `audit.maxScopes` ile sınırlıdır; sınıra ulaşınca tam doğrulandı demez. Okumalar yazma, migration, healing veya eksik anahtar/kimlik üretimi yapmaz. Ayrı pull cihazı uygulaması beta sonrasıdır; FIDO2 imzalı politika paketi ilk beta sonrası iştir. Kaynak testleri canlı veya bağımsız kabul değildir.
 
 <a id="imzali-hub-paketleri"></a>
 
@@ -240,7 +242,7 @@ ve kişi güvenlik kartlarını sunmaz. Yayıncı anahtarı yönetimi mevcut ki�
 kartlarından devam eder.
 
 Kaynak, host veya bağlantı başlangıç verisi eklenmez. Kaynak eklemek ilk ağ
-bağlantısını onaylamaz. Arama, kaynak inceleme ve yayın için registry eklenti
+bağlantısını onaylamaz. Arama, kaynak inceleme ve yayın için kayıt eklenti
 kimliği, kişinin kalıcı ilk kullanım kararı, kaynağa bağlı kimlik doğrulama ve
 yönetilen ağ etkisi yolu bağlanmalıdır. Eksik bağlantı
 `HUB_CONNECTION_UNAVAILABLE` döndürür; ham HTTP'ye geçilmez. Yayın öncesi yerel

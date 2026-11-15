@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { agentShellHardFloor, agentWorkspaceDeny, createWorkspaceScope, isWriteApprovalFloored, type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { resolveProductLayout } from '#platform/index.js';
+import { HOME_CREDENTIAL_PATHS } from '#adapters/core/workspace-read/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 const measured = await measureTestShellHost();
@@ -49,9 +50,13 @@ describe.skipIf(process.platform !== 'linux')('bounded HOME credential protectio
 
   it('protects literal registry paths beyond depth three without scanning their contents', async () => {
     const f = await fixture();
-    const keys = await Promise.all(['.gnupg/a/b/c/d/token', '.local/share/keyrings/a/b/c/token', '.config/gcloud/a/b/c/token', '.codex/auth.json'].map(f.secret));
+    expect(HOME_CREDENTIAL_PATHS).toEqual(expect.arrayContaining(['.codex/auth.json', '.claude/.credentials.json', '.config/cursor/auth.json']));
+    const keys = await Promise.all(['.gnupg/a/b/c/d/token', '.local/share/keyrings/a/b/c/token', '.config/gcloud/a/b/c/token', '.codex/auth.json',
+      '.claude/.credentials.json', '.config/cursor/auth.json'].map(f.secret));
+    const neighbours = await Promise.all(['.claude/settings.json', '.config/cursor/cli-config.json'].map(f.secret));
     const out = await f.resolve(); if (!out.ok) throw new Error(out.reason);
     for (const path of keys) expect(hidden(path, out.view)).toBe(true);
+    for (const path of neighbours) expect(hidden(path, out.view)).toBe(false);
   });
 
   it.each(['.npmrc', '.aws', '.config'])('refuses a symlink at known credential component %s', async rel => {

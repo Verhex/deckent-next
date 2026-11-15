@@ -1,6 +1,6 @@
 import { hostname, userInfo } from 'node:os';
 import { type Policy, AuditError, auditListQuerySchema, auditRebaselineCommandSchema, auditVerifyQuerySchema, type AuditListView, type AuditVerification } from '#domain/index.js';
-import { AuditApplication, AuditCheckpointCycleError, AuditCheckpointApplication, approvalAssuranceProducerInventory, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
+import { AuditApplication, relatedAuditRecords, AuditCheckpointCycleError, AuditCheckpointApplication, approvalAssuranceProducerInventory, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -32,7 +32,12 @@ export async function verifyConfiguredAudit(root: string, input: unknown, option
 export async function listConfiguredAudit(root: string, input: unknown, options: ConfigLoadOptions = {}): Promise<AuditListView> {
   try { const query = auditListQuerySchema.parse(input), context = await loadConfiguredScopeContext(root, query.scopeId, options, 'read'), limit = query.limit ?? context.config.audit.pageSize;
     authorizeApproval(context.document, 'inspect', query.scopeId, query.scopeId, context.principal); const store = await openReadOnlyAuditStore(await context.path(), context.config.storage.sqlite);
-    try { const records = auditScopeRecorded(store, query.scopeId) ? new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile)).list(query.scopeId, query.after, limit) : []; return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, records: records.map(record => ({ sequence: record.sequence, event: record.event })), next: records.length === limit ? records.at(-1)!.sequence : null }); } finally { store.close(); }
+    try {
+      const audit = auditScopeRecorded(store, query.scopeId) ? new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile)) : null;
+      const records = audit?.list(query.scopeId, query.after, limit) ?? [];
+      return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, records: records.map(record => ({ sequence: record.sequence, event: record.event })),
+        next: records.length === limit ? records.at(-1)!.sequence : null, ...(audit ? relatedAuditRecords(audit, records, context.config.audit) : {}) });
+    } finally { store.close(); }
   } catch (error) { throw queryFailure(error); } }
 /** Trusted service-only writer. This function is not an SDK/MCP mutation and never invents scope identities. */
 export async function checkpointConfiguredAudit(root: string, installationId: string | null, options: ConfigLoadOptions = {}): Promise<readonly AuditVerification[]> {

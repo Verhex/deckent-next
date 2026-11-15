@@ -1,4 +1,10 @@
-import { notifyNativeBuiltinPlugins } from '#composition/core/model-invocation/index.js';
+import { spawn } from 'node:child_process';
+import type { Socket } from 'node:net';
+import { createClaudeAgentDriver, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
+import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/index.js';
+import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
+import { FAMILY, PINNED, rateLimitLine } from '../../fixtures/native-headless/stream.js';
+import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
@@ -51,7 +57,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -61,10 +67,11 @@ async function fixture(askEdits = true) {
   });
   const call: AgentToolCall = { id: 'unused', name: 'write_file', argumentsJson: JSON.stringify({ path: 'result.txt', content: 'approved business result\n' }) };
   const runtime: NativeChatRuntime = { readiness, limits: { idleMs: 30_000, maxConnections: 4, replayMaxEntries: 8, replayMaxBytes: 16 * entry.bridge.frameMaxBytes }, resolveModelUse,
-    driver: async ({ session }) => ({ port: session, admit: async () => undefined,
+    driver: async ({ session, paidExtraUsage, onPaidUsage }) => { expect(paidExtraUsage).toBe('continue'); return { port: session, admit: async () => undefined,
       native: (bridge, secrets) => ({ billingAxis: 'subscription', prepare: async (_profile, _definition, request) => { state.prompt = JSON.stringify(request); return {}; },
         async send(_prepared, signal) {
           state.calls++; state.token = bridge.turnToken;
+          if (state.paidExtraUsage) await onPaidUsage?.(state.paidExtraUsage as never);
           expect(redactForRecord(bridge.turnToken, secrets.turn)).not.toContain(bridge.turnToken);
           const server = createServer((req, res) => { void bridge.handle(req, res, () => true); }); state.servers.push(server);
           await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -83,16 +90,16 @@ async function fixture(askEdits = true) {
           state.channels.push(localPrincipalChannel());
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: JSON.parse(call.argumentsJson), _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
-          return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
+          return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
-      close: async () => { state.closes++; for (const server of state.servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } } }) };
+      close: async () => { state.closes++; for (const server of state.servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } } }; } };
   const host = createRuntimeChatTurnHost({ ownerId: 'k11-test-service', controllers: new ModelInvocationControllers(2) }, new AbortController().signal,
     undefined, undefined, () => [], undefined, runtime);
   const events: AgentTurnStreamEvent[] = [];
   let offer!: (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>) => void;
   const offered = new Promise<Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>>(resolve => { offer = resolve; });
-  const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => undefined,
+  const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => true,
     emit(event: AgentTurnStreamEvent) { events.push(event); if (event.kind === 'approval.requested') offer(event); } };
   const command = { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn', messages: [{ role: 'user', content: 'write the business result' }] };
   const run = (turnId = command.turnId) => runPeerConfiguredChatTurn(f.project, { ...command, turnId }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
@@ -198,13 +205,16 @@ it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the 
   const h = await fixture(false), driver = h.runtime.driver;
   h.runtime.driver = async input => ({ ...await driver(input), notices: () => ['system/future_notice'] });
   h.state.builtinPlugins = ['cc-plugin-unseen', 'cc-plugin-unseen'];
+  h.state.paidExtraUsage = { kind: 'overage', status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 };
   const result = await h.run();
   expect(result).toMatchObject({ finish: 'stop', answer: 'finished', recorded: true });
   expect(result.note).toContain('system/future_notice');
+  expect(result.note).toContain('Paid extra usage of your provider account is in use');
   const message = '[deckent] Claude CLI 2.1.322 loaded a new built-in plugin: cc-plugin-unseen. Nothing was blocked; this observation is recorded with the turn.';
   expect(result.note?.split(message)).toHaveLength(2);
   expect((await h.run()).note).toBe(result.note); // Durable replay; no new invocation.
-  expect((await h.run('builtin-again')).note).not.toContain('cc-plugin-unseen');
+  const again = await h.run('builtin-again');
+  expect(again.note).not.toContain('cc-plugin-unseen'); expect(again.note).not.toContain('Paid extra usage');
   h.state.cliVersion = '2.1.323';
   expect((await h.run('builtin-next-version')).note).toContain('CLI 2.1.323');
   const ledger = openSqliteLedger(h.f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' }, 'forbid');
@@ -216,6 +226,7 @@ it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the 
     const observed = records.map(row => JSON.parse(String(row.record))).filter(row => JSON.stringify(row).includes('cc-plugin-unseen'));
     expect(observed).toHaveLength(3);
     expect(JSON.stringify(observed)).toContain('2.1.322');
+    expect(JSON.stringify(observed)).toContain('paidExtraUsage');
     expect(JSON.stringify(observed)).toContain('2.1.323');
   } finally { ledger.close(); }
 
@@ -377,4 +388,84 @@ it('finishes and records a turn with long, many and multiline builtin names with
     expect(result.note).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u);
     expect(await store.claim(claim)).toMatchObject({ status: 'finished', outcome: { note: result.note } });
   } finally { store.close(); }
+});
+
+it('delivers the paid-usage notice once after successful delivery and records it in the existing turn note', async () => {
+  const f = await brainProviderFixture(); cleanups.push(f.close);
+  const store = await openSqliteAgentTurnStore(f.path, { busyTimeoutMs: 1000, journalMode: 'delete', durability: 'full' });
+  const value = { kind: 'overage' as const, status: 'rejected', window: 'five_hour', resetsAtMs: 1792773600000 };
+  try {
+    for (const language of ['en', 'tr'] as const) {
+      const session = {}, notes: string[] = [], claim = { scopeId: 's', turnId: `paid-${language}`, principalKey: 'fixture', requestDigest: 'a'.repeat(64), claimedAtMs: 1 };
+      await expect(notifyNativePaidUsage(value, language, session, 'terminal', 's', () => { throw new Error('delivery-failed'); })).rejects.toThrow('delivery-failed');
+      const result = await runDurableAgentTurn({ claim, messages: [], tools: [], signal: new AbortController().signal, emit: () => undefined }, store, {
+        async invokeRound() {
+          const notify = () => notifyNativePaidUsage(value, language, session, 'terminal', 's', async text => { await Promise.resolve(); notes.push(text); });
+          await Promise.all([notify(), notify()]); await notify();
+          return { status: 'responded', content: 'finished', reasoning: '', toolCalls: [], finish: 'stop', usage: null };
+        }, hostNote: () => notes.join(' '), authorize: async () => 'allow', describe: () => null,
+        execute: async () => { throw new Error('no tools'); }, now: () => 2,
+      });
+      expect(notes).toHaveLength(1);
+      expect(result.note).toContain(language === 'en' ? 'Paid extra usage of your provider account is in use' : 'Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
+      expect(result.note).toContain(language === 'en' ? 'deckent cannot see the amount' : 'deckent tutarı göremez');
+      expect(result.note).toContain("deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'");
+      expect(result.note).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|\{\w+\}/u);
+      expect(await store.claim(claim)).toMatchObject({ status: 'finished', outcome: { note: result.note } });
+      await expect(notifyNativePaidUsage({ ...value, window: 'x\n' }, language, {}, 'terminal', 's', () => { throw new Error('unsafe'); })).rejects.toThrow();
+    }
+  } finally { store.close(); }
+});
+
+it('retries paid notices dropped by the real channel and refuses cancelled late delivery', async () => {
+  // Real channel + Node pipe socket; only the provider stream is synthetic. No CLI or login runs.
+  const child = spawn(process.execPath, ['-e', 'process.stdin.resume()'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  const closed = new Promise<void>(resolve => child.once('close', () => resolve()));
+  const socket = child.stdin as Socket;
+  const entry = nativeCliAgent(FAMILY)!, session = {}, scopeId = 's';
+  const tools = toolSessionSchema.parse({ schemaVersion: 1, turnId: 'paid-delivery', generation: 1, tools: [], approvalTtlMs: 120000 });
+  const port: ToolSessionPort = { session: tools, propose: async () => { throw new Error('no tool expected'); },
+    cancel: async () => { throw new Error('unused'); }, revoke: async () => { throw new Error('unused'); } };
+  const event = JSON.stringify(rateLimitLine('rejected', { overageStatus: 'allowed' }));
+  let sinks = 0;
+  const start = (channel: ReturnType<typeof createServerTurnChannel>) => {
+    const driver = createClaudeAgentDriver({ entry, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192,
+      quotaPolicy: nativeQuotaPolicy(), onPaidUsage: (limit, signal) => notifyNativePaidUsage(limit, 'en', session, 'terminal', scopeId, async text => {
+        sinks++; channel.emit({ kind: 'text', text });
+        if (!await channel.drained()) throw new Error('notice-not-delivered');
+      }, signal) });
+    expect(driver.line(JSON.stringify(initLine({ model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir', tools: [],
+      mcp_servers: [{ name: entry.bridge.serverName, status: 'connected' }] })))).toBeUndefined();
+    return driver;
+  };
+  try {
+    for (const mode of ['error', 'aborted', 'finished', 'overflow', 'late-cancel', 'late-timeout'] as const) {
+      const channel = createServerTurnChannel(socket, mode, 8192, mode === 'overflow' ? 1 : 32768);
+      const driver = start(channel), before = sinks, controller = new AbortController();
+      if (mode === 'aborted') socket.emit('error', new Error('disconnected'));
+      if (mode === 'finished') channel.finish();
+      if (mode.startsWith('late-')) socket.cork();
+      const pending = driver.line(event, controller.signal);
+      // Let the actual sink enqueue the event, before the channel's scheduled write.
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      if (mode === 'error') socket.emit('error', new Error('disconnected'));
+      if (mode.startsWith('late-')) {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        controller.abort(new Error(mode));
+      }
+      expect(await pending).toBe('stop');
+      socket.uncork(); await new Promise<void>(resolve => setImmediate(resolve));
+      expect(sinks).toBe(before + 1); expect(driver.paidExtraUsage()).toBeNull();
+      expect(driver.line(JSON.stringify(assistantLine('must not be accepted')))).toBe('stop');
+      expect(driver.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false }))
+        .toMatchObject({ kind: 'refused', limit: { kind: 'quota' } });
+      channel.finish();
+    }
+    const channel = createServerTurnChannel(socket, 'retry', 8192, 32768), before = sinks;
+    const driver = start(channel);
+    expect(await driver.line(event)).toBeUndefined(); expect(sinks).toBe(before + 1);
+    expect(driver.paidExtraUsage()).toMatchObject({ kind: 'overage' });
+    expect(await start(channel).line(event)).toBeUndefined(); expect(sinks).toBe(before + 1);
+    channel.finish();
+  } finally { socket.uncork(); child.kill('SIGKILL'); await closed; }
 });

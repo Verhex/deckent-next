@@ -1,9 +1,9 @@
 import { constants, type Stats } from 'node:fs';
 import { lstat, open, readdir, readlink, realpath, statfs } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PersonalCustodyError } from '#engine/index.js';
-import { PRIVATE_PERMISSION_MASK,isAbsent as absent, privateFile } from '#platform/index.js';
+import { PRIVATE_PERMISSION_MASK,isAbsent as absent, privateFile, readHostMetadata, linuxMountsAt, linuxDeviceNumber } from '#platform/index.js';
 import { PERSONAL_CUSTODY_REGISTRY as registry } from './personal-registry.js';
 import { ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYPTED_FILE_SECRET_STORE_NAME } from './encrypted.js';
 
@@ -12,13 +12,7 @@ const unsafe = () => new PersonalCustodyError('unsafe-root');
 const identity = (info: Stats) => [info.dev, info.ino, info.uid, info.mode, info.nlink];
 /** Reads only bounded host metadata; never a key or envelope's bytes. */
 async function custodyHostText(path: string, maxBytes = registry.hostMaxBytes): Promise<string> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-  try {
-    const bytes = Buffer.alloc(maxBytes + 1); let offset = 0;
-    while (offset < bytes.length) { const result = await file.read(bytes, offset, bytes.length - offset, null); if (!result.bytesRead) break; offset += result.bytesRead; }
-    if (offset > maxBytes) throw new PersonalCustodyError('unknown-locality');
-    return bytes.subarray(0, offset).toString('utf8');
-  } finally { await file.close(); }
+  return readHostMetadata(path, maxBytes);
 }
 /** KG12 F1 `exact0600` custody of `uid`'s file; with `read` its bounded bytes, else metadata only. Nothing is repaired. */
 export async function personalPrivateFile(path: string, uid: number, maxBytes: number, read = false): Promise<{ identity: string; text: string } | null> {
@@ -89,21 +83,14 @@ export async function inspectPersonalStoreReadiness(root: string | null): Promis
     return { status: 'untested', reason: absent(error) ? 'no-root' : 'unreadable' };
   } finally { clearTimeout(timer); }
 }
-const unescapeMount = (value: string) => value.replace(/\\(040|011|012|134)/gu, (_, code: string) => String.fromCharCode(Number.parseInt(code, 8)));
 async function observeLocalBacking(root: string, dev: number): Promise<string> {
   try {
     const [fs, mounts] = await Promise.all([statfs(root), custodyHostText('/proc/self/mountinfo')]);
-    const rows = mounts.trim().split('\n').map(line => {
-      const [left, right] = line.split(' - '), fields = left!.split(' '), type = right?.split(' ')[0];
-      return { id: fields[0], device: fields[2], base: unescapeMount(fields[3] ?? ''), path: unescapeMount(fields[4] ?? ''), type };
-    }).filter(row => row.path && (root === row.path || root.startsWith(row.path === sep ? sep : `${row.path}${sep}`)))
-      .sort((a, b) => b.path.length - a.path.length);
+    const rows = linuxMountsAt(root, mounts);
     const mount = rows[0], type = mount?.type as keyof typeof registry.filesystemTypes;
     if (!mount || mount.base !== '/' || !Object.hasOwn(registry.filesystemTypes, type) || fs.type !== registry.filesystemTypes[type])
       throw new PersonalCustodyError(mount?.type && /nfs|cifs|9p|fuse|drvfs/su.test(mount.type) ? 'remote-store' : 'unknown-locality');
-    const device = BigInt(dev), major = Number(((device >> 8n) & 0xfffn) | ((device >> 32n) & 0xfffff000n)),
-      minor = Number((device & 0xffn) | ((device >> 12n) & 0xffffff00n));
-    if (mount.device !== `${major}:${minor}`) throw new PersonalCustodyError('unknown-locality');
+    if (mount.device !== linuxDeviceNumber(BigInt(dev))) throw new PersonalCustodyError('unknown-locality');
     const ancestry: string[] = [];
     await localDevice(`/sys/dev/block/${mount.device}`, ancestry, 0);
     return custodyDigest([fs.type, mount, ancestry]);

@@ -33,7 +33,7 @@ it.skipIf(process.platform !== 'linux')('SDK, CLI, MCP and doctor share scoped r
       let text = '';
       expect(await main(['policy', 'status', '--scope', 's', '--lang', lang], { root, env: options.env, inspectPolicyAdministration: inspect,
         stdout: { write: value => { text += value; } } })).toBe(0);
-      expect(text).toContain(owner.issuer); expect(text).toContain(lang === 'tr' ? 'kullanılabilir admin' : 'usable administrators');
+      expect(text).toContain(owner.issuer); expect(text).toContain(lang === 'tr' ? 'kullanılabilir yönetici' : 'usable administrators');
     }
     let json = '';
     expect(await main(['policy', 'status', '--scope', 's', '--json'], { root, env: options.env, inspectPolicyAdministration: inspect,

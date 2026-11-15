@@ -67,8 +67,8 @@ describe('K1 real binary journeys', () => {
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
     // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope;
-    // alpha.64 SETUPUX: codingRepository, the read-only coding-folder observation).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status', 'workerKinds']);
+    // alpha.64 SETUPUX: codingRepository, the read-only coding-folder observation; beta.2: summary, the counts /doctor and CLI doctor share).
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'codingRepository', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status', 'summary', 'workerKinds']);
     expect({ ownerBaseline: result.ownerBaseline, providerSpending: result.providerSpending }).toEqual({ ownerBaseline: null, providerSpending: null });
     // beta.1 SETUPFACT: workerKinds is always present; this fixture admitted no worker image, so no kind is listed.
     expect(result.workerKinds).toEqual([]);
@@ -77,9 +77,11 @@ describe('K1 real binary journeys', () => {
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
     // config requires machine strength (default false); no identity value or digest is shown.
     const strength = await hostBindingStrength();
-    expect(result.installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false }
-      : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false }
-        : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false } : null);
+    const filesystemIdentity = expect.objectContaining({ status: expect.stringMatching(/^(available|unavailable)$/u) });
+    expect(result.installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false, filesystemIdentity }
+      : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false, filesystemIdentity }
+        : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false, filesystemIdentity } : null);
+    if (result.installationBinding) expect(result.installationBinding.filesystemIdentity).not.toHaveProperty('value');
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     // SECRET-STORE-SWITCH (Astra 2456 N2): the other Core stores that cannot be listed now (here: the installation directory is not private,
     // so the file stores refuse it as unsafe) are `unverified`, never counted as empty; names are never read or shown.

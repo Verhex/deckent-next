@@ -22,6 +22,8 @@ export type ProjectVaultLocation = z.infer<typeof locationSchema>;
 export const projectVaultAnchorSchema = z.strictObject({ installationId: installationIdSchema, projectId: projectIdSchema, binding: locationSchema,
   repository: locationSchema.nullable(), projectRoot: persistedString(z.string().min(1).max(4096)) }).readonly();
 export type ProjectVaultAnchor = z.infer<typeof projectVaultAnchorSchema>;
+/** Transient card context only; never persisted in a grant, receipt or protocol record. */
+export interface SecretProjectTarget { readonly anchor: ProjectVaultAnchor; readonly workingFolder: string }
 /** `project.json` v1 beside the vault: who owns it (the anchor it was first opened for) and since when. Never a secret. */
 export const projectVaultRecordSchema = z.strictObject({ schemaVersion: z.literal(1), anchor: projectVaultAnchorSchema, firstSeenAtMs: counterSchema,
   handedOverAtMs: counterSchema.nullable() }).readonly();

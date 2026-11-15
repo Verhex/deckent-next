@@ -1,5 +1,6 @@
 import type { InitialRegistryRequest, CodingTemplateResult, InstallationPoolResult, ProjectInstructionPort } from '#engine/index.js';
-import type { InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
+import type { InstallationIdentityChoice } from '#domain/index.js';
+import type { InstallationIdentityResolutionView } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink } from '#platform/index.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
   PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler, PolicyTemplateUpgradeHandler } from './init.js';
@@ -20,7 +21,7 @@ export interface InstallationCommandContext {
   applyUninstall?: (root: string, input: unknown, interaction: import('#engine/index.js').UninstallInteraction,
     options: ConfigLoadOptions, signal?: AbortSignal) => Promise<import('#engine/index.js').UninstallResult>;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InstallationIdentityRead>;
-  resolveInstallationIdentity?: (root: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions) => Promise<InstallationIdentityResolution>;
+  resolveInstallationIdentity?: (root: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions) => Promise<InstallationIdentityResolutionView>;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
   applyInstallation?: InstallationApplyHandler;

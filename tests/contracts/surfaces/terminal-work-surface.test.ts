@@ -1,3 +1,5 @@
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
+import { exitTypedText } from '../support/workline-harness.js';
 import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
@@ -25,7 +27,7 @@ const work: WorkSurfaceLabels = { jobs: EN_WORK.jobs, workerLine: EN, panel: { t
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
-  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work,
+  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work, decisionArm: decisionArmLabels('en'),
   render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued' },
@@ -195,8 +197,9 @@ describe('work surface: approvals', () => {
     // Keys that are not y/n/Enter/Esc (legacy "always" key, stray text, a paste) leave the card waiting and never reach the composer.
     await view.type('a'); view.stdin.write('yes'); await settle(60);
     expect(fake.decisions).toEqual([]);
-    expect(view.frame()).toContain(W.deny);
+    expect(view.frame()).toContain('Approval: ap-1');
     expect(view.stdout.text).not.toContain('> a');
+    await exitTypedText(view); expect(fake.decisions).toEqual([]);
     await view.type('y');
     await until(() => view.frame().includes('A-ALLOWED ap-1') && !view.frame().includes(W.deny), 'approved');
     expect(view.frame()).toContain('A-MORE 2');
@@ -387,7 +390,7 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       expect(view.frame()).toContain('SECOND-CARD');
       await view.type('y'); await settle(40);
       expect(decided).toEqual(['approval-a:allow']); // A key at once never answers the new card (it is still arming).
-      await until(() => view.frame().includes(W.deny), 'second card armed'); await view.type('y');
+      await until(() => view.frame().includes('press it again'), 'newer card armed for same y'); expect(decided).toEqual(['approval-a:allow']); await view.type('y');
       await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });
@@ -452,6 +455,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     for (const row of [W.once, W.session, W.no, W.deny]) expect(view.frame()).toContain(row); expect(view.frame()).not.toContain(W.always);
     await view.type('a'); await settle(60);
     expect(onlySession).toEqual([]);
+    await exitTypedText(view); expect(onlySession).toEqual([]);
     await view.type('y');
     await until(() => view.stdout.text.includes('A-ALLOWED appr-s'), 'once');
     expect(onlySession).toEqual([['appr-s', 'allow', undefined]]);
@@ -478,6 +482,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     for (const row of [W.once, W.no, W.deny]) expect(view.frame()).toContain(row); expect(view.frame()).not.toContain(W.session);
     await view.type('sa'); await settle(60);
     expect(calls).toEqual([]);
+    await exitTypedText(view); expect(calls).toEqual([]);
     await view.type('n');
     await until(() => view.stdout.text.includes('A-DENIED appr-p'), 'denied');
   });

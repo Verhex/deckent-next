@@ -41,7 +41,7 @@ export function ConfigRecordWindow({ port, keyPath, title, layer, labels, onResu
     body={[{ spans: [span(title, { bold: true })] }, ...(view?.note ? [{ spans: [span(view.note, { role: 'warning' })] }] : []), { label: [span(`− ${words.before}`, { bold: true, role: 'warning' })], spans: [span(step.preview.before, { role: 'muted' })], exact: true },
       { label: [span(`+ ${words.after}`, { bold: true, role: 'success' })], spans: [span(step.preview.after)], exact: true },
       ...(step.preview.warning ? [{ spans: [span(step.preview.warning, { role: 'warning' })] }] : [])]}
-    hints={labels.config.previewHint} position={labels.position} onClose={() => { setStep({ kind: 'members' }); setGeneration(n => n + 1); }}
+    decision hints={labels.config.previewHint} position={labels.position} onClose={() => { setStep({ kind: 'members' }); setGeneration(n => n + 1); }}
     onInput={(input, key) => { if (key.return) { void run(async () => onResult(await port.commit(step.preview.token))); return true; }
       if (key.escape || key.ctrl && input === 'c') { setStep({ kind: 'members' }); setGeneration(n => n + 1); return true; } return undefined; }} />;
   let items: PickerNode[] = [], selected: (path: readonly string[]) => void = () => undefined;

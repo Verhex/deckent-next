@@ -3,3 +3,4 @@ export { resolveConfiguredScopeMembership, registerConfiguredScopesAtStart } fro
 
 export { configuredInstallationProjectContext, configuredAttachmentStore, inspectConfiguredInstallationSource } from './internal/installation-context.js';
 export { openConfiguredLedger } from './internal/ledger.js';
+export { plainMacosRebinding } from './internal/rebind.js';

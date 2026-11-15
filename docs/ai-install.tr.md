@@ -26,7 +26,7 @@ npm install --global /absolute/path/to/deckent-package.tgz
 ```
 
 Aşağıdaki adımları kişinin seçtiği proje klasöründe, deckent kaynağının dışında çalıştırın. `my-project` yerine kalıcı kapsam
-adını yazın. Kapsam politika ve kayıtları gruplar; sandbox değildir. Bu adım yeni kurulumun dilini ve izinlerini yazar;
+adını yazın. Kapsam politika ve kayıtları gruplar; yalıtım alanı değildir. Bu adım yeni kurulumun dilini ve izinlerini yazar;
 kimlik profili seçmez, giriş yapmaz, anahtar girmez ve kart onaylamaz.
 
 ```sh
@@ -69,7 +69,7 @@ kanıtıdır; sonraki ERP/CRM operasyonunun veya işçi çıktısının kabulü 
 
 JSON'daki tipli hata `code` alanını, güvenli açıklamasını ve sonraki adımını koruyun; hepsini “kurulum başarısız” diye birleştirmeyin.
 Tanık ya da politika reddi, kişinin sunulan karttan karar vermesini gerektirir. Eksik bağlantı, bilinmeyen tarife,
-kullanılamayan sandbox veya sınanmamış kontrol varsa bağımlı eylemi durdurup nedeni bildirin. Sır taşıyan ham günlükleri
+kullanılamayan yalıtım alanı veya sınanmamış kontrol varsa bağımlı eylemi durdurup nedeni bildirin. Sır taşıyan ham günlükleri
 paylaşmayın. Kesinti sonrası kayıtlı sonucu inceleyin; belirsiz etki çözülmemiştir, kör tekrar izni değildir.
 Mevcut derleme istenen yolu sunamıyorsa bilinen sınırlar sayfasını kullanın.
 
@@ -96,7 +96,7 @@ Kişi gerçek terminalde `deckent uninstall` çalıştırır. Menü, her biri ke
 Bütün denetimler tek onaydan önce yapılır; silinecek bir şey yoksa soru sorulmaz. Ret nedenini ve sonraki adımı söyler:
 çalışan iş (`--force` kişinin kendi yetkisiyle iptal eder, sonucu bilinmeyen işlemi kapatmaz), servisi yeniden başlatan
 servis yöneticisi (`--disable-unit` kullanıcı birimini kapatmaya ayrı rızadır; manager dosya ve bağlantı kümesini kanıtlar,
-ledger kilidi yeni başlangıcı kapatır; birim dosyası kalır), kuyruktaki teslimler (`--all --force` her teslimin yetkisini karttan
+defter kilidi yeni başlangıcı kapatır; birim dosyası kalır), kuyruktaki teslimler (`--all --force` her teslimin yetkisini karttan
 önce kendi kuyruğunun sahibinde denetler, sonra aynı sahip üzerinden geri çeker), politika,
 saklama ya da yasal saklama veya taşınmış ya da güvensiz yetki dosyası (güvensiz `policy.json` ya da `bindings.json`
 `UNINSTALL_POLICY_UNREADABLE` olur: veriler kalır, dosya onarılmaz; kişi adına düzeltmeyin). Git izleme bilgisi

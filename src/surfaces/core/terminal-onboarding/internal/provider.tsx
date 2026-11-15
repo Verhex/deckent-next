@@ -2,18 +2,18 @@ import { useApp } from 'ink';
 import { DeckentError, t, colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
 import { type PanelLabels } from '#surfaces/core/terminal-panels/index.js';
 import { ProviderPanel, type ProviderWindowPort } from '#surfaces/core/terminal-provider/index.js';
-import { CardCopyContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DecisionArmLabelsContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalHost, streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { cardCopyLabels, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import { cardCopyLabels, decisionArmLabels, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 function ProviderScreen({ port, labels, finish, io }: { readonly port: ProviderWindowPort; readonly labels: PanelLabels; readonly finish: (error?: unknown) => void; readonly io: CliCardIo }) {
   const { exit } = useApp();
   const done = (error?: unknown) => { finish(error); exit(); };
-  return <WindowStackProvider><ProviderPanel port={port} labels={labels} laterLabel={t('onboarding.session.later', {}, io.locale)}
+  return <DecisionArmLabelsContext.Provider value={decisionArmLabels(io.locale)}><WindowStackProvider><ProviderPanel port={port} labels={labels} laterLabel={t('onboarding.session.later', {}, io.locale)}
     push={rows => { for (const row of rows) ((io.stdout ?? process.stdout) as NodeJS.WriteStream).write(`${row.text}\n`); }} onClose={() => done()}
     onError={done} errorText={error => error instanceof DeckentError ? (error.localize?.(io.locale).message ?? error.message) : error instanceof Error ? error.message : String(error)}
-    openApproval={() => done(new Error(t('onboarding.provider.approval', {}, io.locale)))} /></WindowStackProvider>;
+    openApproval={() => done(new Error(t('onboarding.provider.approval', {}, io.locale)))} /></WindowStackProvider></DecisionArmLabelsContext.Provider>;
 }
 /** Reuse the existing connection, masked-key, discovery and activation owner in the current onboarding step. */
 export async function runOnboardingProvider(port: ProviderWindowPort, labels: PanelLabels, subscriptionIds: readonly string[], io: CliCardIo & { readonly root?: string }) {

@@ -325,7 +325,7 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
   const args = ['init', 'registry', '--scope', 's', '--provider', 'codex', '--kind', 'feature', '--pool', 'customer', '--execution-slots', '3', '--in-flight-slots', '5', '--discovery', 'repository'];
   for (const locale of ['en', 'tr']) {
     output = ''; expect(await main([...args, '--preview', '--lang', locale], context), error).toBe(0);
-    expect(output).toContain(locale === 'en' ? 'First registry preview' : 'İlk registry önizlemesi'); expect(output).toContain('native-coding-template');
+    expect(output).toContain(locale === 'en' ? 'First registry preview' : 'İlk kayıt önizlemesi'); expect(output).toContain('native-coding-template');
   }
   for (const flags of [[], ['--preview', '--apply'], ['--apply', '--apply'], ['--preview', '--model', 'alias'], ['--preview', '--pool', 'x']]) {
     output = ''; expect(await main([...args, ...flags], context)).toBe(2); expect(output).toBe('');
@@ -333,7 +333,7 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
   const terminal = onTerminal(context, text => { output += text; }); await refusedOffTerminal(f.path, () => main([...args, '--apply', '--json'], context), () => error);
   for (const status of ['applied', 'current']) { output = ''; expect(await main([...args, '--apply'], terminal), error).toBe(0); expect(resultOf(output)).toMatchObject({ status, ...(status === 'current' ? { write: null } : {}) }); }
   // I-S6 J1 delta: a person sees "already exists, nothing written" for `current`, never "created".
-  for (const [locale, said, never] of [['en', 'already exists and matches this request', 'registry created'], ['tr', 'zaten var ve bu istekle aynı', 'registry oluşturuldu']] as const) {
+  for (const [locale, said, never] of [['en', 'already exists and matches this request', 'registry created'], ['tr', 'zaten var ve bu istekle aynı', 'kabul kaydı oluşturuldu']] as const) {
     output = ''; expect(await main([...args, '--apply', '--lang', locale], terminal), error).toBe(0); expect(output).toContain(said); expect(output).not.toContain(never);
   }
   const different = args.map(value => value === '3' ? '4' : value);

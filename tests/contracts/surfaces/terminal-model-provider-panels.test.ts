@@ -6,9 +6,9 @@ import type { ModelConnectResult } from '#domain/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
-import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
-import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
+import { cardCopyLabels, decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { QuestionWindow, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { SettingsPanel, ProviderPanel, modelPanelTree, providerPanelTree, providerPanelPort, type ProviderWindowPort } from '#surfaces/core/terminal-provider/index.js';
@@ -29,11 +29,39 @@ class Screen extends Writable {
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
 /** G2-3: a panel question is a decision window — it counts keys once its key hints show after the quiet arming period (arming.ts). */
+/**
+ * One Enter on a list row, never a repeat (Astra 3140: a second Enter could act on the level the first one opened). Hosted CI 2026-11-15
+ * (run 43689872264, three attempts) lost such an Enter when it was sent the moment the list's first rows were drawn; the cause is not
+ * established (a key written in the same tick as a list's first frame is NOT lost: measured). The provider list keeps loading after its
+ * first frame (budget, cache and custody rows), so: wait until the window shows `ready` and has stopped changing, press once, then only
+ * observe. A timeout reports the screen, so the next red says what was on it.
+ */
+async function enterWhenStill(ui: { frame(): string; press(keys: string, ms?: number): Promise<void> }, ready: string, shows: () => boolean, label: string, samples = 400) {
+  let still = 0;
+  for (let sample = 0, last = ''; sample < samples && still < 8; sample++) { await settle(25); const now = ui.frame(); still = now === last && now.includes(ready) ? still + 1 : 0; last = now; }
+  // Bounded (Astra 3142): a level that never shows `ready`, or never stops changing, ends here with no key sent.
+  if (still < 8) throw new Error(`no Enter sent for ${label}: "${ready}" not shown and still; screen:\n${ui.frame().slice(-1800)}`);
+  await ui.press(ENTER);
+  for (let waited = 0; waited < 500 && !shows(); waited++) await settle(10);
+  if (!shows()) throw new Error(`timed out waiting for ${label}; screen:\n${ui.frame().slice(-1800)}`);
+}
+it('enterWhenStill sends no key when its level never shows or never settles, and one key when it does', async () => {
+  const sent: string[] = [], press = async (keys: string) => { sent.push(keys); };
+  await expect(enterWhenStill({ frame: () => 'Loading', press }, 'READY', () => false, 'never ready', 12)).rejects.toThrow(/no Enter sent for never ready[\s\S]*Loading/u);
+  let tick = 0;
+  await expect(enterWhenStill({ frame: () => `READY ${tick++}`, press }, 'READY', () => false, 'never still', 12)).rejects.toThrow(/no Enter sent for never still/u);
+  expect(sent).toEqual([]);
+  let opened = false;
+  await enterWhenStill({ frame: () => 'READY', press: async keys => { sent.push(keys); opened = true; } }, 'READY', () => opened, 'opens');
+  expect(sent).toEqual([ENTER]);
+});
 async function armed(frame: () => string, hint: string) {
   await settle(DECISION_ARM_DEFAULT + 80);
   for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
   expect(frame()).toContain(hint);
 }
+/** Owner 108: the armed hint row of a list's scope step and of a confirm list (the scope hint also ends in "Enter confirm"). */
+const SCOPE_KEYS = 'choose scope', CONFIRM_KEYS = '↑↓ choose · Enter confirm', CONFIRM_KEYS_TR = '↑↓ seç · Enter onayla';
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 function splitKeys(keys: string): string[] {
@@ -54,7 +82,7 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false, copy
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const listeners = new Set<(event: PointerEvent) => void>();
   const pointerSource = { pointer: { subscribe: (listener: (event: PointerEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } }, copy: () => undefined };
-  const stack = createElement(PointerContext.Provider, { value: copy ? pointerSource : null }, createElement(WindowStackProvider, null, node));
+  const stack = createElement(DecisionArmLabelsContext.Provider, { value: decisionArmLabels('en') }, createElement(PointerContext.Provider, { value: copy ? pointerSource : null }, createElement(WindowStackProvider, null, node)));
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, copy ? createElement(CardCopyContext.Provider, { value: streamCardCopy(stdout, cardCopyLabels('en'), {}) }, stack) : stack) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
@@ -104,6 +132,10 @@ describe('/model window', () => {
     // The scope step: this session, or (locked here: no governed default write is bound) also the default.
     expect(view.frame()).toContain('This session only (from the next turn)');
     expect(view.frame()).toContain('This session, and make it my default');
+    // Owner 108: the scope step is a decision window. Typed text and its Enter pin nothing; the next Enter confirms.
+    await armed(view.frame, SCOPE_KEYS);
+    await view.press('x'); expect(view.frame()).toContain('Text typed here');
+    await view.press(ENTER); expect(pins).toEqual([]); expect(calls.closed).toBe(0); expect(view.frame()).toContain('Nothing was chosen.');
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
@@ -111,7 +143,7 @@ describe('/model window', () => {
     const rapid = modelPort(MODELS), next = panel('model', { model: rapid.port }), coalesced = mount(next.element, 100, 40);
     await settle(80); await coalesced.raw('fast\r', 60);
     expect(coalesced.frame()).toContain('This session only (from the next turn)');
-    expect(rapid.pins).toEqual([]); await coalesced.press(ENTER);
+    expect(rapid.pins).toEqual([]); await armed(coalesced.frame, SCOPE_KEYS); await coalesced.press(ENTER);
     expect(rapid.pins).toEqual(['fast']); expect(next.calls.closed).toBe(1);
   });
 
@@ -152,6 +184,7 @@ describe('/model window', () => {
     const view = mount(element, 100, 40);
     await settle(80);
     await view.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(pins).toEqual([]); await armed(view.frame, SCOPE_KEYS);
     await view.press(`${DOWN}${ENTER}`, 80);
     expect(pins).toEqual(['fast']); expect(written).toEqual(['fast']);
     expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
@@ -169,9 +202,11 @@ describe('/model window', () => {
       const view = mount(element, 100, 40);
       await settle(80);
       await view.press(`${DOWN}${DOWN}${ENTER}`);
-      await view.press(`${DOWN}${ENTER}`, 80);
+      // The Enter that answers the scope step, pressed twice, never answers the list that follows it: that list arms anew.
+      await armed(view.frame, SCOPE_KEYS); await view.press(`${DOWN}${ENTER}${ENTER}`, 80);
       expect(view.frame()).toContain('This project names its own model (team-model); it wins over your default here.');
       expect(view.frame()).toContain("Remove the project's model (your default applies)"); expect(view.frame()).toContain("Make the project's model this one too");
+      expect(asked).toEqual([]); await armed(view.frame, CONFIRM_KEYS);
       await view.press(keys, 80);
       expect(asked).toEqual(expected ? [expected] : []);
       expect(calls.closed).toBe(1);
@@ -364,13 +399,18 @@ describe('/provider window', () => {
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
     // G2-3: a y in the same moment the question opened is swallowed (the arming period), never a disconnect.
     await view.press('y', 60); expect(removed).toEqual([]);
-    await armed(view.frame, 'y remove'); await view.press('n', 60);
+    await armed(view.frame, 'press it again');
+    await view.press('n', 60); expect(view.frame()).toContain('Text typed here'); expect(view.frame()).toContain('Disconnect Local server'); // Still text, not a decline.
+    await view.press(ENTER, 60); expect(view.frame()).toContain('Disconnect Local server');
+    await view.press('n', 60);
     expect(removed).toEqual([]);
     await view.press(`${ENTER}${DOWN}${ENTER}`, 60); // back on the same kind
     await armed(view.frame, 'y remove');
     // TERMINAL-UX: Ctrl+Y, Alt+y and a coalesced Ctrl+O y are not a typed y (nor a no): the question keeps waiting.
     for (const keys of ['\u0019', `${ESC}y`, '\u000fy']) { await view.raw(keys, 60); expect(removed).toEqual([]); }
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
+    await settle(DECISION_ARM_DEFAULT + 80); await view.press('y', 60); expect(removed).toEqual([]);
+    await view.press(DOWN, 60);
     await armed(view.frame, 'y remove'); await view.press('y', 100);
     expect(removed).toEqual(['local-openai']);
     // The answer is shown in the window, not in scrollback.
@@ -391,7 +431,10 @@ describe('QuestionWindow keys', () => {
     await view.raw('\u0019y', 40); expect(clipboardTexts(view.all())).toHaveLength(1);
     for (const keys of ['\u000e', `${ESC}y`, '\u000fy', 'yy', 'yes']) { await view.raw(keys, 40); expect(answers).toEqual([]); }
     expect(view.frame()).toContain('Trust files and pin these tools?');
-    await armed(view.frame, 'y/n'); await view.press('y', 40); await view.press('n', 40);
+    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
+    await view.press('y', 40); expect(answers).toEqual([]);
+    await view.press(ENTER, 40); expect(answers).toEqual([]); // Not even the default cancellation.
+    await view.press('y', 40); await view.press('n', 40);
     expect(answers).toEqual([true]);
   });
   it('a typed n says no; Enter and Ctrl+C give no answer (null)', async () => {
@@ -402,11 +445,16 @@ describe('QuestionWindow keys', () => {
   // G2-3 (analysis 2026-10-18): the MCP trust, provider disconnect and profile apply questions were outside the approval cards' key-race guard,
   // so a y typed for the input just before the question appeared granted trust. Now it is swallowed, and a held key keeps the question unarmed.
   it('a y pressed as the question appears, or held through its arming, is swallowed; a deliberate y after the quiet period answers', async () => {
+    const once: (boolean | null)[] = [], lone = question(once);
+    await lone.press('y', 20); expect(once).toEqual([]);
+    await armed(lone.frame, 'press it again'); await lone.press('y', 40); expect(once).toEqual([true]);
     const answers: (boolean | null)[] = [], view = question(answers);
     await view.press('y', 20); expect(answers).toEqual([]);
     expect(view.frame()).toContain('Trust files and pin these tools?'); expect(view.frame()).not.toContain('y/n'); // its keys are not shown until they count
     for (let elapsed = 0; elapsed < DECISION_ARM_DEFAULT * 2; elapsed += 30) { await view.raw('y', 30); expect(answers).toEqual([]); }
-    await armed(view.frame, 'y/n'); await view.press('y', 40);
+    await settle(DECISION_ARM_DEFAULT + 80); expect(view.frame()).toContain('Text typed here');
+    await view.press('y', 40); expect(answers).toEqual([]);
+    await view.press(DOWN, 40); await armed(view.frame, 'y/n'); await view.press('y', 40);
     expect(answers).toEqual([true]);
   });
 });
@@ -589,11 +637,16 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(ENTER);
     expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
     expect(budget.applied).toEqual([]);
-    await screen.press(ESC);
+    // Owner 108: the confirm list is a decision window with no filter. A typed n is text (it used to filter, and Enter then sent the
+    // "confirm" row left on top); its Enter sends nothing and neither does Esc.
+    await armed(screen.frame, CONFIRM_KEYS);
+    await screen.press('n'); expect(screen.frame()).toContain('Text typed here');
+    await screen.press(ENTER, 80); expect(budget.applied).toEqual([]); expect(screen.frame()).toContain("Set this scope's shared budget to 10 USD?");
+    await screen.press(ESC); expect(budget.applied).toEqual([]);
     await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
     expect(budget.applied).toEqual([]);
-    await screen.press(ENTER, 80);
+    await armed(screen.frame, CONFIRM_KEYS); await screen.press(ENTER, 80);
     expect(budget.applied).toEqual([{ action: 'create', usd: 25, unfreeze: false }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
   });
@@ -614,12 +667,13 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await settle(80);
     await screen.press(ENTER); await screen.press(`${UP}${ENTER}`);
     expect(screen.frame()).toContain('Budget in USD (whole dollars)');
+    await armed(screen.frame, '←→ step'); // owner 108: the stepper and the confirm list after it are decision windows
     await screen.press(`99${RIGHT}${RIGHT}${RIGHT}${RIGHT}`);
     // 5 → 7: the bound stops the step; the typed 9s changed nothing.
     expect(screen.frame()).toContain('7'); expect(screen.frame()).not.toContain('99');
     await screen.press(ENTER);
     expect(screen.frame()).toContain("Set this scope's shared budget to 7 USD?");
-    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([]); await armed(screen.frame, CONFIRM_KEYS); await screen.press(ENTER, 80);
     expect(budget.applied).toEqual([{ action: 'create', usd: 7, unfreeze: false }]); expect(calls.closed).toBe(1);
   });
 
@@ -636,10 +690,10 @@ describe('stage 1 budget window (/model and /provider)', () => {
     await screen.press(`${DOWN}${ENTER}`);
     expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
     expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
-    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(`${DOWN}${DOWN}${ENTER}`); // owner 108: the confirm list arms each time it opens
     expect(budget.applied).toEqual([]);
     expect(screen.frame()).toMatch(/>.*25 USD/u);
-    await screen.press(`${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    await screen.press(`${DOWN}${ENTER}`); await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
@@ -655,7 +709,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       const screen = mount(element, 140, 40); await settle(80);
       expect(screen.frame()).toContain('Güncel protokole geç');
       await screen.press(ENTER); expect(screen.frame()).toContain('API anahtarı korunur'); expect(applied).toEqual([]);
-      await screen.press(confirm ? ENTER : ESC, 80);
+      await armed(screen.frame, CONFIRM_KEYS_TR); await screen.press(confirm ? ENTER : ESC, 80);
       expect(applied).toEqual(confirm ? [1] : []); expect(calls.approvals).toEqual(confirm ? ['protocol-approval'] : []); expect(pins).toEqual([]);
     }
   });
@@ -675,6 +729,10 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     await screen.press(ENTER);
     expect(screen.frame()).toContain('Turn on prompt cache (5 min)?'); expect(screen.frame()).toContain('1.25× the input price');
     expect(screen.frame()).toContain('Yes, turn it on (5 min)'); expect(cache.applied).toEqual([]);
+    // Owner 108: the confirm list is a decision window. Typed text and its Enter write nothing; the next Enter is the answer.
+    await armed(screen.frame, CONFIRM_KEYS);
+    await screen.press('yes'); await screen.press(ENTER, 80);
+    expect(cache.applied).toEqual([]); expect(calls.closed).toBe(0); expect(screen.frame()).toContain('Nothing was chosen.');
     await screen.press(ENTER, 80);
     expect(cache.applied).toEqual([1]); expect(calls.notices).toEqual([{ level: 'info', text: 'Prompt cache (5 min) turned on for 1 model(s).' }]);
     expect(calls.closed).toBe(1); expect(pins).toEqual([]);
@@ -684,7 +742,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     const cancel = cachePort(), { port } = modelPort(MODELS);
     const first = panel('model', { model: { ...port, cache: cancel.port } });
     const screen = mount(first.element, 140, 40); await settle(80);
-    await screen.press(ENTER); await screen.press(`${DOWN}${ENTER}`, 80);
+    await screen.press(ENTER); await armed(screen.frame, CONFIRM_KEYS); await screen.press(`${DOWN}${ENTER}`, 80);
     expect(cancel.applied).toEqual([]); expect(first.calls.closed).toBe(1);
     const held = cachePort('approval-pending');
     const provider: ProviderPanelPort = { inspect: async () => ({ title: 'Sağlayıcılar', kinds: [], notes: [] }), endpoint: () => ({ ok: false, reason: '-' }),
@@ -693,7 +751,7 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     const tr = mount(second.element, 140, 40); await settle(80);
     expect(tr.frame()).toContain('Önbelleği aç (5 dk)');
     await tr.press(ENTER); expect(tr.frame()).toContain('Evet, aç (5 dk)');
-    await tr.press(ENTER, 80);
+    expect(held.applied).toEqual([]); await armed(tr.frame, CONFIRM_KEYS_TR); await tr.press(ENTER, 80);
     expect(held.applied).toEqual([1]); expect(second.calls.approvals).toEqual(['approval-cache']);
   });
 
@@ -711,17 +769,17 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       expect(pins).toEqual([]);
       expect(screen.frame()).toContain('New context');
       expect(screen.frame()).toContain('Continue (the whole history');
-      await screen.press(answer, 60);
+      await armed(screen.frame, SCOPE_KEYS); await screen.press(answer, 60);
       expect(pins).toEqual([{ model: 'fast', fresh }]);
       expect(calls.notices.map(item => item.text).join('\n')).toContain(fresh ? 'New context for fast' : 'fast continues with the whole history');
     }
     const esc = switchPort(60_000), escaped = panel('model', { model: esc.port });
     const screen = mount(escaped.element, 140, 40); await settle(80);
-    await screen.press(`${DOWN}${DOWN}${ENTER}${ESC}`, 60);
+    await screen.press(`${DOWN}${DOWN}${ENTER}`); await armed(screen.frame, SCOPE_KEYS); await screen.press(ESC, 60); // an Esc that counts
     expect(esc.pins).toEqual([]);
     const small = switchPort(null), quiet = panel('model', { model: small.port });
     const other = mount(quiet.element, 140, 40); await settle(80);
-    await other.press(`${DOWN}${DOWN}${ENTER}${ENTER}`, 60);
+    await other.press(`${DOWN}${DOWN}${ENTER}`); await armed(other.frame, SCOPE_KEYS); await other.press(ENTER, 60);
     expect(small.pins).toEqual([{ model: 'fast', fresh: false }]);
   });
 
@@ -782,7 +840,8 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
     await settle(80);
     const shapes = [windowShape(view.frame(), 'Models · scope')];
     await view.press(DOWN); expect(view.frame()).toContain('NOT-ACTIVE'); shapes.push(windowShape(view.frame(), 'Models · scope'));
-    await view.press(`\u001B[A${ENTER}`); expect(view.frame()).toContain('This session only'); shapes.push(windowShape(view.frame(), 'Models · scope'));
+    // Owner 108: the scope step shows its key-hint row once it is armed.
+    await view.press(`\u001B[A${ENTER}`); expect(view.frame()).toContain('This session only'); await armed(view.frame, SCOPE_KEYS); shapes.push(windowShape(view.frame(), 'Models · scope'));
     expect(shapes.every(shape => shape.titles === 1 && shape.hints === 1 && shape.height === shapes[0]!.height), JSON.stringify(shapes)).toBe(true);
   });
   it('budget (amount, then confirm with its question as the title) and the cache confirm', async () => {
@@ -791,13 +850,13 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
     const view = mount(panel('model', { model: { ...modelPort(MODELS).port, budget } }).element);
     await settle(80); await view.press(ENTER);
     const amount = windowShape(view.frame(), 'Create budget');
-    await view.press(ENTER);
+    await view.press(ENTER); await armed(view.frame, CONFIRM_KEYS); // owner 108: a confirm list shows its key-hint row once it is armed
     const confirm = windowShape(view.frame(), "Set this scope's shared budget to 5 USD?");
     expect([amount, confirm]).toEqual([{ height: amount.height, titles: 1, hints: 1 }, { height: amount.height, titles: 1, hints: 1 }]);
     const cache = { inspect: async () => ({ detail: 'one', lines: [{ label: '', text: 'WHAT-CHANGES' }] }),
       apply: async (): Promise<ConfigPanelOutcome> => ({ status: 'applied', lines: ['on'], approvalId: null }) };
     const cached = mount(panel('model', { model: { ...modelPort(MODELS).port, cache } }).element);
-    await settle(80); await cached.press(ENTER);
+    await settle(80); await cached.press(ENTER); await armed(cached.frame, CONFIRM_KEYS);
     expect(windowShape(cached.frame(), 'Turn on prompt cache (5 min)?')).toMatchObject({ titles: 1, hints: 1 });
   });
   it('workspace: the profiles, the Loading frame while the list is read and the workspaces', async () => {
@@ -873,14 +932,12 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
       } }, {}, 'en', () => 'POLICY_DENIED').subscription!;
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const ui = mount(panel('provider', { provider }).element, 120, 40);
-    await until(() => ui.frame().includes('Fixture subscription'), 'subscription kind loaded');
-    await ui.press(ENTER);
-    await until(() => ui.frame().includes('Sign in'), 'subscription actions loaded');
-    await ui.press(ENTER);
-    await until(() => ui.frame().includes('Login directory'), 'login directory loaded');
+    await enterWhenStill(ui, 'Fixture subscription', () => ui.frame().includes('Sign in'), 'subscription actions loaded');
+    await enterWhenStill(ui, 'Sign in', () => ui.frame().includes('Login directory'), 'login directory loaded');
     await ui.press(ENTER); // default directory; fake login in suspended Ink
     await until(() => ui.frame().includes('Who may use this login now:'), 'delegation loaded after login');
     expect(ui.frame()).toContain('Who may use this login now:');
+    await armed(ui.frame, CONFIRM_KEYS); // owner 108: the consent list is a decision window; it stays armed while boxes are ticked
     await ui.press(`${DOWN}${ENTER}`, 60); // tick/untick system
     expect(requests).toEqual([null]);
     await ui.press(`\u001B[A${ENTER}`, 60); // confirm selection
@@ -911,11 +968,12 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const { element, calls } = panel('provider', { provider }, locale), ui = mount(element, 180, 45);
     // Wait for each real screen (CI 41293916929 shard 15: three Enters 120 ms apart outran the login directory screen).
-    await until(() => ui.frame().includes(kind.label), 'subscription kind loaded'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(t('tui.provider.login.action', {}, locale).replace('…', '')), 'subscription actions loaded'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
+    const action = t('tui.provider.login.action', {}, locale).replace('…', '');
+    await enterWhenStill(ui, kind.label, () => ui.frame().includes(action), 'subscription actions loaded');
+    await enterWhenStill(ui, action, () => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
     await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent with the config policy loaded');
     expect(ui.frame()).toContain(subscription.words.configPolicy);
+    await armed(ui.frame, t('tui.picker.hint_confirm', {}, locale));
     const reason = policy === 'unknown' ? t('tui.provider.login.policyUnread', {}, locale)
       : t('tui.provider.login.policyBlocked', { policy: 'company-profile-write', layer: 'project' }, locale);
     for (const actor of ['system', 'ai'] as const) {
@@ -934,7 +992,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     expect(calls.errors).toEqual([]);
     mounted.pop()!.unmount();
   }
-});
+}, 90_000); // 18 mounts, each waiting for the consent list to arm (owner 108): well above the default on a slow runner
 
 it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {
   const { port, requests } = providerPort();
@@ -966,6 +1024,10 @@ it('a blocked model offers its governed repair, writes only after the card, and 
   const view = mount(element, 80, 35, true);
   await settle(80); await view.press(ENTER); await view.press(ENTER);
   expect(view.frame()).toContain('Apply state change'); expect(fixed).toEqual([]);
+  // Owner 108: the apply/keep list is a decision window. Typed text and its Enter call no repair; the next Enter applies it.
+  await armed(view.frame, 'choose · Enter confirm');
+  await view.press('ok'); await view.press(ENTER, 80);
+  expect(fixed).toEqual([]); expect(pins).toEqual([]); expect(view.frame()).toContain('Apply state change');
   await view.press(ENTER); await settle(80);
   expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
 });
@@ -985,7 +1047,7 @@ it('reloading partly loaded model/provider windows ignores the old generation su
     const window = panel(kind, ports), ui = mount(window.element);
     await until(() => ui.frame().includes(kind === 'model' ? 'coder' : 'Providers'), 'partly loaded window');
     if (kind === 'model') {
-      await ui.press(`${ENTER}${ENTER}`); expect(ui.frame()).toContain('Apply state change'); await ui.press(ENTER);
+      await ui.press(`${ENTER}${ENTER}`); expect(ui.frame()).toContain('Apply state change'); await armed(ui.frame, CONFIRM_KEYS); await ui.press(ENTER);
     } else {
       // Enter the first provider's action list, then back out of its masked key entry to reload.
       await ui.press(`${ENTER}${ENTER}`); await ui.press(ESC);
@@ -1016,9 +1078,13 @@ it('model/provider windows open during startup but a resulting approval waits fo
     const press = async (key: string) => { view.stdin.write(key); await settleWorkline(40); };
     await press(`/${kind}${ENTER}`);
     await until(() => view.stdout.frame.includes(kind === 'model' ? 'Models · scope' : 'Providers'), 'local window before readiness');
-    await press(ENTER); await press(DOWN); await press(ENTER);
-    if (kind === 'provider') {
-      await until(() => view.stdout.frame.includes('model to connect'), 'provider models'); await press(ENTER);
+    // Every key waits for the step it acts on, and no key is repeated (hosted CI 2026-11-15: three keys 40 ms apart outran the list).
+    const ui = { frame: () => view.stdout.frame, press };
+    if (kind === 'model') {
+      await enterWhenStill(ui, 'Models · scope', () => view.stdout.frame.includes(SCOPE_KEYS), 'armed scope step'); await press(DOWN); await press(ENTER);
+    } else {
+      await enterWhenStill(ui, 'Providers', () => /Providers › OpenAI API/u.test(view.stdout.frame), 'provider level'); await press(DOWN);
+      await enterWhenStill(ui, 'Providers › OpenAI API', () => view.stdout.frame.includes('model to connect'), 'provider models'); await press(ENTER);
       await until(() => view.stdout.frame.includes('Waiting for approval'), 'connection result'); await press(ENTER);
     }
     await until(() => view.stdout.text.includes('OPENING-WAIT'), 'approval waits');
@@ -1029,6 +1095,21 @@ it('model/provider windows open during startup but a resulting approval waits fo
 });
 
 const SIGN_IN = `https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid%20profile%20email%20offline_access&code_challenge=${'C'.repeat(43)}&code_challenge_method=S256&state=${'s'.repeat(43)}&originator=deckent&extra=${'x'.repeat(60)}`;
+it('108: sign-in typed text blocks letters and Enter with immediate EN/TR words; an arrow restores choosing', async () => {
+  const { default: SiwcWindow } = await (await import('#surfaces/core/siwc/index.js')).loadSiwcWindow();
+  for (const locale of ['en', 'tr'] as const) {
+    const requests: unknown[] = [];
+    const view = mount(createElement(SiwcWindow, { port: { locale, connection: 'fixture-plan', execute: async (request: unknown) => { requests.push(request); return { apiTargets: [] }; } } as never,
+      onClose: () => {}, onError: error => { throw error; } }));
+    await armed(view.frame, t('siwc.card.keys', {}, locale));
+    await view.press('/'); expect(view.frame()).toContain(t('terminal.decision.typedText', {}, locale));
+    for (const char of 'policy1n jk') await view.press(char);
+    await view.press(ENTER); expect(requests).toEqual([]);
+    await view.press(DOWN); await view.press(ENTER);
+    expect(requests).toEqual([{ operation: 'prepare' }]);
+    mounted.pop()!.unmount();
+  }
+});
 it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
   const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
   for (const key of [ENTER, ESC]) {
@@ -1142,9 +1223,9 @@ it('K13: the provider and onboarding subscription window offers the registry met
         cli: { configDir: '/fixture/login', owned: true, delegate: [] } }) as never }, {}, locale, () => 'REFUSED');
     const { port } = providerPort(), subscription = source.subscription!;
     const ui = mount(panel('provider', { provider: { ...port, subscription, inspect: async () => ({ ...KINDS, kinds: [kind] }) } as ProviderWindowPort }, locale).element);
-    await until(() => ui.frame().includes(kind.label), 'subscription listed'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(subscription.words.action.replace('…', '')), 'subscription action'); await ui.press(ENTER);
-    await until(() => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
+    const signIn = subscription.words.action.replace('…', '');
+    await enterWhenStill(ui, kind.label, () => ui.frame().includes(signIn), 'subscription action');
+    await enterWhenStill(ui, signIn, () => ui.frame().includes(subscription.words.dirTitle), 'login directory'); await ui.press(ENTER);
     await until(() => ui.frame().includes(subscription.words.methodTitle!), 'method choice');
     expect(ui.frame()).toContain(locale === 'en' ? 'Sign in with a device code' : 'Cihaz kodu ile giriş');
     await ui.press(ESC); expect(requests).toEqual([]);
@@ -1162,7 +1243,7 @@ it('R2a: /model pins an unverified (unknown) subscription model; its first turn 
   const provider: ProviderWindowPort = { ...base, locale: 'en', subscriptionReadiness: { recognizes: () => true, inspect: unknown, inspectMany: async (_surface, refs) => Promise.all(refs.map(unknown)) } };
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.unknown.sealed', {}, 'en').slice(0, 25)), 'unknown prerequisites displayed');
-  await ui.press(ENTER + ENTER);
+  await ui.press(ENTER); await armed(ui.frame, SCOPE_KEYS); await ui.press(ENTER);
   await until(() => model.pins.length > 0, 'unknown model pinned');
   expect(calls.errors).toEqual([]);
 });
@@ -1176,7 +1257,7 @@ it('K13: /model rechecks subscription readiness at confirmation and does not pin
   const { element, calls } = panel('model', { model: { ...model.port, provider } }), ui = mount(element);
   await until(() => ui.frame().includes(t('headless.agent.readiness.ready', {}, 'en').slice(0, 25)), 'ready prerequisites displayed');
   ready = false;
-  await ui.press(ENTER + ENTER);
+  await ui.press(ENTER); await armed(ui.frame, SCOPE_KEYS); await ui.press(ENTER);
   await until(() => calls.errors.length > 0, 'revocation reported');
   expect(model.pins).toEqual([]);
   expect(calls.errors[0]).toMatchObject({ code: 'TERMINAL_MODEL_SWITCH_REFUSED' });

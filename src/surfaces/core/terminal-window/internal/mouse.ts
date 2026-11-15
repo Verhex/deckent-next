@@ -43,11 +43,6 @@ export function takeMouseReports(chunk: string, carry = ''): Readonly<{ text: st
   return { text, wheel, pointer, carry: rest };
 }
 
-/** The terminal clipboard write (OSC 52, BEL-terminated) for text the person selected; nothing else is ever written to the clipboard. */
-export function osc52Copy(text: string): string {
-  return `\u001b]52;c;${Buffer.from(text, 'utf8').toString('base64')}\u0007`;
-}
-
 type WheelListener = (step: number) => void;
 export type WheelSource = Readonly<{ subscribe: (listener: WheelListener) => () => void }>;
 export type PointerListener = (event: PointerEvent) => void;

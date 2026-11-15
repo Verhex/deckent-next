@@ -172,7 +172,7 @@ it('policy: summary (labelled admin, counts, hashes only with --verbose), own gr
       inspectMcpCapabilities: async () => { throw Object.assign(new Error('denied'), { code: 'POLICY_DENIED' }); } } };
   const summary = await run(['policy', 'status', '--lang', 'tr'], handlers, root);
   expect(summary.code).toBe(0);
-  expect(summary.text).toContain('Yönetici: host/DESKTOP/1000'); expect(summary.text).toContain('kullanılabilir admin'); expect(summary.text).toContain('Kalıcı onaylarım: 1');
+  expect(summary.text).toContain('Yönetici: host/DESKTOP/1000'); expect(summary.text).toContain('kullanılabilir yönetici'); expect(summary.text).toContain('Kalıcı onaylarım: 1');
   expect(summary.text).toContain(`${getDecisionSteps().length} içinde 1 açık`); expect(summary.text).toContain('okunamadı: POLICY_DENIED'); expect(summary.text).not.toContain('rev-123');
   expect(summary.text).toContain('Benimsemeyi geri alma: attempt / rollback-integration; deliver-working-tree kuralından ayrı yönetilir.');
   const english = await run(['policy', 'show', '--lang', 'en'], handlers, root);

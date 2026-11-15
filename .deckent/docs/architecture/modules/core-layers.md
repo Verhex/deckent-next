@@ -111,6 +111,37 @@ verified events after a sequence and reports gaps; it has no runtime operation y
 `<issuer>/auditor` identity may only inspect, list and verify. A hold now carries its source: an operator hold, or a Nervous or Auditor
 safety hold that only a person at an interactive terminal lifts (`RUN_HOLD_PERSON_REQUIRED`); every resume is a sealed decision.
 
+### Access refusal reader (beta.2; writers in beta.2.1)
+
+The shared strict audit subject union reads `access-refusal-summary` v1 through store decode, seal verification, list/show/export,
+AuditFollow and Nervous re-parsing. This release has no producer, feature flag or backfill; both the audit application writer and the
+seal producer reject this subject. Existing subjects retain their schema and canonical bytes. Refusals remain best effort; this reader
+adds no seal-before-response or stop behaviour.
+Beta.2 reads `installation-rebind` v1 (four bases, fresh class, keyed opaque bindings, per-scope copies); beta.2.1 writes it.
+
+The subject carries `operationClass` (read/write/execute/invoke/connect/authority), optional registered `operation {id, version}` and
+`tool {name, version}`, `decisionSource` (deckent-decision/cli-reported/adapter-reported), open pattern-bounded `reasonCode` and
+`evidenceBasis`, and `target {role, identity: {keyId, digest} | null}`. Codes and role/key references accept ASCII catalog tokens
+(`[A-Za-z0-9][A-Za-z0-9_.:-]*`, length from the audit limits registry); they are not names, paths or diagnostic text. The digest is
+64 lowercase hex characters, a scope/domain-separated keyed identity, never a plain target hash. Key ownership and authorised
+resolution belong to beta.2.1; null identity renders “Target not resolvable.” No target resolution is attempted by this reader.
+
+`firstObservedAtMs`/`lastObservedAtMs` are observation times, distinct from the envelope's flush time; `count` is positive and
+`countBasis` exact/at-least distinguishes a total from a lower bound. `samples` holds at most the audit registry's refused-call limit
+of full call references; `overflow` reports omitted observations, never a claim of complete detail. Optional `turnId`, `call`,
+`runId`/`taskId`/`attemptId`, `generation`, `invocationId` and `commandId` refer to existing identities. Task requires Run; Attempt requires Task; generation requires Attempt; a supplied turn must match its
+call samples. All nested objects are strict. Reason, evidence, resource-role and operation/tool tokens stay open so an Enterprise
+adapter can use registered codes without another Core reader release. Source/class/count-basis enums are protocol semantics.
+
+Human list rows show class, source and target role. “CLI reported a refusal; Deckent did not decide (cli-reported)” is an attributed
+CLI report, not a Deckent policy decision. `adapter-reported` similarly attributes an adapter; `deckent-decision` identifies Deckent's
+own decision. Show renders all fields plus lower-bound counts and unresolved targets; `--json` exports original events unchanged.
+The list projection may carry `related` records and `correlationLimited`; these are read-only context, outside the sealed events.
+A matching policy allow and refusal are displayed as “Allowed by policy, refused at the boundary”: scope, principal, turn, round,
+index and call id must all match. Lookup works in both directions across pages, verifies every candidate and uses configured
+`audit.pageSize`/`audit.maxRecords`; reaching the bound is visible and never proves absence. Truncated policy/call samples can leave
+an unprovable relation. AuditFollow continues to export unchanged events, sequences and gaps; its wire shape has no new fields.
+
 ## Nervous and lost-worker recovery (S6, S6R-1…S6R-6)
 
 Nervous (`src/engine/core/nervous/`) evaluates deterministic rules (`rules.json`, revision `core-2026-10-23`) over existing signals:

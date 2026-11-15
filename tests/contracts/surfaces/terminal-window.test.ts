@@ -4,7 +4,7 @@ import { Box, render, Text, useInput } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, resolveRenderGlyphs, span, HumanTextContext, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
-import { CardCopyContext, QuestionRows, cardCopyText, Window, WindowStackProvider, WINDOW_PRIORITY, layoutWindowLines, scrollBy, topWindowLayer, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, QuestionRows, cardCopyText, Window, WindowStackProvider, WINDOW_PRIORITY, layoutWindowLines, scrollBy, topWindowLayer, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 
 import { ArrowPicker, ListPicker } from '#surfaces/core/terminal-picker/index.js';
 import { clipboardRequest } from '#surfaces/core/terminal-host/index.js';
@@ -54,6 +54,30 @@ function Stacked({ log, typed }: { readonly log: string[]; readonly typed: strin
 }
 
 describe('terminal window stack', () => {
+  it('108: every navigation key ends typed text; Tab, Esc and Ctrl+C retain their owner meaning', async () => {
+    const answers: string[] = [], seen: string[] = [];
+    const view = mount(createElement(DecisionArmLabelsContext.Provider, { value: { arming: 'ARMING', ignored: 'IGNORED', typedText: 'TEXT-IS-NOT-AN-ANSWER', unchosen: 'NOTHING-CHOSEN' } },
+      createElement(Window, { title: [span('Decision')], hints: 'CHOICES', position: '', decision: true,
+        body: Array.from({ length: 40 }, (_, index) => ({ spans: [span(`ROW-${index}`)] })), onClose: () => { answers.push('closed'); },
+        onInput: (input, key) => { if (key.tab) { seen.push('tab'); return true; } if (key.ctrl && input === 'c') { answers.push('no'); return true; }
+          if (input === 'y') { answers.push('yes'); return true; } if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || key.pageUp || key.pageDown || key.home || key.end) seen.push('navigation'); return false; } })));
+    await settle(DECISION_ARM_DEFAULT + 100); expect(view.frame()).toContain('CHOICES');
+    for (const recovery of ['\u001b[A', DOWN, '\u001b[C', '\u001b[D', '\u001b[5~', PAGE_DOWN, HOME, END]) {
+      const count = answers.length;
+      await view.press('/'); expect(view.frame()).toContain('TEXT-IS-NOT-AN-ANSWER');
+      for (const text of 'ynsaq12jk ') await view.press(text);
+      expect(answers).toHaveLength(count);
+      await view.press('\t'); expect(seen.at(-1)).toBe('tab');
+      await view.press(recovery); expect(seen.at(-1)).toBe('navigation');
+      await view.press('y'); expect(answers).toHaveLength(count + 1);
+    }
+    await view.press('/'); await view.press('\r'); expect(view.frame()).toContain('NOTHING-CHOSEN'); expect(view.frame()).toContain('CHOICES');
+    await view.press('\u001bz'); expect(view.frame()).toContain('NOTHING-CHOSEN'); // An unhandled control chord does not clear the note.
+    await view.press('\t'); expect(view.frame()).not.toContain('NOTHING-CHOSEN'); // A taken key clears it.
+    await view.press('/'); await view.press(DOWN); expect(view.frame()).toContain('CHOICES'); expect(view.frame()).not.toContain('NOTHING-CHOSEN');
+    await view.press('/'); await view.press(ESC); expect(answers.at(-1)).toBe('closed');
+    await view.press('\u0003'); expect(answers.at(-1)).toBe('no');
+  });
   it('two windows stack: Esc closes the top first, focus returns to the one below, then to the composer', async () => {
     const log: string[] = [], typed: string[] = [];
     const view = mount(createElement(Stacked, { log, typed }));

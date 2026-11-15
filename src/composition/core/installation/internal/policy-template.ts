@@ -48,7 +48,7 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
     journal,
     async inspectPreimage(target) { return (await inspectInstallationFile(file(target))).digest; },
     async publish(target, transactionId) {
-      if (target.resource === 'config' || target.resource === 'ledger') await firstSession.publish(target, transactionId);
+      if (target.resource === 'config' || target.resource === 'ledger' || target.resource === 'projectAttachment') await firstSession.publish(target, transactionId);
       else {
         if (target.resource === 'policy' && prepared.preview.systemRows) {
           const ledger = prepared.targets.find(item => item.resource === 'ledger');

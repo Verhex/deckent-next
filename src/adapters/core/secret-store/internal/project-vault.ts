@@ -17,14 +17,15 @@ export async function directoryLocation(path: string): Promise<ProjectVaultLocat
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * Astra REVISE 2706 P2-2: the handover's strict observation of the recorded owner's data root. `gone` only when proven: the path does not resolve
- * (ENOENT, ENOTDIR) or it resolves to another directory identity; `present` for the recorded identity; `unknown` for any other error (EACCES, EIO,
+ * (ENOENT, ENOTDIR) or it resolves to another path/inode; `uncertain` for a device-only difference; `present` for the recorded identity; `unknown` for any other error (EACCES, EIO,
  * ELOOP, …) — never read as gone. Other consumers keep `directoryLocation`.
  */
-export async function observeOwnerRoot(location: ProjectVaultLocation): Promise<'present' | 'gone' | 'unknown'> {
+export async function observeOwnerRoot(location: ProjectVaultLocation): Promise<'present' | 'gone' | 'unknown' | 'uncertain'> {
   const absent = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes(String((error as NodeJS.ErrnoException | null)?.code));
   try {
     const canonicalRoot = await realpath(location.canonicalRoot), info = await stat(canonicalRoot, { bigint: true });
-    return info.isDirectory() && canonicalRoot === location.canonicalRoot && String(info.dev) === location.device && String(info.ino) === location.inode ? 'present' : 'gone';
+    if (!info.isDirectory() || canonicalRoot !== location.canonicalRoot || String(info.ino) !== location.inode) return 'gone';
+    return String(info.dev) === location.device ? 'present' : 'uncertain';
   } catch (error) { return absent(error) ? 'gone' : 'unknown'; }
 }
 
@@ -122,7 +123,11 @@ export async function admitProjectVault(directory: string, anchor: ProjectVaultA
   const owned = async () => {
     const record = await loadOwnership(directory);
     if (record === 'lost' || (record === 'absent' && await vaultHasContent(directory))) throw ownershipLost(anchor);
-    if (record !== 'absent' && assessProjectVaultOwnership(record, anchor) === 'claimed') throw projectVaultClaimed(anchor);
+    if (record !== 'absent' && assessProjectVaultOwnership(record, anchor) === 'claimed') {
+      if (await observeOwnerRoot(record.anchor.binding) === 'uncertain') throw ErrorRegistry.createError('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', {
+        params: { project: record.anchor.projectRoot, reason: 'uncertain' } });
+      throw projectVaultClaimed(anchor);
+    }
     return record !== 'absent';
   };
   if (await owned() || !claim) return;
@@ -143,7 +148,7 @@ export async function handOverProjectVault(directory: string, anchor: ProjectVau
     if (record === 'lost' || record === 'absent') throw ownershipLost(anchor);
     if (assessProjectVaultOwnership(record, anchor) === 'match') return record;
     const owner = await observeOwnerRoot(record.anchor.binding);
-    if (owner === 'unknown') throw ErrorRegistry.createError('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', { params: { project: record.anchor.projectRoot } });
+    if (owner === 'unknown' || owner === 'uncertain') throw ErrorRegistry.createError('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', { params: { project: record.anchor.projectRoot, reason: owner } });
     const next = projectVaultHandover(record, anchor, owner === 'present', nowMs);
     await authorize(record);
     await writeRecord(recordPath(directory), next);

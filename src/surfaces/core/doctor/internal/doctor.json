@@ -11,6 +11,8 @@
     "retired"
   ],
   "backupPassphraseName": "BACKUP_PASSPHRASE",
+  "nativePluginScan": { "pageSize": 50, "maxRecords": 1000 },
+  "nativePluginRowsShown": 5,
   "pendingRoleRowsShown": 5,
   "headlessRefusedHostsShown": 5,
   "fixes": [

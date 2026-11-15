@@ -1,15 +1,17 @@
-import { spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { stripVTControlCharacters } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { inPty } from '../support/pty-steps.js';
+import { DRIVER, inPty } from '../support/pty-steps.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, installationSecretRoot, openSqliteAuditStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
-import { PROJECT_VAULT } from '#engine/index.js';
+import { inspectSecretProjectTarget } from '#composition/core/secrets/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
 
 // PRE-8 v2 end to end (lead fan-in check): a proje-wsl-shaped installation (first-run policy, legacy main key in the encrypted store, no .deck)
 // → the terminal turn is refused SECRET_GRANT_REQUIRED → the first-use card → y → the REAL governed grant (witness, secret/set, sealed decision,
@@ -73,4 +75,34 @@ it('off a terminal (a pipe, or a detached agent-shell-shaped child) the grant is
     expect(code, String(detached)).not.toBe(0); expect(text).toContain('AUTHORITY_WITNESS_REQUIRED');
   }
   await expect(access(join(installationSecretRoot(where.env)!, PROJECT_VAULT.directory))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('from a linked worktree the real CLI card, grant result, durable grant and list all name the main project (EN/TR)', async () => {
+  const where = await installation(), tree = join(where.root, 'worktree');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: where.project, stdio: 'pipe', env: { ...process.env,
+    GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' } });
+  await writeFile(join(where.project, 'README'), 'fixture\n');
+  git('init', '-q', '-b', 'main'); git('add', 'README'); git('commit', '-q', '-m', 'fixture'); git('worktree', 'add', '-q', tree, '-b', 'side');
+  await applyPolicyTemplateInstallation(tree, 'scope-a', { env: where.env });
+  (await openConfiguredAttemptStore(tree, { env: where.env })).store.close();
+  const target = await inspectSecretProjectTarget(tree, 'scope-a', { env: where.env });
+  const local = await loadConfiguredScopeContext(tree, 'scope-a', { env: where.env }, 'read');
+  expect(target.anchor.projectRoot).toBe(where.project); expect(target.anchor.projectId).not.toBe(local.projectId);
+  const execute = promisify(execFile), env = { PATH: process.env['PATH'] ?? '', ...where.env, TERM: 'xterm-256color', NO_COLOR: '1' };
+  for (const locale of ['en', 'tr'] as const) {
+    const steps = [[locale === 'en' ? 'Current working folder:' : 'Çalıştığınız klasör:', 'y']];
+    const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'secret', 'grant', 'DECKENT_ANTHROPIC_KEY', '--scope', 'scope-a', '--lang', locale]), JSON.stringify(steps), 'tty', 'until-exit'],
+      { cwd: tree, env, timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+    const run = JSON.parse(result.stdout) as { status: number; timeout?: string; output: string }, output = words(run.output);
+    expect(run.timeout).toBeUndefined(); expect(run.status).toBe(0);
+    expect(output).toContain(locale === 'en' ? `in the project ${where.project}?` : `${where.project} projesinde kullanılsın mı?`);
+    expect(output).toContain(locale === 'en' ? 'worktrees share this key permission' : 'anahtar iznini paylaşır'); expect(output).toContain(tree);
+    expect(output).toContain(locale === 'en' ? `may now be used in ${where.project}.` : `artık ${where.project} projesinde kullanılabilir.`);
+    expect(output).not.toContain(MAIN_VALUE);
+    const listed = await execute(process.execPath, [cli, 'secret', 'list', '--scope', 'scope-a', '--json'], { cwd: tree, env });
+    expect(JSON.parse(listed.stdout)).toMatchObject({ project: where.project, rows: expect.arrayContaining([expect.objectContaining({ name: 'DECKENT_ANTHROPIC_KEY', grant: expect.objectContaining({ state: 'granted' }) })]) });
+    const file = JSON.parse(await readFile(join(installationSecretRoot(where.env)!, PROJECT_VAULT.directory, projectVaultKey(target.anchor), PROJECT_VAULT.grantsFile), 'utf8'));
+    expect(file).toMatchObject({ schemaVersion: 1, installationId: target.anchor.installationId, projectId: target.anchor.projectId });
+    expect(JSON.stringify(file)).not.toContain(tree);
+  }
 });

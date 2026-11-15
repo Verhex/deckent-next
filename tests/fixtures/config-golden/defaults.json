@@ -190,6 +190,7 @@
   },
   "models": {
     "headless": {
+      "paidExtraUsage": "continue",
       "preview": false
     },
     "retirementWarningDays": 15

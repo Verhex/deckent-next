@@ -1,5 +1,9 @@
 import { CodedError, persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
+import { REBIND_CLASS } from '#domain/core/policy/index.js';
+import { digest, refusalToken, opaqueIdentitySchema } from './opaque-identity.js';
+export { AUDIT_REFUSAL_TOKEN_MAX_CHARS } from './opaque-identity.js';
+import { installationRebindSubjectSchema } from './installation-rebind.js';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import limits from './limits.json' with { type: 'json' };
 /** S4B-3 memory evaluation record modes (the memory domain owns their meaning). */
@@ -10,7 +14,7 @@ const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
 const RECOVERY_DECISION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
 /** S6R-6 / alpha.56 G1: what a decision seal stands on besides its own call — a live adoption of a shadow decision, or a would-stop shadow input. */
 const RECOVERY_DECISION_BASES = Object.freeze(['shadow', 'would-stop'] as const);
-const digest = z.string().regex(/^[a-f0-9]{64}$/), signedRef = z.strictObject({ keyId: digest, signatureDigest: digest }).optional();
+const signedRef = z.strictObject({ keyId: digest, signatureDigest: digest }).optional();
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 /** S5b: the safety hold sources (Nervous pause, Auditor park) a Run hold and its audit name; the Run contract reuses this one list. */
@@ -77,6 +81,23 @@ const turnCallRef = z.strictObject({ get round() { return counterSchema.positive
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
+  installationRebindSubjectSchema,
+  /** beta.2 reads only; beta.2.1 owns producers. Tokens are catalog codes, never target names or diagnostic text.
+   * The identity is a scope/domain-separated keyed digest plus an opaque key reference; resolution is outside this reader.
+   * Samples name observed calls only; overflow means observations were omitted. Counts with at-least basis are lower bounds. */
+  z.strictObject({ get kind() { return z.literal('access-refusal-summary'); }, get schemaVersion() { return z.literal(1); },
+    get operationClass() { return z.enum(['read', 'write', 'execute', 'invoke', 'connect', 'authority']); },
+    get operation() { return z.strictObject({ id: refusalToken, version: counterSchema.positive() }).optional(); },
+    get tool() { return z.strictObject({ name: refusalToken, version: counterSchema.positive() }).optional(); },
+    get decisionSource() { return z.enum(['deckent-decision', 'cli-reported', 'adapter-reported']); },
+    reasonCode: refusalToken, evidenceBasis: refusalToken,
+    get target() { return z.strictObject({ role: refusalToken, identity: opaqueIdentitySchema.nullable() }); },
+    firstObservedAtMs: counterSchema, lastObservedAtMs: counterSchema, get count() { return counterSchema.positive(); },
+    get countBasis() { return z.enum(['exact', 'at-least']); },
+    get samples() { return z.array(callRef).max(AUDIT_POLICY_TURN_LIMITS.refusedMax); }, get overflow() { return z.boolean(); },
+    get turnId() { return identitySchema.optional(); }, get runId() { return identitySchema.optional(); }, get taskId() { return identitySchema.optional(); },
+    get attemptId() { return identitySchema.optional(); }, get generation() { return counterSchema.positive().optional(); },
+    get invocationId() { return identitySchema.optional(); }, get commandId() { return identitySchema.optional(); }, get call() { return callRef.optional(); } }),
   z.strictObject({ get kind() { return z.literal('target-batch-decision'); }, batchDigest: digest, get operation() { return z.enum(['publish', 'adopt', 'rollback']); }, get answer() { return z.enum(['allow', 'decline']); }, get peerPid() { return counterSchema.positive(); }, witnessDigest: digest }),
   z.strictObject({ get kind() { return z.literal('target-queue'); }, commandId: identitySchema, targetKey: digest, get ordinal() { return counterSchema.positive(); },
     revision: counterSchema, state: identitySchema, payloadDigest: digest, recordDigest: digest, get reason() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional(); } }),
@@ -375,6 +396,26 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     get bytes() { return counterSchema.nullable(); }, get counters() { return z.strictObject({ peersRefused: counterSchema, capabilityIssued: counterSchema, capabilityRefused: counterSchema, relayed: counterSchema,
       refused: counterSchema, upstreamSends: counterSchema, suppressed: counterSchema }).nullable(); } }),
 ]).superRefine((subject, context) => {
+  if (subject.kind === 'installation-rebind') {
+    const source = subject.part === 'source', keep = subject.transition === 'keep', basis = subject.admission?.basis;
+    if (source && subject.projectId !== null
+      || source && keep && (subject.previousInstallationId !== subject.installationId || subject.admission === null)
+      || source && keep && subject.class === null && basis !== 'open-class'
+      || source && keep && subject.class === REBIND_CLASS.moved && basis === 'open-class'
+      || source && !keep && (subject.previousInstallationId === subject.installationId || subject.class !== null || subject.admission !== null || subject.attachments !== null)
+      || !source && (!keep || subject.previousInstallationId !== subject.installationId || subject.class !== REBIND_CLASS.deviceOnly || basis !== 'open-class')
+      || !source && (subject.previousBinding !== null || subject.binding !== null)
+      || !source && (subject.changedFields.some(field => field !== 'attachment.location') || subject.projectId === null || subject.attachments !== null)
+      || (subject.phase === 'intent' || subject.phase === 'succeeded') && subject.failure !== null
+      || subject.phase === 'failed' && subject.failure === null) context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
+  }
+  if (subject.kind === 'access-refusal-summary' && (subject.lastObservedAtMs < subject.firstObservedAtMs
+    || subject.samples.length > subject.count || subject.overflow && subject.countBasis === 'exact' && subject.samples.length >= subject.count
+    || subject.taskId !== undefined && subject.runId === undefined || subject.attemptId !== undefined && subject.taskId === undefined
+    || subject.generation !== undefined && subject.attemptId === undefined
+    || subject.turnId !== undefined && (subject.call && subject.call.turnId !== subject.turnId || subject.samples.some(call => call.turnId !== subject.turnId)))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
+  }
   // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost;
   // relay counters exactly on the closing summary.
   if (subject.kind === 'recovery-decision' && (subject.terminationReceiptId === null) !== (subject.basis === 'would-stop')

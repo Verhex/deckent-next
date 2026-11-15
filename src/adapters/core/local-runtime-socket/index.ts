@@ -12,6 +12,7 @@ export type { LocalPeerIdentity } from './internal/peer.js';
 export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './internal/authentication.js';
 export { createLocalPeerSession } from './internal/authentication.js';
 export { acquireLedgerLock, type LedgerLock } from './internal/ledger-lock.js';
+export { nativeFilesystemIdentity, type NativeFilesystemStat } from './internal/filesystem-identity.js';
 export { listenForContainerPeer, localPeerNativePath } from './internal/container-peer.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ContainerPeer } from './internal/container-peer.js';
 

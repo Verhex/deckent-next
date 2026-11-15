@@ -5,6 +5,40 @@
 Bu terimler ürün davranışını açıklar. Bir kimlik, persona ya da izin modu tek başına erişim
 vermez; kimlik ve yetki politikası denetimleri her zaman geçerlidir.
 
+**Türkçe metin kuralları**
+
+1. Komutlar, bayraklar, dosya adları, tanımlayıcılar, alan adları, hata kodları ve yer tutucular
+   İngilizce kalır: `deckent checkpoint approve`, `/workers`, `policy.administer`, `POLICY_DENIED`, `{scopeId}`.
+2. Cümle içinde aşağıdaki Türkçe karşılık kullanılır. Yardım metninde İngilizcesi ilk geçişte
+   bir kez parantez içinde verilebilir: beceri (skill).
+3. Her kavram için tek karşılık kullanılır. Ürün adı daima küçük harfle `deckent` yazılır.
+
+| İngilizce terim | Türkçe karşılık |
+|---|---|
+| Runtime servisi / Runtime (servis) | deckent servisi / servis |
+| checkpoint | kontrol noktası |
+| admission registry | kabul kaydı |
+| skill | beceri |
+| sandbox, realm | yalıtım alanı (sıfat olarak: yalıtım; örneğin Yalıtım öz-testi) |
+| registry | kayıt |
+| ledger | defter |
+| principal | kimlik |
+| admin | yönetici |
+| audit | denetim |
+| worker / run | işçi / çalışma |
+| Attempt | deneme |
+| policy | politika |
+| plugin | eklenti |
+| receipt | makbuz |
+| grant | izin |
+| custody | sorumluluk |
+| baseline | temel durum |
+| witness | tanık |
+| recovery / fence / dispatch | kurtarma / sınır işareti / dağıtım |
+
+Brain, Hub, workline, token (model birimi), MCP, CLI ve API değişmez. Kapsam, profil ve
+bağlantı zaten Türkçedir. Aşağıda kavramların ürün içindeki anlamları açıklanır.
+
 ## Kapsam (scope)
 
 Bir işlemin veri ve yetki sınırını belirleyen kimliktir. Yetki politikası, onay kayıtları,
@@ -20,24 +54,24 @@ Hedeflenen kuruluş hiyerarşisi kurulum → şirket → isteğe bağlı tesis/b
 Kurulum barındırma ve güven sınırıdır; şirket bir veri kapsamıdır. Bu, mimari yöndür;
 tüm yönetim yüzeylerinin bugün sunulduğu anlamına gelmez.
 
-## Yürütme ortamı (realm)
+## Yalıtım alanı
 
 İşlemin çalıştığı, dosya sistemi, süreç ve ağ kısıtlarını içeren yapılandırılmış ortamdır.
 Kabuk ortamı kayıtlı bir yalıtım uygulamasını ve yalıtım tutumunu seçer. Kapsam hangi işe
-erişebileceğinizi, yürütme ortamı ise işin nerede ve nasıl çalışacağını sınırlar.
+erişebileceğinizi, yalıtım alanı ise işin nerede ve nasıl çalışacağını sınırlar.
 
 `require-sandbox`, yalıtım sağlanamazsa çalışmayı reddeder. `prefer-sandbox` ana makinede
 çalışabilir; bu durum onay kartında görünür. Docker işçileri kendi konteyner ayarlarını
 kullanır ve ana makinenin çekirdeğini paylaşır.
 
-## Yürütme, görev ve deneme (run, task, attempt)
+## Çalışma, görev ve deneme
 
-- **Yürütme (Run):** bağımlılıkları, sınırları ve genel sonucu olan bir görev grafiğinin kabul edilmiş yürütülmesidir.
+- **Çalışma:** bağımlılıkları, sınırları ve genel sonucu olan bir görev grafiğinin kabul edilmiş yürütülmesidir.
 - **Görev (Task):** bu grafikte girdisi ve kabul ölçütleri bulunan bir iş birimidir.
-- **Deneme (Attempt):** görevin işçiye, çalışma alanına ve saklanan kanıta bağlı tek çalıştırma denemesidir.
+- **Deneme:** görevin işçiye, çalışma alanına ve saklanan kanıta bağlı tek çalıştırma denemesidir.
 
 Yeniden deneme politikası izin verirse bir görevin birden çok denemesi olabilir. İşçinin
-sonlanması yalnız çalıştırma gözlemidir; işin kabulü ve teslimi ayrı adımlardır. Yürütme karar
+sonlanması yalnız çalıştırma gözlemidir; işin kabulü ve teslimi ayrı adımlardır. Çalışma karar
 veya kanıt beklerken duraklatılabilir. Eksik kanıt başarı değil, bilinmeyen sonuçtur;
 belirsiz bir dış etki körlemesine tekrar edilmez.
 
@@ -81,7 +115,7 @@ taşır; hesap kesin aritmetik kullanır. Sağlayıcının bildirdiği para değ
 Üst sınır kademesi açıkça belirtilir. Nihai kullanım eksikse kayıt çözümlenmemiş kalır;
 sıfır ya da ara tahminle doldurulmaz.
 
-## Kalıcı işlem kaydı (ledger)
+## Defter
 
 İşlerin, ayrılan kaynakların, kararların, etkilerin ve makbuzların kalıcı işlemsel kaydıdır.
 Mevcut uygulama SQLite kullanır. Şema sürümü veri biçimini ve geçiş gereksinimini tanımlar;
@@ -91,14 +125,14 @@ ele geçirilmiş bir ana makineyi güvenilir yapmaz.
 ## Protokol (protocol)
 
 deckent istemcileri ile yerel yürütme servisi arasındaki sürümlü mesaj sözleşmesidir. Tipli
-komut, sorgu, olay, hata ve sonuçları taşır. Protokol sürümü, ledger şeması ve paket sürümü
+komut, sorgu, olay, hata ve sonuçları taşır. Protokol sürümü, defter şeması ve paket sürümü
 ayrı kimliklerdir. Yaşam döngüsü uyumluluğu eski bir servisi tanımlamaya veya durdurmaya izin
 verebilir; uyumsuz istemciyle iş yürütmeye izin verdiği anlamına gelmez. Normal kullanımda
 istemci ve servis için eşleşen build'ler kullanın.
 
-## İşlemi yapan kimlik ve yetki politikası (principal, policy)
+## Kimlik ve politika
 
-**Principal**, adına işlem yürütülen doğrulanmış kişi veya süreçtir. **Policy**, bu kimliğin
+**Kimlik**, adına işlem yürütülen doğrulanmış kişi veya süreçtir. **Politika**, bu kimliğin
 bir kapsamdaki kaynak üzerinde eylem yapmasına izin verir, reddeder veya onay gerektirir.
 Kapsam üyeliği tek başına yeterli değildir. Model, persona veya eklenti kendisine yetki veremez.
 
@@ -109,13 +143,13 @@ deckent'in işi daha az gözetimle yürütmesini sağlayan parçalar; alpha.55't
 - **Brain:** `/do`'nun arkasındaki planlayıcı. İsteği görevlere böler ve her görevin **WorkClass**'ını (iş türünü) adlandırır;
   işçi modelini seçmez.
 - **Sistem ataması:** kabulde sistem, WorkClass'ın görünen aday listesinden izin verilen ilk modeli alır ve seçimi kaydeder;
-  modelin seviyesi ve rolleri tek bir sürümlü registry'den gelir (`deckent models roles`).
+  modelin seviyesi ve rolleri tek bir sürümlü kayıttan gelir (`deckent models roles`).
 - **Hafıza günlüğü:** kabul edilen işten gelen kapsamlı olgular ve dersler (`deckent memory`); herhangi bir iş okumadan önce bir
   kişi ya da başka bir üreticinin değerlendirici modeli doğrular.
-- **Auditor:** araç kararı veren bir ajan turundaki policy kararlarının en fazla bir mühürlü kaydı; en iyi çaba — boş turda ya da yazma hatasında kayıt olmayabilir.
+- **Auditor:** araç kararı veren bir ajan turundaki politika kararlarının en fazla bir mühürlü kaydı; en iyi çaba — boş turda ya da yazma hatasında kayıt olmayabilir.
 - **Nervous:** kaybolan işçilerin tespiti, öneri olarak kaydedilir; **kurtarma**, kaybolan bir görevin belirli sınırlar içinde
   yeni bir denemede sürüp süremeyeceğine karar verir.
-- **Ajan kataloğu:** sürümlü ajanlar ve skill'ler (`deckent agents`); onlara yapılan her AI ya da sistem değişikliği, bir kişinin
+- **Ajan kataloğu:** sürümlü ajanlar ve beceriler (`deckent agents`); onlara yapılan her AI ya da sistem değişikliği, bir kişinin
   kaydettiği bir anahtarla imzalanır.
 
 Hafıza, Nervous, kurtarma ve ajan istatistiğinin her birinin kapalı başlayan korumalı bir anahtarı vardır. `shadow` (gölge) kipleri

@@ -346,7 +346,7 @@ describe('monitor human worker evidence', () => {
       expect(worker).not.toHaveProperty('usage');
       expect(worker).toMatchObject({ human: { transcript: { state: 'denied' }, finalReport: null } });
       expect(JSON.stringify(worker)).not.toContain('tests passed');
-      expect(humanText).toContain('policy izin vermedi'); expect(humanText).not.toContain('tests passed');
+      expect(humanText).toContain('politika izin vermedi'); expect(humanText).not.toContain('tests passed');
     }
     for (const lang of ['en', 'tr']) {
       let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += chunk.toString(); done(); } });

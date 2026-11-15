@@ -1,11 +1,14 @@
 import { t, type Locale } from '#platform/index.js';
 import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
+import type { DecisionArmLabels } from '#surfaces/core/terminal-window/index.js';
 export interface ProjectInstructionLabels {
   readonly trustTitle: string; readonly trustBody: string; readonly skip: string; readonly trust: string;
   readonly source: string; readonly blocked: string; readonly hints: string; readonly position: string;
   readonly initTitle: string; readonly external: string;
   readonly confirm: string; readonly cancel: string; readonly done: string;
   readonly lineTrustRequired: string;
+  /** Hint-row words of the standalone init window; inside the Workline its own provider speaks. */
+  readonly decisionArm: DecisionArmLabels;
 }
 export function projectInstructionLabels(locale: Locale): ProjectInstructionLabels {
   return {
@@ -23,6 +26,7 @@ export function projectInstructionLabels(locale: Locale): ProjectInstructionLabe
     cancel: t('instructions.cancel', {}, locale),
     done: t('instructions.done', {}, locale),
     lineTrustRequired: t('instructions.lineTrustRequired', {}, locale),
+    decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale), typedText: t('terminal.decision.typedText', {}, locale), unchosen: t('terminal.decision.unchosen', {}, locale) },
   };
 }
 /** Package strings are sanitized facts; command lines contain only detected, validated npm script names. */

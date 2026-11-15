@@ -41,7 +41,7 @@ type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | n
   | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }
   | { kind: 'api-list' } | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
-  | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }
+  | { kind: 'grant'; question: Awaited<ReturnType<ProviderSecretGrantPort['question']>>; answer: (yes: boolean) => void }
   | { kind: 'subscription'; target: ProviderPanelKind } | { kind: 'refusal'; title: string; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }>;
 /** The typed refusal that opens the first-use card: a main-vault key without a grant in this project (name and project only, never a value). */
 const grantRefusal = (error: unknown): Readonly<{ name: string; project: string }> | null => {
@@ -117,7 +117,9 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     work().then(done, async (error: unknown) => {
       const asked = grantRefusal(error), card = port.secretGrant;
       if (!asked || !card || !await card.offer().catch(() => false)) { refused(error); return; }
-      setStep({ kind: 'grant', question: card.question(asked.name, asked.project), answer: yes => {
+      let question;
+      try { question = await card.question(asked.name, asked.project); } catch (error) { refused(error); return; }
+      setStep({ kind: 'grant', question, answer: yes => {
         if (!yes) { refused(error); return; }
         setStep({ kind: 'busy' });
         card.grant(asked.name).then(() => work().then(done, refused), refused);

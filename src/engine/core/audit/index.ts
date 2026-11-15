@@ -11,3 +11,4 @@ export { AuthorityDecisionRecords } from './internal/authority-decision.js';
 export { AuditFollow } from './internal/follow.js';
 export { PolicyTurnRecord } from './internal/policy-turn.js';
 export { runRequestRefusedEvent, listRefusedRunRequests, deliveryDismissalEvent, deliveryRollbackEvent, dismissedDeliveries, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type RefusedRunRequest } from './internal/refused-request.js';
+export { relatedAuditRecords } from './internal/related.js';

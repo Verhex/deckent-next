@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { persistedString, persistedUuid, identitySchema, installationIdSchema, projectIdSchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedUuid, identitySchema, installationIdSchema, projectIdSchema, filesystemIdentitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 
 const text = persistedString(z.string().min(1).max(4096));
@@ -19,22 +19,48 @@ export const projectAttachmentSchema = z.strictObject({ schemaVersion: z.literal
 export type ModelUseLease = z.infer<typeof modelUseLeaseSchema>;
 const attachmentInventoryEntrySchema = z.strictObject({ attachment: projectAttachmentSchema, modelLease: modelUseLeaseSchema.optional(),
   preparationDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), restoreDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), planDigest: z.string().regex(/^[a-f0-9]{64}$/), state: z.enum(['pending', 'active', 'revoked']) }).readonly();
+
+function validateInventory(value: { schemaVersion: number; registrationId: string; unregistered?: boolean | undefined; source: { companyId: string };
+  entries: readonly { attachment: { projectId: string; commandId: string; registrationId: string; companyId: string; location: { canonicalRoot: string } };
+    modelLease?: unknown; preparationDigest?: unknown; restoreDigest?: unknown }[] }, ctx: z.RefinementCtx) {
+  if (value.schemaVersion === 1 && (value.unregistered !== undefined || value.entries.some(entry => entry.modelLease || entry.preparationDigest || entry.restoreDigest))) ctx.addIssue({ code: 'custom', message: 'ATTACHMENT_INVENTORY_INVALID' });
+  const ids = new Set<string>(), roots = new Set<string>(), commands = new Set<string>();
+  for (const entry of value.entries) {
+    const item = entry.attachment;
+    if (ids.has(item.projectId) || roots.has(item.location.canonicalRoot) || commands.has(item.commandId) || item.registrationId !== value.registrationId
+      || item.companyId !== value.source.companyId) ctx.addIssue({ code: 'custom', message: 'ATTACHMENT_INVENTORY_INVALID' });
+    ids.add(item.projectId); roots.add(item.location.canonicalRoot); commands.add(item.commandId);
+  }
+}
 export const installationRegistrationSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), registrationId: persistedUuid(), unregistered: z.boolean().optional(),
-  source: installationSourceSchema, entries: z.array(attachmentInventoryEntrySchema).readonly() }).superRefine((value, ctx) => {
-    if (value.schemaVersion === 1 && (value.unregistered !== undefined || value.entries.some(entry => entry.modelLease || entry.preparationDigest || entry.restoreDigest))) ctx.addIssue({ code: 'custom', message: 'ATTACHMENT_INVENTORY_INVALID' });
-    const ids = new Set<string>(), roots = new Set<string>(), commands = new Set<string>();
-    for (const entry of value.entries) {
-      const item = entry.attachment;
-      if (ids.has(item.projectId) || roots.has(item.location.canonicalRoot) || commands.has(item.commandId) || item.registrationId !== value.registrationId
-        || item.companyId !== value.source.companyId) ctx.addIssue({ code: 'custom', message: 'ATTACHMENT_INVENTORY_INVALID' });
-      ids.add(item.projectId); roots.add(item.location.canonicalRoot); commands.add(item.commandId);
-    }
-  }).readonly();
+  source: installationSourceSchema, entries: z.array(attachmentInventoryEntrySchema).readonly() }).superRefine(validateInventory).readonly();
 export type AttachmentPerson = z.infer<typeof attachmentPersonSchema>;
 export type AttachmentLocation = z.infer<typeof attachmentLocationSchema>;
 export type InstallationSource = z.infer<typeof installationSourceSchema>;
 export type ProjectAttachment = z.infer<typeof projectAttachmentSchema>;
 export type InstallationRegistration = z.infer<typeof installationRegistrationSchema>;
+
+export const ATTACHMENT_REGISTRATION_VERSION = 3;
+const locationV2 = attachmentLocationSchema.unwrap().extend({ filesystemIdentity: filesystemIdentitySchema }).readonly();
+export const readableProjectAttachmentSchema = z.union([projectAttachmentSchema,
+  projectAttachmentSchema.unwrap().extend({ schemaVersion: z.literal(2), location: locationV2 }).readonly()]);
+const readableSource = installationSourceSchema.unwrap().extend({ location: z.union([attachmentLocationSchema, locationV2]) }).readonly();
+const decimal20 = z.string().regex(/^\d{1,20}$/);
+const lineageSchema = z.strictObject({ headIntentId: persistedUuid(), headAtMs: counterSchema,
+  fromBinding: z.string().regex(/^[a-f0-9]{64}$/), toBinding: z.string().regex(/^[a-f0-9]{64}$/),
+  headDevice: decimal20, filesystemIdentity: filesystemIdentitySchema.nullable(), pastDevices: z.array(decimal20).readonly() }).readonly();
+export const readableInstallationRegistrationSchema = z.union([installationRegistrationSchema,
+  z.strictObject({ ...installationRegistrationSchema.unwrap().shape, schemaVersion: z.literal(ATTACHMENT_REGISTRATION_VERSION), source: readableSource,
+    entries: z.array(attachmentInventoryEntrySchema.unwrap().extend({ attachment: readableProjectAttachmentSchema }).readonly()).readonly(),
+    lineage: lineageSchema.optional() }).superRefine(validateInventory).superRefine((value, ctx) => {
+      const lineage = value.lineage;
+      if (lineage && (lineage.pastDevices.includes(lineage.headDevice) || new Set(lineage.pastDevices).size !== lineage.pastDevices.length
+        || lineage.pastDevices.length > Math.max(1, value.entries.length))) ctx.addIssue({ code: 'custom', message: 'ATTACHMENT_INVENTORY_INVALID' });
+    }).readonly()]);
+export type ReadableProjectAttachment = z.infer<typeof readableProjectAttachmentSchema>;
+export type ReadableInstallationRegistration = z.infer<typeof readableInstallationRegistrationSchema>;
+export type ReadableInstallationSource = ReadableInstallationRegistration['source'];
+export type ReadableAttachmentLocation = ReadableInstallationSource['location'];
 
 const scope = identitySchema, hex = z.string().regex(/^[a-f0-9]{64}$/);
 export const projectAttachmentCommandSchema = z.discriminatedUnion('action', [

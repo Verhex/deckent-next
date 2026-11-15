@@ -126,7 +126,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const w = workSurfaceLabels('tr').approvalWindow;
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
-    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    expect(text).toContain('bubblewrap yalıtım alanı içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
     // The engine's English posture sentence is never parsed into a field; it stays only in the producer's preview, shown whole (Astra 2431).
     const lines = text.split('\n'), preview = lines.indexOf('Önizleme');
     expect(lines.findIndex(line => line.includes('Runs in the bubblewrap sandbox'))).toBeGreaterThan(preview);
@@ -402,13 +402,13 @@ describe('approval window: reversibility by call kind and structured posture (T2
     const rows = (approval: WorklineApproval, locale: 'en' | 'tr') => approvalCardLines(approval, workSurfaceLabels(locale), '$ make\nrisk: modify (x)\nENGINE SENTENCE', 'make', {}, NOW).join('\n');
     const host = shell({ realm: 'host', containment: 'host', project: 'writable', git: 'writable', network: 'reachable', passedOver: ['bubblewrap', 'landlock'] });
     expect(rows(host, 'en')).toContain('On this machine as your user — not a sandbox: files, processes and the network are reachable');
-    expect(rows(host, 'tr')).toContain('Bu makinede senin kullanıcınla — sandbox değil: dosyalar, süreçler ve ağ erişilebilir');
-    expect(rows(host, 'tr')).toContain('Tercih edilen sandbox kullanılamadı: bubblewrap, landlock');
+    expect(rows(host, 'tr')).toContain('Bu makinede senin kullanıcınla — yalıtım alanı değil: dosyalar, süreçler ve ağ erişilebilir');
+    expect(rows(host, 'tr')).toContain('Tercih edilen yalıtım alanı kullanılamadı: bubblewrap, landlock');
     const degraded = shell({ realm: 'landlock', containment: 'degraded', project: 'read-only', git: 'read-only', network: 'closed', passedOver: [] });
     expect(rows(degraded, 'en')).toContain('In the landlock sandbox: the project is read-only, .git read-only, network off');
-    expect(rows(degraded, 'tr')).toContain('Sandbox eksik korumalı (degraded)');
+    expect(rows(degraded, 'tr')).toContain('Yalıtım alanı eksik korumalı (degraded)');
     const open = shell({ realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
-    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git yazılabilir, ağ açık');
+    expect(rows(open, 'tr')).toContain('bubblewrap yalıtım alanı içinde: proje yazılabilir; deckent yetki dosyaları salt okunur, .git yazılabilir, ağ açık');
     const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
     expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied after the call; policy denies still apply, .git read-only, network off');
     // The engine sentence is never worded into the posture rows; it stays in the producer's preview below the Preview heading.

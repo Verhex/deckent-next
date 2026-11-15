@@ -275,7 +275,7 @@ describe.skipIf(process.platform !== 'linux')('W8 production chat composition fi
     };
     const turn = (turnId: string, messages: readonly AgentTurnMessage[], emit: (event: AgentTurnEvent) => void) => runPeerConfiguredChatTurn(f.project,
       { schemaVersion: 1, scopeId: 'scope', turnId, sessionId: 'fixture-conversation', messages }, peer, f.options, { maxResultBytes: 65_536 }, host,
-      { signal: controller.signal, drained: async () => undefined, emit: event => emit(agentTurnStreamEventSchema.parse(event)) });
+      { signal: controller.signal, drained: async () => true, emit: event => emit(agentTurnStreamEventSchema.parse(event)) });
     try {
       expect(await turn('production-1', history, event => { if (event.kind === 'message') history.push(event.message); })).toMatchObject({ finish: 'stop', toolCalls: 1, rounds: 2, recorded: true });
       const directory = join(f.root, 'production-sessions'); await mkdir(directory); const sessionId = '11111111-2222-4333-8444-555555555555';

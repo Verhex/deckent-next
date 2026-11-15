@@ -74,7 +74,7 @@ describe('terminal turn-outcome catalog guard', () => {
       const ports: AgentTurnPorts = { invokeRound: async (_input, onDelta) => { onDelta({ kind: 'text', text: 'Once upon' }); controller.abort(); return { status: 'failed', state: 'cancelled' }; },
         authorize: async () => 'allow', describe: () => null, execute: async () => { throw new Error('must not execute'); }, now: () => 1, serviceStopping: () => true };
       const result = await runAgentTurn({ language: locale, messages: [{ role: 'user', content: 'story' }], tools: [], signal: controller.signal, emit: event => events.push(event as never) }, ports);
-      expect(result.finish).toBe('error'); expect(result.note).toContain(locale === 'tr' ? 'Runtime servisi bu tur sırasında durdu' : 'The runtime service stopped during this turn');
+      expect(result.finish).toBe('error'); expect(result.note).toContain(locale === 'tr' ? 'deckent servisi bu tur sırasında durdu' : 'The runtime service stopped during this turn');
       expect(result.note).not.toMatch(/^(Cancelled|İptal edildi)/);
       expect(events.find(event => event.kind === 'message')?.message?.content).toContain(locale === 'tr' ? 'yanıtın ortasında durdu' : 'stopped mid-answer');
     });

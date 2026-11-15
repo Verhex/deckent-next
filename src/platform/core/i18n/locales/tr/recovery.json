@@ -35,7 +35,7 @@
   "recovery.grant.partial": "bazı kapsamlarda var",
   "recovery.grant.missing": "yok",
   "recovery.grant.unknown": "okunamadı",
-  "recovery.state.line": "Kaybolan işçi kurtarma: güvenlik sistemi {nervous} · kurtarma {recovery} · kalıcı onay {grant}",
+  "recovery.state.line": "Kaybolan işçi kurtarma: güvenlik sistemi {nervous} · kurtarma {recovery} · her seferinde sormadan kurtarma izni {grant}.",
   "recovery.state.none": "Kaybolan işçiler otomatik kurtarılmaz; işleri bir kişiyi bekler.",
   "recovery.state.recorded": "Kurtarma kararları yalnız kaydedilir; hiçbir şey değişmez.",
   "recovery.state.automatic": "Kaybolan bir işçinin görevi sınırları içinde yeni bir denemeyle sürebilir.",

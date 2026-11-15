@@ -2,12 +2,13 @@ import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
-import { attachmentLifecycle, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
+import { admitInstallationRebinding, plainMacosRebinding } from './rebind.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
 // The local OS identity is read after the policy loads: unsupported policy custody (native Windows) refuses POLICY_UNAVAILABLE before
 // any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
@@ -49,10 +50,12 @@ async function accessIdentity<T extends { readonly status: string; readonly reas
     return current;
   });
 }
-async function readBootstrapIdentity<T>(read: () => Promise<T>) {
+async function readBootstrapIdentity<T>(read: () => Promise<T>, identityChoice?: InstallationIdentityChoice) {
   try { return await read(); }
   catch (error) {
-    if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof ProjectAttachmentError || error instanceof ProjectIdentityError || error instanceof InstallationIdentityError) throw ErrorRegistry.createError(error.code, {
+      params: error.code === 'PROJECT_ATTACHMENT_SOURCE_REGISTERED' && identityChoice ? { identityChoice }
+        : error.code === 'INSTALLATION_IDENTITY_REBIND_REQUIRED' ? { platform: process.platform } : {} });
     throw error;
   }
 }
@@ -66,27 +69,45 @@ export async function loadConfiguredInstallationIdentity(projectRoot: string, op
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
 type InstallationBindingInspection = { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
-  readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean };
+  readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean;
+  readonly filesystemIdentity: Readonly<{ status: 'available'; kind: string } | { status: 'unavailable'; reason: string }> };
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<InstallationBindingInspection | null> {
   let config;
   try { config = await loadComposedConfig(projectRoot, { ...options, heal: false }); } catch { return null; }
   const required = config.installation.requireMachineBinding;
+  const observed = await inspectFilesystemIdentity(config.productLayout.root);
+  const filesystemIdentity = observed.status === 'available' ? { status: 'available' as const, kind: observed.identity.kind } : observed;
   try {
     // The capability is machine-level: probe against the project directory, which exists before `.deckent` is initialized.
     const binding = await localInstallationBindingSource({ ...config.productLayout, root: config.projectRoot }, config.installation).capture();
-    return 'status' in binding ? { capability: 'unsupported', strength: null, source: null, required }
-      : { capability: 'supported', strength: binding.strength, source: binding.source, required };
+    return 'status' in binding ? { capability: 'unsupported', strength: null, source: null, required, filesystemIdentity }
+      : { capability: 'supported', strength: binding.strength, source: binding.source, required, filesystemIdentity };
   } catch (error) {
-    if (error instanceof InstallationIdentityError && error.code === 'INSTALLATION_IDENTITY_SOURCE_INVALID') return { capability: 'source-invalid', strength: null, source: 'configured', required };
+    if (error instanceof InstallationIdentityError && error.code === 'INSTALLATION_IDENTITY_SOURCE_INVALID') return { capability: 'source-invalid', strength: null, source: 'configured', required, filesystemIdentity };
     return null;
   }
 }
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
-  const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  await attachmentLifecycle(config, options).assert();
-  return readBootstrapIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
-    .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }));
+  const { issuer, subject } = readLocalOsIdentity(), principal = { issuer, subject }, config = await loadComposedConfig(projectRoot, { ...options, heal: false });
+  return readBootstrapIdentity(async () => {
+    const lifecycle = attachmentLifecycle(config, options);
+    await lifecycle.assert();
+    const store = new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation);
+    if (choice === 'new') return store.resolveRelocation({ choice }, principal);
+    const admission = await admitInstallationRebinding(config, options, store, principal);
+    const keep = async () => {
+      const registration = await new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs).registration();
+      const result = await store.resolveRelocation({ choice, admission }, principal);
+      return { ...result, ...(registration?.source.installationId === result.installationId && registration.source.projectRoot !== config.projectRoot
+        ? { attachmentRecordsUnreconciled: true as const } : {}) };
+    };
+    // Only the plain-project exception needs this hold; open-class and witnessed/rule paths keep their existing dependencies.
+    return admission.basis === 'macos-plain' ? lifecycle.hold(async () => {
+      if (!await plainMacosRebinding(config, options, (await store.inspectRebinding()).installationId)) throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+      return keep();
+    }) : keep();
+  }, choice);
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
 export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {

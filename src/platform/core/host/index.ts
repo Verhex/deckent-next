@@ -15,4 +15,5 @@ export * from './internal/service-manager.js';
 export { packageRemovalCommand, handMadeLaunchers } from './internal/package-method.js';
 export * from './internal/process-liveness.js';
 export { privateIpcRoot } from './internal/private-ipc.js';
+export { readHostMetadata, linuxMountsAt, linuxDeviceNumber } from './internal/linux-mount.js';
 export * from './internal/user-unit.js';

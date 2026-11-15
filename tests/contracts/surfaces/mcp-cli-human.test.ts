@@ -38,5 +38,5 @@ it('prints the trust card in the person\'s words and the grant outcome as a sent
   expect(en.text).not.toMatch(/grant:\s*\{/u);
   const tr = await run('tr', { status: 'refused', reason: 'administer' });
   expect(tr.text).toContain('Başlıklar: Authorization');
-  expect(tr.text).toContain('Güvenildi ama policy grant\'i yazılmadı: policy\'niz policy kurallarını değiştirmenize izin vermiyor');
+  expect(tr.text).toContain('Güvenildi ama politika izni yazılmadı: politikanız politika kurallarını değiştirmenize izin vermiyor');
 });

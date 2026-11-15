@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { readWorkerSidecars } from '#adapters/index.js';
-import type { WorkerObservation, WorkerSidecars } from '#engine/index.js';
+import { workerKind, type WorkerObservation, type WorkerSidecars } from '#engine/index.js';
 import { t } from '#platform/index.js';
 import { renderWorkerRow } from '../../../src/surfaces/core/cli-observe/index.js';
 
@@ -21,6 +21,16 @@ const sidecars = (state: string, freshness: WorkerSidecars['heartbeat']['freshne
   result: { state: 'missing', exitCode: null, reportedAssessment: null }, pid: null, activity: null, usage: null, eventsTruncated: false,
 });
 const label = (w: WorkerObservation, locale: 'en' | 'tr') => renderWorkerRow(w, locale).split(locale === 'en' ? ' · heartbeat ' : ' · sinyal ')[1]!.split(' · ')[0];
+
+it('counts only verified processes as active, preserving unknown, lost and finished evidence', () => {
+  const w = worker(sidecars('available'));
+  for (const process of ['running', 'created', 'paused'] as const) expect(workerKind({ ...w, process })).toBe('active');
+  for (const process of ['unknown', 'present-unverified', 'denied'] as const) expect(workerKind({ ...w, process })).toBe('unknown');
+  for (const process of ['missing', 'absent-unverified'] as const) expect(workerKind({ ...w, process })).toBe('lost');
+  expect(workerKind({ ...w, process: 'exited' })).toBe('finished');
+  expect(workerKind({ ...w, custody: 'released' })).toBe('finished');
+  expect(workerKind({ ...w, process: 'unknown', terminal: { handle: 'h', exitCode: 0, interrupted: false } })).toBe('finished');
+});
 
 it.each([
   ['identity-mismatch', 'identity-mismatch', 'kimlik uyuşmazlığı'],

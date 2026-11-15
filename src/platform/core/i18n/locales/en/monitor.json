@@ -1,4 +1,6 @@
 {
+  "cli.task.transcript.pluginCount": "{count} names; reading them needs content permission",
+  "cli.task.transcript.observation": "Worker-reported: {facts}",
   "cli.worker.phase.starting": "starting",
   "cli.worker.phase.thinking": "thinking",
   "cli.worker.phase.reading": "reading",

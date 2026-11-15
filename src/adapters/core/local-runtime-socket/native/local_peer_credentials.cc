@@ -20,6 +20,7 @@
 #include <cmath>
 #include <climits>
 #include "socket_publication.h"
+#include "filesystem_identity.h"
 
 namespace {
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
@@ -407,6 +408,8 @@ static napi_value set_non_dumpable(napi_env env, napi_callback_info) {
   return result;
 }
 NAPI_MODULE_INIT() {
+  napi_property_descriptor filesystem = {"filesystemIdentity", nullptr, filesystem_identity, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &filesystem);
   napi_property_descriptor dumpable = {"setNonDumpable", nullptr, set_non_dumpable, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &dumpable);
   napi_property_descriptor witness = {"isConnectionActive", nullptr, connection_active, nullptr, nullptr, nullptr, napi_default, nullptr};

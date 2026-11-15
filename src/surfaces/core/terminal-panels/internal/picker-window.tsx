@@ -1,5 +1,5 @@
-import { useState, type Key as ReactKey } from 'react';
-import { Box, Text, useAnimation, useWindowSize } from 'ink';
+import { useRef, useState, type Key as ReactKey } from 'react';
+import { Box, Text, useAnimation, useWindowSize, type Key } from 'ink';
 import { fillTemplate, span, wrapCells, type Span, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { ListPicker, LIST_PICKER_EMBEDDED_CHROME_ROWS, PICKER_INITIAL, embeddedPickerPageSize, pickerHints, pickerView, type PickerLabels, type PickerOutcome, type PickerResult,
   type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
@@ -34,7 +34,9 @@ export function useLoadingText(labels: Readonly<{ loading: string; elapsed: stri
  * A window around one embedded `ListPicker`: one title (the window's, followed by the levels entered: `Title › section › key`), one key-hint
  * row (the list's own words for its stage: list, filter or scope; `listHints` replaces the list's words when the panel's are more exact), a
  * body that keeps its rows (blank ones under the list) and a list of one fixed height, so the closing border stays on its row at every level. `tree: null` is the Loading
- * frame: the same height, the body's first line and Esc close. The list owns the keys; the window never applies a choice.
+ * frame: the same height, the body's first line and Esc close. The list owns the keys; the window never applies a choice. A stage whose
+ * Enter confirms or applies an effect (the scope step of any list; every stage of a `confirm` list) is a decision window (owner 108): it
+ * arms first and its keys reach the list only through the guarded Window, so typed text followed by Enter chooses nothing.
  */
 export function PickerWindow(props: {
   readonly title: readonly Span[];
@@ -61,13 +63,23 @@ export function PickerWindow(props: {
   readonly bodyPages?: boolean;
   /** Opt-in filter+Enter navigation for the model/provider lists; never enabled by decision cards. */
   readonly submitFilter?: boolean;
+  /** A confirm list (apply / cancel rows): a decision window at every stage, with no filter. Default false. */
+  readonly confirm?: boolean;
 }) {
   const glyphs = useRenderGlyphs(), size = useWindowSize(), reserve = useWindowReserve();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
   const key = props.pickerKey ?? 0, initial = props.initial ?? PICKER_INITIAL;
   const [tracked, setTracked] = useState<Readonly<{ key: ReactKey; state: PickerState }>>({ key, state: initial });
   const state = tracked.key === key ? tracked.state : initial;
-  const hints = props.tree ? pickerHints(props.labels, state, props.listHints) : props.listHints ?? props.labels.hintList;
+  const keys = useRef<((input: string, pressed: Key) => boolean) | null>(null);
+  // Another list in the same window (a scope step followed by a confirm list) is a new question: it arms anew, so the Enter that answered
+  // the previous step, held or pressed twice, never answers the next one. The same rows under the same title (a tick list redrawn after a
+  // tick) are the same question.
+  const question = props.tree ? [props.tree.title, ...props.tree.items.map(item => item.id)].join('\n') : null;
+  const lists = useRef({ question, count: 0 });
+  if (question !== null && lists.current.question !== question) lists.current = { question, count: lists.current.count + (lists.current.question === null ? 0 : 1) };
+  const guarded = (at: PickerState) => props.confirm === true || at.stage === 'scope';
+  const hints = props.tree ? pickerHints(props.labels, state, props.confirm ? props.labels.hintConfirm ?? props.listHints : props.listHints) : props.listHints ?? props.labels.hintList;
   const width = Math.max(1, columns - FRAME_COLUMNS);
   const geometry = pickerWindowGeometry({ terminalRows, reserved: reserve ?? WINDOW_RESERVED_ROWS, bodyRows: props.bodyRows,
     hintRows: wrapCells(hints, width).length, minimumBody: reserve === undefined ? 3 : 1 });
@@ -84,10 +96,14 @@ export function PickerWindow(props: {
       footer={() => <Box flexDirection="column">{blank(footerHeight + padding)}</Box>} />;
   }
   const tree = props.tree;
-  return <Window title={title} {...(props.status ? { status: props.status } : {})} body={body} hints={hints} position={props.position} footerRows={geometry.footerRows}
-    onInput={(_input, pressed) => !(props.bodyPages && (pressed.pageUp || pressed.pageDown))}
+  return <Window decision={guarded(state)} inputRevision={lists.current.count} title={title} {...(props.status ? { status: props.status } : {})} body={body} hints={hints} position={props.position} footerRows={geometry.footerRows}
+    onInput={(input, pressed) => {
+      if (props.bodyPages && (pressed.pageUp || pressed.pageDown)) return false;
+      // A guarded stage: only a key the list acted on is handled, so the Window sees every other letter as typed text.
+      return guarded(state) ? (props.active ?? true) && keys.current?.(input, pressed) === true : true;
+    }}
     footer={focused => <Box flexDirection="column">
-      <ListPicker key={key} embedded submitFilter={props.submitFilter ?? false} pageKeys={!props.bodyPages} tree={tree} labels={props.labels} active={focused && (props.active ?? true)} initial={initial}
+      <ListPicker key={key} guarded={guarded} keys={keys} embedded submitFilter={props.submitFilter ?? false} pageKeys={!props.bodyPages} tree={tree} labels={props.labels} active={focused && (props.active ?? true)} initial={initial}
         maxRows={geometry.pageSize} onState={next => { setTracked({ key, state: next }); props.onState?.(next); }} onResult={props.onResult}
         {...(props.onOutcome ? { onOutcome: props.onOutcome } : {})} />
       {blank(padding)}

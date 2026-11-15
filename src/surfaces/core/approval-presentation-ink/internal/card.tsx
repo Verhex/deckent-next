@@ -111,7 +111,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
       return true;
     }
     // Recording: decision keys do nothing more, scroll keys still scroll.
-    if (controlledPending ?? decided.current) return key.return || key.escape || key.tab || input.length > 0 && !key.upArrow && !key.downArrow;
+    if (controlledPending ?? decided.current) return key.return || key.escape || key.tab;
     if (key.tab && reasonLabels) { edit(true); return true; }
     if (options.length) {
       const step = questionStep('single', options, { at: atRef.current, ticked: [] }, input, key);

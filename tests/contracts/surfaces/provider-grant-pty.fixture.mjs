@@ -11,7 +11,7 @@ import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { providerPanelPort, secretGrantCardPort } from '#surfaces/core/cli-terminal/index.js';
 import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
-import { assertConfiguredProjectCredential, changeProjectSecretGrant, projectCredentialResolver } from '#composition/core/secrets/index.js';
+import { inspectSecretProjectTarget, assertConfiguredProjectCredential, changeProjectSecretGrant, projectCredentialResolver } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 
@@ -35,8 +35,8 @@ const host = {
       return [{ nativeId: 'fixture-model', displayName: `FIXTURE-MODEL-AFTER-GRANT len=${value?.length ?? 0}`, priced: true }];
     } },
 };
-const card = secretGrantCardPort(projectRoot, scope, options, locale, { offer: (where, loaded) => terminalSecretGrantOffer(where, loaded),
-  grant: (where, scopeId, name, loaded) => changeProjectSecretGrant(where, scopeId, name, 'grant', 'card', loaded).then(() => {}),
+const card = secretGrantCardPort(projectRoot, scope, options, locale, { target: inspectSecretProjectTarget, offer: (where, loaded) => terminalSecretGrantOffer(where, loaded),
+  grant: (where, scopeId, name, loaded, target) => changeProjectSecretGrant(where, scopeId, name, 'grant', 'card', loaded, undefined, target).then(() => {}),
   check: (where, scopeId, name, loaded) => assertConfiguredProjectCredential(where, scopeId, name, loaded) }, home);
 const port = providerPanelPort(projectRoot, scope, host, options, locale, error => `ERR:${error?.code ?? 'error'} ${error?.suggestion ?? ''}`, card);
 const notices = [];

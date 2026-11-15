@@ -1,6 +1,7 @@
 import type { PermissionModeView } from '#domain/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
+import type { DecisionArmLabels } from '#surfaces/core/terminal-window/index.js';
 import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 /**
@@ -259,7 +260,7 @@ export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; 
  */
 export interface ProviderSecretGrantPort {
   offer(): Promise<boolean>;
-  question(name: string, project: string): Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
+  question(name: string, project: string): Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }> | Promise<Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>>;
   grant(name: string): Promise<void>;
   check?(name: string): Promise<void>;
 }
@@ -333,6 +334,8 @@ export interface BudgetPanelLabels {
   readonly belowSettled?: string;
 }
 export interface PanelLabels {
+  /** Hint-row words of a confirmation step for a host outside the Workline (`deckent config`); the Workline provides its own. */
+  readonly decisionArm?: DecisionArmLabels;
   readonly policy?: PolicyPanelLabels;
   readonly picker: PickerLabels;
   readonly position: string;

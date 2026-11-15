@@ -6,7 +6,7 @@ import { get, request } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openNativeConnection, readLocalNativeCredential } from '../../../dist/adapters/core/native-connection/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
-import type { WorkerEvent } from '#domain/index.js';
+import { workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const roots: string[] = []; const closes: (() => Promise<void>)[] = [];
 const capabilities = new Map<string, string>();
@@ -56,6 +56,11 @@ it('scrubs credential values and secret shapes from schema-valid events a worker
   const hostile = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'tool.call', toolId: 'x', name: 'Write', toolClass: 'write',
     target: `leak-${access}.txt`, detail: 'Authorization: Bearer abc.def.ghi' });
   expect(await call(socket, 'POST', '/events', hostile + '\n')).toBe(204);
+  const observation = workerEventSchema.parse({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'cli.observation', observation: { schemaVersion: 1, cliVersion: 'secret-version',
+    builtinPlugins: { names: ['secret-name'], omitted: 0 }, paidExtraUsage: { kind: 'overage', status: 'secret-status', window: 'secret-window', resetsAtMs: null } } });
+  expect(await call(socket, 'POST', '/events', JSON.stringify(observation) + '\n')).toBe(204);
+  expect(received.flat().filter(event => event.kind === 'cli.observation')).toHaveLength(0);
+  expect(received.flat().at(-1)).toMatchObject({ kind: 'dropped', reason: 'invalid', count: 1 });
   const serialized = JSON.stringify(received.flat());
   expect(serialized).not.toContain(access); expect(serialized).not.toContain('abc.def.ghi'); expect(serialized).toContain('[REDACTED]');
   // Retention charges exactly the scrubbed NDJSON, including its newline, rather than the untrusted input bytes.

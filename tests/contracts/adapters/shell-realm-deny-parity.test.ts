@@ -18,14 +18,16 @@ afterEach(async () => {
 });
 
 /** The protected files under `.gitignore`d directories, workspace-relative; each matches the Core credential floor. */
-const PROTECTED = ['secrets/.env', 'secrets/deep/id_rsa', 'secrets/credentials.json', 'certs/prod.pem', 'certs/tls.key'];
+const PROTECTED = ['secrets/.env', 'secrets/deep/id_rsa', 'secrets/credentials.json', 'certs/prod.pem', 'certs/tls.key',
+  '.claude/.credentials.json', '.config/cursor/auth.json'];
 /** Clean files beside them: still reachable (the walk carves, it does not close the directory). */
-const CLEAN = ['secrets/plain.txt', 'certs/ca.txt', 'src/a.ts'];
+const CLEAN = ['secrets/plain.txt', 'certs/ca.txt', 'src/a.ts', '.claude/settings.json', '.config/cursor/cli-config.json'];
 
 async function fixture() {
   const base = await mkdtemp(join(tmpdir(), 'dn-deny-parity-')); roots.push(base);
   const root = join(base, 'project'), scratch = join(base, 'scratch'), home = join(base, 'home');
-  for (const dir of [join(root, 'secrets', 'deep'), join(root, 'certs'), join(root, 'src'), join(root, 'node_modules', 'pkg'), scratch, home]) await mkdir(dir, { recursive: true });
+  for (const dir of [join(root, 'secrets', 'deep'), join(root, 'certs'), join(root, 'src'), join(root, '.claude'), join(root, '.config/cursor'),
+    join(root, 'node_modules', 'pkg'), scratch, home]) await mkdir(dir, { recursive: true });
   await writeFile(join(root, '.gitignore'), 'secrets/\n/certs\nnode_modules/\n');
   for (const rel of PROTECTED) await writeFile(join(root, rel), `SECRET-${rel}\n`);
   for (const rel of CLEAN) await writeFile(join(root, rel), `CLEAN-${rel}\n`);

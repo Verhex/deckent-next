@@ -1,4 +1,7 @@
 {
+  "models.invocation.observationVersion": "Reported CLI version: {version}",
+  "models.invocation.observationPlugins": "Recorded built-in plugins: {names}",
+  "models.invocation.observationCount": "{count} names; reading them needs content permission",
   "headless.agent.connection.reconnectRequired": "Reconnect this subscription from the owning person’s terminal in its original installation, company and scope. Its source or login resource binding is missing or unavailable.",
   "headless.agent.host.chatWarning": "The working directory could not be verified; this command may reach deckent's state folder. The host realm is not a security boundary. Approve only if you accept this risk.",
   "headless.agent.host.unresolved": "The host realm is not a security boundary. With global state present, directory changes, path-producing commands and unresolved shell expansions are refused before approval. Use an enforcing sandbox.",
@@ -61,7 +64,7 @@
   "doctor.headless.updated": "CLI {cli} updated {from} → {to} (checked again before use)",
   "tui.provider.login.ownSubscriptionNote": "Your own subscription through the CLI's own sign-in; deckent never reads, copies or shares it.",
   "tui.model.textChatSubscription": "Subscription text chat; no API budget. Native tools are disabled.",
-  "headless.chat.quota": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.",
+  "headless.chat.quota": "The subscription's usage limit is reached ({window}). Resets at: {reset} (local time). deckent made no charge and stopped this turn instead of continuing on paid extra usage. Wait for the reset, sign in with another account (`deckent models login --connection claude-cli-subscription`), or use another connection.",
   "headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE": "The subscription CLI is unavailable. Install it or reconnect before using agent tools.",
   "headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED": "Sign in through the CLI’s own login in your terminal before using agent tools.",
   "headless.agent.reason.NATIVE_AGENT_CAPABILITY_UNSEALED": "Agent execution has not been verified for this CLI version and profile. It is unavailable until verification completes.",
@@ -121,5 +124,13 @@
   "headless.agent.workspace.containedWorkspaceRefused": "The worker workspace cannot be opened as a closed view of installation state.",
   "headless.agent.builtinPlugin": "[deckent] Claude CLI {version} loaded a new built-in plugin: {name}. Nothing was blocked; this observation is recorded with the turn.",
   "headless.agent.builtinPlugins": "[deckent] Claude CLI {version} loaded new built-in plugins: {name}. Nothing was blocked; this observation is recorded with the turn.",
-  "headless.agent.builtinPluginsMore": "+{count} more"
+  "headless.agent.builtinPluginsMore": "+{count} more",
+  "headless.chat.quotaUnknownStatus": "Unknown limit status ({status}); this turn was stopped. Check the subscription with your provider or use another connection.",
+  "headless.chat.quotaUnknown": "unknown",
+  "headless.chat.quotaWindow.five_hour": "five-hour window",
+  "headless.chat.quotaWindow.seven_day": "weekly window",
+  "headless.chat.quotaWindow.seven_day_opus": "weekly window for Opus",
+  "headless.chat.quotaWindow.seven_day_sonnet": "weekly window for Sonnet",
+  "headless.chat.quotaFallback": "Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.",
+  "headless.chat.paidExtraUsage": "The plan's usage limit is reached ({window}). Resets at: {reset} (local time). Paid extra usage of your provider account is in use; deckent cannot see the amount. To stop instead, run `deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'`."
 }

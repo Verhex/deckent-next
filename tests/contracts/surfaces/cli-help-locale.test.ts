@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
+import * as cliHuman from '#surfaces/core/cli-human/index.js';
 import { PACKAGE_VERSION, t } from '#platform/index.js';
 
 let temporary: string, root: string, globalRoot: string, env: NodeJS.ProcessEnv;
@@ -136,6 +137,44 @@ it('ATTACHDOC: human previews give a complete apply command; JSON stays exact an
     expect(quoted.output).toContain("--scope 'target'\\''s project' --apply");
   }
   expect(commandIds.size).toBe(2);
+});
+it('attachment confirmations name the selected action in EN/TR and never offer a write card to a pipe or agent', async () => {
+  const projectId = '11111111-1111-4111-8111-111111111111', digest = 'a'.repeat(64);
+  const cases: readonly [string[], string, string][] = [
+    [['--register', '--scope', 'source', '--expect', digest], 'Register this source installation?', 'Bu kaynak kurulum kaydedilsin mi?'],
+    [['--scope', 'target', '--expect', digest, '--command-id', projectId], 'Connect this folder to the selected installation?', 'Bu klasör seçilen kuruluma bağlansın mı?'],
+    [['--revoke', projectId], "Revoke this project's attachment?", 'Bu projenin kurulum bağı geri alınsın mı?'],
+    [['--lease-revoke', projectId], 'Revoke model use for this project?', 'Bu projenin model kullanım izni geri alınsın mı?'],
+    [['--detach', projectId], 'Detach this project?', 'Bu proje kurulumdan ayrılsın mı?'],
+    [['--unregister'], 'Unregister this source installation?', 'Bu kaynak kurulumun kaydı kaldırılsın mı?'],
+    [['--relocate', '--scope', 'source'], "Update this project or source's recorded location?", 'Bu proje veya kaynağın kayıtlı konumu güncellensin mi?'],
+    [['--restore', projectId, '--expect', digest], "Restore this project's attachment?", 'Bu projenin kurulum bağı yeniden açılsın mı?'],
+  ];
+  const confirm = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue('no'), projectAttachment = vi.fn();
+  try {
+    for (const language of ['en', 'tr'] as const) {
+      await config(language);
+      for (const [args, en, tr] of cases) {
+        confirm.mockClear(); let errors = '';
+        const context = { root, env, projectAttachment, stdin: { isTTY: true } as NodeJS.ReadStream,
+          stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
+        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(0);
+        expect(confirm).toHaveBeenCalledOnce();
+        const card = confirm.mock.calls[0]![0];
+        expect(card.title).toBe(language === 'en' ? en : tr); expect(card.initial).toBe('no');
+        expect(card.body?.join('\n')).toContain(language === 'en' ? 'Scope / project:' : 'Kapsam / proje:');
+        if (args.includes('--relocate')) expect(card.body?.join('\n')).toContain(language === 'en'
+          ? "Update the project or source's recorded location; keep its identity" : 'Proje veya kaynağın kayıtlı konumunu güncelle; kimliğini koru');
+        confirm.mockClear();
+        for (const refused of [{ ...context, stdin: { isTTY: false } as NodeJS.ReadStream }, { ...context, env: { ...env, AI_AGENT: '1' } }]) {
+          errors = '';
+          expect(await main(['terminal', 'attach', ...args, '--apply'], refused)).toBe(1);
+          expect(errors).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(confirm).not.toHaveBeenCalled();
+        }
+      }
+    }
+    expect(projectAttachment).not.toHaveBeenCalled();
+  } finally { confirm.mockRestore(); }
 });
 it('keeps environment locale available with invalid config', async () => {
   await writeFile(join(root, '.deckent', 'config.json'), '{broken');

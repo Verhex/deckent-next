@@ -2,7 +2,7 @@ import { timedAsync } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { processCommandSchema, validateProcessEvidence, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
 /** A v2 stdout line consumer: complete lines in order (UTF-8, without the newline); `stop` ends the process group at once (reason `stopped`). */
-export type ProcessLineConsumer = (line: string) => 'stop' | void;
+export type ProcessLineConsumer = (line: string, signal?: AbortSignal) => 'stop' | void | Promise<'stop' | void>;
 /** Linux comparison profile: explicit environment, closed (v1) or bounded (v2) stdin, owned process group, raw bounded output.
  * This reports the command process, never the Docker container or a Task's success.
  */
@@ -23,21 +23,29 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
     catch { resolve(evidence({})); return; }
     const out = child.stdout!, err = child.stderr!;
     const stdout: Buffer[] = []; const stderr: Buffer[] = []; let outBytes = 0; let errBytes = 0; let pending = Buffer.alloc(0);
-    let started = false; let reason: ProcessEvidence['reason'] | undefined; let stdoutTruncated = false; let stderrTruncated = false;
-    let grace: NodeJS.Timeout | undefined;
-    const group = (name: NodeJS.Signals) => { if (child.pid) { try { process.kill(-child.pid, name); } catch { /* Exit evidence determines whether the command terminated. */ } } };
+    let started = false, closed = false; let reason: ProcessEvidence['reason'] | undefined; let stdoutTruncated = false; let stderrTruncated = false;
+    let grace: NodeJS.Timeout | undefined, lines = Promise.resolve();
+    let interruptLine: (() => void) | undefined;
+    const consumer = new AbortController();
+    const group = (name: NodeJS.Signals) => { if (!closed && child.pid) { try { process.kill(-child.pid, name); } catch { /* Exit evidence determines whether the command terminated. */ } } };
     const kill = () => {
       clearTimeout(grace); grace = undefined; group('SIGKILL');
       // Escaped descendants holding inherited pipes must not extend our transport lifetime.
       out.destroy(); err.destroy();
     };
     const stop = (cause: ProcessEvidence['reason']) => {
-      const first = reason === undefined; reason ??= cause;
+      const first = reason === undefined; reason ??= cause; consumer.abort(); interruptLine?.();
       // v2 graceful stop for timeout/cancel only: SIGINT ends the turn, SIGKILL follows after the grace bound; limits and `stop` kill at once.
       if (first && v2?.interruptGraceMs && (cause === 'timeout' || cause === 'cancelled')) { group('SIGINT'); grace = setTimeout(kill, v2.interruptGraceMs); }
       else if (first || grace !== undefined) kill();
     };
-    const line = (bytes: Buffer) => { if (reason === undefined && onLine?.(bytes.toString('utf8')) === 'stop') stop('stopped'); };
+    const line = async (bytes: Buffer) => {
+      if (reason !== undefined) return;
+      const interruption = new Promise<void>(resolve => { interruptLine = resolve; });
+      try { if (await Promise.race([onLine?.(bytes.toString('utf8'), consumer.signal), interruption]) === 'stop') stop('stopped'); }
+      catch { stop('stopped'); }
+      finally { interruptLine = undefined; }
+    };
     const abort = () => stop('cancelled'); const timer = setTimeout(() => stop('timeout'), command.timeoutMs);
     signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort();
     child.on('spawn', () => { started = true; });
@@ -46,9 +54,16 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
     out.on('data', (chunk: Buffer) => {
       const kept = chunk.subarray(0, Math.max(0, command.outputBytes - outBytes)); stdout.push(kept); outBytes += kept.length;
       if (onLine) {
-        pending = Buffer.concat([pending, kept]);
-        for (let index = pending.indexOf(10); index >= 0 && reason === undefined; index = pending.indexOf(10)) { line(pending.subarray(0, index)); pending = pending.subarray(index + 1); }
-        if (pending.length > v2!.maxLineBytes! && reason === undefined) stop('line-limit');
+        // Await each consumer before accepting the next line; total queued bytes remain output-bounded.
+        lines = lines.then(async () => {
+          if (reason !== undefined) return;
+          pending = Buffer.concat([pending, kept]);
+          for (let index = pending.indexOf(10); index >= 0 && reason === undefined; index = pending.indexOf(10)) {
+            if (index > v2!.maxLineBytes!) { stop('line-limit'); break; }
+            await line(pending.subarray(0, index)); pending = pending.subarray(index + 1);
+          }
+          if (pending.length > v2!.maxLineBytes! && reason === undefined) stop('line-limit');
+        });
       }
       if (kept.length !== chunk.length) { stdoutTruncated = true; stop('output-limit'); }
     });
@@ -56,10 +71,12 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
       const kept = chunk.subarray(0, Math.max(0, errLimit - errBytes)); stderr.push(kept); errBytes += kept.length;
       if (kept.length !== chunk.length) { stderrTruncated = true; stop('output-limit'); }
     });
-    child.on('close', (exitCode, exitSignal) => {
+    child.on('close', async (exitCode, exitSignal) => {
+      if (grace !== undefined) { clearTimeout(grace); group('SIGKILL'); grace = undefined; }
+      closed = true; // A notice deadline after exit must never signal a reused process id.
+      await lines;
+      if (onLine && pending.length > 0) await line(pending);
       clearTimeout(timer); signal?.removeEventListener('abort', abort);
-      if (grace !== undefined) { clearTimeout(grace); group('SIGKILL'); }
-      if (onLine && pending.length > 0) line(pending);
       resolve(evidence({ started, reason: reason ?? (exitSignal ? 'signal' : 'exit'), exitCode: started ? exitCode : null, signal: started ? exitSignal : null,
         stdoutBase64: Buffer.concat(stdout).toString('base64'), stderrBase64: Buffer.concat(stderr).toString('base64'), stdoutTruncated, stderrTruncated }));
     });

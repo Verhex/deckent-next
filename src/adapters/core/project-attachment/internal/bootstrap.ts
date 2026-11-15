@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { attachmentFailure } from '#engine/index.js';
-import { projectAttachmentSchema } from '#domain/index.js';
+import { readableProjectAttachmentSchema, isNewerAttachmentVersion } from '#domain/index.js';
 import { observeBootstrapState, bootstrapPublishesConfig, loadConfig, validateConfig, versionedConfig, deepMerge, resolveProductLayout,
   productResourcePath, digestText, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 /** The installer's retained first-session material is the only recovery read override. No files are healed or published here. */
@@ -14,8 +14,10 @@ export async function readAttachmentBootstrapConfig(projectRoot: string, options
   const cfg = targets.find((target: { resource?: string } | null) => target?.resource === 'config') as { content?: unknown; path?: unknown; digest?: unknown } | undefined;
   if (typeof ref?.content !== 'string' || typeof cfg?.content !== 'string') return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   if ([ref, cfg].some(target => target.digest !== digestText(String(target.content)) || !observed.record!.resources.some(resource => resource.path === target.path && resource.targetDigest === target.digest))) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+  let raw: unknown; try { raw = JSON.parse(ref.content); } catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
+  if (isNewerAttachmentVersion(raw, 2)) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
   let attachment, document, authored;
-  try { attachment = projectAttachmentSchema.parse(JSON.parse(ref.content)); authored = versionedConfig(JSON.parse(cfg.content)); document = validateConfig(authored).config; }
+  try { attachment = readableProjectAttachmentSchema.parse(raw); authored = versionedConfig(JSON.parse(cfg.content)); document = validateConfig(authored).config; }
   catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
   if (attachment.location.canonicalRoot !== root || ![5, 6].includes(document.schema_version) || document.installation.sharedRegistrationId !== attachment.registrationId
     || document.company.id !== attachment.companyId) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');

@@ -188,7 +188,7 @@ it('describes a run: how it ended and after how long, the command cut at 120, th
   expect(describeHostShellResult('cd x\necho a\r\necho b', ran({}), null)).toBe('[deckent] run_shell: exit 0 after 1.2s (cd x ⏎ echo a ⏎ echo b)\nhi\n');
   // The owner's line for a sandbox that could not start a command: the typed reason, in the owner's language, never a host fallback.
   expect(sandboxNotStartedNote('[deckent] sandbox: SANDBOX_VIEW_TOO_LARGE: 9 mounts; nothing was run.', 'en')).toBe('The sandbox could not start this command: sandbox: SANDBOX_VIEW_TOO_LARGE: 9 mounts. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.');
-  expect(sandboxNotStartedNote('[deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', 'tr')).toMatch(/^Sandbox bu komutu başlatamadı: the command could not be started: E2BIG .*host kabuğuna geçilmedi/u);
+  expect(sandboxNotStartedNote('[deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', 'tr')).toMatch(/^Yalıtım alanı bu komutu başlatamadı: the command could not be started: E2BIG .*host kabuğuna geçilmedi/u);
   expect(hostShellCleanupNote('clean')).toBeNull();
   expect(hostShellCleanupNote('unverified')).toMatch(/^\[deckent\] cleanup unverified: .*this is not a sandbox\.$/u);
 });

@@ -7,6 +7,7 @@ import { appendFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
 const EN_WORK = workSurfaceLabels('en');
@@ -17,7 +18,7 @@ const labels = {
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS',
   serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
-  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
+  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', decisionArm: decisionArmLabels('en'),
   render: { assistant: 'bot', thinking: 'THINKING', thought: 'THOUGHT', elapsed: '{seconds}s', tokens: '{prompt}',
     reasoningTokens: '{count}', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED', code: 'code',
     moreAbove: '{count}', queued: '{count} queued', tool: 'TOOL', toolRunning: 'RUNNING', toolStatus: {},

@@ -40,7 +40,7 @@ describe.each([
   }],
   ['tr', {
     status: [`deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
-      `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  REPORT-TAIL', `  Çalışma servisi şimdi: örnek ${SERVICE}, pid 4242, sürüm aaaaaaaaaaaa`],
+      `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  REPORT-TAIL', `  deckent servisi şimdi: örnek ${SERVICE}, pid 4242, sürüm aaaaaaaaaaaa`],
     scope: ['Siz: alperen · Proje: deckent-next (b7d1e2f3) · Şirket: varsayılan · Mod: standart · Kural sürümü: p-7', 'Kapsam: scope-main', 'Yüzey erişimi: işler, işçiler, onaylar', 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  İzin modu: standart (politika revizyonu p-7; modlar destekleniyor: evet; tam erişim izinli: hayır)'],
     model: ['Geçerli model: Qwen 3 8B (yerel sunucu) · araç çağrısı destekli', 'Model kataloğu · kapsam scope-main · kanal sayısı: 1', '  local-vllm · yerel sunucu · etkin',
@@ -76,6 +76,6 @@ describe.each([
   });
   it('names a service that could not be read instead of saying it is running', async () => {
     const lines = await run(locale, 'status', { describeRuntimeService: async () => { throw new Error('boom'); } });
-    expect(lines[0]).toContain(locale === 'en' ? 'runtime service not read' : 'çalışma servisi okunamadı'); expect(lines[0]).not.toMatch(/is running|çalışıyor/u);
+    expect(lines[0]).toContain(locale === 'en' ? 'runtime service not read' : 'deckent servisi okunamadı'); expect(lines[0]).not.toMatch(/is running|çalışıyor/u);
   });
 });

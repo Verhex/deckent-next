@@ -145,7 +145,9 @@ describe('terminal themes (T2 T-READABLE)', () => {
     expect(palette.modeIndicator.color).toBe('cyanBright'); expect(palette.warning.color).toBe('yellow');
     expect(resolveWorklinePalette('truecolor', 'light').assistantLabel.color).toBe('#0A4A4F');
     expect(resolveWorklinePalette('ansi16', 'dark-daltonized').diffRemoved.color).toBe('yellowBright');
-    for (const style of Object.values(resolveWorklinePalette('none', 'light'))) expect(style).toEqual({});
+    const { tier, ...styles } = resolveWorklinePalette('none', 'light');
+    expect(tier).toBe('none');
+    for (const style of Object.values(styles)) expect(style).toEqual({});
     // Connected uses success, disconnected uses warning; the light 16-colour fallback keeps the word and `!` in bold.
     expect([resolveWorklinePalette('truecolor', 'light').stateConnected.color, resolveWorklinePalette('truecolor', 'light').stateDisconnected.color]).toEqual(['#136F57', '#8A5300']);
     expect(resolveWorklinePalette('ansi16', 'light').stateDisconnected).toEqual({ bold: true });

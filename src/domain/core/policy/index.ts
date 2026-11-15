@@ -11,6 +11,7 @@ export { effectivePermissionMode, fullAccessGrant, fullAutoGrant, fullAutoNotInE
   permissionModeViewSchema, withPrincipalPermissionMode } from './internal/mode.js';
 export type { PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from './internal/mode.js';
 export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';
+export { rebindClasses, REBIND_CLASS, explicitRebindGrant, type RebindClass } from './internal/rebind.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ CorePolicyResource, CorePolicyAction } from './internal/vocabulary.js';
 export { authorityDocuments, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
   policyChangeSchema, POLICY_RECOVERY_CHANGE_KIND, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RECOVERY_RAISE_KINDS, type DelegationOptions } from './internal/administer.js';

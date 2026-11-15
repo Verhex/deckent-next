@@ -1,6 +1,11 @@
 {
   "cli.identity.keep": "Same installation (move/restore): identity kept, binding updated",
   "cli.identity.new": "New installation: new installationId, projects preserved",
+  "cli.identity.basis.open-class": "Basis: open repair class.",
+  "cli.identity.basis.human-tty": "Basis: person at a terminal.",
+  "cli.identity.basis.ai-policy": "Basis: explicit rebinding rule in the policy file.",
+  "cli.identity.basis.macos-plain": "Basis: plain-project exception on macOS.",
+  "cli.identity.attachmentsUnreconciled": "Attachment records were not reconciled. Run deckent terminal attach --relocate to reconcile them.",
   "cli.identity.resolved": "{choice}\nPrevious installationId: {previous}\nCurrent installationId: {current}",
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
@@ -351,12 +356,19 @@
   "setup.attachment.leaseRevoke": "Revoke model use; retain the project attachment",
   "setup.attachment.detach": "Detach the project and revoke model use; keep local data",
   "setup.attachment.unregister": "Unregister the source after all projects are detached",
-  "setup.attachment.relocate": "Reconcile the moved project or source, keeping its identity",
+  "setup.attachment.relocate": "Update the project or source's recorded location; keep its identity",
   "setup.attachment.restore": "Restore the project attachment and grant a new model-use lease",
   "setup.attachment.body": "Action: {action}\nFolder: {path}\nScope / project: {scope}\nThe operation uses current policy and the exact preview where required.",
   "setup.attachment.help": "terminal attach --scope <id> --preview [--register] [--json]\nterminal attach --scope <id> --apply --expect <digest> --command-id <uuid>\nterminal attach --register --scope <id> --apply [--expect <digest>]\nRegister a verified source in its folder, then preview and attach a new project. --lease-revoke <projectId> --apply withdraws only model use. --detach <projectId> --apply withdraws both attachment and use without deleting data. --unregister --apply on the source requires detached dependencies. --relocate --scope <id> --apply reconciles a real move. After encrypted restore, preview the retained scope and use --restore <projectId> --expect <digest> --apply to grant new use. Every apply needs a person at a terminal.",
   "setup.session.registerHint": "Already installed elsewhere? In your installed folder, run `deckent terminal attach --register --apply`, confirm the source, then return here.",
   "setup.attachment.next": "To apply, run this command. Reuse the same command when retrying:\n{command}",
   "setup.state.checked": "check ran",
-  "setup.reason.checkPending": "The final check ran; {count} item(s) wait for you. Run deckent doctor for the results and next steps."
+  "setup.reason.checkPending": "The final check ran; {count} item(s) wait for you. Run deckent doctor for the results and next steps.",
+  "setup.attachment.title.register": "Register this source installation?",
+  "setup.attachment.title.revoke": "Revoke this project's attachment?",
+  "setup.attachment.title.leaseRevoke": "Revoke model use for this project?",
+  "setup.attachment.title.detach": "Detach this project?",
+  "setup.attachment.title.unregister": "Unregister this source installation?",
+  "setup.attachment.title.relocate": "Update this project or source's recorded location?",
+  "setup.attachment.title.restore": "Restore this project's attachment?"
 }

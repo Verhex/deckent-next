@@ -50,11 +50,13 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false) {
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, createElement(WindowStackProvider, null, node)) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); } };
+  return { frame: () => stdout.frame, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+    /** One stdin chunk, as a terminal sends a modified key. */
+    raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
 const VIEW: PermissionModeView = { schemaVersion: 1, scopeId: 'scope', supported: true, mode: 'standart', askEdits: false, revision: 'r1', eligible: true, fullAccess: false } as PermissionModeView;
 type Calls = { notices: PanelNotice[]; errors: unknown[]; closed: number; approvals: string[] };
-function panel(kind: 'mode' | 'config' | 'mcp', ports: Parameters<typeof SettingsPanel>[0]['ports'], locale: 'en' | 'tr' = 'en') {
+function panel(kind: 'mode' | 'config' | 'mcp' | 'policy', ports: Parameters<typeof SettingsPanel>[0]['ports'], locale: 'en' | 'tr' = 'en') {
   const calls: Calls = { notices: [], errors: [], closed: 0, approvals: [] };
   const element = createElement(SettingsPanel, { kind, ports, labels: terminalPanelLabels(locale), push: notices => { calls.notices.push(...notices); },
     onError: error => { calls.errors.push(error); }, errorText: error => `ERR:${String((error as { code?: unknown })?.code)}`,
@@ -72,10 +74,13 @@ describe('/mode window', () => {
     expect(view.frame()).toContain('standart · şu an');
     await view.press(`${DOWN}${DOWN}${DOWN}`);
     expect(view.frame()).toMatch(/x tam erişim/u); expect(view.frame()).toContain('[engellendi]');
-    expect(view.frame()).toContain('grant');
+    expect(view.frame()).toContain('izin gerekir');
     await view.press(ENTER);
     expect(selected).toEqual([]); expect(calls.closed).toBe(0);
-    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); // wraps to full-auto (standart → ask-edits → full-auto)
+    await view.press(`${DOWN}${DOWN}${DOWN}`); // wraps to full-auto (standart → ask-edits → full-auto)
+    // Shift+Enter is a new line, never a selection, also in a catalog list (its own key handler; Astra 3136).
+    await view.raw('\u001b[13;2u', 60); expect(selected).toEqual([]); expect(calls.closed).toBe(0);
+    await view.press(ENTER);
     expect(selected).toEqual(['full-auto']); expect(calls.closed).toBe(1);
   });
   it('a load that lasts a second or more shows its live elapsed seconds (FIX8a R26)', async () => {
@@ -126,11 +131,15 @@ describe('/config window', () => {
     await view.press(ENTER); // theme
     expect(view.frame()).toContain('Colour theme');
     await view.press(`${DOWN}${ENTER}`); // dark → scope step
+    await armed(view.frame, 'choose scope'); // owner 108: the layer step is a decision window; its keys count once its hints show
     await view.press(DOWN); // the user layer: locked, with the policy's reason under the cursor
     expect(view.frame()).toContain('GLOBAL-LOCKED');
     await view.press(ENTER, 60);
     expect(writes).toEqual([]);
-    await view.press(`${DOWN}${ENTER}`, 80); // back on project
+    await view.press(DOWN); // back on project
+    await view.press('x'); await view.press(ENTER, 60); // typed text and its Enter choose no layer
+    expect(writes).toEqual([]); expect(view.frame()).toContain('choose scope');
+    await view.press(ENTER, 80);
     expect(writes).toEqual([{ action: 'set', keyPath: 'terminal.theme', value: 'dark', layer: 'project' }]);
     expect(calls.notices).toEqual([{ level: 'info', text: 'Config: saved terminal.theme' }]);
     expect(view.frame()).toContain('theme'); // the key list again, ready for the next change
@@ -144,7 +153,7 @@ describe('/config window', () => {
     expect(view.frame()).toContain('Adjust with arrows');
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-values.txt`, view.frame());
     expect(view.frame()).not.toContain('New value');
-    await view.press(`${ENTER}${ENTER}`, 80);
+    await view.press(ENTER); await armed(view.frame, 'choose scope'); await view.press(ENTER, 80);
     expect(writes).toEqual([{ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' }]);
     expect(calls.notices).toEqual([{ level: 'warning', text: 'Config: Nothing was written; appr-1 waits' }]);
     expect(calls.approvals).toEqual(['appr-1']); expect(calls.closed).toBe(1);
@@ -268,14 +277,17 @@ describe('CS-1 number window', () => {
       position: '{pos} of {count}', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }), 40, 24, true);
     await settle(60);
     expect(view.frame()).toContain('2 s'); expect(view.frame()).toContain('1 s'); expect(view.frame()).toContain('5 s');
+    await armed(view.frame, 'adjust'); // owner 108: a decision window; the 40-column hint row wraps, its first words show once keys count
     await view.press('999'); expect(view.frame()).toContain('2 s'); expect(selected).toEqual([]);
+    await view.press(ENTER); expect(selected).toEqual([]); expect(view.frame()).toContain('2 s'); // digits are typed text: their Enter selects nothing
     await view.press('-----'); expect(view.frame()).toContain('1 s');
     await view.press('++++++'); expect(view.frame()).toContain('5 s');
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/number-window.txt`, view.frame());
+    await view.press('9'); await view.press(ENTER); expect(selected).toEqual([]); expect(view.frame()).toContain('5 s');
     await view.press(`${ENTER}${ENTER}`); expect(selected).toEqual([5000]);
     const escape = mount(createElement(ConfigNumberWindow, { title: 'Timeout', stepper, hints: 'Esc', position: '-', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }));
-    await settle(60); await escape.press(ESC); expect(canceled).toBe(1); expect(selected).toEqual([5000]);
+    await armed(escape.frame, 'Esc'); await escape.press(ESC); expect(canceled).toBe(1); expect(selected).toEqual([5000]);
   });
   it('ignores a forged free-entry flag for any field outside the allowed-entry registry', () => {
     const forged = { ...CONFIG, fields: [{ ...CONFIG.fields[1]!, free: true }] };
@@ -292,16 +304,54 @@ describe('CS-1 allowed new value preview', () => {
       parse: (_key: string, text: string) => text.startsWith('https://') ? { ok: true as const, value: text } : { ok: false as const, reason: 'INVALID-URL' } };
     const { element, calls } = panel('config', { config: port }), view = mount(element, 80, 24, true);
     await settle(80);
-    await view.press(`${ENTER}${ENTER}${ENTER}${ENTER}`);
+    await view.press(`${ENTER}${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER); // section → key → new value → layer
     expect(view.frame()).toContain('New value');
     await view.press(`bad${ENTER}`); expect(view.frame()).toContain('INVALID-URL'); expect(writes).toEqual([]);
     await view.press(`\u007f\u007f\u007fhttps://registry.example.com${ENTER}`);
     expect(view.frame()).toContain('Preview change'); expect(view.frame()).toContain('https://registry.example.com'); expect(writes).toEqual([]);
     if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-preview.txt`, view.frame());
-    await view.press(ESC); expect(writes).toEqual([]);
-    await view.press(`${ENTER}${ENTER}${ENTER}https://registry.example.com${ENTER}${ENTER}`);
+    // The preview is a decision window (owner 108): it arms first, and text typed on it and its Enter write nothing.
+    await armed(view.frame, 'Enter confirms'); await view.press(ESC); expect(writes).toEqual([]);
+    await view.press(`${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER); expect(view.frame()).toContain('New value'); // key → new value → layer
+    await view.press(`https://registry.example.com${ENTER}`); await armed(view.frame, 'Enter confirms');
+    await view.press(`ok${ENTER}`); expect(writes).toEqual([]); expect(view.frame()).toContain('Preview change');
+    await view.press(ENTER);
     expect(writes).toEqual([{ action: 'set', keyPath: urlField.key, value: 'https://registry.example.com', layer: 'project' }]);
     expect(calls.notices).toHaveLength(1); expect(calls.errors).toEqual([]);
+  });
+});
+
+describe('owner 108: the confirmation steps of the settings panels are decision windows', () => {
+  it('/policy: on the preview that applies, typed text, its Enter and a y inside it apply nothing; a deliberate Enter or y applies once', async () => {
+    const applied: string[] = [], group = { id: 'g1', label: 'GROUP-ONE', detail: 'detail', note: 'note' }, words = terminalPanelLabels('en').policy!;
+    const port: NonNullable<Parameters<typeof SettingsPanel>[0]['ports']['policy']> = { scopes: async () => ['scope-a'], inspect: async () => ({ groups: [group] }),
+      delegations: async () => ({ groups: [{ ...group, id: 'decision:d1', label: 'DELEGATE-ONE' }] }),
+      preview: async (scopeId, groupId, action) => ({ scopeId, groupId, action, digest: 'digest', lines: [{ label: '', text: `PREVIEW ${groupId}` }], applicable: true, ...(groupId.startsWith('decision:') ? { delegation: true } : {}) }),
+      apply: async preview => { applied.push(preview.groupId); return []; } };
+    const { element, calls } = panel('policy', { policy: port }), view = mount(element, 100, 30, true);
+    await settle(80);
+    await view.press(`${ENTER}${ENTER}${ENTER}`, 80); // scope → group → grant: the preview, "Approve and apply" highlighted
+    expect(view.frame()).toContain('PREVIEW g1'); await armed(view.frame, 'Enter select');
+    await view.press(`/polic${ENTER}`); expect(applied).toEqual([]); expect(view.frame()).toContain('PREVIEW g1'); // text and its Enter chose nothing
+    await view.press(ENTER, 80); expect(applied).toEqual(['g1']);
+    expect(view.frame()).toContain(words.delegations!);
+    await view.press(`${DOWN}${ENTER}`, 80); await view.press(`${ENTER}${ENTER}`, 80); // delegations → the delegation → grant: the y/n preview
+    expect(view.frame()).toContain('PREVIEW decision:d1'); await armed(view.frame, 'y: confirm');
+    await view.press('/policy'); expect(applied).toEqual(['g1']); // the y inside typed text is text
+    await view.press(ENTER); expect(applied).toEqual(['g1']); expect(view.frame()).toContain('PREVIEW decision:d1'); // that Enter is neither yes nor cancel
+    await view.press('y', 80); expect(applied).toEqual(['g1', 'decision:d1']); expect(calls.errors).toEqual([]);
+  });
+  it('/config: the operations baseline offer takes no y out of typed text; a deliberate y applies it once', async () => {
+    const writes: unknown[] = [], baseline: string[] = [];
+    const field = { ...CONFIG.fields[0]!, key: 'operations.demo', section: 'operations', description: 'Demo operation' };
+    const port: ConfigPanelPort = { ...configPort(writes), inspect: async () => ({ ...CONFIG, fields: [field] }),
+      operationsBaseline: { offer: async () => ({ scopeId: 'scope', digest: 'digest', title: 'BASELINE-OFFER', lines: ['what it grants'], later: 'LATER' }), apply: async () => { baseline.push('applied'); return ['BASELINE-APPLIED']; } } };
+    const { element, calls } = panel('config', { config: port }), view = mount(element, 100, 30, true);
+    await settle(80);
+    await view.press(`${ENTER}${ENTER}${ENTER}`); await armed(view.frame, 'choose scope'); await view.press(ENTER, 120); // section → key → value → layer: written, then the offer
+    expect(writes).toHaveLength(1); expect(view.frame()).toContain('BASELINE-OFFER'); await armed(view.frame, 'y apply');
+    await view.press('/policy'); await view.press(ENTER); expect(baseline).toEqual([]); expect(view.frame()).toContain('BASELINE-OFFER');
+    await view.press('y', 80); expect(baseline).toEqual(['applied']); expect(calls.errors).toEqual([]);
   });
 });
 
@@ -321,8 +371,11 @@ describe('TERM-PANEL: a window with a list draws one title and one key-hint row 
     expect(windowShape(loading.frame(), 'Loading')).toEqual({ height, titles: 1, hints: 1 });
     const view = mount(panel('config', { config: configPort([]) }).element);
     await settle(80);
-    const shapes = [windowShape(view.frame(), 'Configuration · acme')];
-    for (const keys of ['th', '\u007f\u007f', ENTER, ENTER, ENTER, DOWN]) { await view.press(keys); shapes.push(windowShape(view.frame(), 'Configuration · acme')); }
+    const shape = () => windowShape(view.frame(), 'Configuration · acme'), shapes = [shape()];
+    for (const keys of ['th', '\u007f\u007f', ENTER, ENTER]) { await view.press(keys); shapes.push(shape()); }
+    // Owner 108: the layer step is a decision window; it shows its key-hint row (and takes the arrow) once it is armed.
+    await view.press(ENTER); await armed(view.frame, 'choose scope'); shapes.push(shape());
+    await view.press(DOWN); shapes.push(shape());
     expect(view.frame()).toContain('GLOBAL-LOCKED'); expect(view.frame()).toContain('Configuration · acme › terminal › terminal.theme');
     expect(shapes).toEqual(shapes.map(() => ({ height, titles: 1, hints: 1 })));
   });
@@ -335,7 +388,7 @@ describe('TERM-PANEL: a window with a list draws one title and one key-hint row 
     await settle(80);
     const first = windowShape(view.frame(), 'İzin modu');
     await view.press(`${DOWN}${DOWN}${DOWN}`);
-    expect(view.frame()).toContain('grant');
+    expect(view.frame()).toContain('izin gerekir');
     expect([first, windowShape(view.frame(), 'İzin modu')]).toEqual([{ height, titles: 1, hints: 1 }, { height, titles: 1, hints: 1 }]);
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
   });

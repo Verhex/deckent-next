@@ -29,8 +29,9 @@ export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDi
 
 export { modelInvocationBillingAxisSchema } from './internal/contract.js';
 export type { ModelInvocationBillingAxis } from './internal/contract.js';
-export { modelInvocationPlanUsageSchema } from './internal/plan-usage.js';
-export type { ModelInvocationPlanUsage } from './internal/plan-usage.js';
+export { modelInvocationPlanUsageSchema, modelInvocationPlanUsageReadSchema } from './internal/plan-usage.js';
+export type { ModelInvocationPlanUsage, ModelInvocationPlanUsageRead } from './internal/plan-usage.js';
+export { rateLimitFactSchema, pluginNamesSchema, nativeCallObservationSchema, type RateLimitFact, type PluginNames, type NativeCallObservation } from './internal/observation.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DELEGATION_PRINCIPAL_CLASSES, DEFAULT_DELEGATED_CLASSES, delegatedUseConsentSchema, delegatedUseOf, subscriptionDelegationRefusal, subscriptionRawUseRefusal, subscriptionConsent, delegationPrincipalClass, delegationOwner } from './internal/delegation.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DelegatedUseConsent, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DelegationPrincipalClass } from './internal/delegation.js';
 export { headlessRejectionBodySchema, headlessEgressSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ headlessEgressReasonSchema, headlessEgressReasons, readHeadlessEgress, readHeadlessRejection, HEADLESS_EGRESS_HOST, NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessEgress, type HeadlessEgressReason, type HeadlessRejectionBody } from './internal/headless-rejection.js';

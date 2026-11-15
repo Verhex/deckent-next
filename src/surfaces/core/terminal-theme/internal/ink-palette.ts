@@ -13,7 +13,7 @@ export type WorklineInkRole = 'model' | 'provider' | 'accent' | 'muted' | 'user'
 
 export type InkRoleStyle = Readonly<{ color?: string; backgroundColor?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
 
-export type WorklineInkPalette = Readonly<Record<WorklineInkRole, InkRoleStyle>>;
+export type WorklineInkPalette = Readonly<Record<WorklineInkRole, InkRoleStyle> & { tier: ColorTier }>;
 
 const ANSI16_NAME: Readonly<Record<string, string>> = {
   '30': 'black', '31': 'red', '32': 'green', '33': 'yellow', '34': 'blue', '35': 'magenta', '36': 'cyan', '37': 'white',
@@ -111,7 +111,7 @@ export function resolveWorklinePalette(tier: ColorTier, theme: PaletteTheme = 'd
     out[worklineRole] = Object.freeze(roleStyle(theme, paletteRole, tier, background));
   }
   for (const [role, style] of Object.entries(ATTRIBUTE_ROLES) as [AttributeRole, InkRoleStyle][]) out[role] = Object.freeze(tier === 'none' ? {} : style);
-  return Object.freeze(out) as WorklineInkPalette;
+  return Object.freeze({ ...out, tier }) as WorklineInkPalette;
 }
 
 /** Default host-theme ansi16 mapping for tests and provider fallback. */

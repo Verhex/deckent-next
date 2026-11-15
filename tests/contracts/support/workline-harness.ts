@@ -1,3 +1,4 @@
+import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { panelFixture } from './workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, Fragment, StrictMode } from 'react';
@@ -22,7 +23,7 @@ const work: WorkSurfaceLabels = { jobs: EN_WORK.jobs, workerLine: WORKER_LINE_EN
 export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED',
-  runUsage: 'USAGE', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
+  runUsage: 'USAGE', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', decisionArm: decisionArmLabels('en'),
   render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
@@ -75,4 +76,12 @@ export function mountWorkline(props: Partial<WorklineProps>, columns = 200, obse
   }) })), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: observation.debug ?? true,
     interactive: true, exitOnCtrlC: false, patchConsole: false });
   return { stdout, stdin, instance };
+}
+
+/** Owner 108: the visible text line proves arming; the first Enter chooses nothing and restores the actual keys. */
+export async function exitTypedText(view: Pick<ReturnType<typeof mountWorkline>, 'stdout' | 'stdin'>, locale: 'en' | 'tr' = 'en', hints = 'Enter confirm') {
+  const labels = decisionArmLabels(locale), compact = (text: string) => text.replace(/[│┃\s]+/gu, '');
+  await until(() => compact(view.stdout.frame).includes(compact(labels.typedText)), 'armed typed-text line');
+  view.stdin.write('\r');
+  await until(() => compact(view.stdout.frame).includes(compact(labels.unchosen)) && compact(view.stdout.frame).includes(compact(hints)), 'nothing chosen and normal key hints');
 }

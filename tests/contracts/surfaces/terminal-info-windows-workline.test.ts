@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerProviderConfig } from '#adapters/index.js';
-import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION, t } from '#platform/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { terminalAdminPorts, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import { terminalComposerLabels, worklineLabels, slashWindowLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -156,9 +156,10 @@ describe('information windows on the real workline (SW-1)', () => {
 
   it('/doctor groups the structured doctor report by area with chips; without it the doctor text is one section', async () => {
     const root = await project();
-    const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
+    const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', summary: { ok: 3, check: 1, failed: 1, untested: 0 }, host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
       company: { companyId: 'default' }, principal: { id: 'host:1000' }, secretStore: { backend: 'core.secret-store.encrypted-file@1', status: 'ready', code: null },
-      serviceConfig: 'stale', imageRefresh: { status: 'failed', reason: 'network', imageVersion: null }, installationBinding: { capability: 'supported', strength: 'machine', source: 'platform' },
+      serviceConfig: 'stale', imageRefresh: { status: 'failed', reason: 'network', imageVersion: null }, installationBinding: { capability: 'supported', strength: 'machine', source: 'platform',
+        filesystemIdentity: { status: 'available', kind: 'linux.ext4.statfs-fsid.v1' } },
       poolReadiness: { status: 'ready', drift: null }, shellRealm: null };
     const ports = admin(root, {}, { doctorReport: async sink => { sink.write(`${JSON.stringify({ message: 'a config warning' })}\n${JSON.stringify(report)}\n`); } });
     const view = await open({ info: ports.info });
@@ -167,6 +168,10 @@ describe('information windows on the real workline (SW-1)', () => {
     const frame = view.stdout.frame;
     expect(frame).toContain('[✓ 3 ok] [! 1 check] [✗ 1 failed]'); expect(frame).toContain('▸ Secret store [✓ ok]'); expect(frame).toContain('▸ Runtime service [! check]');
     expect(frame).toContain('Memory'); expect(frame).toContain('16000 MB');
+    expect(frame).toContain("deckent's workers and sandbox cannot read them; other programs running as your user can.");
+    const tr = (await admin(root, {}, { locale: 'tr', doctorReport: async sink => { sink.write(JSON.stringify(report)); } }).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+    expect(infoModelText(tr).join('\n')).toContain("deckent'in işçileri ve yalıtım alanı bu anahtarları okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir.");
+    expect(frame).toContain('Filesystem identity: available (linux.ext4.statfs-fsid.v1)');
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Health: 3 ok · 1 to check · 1 failed`), 'doctor summary');
     const text = (await admin(root, {}).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
@@ -188,13 +193,22 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(text).toContain('deckent doctor');
   });
 
-  it('the real `deckent doctor --json` command feeds the structured window (not the text fallback)', async () => {
+  it('the real doctor command shares its check counts with the window when the pool is unconfigured (EN/TR)', async () => {
     const root = await project(), env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
-    const ports = admin(root, {}, { doctor: sink => runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: sink, stderr: sink }),
-      doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', 'en'], { root, env, stdout: sink, stderr: sink }) });
-    const text = infoModelText((await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model);
-    expect(text).toEqual(expect.arrayContaining(['> This computer', '> Company and person']));
-    expect(text.join('\n')).not.toContain('could not be read');
+    for (const locale of ['en', 'tr'] as const) {
+      let json = '', human = '';
+      await runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: { write: chunk => { json += chunk; } } });
+      const report = JSON.parse(json.trim().split('\n').at(-1)!);
+      expect(report.poolReadiness.status).toBe('unconfigured');
+      expect(report.summary.check).toBeGreaterThan(0);
+      await runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: { write: chunk => { human += chunk; } } });
+      expect(human).toContain(t('doctor.summary.warnings', { n: report.summary.check }, locale));
+      const ports = admin(root, {}, { locale, doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) });
+      const model = (await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+      expect(model.summary).toBe(t('terminal.info.doctor.summary', report.summary, locale));
+      expect(model.sections.find(section => section.title === t('terminal.info.doctor.section.pools', {}, locale))?.chip?.state).toBe('warn');
+      expect(infoModelText(model).join('\n')).not.toContain('could not be read');
+    }
   });
 
   it('/scope shows human labels with identities muted after them, and names a part it could not read', async () => {

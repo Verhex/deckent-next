@@ -156,6 +156,10 @@ provider protocol or public surface is added. Proof: `proof/HARDCODE-P1-B-2026-1
 
 **Kurulum bağı v2 (IDENTITY-BINDING-V2, 2026-10-06, `wave/2`).** Yazım expand/contract: platform makine bağı alpha.6 v1 şeklinde yazılır; v2 kaydı `binding.schemaVersion: 2`, `strength: 'machine' | 'weak'`, `source: 'configured' | 'platform' | 'location'`; kimlik kaydı `schemaVersion: 2` kalır, eski v1 (makine gücü) okunur ve eşleştiği sürece yeniden yazılmaz. Ham makine değeri kayıt/çıktı/loga girmez; yalnız sabit uygulama anahtarlı HMAC (`deckent.installation-binding.v1`). Yapılandırılmış kaynak: mutlak yol, salt okunur, symlink izlenir (secret/downward API `..data`), normal dosya, `identityProbe.outputBytes` sınırı, 16–256 karakter `[A-Za-z0-9._:-]` belirteç, tek tekrar eden karakter/sıfırlar reddedilir; bozuksa okuma ve yazma yolunda `INSTALLATION_IDENTITY_SOURCE_INVALID`. Karşılaştırma (engine `assessInstallationBinding`): konum farkı → RELOCATED; makine kaydı + makine yakalama → digest; makine kaydı + yalnız zayıf yakalama → RELOCATED (alpha.6 atlıyordu); zayıf + zayıf → eşleşme; zayıf kayıt + aynı konumda makine yakalama → yazma yolunda güçlendirme. Yükseltme: read yolu `pendingWrite` bildirir, dosya/dizin/kilit yazmaz; bağsız v1 kayıt yalnız zayıf bağ mümkün ortamda sonraki yazma yolunda (kimlik yazma kilidi altında, kilit içinde yeniden yakalama) v2 zayıfa yükselir; makine kimlikli ortamda açık `--keep/--new` değişmedi. `installation.requireMachineBinding` true iken makine kanıtı yoksa her kuruluma bağlı yazma (ilk oluşturma, bağlama, güçlendirme, `--keep/--new`) tipli `INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED`; okumalar raporlar, taşınmış makine kaydında önce RELOCATED. `InstallationIdentityRead` eki `binding: { strength, source }`, `pendingWrite`; `bindingCapability: 'supported'` artık herhangi bir bağ demektir. Doctor EN+TR bağ gücü/kaynağı ve requireMachineBinding sonucu; JSON `installationBinding: { capability, strength, source, required }`. `init policy --apply` kimlik deposunu yerleşik yapılandırmanın installation ayarlarıyla kurar. Yazma kabulü (Astra 2382 P1-3): `init policy --apply` ve `init apply/resume` kimlik yazma kurallarını `InstallationIdentityStore.admitWrite()` ile ilk kalıcı etkiden (journal, policy, bindings, config, ledger) önce salt okuma olarak uygular; apply/resume journal kilidi altında hedeflerden önce yeniden uygular; ret durumunda dosya veya journal yazılmaz. Config alanları: `installation.machineIdentity.source` (`null` | mutlak yol; değer gösterilmez/loglanmaz), `installation.requireMachineBinding` (boolean, varsayılan `false`). Rollback: platform makine bağlı kurulumlar etkilenmez; weak/configured kayıtlar alpha.6'da INVALID okunur (kurtarma owner-decisions'ta). Proof `proof/W2-BINDING-V2-2026-10-06/`; Astra incelemesi bekliyor.
 
+**bootstrap-identity / installation-files — v3 okuyucu (owner 78/81, 2026-11-12).** beta.2 (R) alt bağ v3'ü okur, yazmaz; beta.2.1 (R+1) yazarı ayrı karttır. Dış kimlik kaydı v2, realm-sealed dış v3 olarak kalır. Alt v3: machine gücü, source configured|platform, machineDigest, canonicalRoot, device, inode ve sıkı `filesystemIdentity: { kind, value }` (128/256 karakter sınırı). Tek karşılaştırma sahibi `assessInstallationBinding`: M/R/I + aynı kind/value → match, device bilgi; kayıp kimlik, farklı tür/değer veya weak → relocated, device kuralına dönüş yok. Eski v1/v2/weak kuralları korunur. `retainedInstallationBinding` dönüş tipi yalnız v1/v2'dir; yakalamadaki filesystemIdentity alanı bütün yazmalarda ayıklanır. Eşleşen v3 normal okuma ve loadOrCreate yolunda dosya/kilit yazmaz; `--keep/--new` v3'ü INSTALLATION_IDENTITY_NEWER_BINDING ile ezmeden reddeder, kilit içi tekrar denetim yarışa karşı kalır.
+
+Linux üreticisi mevcut local-runtime-socket native modülünde açılmış dizin üzerinde tek `fstatfs` çağrısıdır (alt süreç/udev yok); fsid iki 32-bit kelimenin word[0]/word[1] sıralı 16 küçük harf hex (GNU stat %i sırası) gösterimidir, UUID değildir. `installation-files/internal/filesystem-identity-registry.json` yalnız ext4'ü `linux.ext4.statfs-fsid.v1` olarak açar; diğer tür/platformlar unavailable kalır. Shared `platform/host` mountinfo ayrıştırıcısı personal custody ile ortaktır; en uzun kapsayan mount, kök `/`, aygıt ve statfs türü denetlenir, sıfır kimlik ve değişen dizin reddedilir. Native yoksa unavailable; platform/configured makine bağına etkisi yoktur. Doctor `installationBinding.filesystemIdentity` içinde yalnız `{ status: available, kind }` veya `{ status: unavailable, reason }` verir; değer yayınlanmaz. beta.2'de F1 ve eklenmiş klasörlerin kurtarma sınırı sürer; bu gözlem yeni yazarı etkinleştirmez. Lead kararı (2026-11-12): yalnız dizinin kendi en uzun kapsayan mount kaydı denetlenir; başka yerdeki tam-kök alias (ör. WSLg) aynı dosya sistemidir ve ret üretmez. Kendi mount'unun `root` alanı `/` olmayan alt-dizin bind reddedilir; başka dosya sistemi kendi fsid'siyle değerlendirilir.
+
 **Hata kataloğu temizliği ve doctor birimi (`wave/2`).** `src/platform/core/errors` registry'sinde numaralı legacy kod yoktur (80 `DECKENT_Exxx` + `INVALID_RUN_ID`, `INVALID_PHASE`, `CONFIG_ALIAS_CONFLICT` silindi; `DECKENT_E004` → `CONFIG_FILE_INVALID`, çıkış 78); `errors-output` sözleşme testi src'de başvurulmayan her kodu reddeder; bilinmeyen kod `error.unknown` metnine düşer. `LAYOUT_*` (5 kod) EN/TR `governance.json` cümleleriyle `validate/issues.ts` render noktasında `KOD: cümle` olur, `issues[].reason` ham kod kalır; `LayoutError` doğrudan çağrıda hâlâ yalın kod taşır (açık takip). `DispatchError` kodları (`DISPATCH_ARTIFACT_REQUIRED|CONFLICT|NOT_ADMITTED|PROFILE_VALIDATION_REQUIRED`) registry'ye eklendi; `queryFailure` tipli kodu yalnız registry'de varsa korur, sahte `{code}` taşıyan hata `INVENTORY_UNAVAILABLE` kalır. SDK `createCrossVerifyContractError`, `createExecutionAuthorityError`, `createExecutionAdmissionError`, `createDockerLifecycleError` export'tan çıktı. `src/surfaces/core/doctor` (bağımlılık: engine/toolchain-currency, platform/i18n) `renderDoctorReport`, `shellRealmLines`, `installationBindingLines`, `imageRefreshText` taşır; toplama `cli`'da kalır (doctor→cli bağımlılığı döngü olurdu); cli birimi 2003 → 1976 satır, bütçe 2000.
 
 ## SQLite ledger concurrency (R6)
@@ -183,3 +187,40 @@ alpha.47, evidence `deckent-refactor-work/proof/ALPHA47-2026-10-18/HANDOFF-S0-S1
 - **Service manager:** terminal/`runtime restart` refuses a service that systemd runs only when systemd confirms it: `/proc/<pid>/cgroup` names
   a candidate unit (a `<name>.service` leaf counts, `user@N.service` and `.scope` leaves do not) and `systemctl [--user] show -p MainPID` (2 s bound)
   must report this process; with no bus or no answer the check is off. It names `systemctl [--user] restart <unit>`.
+
+
+**bootstrap-identity — beta.2 yeniden bağlama tüketicisi (owner 79/88/92/94, 2026-11-12).**
+`classifyInstallationRebinding` yalnız relocated için tek saf sınıflandırıcıdır: makine gücündeki v1 veya
+v2 machine kayıt ve machine yakalama aynı digest/kök/inode, farklı device taşıyorsa device-only; diğerleri moved.
+V3 yazıcı çiti önce işler. `resolveRelocation` keep için zorunlu sınıf/dayanak alır, new açık kalır; kilit altında
+yeni yakalamada açık sınıfın moved'a dönüşmesi reddedilir, moved kabulü her iki sınıfı da karşılar.
+Bind/strengthen değişmez. Device-only policy okumadan herkese açıktır. Moved sırası aynı project.attach tanığı
+(iki env'de AI işareti), dosyada doğrudan adlandırılmış installation/rebind/moved allow + scopes all,
+statik macOS sade proje istisnası, tipli INSTALLATION_IDENTITY_REBIND_REQUIRED reddidir.
+Kural eşleştirmesi ledger/kapsam üyeliğini açmaz; FilePolicySource mevcut dosya güvenliğiyle taze revizyonu okur.
+Her kapsamda deny/restriction/require-approval, wildcard ve rol kaynaklı retler kuralı kapatır; roller izin vermez.
+MacOS sade koşulu attachment lifecycle kilidinde kurulum/kök/entry ve unregistered geçmişini denetler;
+aynı kullanıcının ilgisiz kaynağı istisnayı kaldırmaz. Yedek restore witnessed=true değeri terminal tanığı değildir:
+attachment keep portu yalnız açık sınıfı kabul eder; normal authorize edilmiş yol human-tty verir.
+CLI sınıf/dayanağı geçici kardeş alanlarda gösterir; lastResolution ve installationIdentityResolutionSchema
+aynıdır. Kayıtlı kaynak kendi klasöründe eski reddi korur; başka klasörde kişi/kural kimliği bağlar, bağlantı
+kayıtlarını uzlaştırmaz. Kurum politikası kişi/açık onarımı daraltamaz. Kopyayla taşınan kural, aynı hesapta
+işaretsiz PTY, doğrudan dosya düzenleme, weak bağ, clone/snapshot ve eski binary sınırları için
+[Installation moved](../../../../docs/known-limits.md#installation-moved) geçerlidir; bu sınırlar ürün kabulü değildir.
+
+
+**project-attachment — beta.2 okuyucusu (r7, owner 78/81/96/104).** Domain eski kurucu şemaları ayrı tutar;
+okuma şemaları L2 (dosya sistemi kimliği zorunlu attachment v2), L1/L2 kaynak ve isteğe bağlı lineage taşıyan
+registration v3 kabul eder. Envanterin kimlik/şirket/tekillik kuralları korunur; lineage geçmişi tekildir,
+headDevice içermez ve uzunluğu max(1, entries.length) ile sınırlıdır. Saf L2 değerlendirmesi kök/inode/tür/değer
+ister; üretici yoksa aygıta düşmez. L1 aynı kök/device/inode kuralını korur. Yerel referans ile envanter kopyası
+birebir aynı kalmalıdır. Adapter tek gözlem portundan yalnız saklanan L2 için dosya sistemi kimliğini ister.
+V3 okuma ham cap+884+51·floor(cap/600) ve normalize cap koşullarını birlikte uygular; N lineage/unregistered
+alanlarını çıkarır, durumları active, en çok 20 basamaklı device değerlerini 0 sayar; uzun eski device metinleri
+aynen sayılır. Motor mutasyonları ve ilk oturum hazırlığı ilk etkiden önce, depo ve gerçek yayına bağlanmış
+ilk oturum referans yazıcısı ikinci sınırda yeni biçimi PROJECT_ATTACHMENT_NEWER_RECORD ile reddeder.
+Referans yazıcısı hem gelen hem saklı attachment v2 kaydını korur. Tek istisna, kilitte yeniden okunan ham kayda uygulanan
+revoke/detach/unregister 104 yazıcısıdır: sürüm, anahtar sırası, lineage, kaynak ve diğer girdiler korunur;
+N değişmediği için yeni normalize boyut reddi yoktur. Shared backup v2 referans veya mevcut v3 envanterle
+publication öncesi reddedilir. Lineage onarım algoritması uygulanmaz; kaynakta uyuşmayan etkin girdilerin
+saf sayımı ve ATT-D doctor satırı kaynakta bağlıdır; birleştirilmiş sürümün kabulü release yürüyüşündedir.

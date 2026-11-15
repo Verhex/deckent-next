@@ -151,6 +151,8 @@ describe('picker core: blocked rows', () => {
 describe('picker core: keys and numbered fallback', () => {
   it('printable keys filter (j and k included); control and meta chords do not', () => {
     expect(pickerActionOf('j', {}, 'list')).toEqual({ type: 'type', text: 'j' });
+    // Shift+Enter is a new line, never a selection, at every stage (Ctrl and Alt Enter were already no action).
+    for (const stage of ['list', 'scope'] as const) { expect(pickerActionOf('\r', { return: true, shift: true }, stage)).toBeNull(); expect(pickerActionOf('\r', { return: true }, stage)).toEqual({ type: 'enter' }); }
     expect(pickerActionOf('k', {}, 'list')).toEqual({ type: 'type', text: 'k' });
     expect(pickerActionOf('x', { ctrl: true }, 'list')).toBeNull();
     expect(pickerActionOf('x', { meta: true }, 'list')).toBeNull();

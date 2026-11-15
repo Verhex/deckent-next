@@ -191,7 +191,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   only one decision is drawn at a time (`useDecisionQueue`, "n/total"). Every decision window (`decision` or approval priority) is gated in
   `Window`, fail closed: it counts keys only after `decision.json` `armMs` (300) with no key at all from the moment it became the visible
   input owner (`arming.ts`; each key while unarmed restarts the wait, a focus change or a new card instance re-arms; the hint row shows the
-  keys only once armed — `terminal.decision.arming` / `.ignored` before — so a person and a PTY test wait on the same visible signal, CI 2026-10-18); keys of one stdin read
+  keys only once armed — `terminal.decision.arming` before — so a person and a PTY test wait on the same visible signal, CI 2026-10-18); keys of one stdin read
   are gathered and looked at after the read — one event is a key press; several (escape sequence + letter, "text⌫y") are dropped whole unless
   the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision — except a read of
   navigation keys only (↑↓, PgUp/PgDn, Home/End without modifiers: a held key or coalesced arrows), delivered as ordinary keys because they
@@ -202,9 +202,42 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   yes or no answer declares `role: 'yes' | 'no'` (never a hand `key`) and `optionKey` derives (y)/(n) in every locale for the row suffix and
   the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`
   window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
-  questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` (Enter cancels) and the onboarding question view are
-  separate and unchanged. Each step of the guided setup window (`setup-window.tsx`) and of the SIWC card mounts its own `Window` (keyed
-  per step), so every step re-arms and a digit plus Enter typed for one step never answers the next (alpha.58). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
+  questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` retains Enter-as-cancel; onboarding has its separate
+  decision-107 guard. Owner decision 108 (2026-11-14): every guarded `Window` (`decision` or approval priority) owns one ephemeral typed-text
+  state. Every step that confirms or applies an effect is such a window: the project-instruction trust and init windows, the `/policy`
+  preview (its rows are chosen through the Window, not through a child picker's own key handler), the `/config` protected-value
+  preview, operations-baseline offer and record preview, an `InfoWindow` with choices (budget confirm, write-off), the number stepper
+  (`ConfigNumberWindow`), and in every `PickerWindow` the scope stage (`/config` layer, `/model` scope) and every stage of a `confirm`
+  list (budget confirm, cache migration, `/model` fix and shadow lists, the subscription consent list). A guarded list stage takes its
+  keys only through the Window (`ListPicker` `guarded` + `keys`: its own key handler ignores that stage, read from the state ref, so a
+  second Enter of the same stdin read cannot pass) and has no type-to-filter. A confirmation owner returns `true` only for keys it
+  acted on, so the Window sees every other letter. Shift+Enter, like Ctrl/Alt+Enter, is a new line and never reaches a window's owner.
+  Not confirmation steps: catalog and command lists with a filter (`/mode`, `/theme`, `/reasoning`, `/model` and `/provider` rows,
+  `/mcp` actions), where typing is the filter and Enter takes the highlighted row of the filtered list, some at once; see the known
+  limits. A window that stops being a decision forgets typed text. Each guarded window owns one typed-text
+  state. A rejected burst, an unconsumed paste or an unhandled printable key starts it. Owner decision 109 (2026-11-14) refines early input:
+  exactly one printable character swallowed as a single-key read during the entire unarmed period is remembered. Once armed, only the
+  same character is delivered as a first key; another printable key starts typed text, and an unhandled repeat does too. Two or more
+  early printable characters, a paste or a mixed/ambiguous read containing text start typed text. No owner-specific key knowledge is used.
+  Only those keys clear the remembered character: its own repeat, typed-text entry, the plain Enter that chooses nothing, or a delivered
+  navigation key. A focus round trip, a rejected read's re-arm and a new `inputRevision` keep it (as they keep typed text), so the card
+  re-arms into the same repeat row; the swallowed press itself never answers any question. A new `inputRevision` is unarmed from its first
+  render (`useQuietArming`), before the wait restarts, so the previous question's keys are neither drawn nor counted for a frame.
+  The threshold of one is a code invariant; there is no new timer or persistence. While unarmed, including after
+  swallowed input, the hint row always keeps `terminal.decision.arming`; armed with one early key it shows `.ignored`
+  (EN "Key not counted: this card just opened · press it again" / TR "Tuş sayılmadı: kart yeni açıldı · yeniden basın"). Armed typed text
+  shows `terminal.decision.typedText` through the shared
+  EN/TR decision labels, so the requested Enter or arrow counts exactly when those words appear. Later printable keys (including answer letters, digits,
+  j/k and space) never reach the owner. Plain Enter ends typed text or the remembered early key without answering and shows `terminal.decision.unchosen`
+  (EN "Nothing was chosen." / TR "Hiçbir şey seçilmedi.") followed by the normal key hints, until the next handled key or re-arm; arrows
+  and PgUp, PgDn, Home and End end it and restore plain key hints, without that note, and are delivered normally. Esc, Ctrl+C, Tab, Ctrl+Y copy and Ctrl+O retain their meanings. Ctrl+Y and Alt+y alone are not text;
+  an ambiguous coalesced Ctrl+O+y read containing a printable letter starts typed text and never decides (fail closed). An open reason field
+  (`burstText`) and non-guarded entry windows retain text editing. The first answer key on an armed card still answers immediately;
+  Enter without prior text or a remembered early key still accepts the highlighted row. The owner-accepted residual is the same offered
+  character twice with a quiet pause while a card opens (including `a` for an offered Always grant), plus the unchanged first-key rule on a ready card. `armMs` (300), burst classification and paste rejection are unchanged.
+  Setup keeps its `Window` mounted and changes `inputRevision` to re-arm each new question, retaining text typed while an answer was
+  being applied; no setup-local flag or ignored-text callback remains. SIWC still mounts a new `Window` per stage. Workline, CLI-card,
+  setup, SIWC and standalone onboarding-provider hosts supply catalog words. No typed state is persisted. In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.
   Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
   https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line
@@ -307,6 +340,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   **Card input (owner 2026-11-02, A62-FIX4):** every onboarding card ignores arrows and Enter for `presentation.json`
   `cardInputGuardMs` (initially 500 ms) after its first render flush; Esc still means Later. Only the welcome choice card yields to
   typing; permission, security and person-witness cards retain their authority and confirmation rules.
+  Owner decision 107 (2026-11-14): on choice-only onboarding cards, ignored typing or paste also blocks the next Enter and shows
+  an EN/TR hint; Enter again or an arrow followed by Enter chooses normally. Paste content never selects a choice. Welcome and
+  text-entry cards keep their input behavior; the render-flush guard is unchanged.
   Worker setup and Git are not prerequisites for ordinary terminal turns. A `/do` refusal may use the normal turn directly only when
   the existing `localRunOffer` predicate permits that exact refusal, with fresh policy/profile/pool-pause recheck before the turn.
   Missing model: a single `/provider` direction; other refusals keep their own path. Mode, sandbox, tool approvals and invocation

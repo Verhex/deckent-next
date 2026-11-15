@@ -21,15 +21,21 @@ async function tree(files: Record<string, string | Buffer>) {
 }
 
 describe('one deny list and one pattern table', () => {
-  it('drives the worker gate with the terminal credential floor itself (same list, not a copy)', () => {
+  it('drives the worker gate with the terminal credential floor itself (same list, not a copy)', async () => {
     expect(WORKER_TREE_DENY).toBe(CREDENTIAL_WORKSPACE_DENY);
     // The terminal's full-access deny view starts with the same list; its default view is the full floor plus repository internals.
     const layout = resolveProductLayout({ projectRoot: '/project' });
     expect(agentWorkspaceDeny('/project', layout, true).slice(0, CREDENTIAL_WORKSPACE_DENY.length)).toEqual(CREDENTIAL_WORKSPACE_DENY);
     expect(DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !CREDENTIAL_WORKSPACE_DENY.includes(pattern))).toEqual(['.git/**', '**/.git/**', '.git', '**/.git']);
-    for (const path of ['.env', 'config/.env.production', 'certs/server.pem', 'keys/deploy.key', 'a/id_rsa', '.npmrc', 'home/.aws/credentials']) {
+    for (const path of ['.env', 'config/.env.production', 'certs/server.pem', 'keys/deploy.key', 'a/id_rsa', '.npmrc', 'home/.aws/credentials',
+      '.claude/.credentials.json', '.config/cursor/auth.json']) {
       expect(CREDENTIAL_WORKSPACE_DENY.some(pattern => createGlobMatcher(pattern)(path)), path).toBe(true);
     }
+    const root = await tree({ '.claude/.credentials.json': 'synthetic', '.config/cursor/auth.json': 'synthetic',
+      '.claude/settings.json': '{}', '.config/cursor/cli-config.json': '{}' });
+    expect(await scanWorkerTree(root, options)).toEqual({ status: 'refused', count: 2, findings: [
+      { path: '.claude/.credentials.json', rule: 'deny-path:**/.credentials.json' },
+      { path: '.config/cursor/auth.json', rule: 'deny-path:**/.config/cursor/auth.json' }] });
   });
   it('declares a gate decision on every redaction row; the shipped selection is the measured, reviewable one', () => {
     expect(REDACTION_PATTERNS.every(row => typeof row.gate === 'boolean')).toBe(true);

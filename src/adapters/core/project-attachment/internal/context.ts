@@ -1,7 +1,7 @@
 import { delegationOwner, installationSourceSchema } from '#domain/index.js';
 import { attachmentFailure, type InstallationContextPorts } from '#engine/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
-import { FileProjectAttachmentStore, captureAttachmentLocation } from './store.js';
+import { FileProjectAttachmentStore, captureAttachmentLocation, observeAttachmentFilesystemIdentity } from './store.js';
 import type { ResolvedConfig, ConfigLoadOptions } from '#platform/index.js';
 /** Reconstruct the selected source from its current configuration and policy, never from a caller-supplied layout alone. */
 export async function inspectInstallationSourceFiles(config: ResolvedConfig, scopeId: string, actor: { readonly issuer: string; readonly subject: string }, authorize: () => Promise<void>) {
@@ -19,7 +19,7 @@ export async function inspectInstallationSourceFiles(config: ResolvedConfig, sco
 }
 export function localInstallationProjectContextPorts(config: ResolvedConfig, options: ConfigLoadOptions, source: InstallationContextPorts['source']): InstallationContextPorts {
   const store = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
-  return { registration: () => store.registration(), attachment: () => store.attachment(), source,
+  return { registration: () => store.registration(), attachment: () => store.attachment(), source, observeFilesystemIdentity: observeAttachmentFilesystemIdentity,
     target: async () => { const project = await new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs).read();
       return { ...await captureAttachmentLocation(config.projectRoot), projectId: project.status === 'available' ? project.value.projectId : null }; },
     legacy: () => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read() };

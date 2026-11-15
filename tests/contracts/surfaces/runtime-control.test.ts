@@ -47,8 +47,14 @@ describe('runtime control surfaces', () => {
     const base = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output, initialize() {} };
     const readiness = { mode: 'started' as const, instanceId: 'instance-c', pid: 4343, logPath: null, shutdownAvailable: true, build: null };
     expect(await main(['runtime', 'restart'], { ...base, async describeRuntimeService() { throw Object.assign(new Error('absent'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
-      async restartRuntimeService() { restarts++; return readiness; } })).toBe(0);
-    expect(restarts).toBe(1); expect(output.values.join('')).toContain('was not running; started it in the background (pid 4343');
+      async restartRuntimeService() { expect(output.values.join('')).toContain('waiting for the new service to answer'); restarts++; return readiness; } })).toBe(0);
+    expect(restarts).toBe(1); expect(output.values.join('')).toContain('Waiting for the deckent service to restart');
+    expect(output.values.join('')).toContain('was not running; started it in the background (pid 4343');
+    const json = sink();
+    expect(await main(['runtime', 'restart', '--json'], { ...base, stdout: json.output, stderr: json.output,
+      async restartRuntimeService() { expect(json.values).toEqual([]); return readiness; } })).toBe(0);
+    expect(JSON.parse(json.values.join(''))).toEqual(readiness);
+
   });
 
   it('BeUser D-01: a restart that stops a running worker image build says so (never silently)', async () => {

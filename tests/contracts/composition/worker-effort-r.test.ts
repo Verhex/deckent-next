@@ -74,7 +74,7 @@ describe.skipIf(process.platform === 'win32')('WORKER-EFFORT-R real admission �
       let output = '';
       await runCommand(['run', 'inspect', '--scope', 's', '--id', request.runId, '--lang', lang],
         { inspectRun, root: f.project, env: f.options.env, stdout: { write(chunk: string) { output += chunk; return true; } } } as never);
-      expect(output).toContain(lang === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra registry hedefi gerekir');
+      expect(output).toContain(lang === 'en' ? 'Ultra requires explicit effort or an Ultra registry target' : 'Ultra için açık efor isteği veya Ultra kayıt hedefi gerekir');
       expect(output).toContain(lang === 'en' ? 'CLI default' : 'CLI varsayılanı');
     }
     // Replayed requests preserve the frozen boundary even after an installation opts in to Ultra.

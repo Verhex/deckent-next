@@ -45,7 +45,8 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
         decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); },
       withdrawDelivery: ref => withQueueContext(root, ref.scopeId, options, undefined, false, async queue => { const record = await queue.app.inspect(ref.scopeId, ref.id, queue.principal); if (!record || record.revision !== ref.revision || record.state !== ref.state || JSON.stringify(record.request.identity) !== JSON.stringify(ref.identity)) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED'); await queue.app.cancel(record, queue.principal); }) },
     // F6: queue authority is decided from the owner's typed observation bound into D0; no queue context or SQLite is opened before the card.
-    async preflight(plan, principal) { const document = await policy(); await authorizeUninstallSteps(document, plan, principal, scopeId);
+    async preflight(plan, principal) { if (plan.purge && config.installation.sharedRegistrationId) await attachmentLifecycle(config, options).assertWritable();
+      const document = await policy(); await authorizeUninstallSteps(document, plan, principal, scopeId);
       if (plan.steps.withdrawDeliveries.length && !config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
       const delivery = plan.steps.withdrawDeliveries[0];
       if (delivery) try { assertQueueWorkTarget(config.execution ? selectWorkTarget(config.execution) : null, await resolveGitWorkTarget(root, config.execution, layout)); }

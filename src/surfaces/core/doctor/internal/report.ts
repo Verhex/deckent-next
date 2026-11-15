@@ -1,6 +1,6 @@
 export interface InstallationStartabilityView { readonly status: 'ready' | 'blocked'; readonly endpoint: string | null; readonly checks: readonly { readonly code: string; readonly message: string }[] }
 import { renderAuditStatus, renderAuditReason } from './audit.js';
-import { t, type Locale } from '#platform/index.js';
+import { t, messageText, type Locale } from '#platform/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, FILE_SECRET_STORE_ID, type ToolchainCurrencyReport } from '#engine/index.js';
 
 /** One realm resolution as doctor shows it (the adapter's `ShellRealmReport` shape; surfaces keep their own view). */
@@ -12,7 +12,8 @@ export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mod
 /** The worker image refresh status as doctor shows it (WORKER-AUTO-REFRESH). */
 interface ImageRefreshDoctorView { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }
 /** Doctor's installation binding view: strength and source kind only, never a machine value, digest or configured path. */
-export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
+export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean;
+  readonly filesystemIdentity?: Readonly<{ status: 'available'; kind: string } | { status: 'unavailable'; reason: string }> }
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
 interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
   readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
@@ -58,7 +59,12 @@ function imageRefreshText(view: ImageRefreshDoctorView, locale: Locale, imageId?
 }
 const installationBindingLines = (r: InstallationBindingReport, platform: string, locale: Locale): string[] => [r.capability === 'source-invalid' ? t('doctor.installationBinding.sourceInvalid', {}, locale)
   : r.capability === 'unsupported' ? t('doctor.installationBinding.unsupported', { platform }, locale) : r.strength === 'weak' ? t('doctor.installationBinding.weak', {}, locale)
-    : t('doctor.installationBinding.machine', { source: r.source === 'configured' ? t('doctor.installationBinding.source.configured', {}, locale) : t('doctor.installationBinding.source.platform', {}, locale) }, locale), ...(r.required && r.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
+    : t('doctor.installationBinding.machine', { source: r.source === 'configured' ? t('doctor.installationBinding.source.configured', {}, locale) : t('doctor.installationBinding.source.platform', {}, locale) }, locale),
+  ...(r.filesystemIdentity ? [filesystemIdentityText(r.filesystemIdentity, locale)] : []), ...(r.required && r.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
+export function filesystemIdentityText(view: NonNullable<InstallationBindingReport['filesystemIdentity']>, locale: Locale): string {
+  return view.status === 'available' ? t('doctor.filesystemIdentity.available', { kind: view.kind }, locale)
+    : t('doctor.filesystemIdentity.unavailable', { reason: messageText(`doctor.filesystemIdentity.reason.${view.reason}`, locale) ?? view.reason }, locale);
+}
 /** The realm lines in the product's own sandbox words (the result marker, then the notice the live stream shows); no catalog text. */
 function shellRealmLines(report: ShellRealmDoctorView, locale: Locale): string[] {
   const lines = (view: ShellRealmSelection, label: string) => [`${view.selected === 'host' ? t('doctor.sandbox.host', {}, locale) : view.selected ? t('doctor.sandbox.selected', { realm: view.selected }, locale) : t('doctor.sandbox.refused', { code: view.code ?? '-' }, locale)} [${label}]`,

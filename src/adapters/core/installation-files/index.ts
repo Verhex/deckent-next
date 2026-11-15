@@ -1,4 +1,5 @@
 export { localInstallationBindingSource } from './internal/installation-binding.js';
+export { inspectFilesystemIdentity, type FilesystemIdentityObservation } from './internal/filesystem-identity.js';
 export { FileInstallationIdentityStore } from './internal/installation-identity.js';
 export { InstallationFileError, inspectInstallationFile, readInstallationFile, publishInstallationFile } from './internal/publication.js';
 export { FileProjectIdentityStore } from './internal/project-identity.js';
