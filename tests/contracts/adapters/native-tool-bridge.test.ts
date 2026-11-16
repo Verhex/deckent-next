@@ -82,6 +82,17 @@ it('replays a pending and completed call once, refuses changed arguments and nev
   expect(resultEnvelope(await f.send(rpc(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
 });
 
+it('serves the ninth call through the registry budget of 128 calls and refuses the next call without an effect', async () => {
+  const { maxConnections, replayMaxEntries, replayMaxBytes } = registry.bridge;
+  const f = await fixture({ limits: { idleMs: 300, maxConnections: maxConnections!, replayMaxEntries: replayMaxEntries!, replayMaxBytes: replayMaxBytes! } });
+  const headers = await f.initialize();
+  for (let call = 1; call <= 128; call++) {
+    expect(resultEnvelope(await f.send(rpc(call + 1), { headers })).outcome).toEqual({ status: 'ok', text: 'scoped-result' });
+  }
+  expect(resultEnvelope(await f.send(rpc(130), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT');
+  expect(f.submit).toHaveBeenCalledTimes(128);
+});
+
 it('returns after waiting longer than the configured idle bound with SSE keepalive', async () => {
   const f = await fixture({}, async call => { await new Promise(resolve => setTimeout(resolve, 750)); return {
     schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'ok', text: 'approved-later' } }; });
