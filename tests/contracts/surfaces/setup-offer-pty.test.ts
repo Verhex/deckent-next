@@ -22,7 +22,7 @@ const python = (process.env['PATH'] ?? '').split(':').map(dir => join(dir, 'pyth
 const ROWS = 40, COLUMNS = 110;
 const CARD = 'There is no deckent installation here. Start setup?';
 const MISSING = 'No deckent installation in this folder. Run `deckent init` to set it up. [CLI_INSTALLATION_MISSING]';
-const SCOPE_REQUIRED = 'Select a scope: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]';
+const SCOPE_REQUIRED = 'In a new folder, run `deckent init` first. The scope id selects where your work and permissions apply: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]';
 /** Waits for each `[text, keys]` step's text in the output since the previous step, then types the keys one by one (never a burst). */
 const PTY = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time

@@ -112,7 +112,7 @@
   "cli.help.action.catalog": "Manage the worker model catalog",
   "cli.help.action.register": "Register installation-wide model facts",
   "cli.help.action.decide": "Decide an approval request",
-  "cli.help.action.renew": "Renew an approval request",
+  "cli.help.action.renew": "Renew an expired or denied task approval",
   "cli.help.action.vocabulary": "List the policy vocabulary",
   "cli.help.action.grants": "List standing grants",
   "cli.help.action.revoke": "Revoke a standing grant",

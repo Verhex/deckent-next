@@ -437,7 +437,7 @@ describe('/model source', () => {
     for (const id of ['coder', 'chat']) expect(row(id).fixes!.map(fix => fix.id)).toEqual(expect.arrayContaining(['brain-global', 'brain-project']));
     expect(row('fast').fixes!.some(fix => fix.id.startsWith('brain'))).toBe(false);
     expect(view.notes).toContain('No Brain model chosen: /do plans with the chat model. Recommended for planning: native-coder. Open one and choose “Use as Brain model”.');
-    expect((await source.setBrain!(row('coder'), 'project')).lines[0]).toBe('native-coder now plans /do work. Chat keeps its own model.');
+    expect((await source.setBrain!(row('coder'), 'project')).lines[0]).toBe('Planning choice saved: native-coder plans /do work once its role is assigned (see /roles). Chat keeps its own model.');
     expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'brain_planner.reference', layer: 'project', scopeId: 'scope', value: ref('coder') })]);
     // A project Brain keeps winning over a user one: the window says so instead of claiming the switch; nothing is suggested once one is chosen.
     const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;

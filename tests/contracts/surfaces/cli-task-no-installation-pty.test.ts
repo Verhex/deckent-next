@@ -96,7 +96,7 @@ describe.skipIf(process.platform === 'win32')('deckent task on a real PTY in a f
     expect(task.output, task.output).toContain('Scope for deckent task');
     expect(task.output).not.toMatch(/CLI_INSTALLATION_MISSING|No deckent installation/u);
     const bare = await onTerminal([], root, home);
-    expect(bare.output, bare.output).toContain('Select a scope: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]');
+    expect(bare.output, bare.output).toContain('In a new folder, run `deckent init` first. The scope id selects where your work and permissions apply: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`. [TERMINAL_SCOPE_REQUIRED]');
     expect(bare.output).not.toMatch(/CLI_INSTALLATION_MISSING|No deckent installation/u);
     expect(bare.status, bare.output).toBe(2);
   }, 120_000);
