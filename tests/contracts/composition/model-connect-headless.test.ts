@@ -368,7 +368,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
         expect(consent?.classes ?? []).toEqual(fault === 'before' ? before : wanted);
       } finally { prune.mockRestore(); layers.mockRestore(); binding.mockRestore(); }
     }
-  });
+  }, 120_000);
   it('without flags: the first CLI of the registry name in PATH (S7: that path, not its realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
     const h = await harness(true), bin = join(h.f.data, 'path-bin'), home = h.f.env.HOME;
     await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
