@@ -370,5 +370,6 @@
   "setup.attachment.title.detach": "Detach this project?",
   "setup.attachment.title.unregister": "Unregister this source installation?",
   "setup.attachment.title.relocate": "Update this project or source's recorded location?",
-  "setup.attachment.title.restore": "Restore this project's attachment?"
+  "setup.attachment.title.restore": "Restore this project's attachment?",
+  "cli.uninstall.backupCancelled": "Backup passphrase entry was cancelled. The runtime service was stopped before this step. Start it again with deckent runtime start."
 }

@@ -180,7 +180,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
 }, plainErrors('error.', { INSTALLATION_ROOT_FOREIGN: 'config', INSTALLATION_ROOT_INSIDE_DATA_ROOT: 'config', INSTALLATION_ROOT_WALK_UNSUPPORTED: 'config' }), {
   INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
-  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
+  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'declined' ? t('error.PROJECT_ATTACHMENT_DENIED.declined', p, l) : p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
   PROJECT_ATTACHMENT_SOURCE_REGISTERED: { category: 'config', render: (p, l) => ({ message: p['identityChoice'] === 'keep' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.keep', p, l)
     : p['identityChoice'] === 'new' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.new', p, l) : t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED', p, l) }) },
   PROJECT_ATTACHMENT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_UNAVAILABLE', p, l) }) },
@@ -281,10 +281,11 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   WORK_INPUT_REQUIRED: 'error', WORK_INPUT_TEMPLATE_REQUIRED: 'error', WORK_INPUT_TURN_LIMIT_UNSUPPORTED: 'error', WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: 'error',
   WORKER_INSTRUCTIONS_TOO_LARGE: 'error',
 }), {
+  WORK_CLASS_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: typeof p['allowed'] === 'string' ? t('error.WORK_CLASS_NOT_REGISTERED.available', p, l) : t('error.WORK_CLASS_NOT_REGISTERED', p, l) }) },
   WORKER_INSTRUCTIONS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: workerInstructionsUnavailable(p, l) }) },
   WORKER_INSTRUCTIONS_CHANGED: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'place' ? t('error.WORKER_INSTRUCTIONS_CHANGED.place', p, l) : t('error.WORKER_INSTRUCTIONS_CHANGED', p, l) }) },
 }, plainErrors('error.', {
-  WORK_CLASS_NOT_REGISTERED: 'error', WORK_CLASS_OVERRIDE_DENIED: 'error', WORK_CLASS_PARENT_INVALID: 'error', WORK_CLASS_REGISTRY_LIMIT: 'error',
+  WORK_CLASS_OVERRIDE_DENIED: 'error', WORK_CLASS_PARENT_INVALID: 'error', WORK_CLASS_REGISTRY_LIMIT: 'error',
   WORK_CLASS_REVISION_INVALID: 'error', WORKER_EFFORT_UNSUPPORTED: 'error', TASK_DECISION_APPROVAL_REQUIRED: 'error', AI_AUTHORITY_NON_DELEGABLE: 'error',
   TASK_DECISION_HUMAN_REQUIRED: 'error', RUN_HOLD_PERSON_REQUIRED: 'error', RUN_QUOTA_PERSON_REQUIRED: 'error', RUN_QUOTA_WAIT_LIMIT: 'error',
   NERVOUS_RULES_UNREADABLE: 'error', NERVOUS_SIGNAL_INVALID: 'error', NERVOUS_ACTION_REFUSED: 'error', RUN_PARKED: 'error', RUN_TERMINAL: 'error',
@@ -450,8 +451,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
 }, plainErrors('error.', {
   BRAIN_PROVIDER_REJECTED: 'error', BRAIN_OUTCOME_UNKNOWN: 'error', BRAIN_CANCELLED: 'error', RUN_ADMISSION_NOT_CONFIGURED: 'error', RUN_STORE_CORRUPT: 'error',
   RUN_PROPOSAL_BUDGET_SCOPE: 'error', RUN_PROPOSAL_BUDGET_CURRENCY: 'error', RUN_PROPOSAL_VERSION: 'error', RUN_PROPOSAL_GRAPH_INVALID: 'error',
-  RUN_PROPOSAL_INVALID: 'error', RUN_PROPOSAL_WORK_CLASS_REQUIRED: 'error', RUN_PROPOSAL_PERMISSION_UNKNOWN: 'error', RUN_PROPOSAL_BUDGET_MISSING: 'error',
+  RUN_PROPOSAL_INVALID: 'error', RUN_PROPOSAL_PERMISSION_UNKNOWN: 'error', RUN_PROPOSAL_BUDGET_MISSING: 'error',
 }), {
+  RUN_PROPOSAL_WORK_CLASS_REQUIRED: { category: 'error', render: (p, l) => ({ message: typeof p['allowed'] === 'string' ? t('error.RUN_PROPOSAL_WORK_CLASS_REQUIRED.available', p, l) : t('error.RUN_PROPOSAL_WORK_CLASS_REQUIRED', p, l) }) },
   RUN_PROPOSAL_BUDGET_EXCEEDED: { category: 'error', render: (p, l) => {
     const money = (key: string) => typeof p[key] === 'number' && typeof p['currency'] === 'string' ? currencyAmountText(p[key], p['currency'], l) : null, remaining = money('remaining'), ceiling = money('ceiling');
     return { message: remaining === null ? t('error.RUN_PROPOSAL_BUDGET_EXCEEDED', p, l) : ceiling === null ? t('error.RUN_PROPOSAL_BUDGET_EXCEEDED.remaining', { remaining }, l)

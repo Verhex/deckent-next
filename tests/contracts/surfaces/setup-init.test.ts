@@ -3,11 +3,12 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as observe from '#surfaces/core/cli-observe/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
-import { createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { runForegroundStage, createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
@@ -486,3 +487,12 @@ it('108/111: only arrows clear typed text; first-key y, n and digits and early E
     await early.armed(); await early.press('\r'); expect(early.sent).toEqual(['yes']);
   } finally { await early.close(); }
 }, 15_000);
+
+it('B27a: the foreground final check passes the invocation language explicitly to doctor', async () => {
+  const doctor = vi.spyOn(observe, 'runKernelCommand').mockResolvedValue(undefined);
+  try {
+    const stage = { id: 'core:final-check', operation: { id: 'doctor.inspect', input: {} } } as SetupStage;
+    expect(await runForegroundStage(harness().context, '/x', stage, null, 'en')).toMatchObject({ status: 'applied' });
+    expect(doctor).toHaveBeenCalledWith(['doctor', '--lang', 'en'], expect.objectContaining({ locale: 'en' }));
+  } finally { doctor.mockRestore(); }
+});

@@ -1,5 +1,6 @@
 {
   "en": {
+    "config.surface.reopenTerminal": {"before": "after closing and reopening the terminal; type /exit, then run deckent again", "after": "reopen terminal"},
     "cli.batch.deprecated.archive_debt": {
       "before": "Command \"archive-debt\" is deprecated; use \"status --debt\" instead.",
       "after": null

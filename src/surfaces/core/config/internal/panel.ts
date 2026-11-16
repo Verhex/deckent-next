@@ -66,7 +66,7 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
         if (model.hidden && !configRecordSupported(field.key)) return null;
         const value = configValueWord(field.value, field.redacted, locale);
         const of = (layer: Layer) => permissions?.find(item => item.keyPath === field.key && item.layer === layer);
-        return { key: field.key, section: field.key.split('.')[0]!, description: fieldDescription(field, locale), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale),
+        return { key: field.key, section: field.key.split('.')[0]!, description: fieldDescription(field, locale), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale, field.key),
           expected: schemaWord(field.schema, locale), choices: model.choices, stepper: model.stepper, readOnly: configRecordSupported(field.key) ? null : model.readOnly, records: configRecordSupported(field.key), generated: model.generated, choiceNotice: model.notice,
           free: model.free, guard: guardLines(field.key, locale), unsettable: field.source === 'project' || field.source === 'global', sensitive: field.redacted,
           locks: { project: layerLock(of('project'), readOnly, locale), global: layerLock(of('global'), readOnly, locale) } };

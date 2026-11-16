@@ -1290,5 +1290,10 @@
   "error.SECRET_PROJECT_TARGET_CHANGED": "The project shown for this key permission has changed. Nothing was granted or handed over. Open the card again and check the project.",
   "secret.project.sharedWorktrees": "This repository and its worktrees share this key permission. Current working folder: {workingFolder}.",
   "secret.project.workingFolder": "Current working folder: {workingFolder}.",
-  "remedy.POLICY_UNAVAILABLE": "For a new folder, set up its policy with `deckent init policy --scope {scope} --apply`, then retry with the same scope. If this folder already has a policy, restore its trusted policy and bindings; do not replace them."
+  "remedy.POLICY_UNAVAILABLE": "For a new folder, set up its policy with `deckent init policy --scope {scope} --apply`, then retry with the same scope. If this folder already has a policy, restore its trusted policy and bindings; do not replace them.",
+  "config.issue.minimum": "minimum: {minimum}",
+  "config.issue.minimumExclusive": "greater than: {minimum}",
+  "error.WORK_CLASS_NOT_REGISTERED.available": "The requested work class is not registered. Choose one of these registered work classes: {allowed}.",
+  "error.RUN_PROPOSAL_WORK_CLASS_REQUIRED.available": "Each proposed task needs one registered work class consistent with its work input. Choose one of: {allowed}.",
+  "error.PROJECT_ATTACHMENT_DENIED.declined": "You chose not to change the folder permissions: {path}. Setup did not continue. To continue, run deckent init again in your own terminal and approve the folder-permission card."
 }

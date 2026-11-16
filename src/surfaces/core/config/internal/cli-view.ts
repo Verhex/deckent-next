@@ -28,7 +28,7 @@ export function renderConfigOverrides(view: ConfigInspection, locale: Locale, st
   const lines = [t('config.surface.title', { project: typeof project === 'string' ? project : '-' }, locale)];
   if (overridden.length) {
     lines.push(t('clisetup.config.overrides', { count: overridden.length }, locale), renderCliTable(columns(locale),
-      overridden.map(field => [field.key, configValueWord(field.value, field.redacted, locale), sourceWord(field.source, locale), applyWord(field.apply, locale)]), style));
+      overridden.map(field => [field.key, configValueWord(field.value, field.redacted, locale), sourceWord(field.source, locale), applyWord(field.apply, locale, field.key)]), style));
   } else lines.push(t('clisetup.config.noOverrides', {}, locale));
   lines.push('', t('clisetup.config.groups', { groups, keys: view.fields.length }, locale), t('clisetup.config.everything', {}, locale));
   return lines.join('\n');

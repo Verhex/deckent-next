@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { main } from '#surfaces/core/cli/index.js';
+import { dispatch, main } from '#surfaces/core/cli/index.js';
 import * as cliHuman from '#surfaces/core/cli-human/index.js';
 import { PACKAGE_VERSION, t } from '#platform/index.js';
 
@@ -214,4 +214,37 @@ it('run propose without its argument follows the configured language', async () 
   await config('tr');
   const configured = await run(['run', 'propose'], 'tr'), flagged = await run(['run', 'propose', '--lang', 'tr']);
   expect(configured.code).not.toBe(0); expect(configured.errors).toBe(flagged.errors);
+});
+
+it('B27b: init help honours invocation Turkish before or after the command without loading the host', async () => {
+  await config('en');
+  const expected = JSON.parse(await readFile(new URL('../../fixtures/cli-help/commands-tr.json', import.meta.url), 'utf8')) as Record<string, string>;
+  for (const argv of [['--lang', 'tr', 'init', '--help'], ['init', '--lang', 'tr', '--help']]) {
+    let output = '';
+    expect(await main(argv, { root, env, loadHost: async () => { throw new Error('Help loaded the host'); },
+      stdout: { write: text => { output += text; } }, stderr: { write: () => { throw new Error('Help failed'); } },
+    })).toBe(0);
+    expect(output).toBe(expected['init']);
+  }
+});
+
+it('B28c: language and help flags after -- belong only to the child command', async () => {
+  await config('en');
+  const top = await readFile(new URL('../../fixtures/cli-help/top-en.txt', import.meta.url), 'utf8');
+  expect(dispatch(['--help', '--', '--lang', 'tr']).output + '\n').toBe(top);
+  const expected = JSON.parse(await readFile(new URL('../../fixtures/cli-help/commands-en.json', import.meta.url), 'utf8')) as Record<string, string>;
+  let output = '';
+  expect(await main(['init', '--help', '--', '--lang', 'tr'], { root, env,
+    loadHost: async () => { throw new Error('Help loaded the host'); }, stdout: { write: text => { output += text; } },
+  })).toBe(0);
+  expect(output).toBe(expected['init']);
+  for (const explicit of [false, true]) {
+    const child = ['node', '--lang', explicit ? 'en' : 'tr', '--help'];
+    const runMcpCommand = vi.fn(async () => ({})); let locale = '';
+    expect(await main([...(explicit ? ['--lang', 'tr'] : []), 'mcp', 'add', '--scope', 'project', '--no-approve', 'fixture', '--', ...child], {
+      root, env, runMcpCommand, onLocale: value => { locale = value; }, stdout: { write() {} }, stderr: { write() {} },
+    })).toBe(0);
+    expect(locale).toBe(explicit ? 'tr' : 'en'); expect(runMcpCommand).toHaveBeenCalledOnce();
+    expect(runMcpCommand.mock.calls[0]).toMatchObject({ 1: { entry: { command: 'node', args: child.slice(1) } }, 4: explicit ? 'tr' : 'en' });
+  }
 });

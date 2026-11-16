@@ -1,3 +1,5 @@
+import * as cliAdmin from '#surfaces/core/cli-admin/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { createUninstallPlan, type UninstallInventory } from '#engine/core/uninstall/index.js';
@@ -167,4 +169,21 @@ it('the reopen card counts unknown results from a fresh preview, says when it co
     expect(asked[2]!.body!.join('\n')).toContain('could not be checked'); expect(asked[2]!.body!.join('\n')).not.toContain('still unknown');
     expect(await lstat(join(data, 'installation/retired.json'))).toBeTruthy();
   } finally { ask.mockRestore(); await rm(project, { recursive: true, force: true }); }
+});
+
+it('B21: cancelling the backup passphrase names an earlier service stop and the start command, retaining the cancellation error', async () => {
+  const cancelled = ErrorRegistry.createError('SECRET_INPUT_CANCELLED');
+  const input = vi.spyOn(cliAdmin, 'readHidden').mockRejectedValue(cancelled);
+  try {
+    for (const locale of ['en', 'tr'] as const) for (const running of [true, false]) {
+      let output = '';
+      const plan = createUninstallPlan(query('all'), inventory({ service: { ...inventory().service, running } }));
+      await expect(uninstallCommand(['uninstall', '--all', '--yes'], { root: '/fixture', locale,
+        stdout: { write: text => { output += text; } }, stderr: { write() {} },
+        previewUninstall: async () => plan, applyUninstall: async (_root, _input, interaction) => { await interaction.backupPassphrase!(); throw new Error('cancelled backup continued'); },
+      })).rejects.toBe(cancelled);
+      expect(output.includes('deckent runtime start')).toBe(running);
+      if (running) expect(output).toContain(locale === 'en' ? 'service was stopped before this step' : 'servisi bu adımdan önce durduruldu');
+    }
+  } finally { input.mockRestore(); }
 });

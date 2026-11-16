@@ -49,7 +49,7 @@ export async function runForegroundStage(context: Omit<SetupCommandContext, 'ins
   const result = (status: SetupApplyResult['status'], failure?: string): SetupApplyResult => ({ stage: stage.id, operation: op, status, ...(failure ? { code: failure } : {}) });
   const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };
   try {
-    if (op === 'doctor.inspect') { await runKernelCommand(['doctor'], human as unknown as KernelCommandContext); return result('applied'); }
+    if (op === 'doctor.inspect') { await runKernelCommand(['doctor', '--lang', locale], human as unknown as KernelCommandContext); return result('applied'); }
     if (!scopeId) return result('refused', 'CLI_SCOPE_REQUIRED');
     if (op === 'installation.policy-template') return await (context.applySetupStage ?? notWiredApply)(root, stage, { env, scopeId, foreground: true, language: locale });
     if (op === 'execution-environment.install' && context.installExecutionEnvironment) {

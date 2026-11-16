@@ -7,7 +7,7 @@ import { parseConfigInput } from '#engine/index.js';
 const field = (key: string, value: unknown, source: 'default' | 'project' | 'global' | 'env', extra: Record<string, unknown> = {}) => ({ key, value, defaultValue: null,
   descriptionKey: 'config.field.max_workers', description: 'Workers', schema: { type: 'number', minimum: 1, maximum: 64 }, source,
   binding: { state: 'bound', consumers: ['src/composition/core/runs'] }, apply: 'restart', redacted: false, ...extra }) as const;
-const fields = [field('projectName', 'demo', 'project'), field('max_workers', 4, 'project'), field('language', 'en', 'global'),
+const fields = [field('projectName', 'demo', 'project'), field('max_workers', 4, 'project'), field('language', 'en', 'global', { apply: 'live' }),
   field('artifacts.maxBytes', 16777216, 'default'), field('artifacts.maxInputs', 64, 'default'), field('terminal.theme', 'auto', 'default')];
 const snapshot = { schemaVersion: 1 as const, digest: 'digest', layer: 'project' as const, fields };
 const tty = { isTTY: true, setRawMode: () => undefined } as never;
@@ -54,6 +54,27 @@ describe('C-SETUP: bare deckent config', () => {
 });
 
 describe('C-SETUP: config set, explain, get', () => {
+  it('B2/B14b: apply columns stay compact while change results and one-key explanations name the next command (EN/TR)', async () => {
+    for (const locale of ['en', 'tr'] as const) {
+      for (const [key, value, compact, guidance] of [
+        ['language', 'tr', locale === 'en' ? 'reopen terminal' : 'yeniden aç', locale === 'en'
+          ? 'The language applies after reopening the terminal: type /exit, then run deckent again.'
+          : 'Dil, terminali yeniden açınca uygulanır: /exit yazın, sonra deckent komutunu yeniden çalıştırın.'],
+        ['artifacts.maxInputs', 10, locale === 'en' ? 'restart' : 'yeniden başlatınca', locale === 'en'
+          ? 'Restart the service with deckent runtime restart.' : 'Servisi deckent runtime restart ile yeniden başlatın.'],
+      ] as const) {
+        const f = fixture({ locale });
+        const panel = await configPanelPort(f.context.root, f.context, {}, locale).inspect();
+        expect(panel.fields.find(item => item.key === key)!.apply).toBe(compact);
+        await configCommand(['config', 'set', key, JSON.stringify(value), '--scope', 's'], f.context);
+        expect(f.output.join('').split('\n')).toContain(guidance);
+        f.output.length = 0;
+        await configCommand(['config', 'explain', key], f.context);
+        // Explain may wrap a long instruction; every word remains present in order.
+        expect(f.output.join('').replace(/\s+/g, ' ')).toContain(guidance);
+      }
+    }
+  });
   it('NEGATIVE: set <key> without a value off a terminal is refused with what the key takes, and nothing is submitted', async () => {
     const f = fixture();
     await expect(configCommand(['config', 'set', 'max_workers'], f.context)).rejects.toMatchObject({ code: 'CLI_CONFIG_VALUE_MISSING' });

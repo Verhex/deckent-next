@@ -1,4 +1,4 @@
-export { clearConfigFieldDefaultCache, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, CORE_SCHEMA, getConfigFieldDefault, MEMORY_AUTOMATION_MODES } from './internal/fields.js';
+export { clearConfigFieldDefaultCache, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, CORE_SCHEMA, getConfigFieldDefault, MEMORY_AUTOMATION_MODES, configApplyPresentation } from './internal/fields.js';
 export { mergeConfigFields } from './internal/field.js';
 export { SQLITE_STORAGE_OPTIONS } from './internal/storage.js';
 export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, GIT_COPY_BYTES, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS, deliveryMode } from './internal/execution.js';

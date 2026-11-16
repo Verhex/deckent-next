@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, emit, getConfigFieldDefault, t, terminalSafeText as safe, type ExitCode } from '#platform/index.js';
+import { ErrorRegistry, emit, isCodedError, getConfigFieldDefault, t, terminalSafeText as safe, type ExitCode } from '#platform/index.js';
 import { uninstallBlockerError, uninstallDecidingBlocker, uninstallBlockerRow, type UninstallPlan, type UninstallQuery } from '#engine/index.js';
 import { readHidden } from '#surfaces/core/cli-admin/index.js';
 import { askCliCard, cliMode, formatDuration, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
@@ -69,7 +69,10 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   if (plan.nothingToRemove && !plan.blockers.length) { print([t('cli.uninstall.nothing', {}, locale), plan.packageRemoval.command ? `  ${safe(plan.packageRemoval.command)}` : t('cli.uninstall.packageUnknown', {}, locale)]); return 0; }
   if (!context.applyUninstall) throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED');
   const result = await context.applyUninstall(root, { schemaVersion: 2, commandId: randomUUID(), planDigest: plan.planDigest }, {
-    backupPassphrase: () => readHidden(process.stdin, context.stderr ?? process.stderr, t('cli.uninstall.backupPassphrase', {}, locale)),
+    backupPassphrase: async () => {
+      try { return await readHidden(process.stdin, context.stderr ?? process.stderr, t('cli.uninstall.backupPassphrase', {}, locale)); }
+      catch (error) { if (isCodedError(error, 'SECRET_INPUT_CANCELLED') && plan.steps.stopService) print([t('cli.uninstall.backupCancelled', {}, locale)]); throw error; }
+    },
     progress: event => print([t('cli.uninstall.progress', { count: String(event.remaining), left: formatDuration(event.leftMs, locale) }, locale)]),
     confirm: async (current: UninstallPlan) => {
       if (yes) { print([title, ...uninstallPlanLines(current, locale)]); return true; }

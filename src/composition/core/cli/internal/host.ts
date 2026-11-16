@@ -44,7 +44,7 @@ import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalH
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, t, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, t, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -72,14 +72,19 @@ type CliHostBase = { readonly root: string; readonly locale: Locale; readonly si
  */
 export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & object {
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
-  const narrowDirectory = async (path: string, json = false, language: Locale = locale) => {
+  const narrowDirectory = async (path: string, json = false, language: Locale = locale, setup = false) => {
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
     // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
     const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
-    return await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
+    const answer = await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
       ...(mode === null ? [] : [t('setup.attachment.narrowPermissionMode', { before: mode.toString(8).padStart(4, '0'), after: (mode & ~0o022).toString(8).padStart(4, '0') }, language)])], initial: 'no', options: [
       { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
-    ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) }) === 'yes';
+    ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
+    if (setup && answer !== 'yes') {
+      const error = ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { locale: language, params: { reason: 'declined', path: terminalSafeText(path) } });
+      emit(error.message); throw error;
+    }
+    return answer === 'yes';
   };
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view, locale, process.stdin, process.stderr,
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
@@ -277,5 +282,5 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   };
-  return { ...host, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language)) }; // I-S3: bare `deckent init`
+  return { ...host, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
 }

@@ -12,8 +12,11 @@ import { MODEL_FIELDS } from './fields-models.js';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from '#platform/core/common/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
+import type { ConfigApplyMode } from './field.js';
 
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './field.js';
+/** Presentation only: the versioned apply contract stays live/restart; an open terminal retains its language. */
+export const configApplyPresentation = (key: string | undefined, apply: ConfigApplyMode): ConfigApplyMode | 'reopenTerminal' => key === 'language' ? 'reopenTerminal' : apply;
 const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
 /** S4B-1/3/5/7: the modes of every `memoryAutomation` switch, in rollout order (the memory rollout registry names them). */
 export const MEMORY_AUTOMATION_MODES = Object.freeze(['off', 'shadow', 'on'] as const);
