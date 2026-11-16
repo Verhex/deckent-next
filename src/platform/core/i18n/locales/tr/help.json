@@ -112,7 +112,7 @@
   "cli.help.action.catalog": "İşçi model kataloğunu yönet",
   "cli.help.action.register": "Kurulum genelinde model bilgisi kaydet",
   "cli.help.action.decide": "Onay isteğini karara bağla",
-  "cli.help.action.renew": "Onay isteğini yenile",
+  "cli.help.action.renew": "Süresi dolan veya reddedilen görev onayını yenile",
   "cli.help.action.vocabulary": "Politika sözlüğünü listele",
   "cli.help.action.grants": "Kalıcı izinleri listele",
   "cli.help.action.revoke": "Kalıcı izni kaldır",

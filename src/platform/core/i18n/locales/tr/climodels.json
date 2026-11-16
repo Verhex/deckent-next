@@ -1,5 +1,5 @@
 {
-  "cli.mcp.grant.granted": "Politika izni yazıldı: bu sunucuyu çağırabilirsiniz (standart her çağrıda sorar; tam otomatik çalıştırır, denetimli).",
+  "cli.mcp.grant.granted": "Politika izni yazıldı: bu sunucuyu çağırabilirsiniz; standart mod her çağrıda, \"her zaman sor\" işaretli araçlar her modda sorar; her çağrı denetim kaydına yazılır.",
   "cli.mcp.grant.revoked": "Politika izni kaldırıldı: bu sunucuya çağrılar yeniden şirket politikanıza bağlı.",
   "cli.mcp.grant.refused": "Güvenildi ama politika izni yazılmadı: {reason}.",
   "models.notConfigured": "Model kataloğu yapılandırılmamış; kullanılabilirlik gözlemlenmedi.",

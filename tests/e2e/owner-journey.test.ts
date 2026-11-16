@@ -153,7 +153,7 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     // Rows are chosen by typing to filter: /model orders by tier (F2-14), so a row's position is not the journey's to know.
     await walk('j1-set', t, [[/Ready/, '/model'], [1500, '\r'], ['Claude Sonnet 5.5 (Sign in', ''], [800, 'sonnet'], [1000, '\r'], ['Use as Brain model (this project)', ''],
       [800, '\r'], ['make it my default', ''], [800, '\r'], [3000, '/model'], [1500, '\r'], ['Claude Opus 5.5 (Sign in', ''], [800, 'opus'], [1000, '\r'],
-      ['Use as Brain model (this project)', ''], [800, DOWN.repeat(2)], [600, '\r'], ['now plans /do work', ''], [1500, '/exit\r']]);
+      ['Use as Brain model (this project)', ''], [800, DOWN.repeat(2)], [600, '\r'], ['Planning choice saved:', ''], [1500, '/exit\r']]);
     await t.closed;
     // "This session, and make it my default" is offered first; "Use as Brain model (your default)" reaches the host port and closes (F2-1).
     const scope = t.flat(); expect(scope.indexOf('This session, and make it my default')).toBeLessThan(scope.indexOf('This session only'));

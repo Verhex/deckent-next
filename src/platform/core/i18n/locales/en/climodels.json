@@ -1,5 +1,5 @@
 {
-  "cli.mcp.grant.granted": "Policy grant written: this server is yours to call (standart asks every call; full-auto runs it, audited).",
+  "cli.mcp.grant.granted": "Policy grant written: this server is yours to call; standart asks every call, and tools marked \"always ask\" ask in every mode; every call is audited.",
   "cli.mcp.grant.revoked": "Policy grant removed: calls to this server follow your company policy again.",
   "cli.mcp.grant.refused": "Trusted, but no policy grant was written: {reason}.",
   "models.notConfigured": "Model catalog is not configured; availability was not observed.",

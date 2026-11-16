@@ -117,7 +117,7 @@ describe('/mcp window port', () => {
   it('the detail names the person\'s real mcp-server grant (owner 2026-10-07): its scope, or none', async () => {
     const lineOf = async (grant: unknown) => (await mcpPanelPort('/p', host({ get: { server: { ...SERVER, grant } } }).run, {}, 'en').detail('files'))
       .find(line => line.label === 'Policy grant')!;
-    expect((await lineOf({ status: 'granted', scopes: ['proj'] })).text).toBe('yours for this server in proj: standart asks every call, full-auto runs it (audited)');
+    expect((await lineOf({ status: 'granted', scopes: ['proj'] })).text).toBe('yours for this server in proj; standart asks every call, and tools marked "always ask" ask in every mode; every call is audited');
     expect((await lineOf({ status: 'granted', scopes: 'all' })).text).toContain('in all your scopes');
     expect(await lineOf({ status: 'none' })).toMatchObject({ text: expect.stringContaining('none: trusting it writes your grant'), tone: 'muted' });
     expect(await lineOf(undefined)).toMatchObject({ tone: 'muted' });
