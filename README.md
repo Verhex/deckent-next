@@ -256,25 +256,6 @@ flowchart LR
 7. **Check usage** with `/usage`: the tokens this conversation used and the scope's budgets. It is deckent's
    measurement, not the provider's invoice.
 
-These screens come from the real terminal, recorded on alpha.53 (120×36, the default full-window layout) in a throwaway
-project with a small local test model: no provider was called and no real key was used. The empty conversation rows above
-each window are trimmed; nothing else is changed.
-
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/09-model.png" alt="/model with no budget: Create budget row, the local model usable, a second model locked with its reason"><br><sub><b>Before a budget.</b> <code>/model</code> offers <b>Create budget</b> first. The local test model is already usable, because local models need no budget; a model this scope may not call is locked with its reason.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/08b-provider-budget-row.png" alt="/provider budget action and provider list"><br><sub><b>/provider.</b> Connections come first; move down or filter for <b>Create budget</b>. This illustration predates that order.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/10-budget.png" alt="Budget window with preset amounts"><br><sub><b>Budget window.</b> Preset amounts, or another amount with the arrow keys.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/11-budget-stepper.png" alt="Budget stepper set to 20 USD"><br><sub><b>Another amount.</b> Whole dollars, 1 to 1000; nothing is sent before you confirm.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/12-model-ready.png" alt="/model after the budget: Change budget row and the system line recording 20 USD"><br><sub><b>After the budget.</b> The framed system line records the budget, and the first row now reads <b>Change budget</b>.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/13-usage.png" alt="/usage window after one chat turn"><br><sub><b>/usage.</b> Tokens this conversation measured and the scope's budgets.</sub></td>
-  </tr>
-</table>
-
 For an API-key connection, steps 3 and 4 also have command-line forms; secret entry stays with the person:
 
 ```sh
@@ -378,10 +359,6 @@ It covers connection ids, previews and older installations.
    [operator reference](.deckent/docs/architecture/operator-reference.md#delivery-queue-inspect-and-undo) shows the
    commands.
 
-<img src=".github/assets/screenshots/en/16-tasks.png" alt="/tasks live window with no work yet" width="880">
-
-<sub><b>/tasks.</b> Workers and Runs in one live window; cancelling asks for approval (empty here: no background work yet).</sub>
-
 ## See it work
 
 Real sessions on `1.0.0-beta.1.2` in a throwaway installation, recorded from the terminal. Each scene that uses a model
@@ -418,29 +395,6 @@ an approval. `/help` lists every command by purpose; the most used ones are:
 | Approvals | `/approvals` pick a pending approval and decide it |
 | Settings | `/provider` · `/model` · `/config` · `/mode` · `/mcp` · `/policy` |
 | Information | `/status` · `/usage` · `/context` · `/doctor` · `/monitor` · `/scope` · `/help` |
-
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under deckent"><br><sub><b>Chat.</b> Your lines and deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where, on whose behalf, scope, why, risk, undo and a live deadline. The answers are a list; "this session" and "always in this project" appear only where policy offers them.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/04-status.png" alt="/status window"><br><sub><b>/status.</b> A human summary first; identities, process and build under the details.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/06-full-access.png" alt="Full access mode indicator"><br><sub><b>Modes.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> cycles the modes you are allowed; full access is clearly marked.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help window grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each; the window scrolls.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; each configured server shows its trust state and where it runs (here a sandbox with network).</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider with its connection state, OpenRouter included.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/14-config.png" alt="/config window choosing the terminal theme"><br><sub><b>/config.</b> Section, key, then one of the allowed values; the current one is marked.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/15-system-line.png" alt="Framed system lines left by closed windows"><br><sub><b>System lines.</b> Each closed window leaves one framed summary line.</sub></td>
-    <td width="50%"></td>
-  </tr>
-</table>
 
 ### On the command line
 

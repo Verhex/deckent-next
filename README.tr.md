@@ -257,25 +257,6 @@ flowchart LR
 7. **Kullanıma bakın**: `/usage` bu konuşmanın kullandığı token'ları ve kapsamın bütçelerini gösterir. Bu, deckent'in
    ölçümüdür; sağlayıcının faturası değildir.
 
-Bu ekranlar gerçek terminalden, alpha.53'te (120×36, varsayılan tam pencere düzeni) geçici bir projede ve küçük bir yerel
-deneme modeliyle çekildi: hiçbir sağlayıcı çağrılmadı ve gerçek bir anahtar kullanılmadı. Her pencerenin üstündeki boş
-konuşma satırları kırpıldı; başka hiçbir şey değiştirilmedi.
-
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/09-model.png" alt="Bütçe yokken /model: Bütçe oluştur satırı, kullanılabilir yerel model, nedeniyle kilitli ikinci model"><br><sub><b>Bütçeden önce.</b> <code>/model</code> önce <b>Bütçe oluştur</b> satırını sunar. Yerel deneme modeli zaten kullanılabilir, çünkü yerel modeller bütçe istemez; bu kapsamın çağıramayacağı model nedeniyle kilitlidir.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/08b-saglayici-butce-satiri.png" alt="/provider bütçe eylemi ve sağlayıcı listesi"><br><sub><b>/provider.</b> Önce bağlantılar gelir; <b>Bütçe oluştur</b> için aşağı inin veya süzün. Bu görsel önceki sırayı gösterir.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/10-butce.png" alt="Hazır tutarlarla bütçe penceresi"><br><sub><b>Bütçe penceresi.</b> Hazır tutarlar ya da ok tuşlarıyla başka bir tutar.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/11-butce-adim.png" alt="20 USD'ye ayarlanmış bütçe adımlayıcısı"><br><sub><b>Başka tutar.</b> Tam dolar, 1 ile 1000 arası; onaylamadan hiçbir şey gönderilmez.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/12-model-hazir.png" alt="Bütçeden sonra /model: Bütçeyi değiştir satırı ve 20 USD bütçeyi kaydeden sistem satırı"><br><sub><b>Bütçeden sonra.</b> Çerçeveli sistem satırı bütçeyi kaydeder; ilk satır artık <b>Bütçeyi değiştir</b> der.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/13-kullanim.png" alt="Bir sohbet turundan sonra /usage penceresi"><br><sub><b>/usage.</b> Bu konuşmanın ölçtüğü token'lar ve kapsamın bütçeleri.</sub></td>
-  </tr>
-</table>
-
 API anahtarı yolunda 3 ve 4. adımların komut satırı biçimleri de vardır; gizli anahtar girişi kişide kalır:
 
 ```sh
@@ -378,10 +359,6 @@ Bağlantı kimlikleri, önizlemeler ve eski kurulumların adımları orada anlat
    teslim kuyruğu) kullanıyorsa dalı ilerletme kendi onayıyla geri alınabilir; komutları
    [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#teslim-kuyruğu-inceleme-ve-geri-alma) gösterir.
 
-<img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi" width="880">
-
-<sub><b>/tasks.</b> İşçiler ve çalışmalar tek bir canlı pencerede; iptal onay ister (burada boş: henüz arka plan işi yok).</sub>
-
 ## Çalışırken görün
 
 Atılabilir bir kurulumda `1.0.0-beta.1.2` ile terminalden kaydedilmiş gerçek oturumlar. Model kullanan her sahne
@@ -418,29 +395,6 @@ dönüşebilir. `/help` tüm komutları amaca göre listeler; en çok kullanıla
 | Onaylar | `/approvals` bekleyen bir onayı seç ve karar ver |
 | Ayarlar | `/provider` · `/model` · `/config` · `/mode` · `/mcp` · `/policy` |
 | Bilgi | `/status` · `/usage` · `/context` · `/doctor` · `/monitor` · `/scope` · `/help` |
-
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı süre. Yanıtlar bir listedir; "bu oturum" ve "bu projede her zaman" yalnız politika sunduğunda görünür.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status penceresi"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/06-tam-erisim.png" alt="Tam erişim modu göstergesi"><br><sub><b>Modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> yetkili olduğunuz modlar arasında döner; tam erişim açıkça işaretlenir.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help penceresi"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır; pencere kaydırılır.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp penceresi"><br><sub><b>/mcp.</b> Adım adım sunucu ekleme; yapılandırılmış her sunucu güven durumunu ve nerede çalıştığını gösterir (burada ağ erişimli bir yalıtım alanı).</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> OpenRouter dahil her sağlayıcı bağlantı durumuyla.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/14-ayarlar.png" alt="Terminal temasını seçen /config penceresi"><br><sub><b>/config.</b> Bölüm, anahtar, sonra izin verilen değerlerden biri; geçerli olan işaretli.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/15-sistem-satiri.png" alt="Kapanan pencerelerin bıraktığı çerçeveli sistem satırları"><br><sub><b>Sistem satırları.</b> Kapanan her pencere tek bir çerçeveli özet satırı bırakır.</sub></td>
-    <td width="50%"></td>
-  </tr>
-</table>
 
 ### Komut satırında
 
