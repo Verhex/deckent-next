@@ -860,7 +860,9 @@ export function WorklineApp(props: WorklineProps) {
     {instructions.window}
     {fullscreenMode ? null : liveNode}
     <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
+    <QueuedListOpeningContext.Provider value={queuedListOpening.current && (presentation?.kind === 'job-picker' || presentation?.kind === 'runs-window' || presentation?.kind === 'approvals')}>
     {work.region}
+    </QueuedListOpeningContext.Provider>
     {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
       position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
     </WindowOpeningContext.Provider>

@@ -9,6 +9,7 @@ import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#su
 import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { openingWorkText, runDetailLines } from '#surfaces/core/terminal-work/index.js';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
 
@@ -35,7 +36,7 @@ function ports(extra: Partial<WorklineLedgerPorts> = {}): WorklineLedgerPorts {
 const mounted: ReturnType<typeof mountWorkline>[] = [];
 let renderDir: string;
 beforeEach(async () => { captured.entries = []; captured.seen = new WeakSet(); renderDir = await mkdtemp(join(tmpdir(), 'sw2-window-render-')); });
-afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); await rm(renderDir, { recursive: true, force: true }); });
+afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); vi.useRealTimers(); await rm(renderDir, { recursive: true, force: true }); });
 const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false) => {
   const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale), ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS } : {}) }, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
   await settle(30); view.stdin.write(`${command}\r`); return view;
@@ -50,6 +51,36 @@ async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
 function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary' }); }
 
 describe('SW-2 job windows', () => {
+  it('112: a queued /run waits for quiet; its info window closes and a direct picker selects immediately', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finish: (text: string) => void = () => { throw new Error('turn did not start'); };
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: EN }, ledger: ports(), pollMs: 60_000,
+      decisionArmMs: DECISION_ARM_DEFAULT, completeTurn: () => new Promise<string>(resolve => { finish = resolve; }) });
+    mounted.push(view);
+    const tick = async (ms: number) => { await vi.advanceTimersByTimeAsync(ms); await view.instance.waitUntilRenderFlush(); };
+    const ready = async (check: () => boolean) => {
+      for (let attempt = 0; attempt < 50 && !check(); attempt++) await view.instance.waitUntilRenderFlush();
+      expect(check()).toBe(true); await view.instance.waitUntilRenderFlush();
+    };
+    await tick(60);
+    view.stdin.write('task\r'); await tick(40);
+    view.stdin.write('/run\r'); await tick(40);
+    expect(view.stdout.frame).toContain('QUEUED');
+    finish('done'); await tick(40);
+    await ready(() => view.stdout.frame.includes('> Fix checkout'));
+    view.stdin.write('\r'); await tick(DECISION_ARM_DEFAULT - 1);
+    expect(view.stdout.frame).toContain('> Fix checkout'); expect(view.stdout.frame).not.toContain(EN.jobs!.delivery);
+    await tick(1);
+    view.stdin.write('\r'); await tick(20);
+    await ready(() => view.stdout.frame.includes(EN.jobs!.delivery));
+    // The queued command's next window is information, so Esc never needs another quiet wait.
+    view.stdin.write(ESC); await tick(20);
+    await ready(() => !view.stdout.frame.includes(EN.jobs!.delivery));
+    view.stdin.write('/run\r'); await tick(40);
+    await ready(() => view.stdout.frame.includes('> Fix checkout'));
+    view.stdin.write('\r'); await tick(20);
+    await ready(() => view.stdout.frame.includes(EN.jobs!.delivery));
+  });
   it.each(['/workers', '/runs'] as const)('%s opens a list, never appends cards, and closes with one labelled line', async command => {
     const view = await open(command);
     await until(() => view.stdout.frame.includes(command === '/workers' ? 'Task 1' : 'Fix checkout'), 'list');
