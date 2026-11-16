@@ -399,6 +399,17 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT (Codex CLI) abonelikleri deckent araçlı sohbetini sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
+- **Abonelik işçisi araç yolunda henüz değişiklik üretmedi (ilk gerçek hesap koşusu 2026-11-16, beta.2).** Abonelik işçisinin CLI'ı
+  bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. İlk gerçek koşuda Codex işçisi hiçbir yazma aracı
+  çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi; Claude işçi türü henüz koşmadı. Kaynak okuması, bir koşuda görülmedi:
+  beta.2'de Codex yolunda işçi koşusu dokuzuncu araç çağrısında biter (Claude yolu doğrulanmadı); ana dal 128 çağrıya izin verir ve
+  işçiye kendi ortamının salt okunur uyarısının deckent'in araçlarını kapsamadığını söyler (henüz yayımlanmadı, beta.2.1 için);
+  incelenen kurulumda çalışma kopyasında `node_modules` yoktu, bu yüzden ona bağlı kontrol komutları orada çalışamadı; işçinin `npm` ve `node` komutları, yalnız etkileşimli terminaldeki kişinin
+  cevaplayabildiği bir kart ister ve bu bekleme işçinin kendi süresinden yer. İşçisi başlamadan bekletilen bir iş, iptal edilene kadar
+  (`deckent run cancel`) girişin tek yerini tutar; o sırada aynı girişle sohbet ve planlama durur.
+- **Sohbetten önerilen iş kabul edilir ama başlamaz (beta.2; düzeltmesi beta.2.1 için kabul edildi).** Sohbetteki yapay zekâ bir iş
+  önerip siz kartı onayladığınızda iş kabul edilir ve listelenir, ama servis onu ilerletmez (depoya alınmamış geçici bir kaynak denemesiyle gösterildi;
+  kurulu sürümde denenmedi). İşi bunun yerine terminalde `/do` ya da `deckent do --request` ile başlatın.
 - **Docker'sız abonelik işçisi (alpha.63, R8b; yazar kanıtı, gerçek hesap ve BeUser kabulü açık).** Bağlantınıza bağlı Claude ya da Codex
   CLI işçisi deckent'in bubblewrap yalıtım alanında çalışır; bu yüzden `execution.docker` olmayabilir. Linux (ya da WSL) ve bubblewrap gerekir,
   yoksa işçi reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`). Düz Docker işçileri ve ChatGPT tarayıcı girişi (SIWC) işçisi Docker ayarı ve imaj
