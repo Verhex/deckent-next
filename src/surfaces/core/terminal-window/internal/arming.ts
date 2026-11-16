@@ -10,6 +10,8 @@ import DECISION from './decision.json' with { type: 'json' };
 export const DECISION_ARM_DEFAULT: number = DECISION.armMs;
 /** The arming delay in force (the test harness may set 0; production keeps the registry value). */
 export const DecisionArmContext = createContext<number>(DECISION_ARM_DEFAULT);
+/** Only lists opened by a queued command opt in; direct commands and onboarding keep their own opening rules. */
+export const QueuedListOpeningContext = createContext<boolean>(false);
 
 /** Decision hint-row words (catalog `terminal.decision.*`): arming, typed text and an unchosen answer; neutral marks without them. */
 export type DecisionArmLabels = Readonly<{ arming: string; ignored: string; typedText: string; unchosen: string }>;
@@ -20,7 +22,7 @@ export const DecisionArmLabelsContext = createContext<DecisionArmLabels>(Object.
  * rejected burst). `shown`: the armed state as render state, so the window shows its keys only once they count (CI 2026-10-18: a key sent
  * right after a card appeared was swallowed silently and the flow looked hung; the visible state is both the person's and a test's signal).
  */
-export function useQuietArming(active: boolean, ms: number, revision?: number): Readonly<{ armed: () => boolean; touch: () => void; restart: () => void; shown: boolean }> {
+export function useQuietArming(active: boolean, ms: number, revision?: number | string): Readonly<{ armed: () => boolean; touch: () => void; restart: () => void; shown: boolean }> {
   const armed = useRef(ms <= 0 && active), timer = useRef<ReturnType<typeof setTimeout> | null>(null), live = useRef(active);
   const [shown, setShown] = useState(ms <= 0 && active), seen = useRef(revision);
   live.current = active;

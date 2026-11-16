@@ -35,7 +35,9 @@ export function ModePanel({ port, labels, onError, onClose }: { readonly port: M
   exits.current = { onError, onClose };
   useEffect(() => {
     let live = true;
-    port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
+    port.inspect().then(value => { if (live) {
+      setState({ ...PICKER_INITIAL, pos: Math.max(0, STOPS.findIndex(stop => stop === port.current())) }); setView(value);
+    } }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     return () => { live = false; };
   }, [port]);
   const words = labels.mode, loading = useLoadingText(labels, !view);

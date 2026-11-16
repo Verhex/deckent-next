@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import type { PanelPorts } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
@@ -9,7 +10,7 @@ import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-
 // composer and Shift+Tab wait), typed config arguments remain in the picker, a held write opens approval in the same command, and
 // full access shows one standing warning line above the composer.
 const mounted: Array<{ unmount(): void }> = [];
-afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
+afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); vi.useRealTimers(); });
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r', SHIFT_TAB = '\u001b[Z';
 const MODE_LABELS = { current: 'MODE {mode}', changed: 'MODE {previous}->{mode}', inert: '', unsupported: 'NO-MODES', usage: 'MODE-USAGE',
   stops: { standart: 'std', 'ask-edits': 'careful', 'full-auto': 'auto', 'full-access': 'FULL' }, cycled: 'CYCLED {previous}->{mode}', cycledFullAccess: 'INTO-FULL {previous}->{mode}',
@@ -27,6 +28,54 @@ function modePort(fullAccess = true) {
     } } };
 }
 const frameOf = (view: ReturnType<typeof mountWorkline>) => view.stdout.frame;
+
+it('112: a queued /mode ignores Enter and letters until a full quiet wait; a direct /mode filters and applies immediately', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const { calls, port } = modePort(false);
+  let finish: (text: string) => void = () => { throw new Error('turn did not start'); };
+  const view = mountWorkline({ labels, permissionMode: port, panels: { ports: {}, labels: terminalPanelLabels('en') },
+    decisionArmMs: DECISION_ARM_DEFAULT, completeTurn: () => new Promise<string>(resolve => { finish = resolve; }) });
+  mounted.push(view.instance);
+  const tick = async (ms: number) => { await vi.advanceTimersByTimeAsync(ms); await view.instance.waitUntilRenderFlush(); };
+  const ready = async (check: () => boolean) => {
+    for (let attempt = 0; attempt < 50 && !check(); attempt++) await view.instance.waitUntilRenderFlush();
+    expect(check()).toBe(true); await view.instance.waitUntilRenderFlush();
+  };
+  await tick(60);
+  view.stdin.write(`task${ENTER}`); await tick(40);
+  view.stdin.write(`/mode${ENTER}`); await tick(40);
+  view.stdin.write(`/mode${ENTER}`); await tick(40);
+  expect(frameOf(view)).toContain('QUEUED'); expect(frameOf(view)).not.toContain('Permission mode');
+  finish('done'); await tick(40);
+  await ready(() => />\s+standard/u.test(frameOf(view)));
+  expect(frameOf(view)).toContain('Permission mode'); expect(frameOf(view)).toMatch(/>\s+standard/u);
+  view.stdin.write(ENTER); view.stdin.write('z'); await tick(DECISION_ARM_DEFAULT - 1);
+  expect(calls).toEqual([]); expect(frameOf(view)).toContain('Permission mode'); expect(frameOf(view)).not.toContain('filter: z');
+  // A late key restarts the quiet interval; wall time since opening alone never arms a list.
+  view.stdin.write('q'); await tick(DECISION_ARM_DEFAULT - 1);
+  expect(frameOf(view)).not.toContain('filter: q'); expect(calls).toEqual([]);
+  await tick(1);
+  view.stdin.write('full'); await tick(20);
+  expect(frameOf(view)).toContain('filter: full');
+  view.stdin.write(ENTER); await tick(20);
+  await ready(() => frameOf(view).includes(labels.decisionArm!.arming));
+  expect(calls).toEqual([['full-auto', 'r0', false]]);
+  // The next queued opening is a fresh list with its own quiet wait, even when the kind stays /mode.
+  expect(frameOf(view)).toContain(labels.decisionArm!.arming);
+  view.stdin.write(ENTER); await tick(20);
+  expect(frameOf(view)).toContain('Permission mode'); expect(calls).toHaveLength(1);
+  await tick(DECISION_ARM_DEFAULT);
+  view.stdin.write(ENTER); await tick(20);
+  await ready(() => !frameOf(view).includes('Permission mode'));
+  expect(frameOf(view)).not.toContain('Permission mode');
+  // A fresh direct command has no wait, even with production arming enabled.
+  view.stdin.write(`/mode${ENTER}`); await tick(40);
+  await ready(() => />\s+full auto · now/u.test(frameOf(view)));
+  view.stdin.write('sta'); await tick(20);
+  expect(frameOf(view)).toContain('filter: sta');
+  view.stdin.write(ENTER); await tick(20);
+  expect(calls).toEqual([['full-auto', 'r0', false], ['standart', 'r1', false]]);
+});
 
 describe('settings windows in the workline', () => {
   it('/mode opens the window: the composer and Shift+Tab wait while it is open; the chosen mode goes through the same service set', async () => {

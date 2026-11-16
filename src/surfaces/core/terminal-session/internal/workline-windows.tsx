@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { layoutWindowLines, Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { layoutWindowLines, Window, QueuedListOpeningContext, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { PickerWindow, QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
 import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import type { ScratchView } from '#domain/index.js';
@@ -108,8 +108,8 @@ export function askGrantWindow(slot: WindowSlot, position: string, question: Sec
     onAnswer={value => answer(value === true ? 'yes' : null)} />).then(id => id === 'yes').finally(() => signal.removeEventListener('abort', close));
 }
 /** A list window of the session and palette commands, shown in the workline's window slot (null without window words). */
-export function askSlashWindow(slot: WindowSlot, labels: SlashWindowLabels | undefined, spec: SlashPickSpec): Promise<string | null> {
-  return labels ? slot.ask(answer => <SlashPickWindow spec={spec} labels={labels} onAnswer={answer} />) : Promise.resolve(null);
+export function askSlashWindow(slot: WindowSlot, labels: SlashWindowLabels | undefined, spec: SlashPickSpec, openedByQueue = false): Promise<string | null> {
+  return labels ? slot.ask(answer => <QueuedListOpeningContext.Provider value={openedByQueue && !spec.info}><SlashPickWindow spec={spec} labels={labels} onAnswer={answer} /></QueuedListOpeningContext.Provider>) : Promise.resolve(null);
 }
 
 const mark = (text: string, current: boolean, label: string) => current ? `${text} · ${label}` : text;

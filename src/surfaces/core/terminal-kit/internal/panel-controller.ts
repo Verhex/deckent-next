@@ -56,7 +56,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
   let picker: { view: PanelPickerView; resolve: (choice: string | null) => void } | null = null;
   let closed = false, last: PanelSnapshot<C>['last'] = null;
   const timings = new Map<string, TimingTrace>();
-  const queue: PanelSubmission<C>[] = [], listeners = new Set<(snapshot: PanelSnapshot<C>) => void>();
+  const queue: (PanelSubmission<C> & { readonly openedByQueue: boolean })[] = [], listeners = new Set<(snapshot: PanelSnapshot<C>) => void>();
   const snapshot = (): PanelSnapshot<C> => Object.freeze({ context,
     phase: closed ? 'closed' : active?.abort.signal.aborted ? 'cancelling' : active ? 'running' : 'idle',
     queued: Object.freeze(queue.map(item => Object.freeze({ inputId: item.inputId }))),
@@ -111,7 +111,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
   };
   const drain = () => {
     if (closed || active || !queue.length) return;
-    const input = queue.shift()!;
+    const { openedByQueue, ...input } = queue.shift()!;
     timings.get(input.inputId)?.phase('started');
     const operation: Active<C> = { input, abort: new AbortController(), binding: null, handles: new Set(), revisions: new Map() };
     active = operation; publish();
@@ -120,7 +120,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
     void runWithTiming(timings.get(input.inputId), async () => {
       let outcome: 'returned' | 'unknown' = 'returned';
       try {
-        await ports.execute(Object.freeze({ input, signal: operation.abort.signal, pick: (view: PanelPickerView) => pick(operation, view),
+        await ports.execute(Object.freeze({ input, signal: operation.abort.signal, openedByQueue, pick: (view: PanelPickerView) => pick(operation, view),
           selectSession: next => {
             if (!current(operation) || operation.binding || picker || approval || context.kind !== 'terminal-local'
               || !validContext(next) || next.kind !== context.kind || next.installationId !== context.installationId
@@ -194,10 +194,10 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
       const index = queue.findIndex(item => item.inputId === input.inputId);
       if (index < 0) return false;
       timings.get(input.inputId)?.finish(true); timings.delete(input.inputId);
-      queue[index] = Object.freeze({ context, inputId: input.inputId, text, mentions: Object.freeze([...(input.mentions ?? queue[index]!.mentions)]) });
+      queue[index] = Object.freeze({ context, inputId: input.inputId, text, openedByQueue: queue[index]!.openedByQueue, mentions: Object.freeze([...(input.mentions ?? queue[index]!.mentions)]) });
     } else {
       if (active?.input.inputId === input.inputId || queue.some(item => item.inputId === input.inputId)) return false;
-      queue.push(Object.freeze({ context, inputId: input.inputId, text, mentions: Object.freeze([...(input.mentions ?? [])]) }));
+      queue.push(Object.freeze({ context, inputId: input.inputId, text, openedByQueue: active !== null, mentions: Object.freeze([...(input.mentions ?? [])]) }));
     }
     if (timingEnabled && text.startsWith('/')) {
       const inherited = input.kind === 'submit' ? currentTiming() : undefined;

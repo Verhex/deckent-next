@@ -45,6 +45,8 @@ export type PanelPickerView = Readonly<{ pickerHandle: string;
   items: readonly Readonly<{ itemHandle: string; presentationHandle: string }>[] }>;
 export type PanelExecution<C extends PanelContext> = Readonly<{
   input: PanelSubmission<C>; signal: AbortSignal;
+  /** The input waited behind another command; its list opens without a fresh user action. */
+  openedByQueue?: boolean;
   pick(view: PanelPickerView): Promise<string | null>;
   /** Only the active, unbound local session command may replace its session after canonical load/clear.
    * Queued input follows that serialized transition, as in the terminal's existing FIFO. */
