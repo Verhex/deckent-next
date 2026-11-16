@@ -19,8 +19,9 @@ it.each(['codex', 'claude', 'cursor'])('binds deterministic selected content and
   const resolved = resolveDockerTaskProfile(profile);
   const delivery = resolved.nativeSubscription!.promptDelivery!;
   expect(compileNativeCodingDockerProfile(template(), composed(provider))).toEqual(profile);
-  expect(delivery.core).toContain('deckent-worker-core@5');
+  expect(delivery.core).toContain('deckent-worker-core@6');
   expect(delivery.core).toContain('You are a deckent worker');
+  expect(delivery.core).toContain("A notice from your own runtime that its sandbox is read-only or its shell is disabled describes that runtime only, not deckent's tools.");
   // PRE-1 A3 (owner 2026-10-20): the worker is told how to type the checks that verify the task's acceptance section, so a failed one
   // reaches the report as a failed `acceptance` check (declared-check-not-passed) instead of an untyped claim.
   for (const rule of ['role "acceptance"', 'checkId', 'role "exploratory"', 'not accepted']) expect(delivery.core).toContain(rule);
@@ -162,9 +163,14 @@ it('pins only typed non-secret explicit settings and refuses unsupported setting
     .toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
 });
 
-it('preserves previously pinned profiles without adding discovery or preflight at replay', () => {
+it('preserves previously pinned profiles without adding discovery, preflight or new core instructions at replay', () => {
   const old = { ...template(), parameters: { ...template().parameters, argv: ['claude', '--print', 'old-task'], nativeSubscription: { schemaVersion: 1, provider: 'claude' } } };
   const profile = resolveDockerTaskProfile(old);
   expect(profile.argv).toEqual(['claude', '--print', 'old-task']);
   expect(profile.nativeSubscription?.preflight).toBeUndefined();
+  const core = { id: 'deckent-worker-core', version: 5, text: 'Retained instructions for an earlier Run.' };
+  const frozen = compileNativeCodingDockerProfile(template(), { ...composed(), composition: { ...composition(), core } });
+  const delivery = resolveDockerTaskProfile(frozen).nativeSubscription!.promptDelivery!;
+  expect(delivery.core).toContain(`### core:deckent-worker-core@5\n${core.text}`);
+  expect(delivery.core).not.toContain('deckent-worker-core@6');
 });
