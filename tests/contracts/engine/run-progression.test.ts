@@ -1,10 +1,13 @@
+import { RunSessionRegistry, runSessionRegistryData, selectProgressionActor, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
+import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
+import type { ApprovalRecord, RunSnapshot } from '#domain/index.js';
 import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { openSqliteApprovalStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunLifecycleApplication, RunPolicyAuthorization, RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -322,4 +325,172 @@ it('fills all eight free pool slots with eight independent single-task Run execu
     expect([...observed].sort()).toEqual([...ids].sort());
     for (const runId of ids) expect((await f.store.loadRun('s', runId))!.progress[0]!.phase).toBe('accepted');
   } finally { controller.abort(); release(); await work; vi.useRealTimers(); }
+});
+
+// 119-C1: the registry is service-owned provenance; these controlled reads exercise its concurrency contract.
+const sessionActor = { id: 'ai/mcp', issuer: 'local/mcp', subject: 'person' };
+const sessionKey = (commandId = 'session-command') => ({ ledger: 'fixture-ledger', companyId: 'company', scopeId: 's', runId: 'r', commandId, actor: sessionActor });
+const sessionIntegrity = createHmacIntegrity('session-fixture', new Uint8Array(32).fill(7));
+function sessionCard(commandId = 'session-command', approvalId = 'card'): ApprovalRecord {
+  return sealApproval({ request: { schemaVersion: 3, approvalId, scopeId: 's',
+    requester: sessionActor, subject: { kind: 'run-create', commandId, runId: 'r', inputDigest: 'a'.repeat(64), admissionDigest: 'b'.repeat(64), decisionRecordId: 'authority' },
+    policyRevision: 'policy', actionDigest: 'c'.repeat(64), summary: 'fixture', createdAt: 10, expiresAt: 100,
+    facts: { risk: { source: 'effect-class', effectClass: 'write', authority: true }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } },
+    revision: 0, status: 'pending', decision: null }, sessionIntegrity);
+}
+function allowSessionCard(card: ApprovalRecord): ApprovalRecord {
+  return sealApproval({ request: card.request, revision: 1, status: 'decided', decision: { schemaVersion: 4, commandId: 'allow-card', decision: 'allow',
+    actor, sessionId: 'person-session', channel: 'local-terminal-card', reason: 'yes', decidedAt: 20, requestDigest: approvalRequestDigest(card.request),
+    commandDigest: 'd'.repeat(64), idempotencyKeyHash: 'e'.repeat(64), assurance: 'terminal-attested', deciderClass: 'human-tty' } }, sessionIntegrity);
+}
+const emptySessionState = (): RunSessionState => ({ run: null, intent: null, approval: null, now: 30, admissionWindowMs: 100 });
+function admittedSessionRun(run: RunSnapshot, card?: ApprovalRecord): RunSnapshot {
+  return { ...run, authority: { decision: { eventId: 'authority', sequence: 1 }, ...(card ? { approval: {
+    approvalId: card.request.approvalId, actionDigest: card.request.actionDigest, requestDigest: approvalRequestDigest(card.request), commandId: card.decision!.commandId } } : {}) } };
+}
+it('119-C1 slot race: one failed producer cannot release the other producer or its committed Q/A', async () => {
+  const f = await fixture(), state = emptySessionState(), registry = new RunSessionRegistry(async () => state);
+  const a = await registry.reserve(sessionKey()), b = await registry.reserve(sessionKey());
+  await registry.finish(a); expect(registry.count).toBe(1);
+  const card = allowSessionCard(sessionCard()), run = admittedSessionRun((await f.store.loadRun('s', 'r'))!, card);
+  registry.request(b, card); registry.admission(b, run, sessionActor, sessionKey().commandId);
+  Object.assign(state, { run, intent: { actor: sessionActor, commandId: sessionKey().commandId }, approval: card });
+  await registry.finish(b); expect(registry.eligible(sessionKey(), run)).toBe(true); expect(registry.count).toBe(1);
+});
+it('119-C1 slot race: a stale sweep cannot delete a superseded request generation', async () => {
+  let state = emptySessionState(), release!: (value: RunSessionState) => void, blocked = false;
+  const registry = new RunSessionRegistry(async () => blocked ? new Promise(resolve => { release = resolve; }) : state);
+  const pin = await registry.reserve(sessionKey()), old = sessionCard(); registry.request(pin, old); state = { ...state, approval: old };
+  await registry.finish(pin); blocked = true; const sweep = registry.sweep();
+  const next = await registry.reserve(sessionKey()), successor = sessionCard('session-command', 'successor'); registry.request(next, successor);
+  release({ ...state, now: 200 }); await sweep; expect(registry.count).toBe(1);
+  blocked = false; state = { ...state, approval: successor }; await registry.finish(next); expect(registry.count).toBe(1);
+});
+it('119-C1 slot race: unused Q expiry loses to a pinned fresh allow and does not erase the admitted basis', async () => {
+  const f = await fixture(); let state = emptySessionState(), release!: (value: RunSessionState) => void, blocked = false;
+  const registry = new RunSessionRegistry(async () => blocked ? new Promise(resolve => { release = resolve; }) : state);
+  const q = await registry.reserve(sessionKey()), card = sessionCard(); registry.request(q, card); state = { ...state, approval: card }; await registry.finish(q);
+  blocked = true; const sweep = registry.sweep(), d = await registry.reserve(sessionKey()), allowed = allowSessionCard(card);
+  registry.decision(d, allowed); release({ ...state, now: 200 }); await sweep;
+  const run = admittedSessionRun((await f.store.loadRun('s', 'r'))!, allowed); registry.admission(d, run, sessionActor, sessionKey().commandId);
+  blocked = false; state = { ...state, run, intent: { actor: sessionActor, commandId: sessionKey().commandId }, approval: allowed, now: 1000 };
+  await registry.finish(d); expect(registry.count).toBe(1); expect(registry.eligible(sessionKey(), run)).toBe(true);
+});
+it('119-C1 capacity: full registry admits existing command pins and refuses a new producer before it writes', async () => {
+  const registry = new RunSessionRegistry(async () => emptySessionState());
+  const pins = [];
+  for (let i = 0; i < runSessionRegistryData.maxEntries; i++) pins.push(await registry.reserve(sessionKey(`command-${i}`)));
+  const existing = await registry.reserve(sessionKey('command-0')); expect(registry.count).toBe(runSessionRegistryData.maxEntries);
+  const write = vi.fn();
+  await expect(registry.reserve(sessionKey('overflow')).then(write)).rejects.toMatchObject({ code: 'AI_RUN_SESSION_CAPACITY', params: { count: runSessionRegistryData.maxEntries, limit: runSessionRegistryData.maxEntries } });
+  expect(write).not.toHaveBeenCalled(); await registry.finish(existing); expect(registry.count).toBe(runSessionRegistryData.maxEntries);
+  const params = { count: registry.count, limit: registry.limit };
+  expect(ErrorRegistry.get('AI_RUN_SESSION_CAPACITY', 'en', { ...params, operation: 'proposal' })!.message).toContain('Try the proposal again after capacity becomes available.');
+  expect(ErrorRegistry.get('AI_RUN_SESSION_CAPACITY', 'en', { ...params, operation: 'approval' })!.message).toContain('Answer the same card again if it is still valid; if it expired, propose again.');
+  expect(ErrorRegistry.get('AI_RUN_SESSION_CAPACITY', 'tr', { ...params, operation: 'approval' })!.message).toContain('Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin.');
+});
+it('119-C1 cleanup: terminal work retires its slot; active A keeps Q after its approval window', async () => {
+  const f = await fixture(), card = allowSessionCard(sessionCard()), run = admittedSessionRun((await f.store.loadRun('s', 'r'))!, card);
+  let state: RunSessionState = { ...emptySessionState(), run, intent: { actor: sessionActor, commandId: sessionKey().commandId }, approval: card, now: 1000 };
+  const registry = new RunSessionRegistry(async () => state), pin = await registry.reserve(sessionKey());
+  registry.request(pin, card); registry.admission(pin, run, sessionActor, sessionKey().commandId); await registry.finish(pin);
+  await registry.sweep(); expect(registry.eligible(sessionKey(), run)).toBe(true);
+  state = { ...state, run: { ...run, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' } } };
+  await registry.sweep(); expect(registry.count).toBe(0);
+});
+it('119-C1 cleanup: unknown reads preserve entries and concurrent sweeps share a single execution', async () => {
+  let fail = false, block = false, release!: () => void;
+  const read = vi.fn(async () => { if (fail) throw Error('READ_UNAVAILABLE'); if (block) await new Promise<void>(resolve => { release = resolve; }); return { ...emptySessionState(), approval: sessionCard() }; });
+  const registry = new RunSessionRegistry(read), pin = await registry.reserve(sessionKey()); registry.request(pin, sessionCard()); await registry.finish(pin);
+  fail = true; await expect(registry.sweep()).rejects.toThrow('READ_UNAVAILABLE'); expect(registry.count).toBe(1);
+  fail = false; block = true; const before = read.mock.calls.length, first = registry.sweep(), second = registry.sweep();
+  expect(first).toBe(second); expect(read.mock.calls.length - before).toBe(1); release(); await first; expect(registry.count).toBe(1);
+});
+it('119-C1 capacity coalesces with a partial sweep and completes the full tracked pass before refusing a new slot', async () => {
+  let now = 30, blocked = false, release!: () => void;
+  const registry = new RunSessionRegistry(async identity => {
+    if (blocked) { blocked = false; await new Promise<void>(resolve => { release = resolve; }); }
+    return { ...emptySessionState(), now, approval: identity.commandId === 'third' ? null : sessionCard(identity.commandId, identity.commandId) };
+  }, 2);
+  for (const command of ['first', 'second']) { const pin = await registry.reserve(sessionKey(command)); registry.request(pin, sessionCard(command, command)); await registry.finish(pin); }
+  now = 200; blocked = true; const partial = registry.sweep(1), next = registry.reserve(sessionKey('third'));
+  release(); await partial; const pin = await next;
+  expect(registry.count).toBe(1); await registry.finish(pin); expect(registry.count).toBe(0);
+});
+it('119-C1 cleanup: verified rollback, deny and unused approval expiry release; unknown committed Q does not', async () => {
+  let state = emptySessionState(); const registry = new RunSessionRegistry(async () => state);
+  await registry.finish(await registry.reserve(sessionKey())); expect(registry.count).toBe(0);
+  const pin = await registry.reserve(sessionKey()), card = sessionCard(); registry.request(pin, card); state = { ...state, approval: card }; await registry.finish(pin);
+  state = { ...state, now: 100 }; await registry.sweep(); expect(registry.count).toBe(0);
+  const unknown = await registry.reserve(sessionKey()); state = { ...state, now: 30 };
+  await expect(registry.finish(unknown)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); expect(registry.count).toBe(1);
+});
+it('119-C1 maintenance never calls either start branch or reserves, but evaluates proven exited work', async () => {
+  const f = await fixture('pass', [], ['a', 'b'], 1);
+  await f.operations.reserve({ ...query, commandId: 'reserved-before-restart', expectedRevision: 0 });
+  const canExecute = vi.fn(async () => true); f.operations.canExecute = canExecute;
+  const execute = vi.spyOn(f.operations, 'execute'), reserve = vi.spyOn(f.operations, 'reserve');
+  await f.turn.advance(query, new AbortController().signal, true);
+  expect(canExecute).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+  const binding = (await f.store.loadRun('s', 'r'))!.bindings[0]!; await f.operations.execute(binding.identity); execute.mockClear();
+  const maintained = await f.turn.advance(query, new AbortController().signal, true);
+  expect(maintained.attempted).toBe(0); expect(f.stats().evaluations).toBe(1); expect(execute).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+  expect(maintained.run.tasks.map(task => task.phase)).toEqual(['accepted', 'pending']);
+});
+it('119-C1 actor selection refuses a partial or unknown actor and merged pages retain a single fair frontier', () => {
+  const read = (channel: 'mcp' | undefined) => channel === 'mcp' ? sessionActor : actor;
+  expect(selectProgressionActor(sessionActor, read)).toBe('mcp'); expect(selectProgressionActor(actor, read)).toBeUndefined();
+  expect(() => selectProgressionActor({ ...sessionActor, id: 'unknown' }, read)).toThrowError(expect.objectContaining({ code: 'RUN_PROGRESSION_AUTHORITY_REQUIRED' }));
+  const a = { scopeId: 's', runId: 'a' }, b = { scopeId: 's', runId: 'b' }, c = { scopeId: 's', runId: 'c' };
+  expect(mergeProgressionPages([{ items: [a, c], next: null }, { items: [b], next: null }], 2)).toEqual({ items: [a, b], next: b });
+  expect(mergeProgressionPages([{ items: [c], next: null }, { items: [], next: null }], 2)).toEqual({ items: [c], next: null });
+});
+it('119-C1 producer metadata is post-commit: request rollback/replay are not fresh and a lost response keeps the fresh commit', async () => {
+  const f = await fixture(), committed = vi.fn(), journal = openSqliteApprovalStore(f.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'forbid', committed);
+  const db = new DatabaseSync(f.path), card = sessionCard();
+  try {
+    db.exec("CREATE TRIGGER reject_session_card BEFORE INSERT ON approval_outbox BEGIN SELECT RAISE(ABORT,'fixture rollback'); END;");
+    expect(() => journal.store.create(card)).toThrow(); expect(committed).not.toHaveBeenCalled(); expect(journal.store.load('s', 'card')).toBeNull();
+    db.exec('DROP TRIGGER reject_session_card');
+    journal.store.create(card); journal.store.create(card); expect(committed).toHaveBeenCalledTimes(1); expect(committed).toHaveBeenLastCalledWith(card, 'create');
+    const allowed = allowSessionCard(card), receipt = { operation: 'decide' as const, scopeId: 's', commandId: allowed.decision!.commandId, fingerprint: allowed.decision!.commandDigest, record: allowed };
+    committed.mockImplementationOnce(() => { throw Error('RESPONSE_LOST_AFTER_COMMIT'); });
+    expect(() => journal.store.transitionWithSettlement(card, allowed, receipt)).toThrow('RESPONSE_LOST_AFTER_COMMIT');
+    expect(journal.store.load('s', 'card')).toEqual(allowed);
+    expect(journal.store.transitionWithSettlement(card, allowed, receipt).commit).toBe('replay'); expect(committed).toHaveBeenCalledTimes(2);
+    const successor = sessionCard('session-command', 'successor');
+    db.exec("CREATE TRIGGER reject_session_supersede BEFORE INSERT ON approval_outbox BEGIN SELECT RAISE(ABORT,'fixture rollback'); END;");
+    expect(() => journal.store.supersedeRunCreate(allowed, successor)).toThrow(); expect(committed).toHaveBeenCalledTimes(2);
+    expect(journal.store.findRunCreate('s', 'session-command')).toEqual(allowed);
+    db.exec('DROP TRIGGER reject_session_supersede');
+    journal.store.supersedeRunCreate(allowed, successor); expect(committed).toHaveBeenLastCalledWith(successor, 'supersede');
+    expect(() => journal.store.supersedeRunCreate(allowed, successor)).toThrow(); expect(committed).toHaveBeenCalledTimes(3);
+  } finally { db.close(); journal.close(); }
+});
+
+it('119-C1 Run producer rollback publishes nothing; lost-response and transaction replay retain one fresh admission', async () => {
+  const f = await fixture(), run = (await f.store.loadRun('s', 'r'))!, committed = vi.fn();
+  const input = { commandId: 'producer-command', actor: sessionActor, identity: { ...run.identity, runId: 'producer-run' },
+    graph: run.graph, execution: run.execution, now: 10, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: run.graph.tasks.map(task => task.id) } };
+  await expect(f.store.createRun(input, undefined, () => { throw Error('ROLLBACK'); }, undefined, committed)).rejects.toThrow('ROLLBACK');
+  expect(committed).not.toHaveBeenCalled(); expect(await f.store.loadRun('s', 'producer-run')).toBeNull();
+  const db = new DatabaseSync(f.path);
+  try { expect(db.prepare("SELECT * FROM run_execution_intents WHERE run_id='producer-run'").all()).toEqual([]); } finally { db.close(); }
+  committed.mockImplementationOnce(() => { throw Error('RESPONSE_LOST'); });
+  await expect(f.store.createRun(input, undefined, undefined, undefined, committed)).rejects.toThrow('RESPONSE_LOST');
+  expect(await f.store.loadRun('s', 'producer-run')).not.toBeNull(); expect(committed).toHaveBeenLastCalledWith(expect.anything(), 'fresh');
+  await f.store.createRun(input, undefined, undefined, undefined, committed);
+  expect(committed).toHaveBeenCalledTimes(2); expect(committed).toHaveBeenLastCalledWith(expect.anything(), 'replay');
+});
+
+it('119-C1 custody selection: unlaunched binding is not maintenance; proven started grant actor survives; unknown custody holds', async () => {
+  const f = await fixture('pass', [], ['a'], 1);
+  await f.operations.reserve({ ...query, commandId: 'custody-reserve', expectedRevision: 0 });
+  const run = (await f.store.loadRun('s', 'r'))!, binding = run.bindings[0]!;
+  expect(progressionCustodyActor(run, [null])).toBeNull();
+  await f.operations.execute(binding.identity);
+  const dispatch = (await f.store.loadBoundDispatch(binding.identity))!;
+  expect(progressionCustodyActor((await f.store.loadRun('s', 'r'))!, [dispatch])).toEqual(dispatch.grant!.principal);
+  expect(progressionCustodyActor(run, [{ ...dispatch, launch: 'pending', grant: null }])).toBeNull();
+  expect(() => progressionCustodyActor(run, [{ ...dispatch, worker: null, terminal: null }])).toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
 });

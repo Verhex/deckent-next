@@ -1,27 +1,34 @@
+import * as execution from '#composition/core/execution/index.js';
+import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { planMcpProposal } from '#adapters/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { userInfo } from 'node:os';
+import { planMcpProposal, DockerSupervisor, identifyDockerRequest, readLocalOsIdentity, type DockerCommandRunner } from '#adapters/index.js';
 import { describeMcpProposal, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
 import { aiSettingResourceIds, firstRunProposalRules, proposalCoverageGrants, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
-import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal, withLocalPrincipalChannel } from '#adapters/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
+import { clearConfigCache, loadConfig, ErrorRegistry } from '#platform/index.js';
 import { planServiceRun } from '#composition/core/run-planner/index.js';
 import { proposeConfiguredRun } from '#composition/core/runs/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
-import { terminalRequest } from '../support/approval-terminal.js';
-import { aiProposalRequester, sealApproval } from '#engine/index.js';
+import { terminalApplication, terminalRequest } from '../support/approval-terminal.js';
+import { aiProposalRequester, sealApproval, RunSessionRegistry, RuntimeServiceLifecycle, type RunSessionIdentity, type RunSessionPin } from '#engine/index.js';
 
 // L1 MCP-CORE item 5 (owner 2026-10-07): the model may only PROPOSE an MCP server. The proposal opens its own approval window in every mode —
 // standart, full-auto and a full-access turn alike — and nothing is written without the person's yes; a yes adds the server to the project's
 // local registry untrusted (its trust cards follow). Every string passes the model-ingress check.
 // Security (owner, Jev 30efcb91: no secrets in a proposal): no env or header value, no `$DECK:`, `${VAR}` or `$VAR` anywhere; the model names the
 // settings it needs and a person binds them in /mcp.
-afterEach(async () => { await closeModeRuntimes(); });
+const restartedServices: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
+afterEach(async () => { for (const service of restartedServices.splice(0)) { await service.stop(); await service.done; } await closeModeRuntimes(); vi.restoreAllMocks(); });
 const PROPOSE = rule('propose', 'agent-tool', ['propose_mcp_server'], 'allow');
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
 const proposal = { name: 'docs-search', transport: 'stdio', command: 'npx', args: ['-y', '@example/docs-mcp'], requiredSettings: ['DOCS_TOKEN'], reason: 'Search the library docs' };
@@ -306,3 +313,225 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     }
   }, 180_000);
 });
+
+it.skipIf(process.platform !== 'linux')('119-C1: chat approval advances from configured discovery as AI through launch and evaluation; person control', async () => {
+  // Explicit v21-equivalent fixture, independent of the shipped template. The person has separate grants.
+  const cells = (prefix: string, principals: unknown) => [
+    { id: `${prefix}-run`, effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['scope'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: `${prefix}-attempt`, effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['scope'], principals, resource: { kind: 'attempt', ids: 'all' } },
+    { id: `${prefix}-pool`, effect: 'allow', actions: ['use'], scopes: ['scope'], principals, resource: { kind: 'pool', ids: ['p'] } },
+  ];
+  const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
+  const w = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, AI_INVOKE, ...V20, ...cells('ai', [AI]), ...cells('person', me),
+    { id: 'person-create', effect: 'allow', actions: ['create'], scopes: ['scope'], principals: me, resource: { kind: 'run', ids: 'all' } }],
+    mode: null, planWork: planServiceRun, brain: JSON.stringify({ graph, budgetCeiling, requiredPermissions }) });
+  // Real workspace preparation, dispatch, artifact storage and evaluation; only Docker's process boundary is controlled.
+  const git = (...args: string[]) => execFileSync('git', ['-C', w.project, ...args], { stdio: 'pipe' });
+  git('init', '-q'); git('config', 'user.email', 'fixture@example.invalid'); git('config', 'user.name', 'Fixture');
+  git('add', 'src'); git('commit', '-qm', 'fixture');
+  const base = config(w), docker = (base['admission'] as { registry: { profiles: { parameters: Record<string, unknown> }[] } }).registry.profiles[0]!.parameters;
+  const { argv: _argv, ...settings } = docker; void _argv;
+  writeFileSync(join(w.project, '.deckent/config.json'), JSON.stringify({ ...base, execution: { deliveryMode: 'reference',
+    docker: { ...settings, executable: '/usr/bin/docker' }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } })); clearConfigCache();
+  const configured = await loadConfig(w.project, { env: w.env, heal: false }), os = userInfo();
+  const options = { ...configured.execution!.docker!, workspaceRoot: join(w.data, 'workspaces'), uid: os.uid, gid: os.gid };
+  const runner: DockerCommandRunner = async command => {
+    const args = command.args[0] === '--host' ? command.args.slice(2) : command.args;
+    if (args[0] === 'context') return { stdout: JSON.stringify({ Host: 'unix:///fixture.sock' }), stderr: '' };
+    if (args[0] === 'info') return { stdout: 'fixture-daemon', stderr: '' };
+    throw Error(`UNEXPECTED_DOCKER_${args[0]}`);
+  };
+  const profile = await new DockerSupervisor(options, runner).captureProfile();
+  vi.spyOn(DockerSupervisor.prototype, 'captureProfile').mockResolvedValue(profile);
+  vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  const launched: string[] = [];
+  vi.spyOn(DockerSupervisor.prototype, 'execute').mockImplementation(async request => {
+    launched.push(request.identity.runId);
+    return { handle: identifyDockerRequest(request, options).handle, result: { kind: 'exited', exitCode: 0 }, stdout: 'business-result', stderr: '', interrupted: false, outputCompleteness: 'complete' };
+  });
+  const admitted = await w.call('propose_work', { request: 'complete the business operation' }, 'allow');
+  expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' });
+  const aiRun = runsOf(w)[0]!.identity.runId;
+  const receipts = () => w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)) as { action: string; actor: unknown; scopeId?: string; runId?: string });
+  await expect.poll(() => receipts().filter(receipt => receipt.action === 'reserve-run-tasks' && receipt.runId === aiRun), { timeout: 8000 }).toHaveLength(1);
+  await expect.poll(() => w.rows('SELECT * FROM task_evaluation_observations'), { timeout: 8000 }).toHaveLength(1);
+  expect(launched).toEqual([aiRun]);
+  await w.client.createRun({ schemaVersion: 1, scopeId: 'scope', runId: 'person-control', commandId: 'person-control', graph });
+  await expect.poll(() => w.rows('SELECT * FROM task_evaluation_observations'), { timeout: 8000 }).toHaveLength(2);
+  const person = readLocalOsIdentity(), ai = withMcpPrincipal(readLocalOsIdentity);
+  const actor = (value: typeof person) => ({ id: value.id, issuer: value.issuer, subject: value.subject });
+  expect(receipts().filter(receipt => receipt.action === 'reserve-run-tasks').map(receipt => [receipt.runId, receipt.actor]))
+    .toEqual([[aiRun, actor(ai)], ['person-control', actor(person)]]);
+  const grants = w.rows('SELECT record FROM dispatches').map(row => JSON.parse(String((row as { record: string }).record)) as { grant: { principal: unknown } });
+  expect(grants.map(value => value.grant.principal)).toEqual([actor(ai), actor(person)]);
+}, 30000);
+
+async function sessionRuntime(progress = true) {
+  const grants = [AI_SCOPE, ...AI_OBSERVE, ...V20,
+    { id: 'person-progress-run', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['scope'], principals: me, resource: { kind: 'run', ids: 'all' } },
+    { id: 'person-progress-attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['scope'], principals: me, resource: { kind: 'attempt', ids: 'all' } }, ...(progress ? [
+    { id: 'ai-progress-run', effect: 'allow', actions: ['reserve', 'cancel'], scopes: ['scope'], principals: [AI], resource: { kind: 'run', ids: 'all' } },
+    { id: 'ai-progress-attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['scope'], principals: [AI], resource: { kind: 'attempt', ids: 'all' } },
+  ] : [])];
+  const w = await modeRuntime({ grants, mode: null, planWork: realPlan }), launched: string[] = [];
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_root, identity, _options, signal) => {
+    launched.push(identity.runId);
+    if (!signal?.aborted) await new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }));
+    return undefined as never;
+  });
+  const ai = withMcpPrincipal(readLocalOsIdentity);
+  const draft = (id: string) => ({ ...proposalFixture('business', { id: ai.id, issuer: ai.issuer, subject: ai.subject }), scopeId: 'scope', commandId: id, proposalId: id, runId: id });
+  const propose = (id: string) => withMcpPrincipal(() => w.client.proposeRun(draft(id)));
+  const ask = async (id: string) => {
+    const pending = await propose(id);
+    expect(pending.proposal).toMatchObject({ status: 'pending', reason: 'RUN_APPROVAL_REQUIRED' });
+    return { schemaVersion: 1 as const, scopeId: 'scope', approvalId: pending.proposal.approval!.approvalId, commandId: `allow-${id}`, expectedRevision: 0, decision: 'allow' as const, reason: 'person answer' };
+  };
+  const errors: { id: string | null; code: string }[] = [];
+  const restart = async () => {
+    await w.service.stop(); await w.service.done;
+    const service = await startConfiguredRuntimeService(w.project, { onPage() {}, onError() {},
+      onRunProgressionError(query, error) { errors.push({ id: query?.runId ?? null, code: error.code }); } }, { env: w.env });
+    restartedServices.push(service); return service;
+  };
+  const pool = async (action: 'hold' | 'resume') => {
+    const { store } = await openConfiguredAttemptStore(w.project, { env: w.env });
+    try { await store.applyPoolHold({ command: { scopeId: 'scope', commandId: `pool-${action}`, poolId: 'p', action, reason: 'controlled restart' }, actor: me[0]!, atMs: Date.now() }, () => {}); }
+    finally { store.close(); }
+  };
+  return { ...w, launched, propose, ask, restart, errors, pool };
+}
+it.skipIf(process.platform !== 'linux')('119-C1 iii: a pre-restart pending card answered fresh through the real socket starts after the re-send', async () => {
+  const f = await sessionRuntime(), answer = await f.ask('pending-card'); await f.restart();
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
+  await f.propose('pending-card');
+  await expect.poll(() => f.launched, { timeout: 6000 }).toEqual(['pending-card']);
+  expect(f.errors).toEqual([]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 ii: approval before restart and fresh Run after restart stays closed; replayed allow is not a fresh decision', async () => {
+  const f = await sessionRuntime(), answer = await f.ask('approved-before');
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.restart();
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
+  expect((await terminalRequest(f, 'decideApproval', { ...answer, commandId: 'another-allow' })).response).toMatchObject({ ok: false, error: { code: 'APPROVAL_CONFLICT' } });
+  await f.propose('approved-before');
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'approved-before', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+  expect(f.launched).toEqual([]); expect(runsOf(f)[0]!.progress).toMatchObject([{ phase: 'pending' }]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 i: an approved committed but unstarted Run never starts after restart or same-command replay', async () => {
+  const f = await sessionRuntime(); await f.pool('hold'); const answer = await f.ask('committed-before');
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('committed-before');
+  await f.restart(); await f.pool('resume'); await f.propose('committed-before');
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'committed-before', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+  expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 external decision: answering the old card outside the service does not create D', async () => {
+  const f = await sessionRuntime(), answer = await f.ask('external-answer'); await f.restart();
+  expect(await terminalApplication(f, 'decide', 'scope', answer)).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
+  await f.propose('external-answer');
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'external-answer', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+  expect(f.launched).toEqual([]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 shipped v20 only: a newly discovered AI Run refuses permission before any worker', async () => {
+  const f = await sessionRuntime(false); await f.restart(); const answer = await f.ask('v20-only');
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('v20-only');
+  await expect.poll(() => f.errors.some(error => error.id === 'v20-only' && error.code === 'POLICY_DENIED'), { timeout: 6000 }).toBe(true);
+  expect(f.errors.some(error => error.code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED')).toBe(false); expect(f.launched).toEqual([]);
+  expect(f.rows('SELECT * FROM attempts')).toEqual([]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 external admission and its socket replay never produce A', async () => {
+  const f = await sessionRuntime(); await f.restart(); const ai = withMcpPrincipal(readLocalOsIdentity);
+  const command = { ...proposalFixture('business', { id: ai.id, issuer: ai.issuer, subject: ai.subject }), scopeId: 'scope', commandId: 'outside-service', proposalId: 'outside-service', runId: 'outside-service' };
+  const external = () => withMcpPrincipal(() => proposeConfiguredRun(f.project, command, { env: f.env }));
+  const pending = await external(); expect(pending.proposal.status).toBe('pending');
+  const answer = { schemaVersion: 1, scopeId: 'scope', approvalId: pending.proposal.approval!.approvalId, commandId: 'allow-external', expectedRevision: 0, decision: 'allow', reason: 'person answer' };
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await external();
+  await withMcpPrincipal(() => f.client.proposeRun(command));
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'outside-service', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+  expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]);
+}, 30000);
+it.skipIf(process.platform !== 'linux')('119-C1 future-dated old intent does not block a new service request and commit', async () => {
+  const f = await sessionRuntime(); await f.pool('hold'); const old = await f.ask('future-old');
+  expect((await terminalRequest(f, 'decideApproval', old)).response).toMatchObject({ ok: true }); await f.propose('future-old');
+  f.exec("UPDATE run_execution_intents SET admitted_at=9007199254740990 WHERE run_id='future-old'");
+  await f.restart(); await f.pool('resume'); const fresh = await f.ask('new-work');
+  expect((await terminalRequest(f, 'decideApproval', fresh)).response).toMatchObject({ ok: true }); await f.propose('new-work');
+  await expect.poll(() => f.launched, { timeout: 6000 }).toEqual(['new-work']);
+  expect(f.errors).toContainEqual({ id: 'future-old', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+}, 30000);
+
+it.skipIf(process.platform !== 'linux')('119-C1 real socket capacity: zero proposal/card/Run writes; existing command continues and the refused command is accepted after release', async () => {
+  const original = RunSessionRegistry.prototype.reserve;
+  let captured!: { registry: RunSessionRegistry; identity: RunSessionIdentity };
+  vi.spyOn(RunSessionRegistry.prototype, 'reserve').mockImplementation(function (this: RunSessionRegistry, key, baseline, operation) {
+    captured = { registry: this, identity: key }; return original.call(this, key, baseline, operation);
+  });
+  const f = await sessionRuntime(); await f.pool('hold'); const old = await f.ask('old-card'); await f.restart();
+  const answer = await f.ask('existing');
+  const { registry, identity } = captured;
+  const pins: RunSessionPin[] = [];
+  for (let i = registry.count; i < registry.limit; i++) pins.push(await original.call(registry, { ...identity, commandId: `in-flight-${i}`, runId: `in-flight-${i}` }));
+  const tables = ['run_proposals', 'approvals', 'runs', 'run_receipts', 'audit_events', 'approval_receipts', 'approval_outbox', 'run_execution_intents'];
+  const before = tables.map(table => f.rows(`SELECT * FROM ${table}`));
+  await expect(f.propose('new-at-capacity')).rejects.toMatchObject({ code: 'AI_RUN_SESSION_CAPACITY', params: { count: registry.limit, limit: registry.limit, operation: 'proposal' } });
+  expect((await terminalRequest(f, 'decideApproval', old)).response).toMatchObject({ ok: false, error: { code: 'AI_RUN_SESSION_CAPACITY', params: { operation: 'approval' } } });
+  expect(tables.map(table => f.rows(`SELECT * FROM ${table}`))).toEqual(before);
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
+  expect((await f.propose('existing')).proposal.status).toBe('accepted'); expect(registry.count).toBe(registry.limit);
+  await registry.finish(pins.pop()!);
+  const retry = await f.ask('new-at-capacity');
+  expect((await terminalRequest(f, 'decideApproval', retry)).response).toMatchObject({ ok: true });
+  expect((await f.propose('new-at-capacity')).proposal.status).toBe('accepted');
+  expect(registry.count).toBe(registry.limit);
+  await registry.finish(pins.pop()!);
+  expect((await terminalRequest(f, 'decideApproval', old)).response).toMatchObject({ ok: true });
+  expect((await f.propose('old-card')).proposal.status).toBe('accepted'); expect(registry.count).toBe(registry.limit);
+}, 30000);
+
+it.skipIf(process.platform !== 'linux')('119-C1 configured FIFO execution and error park re-enter the AI actor when the queued work runs outside its context', async () => {
+  const f = await sessionRuntime(); await f.restart();
+  let queued!: () => Promise<void>, release!: () => void;
+  vi.spyOn(RuntimeServiceLifecycle.prototype, 'admitExecution').mockImplementation(async work => {
+    await new Promise<void>((resolve, reject) => { queued = () => work().then(resolve, reject); release = resolve; });
+  });
+  const observed: ReturnType<typeof readLocalOsIdentity>[] = [];
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async () => { observed.push(readLocalOsIdentity()); throw ErrorRegistry.createError('POLICY_DENIED'); });
+  const answer = await f.ask('fifo-ai'); expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
+  await f.propose('fifo-ai');
+  try {
+    await expect.poll(() => typeof queued, { timeout: 6000 }).toBe('function'); expect(observed).toEqual([]);
+    await withLocalPrincipalChannel(undefined, () => queued()).catch(() => undefined); release();
+    await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'fifo-ai', code: 'RUN_PROGRESSION_PARKED' });
+    const ai = withMcpPrincipal(readLocalOsIdentity), actor = { id: ai.id, issuer: ai.issuer, subject: ai.subject };
+    expect(observed).toHaveLength(1); expect(observed[0]).toMatchObject(actor);
+    const receipts = f.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)));
+    expect(receipts.filter(value => value.action === 'reserve-run-tasks' || value.action === 'park-progression').map(value => value.actor)).toEqual([actor, expect.objectContaining(actor)]);
+    expect(runsOf(f)[0]).toMatchObject({ progress: [{ phase: 'active' }] });
+  } finally { release?.(); }
+}, 30000);
+
+it.skipIf(process.platform !== 'linux')('119-C1 configured cancellation while FIFO waits prevents actual dispatch without borrowing the person identity', async () => {
+  const execute = execution.executeConfiguredTask, f = await sessionRuntime(); await f.restart();
+  let queued!: () => Promise<void>, release!: () => void;
+  vi.spyOn(RuntimeServiceLifecycle.prototype, 'admitExecution').mockImplementation(async work => { await new Promise<void>((resolve, reject) => { queued = () => work().then(resolve, reject); release = resolve; }); });
+  const seen: ReturnType<typeof readLocalOsIdentity>[] = [], failures: string[] = [];
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (...args) => {
+    seen.push(readLocalOsIdentity()); try { return await execute(...args); } catch (error) { failures.push((error as { code: string }).code); throw error; }
+  });
+  const answer = await f.ask('cancel-queued'); expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('cancel-queued');
+  try {
+    await expect.poll(() => typeof queued, { timeout: 6000 }).toBe('function');
+    const row = f.rows('SELECT revision FROM runs')[0] as { revision: number };
+    await f.client.requestRunCancellation({ schemaVersion: 1, scopeId: 'scope', runId: 'cancel-queued', commandId: 'cancel-race', action: 'cancel', expectedRevision: row.revision });
+    await withLocalPrincipalChannel(undefined, () => queued()).catch(() => undefined); release();
+    expect(seen).toHaveLength(1); expect(seen[0]).toMatchObject(withMcpPrincipal(readLocalOsIdentity));
+    expect(failures).toEqual(['RUN_STORE_CONFLICT']); expect(f.rows('SELECT * FROM dispatches')).toEqual([]); expect(f.launched).toEqual([]);
+  } finally { release?.(); }
+}, 30000);
+
+it.skipIf(process.platform !== 'linux')('119-C1 configured company boundary: startup refuses a foreign registered own scope before any AI reservation or execution', async () => {
+  const f = await sessionRuntime(); await f.pool('hold'); const answer = await f.ask('foreign-company');
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('foreign-company');
+  f.exec("INSERT INTO companies(company_id) VALUES('foreign'); UPDATE scope_registry SET company_id='foreign' WHERE scope_id='scope'");
+  await expect(f.restart()).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' });
+  expect(f.rows('SELECT * FROM attempts')).toEqual([]); expect(f.rows('SELECT * FROM dispatches')).toEqual([]); expect(f.launched).toEqual([]);
+}, 30000);

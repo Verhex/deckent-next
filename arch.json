@@ -141,7 +141,8 @@
         "src/adapters/core/run-store",
         "src/engine/core/workspace-adoption",
         "src/engine/core/workspace-patch-contract",
-        "src/adapters/core/sqlite-effect-store"
+        "src/adapters/core/sqlite-effect-store",
+        "src/domain/core/approval"
       ],
       "plan": "STORE"
     },
@@ -710,7 +711,9 @@
         "src/composition/core/model-use",
         "src/capabilities/core/native-agent-execution",
         "src/adapters/core/native-cli-registry",
-        "src/engine/core/workspace-adoption"
+        "src/engine/core/workspace-adoption",
+        "src/domain/core/approval",
+        "src/engine/core/run-progression"
       ],
       "plan": "EXECUTION"
     },
@@ -799,7 +802,8 @@
         "src/capabilities/core/native-agent-execution",
         "src/engine/core/proposal-upgrade",
         "src/adapters/core/native-cli-worker",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/engine/core/run-progression"
       ],
       "plan": "EXECUTION"
     },
@@ -2332,13 +2336,19 @@
     },
     "src/engine/core/run-progression": {
       "dependencies": [
+        "src/engine/core/dispatch",
         "src/platform/core/errors",
         "src/platform/core/config-fields",
         "src/domain/core/attempt",
         "src/domain/core/run",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/approval",
+        "src/domain/core/command",
+        "src/domain/core/principal",
+        "src/platform/core/integrity",
+        "src/engine/core/approval"
       ],
       "plan": "EXECUTION"
     },
@@ -2356,7 +2366,10 @@
         "src/platform/core/config",
         "src/adapters/core/local-principal",
         "src/platform/core/managed-files",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/approval"
       ],
       "plan": "EXECUTION"
     },
@@ -2768,7 +2781,9 @@
         "src/composition/core/operations",
         "src/engine/core/effect",
         "src/domain/core/effect",
-        "src/engine/core/authentication"
+        "src/engine/core/authentication",
+        "src/platform/core/integrity",
+        "src/engine/core/run-progression"
       ],
       "plan": "SECURITY"
     },

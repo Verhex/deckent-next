@@ -1,6 +1,7 @@
+import { localPrincipalChannel, withLocalPrincipalChannel } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { verifiedPrincipal, authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
+import { verifiedPrincipal, authenticate, DispatchPolicyAuthorization, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask, settleConfiguredEnvironmentProbes, withNativeCliWorkerOptions } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -12,7 +13,7 @@ export type RunExecutionAdmission = (work: () => Promise<void>, onSlotWait?: (wa
  * Every operation reloads local scope/policy; a previous turn or reservation is not a new permission.
  */
 export async function advanceConfiguredRun(projectRoot: string, input: RunQuery, signal: AbortSignal,
-  options: ConfigLoadOptions = {}, admitExecution: RunExecutionAdmission = work => work(), maxReservations?: number): Promise<ConfiguredRunProgressionResult> {
+  options: ConfigLoadOptions = {}, admitExecution: RunExecutionAdmission = work => work(), maxReservations?: number, maintenanceOnly = false): Promise<ConfiguredRunProgressionResult> {
   try {
     const query = runQuerySchema.parse(input), initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write'); let waitedForSlotMs = 0;
     async function withRunStore<T>(request: RunQuery, work: (store: Awaited<ReturnType<typeof openConfiguredLedger>>) => Promise<T>) {
@@ -21,6 +22,12 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
         .authorize('inspect', request, await authenticate(verifiedPrincipal(principal), undefined, request.scopeId));
       const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
       try { return await work(store); } finally { store.close(); }
+    }
+    const channel = localPrincipalChannel();
+    if (channel === 'mcp' && !maintenanceOnly) {
+      const authorization = new RunPolicyAuthorization(contextPolicySource(initial));
+      await authorization.authorize('reserve', query, initial.principal);
+      await authorization.authorize('cancel', query, initial.principal);
     }
     const executionOptions = withNativeCliWorkerOptions(projectRoot, options);
     const turn = new RunProgressionTurn({
@@ -31,9 +38,14 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }
         catch (error) { const outcome = reservationRefusalOutcome(queryFailure(error).code); if (outcome) return outcome; throw error; }
       },
-      canExecute: identity => withRunStore(query, async store => { const run = await store.loadRun(identity.scopeId, identity.runId);
+      canExecute: identity => withRunStore(query, async store => {
+        if (channel === 'mcp') {
+          const context = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write'), authorization = new DispatchPolicyAuthorization(contextPolicySource(context));
+          for (const action of ['execute', 'evaluate', 'read-output', 'recover-output'] as const) await authorization.authorizeIdentity(action, identity, context.principal);
+        }
+        const run = await store.loadRun(identity.scopeId, identity.runId);
         return !!run && !(await store.quotaHeldTasks(run, Date.now())).includes(identity.taskId); }),
-      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, executionOptions, signal); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
+      async execute(identity) { await admitExecution(() => withLocalPrincipalChannel(channel, async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, executionOptions, signal); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }), waited => { waitedForSlotMs += waited; }); },
       async evaluate(command) {
         try { await evaluateConfiguredTask(projectRoot, command, options); return 'recorded'; }
         catch (error) {
@@ -45,6 +57,6 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       },
       evaluationRecorded: (identity, revision) => withRunStore(query, store => store.hasTaskEvaluation(identity, revision)),
     }, initial.config.service.maxConcurrentExecutions, { commandId: randomUUID }, maxReservations);
-    const result = await turn.advance(query, signal); return waitedForSlotMs > 0 ? Object.freeze({ ...result, waitedForSlotMs }) : result;
+    const result = await turn.advance(query, signal, maintenanceOnly); return waitedForSlotMs > 0 ? Object.freeze({ ...result, waitedForSlotMs }) : result;
   } catch (error) { throw error instanceof RunProgressionFailure ? new RunProgressionFailure(queryFailure(error.cause), error.revision) : queryFailure(error); }
 }

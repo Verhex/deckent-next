@@ -104,3 +104,5 @@ export * from '#engine/core/beuser-evidence/index.js';
 
 export * from '#engine/core/project-attachment/index.js';
 export * from '#engine/core/model-use/index.js';
+export { RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, runProgressionSession, withRunProgressionSession, beginRunSession, beginRunDecisionSession } from '#engine/core/run-progression/index.js';
+export type { RunSessionIdentity, RunSessionState, RunSessionRead, RunSessionPin } from '#engine/core/run-progression/index.js';

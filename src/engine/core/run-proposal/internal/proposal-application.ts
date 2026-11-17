@@ -87,6 +87,7 @@ export class RunProposalApplication {
     };
     if (record && record.digest !== digest) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
     if (record && ['rejected', 'parked'].includes(record.status)) return result(this.context.registry, record);
+    const unrecorded = !record;
     if (!record) {
       record = { schemaVersion: 2, kind: 'planned', origin, proposal, digest, revision: origin ? origin.revision + 1 : 0, recordedAt: origin?.recordedAt ?? this.context.clock.sample().wallMs,
         status: 'recorded', binding: command.proposal!, reason: null, approval: null, authority: null };
@@ -99,9 +100,13 @@ export class RunProposalApplication {
         this.authority.recordUnapplied(command, principal, evaluation);
         return result(this.context.registry, await save({ ...record, status: 'rejected', reason: code }), null, error);
       }
-      // A failed receipt write stops before sealing/approval/Run admission.
-      record = await save(record);
     }
+    // Capacity refuses before even the proposal outcome is written; this command remains retryable.
+    const producer = await this.runs.beginSession(command, principal);
+    let failed = false;
+    try {
+    // A failed receipt write stops before sealing/approval/Run admission.
+    if (unrecorded) record = await save(record);
     const bound = { ...command, proposal: record.binding };
     try {
       // Reconcile an already committed admission before consulting mutable registry/budget/model state.
@@ -114,7 +119,7 @@ export class RunProposalApplication {
           throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
         }
       }
-      const admitted = await this.runs.admitEvaluated(bound, principal, evaluation);
+      const admitted = await this.runs.admitEvaluated(bound, principal, evaluation, undefined, producer);
       const completed = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
       if (!completed || isRunIntent(completed) || completed.status !== 'accepted' || completed.digest !== digest
         || encodeCommandProjection('authority', completed.authority) !== encodeCommandProjection('authority', admitted.run.authority)) throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
@@ -123,7 +128,7 @@ export class RunProposalApplication {
       const code = codeOf(error);
       const pending = error instanceof DeckentError && code === 'RUN_APPROVAL_REQUIRED' ? error.params : undefined;
       // Unknown I/O/commit outcomes cannot be laundered into a rejection or a safe retry claim.
-      if (!code || !ErrorRegistry.has(code) || ['RUN_PROPOSAL_OUTCOME_UNKNOWN', 'RUN_COMMAND_CONFLICT', 'RUN_PROPOSAL_COMMAND_CONFLICT'].includes(code)
+      if (!code || !ErrorRegistry.has(code) || ['AI_RUN_SESSION_CAPACITY', 'RUN_PROPOSAL_OUTCOME_UNKNOWN', 'RUN_COMMAND_CONFLICT', 'RUN_PROPOSAL_COMMAND_CONFLICT'].includes(code)
         || code.startsWith('ATTEMPT_STORE_') || code.startsWith('AUDIT_')) throw error;
       const status = pending ? 'pending' : ['APPROVAL_EXPIRED', 'APPROVAL_STALE', 'APPROVAL_CONFLICT', 'RUN_PROPOSAL_BASIS_STALE'].includes(code) ? 'parked' : 'rejected';
       const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason: code, authority: null,
@@ -132,6 +137,8 @@ export class RunProposalApplication {
       if (isRunIntent(stored)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
       return result(this.context.registry, stored, null, pending ? undefined : error);
     }
+    } catch (error) { failed = true; throw error; }
+    finally { if (failed) await producer?.finish().catch(() => undefined); else await producer?.finish(); }
   }
 }
 

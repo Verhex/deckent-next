@@ -216,11 +216,12 @@ export class SqliteRunJournal {
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
-  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources: readonly RunCapacityBinding[] = []): Promise<RunReceipt> {
+  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources: readonly RunCapacityBinding[] = [], committed?: (receipt: RunReceipt, commit: 'fresh' | 'replay') => void): Promise<RunReceipt> {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
-    return ledgerTransaction(this.db, () => withRunCapacityBindings(this.db, parsed, resources, () => {
+    let commit: 'fresh' | 'replay' = 'replay';
+    const result = ledgerTransaction(this.db, () => withRunCapacityBindings(this.db, parsed, resources, () => {
       const custody = new SqliteRunWorkspaceCustody(this.db);
       const replay = this.receipt(scopeId, runId, parsed.commandId, command);
       if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
@@ -238,8 +239,9 @@ export class SqliteRunJournal {
       // A pinned workspace is durable before any progression turn can observe the Run (never sampled from a moving HEAD later).
       if (workspace) custody.admitWithin(workspace);
       const receipt = this.record({ commandId: parsed.commandId, command, snapshot });
-      proposals.acceptWithin(proposal, receipt); return receipt;
+      proposals.acceptWithin(proposal, receipt); commit = 'fresh'; return receipt;
     }));
+    committed?.(result, commit); return result;
   }
   async reserveRunTasks(input: RunReservation): Promise<RunReceipt> {
     const parsed = runReservationSchema.parse(input), command = JSON.stringify({ action: 'reserve-run-tasks', ...parsed }), { scopeId, runId } = parsed;

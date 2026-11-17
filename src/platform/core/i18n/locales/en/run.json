@@ -477,5 +477,10 @@
   "docker.imageProbe.cause.parse": "the Docker answer could not be read",
   "approval.plan.workerMode.standart": "standard",
   "approval.plan.workerMode.ask-edits": "careful",
-  "approval.plan.workerMode.full-auto": "full auto"
+  "approval.plan.workerMode.full-auto": "full auto",
+  "error.AI_RUN_SESSION_CAPACITY": "AI work capacity reached ({count}/{limit}). Deny pending cards, finish/cancel existing Runs, or wait for unused approvals to expire. Then retry this operation.",
+  "error.RUN_PROGRESSION_AUTHORITY_REQUIRED": "The service cannot verify this Run actor. Ask an authorized person to inspect its authority.",
+  "error.RUN_PROGRESSION_REPROPOSE_REQUIRED": "No automatic start record exists in this service session. Cancel this Run and propose new work through the service.",
+  "run.sessionCapacity.proposalNextStep": "Try the proposal again after capacity becomes available.",
+  "run.sessionCapacity.approvalNextStep": "Answer the same card again if it is still valid; if it expired, propose again."
 }

@@ -477,5 +477,10 @@
   "docker.imageProbe.cause.parse": "Docker yanıtı okunamadı",
   "approval.plan.workerMode.standart": "standart",
   "approval.plan.workerMode.ask-edits": "dikkatli",
-  "approval.plan.workerMode.full-auto": "tam otomatik"
+  "approval.plan.workerMode.full-auto": "tam otomatik",
+  "error.AI_RUN_SESSION_CAPACITY": "Yapay zekâ iş kapasitesi dolu ({count}/{limit}). Bekleyen kartları reddedin, mevcut işleri tamamlayın/iptal edin veya kullanılmamış onayların süresinin dolmasını bekleyin. Sonra bu işlemi yeniden deneyin.",
+  "error.RUN_PROGRESSION_AUTHORITY_REQUIRED": "Servis bu işin aktörünü doğrulayamıyor. Yetkili bir kişiden işin yetkisini incelemesini isteyin.",
+  "error.RUN_PROGRESSION_REPROPOSE_REQUIRED": "Bu servis oturumunun otomatik başlangıç kaydı yok. Bu işi iptal edip servis üzerinden yeni bir iş önerin.",
+  "run.sessionCapacity.proposalNextStep": "Yer açıldıktan sonra öneriyi yeniden deneyin.",
+  "run.sessionCapacity.approvalNextStep": "Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin."
 }

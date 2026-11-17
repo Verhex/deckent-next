@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { verifiedPrincipal, ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
-  resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities,
+import { sha256, ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { verifyApproval, verifiedPrincipal, ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
+  resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type RunSessionPin, type ApprovalSubjectKind, type TurnDecisionCapabilities,
   EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type EffectTarget } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type AuditEvent, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
+import { runProgressionSession, beginRunDecisionSession } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
 export async function configuredApproval(projectRoot: string, action: 'list' | 'inspect' | 'decide' | 'renew', input: unknown,
@@ -24,9 +25,17 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
       : await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
     if (action === 'decide' && ApprovalApplication.requiresInteractiveTerminal(principal)) sessions.requireInteractiveTerminal();
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
-    const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite);
+    const session = runProgressionSession(); let pin: RunSessionPin | undefined;
+    const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite, 'forbid', (record, kind) => {
+      if (kind === 'transition' && pin && record.decision?.decision === 'allow') session?.decision(pin, verifyApproval(record, integrity));
+    });
+    let failed = false;
     let audit: Awaited<ReturnType<typeof openSqliteAuditStore>> | undefined;
     try {
+      if (session && action === 'decide' && 'decision' in parsed && parsed.decision === 'allow' && 'approvalId' in parsed) {
+        const loaded = journal.store.load(parsed.scopeId, parsed.approvalId);
+        pin = await beginRunDecisionSession(session, loaded && verifyApproval(loaded, integrity), { ledger: sha256(await context.path()), companyId: config.company.id });
+      }
       if (action === 'decide') audit = await openSqliteAuditStore(await context.path(), config.storage.sqlite, 'forbid');
       const check = (result: unknown) => { if (Buffer.byteLength(JSON.stringify(result)) > (capacity ?? config.service.responseMaxBytes)) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT'); };
       const restriction = action !== 'decide' ? undefined : { catalog: resolveOperationCatalog(readOperationsConfig(config as unknown as Record<string, unknown>)),
@@ -37,10 +46,11 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
         contextPolicySource(context, async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
           : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document), integrity, clock,
         'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
-      const result = action === 'list' ? await app.list(parsed, undefined, view) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : ('standing' in parsed && parsed.standing === 'session' ? await (answers ?? new SessionApprovalAnswers()).answer(approvalCommandSchema.parse(parsed), principal, peer?.pid ?? null, app) : await app.decide(parsed));
+      const result = action === 'list'  ? await app.list(parsed, undefined, view) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : ('standing' in parsed && parsed.standing === 'session' ? await (answers ?? new SessionApprovalAnswers()).answer(approvalCommandSchema.parse(parsed), principal, peer?.pid ?? null, app) : await app.decide(parsed));
       const answer = action === 'decide' ? parseApprovalAnswer('standing' in parsed, result) : result;
       check(answer); return answer;
-    } finally { audit?.close(); journal.close(); }
+    } catch (error) { failed = true; throw error; }
+    finally { try { if (pin) { if (failed) await session?.finish(pin).catch(() => undefined); else await session?.finish(pin); } } finally { audit?.close(); journal.close(); } }
   } catch (error) { throw queryFailure(error); }
 }
 /** A person's confirmed card applies its exact commands through the scope's operation broker and the shared effect contract. The card already

@@ -23,6 +23,9 @@ export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
+  /** Code-only service producer custody. Never part of admission or persisted records. */
+  session?(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<{ committed(receipt: RunReceipt, commit: 'fresh' | 'replay'): void; finish(): Promise<void> }>;
+
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
   modelUse?: {
     pin(execution: RunCreate['execution'], principal: VerifiedPrincipal, workerMode?: RunCreate['execution']['workerMode']): Promise<RunCreate['execution']>; // R9: recorded for a Run with a worker
@@ -38,6 +41,7 @@ export class RunAdmissionApplication {
   constructor(private readonly store: Pick<RunStore, 'createRun' | 'loadRunReceipt'> & Pick<RunWorkspaceCustodyStore, 'loadRunWorkspaceCustody'>, private readonly verifier: PrincipalVerifier,
     private readonly authorization: RunCreationAuthority, private readonly poolAuthorization: PoolAuthorization, private readonly context: RunAdmissionContext) {}
   async hasReceipt(scopeId: string, commandId: string) { return (await this.store.loadRunReceipt(scopeId, commandId)) !== null; }
+  beginSession(command: BoundRunAdmission, principal: VerifiedPrincipal) { return this.context.session?.(command, principal); }
   private replay(receipt: RunReceipt, command: BoundRunAdmission, actor: RunCreate['actor']) {
     let previous;
     try { previous = persistedCreate.parse(JSON.parse(receipt.command)); } catch { throw new RunStoreError('RUN_COMMAND_CONFLICT'); }
@@ -73,13 +77,17 @@ export class RunAdmissionApplication {
     return this.admitEvaluated(command, principal, evaluation, pin);
   }
   /** Trusted proposal application shares this exact path and passes its one sampled policy evaluation. */
-  async admitEvaluated(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, pin?: RunWorkspacePin) {
+  async admitEvaluated(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, pin?: RunWorkspacePin,
+    session?: Awaited<ReturnType<RunAdmissionApplication['beginSession']>>) {
     evaluation = this.authorization.evaluatePermissions(command, principal, evaluation);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     const replay = await this.store.loadRunReceipt(command.scopeId, command.commandId);
     const workspace = pin ? runWorkspaceCustodySchema.parse(await pin(replay !== null)) : undefined;
     if (workspace && (workspace.scopeId !== command.scopeId || workspace.runId !== command.runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     if (replay) return this.pinned(replay, command, principal, workspace);
+    const producer = session ?? await this.beginSession(command, principal);
+    let failed = false;
+    try {
     let create: RunCreate;
     try {
       const resolved = command.branch ? resolveAdmissionBranch(command.graph, command.branch) : undefined;
@@ -97,7 +105,7 @@ export class RunAdmissionApplication {
     try {
       await this.context.modelUse?.recheck(create.execution, principal);
       const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;
-      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert, resources);
+      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert, resources, producer?.committed);
       return await this.pinned(receipt, command, principal, workspace);
     } catch (error) {
       // A concurrent identical admission may have won using a different sampled clock/config snapshot.
@@ -106,5 +114,7 @@ export class RunAdmissionApplication {
       if (!winner) throw error;
       return this.pinned(winner, command, principal, workspace);
     }
+    } catch (error) { failed = true; throw error; }
+    finally { if (!session) { if (failed) await producer?.finish().catch(() => undefined); else await producer?.finish(); } }
   }
 }

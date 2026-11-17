@@ -63,7 +63,7 @@ export class RunProgressionTurn {
       await this.operations.evaluate({ schemaVersion: 1, commandId: this.runtime.commandId(), identity: current.identity, expectedRevision: latest.revision });
     }
   }
-  async advance(input: unknown, signal: AbortSignal) {
+  async advance(input: unknown, signal: AbortSignal, maintenanceOnly = false) {
     const query = runQuerySchema.parse(input); let revision: number | null = null;
     const read = async (request: RunQuery) => { const run = await this.read(request); revision = run.revision; return run; };
     await this.operations.advanceLifecycle?.(query);
@@ -104,14 +104,14 @@ export class RunProgressionTurn {
         run = await read(query);
         throwIfFailed();
         if (signal.aborted || stops(run)) break;
-        await startReserved(run);
+        if (!maintenanceOnly) await startReserved(run);
         // Cooperative yield: stop taking new reservations, but drain existing custody before returning.
-        if (run.state.kind === 'running' && (this.maxReservations === undefined || reservations < this.maxReservations)
+        if (!maintenanceOnly && run.state.kind === 'running' && (this.maxReservations === undefined || reservations < this.maxReservations)
           && running.size < this.concurrency && run.progress.some(task => task.phase === 'pending')) {
           reservations++;
           await this.operations.reserve({ ...query, commandId: this.runtime.commandId(), expectedRevision: run.revision });
           run = await read(query);
-          if (!run.cancelRequested) await startReserved(run);
+          if (!maintenanceOnly && !run.cancelRequested) await startReserved(run);
         }
         if (!running.size) break;
         const completed = await Promise.race(running.values());

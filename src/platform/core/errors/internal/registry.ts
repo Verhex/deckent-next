@@ -480,7 +480,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   SUPERVISOR_RELEASE_UNCONFIRMED: 'error',
 }), {
   QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: p['record'] === undefined ? t('error.QUERY_UNEXPECTED_FAILURE', p, l) : t('error.QUERY_UNEXPECTED_FAILURE.recorded', p, l) }) },
-}, plainErrors('error.', { RUN_PROGRESSION_PARKED: 'error' }), {
+}, plainErrors('error.', { RUN_PROGRESSION_PARKED: 'error', RUN_PROGRESSION_AUTHORITY_REQUIRED: 'error', RUN_PROGRESSION_REPROPOSE_REQUIRED: 'error' }), {
+  AI_RUN_SESSION_CAPACITY: { category: 'error', render: (p, l) => ({ message: [t('error.AI_RUN_SESSION_CAPACITY', p, l),
+    p['operation'] === 'proposal' ? t('run.sessionCapacity.proposalNextStep', {}, l) : p['operation'] === 'approval' ? t('run.sessionCapacity.approvalNextStep', {}, l) : ''].filter(Boolean).join(' ') }) },
   // Crash-loop breaker: params task, attempt, phase (last preparation phase entered, or 'unknown'), aborts, bound. Without params (the parked
   // Run's recorded failure code seen later) the summary sentence stands.
   DISPATCH_PREPARATION_ABORTED: { category: 'error', render: (p, l) => ({ message: p['aborts'] === undefined ? t('error.DISPATCH_PREPARATION_ABORTED.summary', p, l) : t('error.DISPATCH_PREPARATION_ABORTED', p, l),
