@@ -401,9 +401,9 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
 - **Codex abonelik işçisi, kayıtlı koşularda araç yolunda değişiklik üretmedi; bir Claude işçisi teslimi bir kayıt kurulumunda belgeli.** Abonelik işçisinin CLI'ı
   bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. Codex: beta.1.2 kayıt kurulumundaki üç yazma
-  görevinde (2026-11-12) ve gerçek hesaplı bir beta.2 kurulumundaki bir koşuda (2026-11-16) işçi hiçbir şey yazmadı; sonuncusunda
-  hiçbir yazma aracı çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi. İşçi başlamadan reddedilen denemeler burada
-  sayılmadı. Claude: beta.1.2 kayıt kurulumunda bir işçinin dosyası çıkış koduyla kabul edilip teslim edildi (README'deki üçüncü
+  denemesi (2026-11-12) dosya üretmedi: ilkinde okuma çağrılarının ardından hata oluştu, diğer ikisinde işçi olayı görünmeden ret
+  kaydedildi; oradaki daha sonraki paralel deneme de reddedildi. Gerçek hesaplı bir beta.2 kurulumundaki bir koşuda (2026-11-16)
+  işçi hiçbir yazma aracı çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi. Claude: beta.1.2 kayıt kurulumunda bir işçinin dosyası çıkış koduyla kabul edilip teslim edildi (README'deki üçüncü
   kayıt); o koşunun araç çağrıları dökümden doğrulanmadı ve beta.2'de kayıtlı Claude işçisi koşusu yok. Kaynak okuması, bir koşuda görülmedi:
   beta.2'de Codex yolunda işçi koşusu dokuzuncu araç çağrısında biter (Claude yolu doğrulanmadı); ana dal 128 çağrıya izin verir ve
   işçiye kendi ortamının salt okunur uyarısının deckent'in araçlarını kapsamadığını söyler (henüz yayımlanmadı, beta.2.1 için);

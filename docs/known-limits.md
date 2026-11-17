@@ -403,10 +403,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
 - **Codex subscription workers have not produced a change on the tool path in the runs on record; a Claude worker delivery is documented on a recording installation.** The CLI of a
-  subscription worker runs read-only on purpose and changes files only through deckent's tools. Codex: in three write tasks on a
-  beta.1.2 recording installation (2026-11-12) and in one run on a real-account beta.2 installation (2026-11-16) the worker wrote
-  nothing; in the last one it called no write tool and reported a read-only workspace. Attempts refused before a worker started are
-  not counted here. Claude: on the beta.1.2 recording installation a worker's file was accepted on exit code and delivered (the third
+  subscription worker runs read-only on purpose and changes files only through deckent's tools. Codex: three write attempts on a
+  beta.1.2 recording installation (2026-11-12) produced no file: the first made read calls and then ended in an error, the other two
+  were recorded as refused with no worker event visible; a later parallel attempt there was refused as well. In one run on a
+  real-account beta.2 installation (2026-11-16) the worker called no write tool and reported a read-only workspace. Claude: on the beta.1.2 recording installation a worker's file was accepted on exit code and delivered (the third
   recording in the README); that run's tool calls were not verified from a transcript, and no Claude worker run on beta.2 is on record. Source reading, not seen in a run: on the
   Codex path a worker run ends at its ninth tool call in beta.2 (the Claude path is not verified); the main branch allows 128 calls and tells
   the worker that its own runtime's read-only notice does not cover deckent's tools (not released yet, for beta.2.1); on the installation
