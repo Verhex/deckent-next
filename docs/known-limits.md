@@ -596,11 +596,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
   admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a
   Run card is open.
-- **Work proposed in chat produces no card when the installation has one subscription sign-in.** The running chat turn holds
-  that sign-in's single slot, so the planner's own call is refused and no card or Run appears; installed beta.2 shows a general
-  tool error (source reading and one sandbox walk with two attempts). `/do` is not affected, and a planner (Brain) on another
-  sign-in or API connection keeps working. Planning inside the chat turn is decided for beta.2.1 and not built yet.
-  *Workaround:* use `/do`, or set the Brain to a model on another sign-in or API connection.
+- **Work proposed in chat produces no card when chat and the planner (Brain) share one single-slot subscription sign-in.**
+  By source reading, the running chat turn holds that sign-in's only slot, so the planner's own call inside the turn is
+  refused and no card or Run appears. Seen once in a sandbox walk on a build of main (not on installed beta.2): of two
+  attempts, one stopped on configuration and one on this capacity refusal; the person saw a general tool error. `/do` is a
+  separate call outside a chat turn and is not part of this nesting. A Brain on another sign-in or on an API connection
+  avoids the clash by source reading; that path has not been walked. Planning inside the chat turn is decided for beta.2.1
+  and not built yet. *Workaround (not walked):* use `/do`, or set the Brain to a model on another sign-in or API connection.
 
 ## Budgets and spend
 

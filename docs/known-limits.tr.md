@@ -589,11 +589,13 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **çalışma kartı iş hedefini henüz bağlamaz.** Bir çalışmanın kartı planına, havuzuna ve çalışma profiline bağlıdır; yapılandırılmış iş hedefinin
   kimliğine bağlı değildir (çalışma onu kaydetmez; iş hedeflerinin 1. dilimi). Kart ile kabul arasında yapılandırmada değişen hedef yeniden
   denetlenir (`work-target/use`) ama kartta adı geçmez. *Yol:* bir çalışma kartı açıkken `execution.workTargets`'ı değiştirmeyin.
-- **Kurulumda tek abonelik girişi varsa sohbette önerilen iş kart üretmez.** Süren sohbet turu o girişin tek yerini tutar;
-  planlayıcının kendi çağrısı reddedilir, kart da iş de oluşmaz; kurulu beta.2 genel bir araç hatası gösterir (kaynak okuması
-  ve iki denemeli bir deneme kurulumu yürüyüşü). `/do` etkilenmez; başka bir girişteki ya da API bağlantısındaki planlayıcı
-  (Brain) çalışmaya devam eder. Sohbet turunun içinde planlama beta.2.1 için kararlaştırıldı, henüz yapılmadı. *Yol:* `/do`
-  kullanın ya da Brain'i başka bir girişteki ya da API bağlantısındaki bir modele ayarlayın.
+- **Sohbet ile planlayıcı (Brain) tek yerli aynı abonelik girişini paylaşıyorsa sohbette önerilen iş kart üretmez.** Kaynak
+  okumasına göre süren sohbet turu o girişin tek yerini tutar; planlayıcının tur içindeki kendi çağrısı reddedilir, kart da iş
+  de oluşmaz. Bir kez, main derlemesiyle kurulmuş bir deneme kurulumu yürüyüşünde görüldü (kurulu beta.2'de değil): iki
+  denemeden biri yapılandırmada, biri bu kapasite reddinde durdu; kişi genel bir araç hatası gördü. `/do` sohbet turunun
+  dışında ayrı bir çağrıdır ve bu iç içe çağrının parçası değildir. Başka bir girişteki ya da API bağlantısındaki Brain, kaynak
+  okumasına göre bu çakışmayı önler; o yol yürünmedi. Sohbet turunun içinde planlama beta.2.1 için kararlaştırıldı, henüz
+  yapılmadı. *Yol (yürünmedi):* `/do` kullanın ya da Brain'i başka bir girişteki ya da API bağlantısındaki bir modele ayarlayın.
 
 ## Bütçe ve harcama
 
