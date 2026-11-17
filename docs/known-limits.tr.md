@@ -399,11 +399,12 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT (Codex CLI) abonelikleri deckent araçlı sohbetini sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
-- **Codex abonelik işçisi araç yolunda henüz değişiklik üretmedi; kayıtlı tek Claude işçisi teslimi var (beta.1.2 ve beta.2).** Abonelik işçisinin CLI'ı
-  bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. Codex işçisi dört koşuda hiçbir şey yazmadı
-  (üçü 2026-11-12'de bir kayıt kurulumunda, biri 2026-11-16'da gerçek hesaplı bir kurulumda; sonuncusunda hiçbir yazma aracı çağırmadı
-  ve çalışma alanının salt okunur olduğunu bildirdi). Bir Claude işçisinin dosyası bir kez çıkış koduyla kabul edilip teslim edildi
-  (kayıt kurulumu, 2026-11-12; README'deki üçüncü kayıt); kayıtlı başka Claude işçisi koşusu yok. Kaynak okuması, bir koşuda görülmedi:
+- **Codex abonelik işçisi, kayıtlı koşularda araç yolunda değişiklik üretmedi; bir Claude işçisi teslimi bir kayıt kurulumunda belgeli.** Abonelik işçisinin CLI'ı
+  bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. Codex: beta.1.2 kayıt kurulumundaki üç yazma
+  görevinde (2026-11-12) ve gerçek hesaplı bir beta.2 kurulumundaki bir koşuda (2026-11-16) işçi hiçbir şey yazmadı; sonuncusunda
+  hiçbir yazma aracı çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi. İşçi başlamadan reddedilen denemeler burada
+  sayılmadı. Claude: beta.1.2 kayıt kurulumunda bir işçinin dosyası çıkış koduyla kabul edilip teslim edildi (README'deki üçüncü
+  kayıt); o koşunun araç çağrıları dökümden doğrulanmadı ve beta.2'de kayıtlı Claude işçisi koşusu yok. Kaynak okuması, bir koşuda görülmedi:
   beta.2'de Codex yolunda işçi koşusu dokuzuncu araç çağrısında biter (Claude yolu doğrulanmadı); ana dal 128 çağrıya izin verir ve
   işçiye kendi ortamının salt okunur uyarısının deckent'in araçlarını kapsamadığını söyler (henüz yayımlanmadı, beta.2.1 için);
   incelenen kurulumda çalışma kopyasında `node_modules` yoktu, bu yüzden ona bağlı kontrol komutları orada çalışamadı; işçinin `npm` ve `node` komutları, yalnız etkileşimli terminaldeki kişinin

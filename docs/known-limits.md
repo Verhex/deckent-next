@@ -402,11 +402,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
-- **Codex subscription workers have not produced a change on the tool path yet; one Claude worker delivery is on record (beta.1.2 and beta.2).** The CLI of a
-  subscription worker runs read-only on purpose and changes files only through deckent's tools. A Codex worker wrote nothing in four runs
-  (three on a recording installation on 2026-11-12, one on a real-account installation on 2026-11-16, where it called no write tool and
-  reported a read-only workspace). A Claude worker's file was accepted on exit code and delivered once (recording installation,
-  2026-11-12; the third recording in the README); no other Claude worker run is on record. Source reading, not seen in a run: on the
+- **Codex subscription workers have not produced a change on the tool path in the runs on record; a Claude worker delivery is documented on a recording installation.** The CLI of a
+  subscription worker runs read-only on purpose and changes files only through deckent's tools. Codex: in three write tasks on a
+  beta.1.2 recording installation (2026-11-12) and in one run on a real-account beta.2 installation (2026-11-16) the worker wrote
+  nothing; in the last one it called no write tool and reported a read-only workspace. Attempts refused before a worker started are
+  not counted here. Claude: on the beta.1.2 recording installation a worker's file was accepted on exit code and delivered (the third
+  recording in the README); that run's tool calls were not verified from a transcript, and no Claude worker run on beta.2 is on record. Source reading, not seen in a run: on the
   Codex path a worker run ends at its ninth tool call in beta.2 (the Claude path is not verified); the main branch allows 128 calls and tells
   the worker that its own runtime's read-only notice does not cover deckent's tools (not released yet, for beta.2.1); on the installation
   examined the work tree had no `node_modules`, so the check commands that need it could not run there; `npm` and `node` commands of a worker ask for a card that only a person at an interactive terminal can answer, inside the
