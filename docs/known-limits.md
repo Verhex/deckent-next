@@ -402,17 +402,19 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
-- **Subscription workers have not produced a change on the tool path yet (first real-account run 2026-11-16, beta.2).** The CLI of a
-  subscription worker runs read-only on purpose and changes files only through deckent's tools. In the first real run a Codex worker
-  called no write tool and reported a read-only workspace; the Claude worker kind has not run. Source reading, not seen in a run: on the
+- **Codex subscription workers have not produced a change on the tool path yet; one Claude worker delivery is on record (beta.1.2 and beta.2).** The CLI of a
+  subscription worker runs read-only on purpose and changes files only through deckent's tools. A Codex worker wrote nothing in four runs
+  (three on a recording installation on 2026-11-12, one on a real-account installation on 2026-11-16, where it called no write tool and
+  reported a read-only workspace). A Claude worker's file was accepted on exit code and delivered once (recording installation,
+  2026-11-12; the third recording in the README); no other Claude worker run is on record. Source reading, not seen in a run: on the
   Codex path a worker run ends at its ninth tool call in beta.2 (the Claude path is not verified); the main branch allows 128 calls and tells
   the worker that its own runtime's read-only notice does not cover deckent's tools (not released yet, for beta.2.1); on the installation
   examined the work tree had no `node_modules`, so the check commands that need it could not run there; `npm` and `node` commands of a worker ask for a card that only a person at an interactive terminal can answer, inside the
   worker's own time. A Run parked before its worker started keeps the sign-in's single slot until it is cancelled (`deckent run cancel`);
   chat and planning on that sign-in stop meanwhile.
-- **Work proposed from chat is admitted but not started (beta.2; fix admitted for beta.2.1).** When the chat AI proposes work and you
-  approve the card, the Run is admitted and listed, but the service does not advance it (shown by a throwaway source probe that is not in the repository; not
-  tried on an installed release). Start the work with `/do` in the terminal or `deckent do --request` instead.
+- **Work proposed by the AI is admitted but not started (beta.2; fix admitted for beta.2.1).** When the chat AI or an AI client over MCP
+  proposes work and you approve the card, the Run is admitted and listed, but the service does not advance it (the chat case was shown by a throwaway source probe that is not in the
+  repository; the MCP case is a source reading; neither was tried on an installed release). Start the work with `/do` in the terminal or `deckent do --request` instead.
 - **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
   worker bound to your connection runs in deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
   bubblewrap, otherwise the worker is refused (`HEADLESS_ISOLATION_UNAVAILABLE`). Plain Docker workers and the ChatGPT browser sign-in (SIWC)
