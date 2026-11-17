@@ -287,5 +287,6 @@
   "monitor.legend.attention": "needs attention: a blocked Run, a warning, a stale heartbeat, a read problem, a held pool or an old snapshot",
   "monitor.legend.installOff": "off or not reachable: an unreachable or refused install, a stopped service, an unused profile",
   "monitor.diagnostic.modelRolesPending": "New model: role pending ({count}); no tier-based role may use it until you assign one",
-  "monitor.action.modelRolesPending": "To assign: deckent models roles"
+  "monitor.action.modelRolesPending": "To assign: deckent models roles",
+  "cli.worker.model.unverifiedReason": " · requested model {model}; its use could not be verified"
 }

@@ -31,6 +31,6 @@ export async function doCommand(argv: readonly string[], context: RunCommandCont
     : t('brainwait.resumed', { attempt: progress.attempt }, locale)}\n`); };
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) stderr.write(`${ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message}\n`);
-  const result = await context.planRun(root, command, options, context.signal, observe);
+  const result = await context.planRun(root, command, { ...options, env: { ...options.env, DECKENT_LANGUAGE: locale } }, context.signal, observe);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: value => [t('cli.do.command', { command: command.commandId }, locale), ...brainProposalLines(value, locale)].join('\n') });
 }

@@ -239,8 +239,8 @@
   "terminal.approval.denied": "Approval {id} denied; the runtime recorded the decision.",
   "terminal.approval.identity": "Approval identity: {id}",
   "terminal.approval.unsettled": "Approval request {id} could not be closed; the call did not run. The pending request permits nothing and closes at its expiry or the next service start.",
-  "terminal.approval.more": "{count} more pending — /approvals to decide the next.",
-  "terminal.approval.notify": "{count} new pending approval(s) — /approvals to review.",
+  "terminal.approval.more": "The list you opened showed {count} more pending — it may have changed; /approvals to review.",
+  "terminal.approval.notify": "{count} pending approval(s) — /approvals to review.",
   "terminal.approval.pollFailed": "Approval check failed",
   "terminal.approval.standing.covers": "A standing answer covers exactly: {pattern}",
   "terminal.approval.standing.promptBoth": "y approve once · s approve for this session · a always in this project · n deny · Enter/Esc deny (default).",
@@ -476,5 +476,7 @@
   "terminal.approval.background.assurance": "This background call needs your witnessed terminal decision; the service binds this card to your current terminal.",
   "terminal.approval.background.call": "Attempt: {attempt} · argsDigest: {digest}",
   "terminal.approval.background.wait": "Waiting for your approval · Run {run} · Task {task} · Attempt {attempt} · {tool} → {target} · {reason} · {seconds}s left. Open /approvals.",
-  "terminal.approval.background.expired": "Approval expired; the task did not complete."
+  "terminal.approval.background.expired": "Approval expired; the task did not complete.",
+  "terminal.approval.notifyPartial": "At least {count} pending approval(s) in the checked part — /approvals to review.",
+  "terminal.approval.countUnknown": "The pending approval count could not be checked completely — /approvals to review."
 }

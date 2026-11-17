@@ -14,9 +14,9 @@ export function nativeQuotaRejection(limit: ClaudeRateLimit): Omit<Extract<Headl
     : { refusal: limit.kind === 'credits-required' ? 'credits-required' : 'quota', field: limit.window, subtype: limit.status, resetsAtMs: limit.resetsAtMs, status: null };
 }
 
-/** Existing v1 fields only: status in subtype, window in field, reset in resetsAtMs. No new durable vocabulary. */
+/** Existing rejection fields only: status in subtype, window in field, reset in resetsAtMs. No new durable vocabulary. */
 export function nativeQuotaText(body: HeadlessRejectionBody, locale: Locale): string | null {
-  if (body.schemaVersion !== 1) return null;
+  if (body.schemaVersion !== 1 && body.schemaVersion !== 5) return null;
   if (body.refusal === 'credits-required') return t('error.HEADLESS_CREDITS_REQUIRED', {}, locale);
   if (body.refusal === 'guard' && body.field === 'agent-surface:rate-limit-status')
     return t('headless.chat.quotaUnknownStatus', { status: body.subtype ?? '?' }, locale);

@@ -1,3 +1,4 @@
+import { workerReadinessText } from '#surfaces/core/doctor/index.js';
 import { messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
@@ -27,7 +28,7 @@ function setupAuthority(plan: SetupPlan) {
 /** A message the plan names by key (stage titles, reasons, questions are message keys of the setup contract): read from the shared
  * catalog and filled the same way as every literal message; an unknown key stays visible as itself. */
 export function setupMessage(key: string, params: Readonly<Record<string, string | number>>, locale: Locale): string {
-  return messageText(key, locale, params) ?? key;
+  return key === 'setup.work.workerMissing' ? workerReadinessText(String(params['code']), locale) : messageText(key, locale, params) ?? key;
 }
 const STATE_LABELS: Readonly<Record<SetupStageState, (locale: Locale) => string>> = Object.freeze({ done: l => t('setup.state.done', {}, l),
   ready: l => t('setup.state.ready', {}, l), 'needs-answer': l => t('setup.state.needsAnswer', {}, l), blocked: l => t('setup.state.blocked', {}, l),
