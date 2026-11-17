@@ -33,5 +33,7 @@ Green transition after K1/K2: replace the cancel-waiting outer fake send with a
 real-protocol replay: correlated preparation delivery, one challenge-framed terminal
 draft and normal CLI close/drain. Only then replace it.todo with it. Preparation
 alone must never open the person card or satisfy the old refusal barrier. Preserve
-one card, one claim/send and zero Run before the person's decision; the effective
-request cap must be null with reasoning model-default.
+one card, one claim/send and zero Run before the person's decision. The Brain
+settings stay cap null / reasoning model-default; the request cap seen today is the
+terminal's own inherited output cap (a positive number by schema), not a Brain
+requirement, and the green phase must not require a separate brain-prepare call.

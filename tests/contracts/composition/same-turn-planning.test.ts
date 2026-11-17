@@ -113,6 +113,8 @@ for (const family of [CODEX_FAMILY, FAMILY]) {
         expect(trace.filter(row => row['event'] === 'claim-attempt')).toHaveLength(2);
         expect(trace.at(-1)).toMatchObject({ event: 'claim-refused', code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
         expect(trace.filter(row => row['event'] === 'brain-send')).toHaveLength(0);
+        // Today's separate Brain call: its own cap setting is null, so the request carries the terminal fixture's inherited output cap.
+        expect(trace.find(row => row['event'] === 'brain-prepare')).toMatchObject({ cap: 8, reasoning: 'model-default' });
       }
       expect(cards, 'K3a: separate Brain attempted a second claim while the outer chat claim owns the single subscription slot; expected one person card').toHaveLength(1);
       expect(trace.filter(row => row['event'] === 'claim-register-attempt')).toHaveLength(1);
