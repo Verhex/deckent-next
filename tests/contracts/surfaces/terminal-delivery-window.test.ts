@@ -883,11 +883,11 @@ describe('delivery card summaries in the window and its port (alpha.53 A3)', () 
 });
 
 /** Real Window arming and pinned-directory narrowing; the recording port isolates the transition from worker execution. */
-function permissionTransition() {
+function permissionTransition(workingTree = true) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-permission-transition-')), directory = join(root, '.git');
   mkdirSync(directory); chmodSync(directory, 0o775);
-  const h = harness({ workingTree: true, decisionArmMs: DECISION_ARM_DEFAULT }), original = h.port.deliver, preview = h.port.preview;
-  h.port.preview = async target => ({ ...await preview(target), workingTree: true });
+  const h = harness({ workingTree, targets: workingTree ? [] : ['refs/heads/main'], decisionArmMs: DECISION_ARM_DEFAULT }), original = h.port.deliver, preview = h.port.preview;
+  h.port.preview = async target => ({ ...await preview(target), workingTree });
   h.port.deliver = async (preview, ids, answer, permission) => {
     try { await prepareAttachmentDirectory(directory, async () => undefined, async path => await permission!(path, '0775', '0755', `chmod go-w -- ${shellWord(path)}`)); }
     catch { throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: directory, command: 'chmod go-w -- folder' } }); }
@@ -927,6 +927,30 @@ it.skipIf(process.platform === 'win32' || !process.getuid)('D1 transition POSITI
     await press(h, 'y'); await press(h, '\r');
     expect(h.calls.filter(call => call === 'publish')).toHaveLength(1);
   } finally { await fixture.close(); }
+});
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 delayed adoption question rejects an old separate-read y and accepts a fresh y after its own quiet period', async () => {
+  const fixture = permissionTransition(false), { h } = fixture, deliver = h.port.deliver;
+  let finishWork!: () => void;
+  const work = new Promise<void>(resolve => { finishWork = resolve; });
+  h.port.deliver = async (...args) => { const outcome = await deliver(...args); await work; return outcome; };
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => h.calls.includes('publish'), 'permission answered and delivery still working');
+    expect(fixture.mode()).toBe(0o755);
+    // No input while the asynchronous work outlasts the previous question's quiet period.
+    await settle(DECISION_ARM_DEFAULT + 60); finishWork();
+    await until(() => frame(h).includes('› refs/heads/main'), 'new adoption question');
+    await press(h, 'y'); // first separate-read repeat carried from the permission answer
+    expect(h.adoptions).toEqual([]); expect(h.calls).not.toContain('adopt:refs/heads/main');
+    expect(frame(h)).toContain('› refs/heads/main');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'fresh adoption answer');
+    expect(h.adoptions).toHaveLength(1);
+  } finally { finishWork(); await fixture.close(); }
 });
 
 it('D1 the delivery permission card requires its own explicit answer; no leaves it refused, yes continues without adoption', async () => {

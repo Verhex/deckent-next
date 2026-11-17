@@ -59,13 +59,15 @@ const VERIFY_RETRY = new Set(['ADOPTION_NOT_VERIFIED', 'ADOPTION_VERIFICATION_MI
   'ADOPTION_VERIFICATION_PENDING', 'ADOPTION_VERIFICATION_UNSETTLED', 'ADOPTION_VERIFICATION_CANCELLED']);
 interface Entry {
   target: DeliveryTarget; readonly sinceMs: number;
-  opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
+  opening: DeliveryOpening; generation: number; inputRevision: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
   reattempt?: boolean; queueBlocked?: string; patch?: DeliveryPreview; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
+/** Each new question, including another exact card of the same kind, starts its own existing Window quiet period. */
+const showQuestion = (entry: Entry, stage: Stage) => { entry.stage = stage; entry.inputRevision++; };
 
 interface DeliveryWindowsInput {
   readonly port: TerminalDeliveryPort | undefined; readonly labels: DeliveryWindowLabels | undefined;
@@ -98,13 +100,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   }, [changed]);
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
-    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
+    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; showQuestion(entry, { kind: 'queue' }); summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false; delete entry.queueBlocked; delete entry.patch;
     // BeUser M-25/DR2-07: an already-delivered result opens on its adoption step (no second delivery, no integration check).
     const delivered = entry.target.delivered;
     if (delivered && current.previewDelivered) { current.previewDelivered(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.delivered = delivered;
-      entry.stage = { kind: preview.workingTree ? 'done' : 'delivered' }; if (preview.workingTree) entry.settled = true; changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
+      if (preview.workingTree) { entry.stage = { kind: 'done' }; entry.settled = true; } else showQuestion(entry, { kind: 'delivered' }); changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
+    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; showQuestion(entry, { kind: 'ready' }); changed(); } },
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
         // BeUser M-32: a refused check still shows the worker's changes (read-only diffs of the retained patch); a failed read shows nothing more.
@@ -122,7 +124,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     seen.current.add(target.key);
     let entry = entries.current.get(target.key);
     if (!entry) {
-      entry = { target, sinceMs: Date.now(), opening, generation: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
+      entry = { target, sinceMs: Date.now(), opening, generation: 0, inputRevision: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
         selected: 0, closed: false, settled: false, verify: null };
       entries.current.set(target.key, entry); load(entry);
     } else if (!entry.delivered && (entry.closed || entry.stage.kind === 'failed')) { entry.target = target; load(entry); }
@@ -146,7 +148,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       const back = view.operation === 'adopt-integration' ? 'adopting' : 'working';
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); if (entry.stage.kind === 'confirm') { entry.stage = { kind: back }; changed(); } resolve(yes); };
-      entry.stage = { kind: 'confirm', waiting: { view, resolve: finish } }; changed();
+      showQuestion(entry, { kind: 'confirm', waiting: { view, resolve: finish } }); changed();
     });
   }, [changed]);
   const fail = useCallback((entry: Entry, error: unknown) => {
@@ -156,13 +158,14 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const queue = latest.current.port?.queue;
     if (!queue || !entry.queue) return;
     queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => {
-      if (view) { entry.queue = view; entry.stage = { kind: 'queue' }; entry.settled = view.state === 'settled'; summarize(entry); changed(); }
+      if (view) { if (entry.stage.kind !== 'queue' || entry.queue?.state !== view.state) showQuestion(entry, { kind: 'queue' });
+        entry.queue = view; entry.settled = view.state === 'settled'; summarize(entry); changed(); }
     }, error => fail(entry, error));
   }, [changed, fail, summarize]);
   const prepareCurrent = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue; if (!queue) return;
     entry.stage = { kind: 'queue-working' }; changed();
-    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => fail(entry, error));
+    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; showQuestion(entry, { kind: 'queue' }); summarize(entry); changed(); }, error => fail(entry, error));
   }, [changed, fail, summarize]);
   const confirmQueue = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue;
@@ -171,7 +174,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const ask = (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => new Promise<boolean>(resolve => {
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'queue-working' }; changed(); resolve(yes); };
-      entry.stage = { kind: 'queue-confirm', view, summaries, resolve: finish }; changed();
+      showQuestion(entry, { kind: 'queue-confirm', view, summaries, resolve: finish }); changed();
     });
     queue.confirm(entry.target.scopeId, entry.queue.commandId, ask).then(() => refreshQueue(entry), error => fail(entry, error));
   }, [changed, fail, refreshQueue]);
@@ -185,12 +188,12 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const permission = words.permissionCard ? (path: string, before: string, after: string, command: string) => new Promise<boolean>(resolve => {
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'working' }; changed(); resolve(yes); };
-      entry.stage = { kind: 'permission', card: words.permissionCard!(path, before, after, command), resolve: finish }; changed();
+      showQuestion(entry, { kind: 'permission', card: words.permissionCard!(path, before, after, command), resolve: finish }); changed();
     }) : undefined;
     current.deliver(preview, entry.ids, answer(entry), permission).then(outcome => {
       entry.delivered = outcome; entry.consent = null;
-      entry.stage = { kind: !preview.workingTree && preview.adoptionTargets.length ? 'delivered' : 'done' };
-      if (preview.workingTree || !preview.adoptionTargets.length) entry.settled = true;
+      if (!preview.workingTree && preview.adoptionTargets.length) showQuestion(entry, { kind: 'delivered' });
+      else { entry.stage = { kind: 'done' }; entry.settled = true; }
       latest.current.summary(fillTemplate(preview.workingTree ? words.summaryWritten : words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref,
         command: outcome.commandId }) + (outcome.setAside?.length ? `\n${fillTemplate(words.setAside, { files: outcome.setAside.join(', ') })}` : ''));
       changed();
@@ -199,9 +202,12 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   // Y1: the candidates of the configured verification kind, read again on `r`; a failed read is the step's status (nothing is chosen for the person).
   const readVerification = useCallback((entry: Entry) => {
     const current = latest.current.port, preview = entry.preview; if (!current || !preview) return;
+    const previous = entry.verify?.runs;
     const verify: Verify = { runs: null, selected: 0, status: entry.verify?.status ?? '' }; entry.verify = verify; changed();
-    current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs; changed(); } },
-      error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error); changed(); } });
+    current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs;
+      if (!previous || runs.length !== previous.length || runs.some((run, index) => run.runId !== previous[index]!.runId || run.taskId !== previous[index]!.taskId)) entry.inputRevision++;
+      changed(); } }, error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error);
+        if (!previous || previous.length) entry.inputRevision++; changed(); } });
   }, [changed]);
   const adopt = useCallback((entry: Entry, verificationRunId?: string) => {
     const current = latest.current.port, preview = entry.preview, delivered = entry.delivered, words = latest.current.labels!;
@@ -220,7 +226,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       entry.consent = null;
       // A verification refusal moved nothing: back to the choice with the reason; a retry is a new adoption command.
       if (preview.verification && VERIFY_RETRY.has(codeOf(error) ?? '')) {
-        entry.ids = { ...entry.ids, adopt: ids().adopt }; entry.stage = { kind: 'verify' };
+        entry.ids = { ...entry.ids, adopt: ids().adopt }; showQuestion(entry, { kind: 'verify' });
         entry.verify = { runs: entry.verify?.runs ?? null, selected: entry.verify?.selected ?? 0, status: latest.current.errorText(error) };
         if (entry.verify.runs === null) readVerification(entry); else changed();
         return;
@@ -250,7 +256,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
       body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
-      {...(visible.stage.kind === 'permission' ? { inputRevision: visible.generation } : {})}
+      inputRevision={visible.inputRevision}
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
@@ -303,7 +309,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           if ((key.upArrow || key.downArrow) && options.length) { verify.selected = (verify.selected + (key.upArrow ? options.length - 1 : 1)) % options.length; changed(); return true; }
           if (key.return) return false;
           if (decision === 'yes') { const chosen = options[verify.selected]; if (chosen === undefined) return false; adopt(visible, chosen ?? undefined); return true; }
-          if (decision === 'no') { visible.stage = { kind: 'delivered' }; visible.verify = null; changed(); return true; }
+          if (decision === 'no') { showQuestion(visible, { kind: 'delivered' }); visible.verify = null; changed(); return true; }
           if (text === 'r' && !key.ctrl && !key.meta) { readVerification(visible); return true; }
           return false;
         }
@@ -312,7 +318,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         if (decision === 'yes') {
           if (stage.kind === 'ready') deliver(visible);
           // With a configured verification bar the branch's y opens the verification choice first (the CLI's --verification-run).
-          else if (stage.kind === 'delivered' && visible.preview?.verification) { visible.stage = { kind: 'verify' }; visible.verify = null; readVerification(visible); }
+          else if (stage.kind === 'delivered' && visible.preview?.verification) { showQuestion(visible, { kind: 'verify' }); visible.verify = null; readVerification(visible); }
           else if (stage.kind === 'delivered') adopt(visible);
           else return false;
           return true;
