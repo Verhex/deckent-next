@@ -37,7 +37,7 @@ export interface RunAnswerLabels {
 }
 /** A row key of the Runs window: the three Y1 controls and the answer to a worker's question. */
 type RunRowAction = RunControlAction | 'answer';
-export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunRowAction[] }>[]; status: string;
+export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ runId: string; spans: readonly Span[]; actions: readonly RunRowAction[] }>[]; status: string;
   empty: string; selected: number }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
 export type RunAnswerPresentation = Readonly<{ kind: 'run-answer'; run: RunView; question: string; reread?: string }>;
@@ -59,7 +59,7 @@ function runsHints(labels: RunControlLabels, actions: readonly RunRowAction[]): 
 
 /** The Runs list with a selection; `h`/`r`/`c`/`a` answer `<action>:<row>` when the selected row offers it, Esc closes (`null`). */
 export function RunsControlWindow({ value, labels, position, onAnswer, onSelect }: { readonly value: RunsWindowPresentation; readonly labels: RunControlLabels; readonly position: string;
-  readonly onAnswer: (choice: string | null) => void; readonly onSelect?: (index: number) => void }) {
+  readonly onAnswer: (choice: string | null) => void; readonly onSelect?: (runId: string) => void }) {
   const known = useHumanTextSecrets(), [selected, setSelected] = useState(() => Math.min(value.selected, Math.max(0, value.rows.length - 1)));
   const project = (spans: readonly Span[]) => spans.flatMap(item => projectHumanPickerText(item.text, known).spans.map(part => ({ ...item, ...part })));
   const count = value.rows.length, row = value.rows[Math.min(selected, Math.max(0, count - 1))];
@@ -69,7 +69,7 @@ export function RunsControlWindow({ value, labels, position, onAnswer, onSelect 
     ...(count ? [] : [{ spans: [span(value.empty, { role: 'muted' })] }])];
   return <Window title={[span(value.title)]} status={[span(String(count))]} body={body} hints={runsHints(labels, row?.actions ?? [])} position={position} reveal={notes.length + selected}
     onClose={() => onAnswer(null)} onInput={(input, key) => {
-      if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { const next = (selected + (key.upArrow ? count - 1 : 1)) % count; setSelected(next); onSelect?.(next); return true; }
+      if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { const next = (selected + (key.upArrow ? count - 1 : 1)) % count; setSelected(next); onSelect?.(value.rows[next]!.runId); return true; }
       const action = runControlKey(input, key);
       if (action && row?.actions.includes(action)) { onAnswer(`${action}:${selected}`); return true; }
       return false;
@@ -134,27 +134,30 @@ async function runAnswerFlow(panel: WorklinePanel, execution: LocalExecution, le
  * result as its status, until Esc. Returns the transcript summary: every result, or the window's closed line.
  */
 export async function runRunsControl(panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
-  errorText: (error: unknown) => string, reason: () => string | undefined, selection?: () => number): Promise<string> {
+  errorText: (error: unknown) => string, reason: () => string | undefined, selection: { current: string | null } = { current: null }): Promise<string> {
   const words = work.runControl!, jobs = work.jobs!, title = work.live!.runsTitle, results: string[] = [];
-  let status = '', selected = 0;
+  let status = '';
+  selection.current = null; // Every new window starts at its first row.
   while (!execution.signal.aborted) {
     const runs = await loadRunViewsForWatch(ledger);
     if (execution.signal.aborted) break;
+    const selected = Math.max(0, runs.findIndex(run => run.runId === selection.current));
+    selection.current = runs[selected]?.runId ?? null; // A vanished row resets to the first remaining row.
     const answerable = Boolean(ledger.answerTask && work.runAnswer && words.keyAnswer);
-    const rows = runs.map(run => ({ actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
+    const rows = runs.map(run => ({ runId: run.runId, actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
       span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
     const choices = ['close', 'refresh', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
     const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;
-    if (choice === 'refresh') { selected = selection?.() ?? selected; continue; }
+    if (choice === 'refresh') continue;
     const [action, index] = choice.split(':') as [RunRowAction, string];
     if (action === 'answer') {
-      const chosen = runs[Number(index)]!; selected = Number(index);
+      const chosen = runs[Number(index)]!; selection.current = chosen.runId;
       const line = await runAnswerFlow(panel, execution, ledger, work, chosen.runId, errorText, reason).catch((error: unknown) => errorText(error));
       if (line === null || execution.signal.aborted) break;
       status = line; results.push(status); continue;
     }
-    const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId); selected = Number(index);
+    const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId); selection.current = chosen.runId;
     if (execution.signal.aborted) break;
     if (!fresh) { status = fillTemplate(words.gone, { run: shortId(chosen.runId) }); results.push(status); continue; }
     const answer = await panel.pick(execution, { kind: 'run-control', run: fresh, action }, ['allow', 'deny']);

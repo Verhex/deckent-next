@@ -40,7 +40,10 @@ For Turkish from the first screen, pass `--lang tr` to `deckent init` and `decke
 Read the complete JSON and the process exit status. Installation completion is separate from onboarding completion.
 Headless setup leaves authority pending; the first witnessed terminal open previews the profile and permission defaults for
 the person. A recorded registry and pool do not prove that a small worker can be admitted. Setup and doctor check the same
-worker model admission and connected-login facts and show the next command when a step is missing; neither activates a model.
+worker model admission and connected-login facts for the first-job kind from the configured defaults. Another kind being
+ready does not prove this one is ready. They name the missing step or say the observation could not be read; other
+adapters have no measured native admission here. Neither activates a model. A role command with `<tier>/<roles>` is a
+template: the person fills it from the listed registry options, including the missing worker role.
 Do not report “ready” just because installation returned zero. Doctor can still report missing models, worker
 configuration, warnings or unverified checks. It checks readiness; it does not install or start Docker.
 

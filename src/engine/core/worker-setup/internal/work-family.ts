@@ -4,7 +4,7 @@ import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engi
 import defaults from './work.json' with { type: 'json' };
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
-export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), workerReadiness: workerReadinessSchema.optional(), pendingProvider: z.string().optional(),
+export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), workerReadiness: workerReadinessSchema.nullable().optional(), pendingProvider: z.string().optional(),
   providers: z.array(z.string()).max(16).optional(), kinds: z.array(z.string()).max(256).optional(),
   images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional(),
   /** R8b/R3a: the scope's connected subscription CLIs (a worker without Docker) and the one the person chose for the first work kind. */
@@ -27,6 +27,7 @@ function kind(context: SetupStageContext): SetupDecision {
   const facts = context.facts as z.infer<typeof workFactsSchema> | undefined, scopeId = context.scopeId;
   if (!facts) return { state: 'blocked', reason: reason('unavailable') };
   const selected = context.answer ?? facts.pendingProvider;
+  if (facts.registry && facts.workerReadiness === null) return { state: 'blocked', reason: reason('workerUnknown') };
   if (facts.registry && (typeof selected !== 'string' || facts.providers === undefined || facts.providers.includes(selected))) return facts.workerReadiness && !facts.workerReadiness.ready
     ? { state: 'blocked', reason: reason('workerMissing', { code: facts.workerReadiness.code }), cli: [...facts.workerReadiness.cli] } : { state: 'done', reason: reason('kindDone') };
   if (context.answer === false) return { state: 'skipped', reason: reason('kindMissing', { kind: WORK_DEFAULTS.kind, pool: WORK_DEFAULTS.poolId }) };
@@ -48,6 +49,7 @@ function kind(context: SetupStageContext): SetupDecision {
 function pool(context: SetupStageContext): SetupDecision {
   const facts = context.facts as z.infer<typeof workFactsSchema> | undefined, scopeId = context.scopeId;
   if (!facts) return { state: 'blocked', reason: reason('unavailable') };
+  if (facts.pool && facts.workerReadiness === null) return { state: 'blocked', reason: reason('workerUnknown') };
   if (facts.pool && facts.workerReadiness && !facts.workerReadiness.ready) return { state: 'blocked', reason: reason('workerMissing', { code: facts.workerReadiness.code }), cli: [...facts.workerReadiness.cli] };
   if (facts.pool) return { state: 'done', reason: reason('poolDone') };
   if (!scopeId || !facts.registry) return { state: 'blocked', reason: reason('waits', { stage: WORK_KIND_STAGE_ID }) };

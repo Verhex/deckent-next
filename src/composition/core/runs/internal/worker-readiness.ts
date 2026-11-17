@@ -6,7 +6,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 
 /** Observation only: no model activation, worker, reservation or provider call. */
-export async function inspectConfiguredWorkerReadiness(root: string, scopeId: string, options: ConfigLoadOptions = {}) {
+export async function inspectConfiguredWorkerReadiness(root: string, scopeId: string, options: ConfigLoadOptions, targetKind: string) {
   const context = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read'), { config } = context;
   const registry = executionRegistrySchema.safeParse(config.admission?.registry);
   if (!registry.success) return { ready: false, code: 'RUN_ADMISSION_NOT_CONFIGURED', cli: ['deckent', 'setup'] };
@@ -17,6 +17,6 @@ export async function inspectConfiguredWorkerReadiness(root: string, scopeId: st
       (template, input, evidence) => compileNativeCodingWorkInput(template, input, undefined, evidence), async (template, model) => {
         const binding = nativeCliWorkerBindingSchema.safeParse(template.parameters['worker']);
         return !binding.success || await connectedModelProfile(config, scopeId, binding.data, model) !== null;
-      });
+      }, targetKind);
   } finally { reader.close(); }
 }

@@ -1,3 +1,4 @@
+import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
 import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { exitTypedText } from '../support/workline-harness.js';
 import { panelFixture } from '../support/workline-panel-fixture.js';
@@ -19,7 +20,7 @@ const work: WorkSurfaceLabels = { jobs: EN_WORK.jobs, workerLine: EN, panel: { t
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
   approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}', approvalPrompt: 'A-PROMPT',
   approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}', approvalMore: 'A-MORE {count}',
-  approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
+  approvalNotify: 'A-NOTIFY {count}', approvalNotifyPartial: EN_WORK.approvalNotifyPartial, approvalCountUnknown: EN_WORK.approvalCountUnknown, approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
   approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS', savedSession: 'S-SAVED-SESSION {id}',
     savedAlways: 'S-SAVED-ALWAYS {id}', unconfirmedSession: 'S-UNCONFIRMED {id} {reason}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
@@ -508,4 +509,29 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     expect(inner).toContain(`${W.covers} ${pattern} in this session`);
     await view.type('n');
   });
+});
+
+
+it('D2 F3 a bounded snapshot cannot prove zero when a later page has pending work', async () => {
+  const readPages: (string | null)[] = [];
+  const ledger = withSurfaceSnapshot({ ...baseLedger, decideApproval: async () => { throw new Error('must not decide'); }, listApprovalPage: async after => {
+    readPages.push(after); const page = after === null ? 1 : Number(after) + 1;
+    return { items: [approval(`page-${page}`, page <= 10 ? { status: 'decided', decision: 'allow' } : {})], nextAfter: page < 11 ? String(page) : null };
+  } }, async () => ({ binding: 'same', kinds: ['approval'] }) as never);
+  const snap = await ledger.readSurfaceSnapshot!(['approval'], new AbortController().signal);
+  expect(snap.approvals).toEqual([]); expect(snap.approvalsTruncated).toBe(true); expect(readPages).toHaveLength(10);
+  const view = mount({ ledger: { ...ledger, readSurfaceSnapshot: async () => snap, followEvents: async function* (signal) {
+    yield { control: 'start', scopeId: 'scope-a', cursors: { worker: 0, run: 0, approval: 0 } };
+    await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+  } } });
+  await until(() => view.frame().includes(EN_WORK.approvalCountUnknown!), 'partial zero is unknown');
+  expect(view.frame()).not.toContain('A-NOTIFY 0');
+  await view.type('/approvals\r'); await view.card(EN_WORK.approvalCountUnknown!, 'partial empty window');
+  expect(view.frame()).not.toContain('A-NONE');
+  const poll = mount({ pollMs: 40, approvalPollMs: 40, ledger: { ...baseLedger, listApprovalPage: async after => {
+    const page = after === null ? 1 : Number(after) + 1;
+    return { items: [approval(`poll-${page}`, page <= 10 ? { status: 'decided', decision: 'allow' } : {})], nextAfter: page < 11 ? String(page) : null };
+  } } });
+  await until(() => poll.frame().includes(EN_WORK.approvalCountUnknown!), 'partial polling is unknown');
+  await until(() => poll.frame().includes('At least 1 pending approval(s)'), 'later page is a lower bound');
 });
