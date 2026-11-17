@@ -522,9 +522,9 @@ describe('delivery window on the real Workline', () => {
   async function toVerification(h: Harness) {
     await admit(h); h.set(awaiting());
     await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
-    await press(h, CTRL_O); await press(h, 'y', 120);
+    await press(h, CTRL_O, h.armMs + 60); await press(h, 'y', h.armMs + 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
-    await press(h, 'y', 120);
+    await press(h, 'y', h.armMs + 120);
     await until(() => frame(h).includes('Verification for refs/heads/main: choose an accepted Run of kind verify'), 'verification step');
   }
 
@@ -561,10 +561,47 @@ describe('delivery window on the real Workline', () => {
     expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-1']);
   });
 
+  it('D1 an identical-list refresh preserves V2 for the next separate-read y', async () => {
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[V1, V2]], decisionArmMs: DECISION_ARM_DEFAULT });
+    const read = h.port.verificationRuns;
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>(resolve => { finishRefresh = resolve; });
+    h.port.verificationRuns = async (...args) => {
+      const runs = await read(...args);
+      if (h.calls.filter(call => call === 'verification-runs').length > 1) await refresh;
+      return runs.map(run => ({ ...run }));
+    };
+    await toVerification(h);
+    await press(h, DOWN); expect(frame(h)).toMatch(/› Run verify-run-2/u);
+    await press(h, 'r'); expect(frame(h)).toContain(WORDS.verifyLoading);
+    expect(h.adoptions).toEqual([]); finishRefresh();
+    await until(() => frame(h).includes('Run verify-run-2 · task check · accepted'), 'same candidates returned');
+    await press(h, 'y');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-2']);
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'adopted with preserved V2');
+  });
+
+  it('D1 reordered, changed-task and shortened verification lists reset selection and require a fresh answer', async () => {
+    const changedTask = { ...V1, taskId: 'other-check' };
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED,
+      candidates: [[V1, V2], [V2, V1], [V2, changedTask], [V2]], decisionArmMs: DECISION_ARM_DEFAULT });
+    await toVerification(h);
+    for (const selected of [V2, V1, changedTask]) {
+      await press(h, DOWN); expect(frame(h)).toContain(`› Run ${selected.runId} · task ${selected.taskId} · accepted`);
+      await press(h, 'r'); expect(frame(h)).toMatch(/› Run verify-run-2 · task check/u);
+      await press(h, 'y'); expect(h.adoptions).toEqual([]);
+      await settle(DECISION_ARM_DEFAULT + 60);
+    }
+    await press(h, 'y');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-2']);
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'fresh answer on the shortened list');
+  });
+
   it('an optional verification also offers adopting without one, recorded as not verified', async () => {
     const h = harness({ targets: ['refs/heads/main'], verification: { kind: 'verify', required: false }, candidates: [[V1]] }); await toVerification(h);
     await until(() => frame(h).includes('Adopt without verification'), 'unverified row');
     await press(h, DOWN); expect(frame(h)).toMatch(/› Adopt without verification/u);
+    await press(h, 'r'); expect(frame(h)).toMatch(/› Adopt without verification/u);
     await press(h, 'y', 150);
     await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
     expect(h.adoptions.map(item => item.verificationRunId)).toEqual([undefined]);

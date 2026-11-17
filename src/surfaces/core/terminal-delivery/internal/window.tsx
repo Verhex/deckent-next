@@ -202,10 +202,11 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   // Y1: the candidates of the configured verification kind, read again on `r`; a failed read is the step's status (nothing is chosen for the person).
   const readVerification = useCallback((entry: Entry) => {
     const current = latest.current.port, preview = entry.preview; if (!current || !preview) return;
-    const previous = entry.verify?.runs;
+    const previous = entry.verify?.runs, selected = entry.verify?.selected ?? 0;
     const verify: Verify = { runs: null, selected: 0, status: entry.verify?.status ?? '' }; entry.verify = verify; changed();
     current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs;
       if (!previous || runs.length !== previous.length || runs.some((run, index) => run.runId !== previous[index]!.runId || run.taskId !== previous[index]!.taskId)) entry.inputRevision++;
+      else verify.selected = selected;
       changed(); } }, error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error);
         if (!previous || previous.length) entry.inputRevision++; changed(); } });
   }, [changed]);
