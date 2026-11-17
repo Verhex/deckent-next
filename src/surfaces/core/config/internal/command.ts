@@ -8,7 +8,7 @@ import { configServiceState, configWriteOperation, isProtectedConfigWrite, parse
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import { applyOperationsBaseline, operationsBaselineOffer, registersOperations, type OwnerBaselineOpener } from './operations-baseline.js';
-import { applyWord, configValueWord, fieldDescription, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
+import { applyGuidance, applyWord, configValueWord, fieldDescription, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
 import { configValueModel } from './choices.js';
 import { configChoiceWords, narrowConfigPanel, renderConfigKeyList, renderConfigLeaves, renderConfigOverrides, type ConfigPanelOpener } from './cli-view.js';
 
@@ -189,10 +189,11 @@ async function openPanel(context: ConfigCommandContext, root: string, options: C
 }
 function renderConfigChanged(keyPath: string, layer: 'project' | 'global', apply: 'live' | 'restart', result: { readonly backupPath: string | null; readonly overridden: boolean },
   service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale, remaining?: ConfigFieldView): string[] {
-  const values = { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale), backup: result.backupPath ?? '-' };
+  const values = { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale, keyPath), backup: result.backupPath ?? '-' };
   return [remaining ? t('config.surface.removed', { ...values, value: remaining.value === undefined ? t('config.surface.notDefined', {}, locale)
     : terminalSafeText(configValueWord(remaining.value, remaining.redacted, locale)), source: sourceWord(remaining.source, locale) }, locale)
     : t('config.surface.changed', values, locale),
+    ...applyGuidance(apply, locale, keyPath),
     ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : []),
     ...(service ? [{ current: t('config.surface.service.current', {}, locale), stale: t('config.surface.service.stale', {}, locale),
       unknown: t('config.surface.service.unknown', {}, locale), stopped: t('config.surface.service.stopped', {}, locale) }[service]] : [])];

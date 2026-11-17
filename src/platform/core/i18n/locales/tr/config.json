@@ -91,5 +91,8 @@
   "config.field.targetQueue.candidateSlots": "Servisin bir geçişte paralel ele aldığı hedef sayısı.",
   "config.field.targetQueue.reattempts": "Hedef tabanı ilerledikten sonra teslim niyeti başına otomatik yeniden deneme (0: yok; yeniden siz kuyruğa alırsınız).",
   "config.field.targetQueue.reattemptWindowMs": "Bir teslimi kuyruğa aldıktan sonra servisin böyle bir yeniden denemeyi hâlâ başlatabileceği süre (ms).",
-  "config.field.targetQueue.requeueMax": "Servisin, hiçbir etkiden önce durmuş devredilmiş bir denemenin biletini en çok kaç kez yeniden kuyruğa aldığı (0: hiç)."
+  "config.field.targetQueue.requeueMax": "Servisin, hiçbir etkiden önce durmuş devredilmiş bir denemenin biletini en çok kaç kez yeniden kuyruğa aldığı (0: hiç).",
+  "config.surface.reopenTerminal": "yeniden aç",
+  "config.surface.guidance.restart": "Servisi deckent runtime restart ile yeniden başlatın.",
+  "config.surface.guidance.reopenTerminal": "Dil, terminali yeniden açınca uygulanır: /exit yazın, sonra deckent komutunu yeniden çalıştırın."
 }

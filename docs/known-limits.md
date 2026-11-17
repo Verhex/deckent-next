@@ -173,7 +173,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
   applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
   The setup language is saved as a global personal default; existing project language overrides keep precedence and are not migrated.
-  Language preference alone grants no connection authority.
+  Language preference alone grants no connection authority. A later language change takes effect when you close and reopen the terminal: type `/exit`, then run `deckent` again. The config result names this step.
 - **Registered source and new folder.** Bare `deckent` offers a TR/EN session card when a healthy source is explicitly registered;
   acceptance creates separate project policy/ledger and revocable use of current source connections. Tokens are not copied.
   Existing projects are not migrated. One personal global registry selects one source; a lost/broken source is never replaced with a new identity.
@@ -1102,7 +1102,7 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews any tier; application needs the
   person's real-terminal card. Keep-data removes only caches, stops the service and retires the folder: the service stays down
   until the person opens `deckent` there and chooses Continue. Images remain until a complete usage-reference contract exists;
-  the card provides the exact manual step. macOS/Windows service removal is manual.
+  the card provides the exact manual step. macOS/Windows service removal is manual. If you cancel the backup passphrase after the service stopped, the cancellation message names the stop and `deckent runtime start` to start it again.
   *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
 - **Delete everything is complete only for a project-folder installation.** In a project's own `.deckent`, `--all` archives

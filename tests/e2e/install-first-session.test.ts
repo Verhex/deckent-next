@@ -55,7 +55,8 @@ it.skipIf(process.platform !== 'linux')('ATTACH review F1 (verify-not-run outsid
       expect(JSON.parse(await readFile(join(global, 'installation/registration.json'), 'utf8')).source.projectRoot).toBe(project);
       expect(await lstat(join(project, '.deckent/config.json'))).toBeDefined();
     } else {
-      expect(result.output).toContain('PROJECT_ATTACHMENT_DENIED');
+      // Owner 123 (walk finding B25b): a declined card is the person's own choice, said in a sentence with the way to continue, not shown as a refusal code.
+      expect(result.output).toContain('You chose not to change the folder permissions'); expect(result.output).toContain('run deckent init again');
       expect(result.output).not.toContain('Permissions: applied');
       expect(await readdir(project)).toEqual([]); expect(await globalSnapshot()).toEqual(before); expect(await readdir(home)).toEqual([]);
     }

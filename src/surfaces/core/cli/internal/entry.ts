@@ -36,12 +36,18 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'show' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
+/** Words after -- belong to the invoked program, including its language and help flags. */
+function invocationArgs(argv: readonly string[]): readonly string[] {
+  const separator = argv.indexOf('--'); return separator < 0 ? argv : argv.slice(0, separator);
+}
+
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
 export function dispatch(argv: readonly string[], locale?: Locale): { readonly output: string; readonly code: ExitCode } {
   const [command] = argv;
-  const l = locale ?? resolveLocale();
+  const flags = invocationArgs(argv), languageAt = flags.indexOf('--lang');
+  const l = locale ?? resolveLocale(languageAt < 0 ? undefined : flags[languageAt + 1]);
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
-  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(l ?? resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined)), code: 0 };
+  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(l), code: 0 };
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
@@ -70,14 +76,20 @@ function interactiveTerminal(context: CommandContext): boolean {
 
 export async function main(argv: readonly string[] = process.argv.slice(2), context: CommandContext = {}): Promise<ExitCode> {
   // R34: `--lang <locale>` is a global option (top help); before the command word it means the same as after it.
-  if (argv[0] === '--lang' && argv[1] !== undefined && !argv[1].startsWith('-')) argv = [...argv.slice(2), '--lang', argv[1]];
-  const words = argv.at(-2) === '--lang' ? argv.slice(0, -2) : argv;
+  let flags = invocationArgs(argv);
+  if (flags[0] === '--lang' && flags[1] !== undefined && !flags[1].startsWith('-')) {
+    argv = [...flags.slice(2), '--lang', flags[1], ...argv.slice(flags.length)]; flags = invocationArgs(argv);
+  }
+  const languageAt = flags.indexOf('--lang'), language = languageAt < 0 ? undefined : flags[languageAt + 1];
+  const words = flags.length === argv.length && flags.at(-2) === '--lang' ? flags.slice(0, -2) : argv;
   // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
   // renders in the same language as its heading.
   let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
     currentTiming()?.phase('dispatch');
-    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
+    const helpAt = flags.findIndex(word => word === '--help' || word === '-h');
+    const helpArgv = languageAt >= 0 && languageAt < helpAt ? [...flags.slice(0, languageAt), ...flags.slice(languageAt + 2), ...flags.slice(languageAt, languageAt + 2)] : flags;
+    const help = await cliHelpRequest(helpArgv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
@@ -89,7 +101,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(words, locale, context);
     // alpha.60 C (P4): where the Workline will open in the full window, its frame is drawn before the host graph loads (`launch-shell`).
     // A shell that cannot be drawn is no refusal: the launch goes on the earlier path.
-    if (interactive && interactiveTerminal(context)) shell = await (await import('./launch-shell.js')).openLaunchShell(words, argv.at(-2) === '--lang' ? argv.at(-1) : undefined, context).catch(() => null);
+    if (interactive && interactiveTerminal(context)) shell = await (await import('./launch-shell.js')).openLaunchShell(words, language, context).catch(() => null);
     if (shell) context = { ...context, terminalShell: shell };
     if (context.loadHost) context = { ...context, ...(await context.loadHost(shell ? () => shell!.host.flushed() : undefined)) };
     await shell?.host.flushed(); // drain keys from the last import before identity/setup can replace the composer
@@ -99,7 +111,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
       && cliInstallationContract(argv, CLI_COMMANDS) === undefined) {
-      locale = resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
+      locale = resolveLocale(language, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
       await context.loadInstallationIdentity(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });
     }
@@ -122,7 +134,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
     if (command) {
-      locale = context.locale ?? resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
+      locale = context.locale ?? resolveLocale(language, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }).catch(() => undefined));
       return (await command.run(argv, { ...context, locale, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
     }

@@ -173,7 +173,7 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
   Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
   Kurulum dili global kişisel varsayılan olarak kaydedilir; eski proje dil tercihleri önceliğini korur ve taşınmaz.
-  Dil tercihi tek başına bağlantı yetkisi vermez.
+  Dil tercihi tek başına bağlantı yetkisi vermez. Sonradan değiştirilen dil, terminali kapatıp yeniden açınca uygulanır: `/exit` yazın, sonra `deckent` komutunu yeniden çalıştırın. Ayar sonucu bu adımı gösterir.
 - **Kayıtlı kaynak ve yeni klasör.** Argümansız `deckent`, açıkça kaydedilmiş sağlıklı bir kaynak varsa TR/EN oturum kartı sunar;
   kabul ayrı proje politika/defter oluşturur ve güncel kaynak bağlantılarına geri alınabilir kullanım izni verir. Token kopyalanmaz.
   Eski projeler otomatik taşınmaz. Bir kişisel global kayıtta tek kaynak vardır; bozuk/kayıp kaynak yeni kimlikle değiştirilmez.
@@ -1104,7 +1104,7 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Kaldırma imajları ve korunan veriyi tutar.** `deckent uninstall --dry-run --json` her kademeyi önizler; uygulamak kişinin
   gerçek terminaldeki kartını ister. Verileri koru yalnız önbellekleri siler, servisi durdurur ve klasörü emekli eder: kişi orada
   `deckent` açıp Devam'ı seçene kadar servis başlamaz. Tam kullanım-referansı sözleşmesi gelene kadar imajlar korunur; kart kesin
-  elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir.
+  elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir. Servis durduktan sonra yedek parolası girişini iptal ederseniz mesaj, servisin durduğunu ve yeniden başlatmak için `deckent runtime start` komutunu gösterir.
   *Yol:* planın adım talimatlarını, ardından yazdırdığı program komutunu izleyin;
   [AI kurulum rehberine](ai-install.tr.md#kaldırma) bakın.
 - **Her şeyi sil yalnız proje klasörü kurulumunda eksiksizdir.** Projenin kendi `.deckent` klasöründe `--all`, adlarını deckent

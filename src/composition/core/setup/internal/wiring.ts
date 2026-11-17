@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupFamily, detectCodingFacts, detectExecutionFacts, dockerInstallOffer, executionSetupFamily, localPrincipalChannel,
   nativeProviderSpec, observeWorkerImage, workerImagePresence, workerImageSetupPorts, type ExecutionFacts } from '#adapters/index.js';
 import { affectedToolchainProfiles, WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage, SETUP_PERMISSIONS_FAMILY, setupProfileRefSchema, hasWorkerKind } from '#engine/index.js';
-import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productResourcePath, resolveLocale, type Locale, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, sha256, loadConfig, prepareProductDirectory, productResourcePath, resolveLocale, type Locale, type ConfigLoadOptions } from '#platform/index.js';
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallationWithSecretDefault, installConfiguredExecutionPool, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -20,7 +20,7 @@ const reachableDocker = (facts: ExecutionFacts) => facts.runtimes.find(row => ro
 const toolchainsHome = (config: Awaited<ReturnType<typeof loadConfig>>) => join(productResourcePath(config.productLayout, 'workspaces'), 'toolchains');
 /** Second-provider profile add: the CLI host supplies the registry owner, so setup never reaches the coding template composition itself. */
 export type AddCodingProfile = (root: string, input: unknown, options: ConfigLoadOptions, dependencies?: { readonly witness?: { attest(): Promise<boolean> } }) => Promise<{ readonly status: string; readonly digest: string; readonly expect: string; readonly profile: { readonly id: string; readonly version: number | string } }>;
-type Status = 'applied' | 'refused' | 'not-wired';
+type Status = 'applied' | 'refused' | 'not-wired' | 'declined';
 const failure = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : 'SETUP_STAGE_FAILED'; };
 
 /**
@@ -113,7 +113,10 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       if (op === 'shell-realm.inspect') { await inspectConfiguredShellRealm(root, options); return result('applied'); }
       if (op === 'doctor.inspect') { await verdict(options.env ?? process.env, root); return result('applied'); }
       return result('refused', 'TERMINAL_TTY_REQUIRED');
-    } catch (error) { return result('refused', failure(error)); }
+    } catch (error) {
+      if (isCodedError(error, 'PROJECT_ATTACHMENT_DENIED') && error.params?.['reason'] === 'declined') return result('declined');
+      return result('refused', failure(error));
+    }
   };
   // PRE-34: doctor's Docker row, the same read-only detection and family decision as the setup stage (no install offer, never a question).
   const inspectExecutionEnvironment = async (env: NodeJS.ProcessEnv) => {

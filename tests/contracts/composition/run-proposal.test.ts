@@ -7,7 +7,8 @@ import { proposeRun, inspectRunProposal, inspectRun, configuredApproval } from '
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { createProviderSpendAccount, createProviderSpendCheckpoint } from '#engine/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { CORE_WORK_CLASSES } from '#domain/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { proposalFixture } from '../support/run-proposal.js';
 const roots: string[] = [];
@@ -65,4 +66,22 @@ it.skipIf(process.platform === 'win32')('no configured budget is a durable typed
   const f = await fixture(true, false), rejected = await proposeRun(f.project, f.proposal, f.options);
   expect(rejected.proposal).toMatchObject({ status: 'rejected', reason: 'RUN_PROPOSAL_BUDGET_MISSING' });
   expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toBeNull();
+});
+
+it.skipIf(process.platform === 'win32')('B17b: SDK proposal refusals carry the effective work classes and localized next step without starting work', async () => {
+  const f = await fixture(true), allowed = [...CORE_WORK_CLASSES.classes.map(row => row.id), 'business'].join(', ');
+  for (const workClass of ['not-registered', undefined]) {
+    const task = { ...f.proposal.graph.tasks[0]! }; delete task.workClass;
+    const input = { ...f.proposal, commandId: workClass ?? 'missing', proposalId: workClass ?? 'missing',
+      graph: { ...f.proposal.graph, tasks: [{ ...task, ...(workClass ? { workClass } : {}) }] } };
+    const result = await proposeRun(f.project, input, f.options);
+    expect(result.proposal.status).toBe('rejected');
+    expect(result.proposal.reason).toBe(workClass ? 'WORK_CLASS_NOT_REGISTERED' : 'RUN_PROPOSAL_WORK_CLASS_REQUIRED');
+    expect(result.reasonParams).toEqual({ allowed });
+    for (const locale of ['en', 'tr'] as const) expect(ErrorRegistry.createError(result.proposal.reason!, { params: result.reasonParams, locale }).message).toContain(allowed);
+    expect((await proposeRun(f.project, input, f.options)).reasonParams).toEqual({ allowed });
+  }
+  const db = new DatabaseSync(f.path);
+  try { expect(db.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); }
+  finally { db.close(); }
 });

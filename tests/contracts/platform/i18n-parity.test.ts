@@ -32,6 +32,9 @@ describe('K2 intentional reconciliation and unchanged-template evidence', () => 
         expect(key + MESSAGE_REGISTRY.catalogs[locale][key]).not.toMatch(new RegExp(['sp', 'rint'].join(''), 'i'));
         expect(key).not.toMatch(/^(mode\.|config\.migrate|cli\.config\.migrate|plan\.adopt)/);
       }
+      expect(t('config.surface.guidance.reopenTerminal', {}, locale)).toContain('/exit');
+      expect(t('config.surface.guidance.restart', {}, locale)).toContain('deckent runtime restart');
+      expect(MESSAGE_REGISTRY.catalogs[locale]['error.WORK_CLASS_NOT_REGISTERED.available']).toContain('{allowed}');
       expect(t('cli.help', { name: 'deckent' }, locale)).not.toContain('config migrate');
       expect(t('run.notify_started_title', { runId: 'run-test' }, locale)).toContain('run-test');
       // Missing historical keys stay missing: this is not a compatibility alias registry.

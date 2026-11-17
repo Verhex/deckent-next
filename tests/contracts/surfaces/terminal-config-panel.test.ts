@@ -44,7 +44,7 @@ function context(permissions: readonly ConfigWritePermission[] | Error | null, s
   principal = true): ConfigCommandContext {
   const app = {
     inspect: async () => ({ schemaVersion: 1, digest: null, layer: 'project', fields: FIELDS }),
-    explain: async () => FIELDS[0],
+    explain: async ({ keyPath }: { keyPath: string }) => FIELDS.find(field => field.key === keyPath),
     permissions: async () => { if (permissions instanceof Error) throw permissions; return permissions; },
     submit: async (action: string, input: Record<string, unknown>) => { seen.push({ action, input });
       return outcome ?? { status: 'applied', approvalId: null, result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: digest('x'), backupPath: null, overridden: false } }; },
@@ -66,6 +66,7 @@ describe('/config window port', () => {
       locks: { project: { blocked: null, note: null }, global: { blocked: null, note: null } }, unsettable: false });
     expect(field('max_workers')).toMatchObject({ free: false, unsettable: true, apply: 'yeniden başlatınca', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
     expect(field('max_workers').locks.global.blocked).toContain('bu katmanda değiştirmenize izin vermiyor');
+    expect(field('language').apply).toBe('yeniden aç');
     expect(field('language').locks.project.blocked).toContain('Şirketinizin politikası');
     expect(field('secrets.token')).toMatchObject({ sensitive: true, locks: { project: { blocked: 'Sırlar buradan değil, deckent secret ile değiştirilir.' } } });
     // The tree: a key every layer refuses is a locked row with its reason; one open layer keeps it open and the scope step locks the other.
@@ -94,6 +95,14 @@ describe('/config window port', () => {
     expect(applied.status).toBe('applied'); expect(seen[0]).toMatchObject({ action: 'set', input: { keyPath: 'terminal.theme', value: 'dark', layer: 'global', scopeId: 'scope' } });
     await port.write({ action: 'unset', keyPath: 'max_workers', layer: 'project' });
     expect(seen[1]).toMatchObject({ action: 'unset', input: { keyPath: 'max_workers', layer: 'project' } }); expect(seen[1]!.input).not.toHaveProperty('value');
+    for (const locale of ['en', 'tr'] as const) {
+      const localized = configPanelPort(root, context([], []), options, locale);
+      const language = await localized.write({ action: 'set', keyPath: 'language', value: 'tr', layer: 'project' });
+      expect(language.lines).toContain(locale === 'en' ? 'The language applies after reopening the terminal: type /exit, then run deckent again.'
+        : 'Dil, terminali yeniden açınca uygulanır: /exit yazın, sonra deckent komutunu yeniden çalıştırın.');
+      const restart = await localized.write({ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' });
+      expect(restart.lines).toContain(locale === 'en' ? 'Restart the service with deckent runtime restart.' : 'Servisi deckent runtime restart ile yeniden başlatın.');
+    }
     const pending: ConfigChangeOutcome = { status: 'approval-pending', commandId: 'cmd-9', expect: null, keyPath: 'max_workers', layer: 'project',
       approval: { approvalId: 'appr-9', revision: 0, expiresAt: NOW, summary: 'Setting will change: max_workers 4 → 2 (project)' } };
     const held = await configPanelPort(root, context([], [], pending), options, 'en').write({ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' });

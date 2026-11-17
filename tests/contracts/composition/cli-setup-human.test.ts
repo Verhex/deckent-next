@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as installation from '#composition/core/installation/index.js';
+import { configuredSetup } from '#composition/core/setup/index.js';
 import { main } from '#surfaces/index.js';
 import { codingCommand, operationCommand } from '#surfaces/core/cli-admin/index.js';
 import { inferenceCommand } from '#surfaces/core/cli-models/index.js';
@@ -186,4 +188,16 @@ describe.skipIf(process.platform === 'win32')('C-SETUP security review (be23372e
     await configCommand(['config', 'set', 'terminal.chat.apiKey', JSON.stringify(secret), '--scope', 's', '--json'], context(f, true, { stdout: sink }) as never);
     expect(output.join('')).not.toContain(secret); expect(JSON.parse(output.join('')).status).toBe('approval-pending');
   });
+});
+
+it("B25b: a declined folder card remains the person's no, while a product permission refusal stays refused", async () => {
+  const preview = vi.spyOn(installation, 'previewPolicyTemplateInstallation').mockResolvedValue({} as never);
+  const apply = vi.spyOn(installation, 'applyPolicyTemplateInstallationWithSecretDefault');
+  try {
+    for (const reason of ['declined', 'location-write']) {
+      apply.mockRejectedValue(ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { params: { reason, path: '/fixture' } }));
+      const stage = { id: 'core:policy', operation: { id: 'installation.policy-template', input: {} } } as import('#engine/index.js').SetupStage;
+      expect(await configuredSetup({}).applySetupStage('/fixture', stage, { scopeId: 'scope', foreground: true })).toMatchObject({ status: reason === 'declined' ? 'declined' : 'refused' });
+    }
+  } finally { apply.mockRestore(); preview.mockRestore(); }
 });

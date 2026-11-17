@@ -370,5 +370,6 @@
   "setup.attachment.title.detach": "Bu proje kurulumdan ayrılsın mı?",
   "setup.attachment.title.unregister": "Bu kaynak kurulumun kaydı kaldırılsın mı?",
   "setup.attachment.title.relocate": "Bu proje veya kaynağın kayıtlı konumu güncellensin mi?",
-  "setup.attachment.title.restore": "Bu projenin kurulum bağı yeniden açılsın mı?"
+  "setup.attachment.title.restore": "Bu projenin kurulum bağı yeniden açılsın mı?",
+  "cli.uninstall.backupCancelled": "Yedek parolası girişi iptal edildi. Çalışma servisi bu adımdan önce durduruldu. Yeniden başlatmak için deckent runtime start komutunu çalıştırın."
 }

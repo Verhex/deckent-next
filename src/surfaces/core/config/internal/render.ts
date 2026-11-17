@@ -1,4 +1,4 @@
-import { messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { configApplyPresentation, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cells, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import type { ConfigApplication, ConfigFieldView } from '#engine/index.js';
 
@@ -9,8 +9,14 @@ export function sourceWord(source: ConfigFieldView['source'], locale: Locale): s
     project: t('config.surface.source.project', {}, locale), env: t('config.surface.source.env', {}, locale) };
   return words[source];
 }
-export function applyWord(apply: ConfigFieldView['apply'], locale: Locale): string {
+export function applyWord(apply: ConfigFieldView['apply'], locale: Locale, key?: string): string {
+  if (configApplyPresentation(key, apply) === 'reopenTerminal') return t('config.surface.reopenTerminal', {}, locale);
   return apply === 'live' ? t('config.surface.live', {}, locale) : t('config.surface.restart', {}, locale);
+}
+export function applyGuidance(apply: ConfigFieldView['apply'], locale: Locale, key: string): string[] {
+  const mode = configApplyPresentation(key, apply);
+  return mode === 'reopenTerminal' ? [t('config.surface.guidance.reopenTerminal', {}, locale)]
+    : mode === 'restart' ? [t('config.surface.guidance.restart', {}, locale)] : [];
 }
 const bindingWord = (field: ConfigFieldView, locale: Locale) => field.binding.state === 'bound' ? t('config.surface.bound', {}, locale) : t('config.surface.declared', {}, locale);
 export function configValueWord(value: unknown, redacted: boolean, locale: Locale): string {
@@ -36,7 +42,7 @@ export function renderConfigInspection(view: ConfigInspection, locale: Locale, w
   for (const field of view.fields) {
     const next = field.key.split('.')[0]!;
     if (next !== group) { group = next; lines.push('', `[${group}]`, ...row(labels, widths)); }
-    lines.push(...row([field.key, configValueWord(field.value, field.redacted, locale), sourceWord(field.source, locale), bindingWord(field, locale), applyWord(field.apply, locale)], widths));
+    lines.push(...row([field.key, configValueWord(field.value, field.redacted, locale), sourceWord(field.source, locale), bindingWord(field, locale), applyWord(field.apply, locale, field.key)], widths));
   }
   return lines.flatMap(line => wrapCells(terminalSafeText(line), bounded)).join('\n');
 }
@@ -46,9 +52,9 @@ export const fieldDescription = (field: ConfigFieldView, locale: Locale): string
 export function renderConfigExplanation(field: ConfigFieldView, locale: Locale, width = 80, verbose = true): string {
   const binding = field.binding.state === 'bound' ? (verbose ? `${bindingWord(field, locale)}: ${field.binding.consumers.join(', ')}` : bindingWord(field, locale))
     : `${bindingWord(field, locale)}: ${field.binding.reason}`;
-  return t('config.surface.explain', { key: field.key, description: fieldDescription(field, locale),
+  return [t('config.surface.explain', { key: field.key, description: fieldDescription(field, locale),
     value: configValueWord(field.value, field.redacted, locale), defaultValue: configValueWord(field.defaultValue, field.redacted, locale),
-    source: sourceWord(field.source, locale), binding, apply: applyWord(field.apply, locale), schema: schemaWord(field.schema, locale) }, locale)
+    source: sourceWord(field.source, locale), binding, apply: applyWord(field.apply, locale, field.key), schema: schemaWord(field.schema, locale) }, locale), ...applyGuidance(field.apply, locale, field.key)].join('\n')
     .split('\n').flatMap(line => wrapCells(terminalSafeText(line), Math.max(40, Math.min(80, width)))).join('\n');
 }
 

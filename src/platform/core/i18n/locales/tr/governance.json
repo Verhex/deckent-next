@@ -1290,5 +1290,10 @@
   "error.SECRET_PROJECT_TARGET_CHANGED": "Bu anahtar izni için gösterilen proje değişti. İzin verilmedi, kasa devredilmedi. Kartı yeniden açıp projeyi kontrol edin.",
   "secret.project.sharedWorktrees": "Bu depo ve aynı deponun ayrı çalışma klasörleri (worktree) bu anahtar iznini paylaşır. Çalıştığınız klasör: {workingFolder}.",
   "secret.project.workingFolder": "Çalıştığınız klasör: {workingFolder}.",
-  "remedy.POLICY_UNAVAILABLE": "Yeni bir klasörde politikayı `deckent init policy --scope {scope} --apply` ile kurun, ardından aynı kapsamla yeniden deneyin. Bu klasörde zaten politika varsa güvenilir politika ve bağlarını geri yükleyin; üzerlerine yazmayın."
+  "remedy.POLICY_UNAVAILABLE": "Yeni bir klasörde politikayı `deckent init policy --scope {scope} --apply` ile kurun, ardından aynı kapsamla yeniden deneyin. Bu klasörde zaten politika varsa güvenilir politika ve bağlarını geri yükleyin; üzerlerine yazmayın.",
+  "config.issue.minimum": "en az: {minimum}",
+  "config.issue.minimumExclusive": "şu değerden büyük: {minimum}",
+  "error.WORK_CLASS_NOT_REGISTERED.available": "İstenen iş sınıfı kayıtlı değil. Şu kayıtlı iş sınıflarından birini seçin: {allowed}.",
+  "error.RUN_PROPOSAL_WORK_CLASS_REQUIRED.available": "Önerilen her görev, iş girdisiyle tutarlı kayıtlı bir iş sınıfı taşımalıdır. Şunlardan birini seçin: {allowed}.",
+  "error.PROJECT_ATTACHMENT_DENIED.declined": "Klasör izinlerini değiştirmemeyi seçtiniz: {path}. Kuruluma devam edilmedi. Devam etmek için kendi terminalinizde deckent init komutunu yeniden çalıştırın ve klasör izin kartını onaylayın."
 }

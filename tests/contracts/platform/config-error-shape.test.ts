@@ -45,9 +45,9 @@ const cases: readonly (readonly [string, unknown, readonly ConfigIssue[]])[] = [
   ['invalid url', { toolchains: { currency: { registryEndpoint: 'not a url' } } }, one('toolchains.currency.registryEndpoint', 'invalid_string')],
   ['union mismatch', { max_workers: 'x' }, one('max_workers', 'invalid_union')],
   ['too big', { inspection: { workers: { heartbeatMs: 60_001 } } }, one('inspection.workers.heartbeatMs', 'too_big')],
-  ['too small number', { inspection: { workers: { heartbeatMs: 99 } } }, one('inspection.workers.heartbeatMs', 'too_small')],
-  ['too small array', { cancellationRuntime: { scopeIds: [] } }, one('cancellationRuntime.scopeIds', 'too_small')],
-  ['record value too small', { layout: { resources: { data: '' } } }, one('layout.resources.data', 'too_small')],
+  ['too small number', { inspection: { workers: { heartbeatMs: 99 } } }, [{ path: 'inspection.workers.heartbeatMs', reason: 'too_small', minimum: 100 }]],
+  ['too small array', { cancellationRuntime: { scopeIds: [] } }, [{ path: 'cancellationRuntime.scopeIds', reason: 'too_small', minimum: 1 }]],
+  ['record value too small', { layout: { resources: { data: '' } } }, [{ path: 'layout.resources.data', reason: 'too_small', minimum: 1 }]],
   ['superRefine custom with authored path', { service: { maxConcurrentExecutions: 16 } }, one('service.maxConcurrentExecutions', 'custom')],
   ['refine custom on an element', { inspection: { workers: { sources: [{ id: 'current', kind: 'next-project', path: 'p', scopeId: 's' }] } } },
     one('inspection.workers.sources.0.id', 'custom')],
@@ -69,10 +69,21 @@ describe('config error shape (zod 4 issue-code guard)', () => {
     const error = (() => { try { validateConfig({ output_mode: 'turbo', mcp: { maxConcurrentCalls: 'x' } }, 'tr'); } catch (caught) { return caught as ConfigValidationError; } throw new Error('expected'); })();
     expect(error.code).toBe('CONFIG_VALIDATION');
     expect(issues({ mcp: { maxConcurrentCalls: -1.5 } })).toEqual([
-      { path: 'mcp.maxConcurrentCalls', reason: 'invalid_type' }, { path: 'mcp.maxConcurrentCalls', reason: 'too_small' },
+      { path: 'mcp.maxConcurrentCalls', reason: 'invalid_type' }, { path: 'mcp.maxConcurrentCalls', reason: 'too_small', minimum: 0, inclusive: false },
     ]);
     expect(error.message).toContain('mcp.maxConcurrentCalls: geçersiz değer (değer türü geçersiz)');
     expect(error.message).toContain('output_mode: geçersiz değer (geçerli değerler: standard, explanatory, verbose, json)');
     expect(error.localize?.('en').message).toContain('output_mode: invalid value (allowed values: standard, explanatory, verbose, json)');
   });
+});
+
+it('B14a: a too-small value carries its minimum in JSON and a usable localized bound', () => {
+  const problem = issues({ terminal: { maxTrackedRuns: 0 } });
+  expect(JSON.parse(JSON.stringify(problem))).toEqual([{ path: 'terminal.maxTrackedRuns', reason: 'too_small', minimum: 1 }]);
+  const error = new ConfigValidationError(problem);
+  expect(error.localize?.('en').message).toContain('minimum: 1');
+  expect(error.localize?.('tr').message).toContain('en az: 1');
+  const exclusive = new ConfigValidationError(issues({ mcp: { maxConcurrentCalls: 0 } }));
+  expect(exclusive.localize?.('en').message).toContain('greater than: 0');
+  expect(exclusive.localize?.('tr').message).toContain('şu değerden büyük: 0');
 });

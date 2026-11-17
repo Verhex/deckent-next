@@ -91,5 +91,8 @@
   "config.field.targetQueue.candidateSlots": "How many targets the service handles in parallel in one pass.",
   "config.field.targetQueue.reattempts": "Automatic re-attempts per delivery intent after the target base advanced (0: none; you queue it again).",
   "config.field.targetQueue.reattemptWindowMs": "How long (ms) after you queued a delivery the service may still start such a re-attempt.",
-  "config.field.targetQueue.requeueMax": "How many times the service re-queues a delegated Attempt's ticket that stopped before any effect (0: never)."
+  "config.field.targetQueue.requeueMax": "How many times the service re-queues a delegated Attempt's ticket that stopped before any effect (0: never).",
+  "config.surface.reopenTerminal": "reopen terminal",
+  "config.surface.guidance.restart": "Restart the service with deckent runtime restart.",
+  "config.surface.guidance.reopenTerminal": "The language applies after reopening the terminal: type /exit, then run deckent again."
 }
