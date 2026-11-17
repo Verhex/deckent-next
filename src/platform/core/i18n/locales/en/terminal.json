@@ -239,7 +239,7 @@
   "terminal.approval.denied": "Approval {id} denied; the runtime recorded the decision.",
   "terminal.approval.identity": "Approval identity: {id}",
   "terminal.approval.unsettled": "Approval request {id} could not be closed; the call did not run. The pending request permits nothing and closes at its expiry or the next service start.",
-  "terminal.approval.more": "{count} more pending — /approvals to decide the next.",
+  "terminal.approval.more": "The list you opened showed {count} more pending — it may have changed; /approvals to review.",
   "terminal.approval.notify": "{count} pending approval(s) — /approvals to review.",
   "terminal.approval.pollFailed": "Approval check failed",
   "terminal.approval.standing.covers": "A standing answer covers exactly: {pattern}",
