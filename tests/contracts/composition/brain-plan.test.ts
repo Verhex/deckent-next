@@ -13,6 +13,7 @@ import { exitCodeFor } from '#platform/index.js';
 import { brainRunId } from '#engine/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { proposalFixture } from '../support/run-proposal.js';
+import { main } from '#surfaces/core/cli/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const cleanups: (() => Promise<void>)[] = [];
@@ -336,3 +337,16 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
 });
 
+
+
+it('D2 config TR plus CLI --lang en reaches the actual planner prompt and replay keeps the stored plan', async () => {
+  const f = await fixture(), configPath = join(f.project, '.deckent/config.json');
+  await writeFile(configPath, JSON.stringify({ ...f.config, language: 'tr' })); clearConfigCache();
+  const context = { root: f.project, env: f.options.env, initialize() {}, stdout: { write() {} }, stderr: { write() {} }, planRun };
+  expect(await main(['do', '--scope', 's', '--request', command.intent, '--command-id', 'd2-lang', '--lang', 'en'], context)).toBe(0);
+  expect(JSON.parse(JSON.parse(f.bodies[0]!).messages[1].content).language).toBe('en');
+  const before = await inspectRunProposal(f.project, { schemaVersion: 1, scopeId: 's', commandId: 'd2-lang', runId: brainRunId({ ...command, commandId: 'd2-lang' }) }, f.options);
+  expect(await main(['do', '--scope', 's', '--request', command.intent, '--command-id', 'd2-lang', '--lang', 'tr'], context)).toBe(0);
+  expect(f.posts).toBe(1);
+  expect(await inspectRunProposal(f.project, { schemaVersion: 1, scopeId: 's', commandId: 'd2-lang', runId: brainRunId({ ...command, commandId: 'd2-lang' }) }, f.options)).toEqual(before);
+});

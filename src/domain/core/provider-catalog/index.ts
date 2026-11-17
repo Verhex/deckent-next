@@ -23,3 +23,5 @@ export { MODEL_TIERS, MODEL_ROLE_LIMITS, CORE_MODEL_ROLES, ModelRoleError, model
 export type { ModelTier, ModelRoleRegistry, ModelRolePolicy, ModelRoleErrorCode, RoleModelTarget, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RoleModelFacts, RoleModelRefusal, RoleModelDecision,
   RoleModelRow } from './internal/model-role.js';
 export { MODEL_MAKERS, canonicalModelMaker, makersIndependent, independentMakerRows } from './internal/model-maker.js';
+
+export { workerReadinessSchema, type WorkerReadiness } from './internal/worker-readiness.js';

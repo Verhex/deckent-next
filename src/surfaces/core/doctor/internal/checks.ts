@@ -27,6 +27,7 @@ export interface DoctorCheckFacts {
   readonly attachmentFolders?: Readonly<{ record: Parameters<typeof countMismatchedAttachments>[0]; projectRoot: string;
     observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
+  readonly workerReadiness?: import('#domain/index.js').WorkerReadiness | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
@@ -183,6 +184,8 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
+    : f.poolStatus === 'ready' && f.workerReadiness?.ready === false ? row('work', 'work.pool', 'warning', t('setup.work.workerMissing', { code: f.workerReadiness.code }, l), f.workerReadiness.cli.join(' '))
+    : f.poolStatus === 'ready' && f.workerReadiness === null ? row('work', 'work.pool', 'untested', t('setup.work.workerUnknown', {}, l), scoped('deckent doctor', f))
     : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))

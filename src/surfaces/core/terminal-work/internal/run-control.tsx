@@ -58,8 +58,8 @@ function runsHints(labels: RunControlLabels, actions: readonly RunRowAction[]): 
 }
 
 /** The Runs list with a selection; `h`/`r`/`c`/`a` answer `<action>:<row>` when the selected row offers it, Esc closes (`null`). */
-export function RunsControlWindow({ value, labels, position, onAnswer }: { readonly value: RunsWindowPresentation; readonly labels: RunControlLabels; readonly position: string;
-  readonly onAnswer: (choice: string | null) => void }) {
+export function RunsControlWindow({ value, labels, position, onAnswer, onSelect }: { readonly value: RunsWindowPresentation; readonly labels: RunControlLabels; readonly position: string;
+  readonly onAnswer: (choice: string | null) => void; readonly onSelect?: (index: number) => void }) {
   const known = useHumanTextSecrets(), [selected, setSelected] = useState(() => Math.min(value.selected, Math.max(0, value.rows.length - 1)));
   const project = (spans: readonly Span[]) => spans.flatMap(item => projectHumanPickerText(item.text, known).spans.map(part => ({ ...item, ...part })));
   const count = value.rows.length, row = value.rows[Math.min(selected, Math.max(0, count - 1))];
@@ -69,7 +69,7 @@ export function RunsControlWindow({ value, labels, position, onAnswer }: { reado
     ...(count ? [] : [{ spans: [span(value.empty, { role: 'muted' })] }])];
   return <Window title={[span(value.title)]} status={[span(String(count))]} body={body} hints={runsHints(labels, row?.actions ?? [])} position={position} reveal={notes.length + selected}
     onClose={() => onAnswer(null)} onInput={(input, key) => {
-      if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { setSelected(current => (current + (key.upArrow ? count - 1 : 1)) % count); return true; }
+      if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { const next = (selected + (key.upArrow ? count - 1 : 1)) % count; setSelected(next); onSelect?.(next); return true; }
       const action = runControlKey(input, key);
       if (action && row?.actions.includes(action)) { onAnswer(`${action}:${selected}`); return true; }
       return false;
@@ -134,7 +134,7 @@ async function runAnswerFlow(panel: WorklinePanel, execution: LocalExecution, le
  * result as its status, until Esc. Returns the transcript summary: every result, or the window's closed line.
  */
 export async function runRunsControl(panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
-  errorText: (error: unknown) => string, reason: () => string | undefined): Promise<string> {
+  errorText: (error: unknown) => string, reason: () => string | undefined, selection?: () => number): Promise<string> {
   const words = work.runControl!, jobs = work.jobs!, title = work.live!.runsTitle, results: string[] = [];
   let status = '', selected = 0;
   while (!execution.signal.aborted) {
@@ -143,9 +143,10 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     const answerable = Boolean(ledger.answerTask && work.runAnswer && words.keyAnswer);
     const rows = runs.map(run => ({ actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
       span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
-    const choices = ['close', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
+    const choices = ['close', 'refresh', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
     const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;
+    if (choice === 'refresh') { selected = selection?.() ?? selected; continue; }
     const [action, index] = choice.split(':') as [RunRowAction, string];
     if (action === 'answer') {
       const chosen = runs[Number(index)]!; selected = Number(index);

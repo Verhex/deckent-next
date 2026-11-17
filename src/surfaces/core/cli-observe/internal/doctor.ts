@@ -40,6 +40,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
     codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
     egress: await egressFacts(root, config, context, options),

@@ -57,13 +57,14 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const recovery = coding.repository === 'present' ? await observeFirstCommitRecovery(root, env).catch(() => ({ state: 'unknown' as const })) : null; signal?.throwIfAborted();
     const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily(), SETUP_PERMISSIONS_FAMILY], facts: { permissions: null, execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider, providerPending: !pins.some(pin => pin.provider === provider) } : {}), acquisition, ...(connected ? { connection: connected } : {}) } } : {}) },
       coding: { ...coding, firstCommitRecovery: recovery?.state === 'prepared' ? 'none' : recovery?.state ?? 'none' } } });
-    const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, execution: observed.firstJob.execution && worker?.image !== 'missing' };
+    const workerReadiness = observed.observation.folder.configuredScope && config?.admission ? await (host as Pick<KernelCommandContext, 'inspectWorkerReadiness'>).inspectWorkerReadiness?.(root, observed.observation.folder.configuredScope, options)?.catch(() => ({ ready: false, code: 'WORKER_ASSIGNMENT_NONE', cli: ['deckent', 'doctor'] })) : undefined;
+    const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, ...(workerReadiness ? { workerReadiness } : {}), execution: observed.firstJob.execution && worker?.image !== 'missing' };
     const registry = executionRegistrySchema.safeParse(config?.admission?.registry);
     const scope = observed.observation.folder.configuredScope;
     const permission = installed && scope ? await observeSetupPermissions(root, scope, options).catch(() => ({ state: 'blocked' as const, digest: '', profile: '-', mode: 'standart', effectiveMode: 'standart', principal: '-', selectedProfile: null })) : null;
     const permissionFacts = permission ? { state: permission.state, digest: permission.digest, profile: permission.profile, mode: permission.mode,
       effectiveMode: permission.effectiveMode, principal: permission.principal, selectedProfile: permission.selectedProfile } : null;
-    const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, permissions: permissionFacts, work: { ...observed.firstJob, ...(provider ? { pendingProvider: provider } : {}),
+    const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, permissions: permissionFacts, work: { ...firstJob, ...(provider ? { pendingProvider: provider } : {}),
       providers: [...new Set(pins.map(pin => pin.provider))], kinds: registry.success ? registry.data.kinds.map(row => row.kind) : [],
       images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections,
       // NF-2: `execution` (first job) means Docker; a chosen connection's kind needs only its Git settings, planned after the kind stage.

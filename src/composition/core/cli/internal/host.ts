@@ -39,7 +39,7 @@ import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConf
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, headlessIsolationRefusal, headlessLoginDir, headlessPersonWitness, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
+import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
@@ -183,7 +183,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
     openModelInspection: openConfiguredModelInspection,
-    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, inspectWorkerReadiness: inspectConfiguredWorkerReadiness, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,

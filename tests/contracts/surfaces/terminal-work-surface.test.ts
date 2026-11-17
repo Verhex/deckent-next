@@ -239,17 +239,23 @@ describe('work surface: approvals', () => {
   });
 
   it('announces new pending approvals once on the heartbeat without opening a card', async () => {
+    expect(EN_WORK.approvalNotify).toBe('{count} pending approval(s) — /approvals to review.');
+    expect(workSurfaceLabels('tr').approvalNotify).toBe('{count} bekleyen onay — incelemek için /approvals.');
     const fake = approvals([approval('ap-1')]);
     const view = mount({ ledger: fake.ledger, pollMs: 40, approvalPollMs: 40 });
     await until(() => view.stdout.text.includes('A-NOTIFY 1'), 'first notice');
     fake.records.set('ap-9', approval('ap-9')); fake.records.set('ap-8', approval('ap-8'));
-    await until(() => view.stdout.text.includes('A-NOTIFY 2'), 'second notice');
+    await until(() => view.stdout.text.includes('A-NOTIFY 3'), 'current pending count');
     const lists = fake.lists(); await settle(200);
     expect(fake.lists() - lists).toBeLessThanOrEqual(6);
     expect(view.count('A-NOTIFY')).toBe(1);
     expect(view.frame()).toContain('READY');
     expect(view.frame()).not.toContain('A-PROMPT');
     expect(fake.decisions).toEqual([]);
+    fake.records.delete('ap-9'); fake.records.delete('ap-8');
+    await until(() => view.frame().includes('A-NOTIFY 1'), 'pending count drops');
+    fake.records.clear();
+    await until(() => !view.frame().includes('A-NOTIFY'), 'no pending approvals');
   });
 });
 

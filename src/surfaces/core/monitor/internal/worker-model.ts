@@ -24,6 +24,7 @@ export function renderWorkerModelLine(view: WorkerModelView, locale: Locale): st
       source: effortSources(locale)[view.reasoningEffort.source],
       workClass: view.reasoningEffort.workClass ?? none }, locale) : '')
     + (view.reasoningEffort?.policyRevision ? t('cli.worker.effort.policy_revision', { revision: view.reasoningEffort.policyRevision }, locale) : '')
+    + (view.verdict === 'unverified' ? t('cli.worker.model.unverifiedReason', { model: view.requested.modelId }, locale) : '')
     + (view.unexpected.length ? t('cli.worker.model.unexpected', { models: view.unexpected.join(', ') }, locale) : '');
 }
 /** F2-11: the agent the system bound to a task and its pinned skill revisions (the plan card's words), for run and task inspect. */

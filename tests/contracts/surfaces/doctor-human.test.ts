@@ -609,3 +609,14 @@ it('D1 doctor reports the shared Git directory warning and command without offer
     if (!command) expect(out).not.toContain('chmod go-w');
   }
 });
+
+
+it('D2 a recorded pool does not mean the small worker is ready (EN/TR)', () => {
+  const workerReadiness = { ready: false, code: 'WORKER_MODEL_NOT_ACTIVE', cli: ['deckent', 'models', 'connect', '--scope', 'live', '--connection', 'fixture-connection', '--model', 'fixture-small'] };
+  for (const locale of ['en', 'tr'] as const) {
+    const rows = doctorChecks(report, facts({ poolStatus: 'ready', workerReadiness } as never), locale);
+    const pool = rows.find(row => row.id === 'work.pool')!;
+    expect(pool.state).toBe('warning'); expect(pool.next).toBe(workerReadiness.cli.join(' '));
+    expect(pool.text).toContain(locale === 'en' ? 'Small worker is not ready' : 'Küçük iş çalışanı hazır değil');
+  }
+});

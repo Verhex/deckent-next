@@ -151,3 +151,21 @@ it.each(['en', 'tr'] as const)('%s completion line names what an accepted verdic
   const rejected = { ...withCriteria, tasks: withCriteria.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, evaluation: { verdict: 'rejected' as const } } })) } as unknown as RunView;
   expect(runCompletionText(rejected, jobs)).not.toMatch(/Accepted on|Kabul dayanağı/);
 });
+
+
+it('D2 refreshes an open Runs window on push and removes hold on completion', async () => {
+  const control = vi.fn(), h = harness();
+  Object.assign(h.ledger, { controlRun: control });
+  await until(() => h.reads() > 0, 'opening snapshot');
+  h.view.stdin.write('/runs\r');
+  await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'running window');
+  h.view.stdin.write('\u001b[B'); await settle();
+  const before = h.reads(); h.pulse();
+  await until(() => h.reads() > before, 'push refresh with second row selected'); await settle();
+  expect(h.view.stdout.frame).toContain('› TASK-SENTINEL [completed] · foreign');
+  h.view.stdin.write('\u001b[A'); await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'first row selected');
+  h.finish();
+  await until(() => h.view.stdout.frame.includes('[completed] · do-run'), 'completed open window');
+  expect(h.view.stdout.frame).not.toContain(EN.runControl!.keyHold);
+  h.view.stdin.write('h'); await settle(); expect(control).not.toHaveBeenCalled();
+});

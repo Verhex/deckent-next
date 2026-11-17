@@ -8,7 +8,7 @@ import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { inspectNativeChat } from '#composition/core/terminal-chat/index.js';
-import { nativeQuotaText, type ToolSessionPort } from '#capabilities/index.js';
+import { nativeQuotaText, nativeAgentReasonText, type ToolSessionPort } from '#capabilities/index.js';
 import { snapshotKnownSecrets, clockText } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
@@ -196,6 +196,24 @@ it('records Claude subscription limits in the existing strict refusal and render
       if (info.rateLimitType === 'seven_day_opus') expect(text).toContain(language === 'en' ? 'weekly window for Opus' : 'Opus için haftalık pencere');
       if (info.rateLimitType?.startsWith('odd')) { expect(body).toMatchObject({ field: 'odd__' + 'x'.repeat(19) }); expect(text).toContain('odd__' + 'x'.repeat(19)); }
     }
+  }
+});
+
+it('D2 preserves a typed Codex usage limit and names a guard check without claiming an unexpected tool', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const quota = await (await fixture(families[1]!, { events: [{ type: 'turn.failed', error: { message: 'Rate limit reached' } }] })).start();
+  const result = await quota.run();
+  expect(result.kind).toBe('rejected');
+  const guard = await (await fixture(families[1]!, { events: [{ type: 'turn.completed', usage: null }] })).start();
+  expect(await guard.run()).toMatchObject({ kind: 'rejected' });
+  expect(guard.driver.refusalCheck()).toBe('usage');
+  const body = result.kind === 'rejected' ? readHeadlessRejection(result.evidence) : null;
+  expect(body).toMatchObject({ refusal: 'quota' }); expect(quota.driver.refusal()).toBeNull();
+  for (const locale of ['en', 'tr'] as const) {
+    expect(nativeQuotaText(body!, locale)).toContain(locale === 'en' ? 'usage limit' : 'kullanım sınırı');
+    const text = nativeAgentReasonText(guard.driver.refusal()!, locale, false, true, guard.driver.refusalCheck());
+    expect(text).toContain(locale === 'en' ? 'safety check refused' : 'güvenlik denetimi');
+    expect(text).not.toContain(locale === 'en' ? 'unexpected tool' : 'beklenmedik bir araç');
   }
 });
 

@@ -315,6 +315,7 @@ export function WorklineApp(props: WorklineProps) {
       workRef.current?.observeWorkers(workers);
     }
     if (snapshot.runs) {
+      workRef.current?.observeRuns();
       completion.observe(snapshot.runs);
       if (watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
     }

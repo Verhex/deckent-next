@@ -240,7 +240,7 @@
   "terminal.approval.identity": "Onay kimliği: {id}",
   "terminal.approval.unsettled": "{id} onay isteği kapatılamadı; çağrı çalışmadı. Bekleyen istek hiçbir şeye izin vermez, süresi dolunca ya da servis yeniden başlayınca kapanır.",
   "terminal.approval.more": "{count} onay daha bekliyor — sıradakine karar vermek için /approvals.",
-  "terminal.approval.notify": "{count} yeni bekleyen onay — incelemek için /approvals.",
+  "terminal.approval.notify": "{count} bekleyen onay — incelemek için /approvals.",
   "terminal.approval.pollFailed": "Onay denetimi başarısız",
   "terminal.approval.standing.covers": "Kalıcı yanıt tam olarak şunu kapsar: {pattern}",
   "terminal.approval.standing.promptBoth": "y bu sefer onayla · s bu oturum boyunca onayla · a bu projede her zaman · n reddet · Enter/Esc reddet (varsayılan).",

@@ -371,5 +371,7 @@
   "setup.attachment.title.unregister": "Unregister this source installation?",
   "setup.attachment.title.relocate": "Update this project or source's recorded location?",
   "setup.attachment.title.restore": "Restore this project's attachment?",
-  "cli.uninstall.backupCancelled": "Backup passphrase entry was cancelled. The runtime service was stopped before this step. Start it again with deckent runtime start."
+  "cli.uninstall.backupCancelled": "Backup passphrase entry was cancelled. The runtime service was stopped before this step. Start it again with deckent runtime start.",
+  "setup.work.workerMissing": "Small worker is not ready ({code}). Complete the next step; setup does not activate a model.",
+  "setup.work.workerUnknown": "Small worker readiness could not be read."
 }
