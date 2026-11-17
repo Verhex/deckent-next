@@ -250,6 +250,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
       body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
+      {...(visible.stage.kind === 'permission' ? { inputRevision: visible.generation } : {})}
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);

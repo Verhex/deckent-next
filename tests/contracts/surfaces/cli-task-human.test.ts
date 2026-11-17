@@ -354,10 +354,13 @@ it('BeUser M-33: setting a result aside or bringing it back is the person\'s ter
 it('D1 CLI prints each delivery kind truthfully and a denied adoption of delivered files stays exit 78', async () => {
   const root = await project(), args = ['task', 'integration-deliver', ...patchArgs.slice(2), '--command-id', 'd', '--candidate-command-id', 'c'];
   let attempts = 0;
-  const warning = { path: '/project/.git', command: "chmod go-w -- '/project/.git'", before: '0775', after: '0755' };
-  for (const env of [{}, { AI_AGENT: '1' }]) {
-    const refused = await run([...args, '--json'], { gitDeliveryPermission: async () => warning, deliverWorkspaceIntegration: async () => { attempts++; } }, root, env);
-    expect(refused.code).toBe(1); expect(JSON.parse(refused.err)).toMatchObject({ code: 'PATCH_UNSAFE' }); expect(refused.err).toContain(warning.command);
+  for (const command of ["chmod go-w -- '/project/.git'", '']) {
+    const warning = { path: '/project/.git', command, before: '0775', after: '0755' };
+    for (const env of [{}, { AI_AGENT: '1' }]) {
+      const refused = await run([...args, '--json'], { gitDeliveryPermission: async () => warning, deliverWorkspaceIntegration: async () => { attempts++; } }, root, env);
+      expect(refused.code).toBe(1); expect(JSON.parse(refused.err)).toMatchObject({ code: 'PATCH_UNSAFE' }); expect(refused.err).toContain(command || 'no command is offered');
+      if (!command) expect(refused.err).not.toContain('chmod');
+    }
   }
   expect(attempts).toBe(0);
   for (const lang of ['en', 'tr']) {

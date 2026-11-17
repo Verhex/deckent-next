@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,6 +16,8 @@ import { homeEnv } from '../support/host-platform.js';
 import { ErrorRegistry, type DeckentError } from '#platform/index.js';
 import { DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
+import { prepareAttachmentDirectory } from '#adapters/index.js';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 
 // TESLIM-PENCERESI (owner 2026-10-14): "bu teslimleri neden CLI'dan yapıyorum; … bana sorulması gerekiyorsa terminalden bana sorsun".
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
@@ -92,7 +94,7 @@ function recordingPort(options: PortOptions = {}) {
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
-function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number } = {}) {
+function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number; decisionArmMs?: number } = {}) {
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
   const withAside = (view: RunView): RunView => ({ ...view, tasks: view.tasks.map(task => recorded.aside.has(`${view.runId}/${task.id}`) && task.resultBrief?.deliveryOutlook === 'awaiting-delivery'
@@ -104,9 +106,9 @@ function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly R
     ...(options.port === false ? {} : { delivery: { port: recorded.port, confirmTimeoutMs: 60_000 } }),
     doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', lines: () => ['PLAN-RESULT'],
       plan: async () => ({ ...pending, run: current, proposal: { ...pending.proposal, status: 'accepted', approval: null } }) },
-    ...(options.fullscreen ? { fullscreen: true } : {}) }, 160, { rows: options.rows ?? 48 });
+    ...(options.fullscreen ? { fullscreen: true } : {}), decisionArmMs: options.decisionArmMs ?? 0 }, 160, { rows: options.rows ?? 48 });
   mounted.push(view.instance);
-  return { view, ...recorded, set: (next: RunView) => { current = next; } };
+  return { view, ...recorded, armMs: options.decisionArmMs ?? 0, set: (next: RunView) => { current = next; } };
 }
 type Harness = ReturnType<typeof harness>;
 const frame = (h: Harness) => h.view.stdout.frame;
@@ -117,8 +119,8 @@ const press = async (h: Harness, keys: string, ms = 60) => { h.view.stdin.write(
 /** /do admits the Run; its automatic result and /tasks windows are closed explicitly, as a person would. */
 async function admit(h: Harness) {
   await settle(80); await press(h, '/do process order\r');
-  await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O); await press(h, ESC);
-  await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O); await press(h, ESC);
+  await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O, h.armMs + 60); await press(h, ESC);
+  await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O, h.armMs + 60); await press(h, ESC);
   await until(() => frame(h).includes(`ORDER-TASK · r · ${EN.jobs!.runStates['running']}`), 'running row');
 }
 const windowTitle = 'Delivery · ORDER-TASK';
@@ -880,20 +882,68 @@ describe('delivery card summaries in the window and its port (alpha.53 A3)', () 
   });
 });
 
+/** Real Window arming and pinned-directory narrowing; the recording port isolates the transition from worker execution. */
+function permissionTransition() {
+  const root = mkdtempSync(join(tmpdir(), 'deckent-permission-transition-')), directory = join(root, '.git');
+  mkdirSync(directory); chmodSync(directory, 0o775);
+  const h = harness({ workingTree: true, decisionArmMs: DECISION_ARM_DEFAULT }), original = h.port.deliver, preview = h.port.preview;
+  h.port.preview = async target => ({ ...await preview(target), workingTree: true });
+  h.port.deliver = async (preview, ids, answer, permission) => {
+    try { await prepareAttachmentDirectory(directory, async () => undefined, async path => await permission!(path, '0775', '0755', `chmod go-w -- ${shellWord(path)}`)); }
+    catch { throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: directory, command: 'chmod go-w -- folder' } }); }
+    return original(preview, ids, answer);
+  };
+  return { h, mode: () => statSync(directory).mode & 0o777,
+    async close() { h.view.instance.unmount(); await settle(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 transition NEGATIVE: separately read held y keys cannot answer the new permission question', async () => {
+  const fixture = permissionTransition(), { h } = fixture;
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    // Each write is a separate read, inside the production quiet period; no paste/burst is involved.
+    for (let repeat = 0; repeat < 3; repeat++) await press(h, 'y', DECISION_ARM_DEFAULT / 4);
+    await settle(DECISION_ARM_DEFAULT + 60);
+    expect(fixture.mode()).toBe(0o775); expect(h.calls).not.toContain('publish');
+    expect(frame(h)).toContain('Others can write to this folder');
+    await press(h, ESC); await until(() => frame(h).includes('You chose to leave'), 'permission declined');
+    expect(fixture.mode()).toBe(0o775);
+  } finally { await fixture.close(); }
+});
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 transition POSITIVE: a fresh y after quiet narrows the pinned root and delivery proceeds once', async () => {
+  const fixture = permissionTransition(), { h } = fixture;
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    await press(h, 'y'); // carried-over single key, before the new question has armed
+    expect(fixture.mode()).toBe(0o775); expect(h.calls).not.toContain('publish');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Written into your files'), 'delivery after fresh permission answer');
+    expect(fixture.mode()).toBe(0o755); expect(h.calls.filter(call => call === 'publish')).toHaveLength(1);
+    await press(h, 'y'); await press(h, '\r');
+    expect(h.calls.filter(call => call === 'publish')).toHaveLength(1);
+  } finally { await fixture.close(); }
+});
+
 it('D1 the delivery permission card requires its own explicit answer; no leaves it refused, yes continues without adoption', async () => {
-  for (const choice of ['n', '\r', 'y']) {
+  for (const command of ['chmod go-w -- folder', '']) for (const choice of ['n', '\r', 'y']) {
     const yes = choice === 'y';
     const h = harness({ workingTree: true, targets: ['refs/heads/main'] }), original = h.port.deliver, preview = h.port.preview;
     h.port.preview = async target => ({ ...await preview(target), workingTree: true });
     h.port.deliver = async (preview, ids, answer, permission) => {
       expect(permission).toBeTypeOf('function');
-      if (!await permission!("/project's/.git", '0775', '0755', 'chmod go-w -- folder')) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: "/project's/.git", command: 'chmod go-w -- folder' } });
+      if (!await permission!("/project's/.git", '0775', '0755', command)) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: "/project's/.git", command } });
       return original(preview, ids, answer);
     };
     await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
     await press(h, CTRL_O); await press(h, 'y');
     await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
     expect(frame(h)).toContain("/project's/.git"); expect(frame(h)).toContain('0775 → 0755');
+    if (!command) { expect(squeeze(frame(h))).toContain(squeeze('no command is offered')); expect(frame(h)).not.toContain('chmod'); }
     await press(h, choice);
     await until(() => yes ? frame(h).includes('Written into your files') : frame(h).includes('You chose to leave'), 'permission answer');
     expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false);

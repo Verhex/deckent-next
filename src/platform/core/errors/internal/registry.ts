@@ -438,7 +438,11 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   ADOPTION_REPOSITORY_CHANGED: 'error', ADOPTION_VERIFICATION_NOT_CONFIGURED: 'config', PATCH_UNSUPPORTED: 'error',
 }), {
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: p['application'] === 'working-tree' ? t('error.ADOPTION_TARGET_DENIED.files', p, l) : t('error.ADOPTION_TARGET_DENIED', p, l) }) },
-  PATCH_UNSAFE: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'git-directory-write' || p['reason'] === 'git-directory-declined' ? (p['reason'] === 'git-directory-declined' ? t('error.PATCH_UNSAFE.gitDirectoryDeclined', p, l) : t('error.PATCH_UNSAFE.gitDirectoryWrite', p, l)) : t('error.PATCH_UNSAFE', p, l) }) },
+  PATCH_UNSAFE: { category: 'error', render: (p, l) => {
+    if (p['reason'] === 'git-directory-declined') return { message: p['command'] ? t('error.PATCH_UNSAFE.gitDirectoryDeclined', p, l) : t('error.PATCH_UNSAFE.gitDirectoryDeclinedUnsafePath', p, l) };
+    if (p['reason'] === 'git-directory-write') return { message: p['command'] ? t('error.PATCH_UNSAFE.gitDirectoryWrite', p, l) : t('error.PATCH_UNSAFE.gitDirectoryWriteUnsafePath', p, l) };
+    return { message: t('error.PATCH_UNSAFE', p, l) };
+  } },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: patchLimit(p, l) }) },
 }, plainErrors('error.', {
   WORKER_OBSERVATION_INVALID: 'error', WORKER_OBSERVATION_UNAVAILABLE: 'error', WORKER_EVENTS_SEAL_FAILED: 'error', PATCH_UNAVAILABLE: 'error',

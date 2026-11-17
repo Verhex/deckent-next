@@ -1298,5 +1298,7 @@
   "error.PROJECT_ATTACHMENT_DENIED.declined": "Klasör izinlerini değiştirmemeyi seçtiniz: {path}. Kuruluma devam edilmedi. Devam etmek için kendi terminalinizde deckent init komutunu yeniden çalıştırın ve klasör izin kartını onaylayın.",
   "error.PATCH_UNSAFE.gitDirectoryWrite": "Başka hesaplar {path} Git klasörüne yazabildiği için deckent buraya güvenle teslim edemiyor. Çalıştırın: {command}",
   "error.PATCH_UNSAFE.gitDirectoryDeclined": "Git klasörünün iznini değiştirmemeyi seçtiniz: {path}. Bu karar kişiye aittir. Teslim hâlâ engelli. Daha sonra daraltmak için: {command}",
-  "error.ADOPTION_TARGET_DENIED.files": "Dosyalarınız teslim edildi, commit atılmadı. Bu yol için dala alma gerekmez. Dal teslimi ayrı yapılandırma ve onay ister; istenen dal değiştirilmedi."
+  "error.ADOPTION_TARGET_DENIED.files": "Dosyalarınız teslim edildi, commit atılmadı. Bu yol için dala alma gerekmez. Dal teslimi ayrı yapılandırma ve onay ister; istenen dal değiştirilmedi.",
+  "error.PATCH_UNSAFE.gitDirectoryWriteUnsafePath": "Başka hesaplar {path} Git klasörüne yazabildiği için deckent buraya güvenle teslim edemiyor. Klasör adı güvenle gösterilemeyen karakterler içerdiğinden komut sunulmuyor.",
+  "error.PATCH_UNSAFE.gitDirectoryDeclinedUnsafePath": "Git klasörünün iznini değiştirmemeyi seçtiniz: {path}. Bu karar kişiye aittir. Teslim hâlâ engelli. Klasör adı güvenle gösterilemeyen karakterler içerdiğinden komut sunulmuyor."
 }

@@ -723,4 +723,7 @@ it.skipIf(process.platform !== 'linux')('D1 refuses writable Git metadata with t
   const { checkGitCustodyDirectory } = await import('../../../src/adapters/core/git-patch/internal/git-command.js');
   await symlink(gitDir, join(f.sourceRoot, 'git-link'));
   await expect(checkGitCustodyDirectory(join(f.sourceRoot, 'git-link'), true)).rejects.toMatchObject({ code: 'PATCH_UNSAFE', params: undefined });
+  const multiline = join(f.sourceRoot, 'line\nbreak'); await mkdir(multiline); await chmod(multiline, 0o775);
+  await expect(checkGitCustodyDirectory(multiline, true)).rejects.toMatchObject({ code: 'PATCH_UNSAFE', params: {
+    reason: 'git-directory-write', path: join(f.sourceRoot, 'line break'), command: '' } });
 });

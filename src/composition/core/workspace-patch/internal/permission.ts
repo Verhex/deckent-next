@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, automationMarker, getConfigFieldDefault, GIT_EXECUTION_SETTINGS, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, automationMarker, getConfigFieldDefault, GIT_EXECUTION_SETTINGS, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, detectCodingFacts, inspectGitDeliveryDirectory, prepareAttachmentDirectory, resolveGitWorkTarget } from '#adapters/index.js';
 import { assertAuthorityWitness, WorkspacePatchError } from '#engine/index.js';
 /** Local UI preflight only: no ledger, policy, protocol operation or automatic permission change. */
@@ -10,8 +10,9 @@ export async function configuredGitDeliveryPermission(root: string, options: Con
   const git = config.execution?.git ?? GIT_EXECUTION_SETTINGS.parse({ gitExecutable: executable });
   const source = await resolveGitWorkTarget(resolve(root), config.execution, config.productLayout);
   const settings = { ...git, ...source.git, workspaceRoot: source.git.sourceRoot };
+  let directory = '';
   const inspect = async () => {
-    try { await inspectGitDeliveryDirectory(settings); return null; }
+    try { await inspectGitDeliveryDirectory(settings, path => { directory = path; }); return null; }
     catch (error) {
       if (error instanceof WorkspacePatchError && error.params?.['reason'] === 'git-directory-write') {
         const { path, command, before, after } = error.params;
@@ -26,18 +27,19 @@ export async function configuredGitDeliveryPermission(root: string, options: Con
   const authorize = async () => {
     await assertAuthorityWitness('git-directory-permission', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), { attest: async () =>
       !automationMarker(process.env, markers) && !automationMarker(options.env ?? process.env, markers) && await attestLocalInteractiveTerminal() });
-    const current = await inspectGitDeliveryDirectory(settings).catch(error => {
+    let current = '';
+    await inspectGitDeliveryDirectory(settings, path => { current = path; }).catch(error => {
       if (!(error instanceof WorkspacePatchError) || error.params?.['reason'] !== 'git-directory-write') throw error;
-      return error.params['path'];
     });
-    if (current !== warning.path) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
+    if (current !== directory) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED');
   };
   let declined = false;
   try {
-    await prepareAttachmentDirectory(warning.path, authorize,
-      async path => { const yes = await confirm(path, warning.before, warning.after, warning.command); declined = !yes; return yes; });
+    await prepareAttachmentDirectory(directory, authorize,
+      async () => { const yes = await confirm(warning.path, warning.before, warning.after, warning.command); declined = !yes; return yes; });
   } catch (error) {
     if (declined) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-declined' } });
+    if (isCodedError(error, 'PROJECT_ATTACHMENT_DENIED') && error.params?.['path'] === directory) throw ErrorRegistry.createError(error.code, { params: { ...error.params, path: warning.path } });
     throw error;
   }
   await inspectGitDeliveryDirectory(settings);

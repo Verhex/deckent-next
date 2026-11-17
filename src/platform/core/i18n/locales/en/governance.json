@@ -1298,5 +1298,7 @@
   "error.PROJECT_ATTACHMENT_DENIED.declined": "You chose not to change the folder permissions: {path}. Setup did not continue. To continue, run deckent init again in your own terminal and approve the folder-permission card.",
   "error.PATCH_UNSAFE.gitDirectoryWrite": "Other accounts can write to Git folder {path}, so deckent cannot safely deliver here. Run: {command}",
   "error.PATCH_UNSAFE.gitDirectoryDeclined": "You chose to leave the Git folder permission unchanged: {path}. This is the person's decision. Delivery is still blocked. To narrow it later: {command}",
-  "error.ADOPTION_TARGET_DENIED.files": "Your files were delivered without a commit. Adoption is not needed for this path. Branch delivery needs its own configuration and approval; the requested branch was not changed."
+  "error.ADOPTION_TARGET_DENIED.files": "Your files were delivered without a commit. Adoption is not needed for this path. Branch delivery needs its own configuration and approval; the requested branch was not changed.",
+  "error.PATCH_UNSAFE.gitDirectoryWriteUnsafePath": "Other accounts can write to Git folder {path}, so deckent cannot safely deliver here. The folder name contains characters that cannot be shown safely, so no command is offered.",
+  "error.PATCH_UNSAFE.gitDirectoryDeclinedUnsafePath": "You chose to leave the Git folder permission unchanged: {path}. This is the person's decision. Delivery is still blocked. The folder name contains characters that cannot be shown safely, so no command is offered."
 }

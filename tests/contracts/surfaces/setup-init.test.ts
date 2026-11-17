@@ -498,12 +498,13 @@ it('B27a: the foreground final check passes the invocation language explicitly t
 });
 
 it('D1 init warns with the shared Git refusal, while --json and --yes never ask a permission card', async () => {
-  for (const flags of [['--json'], ['--yes', '--scope', 'my-erp', '--json']]) {
+  for (const command of ["chmod go-w -- '/project/.git'", '']) for (const flags of [['--json'], ['--yes', '--scope', 'my-erp', '--json']]) {
     const run = harness(), calls: boolean[] = [];
     await setupInitCommand(['init', ...flags], { ...run.context, gitDeliveryPermission: async (_root, _options, confirm) => {
-      calls.push(Boolean(confirm)); return { path: '/project/.git', command: "chmod go-w -- '/project/.git'", before: '0775', after: '0755' };
+      calls.push(Boolean(confirm)); return { path: '/project/.git', command, before: '0775', after: '0755' };
     }, applySetupStage: async (_root, stage) => ({ stage: stage.id, operation: stage.operation!.id, status: 'declined' }) });
-    expect(run.err()).toContain('Other accounts can write to Git folder /project/.git'); expect(run.err()).toContain("chmod go-w -- '/project/.git'");
+    expect(run.err()).toContain('Other accounts can write to Git folder /project/.git');
+    expect(run.err()).toContain(command || 'no command is offered'); if (!command) expect(run.err()).not.toContain('chmod');
     expect(calls).toEqual([false]); expect(JSON.parse(run.out())).toHaveProperty('schemaVersion');
   }
 });
@@ -511,9 +512,9 @@ it('D1 init warns with the shared Git refusal, while --json and --yes never ask 
 it('D1 human init offers the same pinned-folder card; decline stays a localized warning before setup continues', async () => {
   const card = vi.spyOn(cards, 'askCliCard').mockResolvedValue('no');
   try {
-    for (const lang of ['en', 'tr'] as const) {
+    for (const command of ["chmod go-w -- '/project/.git'", '']) for (const lang of ['en', 'tr'] as const) {
       const run = harness({ stdin: tty, stdout: tty }), stop = new Error('observation reached'); let calls = 0;
-      const warning = { path: '/project/.git', command: "chmod go-w -- '/project/.git'", before: '0775', after: '0755' };
+      const warning = { path: '/project/.git', command, before: '0775', after: '0755' };
       await expect(setupInitCommand(['init', '--lang', lang], { ...run.context, observeSetup: async () => { throw stop; },
         gitDeliveryPermission: async (_root, _options, confirm) => {
           calls++; if (!confirm) return warning;
@@ -521,7 +522,8 @@ it('D1 human init offers the same pinned-folder card; decline stays a localized 
           throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-declined' } });
         } })).rejects.toBe(stop);
       expect(calls).toBe(2); expect(card.mock.calls.at(-1)![0]).toMatchObject({ initial: 'no', title: lang === 'en' ? 'Others can write to this folder; narrow the permission?' : 'Başkaları bu klasöre yazabiliyor; izni daraltalım mı?' });
-      expect(card.mock.calls.at(-1)![0].body!.join('\n')).toContain(warning.command);
+      expect(card.mock.calls.at(-1)![0].body!.join('\n')).toContain(command || (lang === 'en' ? 'no command is offered' : 'komut sunulmuyor'));
+      if (!command) expect(run.err()).not.toContain('chmod');
       expect(run.err()).toContain(lang === 'en' ? "This is the person's decision." : 'Bu karar kişiye aittir.');
     }
   } finally { card.mockRestore(); }
