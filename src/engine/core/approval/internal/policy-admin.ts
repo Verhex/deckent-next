@@ -1,7 +1,7 @@
 import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
   effectCommandSchema, policyChangeSchema, type DelegationOptions, PolicyChangeError, PolicyLastAdminError, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
-import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
+import type { IntegrityAuthority, TrustedClock, Locale } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
 import { AuthorityChangeError, delegationExceeded, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
 import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, type EffectAdmission, type EffectApplyRequest, type EffectApprovalContext,
@@ -9,6 +9,7 @@ import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, typ
 import type { ApprovalStore } from './store.js';
 import { verifyApproval } from './integrity.js';
 import { OperationApprovalBroker } from './operation.js';
+import { policyExecutionLines } from './policy-execution.js';
 
 /** Refusal codes of an authority submission that are audited (transient or unknown-outcome failures are not refusals). */
 const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEEDS', 'POLICY_DENIED', 'POLICY_CHANGE_INVALID', 'POLICY_LAST_ADMIN', 'EFFECT_REJECTED',
@@ -102,7 +103,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyAdministrationDependencies {
   readonly authority: AuthorityDocumentStore & PolicySource; readonly policy: PolicySource; readonly effects: EffectStore; readonly approvals: ApprovalStore;
   readonly integrity: IntegrityAuthority; readonly sessions: SessionVerifier & SessionAuthority; readonly clock: TrustedClock; readonly requestTtlMs: number;
-  readonly audit: PermissionModeAudit;
+  readonly audit: PermissionModeAudit; readonly locale?: Locale;
 }
 /**
  * The authority producer of `policy.administer@1` (POLICY-ADMIN P3): the only `EffectApplication` constructed with `surface: 'authority'`.
@@ -147,7 +148,12 @@ export class PolicyAdministrationApplication {
     // (an id that exists, a known role) stay with the plan at the gate and inside the write.
     if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
     // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
-    const describe = async (asked: EffectCommand, budget: number) => describePolicyChange(authorityDocuments((await deps.policy.load())), asked.input, budget);
+    const describe = async (asked: EffectCommand, budget: number) => {
+      const change = policyChangeSchema.parse(asked.input), files = authorityDocuments(await deps.policy.load());
+      const rules = change.changes.flatMap(item => item.kind === 'grant.add' || item.kind === 'grant.replace' ? [item.grant] : []);
+      const notice = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en').join('\n');
+      return notice ? `${notice}\n${describePolicyChange(files, asked.input, Math.max(0, budget - notice.length - 1)) ?? ''}` : describePolicyChange(files, asked.input, budget);
+    };
     const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs, describe });
     const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission, options);
     const target = new AuthorityDocumentTarget(deps.authority, {

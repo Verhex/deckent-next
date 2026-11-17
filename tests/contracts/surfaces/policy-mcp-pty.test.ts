@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
@@ -161,9 +161,12 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
       .filter(row => row.event.subject.kind === 'authority-change');
     expect(changes).toHaveLength(4); // the AI proposals off and on, then the delegation grant and revoke
     for (const row of changes) expect(row.event.subject.decider).toEqual(me[0]);
-    const held = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants.filter((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never));
-    expect(held).toEqual(template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never)));
-    for (const id of FIRST_RUN_CURRENT_UPGRADE_RULE_IDS) expect(text).toContain(id); // the off card named each rule it removes
+    const grants = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants as { id: string }[];
+    const proposalIds: readonly string[] = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, executionIds: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    expect(grants.filter(rule => proposalIds.includes(rule.id))).toEqual(template.policy.grants.filter(rule => proposalIds.includes(rule.id)));
+    expect(grants.filter(rule => executionIds.includes(rule.id))).toEqual(template.policy.grants.filter(rule => executionIds.includes(rule.id)));
+    for (const id of proposalIds) expect(text).toContain(id); // the off card names only the v20 rules it removes
+    for (const id of executionIds) expect(text).not.toContain(id); // the v20 toggle never offers to revoke v21 execution
     const directory = process.env['DECKENT_MCP_GRANT_FRAMES'];
     if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `delegation-${locale}.txt`), text); }
   }, 120_000);

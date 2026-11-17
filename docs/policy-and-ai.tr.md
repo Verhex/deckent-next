@@ -2,7 +2,7 @@
 
 [English](policy-and-ai.md) · [Mimari](architecture-overview.tr.md) · [Uyum raporu](reports/ai-floor-compliance.md)
 
-Kaynakla son karşılaştırma: 2026-10-23. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
+Kaynakla son karşılaştırma: 2026-11-17. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
 hangi eylemi yapabileceğini belirler. İzin (yetki kuralı), uygulamanın eylemi değerlendirmesine
 izin verir; durum kontrolü, onay, yalıtım, kabul kriteri ve kalıcı etki kanıtını kaldırmaz.
 Yönetici yalnız kendisinde bulunan yetkiyi devreder. AI aktör yetki yönetimi yapamaz.
@@ -114,6 +114,42 @@ satırında gösterir ve onları kapsayan mevcut izni adlandırır. Yerel ajan v
 dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, başka yapılandırma, sır, politika,
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 izinlerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
+
+## Kalıcı yapay zekâ yürütme izinleri (şablon v21)
+
+Yeni v21 politikası kurulu kapsamda açık MCP kimliğine üç kural ekler: `run/reserve`,
+`run/cancel` ve `attempt/execute,evaluate,read-output,recover-output`. Sahiplik koşulu
+yoktur: aynı yapay zekâ kimliği MCP araçlarıyla senin veya başka aktörün aynı kapsamdaki
+işlerinde de bu izinleri kullanabilir; eski takılmış işi başlatmayı deneyebilir, çıktı
+okuyabilir, yama hazırlayabilir, iptal isteyebilir ve işi beklemeye alabilir. Servis eski
+takılmış yapay zekâ işlerini kendiliğinden başlatmaz. Servis yeniden başlamadan önce
+onaylanmış ama başlamamış öneri yeniden önerilmelidir; iş kaydı varsa önce iptal edilir.
+Henüz cevaplanmamış eski kart, güncel kontroller geçerliyken yeni servis oturumunda
+taze bir cevapla onaylanabilir.
+
+Mevcut kurulumlara başlangıçta v21 yürütme izni eklenmez. Kişi
+`deckent init policy --scope SCOPE_ID --upgrade --preview` ile yapay zekâ kimliğini,
+kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; kendi terminalinde
+çıktıdaki tam uygulama komutunu ve `--expect` değerini kullanır. Elle kurulmuş politika
+için kişi açıkça adlandırılır. Yetkili yöneticinin diğer yolu
+`deckent policy upgrade --template current --scope SCOPE_ID`, ardından `--apply
+--expect REVISION` adımıdır. Önizleme ve reddedilmiş kart hiçbir şeyi değiştirmez;
+yapay zekâ uygulayamaz veya geri alamaz. Aynı kimlikli değiştirilmiş kurallar ve özel
+yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
+gereğini aşmaz.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback`, kişinin
+mevcut onay yoluyla yalnız değiştirilmemiş ve yönetilen kaynağı kanıtlanmış v21
+yürütme kurallarını kaldırır. V20 önerilerini, havuz/hedef kullanımını ve önceki bütün
+kuralları korur. **Yapay zekâ önerileri** satırı v20'de kalır; komut satırında bu aile
+`--rollback --only ai-proposals` ile geri alınır. Kapatılan öneriler yeniden başlangıçta
+açılmaz. Özel veya rol izinleri aynı hücreleri hâlâ karşılayabilir; kalan yetkiyi
+inceleyin. Geri alma geçmiş etkileri geri almaz, çalışan işi öldürmez; eski program
+sürümüne dönmek politika iznini geri almaz. İki aile de deneme iptal/bırakma/uzlaştırma,
+entegrasyon/benimseme, politika yönetimi, sır veya ek karar adımı izni vermez. Doğrudan
+yama hazırlama ayrı kapasite bırakma adımında reddedilebilir; değerlendirme için yama
+hazırlama bu bırakmanın başarısını vaat etmez. Görev, hedef, havuz, model, araç, şirket,
+onay ve işçi modu kontrolleri sürer.
 
 ## Mevcut yüzeylerle inceleme, yetki verme ve geri alma
 
@@ -238,7 +274,7 @@ değildir. Mevcut CLI:
 
 **“MCP salt okunur gözlemci olsun.”** Şablon v19'dan beri ilk kurulum politikası MCP aktörüne model
 çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
-deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
+deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback --only ai-proposals` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
 yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
 yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol izinlerini de inceleyin. Başka
 izinler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;

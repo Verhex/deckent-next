@@ -4,7 +4,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, readLocalOsIdentity } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
@@ -15,7 +15,7 @@ import { clearConfigCache } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
@@ -196,7 +196,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 20 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 21 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -209,7 +209,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       const request = { principal: owner, scopeId: SCOPE, action: action!, resource: { kind: kind!, id: 'any' } };
       expect(evaluatePolicy(policy, request).decision).toBe('allow');
       expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: '1001', id: 'stranger' } }).decision).toBe('deny');
-      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && ['inspect', 'reserve', 'cancel'].includes(action!) || kind === 'attempt' && ['execute', 'evaluate', 'read-output', 'recover-output'].includes(action!) || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
     }
     expect(file.grants.slice(0, v9.grants.length)).toEqual(v9.grants);
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current' });

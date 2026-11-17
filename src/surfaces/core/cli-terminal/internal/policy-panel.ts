@@ -11,7 +11,7 @@ type AiState = 'on' | 'off' | 'partial' | 'covered' | 'unavailable';
 export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[];
   /** A scoped (`only`) read: the rules it would add and the current delta's rules held now. */ readonly rules?: readonly { readonly id: string }[]; readonly held?: readonly string[];
   /** A scoped read: the delta rules an existing allow covers instead, with that allow's id. */ readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[] }
-export type PolicyTemplateUpgradePort = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' },
+export type PolicyTemplateUpgradePort = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
 // Lead 2026-11-09 (side effect C): nothing held and nothing to add because existing grants cover the cells is `covered` (named), never "not on this policy".
 const aiState = (view: PolicyUpgradeView): AiState => view.status === 'unavailable' || !view.held ? 'unavailable'
@@ -52,7 +52,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
         ...(ai ? [{ id: AI_PROPOSALS, label: t('policy.aiProposals.label', {}, locale), detail: ai, note: t('policy.aiProposals.note', {}, locale) }] : [])] };
     },
     async preview(scopeId, groupId, action) {
-      // The row's card: turning on adds only the v20 rules (`--apply --only ai-proposals`); turning off is `--rollback`, which has no preview: the card names the rules it removes.
+      // The row's card: turning on adds only the v20 rules (`--apply --only ai-proposals`); turning off is `--rollback --only ai-proposals`, which has no preview: the card names the rules it removes.
       if (upgrade && groupId === AI_PROPOSALS) {
         const view = await proposals(scopeId), on = action !== 'revoke', ids = on ? (view.rules ?? []).map(rule => rule.id) : view.held ?? [];
         const applicable = ids.length > 0 && (!on || view.status === 'preview' && !view.missing.length);
@@ -71,7 +71,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
     },
     async apply(preview) {
       if (upgrade && preview.groupId === AI_PROPOSALS) {
-        const view = preview.action === 'revoke' ? await upgrade(root, preview.scopeId, { mode: 'rollback', reason }, env)
+        const view = preview.action === 'revoke' ? await upgrade(root, preview.scopeId, { mode: 'rollback', reason, expect: preview.digest, only: 'ai-proposals' }, env)
           : await upgrade(root, preview.scopeId, { mode: 'apply', reason, expect: preview.digest, only: 'ai-proposals' }, env);
         const done = view.status === 'upgraded' || view.status === 'rolled-back';
         const text = view.status === 'upgraded' ? t('policy.aiProposals.turnedOn', {}, locale) : view.status === 'rolled-back' ? t('policy.aiProposals.turnedOff', { ids: view.reason ?? '-' }, locale)

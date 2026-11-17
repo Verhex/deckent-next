@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, withMcpPrincipal } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
@@ -33,7 +33,7 @@ afterEach(async () => { await closeModeRuntimes(); await Promise.all(roots.splic
  * (earlier rules stay once added). A v4-era plan is longer than one policy change since v15: the same run again adds the rest. */
 const DELTA: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, MODIFIED = DELTA[0]!;
 const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
-  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...DELTA];
+  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...DELTA];
 /** Applies the add-only plan batch by batch (POLICY_CHANGE_MAX rules each) until it is current; returns how many batches it took. */
 async function applyAll(upgrade: (mode: 'apply') => Promise<{ status: string }>) {
   for (let batch = 0; batch < 4; batch++) { const result = await upgrade('apply'); if (result.status === 'current') return batch; expect(result).toMatchObject({ status: 'upgraded' }); }
@@ -65,7 +65,7 @@ async function project(shape: 'owner-role' | 'pure') {
     grants: shape === 'owner-role' ? [...policy.grants, ...v4Grants(), HAND_ADDED] : v4Grants() }), { mode: 0o600 });
   writeFileSync(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b-v4', modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode: 'full-auto' }],
     bindings: shape === 'owner-role' ? [{ id: 'root', principals: me, roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }] : [] }), { mode: 0o600 });
-  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(f, 'policy-upgrade', 'scope',
+  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals' | 'ai-execution') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(f, 'policy-upgrade', 'scope',
     { mode, reason: 'test upgrade', ...(expect ? { expect } : {}), ...(only ? { only } : {}) });
   const grants = () => (JSON.parse(readFileSync(join(f.data, 'policy.json'), 'utf8')) as { grants: { id: string; resource: { kind: string; ids: unknown } }[] }).grants;
   return { f, upgrade, grants, bytes: () => readFileSync(join(f.data, 'policy.json'), 'utf8') };
@@ -125,9 +125,9 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...current, grants: [...current.grants,
       { id: 'run-card', effect: 'deny', actions: ['create'], scopes: ['scope'], principals: me, resource: { kind: 'run', ids: 'all' } }] }));
     const guarded = readFileSync(join(f.data, 'policy.json'), 'utf8');
-    expect(await upgrade('rollback')).toMatchObject({ status: 'refused', missing: ['delegation'] });
+    expect(await upgrade('rollback', undefined, 'ai-proposals')).toMatchObject({ status: 'refused', missing: ['delegation'] });
     expect(readFileSync(join(f.data, 'policy.json'), 'utf8')).toBe(guarded);
-    expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp') && !id.startsWith('first-run-mcp-observe-') && !DELTA.includes(id))).toHaveLength(8); // v5's three and v19's five stay
+    expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp') && !id.startsWith('first-run-mcp-observe-') && !DELTA.includes(id))).toHaveLength(12); // v5's three, v19's five and v20's four stay
     expect(grants().map(grant => grant.id).filter(id => DELTA.includes(id))).toEqual(DELTA);
   }, 180_000);
 
@@ -212,7 +212,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
       grants: (state.policy as { grants: { id: string }[] }).grants.filter(rule => rule.id !== 'first-run-policy-administer').map(asPersonAdmin) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
     const before = grants(), auditCount = f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
     const customAdmin = before.find(rule => rule.id === MODIFIED);
-    expect(DELTA).toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-setting', 'first-run-mcp-propose-pool', 'first-run-mcp-propose-target']);
+    expect(DELTA).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', conflicts: [MODIFIED], reason: DELTA.slice(1).join(',') });
     expect(grants()).toEqual(before.filter(rule => !DELTA.slice(1).includes(rule.id)));
     expect(grants().find(rule => rule.id === MODIFIED)).toEqual(customAdmin);
@@ -254,14 +254,15 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
 
 describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner 2026-11-05)', () => {
   it('R4a (owner 2026-11-05): a fresh v19 install withdraws exactly its MCP-actor rules on the person\'s card; a non-terminal or MCP rollback is refused; --apply re-adds them', async () => {
-    const { f, upgrade, grants, bytes } = await project('pure');
+    const { f, upgrade: all, grants, bytes } = await project('pure');
+    const DELTA = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only: 'ai-proposals' | 'ai-execution' = 'ai-proposals') => all(mode, expect, only);
     const fresh = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, ...FIRST_RUN_TOOL_NAMES });
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify(fresh.policy), { mode: 0o600 }); writeFileSync(join(f.data, 'bindings.json'), JSON.stringify(fresh.bindings), { mode: 0o600 }); clearConfigCache();
     const before = bytes(), changes = () => f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
     await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'headless' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
     // The MCP actor owns no template delta and cannot administer policy: its rollback finds nothing it may remove and writes nothing.
     expect(await withMcpPrincipal(() => configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'mcp' })))
-      .toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
+      .toMatchObject({ status: 'refused', missing: ['policy-administer'] });
     expect(bytes()).toBe(before); expect(changes()).toBe(0);
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(','), conflicts: [] });
     expect(grants()).toEqual(fresh.policy.grants.filter(rule => !DELTA.includes(rule.id)));

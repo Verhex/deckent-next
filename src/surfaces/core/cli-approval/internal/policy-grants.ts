@@ -1,3 +1,4 @@
+import { policyExecutionLines } from '#engine/index.js';
 import { createInterface } from 'node:readline/promises';
 import type { PolicyTemplateUpgradePort, PolicyUpgradeView } from '#surfaces/core/cli-terminal/index.js';
 import { optionalField, ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
@@ -92,21 +93,21 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       else throw ErrorRegistry.createError('CLI_USAGE');
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  // alpha.64: `--only ai-proposals` previews or applies only the current delta (the AI actor's v20 proposal rules); rollback removes only it anyway.
-  if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply') || (only !== undefined && (only !== 'ai-proposals' || mode === 'rollback')) || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
+  // The proposal family remains v20 for preview, apply and rollback; the default rollback selects v21 execution.
+  if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply' && mode !== 'rollback') || (only !== undefined && only !== 'ai-proposals' && only !== 'ai-execution') || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env });
   const locale = commandLocale(context, language);
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (template === 'v5') (context.stderr ?? process.stderr).write(`${t('cli.policy.upgrade.deprecated', { scope: scopeId }, locale)}\n`);
-  const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}), ...(only ? { only: 'ai-proposals' as const } : {}) }, { env });
+  const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}), ...(only ? { only: only as 'ai-proposals' | 'ai-execution' } : {}) }, { env });
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const missing = (view: PolicyUpgradeView) => view.missing.map(item => item === 'policy-administer' ? t('cli.policy.upgrade.missing.policyAdminister', {}, locale)
     : item === 'approval-decide' ? t('cli.policy.upgrade.missing.approvalDecide', {}, locale) : item === 'lockout' ? t('cli.policy.upgrade.missing.lockout', {}, locale)
     : t('cli.policy.upgrade.missing.delegation', {}, locale));
   emit(result, { ...sinks, json, render: view => {
-    const head = view.status === 'preview' ? t('cli.policy.upgrade.preview', { revision: view.revision, scope: scopeId }, locale)
+    const head = view.status === 'preview' ? t('policy.aiExecution.upgradePreview', { revision: view.revision, scope: scopeId, selector: only ? ` --only ${only}` : '' }, locale)
       : view.status === 'upgraded' ? t('cli.policy.upgrade.upgraded', { scope: scopeId }, locale) : view.status === 'current' ? t('cli.policy.upgrade.current', {}, locale)
       : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? t('cli.policy.upgrade.conflict', { revision: view.revision }, locale)
       : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale)
@@ -116,7 +117,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       : t('cli.policy.upgrade.unavailable', { reason: upgradeReason(view.reason, locale) }, locale);
     // A preview that would be refused says so before anything is tried.
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
-    return [head, ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
+    return [head, ...policyExecutionLines(view.rules ?? [], scopeId, locale), ...(view.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(view.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
   } });
 }
 

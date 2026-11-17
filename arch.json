@@ -1505,6 +1505,7 @@
     },
     "src/surfaces/core/cli-installation": {
       "dependencies": [
+        "src/engine/core/approval",
         "src/engine/core/config",
         "src/domain/core/primitives",
         "src/engine/core/installation",
@@ -2707,6 +2708,8 @@
     },
     "src/engine/core/approval": {
       "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
         "src/platform/core/config-fields",
         "src/domain/core/approval",
         "src/domain/core/command",
@@ -2757,6 +2760,7 @@
     },
     "src/composition/core/approvals": {
       "dependencies": [
+        "src/platform/core/i18n",
         "src/engine/core/policy",
         "src/platform/core/errors",
         "src/engine/core/installation",
@@ -4039,6 +4043,7 @@
     },
     "src/surfaces/core/cli-approval": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/config",

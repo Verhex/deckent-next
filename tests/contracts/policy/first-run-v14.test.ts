@@ -1,12 +1,12 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
-// Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+// Historical fixtures exclude v16 onward, including the separate v20 proposal and v21 execution families.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // S4 (lead 2026-10-23): one bump v13 → v14 with two add-only rules — the named person reads the installed scope's memory journal, the MCP actor
 // gets the same read (observation). No memory change for the person or the MCP actor (propose/verify/retire stay ungranted). S4B-1's v15 delta
@@ -53,11 +53,23 @@ it('exact v13 becomes exactly the current template; edited and hand-built polici
   const edited = { ...v13, revision: 'a-edited', grants: [...v13.grants, { id: 'extra', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [person],
     resource: { kind: 'agent-tool', ids: ['fetch_url'] } }] };
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
-  for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
+  // This historical call supplies no recovery rule versions, so it cannot add the three versioned promote cells.
+  const all = current.policy.grants.filter(rule => [...v14ids, ...v15ids].includes(rule.id) && !rule.id.startsWith('first-run-recovery-promote-'));
+  expect(all.slice(-3).map(rule => rule.id)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
+  for (const policy of [edited, handBuilt]) {
+    const next = (grants: typeof policy.grants) => policy === edited ? firstRunTemplateAdditions({ ...policy, grants }, { ...names, person }) : namedPersonPolicyAdditions({ ...policy, grants }, { ...names, person, scopeId: 'installation' });
+    const plan = next(policy.grants);
     expect(plan.status === 'plan' ? plan.rules.slice(0, 2) : null).toEqual(v14);
+    expect(plan.status === 'plan' ? plan.rules : null).toEqual(all.slice(0, POLICY_CHANGE_MAX));
+    expect(plan.status === 'plan' ? plan.conflicts : null).toEqual([]);
+    expect(plan.status === 'plan' && plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    const applied = [...policy.grants, ...(plan.status === 'plan' ? plan.rules : [])], rest = next(applied);
+    expect(rest.status === 'plan' ? rest.rules : null).toEqual(all.slice(POLICY_CHANGE_MAX));
+    expect(rest.status === 'plan' && rest.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    expect(next([...applied, ...(rest.status === 'plan' ? rest.rules : [])]).status).toBe('current');
   }
   // The rollback delta is v15's now: a v14 policy holds none of it, and keeps its v14 reads.
-  expect(firstRunTemplateRollback(built.policy, person, 'installation', input).rules).toEqual([]);
+  expect(firstRunTemplateRollback(built.policy, person, 'installation').rules).toEqual([]);
   expect(matchFirstRunPolicyTemplate('first-run-template-v14')).toEqual({ id: 'first-run-template', version: 14 });
 });
 

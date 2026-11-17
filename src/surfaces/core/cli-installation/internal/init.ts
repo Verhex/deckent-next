@@ -1,3 +1,4 @@
+import { policyExecutionLines } from '#engine/index.js';
 import { ownerBaselineCommand, parseBaseline } from './owner-baseline.js';
 import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
@@ -30,7 +31,7 @@ type Person = { readonly issuer: string; readonly subject: string };
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. `person` (lead 2026-10-08): the person a hand-built
  * policy's file owner names (`--person <issuer>/<subject>`). */
 export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string, person?: Person) => Promise<{ readonly status: string;
-  readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[];
+  readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[]; readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[];
   readonly systemRows?: { readonly status: string; readonly packageDigest: string; readonly reason: string | null; readonly conflicts: readonly string[]; readonly withheld: readonly string[] };
   readonly basis?: string | null; readonly person?: Person | null; readonly people?: readonly Person[];
   /** v12 (owner 2026-10-16): what happened to `service.identity` (written/planned/kept/other-scope/skipped/not-set). */
@@ -206,12 +207,15 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
     : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people, typed }, locale)
     : value.reason === 'person-not-named' ? t('cli.init.policyUpgrade.personNotNamed', { scope, person: named, people }, locale)
     : t('cli.init.policyUpgrade.unavailable', {}, locale);
-  const rules = (value.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string; ids?: unknown } };
-    return `  + ${grant.id ?? '-'}: ${grant.resource?.kind ?? '-'} ${Array.isArray(grant.resource?.ids) ? grant.resource!.ids.join(', ') : '*'}`; });
+  const rules = (value.rules ?? []).map(rule => {
+    const grant = rule as { id?: string; effect?: string; actions?: readonly string[]; scopes?: 'all' | readonly string[]; principals?: 'all' | readonly Person[]; resource?: { kind?: string; ids?: 'all' | readonly string[] } };
+    return t('policy.aiExecution.cell', { id: grant.id ?? '-', effect: grant.effect ?? '-', actions: grant.actions?.join(', ') ?? '-', kind: grant.resource?.kind ?? '-',
+      ids: Array.isArray(grant.resource?.ids) ? grant.resource.ids.join(', ') : '*', scopes: Array.isArray(grant.scopes) ? grant.scopes.join(', ') : '*', actors: Array.isArray(grant.principals) ? grant.principals.map(who).join(', ') : '*' }, locale);
+  });
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
   const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
   const rows = value.systemRows ? [t('beuser.installation.systemRows', { status: value.systemRows.status, digest: value.systemRows.packageDigest, reason: value.systemRows.reason ?? '-', conflicts: value.systemRows.conflicts.join(', ') || '-', withheld: value.systemRows.withheld.join(', ') || '-' }, locale)] : [];
-  return [head, ...rules, ...kept, ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
+  return [head, ...policyExecutionLines(value.rules ?? [], scope, locale), ...rules, ...kept, ...(value.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(value.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
 }
 /** The `service.identity` line (v12): only when something was written, is planned, names another scope or was refused; kept/skipped say nothing. */
 function serviceIdentityText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>['serviceIdentity'], locale: Locale): string[] {

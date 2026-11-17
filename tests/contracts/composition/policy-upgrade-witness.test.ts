@@ -35,7 +35,7 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
     // The test process has no controlling terminal: the Core witness says no.
     expect(await attestLocalInteractiveTerminal()).toBe(false);
     const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
-    expect(preview).toMatchObject({ status: 'preview', template: { to: 20 } });
+    expect(preview).toMatchObject({ status: 'preview', template: { to: 21 } });
     const before = await snapshot(root), mtime = (await stat(policyPath)).mtimeMs;
 
     // Default (Core) witness, no terminal: typed refusal, every file byte-identical.
@@ -53,7 +53,7 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
 
     // Positive control: the same witnessed apply restores every v20 grant and keeps the separately installed workload roles.
     expect(await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!, {}, process.getuid?.(), undefined, attested))
-      .toMatchObject({ status: 'upgraded', template: { to: 20 } });
+      .toMatchObject({ status: 'upgraded', template: { to: 21 } });
     const upgraded = JSON.parse(await readFile(policyPath, 'utf8'));
     expect(upgraded).toEqual({ ...current, revision: expect.stringMatching(/^a-/u) });
     expect(upgraded.revision).not.toBe(current.revision); // The explicit v17 rewrite cannot reuse the earlier authority revision.

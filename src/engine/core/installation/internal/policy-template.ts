@@ -259,7 +259,7 @@ type Person = { readonly issuer: string; readonly subject: string };
   /** The current template rules this upgrade adds (nothing is replaced or removed). */
   readonly rules: readonly unknown[];
   /** Rule ids the upgrade would add that already exist with other content: kept as they are, shown for the person to review. */
-  readonly conflicts: readonly string[];
+  readonly conflicts: readonly string[]; readonly covered?: readonly import('#domain/index.js').FirstRunProposalCover[];
   /** Hand-added `agent-tool` rules naming MCP wire names (`mcp__…`): kept, but since T3 an MCP call is decided on `mcp-server`, not on them. */
   readonly wireRules: readonly string[];
   readonly systemRows?: import('#engine/core/system-policy-rows/index.js').SystemPolicyRowsPlan;
@@ -337,12 +337,12 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       if (person === null) return { result: result('unavailable', { reason: 'not-first-run', revision, people }), next: null };
       const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
-      if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, wireRules }), next: null };
-      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, wireRules }), next: nextWith(current, revision, mine.rules) };
+      if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: null };
+      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, mine.rules) };
     }
     if (additions.status === 'unavailable') return { result: result('unavailable', { reason: additions.reason, revision }), next: null };
-    if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, wireRules }), next: null };
-    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
+    if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: null };
+    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
     const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;

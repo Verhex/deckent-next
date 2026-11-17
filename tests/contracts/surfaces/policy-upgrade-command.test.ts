@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { homeEnv } from '../support/host-platform.js';
+import { firstRunPolicyTemplate, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
+import { FIRST_RUN_TOOL_NAMES, policyExecutionLines } from '#engine/index.js';
 
 // Owner request 2026-10-07: `deckent policy upgrade --template v5` — preview by default (writes nothing), `--apply [--expect <revision>]`, `--rollback`;
 // the surface only words the engine's result (what would be added, what the person lacks) in EN/TR.
@@ -15,17 +17,38 @@ function context(result: Record<string, unknown>, calls: unknown[] = []) {
 }
 const PREVIEW = { schemaVersion: 1, status: 'preview', revision: 'first-run-template-v4+b', summary: 'policy.administer@1 · 3 changes\n+ grant first-run-mcp-servers: allow mcp-server*', missing: [], reason: null, rules: [] };
 
+it('119-C2: all EN/TR person previews show the full standing breadth and rollback command', async () => {
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'person', subject: 'one' }, ...FIRST_RUN_TOOL_NAMES });
+  const rules = template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id));
+  for (const locale of ['en', 'tr'] as const) {
+    const { out, ctx } = context({ ...PREVIEW, rules });
+    const notice = policyExecutionLines(rules, 'scope', locale)[0]!;
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--lang', locale], ctx)).toBe(0);
+    expect(out.join('')).toContain(notice); out.length = 0;
+    const installation = { ...ctx, async upgradePolicyTemplateInstallation() { return { status: 'preview', basis: 'first-run', rules, revision: 'r', conflicts: [], wireRules: [] }; },
+      async previewPolicyTemplateInstallation() { return { ...template, scopeId: 'scope', principal: { issuer: 'person', subject: 'one' } }; } };
+    expect(await main(['init', 'policy', '--scope', 'scope', '--upgrade', '--preview', '--lang', locale], installation)).toBe(0);
+    expect(out.join('')).toContain(notice); out.length = 0;
+    expect(await main(['init', 'policy', '--scope', 'scope', '--preview', '--lang', locale], installation)).toBe(0);
+    expect(out.join('')).toContain(notice);
+  }
+});
+
 it('previews by default with the exact apply command, and applies only with --apply (and the previewed --expect)', async () => {
   const calls: unknown[] = [], { out, ctx } = context(PREVIEW, calls);
   expect(await main(['policy', 'upgrade', '--template', 'v5', '--scope', 'scope', '--lang', 'en'], ctx)).toBe(0);
   expect(out.join('')).toContain('deckent policy upgrade --template current --scope scope --apply --expect first-run-template-v4+b');
   expect(out.join('')).toContain('+ grant first-run-mcp-servers');
   expect(await main(['policy', 'upgrade', '--template', 'v5', '--scope', 'scope', '--apply', '--expect', 'first-run-template-v4+b'], ctx)).toBe(0);
-  // alpha.64 (/policy's re-enable): `--only ai-proposals` previews or applies only the current delta; it never scopes a rollback, and no other value exists.
+  // V20 proposal rollback selects its family; the default rollback is v21 execution.
   expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--only', 'ai-proposals'], ctx)).toBe(0);
-  for (const extra of [['--rollback', '--only', 'ai-proposals'], ['--apply', '--only', 'everything']]) expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', ...extra], ctx)).toBe(2);
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--only', 'ai-proposals'], ctx)).toBe(0);
+  out.length = 0;
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--only', 'ai-proposals', '--lang', 'en'], ctx)).toBe(0);
+  expect(out.join('')).toContain('deckent policy upgrade --template current --scope scope --only ai-proposals --apply --expect first-run-template-v4+b');
+  for (const extra of [['--apply', '--only', 'everything']]) expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', ...extra], ctx)).toBe(2);
   expect(calls).toEqual([['scope', { mode: 'preview', reason: expect.any(String) }], ['scope', { mode: 'apply', reason: expect.any(String), expect: 'first-run-template-v4+b' }],
-    ['scope', { mode: 'apply', reason: expect.any(String), only: 'ai-proposals' }]]);
+    ['scope', { mode: 'apply', reason: expect.any(String), only: 'ai-proposals' }], ['scope', { mode: 'rollback', reason: expect.any(String), only: 'ai-proposals' }], ['scope', { mode: 'preview', reason: expect.any(String), only: 'ai-proposals' }]]);
 });
 it.each(['en', 'tr'] as const)('uses the same current handler for current and deprecated v5 selectors in %s, preserving JSON stdout', async locale => {
   const calls: unknown[] = [], { out, errors, ctx } = context(PREVIEW, calls);

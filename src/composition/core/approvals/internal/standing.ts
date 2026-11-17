@@ -1,4 +1,4 @@
-import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
@@ -25,7 +25,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
     try {
       const audit = new AuditApplication(auditStore, integrity);
       const administration = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
-        requestTtlMs: config.approvals.requestTtlMs, audit: event => { audit.record(event); } });
+        requestTtlMs: config.approvals.requestTtlMs, locale: resolveLocale(undefined, options.env, config.language), audit: event => { audit.record(event); } });
       const approve = async (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
         if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
         sessions.requireInteractiveTerminal();
@@ -91,7 +91,7 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
 export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }): Promise<TemplateUpgradeResult> {
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
     new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));

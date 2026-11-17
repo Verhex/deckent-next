@@ -1,3 +1,7 @@
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
+import { mcpApplications } from '#composition/core/mcp/index.js';
 import * as execution from '#composition/core/execution/index.js';
 import * as runs from '#composition/core/runs/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
@@ -11,7 +15,7 @@ import { userInfo } from 'node:os';
 import { planMcpProposal, DockerSupervisor, identifyDockerRequest, readLocalOsIdentity, type DockerCommandRunner } from '#adapters/index.js';
 import { describeMcpProposal, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
-import { aiSettingResourceIds, firstRunProposalRules, proposalCoverageGrants, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, aiSettingResourceIds, firstRunProposalRules, proposalCoverageGrants, mcpPrincipalRef, type AgentTurnStreamEvent } from '#domain/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal, withLocalPrincipalChannel } from '#adapters/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { clearConfigCache, loadConfig, ErrorRegistry } from '#platform/index.js';
@@ -21,7 +25,7 @@ import { proposalFixture } from '../support/run-proposal.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { terminalApplication, terminalRequest } from '../support/approval-terminal.js';
-import { aiProposalRequester, sealApproval, RunSessionRegistry, RuntimeServiceLifecycle, type RunSessionIdentity, type RunSessionPin } from '#engine/index.js';
+import { FIRST_RUN_TOOL_NAMES, aiProposalRequester, sealApproval, RunSessionRegistry, RuntimeServiceLifecycle, type RunSessionIdentity, type RunSessionPin } from '#engine/index.js';
 
 // L1 MCP-CORE item 5 (owner 2026-10-07): the model may only PROPOSE an MCP server. The proposal opens its own approval window in every mode —
 // standart, full-auto and a full-access turn alike — and nothing is written without the person's yes; a yes adds the server to the project's
@@ -315,17 +319,22 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
   }, 180_000);
 });
 
-it.skipIf(process.platform !== 'linux')('119-C1: chat approval advances from configured discovery as AI through launch and evaluation; person control', async () => {
-  // Explicit v21-equivalent fixture, independent of the shipped template. The person has separate grants.
+it.skipIf(process.platform !== 'linux')('119-C1/C2: the person applies v21; chat approval advances from configured discovery as AI through launch and evaluation; person control', async () => {
+  // C2 reuses C1's configured-loop proof with the real v20 template and the person's governed v21 apply.
   const cells = (prefix: string, principals: unknown) => [
     { id: `${prefix}-run`, effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['scope'], principals, resource: { kind: 'run', ids: 'all' } },
     { id: `${prefix}-attempt`, effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['scope'], principals, resource: { kind: 'attempt', ids: 'all' } },
     { id: `${prefix}-pool`, effect: 'allow', actions: ['use'], scopes: ['scope'], principals, resource: { kind: 'pool', ids: ['p'] } },
   ];
   const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
-  const w = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, AI_INVOKE, ...V20, ...cells('ai', [AI]), ...cells('person', me),
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, ...FIRST_RUN_TOOL_NAMES });
+  const w = await modeRuntime({ grants: [...template.policy.grants.filter(rule => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)), ...cells('person', me),
     { id: 'person-create', effect: 'allow', actions: ['create'], scopes: ['scope'], principals: me, resource: { kind: 'run', ids: 'all' } }],
     mode: null, planWork: planServiceRun, brain: JSON.stringify({ graph, budgetCeiling, requiredPermissions }) });
+  const upgrade = (mode: 'preview' | 'apply') => terminalApplication<{ status: string; rules: { id: string }[] }>(w, 'policy-upgrade', 'scope', { mode, only: 'ai-execution', reason: 'C2 person grants execution' });
+  expect(await upgrade('preview')).toMatchObject({ status: 'preview', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id })) });
+  expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
+  expect(await upgrade('apply')).toMatchObject({ status: 'current' });
   // Real workspace preparation, dispatch, artifact storage and evaluation; only Docker's process boundary is controlled.
   const git = (...args: string[]) => execFileSync('git', ['-C', w.project, ...args], { stdio: 'pipe' });
   git('init', '-q'); git('config', 'user.email', 'fixture@example.invalid'); git('config', 'user.name', 'Fixture');
@@ -353,7 +362,7 @@ it.skipIf(process.platform !== 'linux')('119-C1: chat approval advances from con
   const admitted = await w.call('propose_work', { request: 'complete the business operation' }, 'allow');
   expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' });
   const aiRun = runsOf(w)[0]!.identity.runId;
-  const receipts = () => w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)) as { action: string; actor: unknown; scopeId?: string; runId?: string });
+  const receipts = () => w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)) as { action: string; actor: unknown; scopeId?: string; runId?: string; commandId?: string });
   await expect.poll(() => receipts().filter(receipt => receipt.action === 'reserve-run-tasks' && receipt.runId === aiRun), { timeout: 8000 }).toHaveLength(1);
   await expect.poll(() => w.rows('SELECT * FROM task_evaluation_observations'), { timeout: 8000 }).toHaveLength(1);
   expect(launched).toEqual([aiRun]);
@@ -365,6 +374,36 @@ it.skipIf(process.platform !== 'linux')('119-C1: chat approval advances from con
     .toEqual([[aiRun, actor(ai)], ['person-control', actor(person)]]);
   const grants = w.rows('SELECT record FROM dispatches').map(row => JSON.parse(String((row as { record: string }).record)) as { grant: { principal: unknown } });
   expect(grants.map(value => value.grant.principal)).toEqual([actor(ai), actor(person)]);
+  // Owner 134's visible counter-example: after stopping automatic progression, the same AI uses real MCP tools on a person's Run.
+  // This is old work from the service's next lifetime; the service does not start it on its own.
+  await w.service.stop(); await w.service.done;
+  await runs.createConfiguredRun(w.project, { schemaVersion: 1, scopeId: 'scope', runId: 'persons-stuck-run', commandId: 'persons-stuck-run', graph }, { env: w.env });
+  const server = createMcpServer(mcpApplications({
+    inspectRun: query => runs.inspectConfiguredRun(w.project, query, { env: w.env }), async inspectInventory() { return {}; },
+    reserveRunTasks: command => runs.reserveConfiguredRunTasks(w.project, command, { env: w.env }),
+    executeTask: identity => execution.executeConfiguredTask(w.project, identity, { env: w.env }),
+    evaluateTask: command => runs.evaluateConfiguredTask(w.project, command, { env: w.env }),
+    requestRunCancellation: command => runs.requestConfiguredRunCancellation(w.project, command, { env: w.env }),
+  } as McpApplications), { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); await server.connect(serverTransport);
+  const client = new Client({ name: 'c2-accepted-breadth', version: '1' }); await client.connect(clientTransport);
+  try {
+    const old = await runs.inspectConfiguredRun(w.project, { schemaVersion: 1, scopeId: 'scope', runId: 'persons-stuck-run' }, { env: w.env });
+    const reserved = await client.callTool({ name: 'reserve_run_tasks', arguments: { schemaVersion: 1, scopeId: 'scope', runId: 'persons-stuck-run', commandId: 'ai-reserves-persons-run', expectedRevision: old.run!.revision } });
+    expect(reserved.isError, JSON.stringify(reserved)).not.toBe(true);
+    const identity = (reserved.structuredContent as unknown as { reservation: { identities: unknown[] } }).reservation.identities[0]!;
+    const executed = await client.callTool({ name: 'execute_task', arguments: identity }); expect(executed.isError, JSON.stringify(executed)).not.toBe(true);
+    const exited = await runs.inspectConfiguredRun(w.project, { schemaVersion: 1, scopeId: 'scope', runId: 'persons-stuck-run' }, { env: w.env });
+    const evaluated = await client.callTool({ name: 'evaluate_task', arguments: { schemaVersion: 1, commandId: 'ai-evaluates-persons-run', identity, expectedRevision: exited.run!.revision } }); expect(evaluated.isError, JSON.stringify(evaluated)).not.toBe(true);
+    expect(receipts().find(receipt => receipt.commandId === 'ai-reserves-persons-run')).toMatchObject({ actor: actor(ai) });
+    expect(launched).toContain('persons-stuck-run');
+    await runs.createConfiguredRun(w.project, { schemaVersion: 1, scopeId: 'scope', runId: 'persons-cancel-run', commandId: 'persons-cancel-run', graph }, { env: w.env });
+    const pending = await runs.inspectConfiguredRun(w.project, { schemaVersion: 1, scopeId: 'scope', runId: 'persons-cancel-run' }, { env: w.env });
+    const cancelled = await client.callTool({ name: 'request_run_cancellation', arguments: { schemaVersion: 1, scopeId: 'scope', runId: 'persons-cancel-run', commandId: 'ai-cancels-persons-run', action: 'cancel', expectedRevision: pending.run!.revision } });
+    expect(cancelled.isError, JSON.stringify(cancelled)).not.toBe(true);
+    expect(receipts().find(receipt => receipt.commandId === 'ai-cancels-persons-run')).toMatchObject({ actor: actor(ai) });
+  } finally { await client.close(); await server.close(); }
+
 }, 30000);
 
 async function sessionRuntime(progress = true) {

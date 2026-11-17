@@ -2,7 +2,7 @@
 
 [Türkçe](policy-and-ai.tr.md) · [Architecture](architecture-overview.md) · [Compliance report](reports/ai-floor-compliance.md)
 
-Last checked against source: 2026-10-23. Policy says which verified actor may perform an action on a
+Last checked against source: 2026-11-17. Policy says which verified actor may perform an action on a
 resource in a scope. A grant permits an application to consider that action; it does not
 skip state checks, approvals, isolation, acceptance criteria or durable effect evidence.
 An administrator grants only authority they hold. AI actors cannot administer authority.
@@ -115,6 +115,40 @@ row to turn off or on, and names the existing grant that covers them.
 The native agent and external MCP clients share this actor. No AI decision step,
 other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
+
+## Standing AI execution permissions (template v21)
+
+Fresh v21 policy adds three explicit MCP rules in the installed scope: `run/reserve`,
+`run/cancel`, and `attempt/execute,evaluate,read-output,recover-output`. There is no
+ownership condition: the same AI identity can use its MCP tools on your or another
+actor's Runs in that scope, including trying old stuck work, reading output, preparing
+patches, requesting cancellation and holding work. The service itself does not start
+old stuck AI Runs. A proposal approved but not started before restart must be proposed
+again; cancel its Run first if one exists. A still-pending older card can be answered
+fresh in the new service session, subject to current checks.
+
+Existing installations receive no v21 execution permission at startup. The person
+previews `deckent init policy --scope SCOPE_ID --upgrade --preview`, checks the named
+AI identity, scopes, cells, conflicts and existing coverage, then repeats the exact
+printed apply command and `--expect` token at their own terminal. Hand-built policies
+require the explicitly named person. The governed administrator alternative is
+`deckent policy upgrade --template current --scope SCOPE_ID`, followed by `--apply
+--expect REVISION`. Preview and a declined card change nothing; AI cannot apply or
+roll back. Same-id changes and custom denials remain visible and are never overridden.
+An allow or role coverage does not override a deny or an approval requirement.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback` removes only
+unmodified, provably managed v21 execution rules through the person's existing
+approval route. It preserves v20 proposals, pool/target use and all earlier rules.
+The **AI proposals** toggle remains v20; CLI rollback of that family uses `--rollback
+--only ai-proposals`. Revoking it remains off after restart. Custom or role grants can
+still allow the same cells; inspect the remaining authority. Rollback does not undo
+past effects or kill running work, and downgrading the binary does not revoke policy.
+Neither family grants attempt cancel/release/reconcile, integration/adoption, policy
+administration, secrets or additional decision steps. Direct patch preparation may
+still refuse its separate custody release; evaluation patch preparation does not
+promise that release. Existing task, target, pool, model, tool, company, approval and
+worker-mode checks still apply.
 
 ## Inspect, grant and revoke using available surfaces
 
@@ -237,7 +271,7 @@ is not business acceptance. The existing CLI is
 
 **“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
 call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
-`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the newest (v20 proposal) AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback --only ai-proposals` on your card removes exactly the v20 proposal AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
 no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary

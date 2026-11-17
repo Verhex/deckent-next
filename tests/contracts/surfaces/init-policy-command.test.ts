@@ -69,14 +69,14 @@ it('is refused (exit 2, never silently ignored) when the composition root did no
 });
 it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writes only with --apply [--expect], and says in words what it adds, keeps and why', async () => {
   const calls: unknown[][] = [], output: string[] = [];
-  let result: Record<string, unknown> = { status: 'preview', revision: 'first-run-template-v4', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
+  let result: Record<string, unknown> = { status: 'preview', revision: 'first-run-template-v4', rules: [{ id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [{ issuer: 'person', subject: 'one' }], resource: { kind: 'mcp-server', ids: 'all' } }],
     conflicts: ['first-run-approvals'], wireRules: ['hand-mcp-github'] };
   const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; },
     stdout: { write(value: string) { output.push(value); } } });
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
   const text = output.join('');
   expect(text).toContain('deckent init policy --scope installation --upgrade --apply --expect first-run-template-v4');
-  expect(text).toContain('+ first-run-mcp-servers: mcp-server *');
+  expect(text).toContain('Rule first-run-mcp-servers: allow invoke / mcp-server *; scopes installation; principals person/one');
   expect(text).toContain('Kept as they are (same id, other content; review them): first-run-approvals');
   expect(text).toContain('no longer used for MCP calls');
   output.length = 0; result = { status: 'unavailable', reason: 'not-this-person' };
@@ -92,7 +92,7 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
 it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with --upgrade, split at the last slash, repeated in the next command; refusals name --person and the people', async () => {
   const calls: unknown[][] = [], output: string[] = [];
   const person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
-  let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
+  let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [{ issuer: 'person', subject: 'one' }], resource: { kind: 'mcp-server', ids: 'all' } }],
     conflicts: [], wireRules: [] };
   const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; }, stdout: { write(value: string) { output.push(value); } } });
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'DESKTOP-7NLBLGA/1000', '--lang', 'en'], ctx)).toBe(0);

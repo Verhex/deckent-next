@@ -1,13 +1,13 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
-// Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+// Historical fixtures exclude v16 onward, including the separate v20 proposal and v21 execution families.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // S4B-1 + S7 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A2/A2b; lead: v15 carries s7's agent-catalog grants): one add-only bump v14 → v15. The memory
 // distiller workload gets D1+D2 (memory inspect, propose), D4 (run inspect) and, as its own rule, D3 (attempt read-output); the named person may
@@ -93,10 +93,20 @@ it('exact v14 and v15 become exactly the current template; edited and hand-built
   const extra = { id: 'extra', effect: 'allow', actions: ['inspect', 'propose'], scopes: ['installation'], principals: [person], resource: { kind: 'memory', ids: 'all' } };
   const edited = { ...v14, revision: 'a-edited', grants: [...v14.grants, extra] };
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
-  for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
+  const all = [...v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose), ...v16];
+  expect(all.slice(-3).map(rule => rule.id)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
+  for (const policy of [edited, handBuilt]) {
+    const next = (grants: typeof policy.grants) => policy === edited ? firstRunTemplateAdditions({ ...policy, grants }, { ...names, person }) : namedPersonPolicyAdditions({ ...policy, grants }, { ...names, person, scopeId: 'installation' });
+    const plan = next(policy.grants);
     // The person's own `extra` rule covers their propose cell, never the distiller's: only the distiller and catalog rules are added.
-    expect(plan.status === 'plan' ? plan.rules : null).toEqual([...v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose), ...v16].slice(0, POLICY_CHANGE_MAX));
+    expect(plan.status === 'plan' ? plan.rules : null).toEqual(all.slice(0, POLICY_CHANGE_MAX));
+    expect(plan.status === 'plan' ? plan.conflicts : null).toEqual([]);
+    expect(plan.status === 'plan' && plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    const applied = [...policy.grants, ...(plan.status === 'plan' ? plan.rules : [])], rest = next(applied);
+    expect(rest.status === 'plan' ? rest.rules : null).toEqual(all.slice(POLICY_CHANGE_MAX));
+    expect(rest.status === 'plan' && rest.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    expect(next([...applied, ...(rest.status === 'plan' ? rest.rules : [])]).status).toBe('current');
   }
-  expect(firstRunTemplateRollback(current.policy, person, 'installation', input).rules.some(rule => ids.includes(rule.id))).toBe(false);
+  expect(firstRunTemplateRollback(current.policy, person, 'installation').rules.some(rule => ids.includes(rule.id))).toBe(false);
   expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toEqual({ id: 'first-run-template', version: 15 });
 });

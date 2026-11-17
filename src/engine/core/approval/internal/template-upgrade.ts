@@ -1,4 +1,4 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, authorityDocuments, firstRunBindingsRevision, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, matchFirstRunPolicyTemplate, mcpPrincipalRef, planPolicyChange, principalGrants,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, isAiPrincipal, authorityDocuments, firstRunBindingsRevision, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunExecutionRules, firstRunProposalRules, matchFirstRunPolicyTemplate, mcpPrincipalRef, planPolicyChange, principalGrants,
   type FirstRunPolicyTemplateInput, type FirstRunProposalCover, type Policy, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { optionalField, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
@@ -39,11 +39,11 @@ export class PolicyTemplateUpgrade {
     if (!delegationWithin(policy, principal, touched).ok) out.push('delegation');
     return out;
   }
-  private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
+  private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string, proposals: boolean): boolean {
     // The installer's key must name a version that can actually have added the current delta (v20's proposal rules; the automatic upgrade too).
     // Earlier template upgrades cannot prove custody of this later grant.
     const installer = policyTemplateUpgradeKeyVersion(entry.key);
-    if (installer !== null && installer >= FIRST_RUN_CURRENT_UPGRADE_VERSION && installer <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
+    if (installer !== null && installer >= (proposals ? FIRST_RUN_PROPOSAL_UPGRADE_VERSION : FIRST_RUN_CURRENT_UPGRADE_VERSION) && installer <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
     if (entry.before.schemaVersion !== 2) return false;
     // The historical plan's own service id (the stop rule this entry added), not today's configuration: a later identity change keeps it recognizable.
     const before = entry.before, added = entry.after.schemaVersion === 2 ? entry.after.grants.find(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown
@@ -56,10 +56,11 @@ export class PolicyTemplateUpgrade {
     // Astra 2598: when the historical stop was covered by another allow (no stop rule added), the plan then was today's without its stop rule; the
     // exact effect key below decides which one it was.
     const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
-    const variants = [without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
+    const variants = [without(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
       .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
+    const execution = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), only: 'ai-execution', aiGrants });
     const scoped = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), only: 'ai-proposals', aiGrants });
-    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes })), ...(scoped.status === 'plan' ? [scoped.change] : [])].some(change => { // scoped: /policy's re-enable (alpha.64)
+    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes })), ...(scoped.status === 'plan' ? [scoped.change] : []), ...(execution.status === 'plan' ? [execution.change] : [])].some(change => { // scoped: /policy's re-enable (alpha.64)
       const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
       const commandId = sha256(`${UPGRADE}:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
       return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
@@ -67,26 +68,28 @@ export class PolicyTemplateUpgrade {
     });
   }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
-    readonly reason: string; /** alpha.64: preview and apply only the current delta (the AI actor's v20 proposal rules); rollback removes only it anyway. */ readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
+    readonly reason: string; /** The v20 proposal toggle/rollback selects its family explicitly. */ readonly only?: 'ai-proposals' | 'ai-execution' }): Promise<TemplateUpgradeResult> {
     const policy = await this.deps.policy.load();
     const result = (status: TemplateUpgradeResult['status'], extra: Partial<TemplateUpgradeResult> = {}): TemplateUpgradeResult => Object.freeze({ schemaVersion: 1, status,
       revision: policy.revision, rules: [], summary: null, missing: [], reason: null, conflicts: [], ...extra });
     if (policy.schemaVersion !== 2) return result('unavailable', { reason: 'invalid' });
+    if (input.mode !== 'preview' && isAiPrincipal(input.principal)) return result('refused', { missing: ['policy-administer'] });
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId);
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, input.only);
       const history = await this.deps.policy.authorityHistory?.();
       // J3, amended by the owner 2026-11-05 (R4a) for the MCP-actor delta (v20 now): a policy at a template's own revision that carries the whole delta
       // (no `a-`/`m-` write since) is a provably fresh install, and the installer wrote that delta, so the same card removes it. Any other policy
       // without archived history stays `history-unavailable` (fail closed).
-      const template = administeredSince(policy.revision) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
-      // The whole expected delta held, none differing from the template's and none removed (a hand edit that kept the revision is not "the
-      // template's own version"; review 2672).
-      // An exact installer upgrade keeps the older template's bindings revision, so a lost archive after an upgrade stays a refusal rather than
-      // "nothing to roll back".
-      const installed = template !== null && template.version >= FIRST_RUN_CURRENT_UPGRADE_VERSION && policy.bindings.revision === firstRunBindingsRevision(policy.policyRevision)
-        && delta.rules.length > 0 && delta.conflicts.length === 0 && (delta.missing ?? []).length === 0;
+      const installedAt = (snapshot: Policy) => {
+        if (snapshot.schemaVersion !== 2) return false;
+        const template = administeredSince(snapshot.revision) ? null : matchFirstRunPolicyTemplate(snapshot.policyRevision);
+        const expected = firstRunTemplateRollback(authorityDocuments(snapshot).policy, input.principal, input.scopeId, input.only);
+        return template !== null && template.version >= (input.only === 'ai-proposals' ? FIRST_RUN_PROPOSAL_UPGRADE_VERSION : FIRST_RUN_CURRENT_UPGRADE_VERSION)
+          && snapshot.bindings.revision === firstRunBindingsRevision(snapshot.policyRevision) && expected.rules.length > 0 && expected.conflicts.length === 0 && expected.missing?.length === 0;
+      };
+      const installed = installedAt(policy);
       if (!history || history.length === 0 && !installed) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
       // Follow exact effective revisions back from the snapshot, never infer provenance from an id or current template alone.
       const chain = []; let revision = policy.revision;
@@ -103,16 +106,17 @@ export class PolicyTemplateUpgrade {
         chain.push(entry); revision = entry.before.revision;
       }
       if (chain.some(entry => entry.before.revision === policy.revision)) return result('unavailable', { reason: 'history-unavailable' });
+      // A later family change must not erase custody of a fresh template's other family. Trust only the verified chain's complete initial delta.
+      const initial = installedAt(chain.at(-1)?.before ?? policy);
       const conflicts = [...delta.conflicts], held: string[] = [];
       for (const rule of delta.rules) {
         const changes = chain.filter(entry => JSON.stringify(entry.before.grants.find(item => item.id === rule.id)) !== JSON.stringify(entry.after.grants.find(item => item.id === rule.id)));
         const added = changes.find(entry => !entry.before.grants.some(item => item.id === rule.id));
-        if (!added) continue;
-        if (!this.upgraded(added, input.principal, input.scopeId)) { conflicts.push(rule.id); continue; }
+        if (!added) { if (initial) { if (changes.length) conflicts.push(rule.id); else held.push(rule.id); } continue; }
+        if (!this.upgraded(added, input.principal, input.scopeId, input.only === 'ai-proposals')) { conflicts.push(rule.id); continue; }
         if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
         else conflicts.push(rule.id);
       }
-      if (installed && chain.length === 0) held.push(...delta.rules.map(rule => rule.id));
       if (!held.length) return result('nothing-to-roll-back', { conflicts });
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);
@@ -124,18 +128,19 @@ export class PolicyTemplateUpgrade {
       if (missing.length) return result('refused', { missing, conflicts });
       await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change, tag: `template-v5-rollback:${held.join(',')}`,
         reason: input.reason, revision: policy.revision, kind: UPGRADE });
-      return result('rolled-back', { reason: held.join(','), conflicts });
+      const remaining = (input.only === 'ai-proposals' ? firstRunProposalRules : firstRunExecutionRules)(principalGrants(after, mcpPrincipalRef(input.principal)), input.principal, [input.scopeId]);
+      return result('rolled-back', { reason: held.join(','), conflicts, covered: remaining.skipped });
     }
     const plan = firstRunTemplateAdditions(files.policy, { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}), aiGrants: principalGrants(policy, mcpPrincipalRef(input.principal)) });
-    const held = input.only /* the delta rules held now (what a rollback removes) and those an allow covers: /policy's row and its cards */ ? { held: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)), ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) } : {};
+    const held = input.only === 'ai-proposals' /* the delta rules held now (what a rollback removes) and those an allow covers: /policy's row and its cards */ ? { held: FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)), ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) } : { ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) };
     if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason, ...held });
-    if (plan.status === 'current') return result('current', held);
+    if (plan.status === 'current') return result('current', { conflicts: plan.conflicts, ...held });
     const summary = describePolicyChange(files, plan.change);
     const missing = this.missing(policy, input.principal, input.scopeId, planPolicyChange(files.policy, files.bindings, plan.change).touched);
-    if (input.mode === 'preview') return result('preview', { rules: plan.rules, summary, missing, ...held });
-    if (missing.length) return result('refused', { rules: plan.rules, summary, missing });
+    if (input.mode === 'preview') return result('preview', { rules: plan.rules, summary, missing, conflicts: plan.conflicts, ...held });
+    if (missing.length) return result('refused', { rules: plan.rules, summary, missing, conflicts: plan.conflicts });
     await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change: plan.change, tag: `template-v5:${plan.rules.map(rule => rule.id).join(',')}`,
       reason: input.reason, revision: policy.revision, kind: UPGRADE });
-    return result('upgraded', { rules: plan.rules, summary });
+    return result('upgraded', { rules: plan.rules, summary, conflicts: plan.conflicts });
   }
 }

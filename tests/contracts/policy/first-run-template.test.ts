@@ -3,13 +3,13 @@ import history from '../../fixtures/policy/first-run-history.json' with { type: 
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, type PolicyGrant } from '#domain/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
+import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, principalGrants, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunExecutionRules, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, namedPersonPolicyAdditions, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunProposalRules, upgradeFirstRunPolicy } from '#domain/core/policy-template/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 import { explicitRebindGrant, REBIND_CLASS } from '#domain/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
 // a fresh, terminal-only installation gets from `deckent init policy`.
@@ -33,7 +33,8 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     const current = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(current.policy, current.bindings);
     for (const change of [REBIND_CLASS.deviceOnly, REBIND_CLASS.moved]) expect(explicitRebindGrant(policy, me, change)).toBeNull();
     expect(firstRunPolicyTemplate(input)).toEqual(firstRunPolicyTemplate(input));
-    expect(createHash('sha256').update(JSON.stringify(firstRunPolicyTemplate(history.input))).digest('hex'))
+    const generated = firstRunPolicyTemplate(history.input), v20 = { ...generated, version: 20, policy: { ...generated.policy, revision: 'first-run-template-v20', grants: generated.policy.grants.filter(rule => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)) }, bindings: { ...(generated.bindings as object), revision: 'first-run-template-v20-bindings' } };
+    expect(createHash('sha256').update(JSON.stringify(v20)).digest('hex'))
       .toBe('0491511dffb072f488d801c365746e7b8576b30bfb08a987946c4ad1fbd6b900');
   });
   it('produces a valid v2 policy and v1 bindings document, versioned in the revision', () => {
@@ -41,8 +42,8 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     expect(template.id).toBe(FIRST_RUN_POLICY_TEMPLATE_ID); expect(template.version).toBe(FIRST_RUN_POLICY_TEMPLATE_VERSION);
     expect(policyFileSchema.safeParse(template.policy).success).toBe(true);
     expect(bindingsFileSchema.safeParse(template.bindings).success).toBe(true);
-    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v20' });
-    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v20-bindings', bindings: [] });
+    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v21' });
+    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v21-bindings', bindings: [] });
   });
   it('grants read tools and the given scratch tool names silently, asks for edit/shell tools, and grants pool use without pool/service management', () => {
     const policy = resolvePolicyBindings(firstRunPolicyTemplate(input).policy, firstRunPolicyTemplate(input).bindings);
@@ -136,7 +137,7 @@ describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', ()
     expect(matchFirstRunPolicyTemplate('first-run-template-v18')).toEqual({ id: 'first-run-template', version: 18 });
     expect(matchFirstRunPolicyTemplate('first-run-template-v19')).toEqual({ id: 'first-run-template', version: 19 });
     expect(matchFirstRunPolicyTemplate(`first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`)).toEqual({ id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION });
-    expect(matchFirstRunPolicyTemplate('first-run-template-v21')).toBeNull();
+    expect(matchFirstRunPolicyTemplate('first-run-template-v22')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v0')).toBeNull();
     expect(matchFirstRunPolicyTemplate('')).toBeNull();
   });
@@ -202,7 +203,7 @@ describe('first-run v4 → v5 migration (pure)', () => {
     const v9 = { ...current, revision: 'first-run-template-v9', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-observe-pool', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v9, input)).toEqual({ status: 'upgrade', from: 9, policy: firstRunPolicyTemplate(input).policy });
     // v15 = the current template without the v16 recovery cells (alpha.56 D1); v14 = v15 without the v15 delta (S4B-1 + S7 + S4B-3); v13 = v14 without the v14 memory delta (S4); v12 = v13 without the v13 delta (I-POL).
-    const v16 = { ...current, revision: 'first-run-template-v16', grants: current.grants.filter(grant => !['first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id)) };
+    const v16 = { ...current, revision: 'first-run-template-v16', grants: current.grants.filter(grant => !['first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v16, input)).toEqual({ status: 'upgrade', from: 16, policy: firstRunPolicyTemplate(input).policy });
     const v15 = { ...current, revision: 'first-run-template-v15', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v15, input)).toEqual({ status: 'upgrade', from: 15, policy: firstRunPolicyTemplate(input).policy });
@@ -266,14 +267,14 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
     expect(plan.conflicts).toEqual([]);
     // v14 (S4) and v15 (S4B-1 + S7 + S4B-3 + S4B-4 + S6R-5) make 46 missing rules, above one policy change (POLICY_CHANGE_MAX 32): the first batch names
     // fourteen remaining (the v14 memory reads and the v15 delta), a second run adds them, a third is current.
-    expect(plan.rules).toHaveLength(POLICY_CHANGE_MAX); expect(plan.remaining).toBe(38); // S8-5 signers + import, S8-3 aggregator (3), v16's seven action cells (no rule versions in this input), v19's five MCP actor rules, v20's four
+    expect(plan.rules).toHaveLength(POLICY_CHANGE_MAX); expect(plan.remaining).toBe(41); // S8-5 signers + import, S8-3 aggregator (3), v16's seven action cells (no rule versions in this input), v19's five MCP actor rules, v20's four
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] }, rest = firstRunTemplateAdditions(applied, names);
     expect(rest.status === 'plan' ? [...rest.rules.map(rule => rule.id), rest.remaining] : rest).toEqual([...['first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
       'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory',
-      ...POST_V15_RULE_IDS.filter(id => id.startsWith('first-run-recovery-action-')), 'first-run-first-commit', 'first-run-uninstall', 'first-run-uninstall-operations', ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].slice(0, POLICY_CHANGE_MAX), 6]);
+      ...POST_V15_RULE_IDS.filter(id => id.startsWith('first-run-recovery-action-')), 'first-run-first-commit', 'first-run-uninstall', 'first-run-uninstall-operations', ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].slice(0, POLICY_CHANGE_MAX), 9]);
     // A third run adds the last two v19 rules and v20's four; a fourth is current.
     const second = { ...applied, grants: [...applied.grants, ...(rest.status === 'plan' ? rest.rules : [])] }, last = firstRunTemplateAdditions(second, names);
-    expect(last.status === 'plan' ? last.rules.map(rule => rule.id) : last).toEqual([...FIRST_RUN_V19_RULE_IDS.slice(-2), ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]);
+    expect(last.status === 'plan' ? last.rules.map(rule => rule.id) : last).toEqual([...FIRST_RUN_V19_RULE_IDS.slice(-2), ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]);
     expect(firstRunTemplateAdditions({ ...second, grants: [...second.grants, ...(last.status === 'plan' ? last.rules : [])] }, names)).toEqual({ status: 'current', conflicts: [] });
   });
   it('a hand-added rule under a v5 id with other content is kept and named as a conflict; another person\'s first-run policy is not theirs to upgrade', () => {
@@ -373,7 +374,7 @@ describe('v10 named execution authority', () => {
         const mcp = { ...principal, id: 'mcp', ...mcpPrincipalRef(me) };
         // The MCP actor only observes: run inspect since v9, pool inspect since v13 (I-POL, A48-D3e); v20 (owner S4/S6): it may only PROPOSE a Run, on the person's card
         // (lead 2026-11-09 option 2: the proposed Run's pool and work-target use are allowed, which does nothing without that card).
-        expect(evaluatePolicy(policy, { ...request, principal: mcp }).decision).toBe((kind === 'run' || kind === 'pool') && action === 'inspect' || (kind === 'pool' || kind === 'work-target') && action === 'use' ? 'allow'
+        expect(evaluatePolicy(policy, { ...request, principal: mcp }).decision).toBe((kind === 'run' || kind === 'pool') && action === 'inspect' || (kind === 'pool' || kind === 'work-target') && action === 'use' || kind === 'run' && ['reserve', 'cancel'].includes(action) || kind === 'attempt' && ['execute', 'evaluate', 'read-output', 'recover-output'].includes(action) ? 'allow'
           : kind === 'run' && action === 'create' ? 'require-approval' : 'deny');
         const restricted = { ...policy, restrictions: [{ id: 'company-deny', actions: [action], principals: [me], scopes: ['installation'], resource: { kind, ids: 'all' } }] };
         expect(evaluatePolicy(restricted, request).decision).toBe('deny');
@@ -433,10 +434,10 @@ it('U4E G1: historical policies upgrade exactly; first-commit remains scoped and
     .map(rule => rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['installation', 'other'] } : rule) };
   const scopedUpgrade = firstRunTemplateAdditions(broadened, { ...source, person: history.input.principal });
   expect(scopedUpgrade.status === 'plan' ? scopedUpgrade.rules.filter(rule => rule.id === 'first-run-first-commit') : null).toEqual(added);
-  const rollback = firstRunTemplateRollback(current.policy, history.input.principal, 'installation', source);
-  expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
+  const rollback = firstRunTemplateRollback(current.policy, history.input.principal, 'installation');
+  expect(rollback.rules.map(rule => rule.id)).toEqual(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS); expect(rollback.conflicts).toEqual([]);
   const customized = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === added[0]!.id ? { ...rule, actions: ['inspect'] } : rule) };
-  expect(firstRunTemplateRollback(customized, history.input.principal, 'installation', source)).toMatchObject({ rules: rollback.rules, conflicts: [] });
+  expect(firstRunTemplateRollback(customized, history.input.principal, 'installation')).toMatchObject({ rules: rollback.rules, conflicts: [] });
 });
 
 it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only, retain enterprise/legal-hold denies and roll back only their own unmodified rules', () => {
@@ -446,7 +447,7 @@ it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only
     { id: 'first-run-uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], scopes: 'all', principals: [me], resource: { kind: 'installation', ids: 'all' } },
     { id: 'first-run-uninstall-operations', effect: 'allow', actions: ['execute'], scopes: 'all', principals: [me], resource: { kind: 'operation', ids: operations } },
   ];
-  const previous = { ...current.policy, revision: 'first-run-template-v17', grants: current.policy.grants.filter(rule => !rule.id.startsWith('first-run-uninstall') && !FIRST_RUN_V19_RULE_IDS.includes(rule.id) && !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)) };
+  const previous = { ...current.policy, revision: 'first-run-template-v17', grants: current.policy.grants.filter(rule => !rule.id.startsWith('first-run-uninstall') && !FIRST_RUN_V19_RULE_IDS.includes(rule.id) && !FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(rule.id) && !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)) };
   expect(upgradeFirstRunPolicy(previous, source)).toEqual({ status: 'upgrade', from: 17, policy: current.policy });
   expect(current.policy.grants.filter(rule => rule.id.startsWith('first-run-uninstall'))).toEqual(wanted);
   const principal = { id: 'person', ...me, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
@@ -456,9 +457,9 @@ it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only
   expect(evaluatePolicy(resolvePolicyBindings(denied, current.bindings), request)).toMatchObject({ decision: 'deny', ruleId: 'legal-hold-admin' });
   expect(evaluatePolicy(resolvePolicyBindings(current.policy, current.bindings), { ...request, principal: { ...principal, ...mcpPrincipalRef(me) } }).decision).toBe('deny');
   // Since v19 the v18 rules stay installed: no v18 rule is a rollback candidate, unmodified or changed.
-  expect(firstRunTemplateRollback(current.policy, me, 'installation', source).rules.some(rule => rule.id.startsWith('first-run-uninstall'))).toBe(false);
+  expect(firstRunTemplateRollback(current.policy, me, 'installation').rules.some(rule => rule.id.startsWith('first-run-uninstall'))).toBe(false);
   const changed = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === wanted[0]!.id ? { ...rule, scopes: ['installation'] } : rule) };
-  expect(firstRunTemplateRollback(changed, me, 'installation', source).conflicts).toEqual([]);
+  expect(firstRunTemplateRollback(changed, me, 'installation').conflicts).toEqual([]);
 });
 
 it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor gets the person\'s first-run tool rules and its card-only proposals, in the installed scope only; upgrade and rollback carry exactly them', () => {
@@ -473,8 +474,8 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   // Lead 2026-11-09 (option 2): the proposed Run's pool and work-target use are `allow`; without the Run card they admit nothing.
   const keys = ['language', 'output_mode', 'terminal.responseStyle'], proposals = [rule('first-run-mcp-propose-work', 'require-approval', 'run', ['create'], 'all'), { ...rule('first-run-mcp-propose-setting', 'require-approval', 'config', ['write'], [...keys.map(key => `project:${key}`), ...keys.map(key => `global:${key}`)]), scopes: 'all' },
     rule('first-run-mcp-propose-pool', 'allow', 'pool', ['use'], 'all'), rule('first-run-mcp-propose-target', 'allow', 'work-target', ['use'], 'all')];
-  expect(current.policy.grants.filter(grant => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(grant.id))).toEqual(proposals);
-  const policy = resolvePolicyBindings(current.policy, current.bindings), mcp = { ...principal, id: 'mcp', ...ai };
+  expect(current.policy.grants.filter(grant => FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(grant.id))).toEqual(proposals);
+  const policy = resolvePolicyBindings({ ...current.policy, grants: current.policy.grants.filter(rule => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)) }, current.bindings), mcp = { ...principal, id: 'mcp', ...ai };
   const ask = (action: string, kind: string, id: string, actor = mcp, scopeId = 'installation') => evaluatePolicy(policy, { principal: { ...actor, scopeIds: ['installation', 'other'] }, scopeId, action, resource: { kind, id } }).decision;
   expect(ask('invoke', 'model-invocation', 'any')).toBe('allow'); expect(ask('invoke', 'model-invocation', 'any', mcp, 'other')).toBe('deny');
   // Round 3: the shared actor reads metadata only (v9), never another principal's content, and cancels nothing it was not given.
@@ -484,12 +485,13 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   for (const [action, kind, id] of [['execute', 'operation', 'policy.administer'], ['decide', 'approval', 'any'], ['write', 'config', 'project:terminal.chat'], ['set', 'secret', 'any'],
     ['create', 'backup', 'any'], ['uninstall', 'installation', 'any'], ['invoke', 'mcp-server', 'any'], ['execute', 'operation', 'mcp.tool.call'], ['invoke', 'agent-tool', 'fetch_url'],
     ['invoke', 'agent-tool', 'session_state'], ['purge-content', 'model-invocation', 'any'], ['write', 'config', 'project:terminal.theme'], ['write', 'config', 'global:brain_planner.reference'],
-    ['write', 'config', 'project:execution.docker.imageId'], ['reserve', 'run', 'any'], ['adopt', 'work-target', 'any']] as const) expect(ask(action, kind, id), `${kind}/${action}`).toBe('deny');
+    ['write', 'config', 'project:execution.docker.imageId'], ['adopt', 'work-target', 'any']] as const) expect(ask(action, kind, id), `${kind}/${action}`).toBe('deny');
   for (const kind of ['pool', 'work-target']) { expect(ask('use', kind, 'any'), kind).toBe('allow'); expect(ask('use', kind, 'any', mcp, 'other'), kind).toBe('deny'); }
   // v20: the person's own config rule is `allow`; the AI actor's write of a listed key and its Run create are only ever a card, in every mode (full-auto + full access open).
   for (const snapshot of [policy, resolvePolicyBindings(openFullAuto(current.policy), { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'me-auto', principal: me, scopes: ['installation'], mode: 'full-auto' }] })])
     for (const [action, kind, id] of [['create', 'run', 'any'], ['write', 'config', 'project:language'], ['write', 'config', 'global:terminal.responseStyle']] as const)
       expect(evaluatePolicy(snapshot, { principal: { ...mcp, scopeIds: ['installation', 'other'] }, scopeId: 'installation', action, resource: { kind, id } }).decision, `${kind}/${id}`).toBe('require-approval');
+  expect(ask('reserve', 'run', 'any')).toBe('deny');
   expect(ask('write', 'config', 'project:language', principal)).toBe('allow');
   const call = (tool: string, cell: AgentToolCallCell, operation: string | null) => decideAgentToolCall(policy, { principal: mcp, scopeId: 'installation', tool: { name: tool }, operation: operation ? { id: operation } : null, cell });
   expect(call('read_file', 'read', null).decision).toBe('allow'); expect(call('scratch_write', 'edit', 'workspace.scratch.write').decision).toBe('allow');
@@ -512,16 +514,16 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
   expect(standartEdit(mcp).decision).toBe('require-approval');
   expect(standartEdit({ ...principal, id: 'other', subject: 'colleague' }).decision).toBe('require-approval');
   // The template for an MCP principal adds nothing for it; exact v18 and v19 templates upgrade to v20; edited policies get exactly the missing rules add-only.
-  expect(firstRunPolicyTemplate({ ...input, principal: ai }).policy.grants.some(grant => [...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id))).toBe(false);
-  const v19 = { ...current.policy, revision: 'first-run-template-v19', grants: current.policy.grants.filter(grant => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(grant.id)) };
+  expect(firstRunPolicyTemplate({ ...input, principal: ai }).policy.grants.some(grant => [...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id))).toBe(false);
+  const v19 = { ...current.policy, revision: 'first-run-template-v19', grants: current.policy.grants.filter(grant => ![...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(grant.id)) };
   const v18 = { ...v19, revision: 'first-run-template-v18', grants: v19.grants.filter(grant => !FIRST_RUN_V19_RULE_IDS.includes(grant.id)) };
   expect(upgradeFirstRunPolicy(v18, input)).toEqual({ status: 'upgrade', from: 18, policy: current.policy }); expect(upgradeFirstRunPolicy(v19, input)).toEqual({ status: 'upgrade', from: 19, policy: current.policy });
   const plan = firstRunTemplateAdditions({ ...v18, revision: 'a-edited' }, { ...input, person: me });
-  expect(plan.status === 'plan' ? plan.rules : plan).toEqual([...wanted, ...proposals]);
+  expect(plan.status === 'plan' ? plan.rules : plan).toEqual([...wanted, ...proposals, ...current.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))]);
   // The rollback delta is v20's alone (the v19 rules stay installed), by content: a customized same-id rule is kept and named.
-  expect(firstRunTemplateRollback(current.policy, me, 'installation')).toEqual({ rules: proposals, conflicts: [], missing: [] });
+  expect(firstRunTemplateRollback(current.policy, me, 'installation', 'ai-proposals')).toEqual({ rules: proposals, conflicts: [], missing: [] });
   const changed = { ...current.policy, grants: current.policy.grants.map(grant => grant.id === proposals[0]!.id ? { ...grant, resource: { ...grant.resource, ids: ['one-run'] } } : grant) };
-  expect(firstRunTemplateRollback(changed, me, 'installation')).toMatchObject({ rules: proposals.slice(1), conflicts: [proposals[0]!.id] });
+  expect(firstRunTemplateRollback(changed, me, 'installation', 'ai-proposals')).toMatchObject({ rules: proposals.slice(1), conflicts: [proposals[0]!.id] });
   // Lead 2026-11-09 (side effects A, B): an allow the AI actor already holds over a v20 rule's WHOLE cell (here the MCP `work` group's run and every-target
   // cells) is never turned into a card or repeated: those rules are left out of both upgrade paths and named with the holding rule. The group's pool `p`
   // covers only part of v20's every-pool cell, so the pool allow still comes, with the setting rule.
@@ -529,7 +531,7 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
     resource: { kind, ids: kind === 'pool' ? ['p'] : 'all' as const } }));
   const grouped = { ...v19, revision: 'a-grouped', grants: [...v19.grants, ...work] }, covered = [{ ruleId: 'first-run-mcp-propose-work', heldBy: 'mcp-cap-work-run' }, { ruleId: 'first-run-mcp-propose-target', heldBy: 'mcp-cap-work-work-target' }];
   expect(firstRunProposalRules(grouped.grants as never, me, ['installation'])).toEqual({ wanted: [proposals[1], proposals[2]], skipped: covered });
-  const groupedPlan = firstRunTemplateAdditions(grouped, { ...input, person: me });
+  const groupedPlan = firstRunTemplateAdditions(grouped, { ...input, person: me, only: 'ai-proposals' });
   expect(groupedPlan).toMatchObject({ status: 'plan', rules: [proposals[1], proposals[2]], covered });
   const after = resolvePolicyBindings({ ...grouped, grants: [...grouped.grants, proposals[1]!, proposals[2]!] }, current.bindings);
   for (const [action, kind] of [['create', 'run'], ['reserve', 'run'], ['use', 'pool']] as const)
@@ -542,4 +544,41 @@ it('R4a v19 + v20 (owner 2026-11-05 option 3, 2026-11-09 S4–S6): the MCP actor
     expect(firstRunProposalRules([...shape.grants, ...work.map(rule => ({ ...rule, scopes: ['live'], principals: [mcpPrincipalRef(host)] }))] as never, host, ['live']).skipped.map(item => item.ruleId), name)
       .toEqual(['first-run-mcp-propose-work', 'first-run-mcp-propose-target']);
   }
+});
+
+it('119-C2: v21 adds exactly six broad execution cells; v20 and hand-built plans preserve conflicts, denies and role coverage', () => {
+  const current = firstRunPolicyTemplate(input), ai = mcpPrincipalRef(me), ids = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+  const expected = [
+    { id: 'first-run-mcp-progress-run-reserve', effect: 'allow', actions: ['reserve'], scopes: ['installation'], principals: [ai], resource: { kind: 'run', ids: 'all' } },
+    { id: 'first-run-mcp-progress-run-cancel', effect: 'allow', actions: ['cancel'], scopes: ['installation'], principals: [ai], resource: { kind: 'run', ids: 'all' } },
+    { id: 'first-run-mcp-progress-attempts', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['installation'], principals: [ai], resource: { kind: 'attempt', ids: 'all' } },
+  ];
+  expect(current.version).toBe(21); expect(current.policy.grants.filter(rule => ids.includes(rule.id))).toEqual(expected);
+  const v20 = { ...current.policy, revision: 'first-run-template-v20', grants: current.policy.grants.filter(rule => !ids.includes(rule.id)) };
+  const names = { ...input, person: me };
+  expect(firstRunTemplateAdditions(v20, names)).toMatchObject({ status: 'plan', rules: expected, conflicts: [] });
+  const applied = { ...v20, grants: [...v20.grants, ...expected] };
+  expect(firstRunTemplateAdditions(applied, names)).toEqual({ status: 'current', conflicts: [] });
+  expect(applied.grants.slice(0, v20.grants.length)).toEqual(v20.grants);
+  const hand = { ...v20, revision: 'hand', grants: v20.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read' } : rule) };
+  expect(namedPersonPolicyAdditions(hand, names)).toMatchObject({ status: 'plan', rules: expected });
+  const odd = { ...expected[0]!, actions: ['inspect'] }, deny = { ...expected[2]!, id: 'company-no-execution', effect: 'deny', actions: ['execute'] };
+  const guarded = { ...v20, grants: [...v20.grants, odd, deny] }, plan = firstRunTemplateAdditions(guarded, names);
+  expect(plan).toMatchObject({ status: 'plan', conflicts: ['company-no-execution', expected[0]!.id], rules: expected.slice(1) });
+  const protectedPolicy = resolvePolicyBindings({ ...guarded, grants: [...guarded.grants, ...(plan.status === 'plan' ? plan.rules : [])] }, current.bindings);
+  const actor = { id: 'ai', ...ai, assurance: 'workload-verified' as const, scopeIds: ['installation', 'outside'] };
+  expect(evaluatePolicy(protectedPolicy, { principal: actor, scopeId: 'installation', action: 'execute', resource: { kind: 'attempt', id: 'other-actors-attempt' } })).toMatchObject({ decision: 'deny', ruleId: deny.id });
+  const policy = resolvePolicyBindings(current.policy, current.bindings);
+  for (const [kind, actions] of [['run', ['reserve', 'cancel']], ['attempt', ['execute', 'evaluate', 'read-output', 'recover-output']]] as const)
+    for (const action of actions) {
+      expect(evaluatePolicy(policy, { principal: actor, scopeId: 'installation', action, resource: { kind, id: 'persons-old-work' } }).decision).toBe('allow');
+      expect(evaluatePolicy(policy, { principal: actor, scopeId: 'outside', action, resource: { kind, id: 'persons-old-work' } }).decision).toBe('deny');
+    }
+  for (const action of ['cancel', 'release', 'reconcile', 'prepare-integration', 'adopt-integration'])
+    expect(evaluatePolicy(policy, { principal: actor, scopeId: 'installation', action, resource: { kind: 'attempt', id: 'a' } }).decision).toBe('deny');
+  const role = { id: 'execute', effect: 'allow', actions: expected[2]!.actions, resource: expected[2]!.resource };
+  const bound = resolvePolicyBindings({ ...v20, roles: [{ id: 'executor', permissions: [role] }] }, { schemaVersion: 1, revision: 'bound', bindings: [{ id: 'ai', principals: [ai], roles: ['executor'], scopes: ['installation'] }] });
+  const coverage = firstRunExecutionRules(principalGrants(bound, ai), me, ['installation']);
+  expect(coverage).toEqual({ wanted: expected.slice(0, 2), skipped: [{ ruleId: expected[2]!.id, heldBy: 'ai/executor/execute' }] });
+  expect(evaluatePolicy(bound, { principal: actor, scopeId: 'installation', action: 'recover-output', resource: { kind: 'attempt', id: 'a' } }).decision).toBe('allow');
 });

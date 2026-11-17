@@ -1,3 +1,4 @@
+import { policyExecutionLines } from '#engine/index.js';
 import { formatValue, t, terminalSafeText, type Locale } from '#platform/index.js';
 
 type Grant = { readonly id?: unknown; readonly actions?: unknown; readonly resource?: { readonly kind?: unknown; readonly ids?: unknown }; readonly effect?: unknown; readonly modeEligible?: unknown };
@@ -41,7 +42,7 @@ export function policyPreviewText(value: unknown, locale: Locale): string {
     t('cli.init.policyPreview.files', {}, locale),
     t('cli.init.policyPreview.policyFile', { path: text(value.paths?.policy) }, locale),
     t('cli.init.policyPreview.bindingsFile', { path: text(value.paths?.bindings), count: count(value.bindings?.bindings) }, locale),
-    t('cli.init.policyPreview.rules', { count: rules.length }, locale), ...rules, ...cards,
+    t('cli.init.policyPreview.rules', { count: rules.length }, locale), ...rules, ...cards, ...policyExecutionLines(policy.grants, value.scopeId, locale),
     t('cli.init.policyPreview.extra', { restrictions: count(policy.restrictions), sod: count(policy.separationOfDuties), roles: count(policy.roles) }, locale),
     t('cli.init.policyPreview.next', { scope }, locale),
     t('cli.init.policyPreview.json', { scope }, locale),
