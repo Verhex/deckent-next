@@ -2,15 +2,15 @@ import { writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
-import { ConfigNumberWindow } from '#surfaces/core/terminal-panels/index.js';
+import { ConfigNumberWindow, PickerWindow } from '#surfaces/core/terminal-panels/index.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PermissionModeView } from '#domain/index.js';
 import { resolveWorklinePalette, WorklinePaletteProvider } from '#surfaces/core/terminal-kit-ink/index.js';
-import { cells, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
-import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { cells, resolveRenderGlyphs, RenderGlyphsContext, span } from '#surfaces/core/terminal-render-ink/index.js';
+import { DECISION_ARM_DEFAULT, QueuedListOpeningContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { configPanelTree, editEntry, maskEntry, mcpPanelTree, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
@@ -23,7 +23,7 @@ class Screen extends Writable {
   readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
   // G2-3: a decision window turns bracketed paste on and off around its frames; that mode switch is not a frame.
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } // eslint-disable-line no-control-regex
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (text.length && !/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } // eslint-disable-line no-control-regex
 }
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
@@ -34,7 +34,7 @@ async function armed(frame: () => string, hint: string) {
   expect(frame()).toContain(hint);
 }
 const mounted: Array<{ unmount(): void }> = [];
-afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
+afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); vi.useRealTimers(); });
 /** One write per key: an escape sequence (arrows) stays whole, every other character is its own key. */
 function splitKeys(keys: string): string[] {
   const out: string[] = [];
@@ -49,8 +49,9 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false) {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, createElement(WindowStackProvider, null, node)) });
-  mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+  const instance = render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
+  mounted.push(instance);
+  return { frame: () => stdout.frame, stdin, flush: () => instance.waitUntilRenderFlush(), press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
     /** One stdin chunk, as a terminal sends a modified key. */
     raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
@@ -64,7 +65,40 @@ function panel(kind: 'mode' | 'config' | 'mcp' | 'policy', ports: Parameters<typ
   return { element, calls };
 }
 
+it('112: an armed queued catalog still waits anew when it enters a scope decision', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const results: unknown[] = [];
+  const view = mount(createElement(QueuedListOpeningContext.Provider, { value: true }, createElement(PickerWindow, {
+    title: [span('Queued catalog')], bodyRows: 1, position: '', labels: terminalPanelLabels('en').picker,
+    tree: { title: 'Catalog', items: [{ id: 'value', label: 'Value' }], scopes: [{ id: 'project', label: 'Project' }] }, onResult: result => { results.push(result); } })));
+  const tick = async (ms: number) => { await vi.advanceTimersByTimeAsync(ms); await view.flush(); };
+  await tick(DECISION_ARM_DEFAULT);
+  view.stdin.write(ENTER); await tick(20); // catalog → scope: both have input ownership, but this is a new decision
+  expect(view.frame()).toContain('Project');
+  view.stdin.write(ENTER); await tick(20);
+  expect(results).toEqual([]);
+  await tick(DECISION_ARM_DEFAULT);
+  view.stdin.write(ENTER); await tick(20);
+  expect(results).toEqual([{ kind: 'selected', path: ['value'], id: 'value', scope: 'project' }]);
+});
+
 describe('/mode window', () => {
+  it('112: opens on the current full-auto row and Enter changes nothing; an unknown current mode starts on the first row', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const selected: string[] = [];
+    const current = panel('mode', { mode: { inspect: async () => VIEW, current: () => 'full-auto', select: async stop => { selected.push(stop); } } });
+    const view = mount(current.element);
+    await vi.advanceTimersByTimeAsync(60); await view.flush();
+    expect(view.frame()).toMatch(/>\s+full auto · now/u);
+    view.stdin.write(ENTER); await vi.advanceTimersByTimeAsync(20); await view.flush();
+    expect(selected).toEqual([]); expect(current.calls.closed).toBe(1);
+    const unknown = panel('mode', { mode: { inspect: async () => VIEW, current: () => null, select: async stop => { selected.push(stop); } } });
+    const fallback = mount(unknown.element);
+    await vi.advanceTimersByTimeAsync(60); await fallback.flush();
+    expect(fallback.frame()).toMatch(/>\s+standard/u);
+    fallback.stdin.write(ENTER); await vi.advanceTimersByTimeAsync(20); await fallback.flush();
+    expect(selected).toEqual(['standart']); expect(unknown.calls.closed).toBe(1);
+  });
   it('every stop with what it does; full access without the company grant is locked with why and Enter does nothing; a free stop goes to the port', async () => {
     const selected: string[] = [];
     const { element, calls } = panel('mode', { mode: { inspect: async () => VIEW, current: () => 'standart', select: async stop => { selected.push(stop); } } }, 'tr');

@@ -4,7 +4,7 @@ import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, wrapCells, wrapSpans, type Span, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
-import { DecisionArmContext, DecisionArmLabelsContext, useQuietArming } from './arming.js';
+import { DecisionArmContext, DecisionArmLabelsContext, QueuedListOpeningContext, useQuietArming } from './arming.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 import { CardCopyContext, CardCopyOptionsContext, cardCopyText, cardRowRange, cardSelectionText, hyperlinkEnds, isCardCopyKey, type CardSelection } from './card-copy.js';
 import { PointerContext } from './fullscreen-workline.js';
@@ -157,7 +157,14 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   useEffect(() => { onFocusChange?.(focused); }, [focused, onFocusChange]);
   // A decision (a card, a question, any approval-priority window) counts keys only after a quiet arming period from the moment it became
   // the visible input owner; earlier keys are swallowed and restart the wait (arming.ts). Fail closed: nothing reaches its owner before.
-  const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext), inputRevision);
+  const guarded = decision || priority >= WINDOW_PRIORITY.approval, queuedOpening = useContext(QueuedListOpeningContext), queuedList = queuedOpening && !guarded;
+  // A queued catalog entering its decision stage must arm anew, even though it already owned the keyboard.
+  const arming = useQuietArming(focused && (guarded || queuedList) && !queue.hidden, useContext(DecisionArmContext), queuedOpening ? `${guarded}:${inputRevision}` : inputRevision);
+  const acceptsListInput = () => {
+    if (!acceptsInput()) return false;
+    if (queuedList && !arming.armed()) { arming.touch(); return false; }
+    return true;
+  };
   // Owner 108: once text reaches a choice-only card, later letters/digits are text too; only Enter or navigation ends it.
   const typing = useCardText(burstText);
   useEffect(typing.settle, [arming.shown, focused, inputRevision]);
@@ -182,7 +189,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
   const keyHints = copy && interactive ? `${hints} · ${copy.labels.hint}` : hints;
   const armedHints = burstText || typing.hint === null ? keyHints : typing.hint === 'early' ? armLabels.ignored : typing.hint === 'text' ? armLabels.typedText : `${armLabels.unchosen} ${keyHints}`;
-  const hintText = !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : armLabels.arming;
+  const hintText = queuedList && interactive && !arming.shown ? armLabels.arming : !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
@@ -278,6 +285,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   };
   const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true, revision: latest.current.inputRevision }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
+    if (queuedList && !acceptsListInput()) return;
     // S5: adding a line never answers any window's choice or confirmation. Shift+Enter is a new line too (Astra 3134: an owner that takes
     // every Return would otherwise answer on it after typed text, which only a plain Enter ends).
     if (key.return && (key.ctrl || key.meta || key.shift)) { if (guarded) begin().owned = false; return; }
@@ -293,6 +301,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   // A paste consumer stays active while a decision holds the keyboard, so a paste begun in the input and finished here is still a paste
   // (Ink would otherwise deliver it as ordinary keys); pasted text never decides and restarts the arming wait.
   usePaste(text => {
+    if (queuedList && !acceptsListInput()) return;
     if (!acceptsInput()) return;
     // An entry window takes a paste only while it holds the keyboard (owner F2-18, Astra 3052 R1); a decision card never decides on one.
     if (!guarded) { latest.current.onPaste?.(text); return; }
@@ -319,7 +328,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       {rows.slice(first, first + visible).map((row, index) => (ends => { const range = picked ? cardRowRange(picked, first + index) : null;
         return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end, palette.selection) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
-      {footer ? <WindowInputContext.Provider value={acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
+      {footer ? <WindowInputContext.Provider value={queuedList ? acceptsListInput : acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
       {hintRows.map((row, index) => <Text key={`hint:${index}`} {...palette.muted} wrap="truncate">{row}</Text>)}
     </Box>

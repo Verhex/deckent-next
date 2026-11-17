@@ -21,7 +21,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
+import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, QueuedListOpeningContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { turnRefusal } from './turn-refusal.js';
@@ -348,7 +348,8 @@ export function WorklineApp(props: WorklineProps) {
   useEffect(() => { let live = true; const ready = () => { if (live) setServiceReady(true); }; opened.then(ready, ready); return () => { live = false; }; }, [opened]);
   const reasoning = useReasoningPreview(push, labels.reasoning);
   // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
-  const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
+  const queuedListOpening = useRef(false);
+  const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec, queuedListOpening.current) };
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
   // conversation's own pin, or none (the configured model) — never another conversation's.
@@ -737,6 +738,7 @@ export function WorklineApp(props: WorklineProps) {
 
   const executionTiming = useRef<TimingTrace | undefined>(undefined);
   execute.current = async execution => {
+    queuedListOpening.current = execution.openedByQueue === true;
     executionTiming.current = currentTiming();
     const action = taskActions.current.get(execution.input.inputId);
     taskActions.current.delete(execution.input.inputId);
@@ -858,7 +860,9 @@ export function WorklineApp(props: WorklineProps) {
     {instructions.window}
     {fullscreenMode ? null : liveNode}
     <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
+    <QueuedListOpeningContext.Provider value={queuedListOpening.current && (presentation?.kind === 'job-picker' || presentation?.kind === 'runs-window' || presentation?.kind === 'approvals')}>
     {work.region}
+    </QueuedListOpeningContext.Provider>
     {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
       position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
     </WindowOpeningContext.Provider>
@@ -866,6 +870,7 @@ export function WorklineApp(props: WorklineProps) {
     {othersOpen || deliveryShown ? null : liveWin.element}
     {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
     {deliveryShown ? deliveries.element : null}
+    <QueuedListOpeningContext.Provider key={state.picker?.pickerHandle} value={queuedListOpening.current}>
     {resumePicker && !work.modalOpen && !work.pickerOpen
       ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
         position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 3}
@@ -873,6 +878,7 @@ export function WorklineApp(props: WorklineProps) {
           details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)}
           {...(labels.sessions?.filter ? { filter: { prompt: (text: string) => fillTemplate(labels.sessions!.filter!.prompt, { text }), none: labels.sessions.filter.none } } : {})} />} /> : null}
     {settings.window}
+    </QueuedListOpeningContext.Provider>
     {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
     <WindowOpeningContext.Provider value={turnRunning ? 'background' : 'foreground'}>
     {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}

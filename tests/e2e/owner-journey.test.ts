@@ -175,8 +175,9 @@ describe.skipIf(!realm)('owner journey FINAL-CHECK-2 (synthetic-person in a disp
     await walk('j3-provider', m, [[/Ready/, '/provider'], [1500, '\r'], ['Sign in with Claude ›', ''], [2500, ESC]]);
     expect.soft(m.flat(mFrom), 'NF-7 /provider after reopening').toContain('claude-sonnet-5-5: Agent prerequisites verified');
     // The mode window (typed /mode arguments are not used in the terminal): careful, then back to full auto for the /do journeys.
-    await walk('j3', m, [[1500, '/mode'], [1500, '\r'], ['careful', ''], [1500, DOWN], [800, '\r'], [3000, 'JOURNEY-HELLO write hello into hello.txt'], [600, '\r'],
-      ['the AI in this chat, on your behalf', ''], [2500, ESC], [4000, '/mode'], [1500, '\r'], ['careful', ''], [1500, DOWN.repeat(2)], [800, '\r'], [2000, '/exit\r']]);
+    // Rows are chosen by typing to filter: /mode opens on the current mode (owner 112), so a row's position is not the journey's to know.
+    await walk('j3', m, [[1500, '/mode'], [1500, '\r'], ['careful', ''], [1500, 'careful'], [1000, '\r'], [3000, 'JOURNEY-HELLO write hello into hello.txt'], [600, '\r'],
+      ['the AI in this chat, on your behalf', ''], [2500, ESC], [4000, '/mode'], [1500, '\r'], ['careful', ''], [1500, 'auto'], [1000, '\r'], [2000, '/exit\r']]);
     await m.closed;
     expect.soft(m.flat(mFrom)).not.toMatch(/peer-session|Policy cell/u); // F2-10 jargon
     await expect(readFile(join(project, 'hello.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
