@@ -362,21 +362,21 @@ it.skipIf(process.platform !== 'linux')('119-C2 security: measures real v19/v20 
     const prior = { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) };
     expect(upgradeFirstRunPolicy(prior, { scopeId, principal: f.principal, ...names })).toMatchObject({ status: 'upgrade', from: version });
     const preview = await f.request({ ...input, mode: 'preview' });
-    const notice = t('policy.aiExecution.preview', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId }, locale);
+    const notice = t('policy.aiExecution.preview', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId, scopes: scopeId }, locale);
     await mkdir(join(f.root, '.deckent'));
     let printed = '';
     expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', scopeId, '--preview', '--lang', locale], {
       root: f.root, env: homeEnv(f.root), stdout: { write(value: string) { printed += value; } },
       upgradePolicyTemplate: async (_root, scope, request) => f.request({ ...request, scopeId: scope, principal: f.principal }),
     })).toBe(0);
-    expect(printed).toContain(notice); // The short form's real command prints the full notice before apply.
+    expect(printed).toContain(notice); // A genuine pre-apply preview prints the full notice.
 
     expect(preview.status).toBe('preview');
     expect(await f.request({ ...input, mode: 'apply' })).toMatchObject({ status: 'upgraded' });
     const summary = f.records()[0]!.request.summary, binding = summary.split('\n')[0]!;
     const change = { schemaVersion: 1, changes: preview.rules.map(grant => ({ kind: 'grant.add', grant })) };
     const diff = describePolicyChange({ policy: { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) }, bindings }, change, 2048 - binding.length - 1)!;
-    const short = t('policy.aiExecution.previewShort', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId }, locale);
+    const short = t('policy.aiExecution.previewShort', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId, scopes: scopeId }, locale);
     console.log('119-C2 measurement', JSON.stringify({ locale, version, only: only ?? 'default', issuer: f.principal.issuer.length, subject: f.principal.subject.length, scope: scopeId.length,
       binding: binding.length, diff: diff.length, full: notice.length, short: short.length, shortSummary: binding.length + 1 + diff.length + 1 + short.length, fullSummary: binding.length + 1 + diff.length + 1 + notice.length, sealed: summary.length }));
     expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
@@ -397,4 +397,27 @@ it.skipIf(process.platform !== 'linux')('119-C2 security: a genuine subset retai
   expect(notice).toContain('This standing grant');
   expect(await f.apply()).toMatchObject({ status: 'upgraded' });
   expect(f.records()[0]!.request.summary).toContain(notice);
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2 P2: genuine multi-scope governed and installer previews name the full planned breadth', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const f = await fixture(grants => grants.filter(rule => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))
+      .map(rule => rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['s', 'other'] } : rule), false, 'ai-execution', locale);
+    const before = await f.bytes();
+    const governed = await f.request({ scopeId: 's', principal: f.principal, mode: 'preview', only: 'ai-execution', reason: 'multi-scope preview' });
+    const installer = await upgradePolicyTemplate(f.source, { scopeId: 's', principal: f.principal, apply: false, owner: true, peopleLimit: 10,
+      now: () => 1000, audit: () => undefined, toolNames: names });
+    expect(governed).toMatchObject({ status: 'preview', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id, scopes: ['s', 'other'] })) });
+    expect(installer).toMatchObject({ status: 'preview', basis: 'first-run' });
+    await mkdir(join(f.root, '.deckent'));
+    const notice = t('policy.aiExecution.preview', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: 's', scopes: 's, other' }, locale);
+    expect(notice).toContain(locale === 'en' ? 'Runs in s, other.' : 's, other kapsamında');
+    for (const args of [['policy', 'upgrade', '--template', 'current', '--preview'], ['init', 'policy', '--upgrade', '--preview']]) {
+      let printed = '';
+      expect(await main([...args, '--scope', 's', '--lang', locale], { root: f.root, env: homeEnv(f.root), stdout: { write(value: string) { printed += value; } },
+        upgradePolicyTemplate: async () => governed, upgradePolicyTemplateInstallation: async () => installer })).toBe(0);
+      expect(printed).toContain(notice);
+    }
+    expect(await f.bytes()).toBe(before); expect(f.cards).toBe(0);
+  }
 });

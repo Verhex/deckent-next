@@ -232,6 +232,7 @@ const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cance
 /** v7 actions (SPEND-SETTLEMENT): read, audit and the two governed management commands (held reconcile, budget revision). */
 const PROVIDER_SPEND_ACCOUNT_ACTIONS = ['inspect', 'audit', 'reconcile', 'budget-revision'] as const;
 export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[];
+    /** The validated planner scopes, never inferred from a proposed execution rule. */ readonly executionScopes: readonly string[];
     /** Rules still missing after this batch (only when the plan exceeds POLICY_CHANGE_MAX); a second run plans them. `covered`: v20 rules an allow covers (never added). */ readonly remaining?: number; readonly covered?: readonly FirstRunProposalCover[] }
   | { readonly status: 'current'; readonly conflicts: readonly string[]; readonly covered?: readonly FirstRunProposalCover[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
 type Selection = 'all' | readonly string[];
@@ -313,7 +314,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
   // One `policy.administer@1` change holds at most POLICY_CHANGE_MAX rules (v14 made a v4-era plan 33): the plan takes the first batch in version
   // order and names how many remain; the same add-only upgrade run again adds the rest (each run is idempotent).
   const batch = rules.slice(0, POLICY_CHANGE_MAX), remaining = rules.length - batch.length;
-  return Object.freeze({ status: 'plan' as const, rules: Object.freeze(batch), conflicts: Object.freeze(conflicts), ...(remaining ? { remaining } : {}), ...cover,
+  return Object.freeze({ status: 'plan' as const, rules: Object.freeze(batch), executionScopes: Object.freeze([...scopes]), conflicts: Object.freeze(conflicts), ...(remaining ? { remaining } : {}), ...cover,
     change: policyChangeSchema.parse({ schemaVersion: 1, changes: batch.map(grant => ({ kind: 'grant.add', grant })) }) });
 }
 

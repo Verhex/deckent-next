@@ -5,6 +5,7 @@ type Grant = { readonly id?: unknown; readonly actions?: unknown; readonly resou
 type Assurance = { readonly id?: unknown; readonly subject?: unknown; readonly cells?: unknown; readonly minimum?: unknown };
 type Preview = {
   readonly scopeId: string; readonly principal?: { readonly issuer?: unknown; readonly subject?: unknown }; readonly template?: { readonly id?: unknown; readonly version?: unknown };
+  readonly executionScopes?: readonly string[];
   readonly planDigest?: unknown; readonly paths?: { readonly policy?: unknown; readonly bindings?: unknown };
   readonly policy: { readonly grants: readonly Grant[]; readonly roles?: unknown; readonly restrictions?: unknown; readonly separationOfDuties?: unknown; readonly approvalAssurance?: unknown };
   readonly bindings?: { readonly bindings?: unknown };
@@ -42,7 +43,7 @@ export function policyPreviewText(value: unknown, locale: Locale): string {
     t('cli.init.policyPreview.files', {}, locale),
     t('cli.init.policyPreview.policyFile', { path: text(value.paths?.policy) }, locale),
     t('cli.init.policyPreview.bindingsFile', { path: text(value.paths?.bindings), count: count(value.bindings?.bindings) }, locale),
-    t('cli.init.policyPreview.rules', { count: rules.length }, locale), ...rules, ...cards, ...policyExecutionLines(policy.grants, value.scopeId, locale),
+    t('cli.init.policyPreview.rules', { count: rules.length }, locale), ...rules, ...cards, ...policyExecutionLines(policy.grants, value.scopeId, locale, [], 'full', value.executionScopes),
     t('cli.init.policyPreview.extra', { restrictions: count(policy.restrictions), sod: count(policy.separationOfDuties), roles: count(policy.roles) }, locale),
     t('cli.init.policyPreview.next', { scope }, locale),
     t('cli.init.policyPreview.json', { scope }, locale),

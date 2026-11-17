@@ -31,7 +31,7 @@ type Person = { readonly issuer: string; readonly subject: string };
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. `person` (lead 2026-10-08): the person a hand-built
  * policy's file owner names (`--person <issuer>/<subject>`). */
 export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string, person?: Person) => Promise<{ readonly status: string;
-  readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly executionContext?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[]; readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[];
+  readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly executionContext?: readonly unknown[]; readonly executionScopes?: readonly string[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[]; readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[];
   readonly systemRows?: { readonly status: string; readonly packageDigest: string; readonly reason: string | null; readonly conflicts: readonly string[]; readonly withheld: readonly string[] };
   readonly basis?: string | null; readonly person?: Person | null; readonly people?: readonly Person[];
   /** v12 (owner 2026-10-16): what happened to `service.identity` (written/planned/kept/other-scope/skipped/not-set). */
@@ -215,7 +215,7 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
   const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
   const rows = value.systemRows ? [t('beuser.installation.systemRows', { status: value.systemRows.status, digest: value.systemRows.packageDigest, reason: value.systemRows.reason ?? '-', conflicts: value.systemRows.conflicts.join(', ') || '-', withheld: value.systemRows.withheld.join(', ') || '-' }, locale)] : [];
-  return [head, ...policyExecutionLines(value.rules ?? [], scope, locale, value.executionContext), ...rules, ...kept, ...(value.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(value.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
+  return [head, ...policyExecutionLines(value.rules ?? [], scope, locale, value.executionContext, 'full', value.executionScopes), ...rules, ...kept, ...(value.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(value.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
 }
 /** The `service.identity` line (v12): only when something was written, is planned, names another scope or was refused; kept/skipped say nothing. */
 function serviceIdentityText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>['serviceIdentity'], locale: Locale): string[] {

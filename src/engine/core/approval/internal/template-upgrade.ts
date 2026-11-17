@@ -18,6 +18,7 @@ export interface TemplateUpgradeResult {
   readonly rules: readonly PolicyGrant[];
   /** Effective grants used only to describe a genuine partial execution upgrade. */
   readonly executionContext?: readonly PolicyGrant[];
+  /** Validated scopes from the template planner, for the execution notice only. */ readonly executionScopes?: readonly string[];
   readonly summary: string | null;
   readonly missing: readonly TemplateUpgradeMissing[];
   readonly reason: string | null;
@@ -137,12 +138,12 @@ export class PolicyTemplateUpgrade {
     const held = input.only === 'ai-proposals' /* the delta rules held now (what a rollback removes) and those an allow covers: /policy's row and its cards */ ? { held: FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)), ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) } : { ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) };
     if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason, ...held });
     if (plan.status === 'current') return result('current', { conflicts: plan.conflicts, ...held });
-    const summary = describePolicyChange(files, plan.change), executionContext = principalGrants(policy, mcpPrincipalRef(input.principal));
+    const summary = describePolicyChange(files, plan.change), executionContext = principalGrants(policy, mcpPrincipalRef(input.principal)), executionScopes = plan.executionScopes;
     const missing = this.missing(policy, input.principal, input.scopeId, planPolicyChange(files.policy, files.bindings, plan.change).touched);
-    if (input.mode === 'preview') return result('preview', { rules: plan.rules, executionContext, summary, missing, conflicts: plan.conflicts, ...held });
-    if (missing.length) return result('refused', { rules: plan.rules, executionContext, summary, missing, conflicts: plan.conflicts });
+    if (input.mode === 'preview') return result('preview', { rules: plan.rules, executionContext, executionScopes, summary, missing, conflicts: plan.conflicts, ...held });
+    if (missing.length) return result('refused', { rules: plan.rules, executionContext, executionScopes, summary, missing, conflicts: plan.conflicts });
     await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change: plan.change, tag: `template-v5:${plan.rules.map(rule => rule.id).join(',')}`,
       reason: input.reason, revision: policy.revision, kind: UPGRADE });
-    return result('upgraded', { rules: plan.rules, executionContext, summary, conflicts: plan.conflicts });
+    return result('upgraded', { rules: plan.rules, executionContext, executionScopes, summary, conflicts: plan.conflicts });
   }
 }

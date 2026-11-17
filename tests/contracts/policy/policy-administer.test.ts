@@ -9,7 +9,7 @@ import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, POLICY_ADMINISTER_OPERATION,
   describePolicyChange, firstRunExecutionRules, evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, auditPolicyDigest, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
-  PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection, policyExecutionLines } from '#engine/index.js';
+  PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection, PolicyTemplateUpgrade, FIRST_RUN_TOOL_NAMES, policyExecutionLines } from '#engine/index.js';
 import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
@@ -65,6 +65,26 @@ const addRead = (id: string, to: Actor) => ({ schemaVersion: 1, changes: [{ kind
 const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
 
 describe.skipIf(process.platform === 'win32')('119-C2: policy card security', () => {
+  it('119-C2 P2: a hand-built policy short card makes no unavailable full-text promise in EN/TR', async () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const f = await fixture(() => [], ownerRoot);
+      const actor = { issuer: 'i'.repeat(238), subject: 'u'.repeat(256) };
+      const rules = firstRunExecutionRules([], actor, ['s']).wanted;
+      const input = { schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) };
+      const upgrade = new PolicyTemplateUpgrade({ policy: f.source, administration: f.admin, approve: async () => { throw new Error('preview must not approve'); } }, FIRST_RUN_TOOL_NAMES);
+      expect(await upgrade.run({ scopeId: 's', principal: f.principal, mode: 'preview', reason: 'hand-built policy' })).toMatchObject({ status: 'unavailable', reason: 'not-first-run' });
+      const pending = await new PolicyAdministrationApplication({ ...f.deps, locale }).submit(f.command(`short-${locale}`, input));
+      if (pending.status !== 'approval-pending') throw new Error('pending expected');
+      const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary, binding = summary.split('\n')[0]!;
+      const diff = describePolicyChange(await f.files(), input, 2048 - binding.length - 1)!;
+      const short = locale === 'en' ? `Standing AI execution grant for ${actor.issuer}/mcp/${actor.subject} in s: beyond this proposal, including your and other actors' Runs.`
+        : `Kalıcı yapay zekâ yürütme izni: ${actor.issuer}/mcp/${actor.subject}, s kapsamında bu öneriyle sınırlı değildir; senin ve başkalarının işlerini de kapsar.`;
+      expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
+      expect(summary.slice(binding.length + 1 + diff.length)).toBe(`\n${short}`);
+      expect(summary.length).toBeLessThanOrEqual(2048);
+    }
+  });
+
   it('119-C2 security: reused v21 ids with wider scopes or another principal get only the real diff, including in previews', async () => {
     const f = await fixture(() => [], ownerRoot);
     const genuine = firstRunExecutionRules([], f.me, ['s']).wanted;

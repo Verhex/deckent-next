@@ -100,6 +100,7 @@ export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplate
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
+  /** Scopes used by the fresh-install producer, for the execution notice only. */ readonly executionScopes?: readonly string[];
   readonly template: { readonly id: string; readonly version: number };
   readonly planDigest: string; readonly transactionId: string;
   readonly paths: { readonly policy: string; readonly bindings: string };
@@ -158,7 +159,7 @@ export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateIn
   const planDigest = digestOf(`deckent.policy-template-plan.v1\n${canonical({ id: template.id, version: template.version, scopeId, principal,
     targets: targets.map(target => ({ resource: target.resource, path: target.path, digest: target.digest })), ...(rows ? { systemRows: { key: rows.key, packageDigest: rows.packageDigest } } : {}) })}`);
   const transactionId = digestOf(`deckent.policy-template-transaction.v1\n${planDigest}`);
-  const preview: PolicyTemplatePreview = Object.freeze({ schemaVersion: 1, status: 'preview', scopeId, principal,
+  const preview: PolicyTemplatePreview = Object.freeze({ schemaVersion: 1, status: 'preview', scopeId, principal, executionScopes: Object.freeze([scopeId]),
     template: { id: template.id, version: template.version }, planDigest, transactionId, paths: { ...input.paths },
     policy: documents.policy, bindings: documents.bindings, ...(rows ? { systemRows: { key: rows.key, packageDigest: rows.packageDigest, before: resolvePolicyBindings(template.policy, template.bindings), after: resolvePolicyBindings(documents.policy, documents.bindings) } } : {}) });
   return Object.freeze({ preview, targets });
@@ -260,6 +261,7 @@ type Person = { readonly issuer: string; readonly subject: string };
   readonly rules: readonly unknown[];
   /** Effective grants for describing a partial execution upgrade, never additional changes. */
   readonly executionContext?: readonly unknown[];
+  /** Validated scopes from the template planner, never copied from candidate rules. */ readonly executionScopes?: readonly string[];
   /** Rule ids the upgrade would add that already exist with other content: kept as they are, shown for the person to review. */
   readonly conflicts: readonly string[]; readonly covered?: readonly import('#domain/index.js').FirstRunProposalCover[];
   /** Hand-added `agent-tool` rules naming MCP wire names (`mcp__…`): kept, but since T3 an MCP call is decided on `mcp-server`, not on them. */
@@ -329,7 +331,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const exact = upgradeFirstRunPolicy(current, template);
     if (exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
-      return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, wireRules }), next: exact.policy };
+      return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, executionScopes: [scopeId], wireRules }), next: exact.policy };
     }
     if (exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
     const aiGrants = proposalCoverageGrants(current, bindings, principal), additions = firstRunTemplateAdditions(current, { ...names, aiGrants }); // alpha.64: role grants too
@@ -340,11 +342,11 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
       if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: null };
-      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, executionContext: aiGrants, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, mine.rules) };
+      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, executionContext: aiGrants, executionScopes: mine.executionScopes, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, mine.rules) };
     }
     if (additions.status === 'unavailable') return { result: result('unavailable', { reason: additions.reason, revision }), next: null };
     if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: null };
-    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, executionContext: aiGrants, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, additions.rules) };
+    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, executionContext: aiGrants, executionScopes: additions.executionScopes, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
     const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;
