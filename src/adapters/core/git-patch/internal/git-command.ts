@@ -6,6 +6,13 @@ import { WorkspacePatchError } from '#engine/index.js';
 import format from './delivery-format.json' with { type: 'json' };
 import { gitFailure } from './snapshot.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
+export async function checkGitCustodyDirectory(path: string, explain = false) {
+  const stat = await lstat(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || await realpath(path) !== path) throw new WorkspacePatchError('PATCH_UNSAFE');
+  if (stat.mode & 0o022) throw new WorkspacePatchError('PATCH_UNSAFE', undefined, explain ? { reason: 'git-directory-write', path,
+    command: format.directoryPermissionCommand.replace('{path}', `'${path.replaceAll("'", "'\"'\"'")}'`), before: (stat.mode & 0o7777).toString(8).padStart(4, '0'), after: (stat.mode & 0o7777 & ~0o022).toString(8).padStart(4, '0') } : undefined);
+  return path;
+}
 /** Bounded Git process for reference writers: no hooks, fsmonitor, replace objects, network or user/system config.
  * The fixed author/committer identity also names reflog entries. */
 export class GitCommand {
@@ -25,11 +32,10 @@ export class GitCommand {
       child.stdin?.on('error', () => undefined); child.stdin?.end(input);
     });
   }
+  async gitDirectory() { return checkGitCustodyDirectory(await this.run(['rev-parse', '--absolute-git-dir']), true); }
   async custody() {
-    for (const path of [this.options.sourceRoot, this.options.workspaceRoot, await this.run(['rev-parse', '--absolute-git-dir'])]) {
-      const stat = await lstat(path);
-      if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o022) || await realpath(path) !== path) throw new WorkspacePatchError('PATCH_UNSAFE');
-    }
+    for (const path of [this.options.sourceRoot, this.options.workspaceRoot]) await checkGitCustodyDirectory(path);
+    await this.gitDirectory();
   }
   /** The canonical, owned, not group/other-writable Git common directory. Identity uses path and inode only; the device number is
    * returned solely to recognize a ticket bound before QUEUE-SMALL 2 (`legacyQueueBinding`). */
@@ -39,3 +45,6 @@ export class GitCommand {
     return { path, inode: stat.ino, device: stat.dev };
   }
 }
+
+/** Read-only preflight, using the delivery writer's exact check and isolated Git command. */
+export const inspectGitDeliveryDirectory = (options: GitWorkspaceOptions) => new GitCommand(options).gitDirectory();

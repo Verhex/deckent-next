@@ -1166,7 +1166,7 @@
   "terminal.delivery.next.POLICY_DENIED": "Next: delivery needs the prepare-integration and deliver-integration grants (adopt-integration for a branch). Ask the policy owner (/policy), then open /deliver again.",
   "terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED": "Next: open deckent in a real interactive terminal on this host (input and output on the same TTY) and use /deliver there; MCP, SDK and piped sessions cannot confirm.",
   "terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED": "Nothing was written. The task still awaits delivery; /deliver opens it again.",
-  "terminal.delivery.next.ADOPTION_TARGET_DENIED": "Next: the delivery stays at its reference. Add the branch to execution.adoption.targets (/config) to adopt it here.",
+  "terminal.delivery.next.ADOPTION_TARGET_DENIED": "Next: file delivery needs no adoption and makes no commit. Branch delivery needs separate configuration in execution.adoption.targets (/config) and approval.",
   "terminal.delivery.next.ADOPTION_NOT_VERIFIED": "Next: the delivery stays at its reference and the branch did not move. This installation adopts a branch only with an accepted verification Run of the delivered commit: choose one in this window (y on the branch), or adopt from the command line: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`",
   "terminal.delivery.next.ADOPTION_BASE_CHANGED": "Next: {target} moved past this delivery's base, so it was not moved (deckent never rebases or merges). To adopt this result anyway, make a new branch at the delivery's base (git branch deckent/next {ref}^), add refs/heads/deckent/next to execution.adoption.targets (/config) and adopt it there; or merge {ref} into {target} yourself with Git. With a work target, r re-prepares it on the moved branch through the queue.",
   "terminal.delivery.nextDefault": "Nothing more was written. /deliver opens it again; /run shows the Run.",
@@ -1240,5 +1240,7 @@
   "tui.theme.sample.codeBlock": "Code block: | console.log(ready);",
   "tui.beuser.slash": "Inspect BeUser walks and limits",
   "tui.provider.beta": "Beta — this connection may be unavailable",
-  "tui.provider.apiTitle": "API providers"
+  "tui.provider.apiTitle": "API providers",
+  "terminal.delivery.candidateTitle": "{title} · candidate ready; not delivered",
+  "terminal.delivery.permissionHints": "y narrow this folder · n/Esc keep its permission"
 }

@@ -1,19 +1,19 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, open, readFile, readdir, rename, rm, utimes, writeFile, type FileHandle } from 'node:fs/promises';
+import { chmod, symlink, mkdtemp, mkdir, open, readFile, readdir, rename, rm, utimes, writeFile, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
+  inspectGitDeliveryDirectory, GitQueueTarget, GitWorkingTreeDelivery, captureWorkingTreeBase, removeRunBase, sweepRunBases, workerTreeDenied, openSqliteAttemptStore, resolveGitWorkTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { deliveryMode } from '#platform/index.js';
 import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
 import { workingTreeRemovalPatterns } from '#adapters/core/git-patch/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, planQueueCommit, assertIntegrationBase, SnapshotBudget, gitBlobOid, classifyLaunchRefusal, WorkspacePatchError, WorkingTreeRollbackApplication, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot, TargetQueueRecord } from '#domain/index.js';
-import { terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
+import { awaitingDeliveryTargets, terminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
 // F1 (Astra 3015): the person's save is injected exactly between the working-tree writer's steps; every other call is the real one.
@@ -692,4 +692,35 @@ describe.skipIf(process.platform !== 'linux')('working-tree delivery conflicts, 
     expect((await resolveGitWorkTarget('/p', { git, adoption }, layout)).git).toEqual({ sourceRoot: '/p' });
     expect((await resolveGitWorkTarget('/p', { git, adoption: { targets: [] } }, layout)).git).toEqual({ sourceRoot: '/p', workingTree: true });
   });
+});
+
+// D1: the same adapter check feeds delivery refusal and every early warning.
+it.skipIf(process.platform !== 'linux')('D1 refuses writable Git metadata with the canonical folder and command, keeps symlink/uid guards, and delivers at 0755', async () => {
+  const f = await fixture(false), patch = f.patch('permission', 'a.txt', 'a before\n', 'changed\n'), candidate = await f.prepare(patch), gitDir = join(f.sourceRoot, '.git');
+  await chmod(gitDir, 0o775);
+  const expected = { code: 'PATCH_UNSAFE', params: { reason: 'git-directory-write', path: gitDir, command: `chmod go-w -- '${gitDir}'` } };
+  await expect(inspectGitDeliveryDirectory(f.options)).rejects.toMatchObject(expected);
+  await expect(f.deliver(patch, candidate)).rejects.toMatchObject(expected);
+  expect(await readFile(join(f.sourceRoot, 'a.txt'), 'utf8')).toBe('a before\n');
+  await chmod(gitDir, 0o755);
+  expect(await inspectGitDeliveryDirectory(f.options)).toBe(gitDir);
+  const [target] = awaitingDeliveryTargets([{ scopeId: 's', runId: patch.identity.runId, state: { kind: 'terminal' }, tasks: [{ id: 't', phase: 'accepted', taskBrief: { task: 'Write the file' },
+    resultBrief: { deliveryOutlook: 'awaiting-delivery', runDelivery: { state: 'integrated', commandId: candidate.manifest.command.commandId } } }] }] as never, 'Task');
+  expect(target?.candidateCommandId).toBe(candidate.manifest.command.commandId);
+  let prepared = 0, reopened = '';
+  const port = terminalDeliveryPort(f.sourceRoot, {
+    inspectInventory: async () => ({ page: { entries: [{ identity: patch.identity }], nextAfter: null } }), previewWorkspacePatch: async () => ({ patch }),
+    checkWorkspaceIntegration: async () => ({ observation: await f.target.observe(patch), proposal: '0'.repeat(20), scope: { status: 'unscoped' } }),
+    prepareWorkspaceIntegration: async () => { prepared++; throw new Error('must reuse the candidate'); }, renderUnifiedDiff: () => '',
+    interactiveDelivery: () => ({ assertAvailable: async () => {}, deliver: async (_root: string, command: { integrationCommandId: string }) => {
+      reopened = command.integrationCommandId; return f.deliver(patch, candidate);
+    } }),
+  } as never, { env: homeEnv(join(f.sourceRoot, 'home')) })!;
+  await port.deliver(await port.preview(target!), { candidate: 'new-candidate', delivery: 'retry-delivery' }, async () => true);
+  expect(prepared).toBe(0); expect(reopened).toBe(candidate.manifest.command.commandId);
+  const uid = process.getuid!(); vi.spyOn(process, 'getuid').mockReturnValue(uid + 1);
+  await expect(inspectGitDeliveryDirectory(f.options)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' }); vi.restoreAllMocks();
+  const { checkGitCustodyDirectory } = await import('../../../src/adapters/core/git-patch/internal/git-command.js');
+  await symlink(gitDir, join(f.sourceRoot, 'git-link'));
+  await expect(checkGitCustodyDirectory(join(f.sourceRoot, 'git-link'), true)).rejects.toMatchObject({ code: 'PATCH_UNSAFE', params: undefined });
 });

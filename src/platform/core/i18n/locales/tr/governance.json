@@ -1295,5 +1295,8 @@
   "config.issue.minimumExclusive": "şu değerden büyük: {minimum}",
   "error.WORK_CLASS_NOT_REGISTERED.available": "İstenen iş sınıfı kayıtlı değil. Şu kayıtlı iş sınıflarından birini seçin: {allowed}.",
   "error.RUN_PROPOSAL_WORK_CLASS_REQUIRED.available": "Önerilen her görev, iş girdisiyle tutarlı kayıtlı bir iş sınıfı taşımalıdır. Şunlardan birini seçin: {allowed}.",
-  "error.PROJECT_ATTACHMENT_DENIED.declined": "Klasör izinlerini değiştirmemeyi seçtiniz: {path}. Kuruluma devam edilmedi. Devam etmek için kendi terminalinizde deckent init komutunu yeniden çalıştırın ve klasör izin kartını onaylayın."
+  "error.PROJECT_ATTACHMENT_DENIED.declined": "Klasör izinlerini değiştirmemeyi seçtiniz: {path}. Kuruluma devam edilmedi. Devam etmek için kendi terminalinizde deckent init komutunu yeniden çalıştırın ve klasör izin kartını onaylayın.",
+  "error.PATCH_UNSAFE.gitDirectoryWrite": "Başka hesaplar {path} Git klasörüne yazabildiği için deckent buraya güvenle teslim edemiyor. Çalıştırın: {command}",
+  "error.PATCH_UNSAFE.gitDirectoryDeclined": "Git klasörünün iznini değiştirmemeyi seçtiniz: {path}. Bu karar kişiye aittir. Teslim hâlâ engelli. Daha sonra daraltmak için: {command}",
+  "error.ADOPTION_TARGET_DENIED.files": "Dosyalarınız teslim edildi, commit atılmadı. Bu yol için dala alma gerekmez. Dal teslimi ayrı yapılandırma ve onay ister; istenen dal değiştirilmedi."
 }

@@ -1,3 +1,4 @@
+import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView, QueueConsent } from '#engine/index.js';
@@ -11,6 +12,7 @@ import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */
 export interface DeliveryWindowLabels {
+  readonly permissionHints?: string; readonly permissionCard?: (path: string, before: string, after: string, command: string) => CliCardRequest;
   readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   /** TESLIM-KARTI-OZET (shared renderer): a ticket's or Attempt's summary lines (`brief` leaves out what the window shows itself: title, operation,
@@ -22,7 +24,7 @@ export interface DeliveryWindowLabels {
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
   /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
-  readonly deliveredTitle: string; readonly adoptNone: string;
+  readonly candidateTitle?: string; readonly deliveredTitle: string; readonly adoptNone: string;
   /** R9p working-tree mode: where the yes writes, the confirm line, the result row and summary, and the next step of a file conflict. */
   readonly whereFiles: string; readonly confirmFiles: string; readonly deliveredFiles: string; readonly summaryWritten: string; readonly setAside: string; readonly nextConflictFiles: string;
   /** L1c (owner "güncel hâle göre yeniden yap sunar"): the `r` hint of a working-tree conflict whose task request the Run recorded. */ readonly redoFiles: string;
@@ -42,7 +44,7 @@ export interface DeliveryWindowLabels {
 }
 type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
-type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
+type Stage = Readonly<{ kind: 'permission'; card: CliCardRequest; resolve: (yes: boolean) => void }> | Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
   | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; summaries?: readonly (DeliverySummary | null)[]; resolve: (yes: boolean) => void }>
   | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'verify' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
 /** The verification choice of the selected branch: the candidates (null while read), the selected row and the last refusal or read failure. */
@@ -56,7 +58,7 @@ const QUEUE_REPREPARE = new Set(['PATCH_BASE_ADVANCED', 'ADOPTION_BASE_CHANGED',
 const VERIFY_RETRY = new Set(['ADOPTION_NOT_VERIFIED', 'ADOPTION_VERIFICATION_MISMATCH', 'ADOPTION_VERIFICATION_CRITERIA_WEAKER', 'ADOPTION_VERIFICATION_FAILED',
   'ADOPTION_VERIFICATION_PENDING', 'ADOPTION_VERIFICATION_UNSETTLED', 'ADOPTION_VERIFICATION_CANCELLED']);
 interface Entry {
-  readonly target: DeliveryTarget; readonly sinceMs: number;
+  target: DeliveryTarget; readonly sinceMs: number;
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
@@ -123,7 +125,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       entry = { target, sinceMs: Date.now(), opening, generation: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
         selected: 0, closed: false, settled: false, verify: null };
       entries.current.set(target.key, entry); load(entry);
-    } else if (entry.closed && !entry.delivered) load(entry);
+    } else if (!entry.delivered && (entry.closed || entry.stage.kind === 'failed')) { entry.target = target; load(entry); }
     entry.closed = false; entry.opening = opening; entry.generation++;
     order.current = opening === 'foreground' ? [target.key, ...order.current.filter(key => key !== target.key)]
       : order.current.includes(target.key) ? order.current : [...order.current, target.key];
@@ -134,7 +136,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const targets = useMemo(() => labels ? awaitingDeliveryTargets(input.runs, labels.fallbackTitle) : [], [input.runs, labels]);
   useEffect(() => { for (const target of targets) if (!seen.current.has(target.key)) open(target, 'background'); }, [targets, open]);
   // An unmounted terminal answers every waiting card with no.
-  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); else if (entry.stage.kind === 'queue-confirm') entry.stage.resolve(false); }, []);
+  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); else if (entry.stage.kind === 'queue-confirm' || entry.stage.kind === 'permission') entry.stage.resolve(false); }, []);
 
   const answer = useCallback((entry: Entry) => async (view: EffectConfirmationView): Promise<boolean> => {
     const consent = entry.consent; entry.consent = null;
@@ -180,10 +182,15 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     entry.consent = { operation: 'deliver-integration', scopeId: preview.identity.scopeId, runId: preview.identity.runId, taskId: preview.identity.taskId,
       commandId: entry.ids.delivery, files: preview.files.map(file => file.path), from: preview.base, ...(preview.changes ? { changes: preview.changes } : {}) };
     entry.stage = { kind: 'working' }; changed();
-    current.deliver(preview, entry.ids, answer(entry)).then(outcome => {
+    const permission = words.permissionCard ? (path: string, before: string, after: string, command: string) => new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
+      const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'working' }; changed(); resolve(yes); };
+      entry.stage = { kind: 'permission', card: words.permissionCard!(path, before, after, command), resolve: finish }; changed();
+    }) : undefined;
+    current.deliver(preview, entry.ids, answer(entry), permission).then(outcome => {
       entry.delivered = outcome; entry.consent = null;
-      entry.stage = { kind: preview.adoptionTargets.length ? 'delivered' : 'done' };
-      if (!preview.adoptionTargets.length) entry.settled = true;
+      entry.stage = { kind: !preview.workingTree && preview.adoptionTargets.length ? 'delivered' : 'done' };
+      if (preview.workingTree || !preview.adoptionTargets.length) entry.settled = true;
       latest.current.summary(fillTemplate(preview.workingTree ? words.summaryWritten : words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref,
         command: outcome.commandId }) + (outcome.setAside?.length ? `\n${fillTemplate(words.setAside, { files: outcome.setAside.join(', ') })}` : ''));
       changed();
@@ -224,7 +231,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const close = useCallback((entry: Entry) => {
     const words = latest.current.labels!;
     if (entry.stage.kind === 'working' || entry.stage.kind === 'adopting' || entry.stage.kind === 'queue-working') return;
-    if (entry.stage.kind === 'queue-confirm') { entry.stage.resolve(false); return; }
+    if (entry.stage.kind === 'queue-confirm' || entry.stage.kind === 'permission') { entry.stage.resolve(false); return; }
     if (entry.stage.kind === 'confirm') { entry.stage.waiting.resolve(false); return; }
     // The one transcript line of a window that ends without a new result: left waiting, or why it was not done (a success already wrote its line).
     const title = humanRecordText(entry.target.title, latest.current.known), stage = entry.stage;
@@ -246,6 +253,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
+        if (stage.kind === 'permission') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
         if (text === 'r' && !key.ctrl && !key.meta && redoable(visible) && input.redo) { input.redo(`/do ${visible.target.request}`); close(visible); return true; }
         if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
@@ -319,7 +327,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     if (!labels) return [];
     const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
     // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).
-    return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
+    return [...awaiting.map(target => target.candidateCommandId && labels.candidateTitle ? Object.freeze({ ...target, title: fillTemplate(labels.candidateTitle, { title: target.title }) }) : target), ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
       && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
     target: (key: string) => entries.current.get(key)?.target ?? null,
@@ -343,6 +351,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'queue-confirm': return labels.confirmHints;
     case 'ready': return entry.preview?.diffs?.length ? entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : `${labels.hints} · ${labels.diffListHints}` : labels.hints;
     case 'confirm': return labels.confirmHints;
+    case 'permission': return labels.permissionHints ?? labels.confirmHints;
     case 'delivered': return labels.adoptHints;
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
@@ -360,6 +369,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
+  if (stage.kind === 'permission') return [line(stage.card.title, { bold: true }), ...(stage.card.body ?? []).map(value => line(value)), ...stage.card.options.map(option => line(option.label))];
   const rows: WindowLine[] = [line(fillTemplate(labels.ids, { run: shortId(target.runId), task: target.taskId }), { role: 'muted' })];
   // The summary stands ABOVE the exact card or status, never inside it (the consent stays bound to the card's digest).
   if (stage.kind === 'queue-confirm' && labels.queue) return [...rows, ...(labels.cardSummary?.consent(stage.summaries ?? []) ?? []).map(value => line(value)),
@@ -389,7 +399,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     if (!delivered) {
       if (preview.summary !== undefined && labels.cardSummary) rows.push(...labels.cardSummary.lines(preview.summary, true, preview.workingTree === true).map(value => line(value)));
       rows.push(line(preview.workingTree ? labels.whereFiles : labels.where, { role: 'muted' }));
-      if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
+      if (!preview.workingTree && preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
       if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));
     }
   }

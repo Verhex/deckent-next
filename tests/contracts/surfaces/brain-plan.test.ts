@@ -43,3 +43,16 @@ it('MCP plan_run shares the contract, rejects decision fields and has no approva
   expect(JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: { scopeId: 's', decision: 'allow' } }))).toContain('MCP_TOOL_UNKNOWN');
   expect(tools.map(tool => tool.name)).not.toContain('decide_approval'); expect(calls).toEqual([]);
 });
+
+it('D1 CLI do warns before planning, also in JSON, and never offers permission repair', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-do-permission-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/config.json'), '{}');
+  for (const locale of ['en', 'tr']) {
+    const order: string[] = [], output: string[] = [], errors: string[] = [], result = pendingBrainFixture();
+    const context = { root, env: { HOME: join(root, 'home') }, stdout: { write: (text: string) => output.push(text) }, stderr: { write: (text: string) => { order.push('warning'); errors.push(text); } },
+      gitDeliveryPermission: async (_root: string, _options: unknown, confirm?: unknown) => { expect(confirm).toBeUndefined(); return { path: '/project/.git', command: "chmod go-w -- '/project/.git'", before: '0775', after: '0755' }; },
+      planRun: async () => { order.push('plan'); return result; } };
+    expect(await main(['do', '--scope', 's', '--request', 'Write the file', '--json', '--lang', locale], context)).toBe(0);
+    expect(order).toEqual(['warning', 'plan']); expect(errors.join('')).toContain("chmod go-w -- '/project/.git'"); expect(JSON.parse(output.join(''))).toEqual(result);
+  }
+});

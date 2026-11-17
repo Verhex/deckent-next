@@ -879,3 +879,24 @@ describe('delivery card summaries in the window and its port (alpha.53 A3)', () 
     await unbound.queue!.confirm('s', 'q1', async (_view, summaries) => { seen = summaries; return false; }); expect(seen).toEqual([]);
   });
 });
+
+it('D1 the delivery permission card requires its own explicit answer; no leaves it refused, yes continues without adoption', async () => {
+  for (const choice of ['n', '\r', 'y']) {
+    const yes = choice === 'y';
+    const h = harness({ workingTree: true, targets: ['refs/heads/main'] }), original = h.port.deliver, preview = h.port.preview;
+    h.port.preview = async target => ({ ...await preview(target), workingTree: true });
+    h.port.deliver = async (preview, ids, answer, permission) => {
+      expect(permission).toBeTypeOf('function');
+      if (!await permission!("/project's/.git", '0775', '0755', 'chmod go-w -- folder')) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: "/project's/.git", command: 'chmod go-w -- folder' } });
+      return original(preview, ids, answer);
+    };
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    expect(frame(h)).toContain("/project's/.git"); expect(frame(h)).toContain('0775 → 0755');
+    await press(h, choice);
+    await until(() => yes ? frame(h).includes('Written into your files') : frame(h).includes('You chose to leave'), 'permission answer');
+    expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false);
+    h.view.instance.unmount();
+  }
+});

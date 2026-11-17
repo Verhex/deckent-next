@@ -1,4 +1,5 @@
-import { optionalField, loadConfig, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, optionalField, loadConfig, patchBody, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { workingTreeSource, patchChangeDigests, type DeliverySummaryRequest, type IntegrationAdoptionCommand, type IntegrationCommand, type IntegrationDeliveryCommand, type QueueConsent, type QueueQuery,
   type QueueSubmitClient, type RunQuery, type RunView, type TargetBatchExecution, type TargetQueueView, type WorkspaceAdoptionApplication, type WorkspaceDeliveryApplication,
@@ -9,7 +10,7 @@ import { queueConfigRefusal, type DeliveryAnswer, type DeliveryFileDiff, type De
 import PORT from './deliver-port.json' with { type: 'json' };
 
 /** The handlers the delivery port reads (KG9 F3: one Ink-free delivery-port unit): the terminal's launch context and the `task` command's context both satisfy it. */
-export interface DeliveryPortHost {
+export interface DeliveryPortHost extends Pick<CliBaseContext, 'gitDeliveryPermission'> {
   inspectInventory?: InventoryQueryHandler;
   inspectRun?: (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ run: RunView | null }>>;
   previewWorkspacePatch?: (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ patch: WorkspacePatch }>>;
@@ -138,12 +139,15 @@ export function terminalDeliveryPort(root: string, context: DeliveryPortHost, op
       const stat = patchStat(patch.changes, renderUnifiedDiff), files = workingTreeSource(patch.source);
       return Object.freeze({ target, identity, ...stat, source: '', base: '', proposal: '', outOfScope: [], adoptionTargets: Object.freeze(files ? [] : [...config.execution?.adoption.targets ?? []]),
         verification: bar ? Object.freeze({ kind: bar.kind, required: bar.required }) : null, ...(files ? { workingTree: true as const } : {}) }); },
-    async deliver(preview, ids, answer) {
+    async deliver(preview, ids, answer, permission) {
       const handlers = interactiveDelivery(answer);
       // A session that is not a verified human terminal is refused before any candidate is prepared.
       await handlers.assertAvailable();
-      await prepareWorkspaceIntegration(root, { schemaVersion: 1, commandId: ids.candidate, identity: preview.identity, proposal: preview.proposal }, options);
-      const delivered = await handlers.deliver(root, { schemaVersion: 1, commandId: ids.delivery, identity: preview.identity, integrationCommandId: ids.candidate }, options);
+      const candidate = preview.target.candidateCommandId ?? ids.candidate;
+      const delivered = await withGitDeliveryPermission(async () => {
+        if (!preview.target.candidateCommandId) await prepareWorkspaceIntegration(root, { schemaVersion: 1, commandId: candidate, identity: preview.identity, proposal: preview.proposal }, options);
+        return handlers.deliver(root, { schemaVersion: 1, commandId: ids.delivery, identity: preview.identity, integrationCommandId: candidate }, options);
+      }, context, root, options, permission);
       return Object.freeze({ ref: delivered.plan.ref, commit: delivered.plan.commit, commandId: ids.delivery, setAside: delivered.setAside });
     },
     async adopt(preview, delivery, targetRef, commandId, answer, verificationRunId) {
@@ -180,4 +184,17 @@ export function terminalDeliveryPort(root: string, context: DeliveryPortHost, op
       return Object.freeze(found);
     },
   };
+}
+
+/** Retry the same command once, only after the witnessed folder card succeeded. Other unsafe causes are unchanged. */
+export async function withGitDeliveryPermission<T>(work: () => Promise<T>, context: Pick<CliBaseContext, 'gitDeliveryPermission'>, root: string, options: ConfigLoadOptions,
+  confirm?: (path: string, before: string, after: string, command: string) => Promise<boolean>): Promise<T> {
+  try { return await work(); }
+  catch (error) {
+    if (!confirm || !context.gitDeliveryPermission || !isCodedError(error, 'PATCH_UNSAFE') || error.params?.['reason'] !== 'git-directory-write') throw error;
+    let yes = false;
+    await context.gitDeliveryPermission(root, options, async (...args) => { yes = await confirm(...args); return yes; });
+    if (!yes) throw error;
+    return work();
+  }
 }

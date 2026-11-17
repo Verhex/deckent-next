@@ -286,6 +286,8 @@ flowchart LR
   L --> R["Git referansı<br/><sub>dalı ilerletmek ayrı</sub>"]
 ```
 
+Yeni bir depo için o kabukta `umask 022; git init` çalıştırın; deckent genel umask ayarınızı değiştirmez.
+
 En az bir commit'i olan Git projesinde ve bağlı bir modelle başlayın. Claude veya ChatGPT aboneliği için `/provider`
 içinden giriş yapıp bağlanın, ardından işçiyi hazırlamak için `/setup` açın. Bu Claude/Codex CLI işçileri Linux/WSL'de
 bubblewrap içinde çalışır ve Docker imajı istemez. CLI'a deckent dışında giriş yapmak bu kurulumu tamamlamaz.

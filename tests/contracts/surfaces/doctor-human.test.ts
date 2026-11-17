@@ -594,3 +594,11 @@ it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with 
   await check(legacy, 0);
   await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
 });
+
+it('D1 doctor reports the shared Git directory warning and command without offering repair', async () => {
+  const root = await project(); let out = '', inspections = 0;
+  await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'home') }, stdout: { write: (text: string) => { out += text; } }, stderr: { write() {} },
+    gitDeliveryPermission: async (_root, _options, confirm) => { expect(confirm).toBeUndefined(); inspections++; return { path: '/project/.git', command: "chmod go-w -- '/project/.git'", before: '0775', after: '0755' }; },
+  });
+  expect(inspections).toBe(1); expect(out).toContain('Other accounts can write to Git folder /project/.git'); expect(out).toContain("chmod go-w -- '/project/.git'");
+});

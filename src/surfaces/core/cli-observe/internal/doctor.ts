@@ -140,6 +140,8 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
+  const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
+  if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: t('error.PATCH_UNSAFE.gitDirectoryWrite', permission, locale), next: permission.command });
   if (await context.inspectLegacyProjectInstructions?.(root).catch(() => false)) checks.push({ group: 'setup', id: 'instructions.legacy', state: 'warning',
     text: t('setup.instructions.legacy', {}, locale), next: t('setup.instructions.legacyNext', {}, locale) });
   // BeUser D-04/ZEY-02: missing founder cells are a warning with the card's exact command, never a green row (pool hold, operations need them).

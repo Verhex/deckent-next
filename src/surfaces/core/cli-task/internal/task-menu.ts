@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { displayId, listRunIds, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
-import type { TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
+import { awaitingDeliveryTargets, type TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import type { TaskCommandContext } from './context.js';
 import { deliverTask, type TaskCardAsk } from './task-deliver.js';
 import { phaseWord } from './task-inspect.js';
@@ -132,7 +132,7 @@ export async function taskMenu(context: TaskCommandContext, io: TaskMenuIo, give
     if (choice === 'inspect' || choice === 'transcript') await io.show(choice, target);
     else if (choice === 'diff') await io.show('patch-preview', target);
     else if (choice === 'accept' || choice === 'reject') await decide(choice, target, context, io);
-    else await deliverTask(io.deliveryPort!, { key: `${target.scopeId}:${target.runId}:${target.taskId}`, ...target, title: title(task) || task.id },
+    else await deliverTask(io.deliveryPort!, awaitingDeliveryTargets([run], task.id).find(value => value.taskId === target.taskId) ?? { key: `${target.scopeId}:${target.runId}:${target.taskId}`, ...target, title: title(task) || task.id },
       { locale: io.locale, ask: io.ask, print: io.print, diff: () => io.show('patch-preview', target) });
   }
 }

@@ -579,7 +579,7 @@
   "monitor.approval.summaryHidden": "you may not see the summary",
   "monitor.col.delivery": "Delivery",
   "monitor.delivery.integrating": "integrating",
-  "monitor.delivery.integrated": "integrated",
+  "monitor.delivery.integrated": "candidate ready; not delivered",
   "monitor.delivery.delivering": "delivering",
   "monitor.delivery.delivered": "delivered",
   "monitor.delivery.adopting": "adopting",

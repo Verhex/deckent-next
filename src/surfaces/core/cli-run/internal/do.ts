@@ -29,6 +29,8 @@ export async function doCommand(argv: readonly string[], context: RunCommandCont
   const observe = (progress: BrainPlanProgress) => { stderr.write(`${progress.kind === 'billing-switch' ? t('siwc.switch.notice', { model: progress.reference.modelId }, locale) : progress.kind === 'quota-wait'
     ? t('brainwait.cli', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale)
     : t('brainwait.resumed', { attempt: progress.attempt }, locale)}\n`); };
+  const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
+  if (permission) stderr.write(`${t('error.PATCH_UNSAFE.gitDirectoryWrite', permission, locale)}\n`);
   const result = await context.planRun(root, command, options, context.signal, observe);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: value => [t('cli.do.command', { command: command.commandId }, locale), ...brainProposalLines(value, locale)].join('\n') });
 }

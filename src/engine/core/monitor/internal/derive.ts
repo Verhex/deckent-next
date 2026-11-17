@@ -1,3 +1,4 @@
+import { sameAttemptIdentity } from '#domain/index.js';
 import { workerBillingAxis } from '#engine/core/provider-spend/index.js';
 import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
 import { RUN_OPEN_PHASES, summarizeWorkCosts } from '#domain/index.js';
@@ -146,16 +147,23 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
  * one whose dispatch recorded no retained patch is `patch-not-prepared` (the preparation failure itself is not recorded in the ledger, so no cause is claimed),
  * else a retained patch awaits delivery; no such task means nothing to deliver. Unknown evidence (an older reader without the patch record) yields no outlook.
  */
+const settledDelivery = new Set(['delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']);
+const taskDelivered = (e: MonitorRunEvidence, taskId: string) => {
+  const identity = e.run.snapshot.bindings.find(binding => binding.identity.taskId === taskId)?.identity;
+  return identity && e.run.deliveryReceipts?.some(value => value.identity && sameAttemptIdentity(value.identity, identity) && settledDelivery.has(value.receipt.state));
+};
 /** BeUser M-33: an awaiting Run whose every retained patch a person set aside (`e.dismissed`). */
 const allSetAside = (e: MonitorRunEvidence) => { const { scopeId, runId } = e.run.snapshot.identity; const ready = e.run.snapshot.graph.tasks.filter(task => task.workInput
-  && e.run.snapshot.progress.find(value => value.taskId === task.id)?.phase === 'accepted' && attemptOf(e.run, task.id)?.dispatch?.patchRecorded === true);
+  && e.run.snapshot.progress.find(value => value.taskId === task.id)?.phase === 'accepted' && attemptOf(e.run, task.id)?.dispatch?.patchRecorded === true && !taskDelivered(e, task.id));
   return ready.length > 0 && ready.every(task => e.dismissed?.has(`${scopeId}\0${runId}\0${task.id}`)); };
 function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
-  if (state !== 'accepted' || e.run.delivery || e.run.deliveryOutputPermitted === false) return undefined;
+  if (state !== 'accepted' || e.run.deliveryOutputPermitted === false) return undefined;
+  if (!e.run.deliveryReceipts && e.run.delivery && settledDelivery.has(e.run.delivery.state)) return undefined;
   const snapshot = e.run.snapshot; let ready = false, unknown = false;
   for (const task of snapshot.graph.tasks) {
     const progress = snapshot.progress.find(value => value.taskId === task.id);
     if (!task.workInput || progress?.phase !== 'accepted') continue;
+    if (taskDelivered(e, task.id)) continue;
     const recorded = attemptOf(e.run, task.id)?.dispatch?.patchRecorded;
     if (recorded === false) return 'patch-not-prepared';
     if (recorded === true) ready = true; else unknown = true;
