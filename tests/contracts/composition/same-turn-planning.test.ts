@@ -21,7 +21,7 @@ import { FAMILY } from '../../fixtures/native-headless/stream.js';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); vi.restoreAllMocks(); });
 // Existing known-red convention: executable body retained under it.todo (setup-init-wired-pty.test.ts).
-// Explicit opt-in runs the real RED; after K1/K2 replace this selector with `it`, without changing the oracle.
+// Explicit opt-in runs the real RED; the green transition also needs challenge/draft/normal-close replay (README.txt).
 for (const family of [CODEX_FAMILY, FAMILY]) {
   const name = `K3a ${family}: one subscription slot reaches one person card inside its open chat claim`;
   const check = async () => {

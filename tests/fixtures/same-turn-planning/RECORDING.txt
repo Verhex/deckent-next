@@ -74,6 +74,15 @@ generation/correlation, argsDigest, token-inclusive P bytes/resultDigest and rel
 Actual W remains in captured native stdout. The public manifest never stores the
 bridge credential, child environment or private MCP config. Run files are disposed.
 
+Failure metadata includes attemptStage, failure {stage, code} and cleanupFailures.
+invocationState is not-started with count 0 only before the runner is called or
+when its returned evidence says started=false; returned started=true gives count 1.
+A runner throw leaves invocationState=unknown and invocationCount=null, even if
+the runner may already have run the process. process=null then means no returned
+process evidence, never proof of no invocation. Any known process result survives
+capture/cleanup failures, and each cleanup is attempted even if another fails.
+Failure messages/stacks and raw output from a throwing runner are not persisted.
+
 Before persisting raw stdout/stderr the kit checks the bridge's known-secret snapshot
 and credential/JWT/email patterns. A hit writes only failure metadata, never raw
 streams. This heuristic is not a proof that all possible secrets are absent; the lead

@@ -1,13 +1,54 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { nativeAgentToolResultSchema, nativeAgentInitReason } from '#capabilities/index.js';
 import { parseBrainDraft } from '#capabilities/core/run-planner/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { AI_PROPOSAL_TOOL_SPECS } from '#engine/index.js';
+import { recordAttempt } from '../../fixtures/same-turn-planning/record-attempt.mjs';
 
 const base = new URL('../../fixtures/same-turn-planning/', import.meta.url);
 const sha = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
+it('retains recording failure stages, unknown invocation and known results across cleanup failures without retry', async () => {
+  const fault = (code: string) => Object.assign(new Error('private error detail must not enter metadata'), { code });
+  const evidence = { started: true, reason: 'exit', exitCode: 0, signal: null, stdoutTruncated: false, stderrTruncated: false,
+    limit: null, egress: { connected: 1, refused: 0, hosts: {}, other: 0 } };
+  const run = vi.fn(async () => evidence), capture = vi.fn(async () => undefined), closed: string[] = [];
+  const cleanup = [['bridge-close', async () => { closed.push('bridge'); }], ['launch-dispose', async () => { closed.push('launch'); }]];
+  const beforeRunner = await recordAttempt({ prepare: async (at: (stage: string) => void) => { at('binary-realpath'); throw fault('ENOENT'); }, run, capture, cleanup });
+  expect(JSON.parse(JSON.stringify(beforeRunner))).toMatchObject({ attemptStage: 'binary-realpath', invocationState: 'not-started', invocationCount: 0,
+    failure: { stage: 'binary-realpath', code: 'ENOENT' }, process: null, cleanupFailures: [] });
+  expect(run).not.toHaveBeenCalled(); expect(capture).not.toHaveBeenCalled(); expect(closed).toEqual(['bridge', 'launch']);
+
+  const prepare = async () => undefined;
+  // A runner can throw before spawn OR after an effect with no returned ProcessEvidence. Neither proves zero calls.
+  const throwsBefore = vi.fn(async () => { throw fault('HEADLESS_ISOLATION_UNAVAILABLE'); });
+  const unknownBefore = await recordAttempt({ prepare, run: throwsBefore, capture, cleanup: [] });
+  expect(unknownBefore).toMatchObject({ attemptStage: 'runner', invocationState: 'unknown', invocationCount: null,
+    failure: { stage: 'runner', code: 'HEADLESS_ISOLATION_UNAVAILABLE' }, process: null });
+  let fakeEffects = 0;
+  const throwsAfter = vi.fn(async () => { fakeEffects++; throw fault('REALM_FAILED_AFTER_PROCESS'); });
+  const unknownAfter = await recordAttempt({ prepare, run: throwsAfter, capture, cleanup });
+  expect(unknownAfter).toMatchObject({ invocationState: 'unknown', invocationCount: null,
+    failure: { stage: 'runner', code: 'REALM_FAILED_AFTER_PROCESS' }, process: null });
+  expect(throwsBefore).toHaveBeenCalledTimes(1); expect(throwsAfter).toHaveBeenCalledTimes(1); expect(fakeEffects).toBe(1);
+  expect(capture).not.toHaveBeenCalled();
+
+  const notStarted = await recordAttempt({ prepare, run: async () => ({ ...evidence, started: false, reason: 'cancelled', exitCode: null }), capture, cleanup: [] });
+  expect(notStarted).toMatchObject({ invocationState: 'not-started', invocationCount: 0, process: { reason: 'cancelled', exitCode: null } });
+
+  const disposal = vi.fn(async () => { throw fault('DISPOSE_FAILED'); });
+  const cleanupOnly = await recordAttempt({ prepare, run, capture,
+    cleanup: [['bridge-close', async () => { throw fault('CLOSE_FAILED'); }], ['launch-dispose', disposal]] });
+  expect(JSON.parse(JSON.stringify(cleanupOnly))).toMatchObject({ attemptStage: 'bridge-close', invocationState: 'started', invocationCount: 1,
+    failure: null, process: { reason: 'exit', exitCode: 0, egress: evidence.egress },
+    cleanupFailures: [{ stage: 'bridge-close', code: 'CLOSE_FAILED' }, { stage: 'launch-dispose', code: 'DISPOSE_FAILED' }] });
+  expect(disposal).toHaveBeenCalledTimes(1);
+  const captureFailed = await recordAttempt({ prepare, run, capture: async () => { throw fault('EACCES'); }, cleanup: [] });
+  expect(captureFailed).toMatchObject({ attemptStage: 'capture', invocationState: 'started', invocationCount: 1,
+    failure: { stage: 'capture', code: 'EACCES' }, process: { reason: 'exit', exitCode: 0 } });
+  expect(run).toHaveBeenCalledTimes(2); expect(JSON.stringify(captureFailed)).not.toContain('private error detail');
+});
 it('pins declared synthetic provenance and bytes for each CLI, positive framing and all five negative groups', async () => {
   for (const cli of ['codex', 'claude']) {
     for (const group of ['positive', 'group-1', 'group-2', 'group-3', 'group-4', 'group-5']) {

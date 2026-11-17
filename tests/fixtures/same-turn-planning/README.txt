@@ -28,3 +28,10 @@ second verifier or evidence that K1/K2 already enforce the expectations.
 [Recording kit](RECORDING.txt) and [source-produced argv](argv.from-source.json).
 The manifest integrity test checks provenance, bytes and the positive wire/envelope
 contract; it does not certify the negative verdicts or installed product acceptance.
+
+Green transition after K1/K2: replace the cancel-waiting outer fake send with a
+real-protocol replay: correlated preparation delivery, one challenge-framed terminal
+draft and normal CLI close/drain. Only then replace it.todo with it. Preparation
+alone must never open the person card or satisfy the old refusal barrier. Preserve
+one card, one claim/send and zero Run before the person's decision; the effective
+request cap must be null with reasoning model-default.
