@@ -589,6 +589,11 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **çalışma kartı iş hedefini henüz bağlamaz.** Bir çalışmanın kartı planına, havuzuna ve çalışma profiline bağlıdır; yapılandırılmış iş hedefinin
   kimliğine bağlı değildir (çalışma onu kaydetmez; iş hedeflerinin 1. dilimi). Kart ile kabul arasında yapılandırmada değişen hedef yeniden
   denetlenir (`work-target/use`) ama kartta adı geçmez. *Yol:* bir çalışma kartı açıkken `execution.workTargets`'ı değiştirmeyin.
+- **Kurulumda tek abonelik girişi varsa sohbette önerilen iş kart üretmez.** Süren sohbet turu o girişin tek yerini tutar;
+  planlayıcının kendi çağrısı reddedilir, kart da iş de oluşmaz; kurulu beta.2 genel bir araç hatası gösterir (kaynak okuması
+  ve iki denemeli bir deneme kurulumu yürüyüşü). `/do` etkilenmez; başka bir girişteki ya da API bağlantısındaki planlayıcı
+  (Brain) çalışmaya devam eder. Sohbet turunun içinde planlama beta.2.1 için kararlaştırıldı, henüz yapılmadı. *Yol:* `/do`
+  kullanın ya da Brain'i başka bir girişteki ya da API bağlantısındaki bir modele ayarlayın.
 
 ## Bütçe ve harcama
 
@@ -712,6 +717,11 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   2.40.0 ya da sonrasını gerektirir (`PATCH_WORKING_TREE_GIT_VERSION`). Özel taban HEAD'in bütün geçmişini kopyalar;
   `execution.git.copyBytes` değerini (ayarlanmamışsa 8 GiB) aşan bir geçmiş çalışmayı reddeder (`PATCH_WORKING_TREE_COPY_LIMIT`). setuid,
   setgid ya da sticky biti olan bir dosyaya hiç teslim yapılmaz (`PATCH_UNSAFE`, alpha.64). *Yol:* `deckent config set execution.deliveryMode reference`.
+- **Grubun ya da başkalarının yazabildiği `.git` klasörü teslimi reddeder; kurulu beta.2 nedenini söylemez.** Deponun Git
+  klasörü grup ya da başkaları tarafından yazılabiliyorsa (örneğin umask değeri 0002 olan bir hesap) çalışma klasörüne teslim
+  `PATCH_UNSAFE` ile durur. Denetim bilerek vardır ve kalır. Main'de (henüz kurulu değil) ret klasörü adlandırır ve terminal
+  kişiye kök klasörün izinlerini daraltmak için tek kart sunar; deckent bunu yapay zekâ çağıranı için asla yapmaz. Bir deneme
+  kurulumu yürüyüşünde Codex işçisiyle görüldü; kurulu bir derlemede yeniden yürünmedi. *Yol:* `chmod go-w <depo>/.git`.
 - **Başka dosya sistemindeki kenar dosya sizin için silinmez.** deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
   `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
   kalır ve not onu adlandırır. deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.

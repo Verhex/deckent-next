@@ -596,6 +596,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
   admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a
   Run card is open.
+- **Work proposed in chat produces no card when the installation has one subscription sign-in.** The running chat turn holds
+  that sign-in's single slot, so the planner's own call is refused and no card or Run appears; installed beta.2 shows a general
+  tool error (source reading and one sandbox walk with two attempts). `/do` is not affected, and a planner (Brain) on another
+  sign-in or API connection keeps working. Planning inside the chat turn is decided for beta.2.1 and not built yet.
+  *Workaround:* use `/do`, or set the Brain to a model on another sign-in or API connection.
 
 ## Budgets and spend
 
@@ -718,6 +723,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`PATCH_WORKING_TREE_GIT_VERSION`). The private base copies all of HEAD's history; a history over `execution.git.copyBytes`
   (unset: 8 GiB) refuses the Run (`PATCH_WORKING_TREE_COPY_LIMIT`). A file with a setuid, setgid or sticky bit is never delivered into
   (`PATCH_UNSAFE`, alpha.64). *Workaround:* `deckent config set execution.deliveryMode reference`.
+- **A `.git` folder that group or others may write refuses delivery, and installed beta.2 does not say why.** Delivery into
+  your working tree stops with `PATCH_UNSAFE` when the repository's Git directory is writable by group or others (for example
+  an account whose umask is 0002). The check is deliberate and stays. On main (not installed yet) the refusal names the folder
+  and the terminal offers the person one card to narrow the root folder's permissions; deckent never narrows them for an AI
+  caller. Seen in one sandbox walk on a Codex worker; not walked again on an installed build. *Workaround:*
+  `chmod go-w <repository>/.git`.
 - **A cross-device aside is never deleted for you.** When deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
   `.deckent-<uuid>.aside`, and the note names it. deckent never deletes it, so these files accumulate and show as untracked in
