@@ -157,7 +157,13 @@ düzenleme yolunu kullan.
 
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback`, kişinin
 mevcut onay yoluyla yalnız değiştirilmemiş ve yönetilen kaynağı kanıtlanmış v21
-yürütme kurallarını kaldırır. V20 önerilerini, havuz/hedef kullanımını ve önceki bütün
+yürütme kurallarını kaldırır. Birkaç kapsam için eklenmiş yönetilen kural, `SCOPE_ID`
+dışındakiler dahil bütün kapsamlarıyla kaldırılır; önizleme ve karar kartı bunları söyler.
+Kişinin güncel devir yetkisi etkilenen her kapsamı karşılamalıdır; herhangi birinde
+eksik izin, deny veya restriction varsa bütün kaldırma yazım yapılmadan reddedilir.
+Her kuralın yönetilen eklemesine ait kalıcı kanıt gerekir. Bugünkü kapsam ayarını
+değiştirmek, önceden eklenen kuralın etkileyeceği kapsamları daraltmaz.
+V20 önerilerini, havuz/hedef kullanımını ve önceki bütün
 kuralları korur. **Yapay zekâ önerileri** satırı v20'de kalır; komut satırında bu aile
 `--rollback --only ai-proposals` ile geri alınır. Kapatılan öneriler yeniden başlangıçta
 açılmaz. Özel veya rol izinleri aynı hücreleri hâlâ karşılayabilir; kalan yetkiyi

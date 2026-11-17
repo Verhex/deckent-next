@@ -416,6 +416,7 @@ it.skipIf(process.platform !== 'linux')('119-C2 P2: genuine multi-scope governed
     await mkdir(join(f.root, '.deckent'));
     const notice = t('policy.aiExecution.preview', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: 's', scopes: 's, other' }, locale);
     expect(notice).toContain(locale === 'en' ? 'Runs in s, other.' : 's, other kapsamında');
+    expect(notice).toContain(locale === 'en' ? 'withdraws these managed permission lines in: s, other' : 'yönetilen izin satırlarını şu kapsamlarda kaldırır: s, other');
     for (const args of [['policy', 'upgrade', '--template', 'current', '--preview'], ['init', 'policy', '--upgrade', '--preview']]) {
       let printed = '';
       expect(await main([...args, '--scope', 's', '--lang', locale], { root: f.root, env: homeEnv(f.root), stdout: { write(value: string) { printed += value; } },
@@ -586,7 +587,8 @@ it.skipIf(process.platform !== 'linux')('119-F1a-3: each governed or installer21
 });
 
 it.skipIf(process.platform !== 'linux')('119-F1a-3: gaps, duplicate/forked links and a cycle after add refuse; a genuine v20-only entry cannot forgive the gap', async () => {
-  const f = await fixture(undefined, false, 'ai-execution');
+  const f = await fixture(undefined, false, 'ai-execution'), baseline = JSON.parse(await f.bytes());
+  await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...baseline, grants: baseline.grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) }));
   expect(await f.apply()).toMatchObject({ status: 'upgraded' });
   const added = JSON.parse(await f.bytes());
   await f.source.updateAuthority(() => ({ write: { policy: { ...added, revision: 'a-after-add' }, bindings: null, order: 'policy-first' }, result: null }), 'after-add');
@@ -630,32 +632,88 @@ it.skipIf(process.platform !== 'linux')('119-F1a-3: partial add witnesses do not
     { id: 'role-held', roles: ['role-execution'], scopes: ['s'], principals: [mcpPrincipalRef(f.principal)] }]);
   const restored = await fixture(undefined, false, 'ai-execution');
   const initial = JSON.parse(await restored.bytes());
-  await writeFile(join(restored.root, 'policy.json'), JSON.stringify({ ...initial, revision: 'a-old-prefix' }));
+  await writeFile(join(restored.root, 'policy.json'), JSON.stringify({ ...initial, revision: 'a-old-prefix', grants: initial.grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) }));
   expect(await restored.apply()).toMatchObject({ status: 'upgraded' });
   const granted = JSON.parse(await restored.bytes());
   for (const revision of ['a-edit', 'a-restore']) await restored.source.updateAuthority(() => ({ write: { policy: { ...granted, revision,
     grants: granted.grants.map((rule: PolicyGrant) => rule.id === ids[0] && revision === 'a-edit' ? { ...rule, scopes: ['other'] } : rule) }, bindings: null, order: 'policy-first' }, result: null }), revision);
   expect(await restored.rollback()).toMatchObject({ status: 'rolled-back', reason: ids.slice(1).join(','), conflicts: [ids[0]] });
-  expect(JSON.parse(await restored.bytes()).grants).toEqual([...initial.grants, granted.grants.find((rule: PolicyGrant) => rule.id === ids[0])]);
+  expect(JSON.parse(await restored.bytes()).grants).toEqual(granted.grants.filter((rule: PolicyGrant) => !ids.slice(1).includes(rule.id)));
 });
 
-it.skipIf(process.platform !== 'linux')('119-F1a-3: v20 keeps its missing-history refusal; installer version21 alone and genuine multiscope21 are not single-scope custody', async () => {
+it.skipIf(process.platform !== 'linux')('119-F1a-3: v20 keeps its missing-history refusal; installer version21 alone is not custody', async () => {
   const proposals = await fixture(undefined, false), original = JSON.parse(await proposals.bytes());
   await writeFile(join(proposals.root, 'policy.json'), JSON.stringify({ ...original, revision: 'a-old', grants: original.grants.filter((rule: PolicyGrant) => !deltaIds.includes(rule.id)) }));
   expect(await proposals.apply()).toMatchObject({ status: 'upgraded' });
   const before = await proposals.bytes();
   expect(await proposals.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
   expect(await proposals.bytes()).toBe(before); expect(proposals.cards).toBe(1);
-  for (const multi of [false, true]) {
-    const f = await fixture(undefined, false, 'ai-execution'), initial = JSON.parse(await f.bytes());
-    await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...initial, revision: multi ? initial.revision : 'a-prefix', grants: initial.grants.map((rule: PolicyGrant) => multi && rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['s', 'other'] } : rule) }));
-    if (multi) expect(await upgradePolicyTemplate(f.source, { scopeId: 's', principal: f.principal, apply: true, owner: true, peopleLimit: 10,
-      now: () => 1000, audit: () => undefined, toolNames: names })).toMatchObject({ status: 'upgraded' });
-    else await f.source.updateAuthority(snapshot => ({ write: { policy: { ...(snapshot.policy as object), revision: 'a-tag-only',
-      grants: [...initial.grants, ...firstRunExecutionRules([], f.principal, ['s']).wanted] }, bindings: null, order: 'policy-first' }, result: null }), `policy-template-upgrade-v21-${'a'.repeat(64)}`);
-    const bytes = await f.bytes(), cards = f.cards;
-    expect(await f.rollback()).toMatchObject(multi ? { status: 'nothing-to-roll-back', conflicts: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS }
-      : { status: 'unavailable', reason: 'history-unavailable', conflicts: [] });
-    expect(await f.bytes()).toBe(bytes); expect(f.cards).toBe(cards);
+  const f = await fixture(undefined, false, 'ai-execution'), initial = JSON.parse(await f.bytes());
+  await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...initial, revision: 'a-prefix' }));
+  await f.source.updateAuthority(snapshot => ({ write: { policy: { ...(snapshot.policy as object), revision: 'a-tag-only',
+    grants: [...initial.grants, ...firstRunExecutionRules([], f.principal, ['s']).wanted] }, bindings: null, order: 'policy-first' }, result: null }), `policy-template-upgrade-v21-${'a'.repeat(64)}`);
+  const bytes = await f.bytes();
+  expect(await f.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', conflicts: [] });
+  expect(await f.bytes()).toBe(bytes); expect(f.cards).toBe(0);
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2-R: genuine governed and installer multi-scope adds roll back every scope with EN/TR preview and decision cards', async () => {
+  for (const [producer, locale] of [['governed', 'en'], ['installer', 'tr']] as const) {
+    const f = await fixture(undefined, false, 'ai-execution', locale), initial = JSON.parse(await f.bytes());
+    const baseline = { ...initial, revision: 'a-unknown-prefix', grants: initial.grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) };
+    await writeFile(join(f.root, 'policy.json'), JSON.stringify(baseline));
+    const preview = await f.request({ scopeId: 's', principal: f.principal, only: 'ai-execution', mode: 'preview', reason: 'multi-scope add' });
+    const notice = policyExecutionLines(preview.rules, 's', locale, preview.executionContext, 'full', preview.executionScopes)[0]!;
+    if (producer === 'governed') expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+    else expect(await upgradePolicyTemplate(f.source, { scopeId: 's', principal: f.principal, apply: true, owner: true, peopleLimit: 10,
+      now: () => 1000, audit: () => undefined, toolNames: names })).toMatchObject({ status: 'upgraded', publications: [21] });
+    const granted = JSON.parse(await f.bytes());
+    expect(granted.grants.filter((rule: PolicyGrant) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toEqual(preview.rules);
+    // Today's anchor is narrower; only the historical before determines the managed add's scopes.
+    await f.source.updateAuthority(() => ({ write: { policy: { ...granted, revision: 'a-narrower-anchor', grants: granted.grants.map((rule: PolicyGrant) =>
+      rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['s'] } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'narrow-anchor');
+    const before = JSON.parse(await f.bytes());
+    expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.join(','), conflicts: [] });
+    expect(JSON.parse(await f.bytes()).grants).toEqual(before.grants.filter((rule: PolicyGrant) => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)));
+    expect(notice).toContain(locale === 'en' ? 'withdraws these managed permission lines in: s, other' : 'yönetilen izin satırlarını şu kapsamlarda kaldırır: s, other');
+    const card = f.records().find(record => record.request.summary.includes('- grant first-run-mcp-progress-run-reserve'))!;
+    const removal = locale === 'en' ? 'Managed permission line first-run-mcp-progress-run-reserve will be withdrawn in: s, other.' : 'Yönetilen izin satırı first-run-mcp-progress-run-reserve şu kapsamlarda kaldırılacak: s, other.';
+    expect(card.request.summary).toContain(removal);
+    let body = '';
+    await answerOnCard(card, undefined, 's', {}, async view => { body = view.body!.join('\n'); return null; }, locale);
+    expect(body).toContain(removal);
+    const lines = approvalWindowLines({ approvalId: card.request.approvalId, summary: card.request.summary, requester: 'person', runId: '-', taskId: '-', expiresAt: 99_999 }, workSurfaceLabels(locale).approvalWindow, 1_000);
+    expect(lines.map(line => line.spans.map(span => span.text).join('')).join('\n')).toContain(removal);
   }
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2-R: multi-scope removal needs current delegation in other; no grant, deny or restriction writes nothing', async () => {
+  for (const bound of ['no-grant', 'deny', 'restriction'] as const) {
+    const f = await fixture(undefined, false, 'ai-execution'), initial = JSON.parse(await f.bytes());
+    const baseline = { ...initial, grants: initial.grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) };
+    await writeFile(join(f.root, 'policy.json'), JSON.stringify(baseline));
+    expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+    const granted = JSON.parse(await f.bytes());
+    const denial = { id: 'other-execution-denied', actions: ['reserve'], scopes: ['other'], principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'run', ids: 'all' } };
+    await f.source.updateAuthority(() => ({ write: { policy: { ...granted, revision: `a-${bound}`, grants: bound === 'no-grant' ? granted.grants.map((rule: PolicyGrant) =>
+      ['run', 'attempt'].includes(rule.resource.kind) && rule.principals !== 'all' && rule.principals.some(actor => actor.issuer === f.principal.issuer && actor.subject === f.principal.subject) && rule.scopes !== 'all' ? { ...rule, scopes: ['s'] } : rule)
+      : bound === 'deny' ? [...granted.grants, { ...denial, effect: 'deny' }] : granted.grants, restrictions: bound === 'restriction' ? [...granted.restrictions, denial] : granted.restrictions }, bindings: null, order: 'policy-first' }, result: null }), `restrict-${bound}`);
+    const bytes = await f.bytes(), history = await f.source.authorityHistory(), cards = f.cards, events = f.events.length;
+    expect(await f.rollback()).toMatchObject({ status: 'refused', missing: ['delegation'], conflicts: [] });
+    expect(await f.bytes()).toBe(bytes); expect(await f.source.authorityHistory()).toEqual(history); expect(f.cards).toBe(cards); expect(f.events).toHaveLength(events);
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2-R: canonical widened after scopes cannot witness a before whose planner only named s', async () => {
+  const f = await fixture(undefined, false, 'ai-execution'), initial = JSON.parse(await f.bytes());
+  expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+  const history = (await f.source.authorityHistory())!, add = history[0]!;
+  const widened = firstRunExecutionRules([], f.principal, ['s', 'other']).wanted;
+  await f.source.updateAuthority(() => ({ write: { policy: { ...initial, revision: 'a-fake-widening', grants: [...initial.grants, ...widened] }, bindings: null, order: 'policy-first' }, result: null }), 'fake-widening');
+  const current = await f.source.load(), bytes = await f.bytes(), cards = f.cards;
+  // Retain the real single-scope key but present a canonical widened after. Shape alone would accept it.
+  const forged = [{ ...add, after: current }];
+  const upgrade = new PolicyTemplateUpgrade({ administration: f.administration, approve: f.approve, policy: { load: () => f.source.load(), authorityHistory: async () => forged } }, names);
+  expect(await upgrade.run({ scopeId: 's', principal: f.principal, mode: 'rollback', reason: 'forged multi-scope add' })).toMatchObject({ status: 'nothing-to-roll-back', conflicts: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS });
+  expect(await f.bytes()).toBe(bytes); expect(f.cards).toBe(cards);
 });

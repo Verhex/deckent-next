@@ -1,6 +1,13 @@
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunExecutionRules, policyGrantSchema, type PolicyGrant } from '#domain/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 
+/** Describe the actual old rules removed by the change, without claiming that every other grant is revoked. */
+export function policyExecutionWithdrawalLines(rules: readonly PolicyGrant[], locale: Locale): string[] {
+  const removed = rules.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id));
+  return removed.flatMap(rule => rule.scopes === 'all' ? [] : [t('policy.aiExecution.withdraw', {
+    id: terminalSafeText(rule.id), scopes: terminalSafeText(rule.scopes.join(', ')) }, locale)]);
+}
+
 /** The notice checks actual cells against the trusted planner's scopes; an arbitrary card defaults to its one scope. */
 export function policyExecutionLines(rules: readonly unknown[], scope: string, locale: Locale, heldRules: readonly unknown[] = [], form: 'full' | 'short' = 'full', plannedScopes: readonly string[] = [scope]): string[] {
   const ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;

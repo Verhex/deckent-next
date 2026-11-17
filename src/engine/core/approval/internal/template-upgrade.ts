@@ -104,8 +104,16 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, input.only);
+      const selected = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, input.only);
       const history = await this.deps.policy.authorityHistory?.();
+      // Origin first: the historical BEFORE planner and exact key must prove each absent-before/add-after rule.
+      const witnessed = input.only === 'ai-proposals' ? [] : policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id)
+        && history?.some(entry => this.upgraded(entry, input.principal, input.scopeId, false, rule)))
+        // Only a proven after-rule supplies its scope list for canonical shape; today's read anchor is irrelevant.
+        .filter(rule => rule.scopes !== 'all' && rule.scopes.includes(input.scopeId)
+          && firstRunExecutionRules([], input.principal, rule.scopes).wanted.some(want => JSON.stringify(want) === JSON.stringify(rule)));
+      const delta = { ...selected, rules: [...selected.rules, ...witnessed.filter(rule => !selected.rules.some(item => item.id === rule.id))],
+        conflicts: selected.conflicts.filter(id => !witnessed.some(rule => rule.id === id)) };
       // J3, amended by the owner 2026-11-05 (R4a) for the MCP-actor delta (v20 now): a policy at a template's own revision that carries the whole delta
       // (no `a-`/`m-` write since) is a provably fresh install, and the installer wrote that delta, so the same card removes it. Any other policy
       // without archived history stays `history-unavailable` (fail closed).

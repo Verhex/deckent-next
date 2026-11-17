@@ -156,7 +156,13 @@ policy editing when the managed rollback cannot prove its lineage.
 
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback` removes only
 unmodified, provably managed family-21 execution rules through the person's existing
-approval route. It preserves v20 proposals, pool/target use and all earlier rules.
+approval route. A managed rule added for several scopes is removed with all its scopes,
+including scopes other than `SCOPE_ID`; the preview and decision card name them.
+The person's current delegation authority must cover every affected scope; a missing
+grant, deny or restriction in any of them refuses the whole removal without writing.
+Each rule needs its own retained proof of the managed addition. Changing today's
+scope configuration does not narrow the affected scopes of a previously added rule.
+It preserves v20 proposals, pool/target use and all earlier rules.
 The **AI proposals** toggle remains v20; CLI rollback of that family uses `--rollback
 --only ai-proposals`. Revoking it remains off after restart. Custom or role grants can
 still allow the same cells; inspect the remaining authority. Rollback does not undo

@@ -9,7 +9,7 @@ import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, typ
 import type { ApprovalStore } from './store.js';
 import { verifyApproval } from './integrity.js';
 import { OperationApprovalBroker } from './operation.js';
-import { policyExecutionLines } from './policy-execution.js';
+import { policyExecutionLines, policyExecutionWithdrawalLines } from './policy-execution.js';
 
 /** Refusal codes of an authority submission that are audited (transient or unknown-outcome failures are not refusals). */
 const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEEDS', 'POLICY_DENIED', 'POLICY_CHANGE_INVALID', 'POLICY_LAST_ADMIN', 'EFFECT_REJECTED',
@@ -149,7 +149,11 @@ export class PolicyAdministrationApplication {
     if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
     // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
     const describe = async (asked: EffectCommand, budget: number) => {
-      const change = policyChangeSchema.parse(asked.input), files = authorityDocuments(await deps.policy.load());
+      const change = policyChangeSchema.parse(asked.input), snapshot = await deps.policy.load(), files = authorityDocuments(snapshot);
+      const removed = change.changes.flatMap(item => item.kind === 'grant.remove' ? snapshot.grants.filter(rule => rule.id === item.id) : []);
+      const withdrawal = policyExecutionWithdrawalLines(removed, deps.locale ?? 'en').join('\n');
+      if (withdrawal && change.changes.every(item => item.kind === 'grant.remove') && withdrawal.length < budget)
+        return `${withdrawal}\n${describePolicyChange(files, asked.input, budget - withdrawal.length - 1) ?? ''}`;
       const rules = change.changes.flatMap(item => item.kind === 'grant.add' || item.kind === 'grant.replace' ? [item.grant] : []);
       const diff = describePolicyChange(files, asked.input, budget);
       if (!diff) return diff;
