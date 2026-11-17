@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, POLICY_ADMINISTER_OPERATION,
-  evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
+  describePolicyChange, firstRunExecutionRules, evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, auditPolicyDigest, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
-  PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection } from '#engine/index.js';
+  PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection, policyExecutionLines } from '#engine/index.js';
 import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
@@ -63,6 +63,43 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
 }
 const addRead = (id: string, to: Actor) => ({ schemaVersion: 1, changes: [{ kind: 'grant.add', grant: readTool(id, to) }] });
 const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
+
+describe.skipIf(process.platform === 'win32')('119-C2: policy card security', () => {
+  it('119-C2 security: reused v21 ids with wider scopes or another principal get only the real diff, including in previews', async () => {
+    const f = await fixture(() => [], ownerRoot);
+    const genuine = firstRunExecutionRules([], f.me, ['s']).wanted;
+    for (const [index, rules] of [genuine.map(rule => ({ ...rule, scopes: ['s', 'other'] })),
+      genuine.map((rule, i) => i === 0 ? { ...rule, principals: [{ issuer: `${f.me.issuer}/mcp`, subject: 'other' }] } : rule)].entries()) {
+      const input = { schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) };
+      const pending = await f.admin.submit(f.command(`spoof-${index}`, input));
+      if (pending.status !== 'approval-pending') throw new Error('pending expected');
+      const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary;
+      const binding = summary.split('\n')[0]!;
+      expect(summary.slice(binding.length + 1)).toBe(describePolicyChange(await f.files(), input, 2048 - binding.length - 1));
+      expect(policyExecutionLines(rules, 's', 'en')).toEqual([]);
+      expect(summary).toContain(index === 0 ? 'scopes[s,other]' : 'principals [' + f.me.issuer + '/mcp:other]');
+    }
+  });
+
+  it('119-C2 security: the full-budget diff comes first and a whole notice block or none follows near capacity', async () => {
+    const f = await fixture(() => [], ownerRoot);
+    const rules = firstRunExecutionRules([], f.me, ['s']).wanted;
+    const many = Array.from({ length: 10 }, (_, i) => firstRunExecutionRules([], { ...f.me, subject: `actor-${i}` }, ['s']).wanted.map(rule => ({ ...rule, id: i === 0 ? rule.id : `custom-${i}-${rule.id}` }))).flat();
+    for (const [index, grants] of [rules, many].entries()) {
+      const input = { schemaVersion: 1, changes: grants.map(grant => ({ kind: 'grant.add', grant })) };
+      const pending = await f.admin.submit(f.command(`room-${index}`, input));
+      if (pending.status !== 'approval-pending') throw new Error('pending expected');
+      const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary;
+      const binding = summary.split('\n')[0]!, diff = describePolicyChange(await f.files(), input, 2048 - binding.length - 1)!;
+      expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
+      const tail = summary.slice(binding.length + 1 + diff.length), notice = policyExecutionLines(grants, 's', 'en').join('\n');
+      expect(tail === '' || tail === `\n${notice}`).toBe(true);
+      expect(summary.length).toBeLessThanOrEqual(2048);
+      if (index === 0) expect(tail).toBe(`\n${notice}`);
+      else expect(tail).toBe('');
+    }
+  });
+});
 
 describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN P3)', () => {
   it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] never applies silently: even the owner root with an allow grant and a full-auto mode gets a pending card; after the allow the change settles once, audited and archived', async () => {

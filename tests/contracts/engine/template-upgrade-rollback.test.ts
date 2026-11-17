@@ -1,18 +1,20 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, upgradeFirstRunPolicy, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationApplication, PolicyTemplateUpgrade, RecoveryPolicyCard, administerOwnPolicyChange, nervousStandingApproval,
   upgradePolicyTemplate, upgradeFirstRunProposalRules } from '#engine/index.js';
-import { createHmacIntegrity, sha256 } from '#platform/index.js';
+import { createHmacIntegrity, sha256, t } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, describePolicyChange, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
 import { policyExecutionLines } from '#engine/index.js';
 import { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
+import { main } from '#surfaces/index.js';
+import { homeEnv } from '../support/host-platform.js';
 import { answerOnCard } from '#surfaces/core/cli-approval/index.js';
 import { approvalWindowLines } from '#surfaces/core/terminal-approval/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
@@ -24,13 +26,17 @@ const names = { firstCommitOperationId: 'coding.first-commit', uninstallOperatio
 const deltaIds: readonly string[] = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS;
 const closers: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); });
-async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknown[] = grants => grants, seededUpgrade = true, family: 'ai-proposals' | 'ai-execution' = 'ai-proposals', locale: 'en' | 'tr' = 'en', historyBytes = 131_072) {
+async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknown[] = grants => grants, seededUpgrade = true, family: 'ai-proposals' | 'ai-execution' = 'ai-proposals', locale: 'en' | 'tr' = 'en', historyBytes = 131_072, scopeId = 's', longIdentity = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-template-rollback-')); closers.push(() => rm(root, { recursive: true, force: true }));
   const sqlite = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const }, ledger = join(root, 'ledger.db');
   openSqliteLedger(ledger, sqlite).close();
   const clock = { sample: () => ({ wallMs: 1_000, monotonicMs: 1_000 }) };
-  const sessions = await LocalOsSessionAuthority.create(['s'], 600_000, clock), { principal } = await sessions.verifySession(undefined);
-  const template = firstRunPolicyTemplate({ scopeId: 's', principal, ...names });
+  const osSessions = await LocalOsSessionAuthority.create([scopeId], 600_000, clock), verified = await osSessions.verifySession(undefined);
+  // A verified-session fixture near the schema bounds; no host identity or live policy is changed.
+  const principal = longIdentity ? { ...verified.principal, issuer: 'i'.repeat(256 - '/catalog-aggregator'.length), subject: 'u'.repeat(256) } : verified.principal;
+  const sessions = longIdentity ? { verifySession: async () => ({ principal, session: { ...verified.session, principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject } } }),
+    isSessionActive: async () => true, revoke: async () => undefined } : osSessions;
+  const template = firstRunPolicyTemplate({ scopeId, principal, ...names });
   const policyPath = join(root, 'policy.json'), bindingsPath = join(root, 'bindings.json'), archive = join(root, 'authority-revisions');
   const managedIds = family === 'ai-proposals' ? deltaIds : FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
   const original = { ...template.policy, revision: 'first-run-template-v10', grants: template.policy.grants.filter(rule => !managedIds.includes(rule.id)) };
@@ -38,7 +44,7 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
   await writeFile(bindingsPath, JSON.stringify(template.bindings), { mode: 0o600 });
   // 128 KiB (product default 1 MiB): an archive entry holds the policy twice, and the v15 template (S4B-3) outgrew a 64 KiB entry.
   const source = new FilePolicySource({ path: policyPath, bindingsPath, archivePath: archive, ownerUid: process.getuid!(), maxBytes: historyBytes });
-  if (seededUpgrade) expect(await upgradePolicyTemplate(source, { scopeId: 's', principal, apply: true, owner: true, peopleLimit: 10, now: () => 1000, audit: () => undefined,
+  if (seededUpgrade) expect(await upgradePolicyTemplate(source, { scopeId, principal, apply: true, owner: true, peopleLimit: 10, now: () => 1000, audit: () => undefined,
     toolNames: names })).toMatchObject({ status: 'upgraded' });
   const edited = edit(template.policy.grants);
   if (JSON.stringify(edited) !== JSON.stringify(template.policy.grants)) await source.updateAuthority(() => ({ write: { policy: { ...template.policy, revision: 'a-custom', grants: edited }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom');
@@ -50,13 +56,13 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
   let cards = 0;
   const approve = (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
     cards++;
-    expect(journal.store.list('s', null, 10)).toHaveLength(cards);
+    expect(journal.store.list(scopeId, null, 10)).toHaveLength(cards);
     return new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source, integrity, clock, 'local-runtime', 10, undefined, undefined, { interactive: async () => true })
-      .decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
+      .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
   };
   const upgrade = new PolicyTemplateUpgrade({ administration, approve, policy: source }, names);
-  return { principal, administration, approve, request: upgrade.run.bind(upgrade), records: () => journal.store.list('s', null, 20), apply: () => upgrade.run({ scopeId: 's', principal, only: family, mode: 'apply', reason: 'v14 upgrade' }), source, events, archive, get cards() { return cards; }, bytes: () => readFile(policyPath, 'utf8'),
-    rollback: (expect?: string) => upgrade.run({ scopeId: 's', principal, mode: 'rollback', ...(family === 'ai-proposals' ? { only: family } : {}), reason: 'v14 rollback', ...(expect ? { expect } : {}) }) };
+  return { root, principal, administration, approve, request: upgrade.run.bind(upgrade), records: () => journal.store.list(scopeId, null, 20), apply: () => upgrade.run({ scopeId, principal, only: family, mode: 'apply', reason: 'v14 upgrade' }), source, events, archive, get cards() { return cards; }, bytes: () => readFile(policyPath, 'utf8'),
+    rollback: (expect?: string) => upgrade.run({ scopeId, principal, mode: 'rollback', ...(family === 'ai-proposals' ? { only: family } : {}), reason: 'v14 rollback', ...(expect ? { expect } : {}) }) };
 }
 
 describe.skipIf(process.platform !== 'linux')('v20 rollback through the real approval and archived authority writer', () => {
@@ -341,4 +347,54 @@ it.skipIf(process.platform !== 'linux')('119-C2: v21 rollback is family-specific
     expect(JSON.parse(await f.bytes()).grants.filter((rule: PolicyGrant) => deltaIds.includes(rule.id))).toEqual(initial.grants.filter((rule: PolicyGrant) => deltaIds.includes(rule.id)));
     expect(await f.request({ scopeId: 's', principal: f.principal, mode: 'rollback', only: 'ai-proposals', reason: 'the proposal family is still independently revocable' })).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
   }
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2 security: measures real v19/v20 upgrades with a UUID scope and near-maximum identity, EN/TR', async () => {
+  const scopeId = '12345678-1234-4234-8234-123456789abc';
+  for (const locale of ['en', 'tr'] as const) for (const version of [19, 20]) for (const only of ['ai-execution', undefined] as const) {
+    const f = await fixture(undefined, false, 'ai-execution', locale, 1_048_576, scopeId, true);
+    const current = JSON.parse(await f.bytes()), revision = `first-run-template-v${version}`;
+    const removed = [...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, ...(version === 19 ? FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS : [])];
+    await writeFile(join(dirname(f.archive), 'policy.json'), JSON.stringify({ ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) }), { mode: 0o600 });
+    const bindingsPath = join(dirname(f.archive), 'bindings.json'), bindings = JSON.parse(await readFile(bindingsPath, 'utf8'));
+    await writeFile(bindingsPath, JSON.stringify({ ...bindings, revision: `${revision}-bindings` }), { mode: 0o600 });
+    const input = { scopeId, principal: f.principal, reason: 'measured upgrade', ...(only ? { only } : {}) };
+    const prior = { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) };
+    expect(upgradeFirstRunPolicy(prior, { scopeId, principal: f.principal, ...names })).toMatchObject({ status: 'upgrade', from: version });
+    const preview = await f.request({ ...input, mode: 'preview' });
+    const notice = t('policy.aiExecution.preview', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId }, locale);
+    await mkdir(join(f.root, '.deckent'));
+    let printed = '';
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', scopeId, '--preview', '--lang', locale], {
+      root: f.root, env: homeEnv(f.root), stdout: { write(value: string) { printed += value; } },
+      upgradePolicyTemplate: async (_root, scope, request) => f.request({ ...request, scopeId: scope, principal: f.principal }),
+    })).toBe(0);
+    expect(printed).toContain(notice); // The short form's real command prints the full notice before apply.
+
+    expect(preview.status).toBe('preview');
+    expect(await f.request({ ...input, mode: 'apply' })).toMatchObject({ status: 'upgraded' });
+    const summary = f.records()[0]!.request.summary, binding = summary.split('\n')[0]!;
+    const change = { schemaVersion: 1, changes: preview.rules.map(grant => ({ kind: 'grant.add', grant })) };
+    const diff = describePolicyChange({ policy: { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) }, bindings }, change, 2048 - binding.length - 1)!;
+    const short = t('policy.aiExecution.previewShort', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId }, locale);
+    console.log('119-C2 measurement', JSON.stringify({ locale, version, only: only ?? 'default', issuer: f.principal.issuer.length, subject: f.principal.subject.length, scope: scopeId.length,
+      binding: binding.length, diff: diff.length, full: notice.length, short: short.length, shortSummary: binding.length + 1 + diff.length + 1 + short.length, fullSummary: binding.length + 1 + diff.length + 1 + notice.length, sealed: summary.length }));
+    expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
+    expect(summary.length).toBeLessThanOrEqual(2048);
+    const room = 2048 - binding.length - diff.length - 2;
+    expect(summary.slice(binding.length + diff.length + 1)).toBe(notice.length <= room ? `\n${notice}` : short.length <= room ? `\n${short}` : '');
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('119-C2 security: a genuine subset retains its breadth when other v21 cells are held or covered', async () => {
+  const ids = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+  const f = await fixture(grants => [...grants.filter(rule => !ids.slice(1).includes(rule.id)),
+    { ...grants.find(rule => rule.id === ids[1])!, id: 'custom-cancel-cover', scopes: 'all' }], false, 'ai-execution', 'en', 1_048_576);
+  const preview = await f.request({ scopeId: 's', principal: f.principal, mode: 'preview', only: 'ai-execution', reason: 'partial upgrade' });
+  expect(preview).toMatchObject({ status: 'preview', rules: [{ id: ids[2] }], covered: [{ ruleId: ids[1], heldBy: 'custom-cancel-cover' }] });
+  expect(policyExecutionLines(preview.rules, 's', 'en')).toEqual([]);
+  const notice = policyExecutionLines(preview.rules, 's', 'en', preview.executionContext)[0]!;
+  expect(notice).toContain('This standing grant');
+  expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+  expect(f.records()[0]!.request.summary).toContain(notice);
 });

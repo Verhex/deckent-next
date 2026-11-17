@@ -151,8 +151,21 @@ export class PolicyAdministrationApplication {
     const describe = async (asked: EffectCommand, budget: number) => {
       const change = policyChangeSchema.parse(asked.input), files = authorityDocuments(await deps.policy.load());
       const rules = change.changes.flatMap(item => item.kind === 'grant.add' || item.kind === 'grant.replace' ? [item.grant] : []);
-      const notice = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en').join('\n');
-      return notice ? `${notice}\n${describePolicyChange(files, asked.input, Math.max(0, budget - notice.length - 1)) ?? ''}` : describePolicyChange(files, asked.input, budget);
+      const diff = describePolicyChange(files, asked.input, budget);
+      if (!diff) return diff;
+      let heldRules: readonly unknown[] = [];
+      let lines = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en');
+      if (!lines.length) try {
+        const plan = planPolicyChange(files.policy, files.bindings, asked.input);
+        const after = resolvePolicyBindings({ ...(plan.policy ?? files.policy as object), revision: 'preview' }, { ...(plan.bindings ?? files.bindings as object), revision: 'preview' });
+        heldRules = after.grants;
+        lines = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en', heldRules);
+      } catch { /* A snapshot-dependent invalid plan still shows the original diff. */ }
+      const notice = lines.join('\n');
+      const room = budget - diff.length - 1;
+      if (notice && notice.length <= room) return `${diff}\n${notice}`;
+      const short = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en', heldRules, 'short').join('\n');
+      return short && short.length <= room ? `${diff}\n${short}` : diff;
     };
     const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs, describe });
     const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission, options);

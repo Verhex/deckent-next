@@ -17,20 +17,26 @@ function context(result: Record<string, unknown>, calls: unknown[] = []) {
 }
 const PREVIEW = { schemaVersion: 1, status: 'preview', revision: 'first-run-template-v4+b', summary: 'policy.administer@1 · 3 changes\n+ grant first-run-mcp-servers: allow mcp-server*', missing: [], reason: null, rules: [] };
 
-it('119-C2: all EN/TR person previews show the full standing breadth and rollback command', async () => {
+it('119-C2: all EN/TR person previews show genuine breadth, withhold it for reused ids, and preserve a genuine partial upgrade', async () => {
   const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'person', subject: 'one' }, ...FIRST_RUN_TOOL_NAMES });
   const rules = template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id));
-  for (const locale of ['en', 'tr'] as const) {
-    const { out, ctx } = context({ ...PREVIEW, rules });
+  for (const locale of ['en', 'tr'] as const) for (const variant of [
+    { changed: rules, executionContext: [], included: true },
+    { changed: rules.map(rule => ({ ...rule, scopes: ['scope', 'other'] })), executionContext: [], included: false },
+    { changed: rules.map((rule, i) => i === 0 ? { ...rule, principals: [{ issuer: 'person/mcp', subject: 'other' }] } : rule), executionContext: [], included: false },
+    { changed: rules.slice(1), executionContext: rules.slice(0, 1), included: true },
+  ]) {
+    const { changed, executionContext, included } = variant;
+    const { out, ctx } = context({ ...PREVIEW, rules: changed, executionContext });
     const notice = policyExecutionLines(rules, 'scope', locale)[0]!;
-    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--lang', locale], ctx)).toBe(0);
-    expect(out.join('')).toContain(notice); out.length = 0;
-    const installation = { ...ctx, async upgradePolicyTemplateInstallation() { return { status: 'preview', basis: 'first-run', rules, revision: 'r', conflicts: [], wireRules: [] }; },
-      async previewPolicyTemplateInstallation() { return { ...template, scopeId: 'scope', principal: { issuer: 'person', subject: 'one' } }; } };
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--preview', '--lang', locale], ctx)).toBe(0);
+    expect(out.join('').includes(notice)).toBe(included); out.length = 0;
+    const installation = { ...ctx, async upgradePolicyTemplateInstallation() { return { status: 'preview', basis: 'first-run', rules: changed, executionContext, revision: 'r', conflicts: [], wireRules: [] }; },
+      async previewPolicyTemplateInstallation() { return { ...template, policy: { ...template.policy, grants: [...executionContext, ...changed] }, scopeId: 'scope', principal: { issuer: 'person', subject: 'one' } }; } };
     expect(await main(['init', 'policy', '--scope', 'scope', '--upgrade', '--preview', '--lang', locale], installation)).toBe(0);
-    expect(out.join('')).toContain(notice); out.length = 0;
+    expect(out.join('').includes(notice)).toBe(included); out.length = 0;
     expect(await main(['init', 'policy', '--scope', 'scope', '--preview', '--lang', locale], installation)).toBe(0);
-    expect(out.join('')).toContain(notice);
+    expect(out.join('').includes(notice)).toBe(included);
   }
 });
 

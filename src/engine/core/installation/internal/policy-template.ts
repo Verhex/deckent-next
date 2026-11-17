@@ -258,6 +258,8 @@ type Person = { readonly issuer: string; readonly subject: string };
   readonly revision: string | null;
   /** The current template rules this upgrade adds (nothing is replaced or removed). */
   readonly rules: readonly unknown[];
+  /** Effective grants for describing a partial execution upgrade, never additional changes. */
+  readonly executionContext?: readonly unknown[];
   /** Rule ids the upgrade would add that already exist with other content: kept as they are, shown for the person to review. */
   readonly conflicts: readonly string[]; readonly covered?: readonly import('#domain/index.js').FirstRunProposalCover[];
   /** Hand-added `agent-tool` rules naming MCP wire names (`mcp__…`): kept, but since T3 an MCP call is decided on `mcp-server`, not on them. */
@@ -338,11 +340,11 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
       if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: null };
-      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, mine.rules) };
+      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, executionContext: aiGrants, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, mine.rules) };
     }
     if (additions.status === 'unavailable') return { result: result('unavailable', { reason: additions.reason, revision }), next: null };
     if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: null };
-    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, additions.rules) };
+    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, executionContext: aiGrants, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
     const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;
