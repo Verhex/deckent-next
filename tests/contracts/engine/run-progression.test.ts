@@ -438,6 +438,9 @@ it('119-C1 secfix: unknown capacity is distinguished without writes and unknown 
   fail = true;
   await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['RUN_STORE_CORRUPT'] });
   expect(registry.eligible(sessionKey(), run)).toBe(false);
+  expect(registry.admissionState(sessionKey(), run)).toBe('unknown');
+  expect(registry.admissionState(sessionKey('no-admission'), run)).toBe('ineligible');
+  expect(registry.admissionState(sessionKey(), { ...run, authority: { decision: { eventId: 'changed-authority', sequence: 2 } } })).toBe('ineligible');
   const write = vi.fn();
   await expect(registry.reserve(sessionKey('overflow')).then(write)).rejects.toMatchObject({ code: 'AI_RUN_SESSION_CAPACITY', params: { count: 1, limit: 1, unknown: 1, operation: 'proposal' } });
   expect(write).not.toHaveBeenCalled(); expect(registry.count).toBe(1);

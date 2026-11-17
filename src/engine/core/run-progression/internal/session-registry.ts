@@ -76,8 +76,12 @@ export class RunSessionRegistry {
     slot.admission = { authorityDigest: digest(run.authority ?? null), eligible }; slot.generation++; slot.unknown = false;
   }
   eligible(identity: RunSessionIdentity, run: RunSnapshot): boolean {
+    return this.admissionState(identity, run) === 'eligible';
+  }
+  admissionState(identity: RunSessionIdentity, run: RunSnapshot): 'eligible' | 'unknown' | 'ineligible' {
     const slot = this.existing(identity);
-    return !!slot?.admission?.eligible && !slot.unknown && slot.admission.authorityDigest === digest(run.authority ?? null);
+    if (!slot?.admission?.eligible || slot.admission.authorityDigest !== digest(run.authority ?? null)) return 'ineligible';
+    return slot.unknown ? 'unknown' : 'eligible';
   }
   /** Rollback and retirement differ: transient failure needs verified durable absence, terminal work may be retired. */
   async finish(pin: RunSessionPin) {

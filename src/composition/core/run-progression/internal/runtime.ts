@@ -22,13 +22,13 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
     const ledger = await inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
     return { current, ledger, store: await openConfiguredLedger({ config: current, path: async () => ledger }, { migration: 'forbid' }) };
   };
-  async function asActor<T>(query: ProgressionCursor, work: (maintenance: boolean) => Promise<T>, purpose: 'start' | 'maintenance' = 'start'): Promise<T> {
+  async function asActor<T>(query: ProgressionCursor, work: (maintenance: boolean, channel: 'mcp' | undefined) => Promise<T>, purpose: 'start' | 'maintenance' = 'start'): Promise<T> {
     const { current, ledger, store } = await storeFor();
     let selected: Awaited<ReturnType<typeof selectRunProgression>>;
     try {
       selected = await selectRunProgression(query, sha256(ledger), current.company.id, store, identity, session, purpose);
     } finally { store.close(); }
-    try { return await withLocalPrincipalChannel(selected.channel, () => work(selected.maintenance)); }
+    try { return await withLocalPrincipalChannel(selected.channel, () => work(selected.maintenance, selected.channel)); }
     catch (error) {
       if (error instanceof RunProgressionFailure) throw new RunProgressionFailure(error.cause, error.revision, selected.channel === 'mcp' ? 'ai' : 'person');
       if (selected.channel === 'mcp') throw new RunProgressionFailure(error, null, 'ai');
@@ -64,6 +64,7 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
       catch (failure) { if (queryFailure(failure).code === 'RUN_STORE_CONFLICT') return 'changed' as const; throw failure; }
     }, 'maintenance'),
     expire: query => asActor(query, async () => { await advanceConfiguredRunLifecycle(projectRoot, { schemaVersion: 1, ...query }, options); }, 'maintenance'),
+    canResume: query => asActor(query, async (maintenance, channel) => channel === 'mcp' && !maintenance),
     advance: (query, signal) => asActor(query, maintenance => advanceConfiguredRun(projectRoot, { schemaVersion: 1, ...query }, signal, options, admitExecution, settings.maxReservationsPerTurn, maintenance)),
   }, { ...(observer.onRun ? { onRun: observer.onRun } : {}),
     onScopeSkipped: note => observer.onScopeSkipped?.(ErrorRegistry.createError('RUN_PROGRESSION_SCOPE_SKIPPED', { params: { scopeId: note.scopeId, reason: note.reason } })),

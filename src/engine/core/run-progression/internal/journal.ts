@@ -35,12 +35,12 @@ export async function selectRunProgression(query: ProgressionCursor, ledger: str
   if (channel === 'mcp') {
     const run = await source.loadRun(query.scopeId, query.runId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND');
-    const eligible = session?.eligible({ ledger, companyId, ...query, commandId: intent.commandId, actor: intent.actor }, run);
+    const admission = session?.admissionState({ ledger, companyId, ...query, commandId: intent.commandId, actor: intent.actor }, run), eligible = admission === 'eligible';
     const actor = progressionCustodyActor(run, await Promise.all(run.bindings.map(binding => source.loadBoundDispatch(binding.identity))));
     if (actor) {
       const custodyChannel = selectProgressionActor(actor, read);
       if (purpose === 'maintenance' || !eligible || custodyChannel !== channel) { channel = custodyChannel; maintenance = true; }
-    } else if (!eligible) throw ErrorRegistry.createError('RUN_PROGRESSION_REPROPOSE_REQUIRED');
+    } else if (!eligible) throw ErrorRegistry.createError(admission === 'unknown' ? 'RUN_PROGRESSION_SESSION_UNVERIFIED' : 'RUN_PROGRESSION_REPROPOSE_REQUIRED');
   }
   return { channel, maintenance };
 }

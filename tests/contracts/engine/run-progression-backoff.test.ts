@@ -1,9 +1,38 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { RunProgressionFailure, RunLifecycleRuntimeLoop, type ProgressionCursor } from '#engine/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 afterEach(() => { vi.useRealTimers(); });
 const run = (runId: string): ProgressionCursor => ({ scopeId: 's', runId });
 const none = { items: [], next: null } as const;
+
+it('rechecks only a held session admission at the existing backoff; no membership and policy suspensions never reopen', async () => {
+  vi.useFakeTimers(); const controller = new AbortController(), calls: string[] = [];
+  let verified = false;
+  const canResume = vi.fn(async () => verified), park = vi.fn(async () => { throw ErrorRegistry.createError('POLICY_DENIED'); });
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover() { return { page: { items: [run('held'), run('old'), run('denied')], next: null }, due: none }; },
+    async expire() {}, canResume, park,
+    async advance(query) {
+      calls.push(query.runId);
+      if (query.runId === 'old') throw ErrorRegistry.createError('RUN_PROGRESSION_REPROPOSE_REQUIRED');
+      if (query.runId === 'denied') throw new RunProgressionFailure(ErrorRegistry.createError('POLICY_DENIED'), null, 'ai');
+      if (!verified) throw ErrorRegistry.createError('RUN_PROGRESSION_SESSION_UNVERIFIED');
+      return {} as never;
+    },
+  }, { onRun() { controller.abort(); } }, { pollIntervalMs: 10, failureBackoffMs: 80, maxConcurrentRuns: 3 });
+  const work = loop.run(controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(80);
+    expect(calls).toEqual(['held', 'old', 'denied']); expect(canResume).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(80);
+    expect(canResume.mock.calls).toEqual([[run('held')]]); expect(calls).toHaveLength(3);
+    verified = true;
+    await vi.advanceTimersByTimeAsync(10); await work;
+    expect(canResume.mock.calls).toEqual([[run('held')], [run('held')]]);
+    expect(calls).toEqual(['held', 'old', 'denied', 'held']); expect(park).toHaveBeenCalledTimes(1);
+  } finally { controller.abort(); await work; }
+});
 
 it('backs off a failing Run on its own: the other Runs keep advancing every poll and the failed one is retried only after the backoff', async () => {
   vi.useFakeTimers(); const controller = new AbortController(), calls: string[] = [], errors: string[] = [];

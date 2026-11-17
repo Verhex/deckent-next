@@ -482,6 +482,7 @@
   "error.AI_RUN_SESSION_CAPACITY.unknown": "Yapay zekâ iş kapasitesi dolu ({count}/{limit}). {unknown} kaydın durumu doğrulanamadı. Bildirilen okuma veya uzlaştırma hatalarını giderin.",
   "error.RUN_PROGRESSION_AUTHORITY_REQUIRED": "Servis bu işin aktörünü doğrulayamıyor. Yetkili bir kişiden işin yetkisini incelemesini isteyin.",
   "error.RUN_PROGRESSION_REPROPOSE_REQUIRED": "Bu servis oturumunun otomatik başlangıç kaydı yok. Bu işi iptal edip servis üzerinden yeni bir iş önerin.",
+  "error.RUN_PROGRESSION_SESSION_UNVERIFIED": "Bu işin otomatik başlangıç kaydı doğrulanamadı. Bildirilen okuma veya uzlaştırma hatalarını giderin; servis işe başlamadan önce aynı kaydı yeniden denetleyecek.",
   "run.sessionCapacity.proposalNextStep": "Yer açıldıktan sonra öneriyi yeniden deneyin.",
   "run.sessionCapacity.approvalNextStep": "Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin."
 }

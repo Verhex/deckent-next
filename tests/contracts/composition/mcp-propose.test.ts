@@ -402,6 +402,67 @@ async function sessionRuntime(progress = true) {
   };
   return { ...w, launched, propose, ask, restart, errors, pool };
 }
+it.skipIf(process.platform !== 'linux')('119-C1 revise2: the same admitted AI Run recovers through the real loop after unknown verification, without launching during a contradiction', async () => {
+  const f = await sessionRuntime(), id = 'verification-recovery';
+  writeFileSync(join(f.project, '.deckent/config.json'), JSON.stringify({ ...config(f),
+    runRuntime: { pollIntervalMs: 10, failureBackoffMs: 80, pageSize: 8, maxConcurrentRuns: 2, maxReservationsPerTurn: 1 } }));
+  clearConfigCache(); await f.restart(); await f.pool('hold');
+  const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+  const prototype = Object.getPrototypeOf(opened.store) as typeof opened.store, read = prototype.readRunSession;
+  opened.store.close();
+  let fault: 'read' | 'contradiction' | null = null, reads = 0;
+  const registries: RunSessionRegistry[] = [];
+  vi.spyOn(prototype, 'readRunSession').mockImplementation(function (this: typeof prototype, key) {
+    const state = read.call(this, key);
+    if (key.runId !== id || fault === null) return state;
+    reads++;
+    if (fault === 'read') throw Error('CONTROLLED_SESSION_READ_FAILURE');
+    return { ...state, intent: state.intent ? { ...state.intent, commandId: 'contradictory-command' } : null };
+  });
+  const admit = RunSessionRegistry.prototype.admission;
+  const admission = vi.spyOn(RunSessionRegistry.prototype, 'admission').mockImplementation(function (this: RunSessionRegistry, pin, run, actor, commandId) {
+    admit.call(this, pin, run, actor, commandId);
+    if (commandId === id) registries.push(this);
+  });
+  const reserve = vi.spyOn(RunSessionRegistry.prototype, 'reserve');
+  const launchActors: ReturnType<typeof readLocalOsIdentity>[] = [];
+  vi.mocked(execution.executeConfiguredTask).mockImplementation(async (_root, query, _options, signal) => {
+    f.launched.push(query.runId); launchActors.push(readLocalOsIdentity());
+    if (!signal?.aborted) await new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }));
+    return undefined as never;
+  });
+  const answer = await f.ask(id);
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
+  await f.propose(id);
+  // Capture the real producer identity, rather than synthesizing a new admission on recovery.
+  const registry = registries[0]!, identity = reserve.mock.calls.find(([key]) => key.runId === id)![0];
+  const run = (await openedRun(f, id))!;
+  expect(registry.eligible(identity, run)).toBe(true); expect(admission).toHaveBeenCalledTimes(1);
+  fault = 'read';
+  await expect.poll(() => f.errors.some(error => error.id === id), { timeout: 6000 }).toBe(true);
+  expect(registry.eligible(identity, run)).toBe(false);
+  expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]);
+  fault = 'contradiction'; const before = reads;
+  await expect.poll(() => reads, { timeout: 6000 }).toBeGreaterThan(before + 12);
+  expect(f.errors).toContainEqual({ id: null, code: 'RUN_STORE_CORRUPT' });
+  expect(registry.eligible(identity, run)).toBe(false); expect(registry.count).toBe(1);
+  expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]);
+  fault = null;
+  await expect.poll(() => registry.eligible(identity, run), { timeout: 6000 }).toBe(true);
+  await f.pool('resume');
+  await expect.poll(() => f.launched, { timeout: 6000 }).toEqual([id]);
+  expect(f.errors).toContainEqual({ id, code: 'RUN_PROGRESSION_SESSION_UNVERIFIED' });
+  expect(f.errors.some(error => error.id === id && error.code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED')).toBe(false);
+  expect(admission).toHaveBeenCalledTimes(1); expect(registry.count).toBe(1);
+  const ai = withMcpPrincipal(readLocalOsIdentity), actor = { id: ai.id, issuer: ai.issuer, subject: ai.subject };
+  expect(launchActors).toEqual([expect.objectContaining(actor)]);
+  const receipts = f.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)));
+  expect(receipts.filter(command => command.action === 'reserve-run-tasks')).toEqual([expect.objectContaining({ runId: id, actor })]);
+}, 30000);
+async function openedRun(f: { project: string; env: { HOME: string } }, id: string) {
+  const { store } = await openConfiguredAttemptStore(f.project, { env: f.env });
+  try { return await store.loadRun('scope', id); } finally { store.close(); }
+}
 it.skipIf(process.platform !== 'linux')('119-C1 F2: old pending replay stays pending without membership; a fresh socket answer then opens iii', async () => {
   const f = await sessionRuntime(), answer = await f.ask('pending-card'); await f.restart();
   const request = vi.spyOn(RunSessionRegistry.prototype, 'request'), decision = vi.spyOn(RunSessionRegistry.prototype, 'decision'), admission = vi.spyOn(RunSessionRegistry.prototype, 'admission');

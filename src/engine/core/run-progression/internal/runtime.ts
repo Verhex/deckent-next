@@ -8,6 +8,8 @@ type SkippedProgressionScope = Readonly<{ scopeId: string; reason: 'foreign' | '
 interface RunLifecycleRuntimeOperations {
   discover(after: ProgressionCursor | null, dueAfter: ProgressionCursor | null, now: number): Promise<{ page: Page; due: Page; skipped?: readonly SkippedProgressionScope[] }>;
   advance(query: ProgressionCursor, signal: AbortSignal): ReturnType<RunProgressionTurn['advance']>;
+  /** Read-only selection of the same session admission; never retries a policy denial or starts work. */
+  canResume?(query: ProgressionCursor): Promise<boolean>;
   expire(query: ProgressionCursor): Promise<void>;
   park?(query: ProgressionCursor, error: unknown): Promise<'parked' | 'changed'>;
 }
@@ -43,8 +45,12 @@ export class RunLifecycleRuntimeLoop {
   private async failed(query: ProgressionCursor, error: unknown) {
     const key = this.key(query), revision = error instanceof RunProgressionFailure ? error.revision : null;
     const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+    if (code === 'RUN_PROGRESSION_SESSION_UNVERIFIED') {
+      this.suspended.add(key); this.retryNotBefore.set(key, this.now() + this.settings.failureBackoffMs);
+      await this.report(query, error); return;
+    }
     if (code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED' || code === 'RUN_PROGRESSION_AUTHORITY_REQUIRED') {
-      this.suspended.add(key); await this.report(query, error); return;
+      this.suspended.add(key); this.retryNotBefore.delete(key); await this.report(query, error); return;
     }
     const denied = error instanceof RunProgressionFailure && error.actorClass === 'ai'
       && (code === 'POLICY_DENIED' || code === 'POLICY_APPROVAL_UNSUPPORTED');
@@ -83,7 +89,7 @@ export class RunLifecycleRuntimeLoop {
         if (backoffUntil > this.now()) { await wait(backoffUntil - this.now(), signal); continue; }
         try {
           const { page, due, skipped } = await this.operations.discover(cursor, dueCursor, this.now());
-          for (const [key, until] of this.retryNotBefore) if (until <= this.now()) this.retryNotBefore.delete(key);
+          for (const [key, until] of this.retryNotBefore) if (until <= this.now() && !this.suspended.has(key)) this.retryNotBefore.delete(key);
           await this.noteSkipped(skipped);
           // The page cursor advances only past Runs this poll actually visited: a page met with a full bound is re-read next poll (Fable R1).
           const previous: ProgressionCursor | null = cursor;
@@ -103,7 +109,18 @@ export class RunLifecycleRuntimeLoop {
             }
             visited = query;
             const key = this.key(query);
-            if (this.inFlight.has(key) || this.suspended.has(key) || this.backedOff(query)) continue;
+            if (this.inFlight.has(key) || this.backedOff(query)) continue;
+            if (this.suspended.has(key)) {
+              if (!this.retryNotBefore.has(key)) continue;
+              this.retryNotBefore.set(key, this.now() + this.settings.failureBackoffMs);
+              try { if (!await this.operations.canResume?.(query)) continue; }
+              catch (error) {
+                const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+                if (code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED' || code === 'RUN_PROGRESSION_AUTHORITY_REQUIRED') this.retryNotBefore.delete(key);
+                await this.report(query, error); continue;
+              }
+              this.suspended.delete(key); this.retryNotBefore.delete(key);
+            }
             const work = Promise.resolve().then(async () => {
               try {
                 let result: Awaited<ReturnType<RunProgressionTurn['advance']>>;
