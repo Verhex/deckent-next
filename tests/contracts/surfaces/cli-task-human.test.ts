@@ -5,7 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { unifiedDiff } from '../../../src/adapters/core/workspace-write/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { ErrorRegistry, clearConfigCache } from '#platform/index.js';
 import { CLI_CATALOG } from '#surfaces/core/cli-kit/index.js';
 import { TASK_ACTION_GROUPS, pickTaskTarget, taskActions, taskCommand, taskMenu } from '#surfaces/core/cli-task/index.js';
 import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
@@ -228,12 +228,12 @@ it('accept: the revision is read before the card; declining writes nothing; a st
   expect(printed.some(line => /not independently verified|unverified/i.test(line))).toBe(true);
 });
 
-function fakePort(log: string[], options: { queue?: boolean; targets?: string[]; summary?: boolean } = {}) {
+function fakePort(log: string[], options: { queue?: boolean; targets?: string[]; summary?: boolean; workingTree?: boolean } = {}) {
   const deliverView = { operation: 'deliver-integration', scopeId: 's', runId: LONG, taskId: 't', commandId: 'd', title: 'Add the file', resource: 'refs/deckent/delivery/x',
     from: 'base', to: 'cand', files: ['src/a.ts'], added: 1, removed: 0 };
   const preview = { target: { key: 'k', scopeId: 's', runId: LONG, taskId: 't', title: 'Add the file' }, identity: {}, files: [{ path: 'src/a.ts', added: 1, removed: 0 }], added: 1, removed: 0,
     source: 'src', base: 'base', proposal: 'p', outOfScope: [], adoptionTargets: options.targets ?? [], verification: null, ...(options.queue ? { queueTarget: 'refs/heads/main' } : {}),
-    ...(options.summary ? { summary: deliverySummaryFixture() } : {}) };
+    ...(options.summary ? { summary: deliverySummaryFixture() } : {}), ...(options.workingTree ? { workingTree: true as const } : {}) };
   const refuse = () => Object.assign(new Error('declined'), { code: 'DELIVERY_CONFIRMATION_DECLINED' });
   return {
     async preview() { log.push('preview'); return preview; },
@@ -280,6 +280,10 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   // Delivered and adopted, each after its own yes.
   const adopted = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', 'yes', 'exit'], { targets: ['refs/heads/main'] });
   expect(adopted.log).toEqual(['preview', 'delivered', 'adopted:refs/heads/main']);
+  expect(adopted.printed.join('\n')).toContain('Delivered commit');
+  const files = await run(['deliver', 'deliver', 'yes', 'exit'], { workingTree: true, targets: ['refs/heads/main'] });
+  expect(files.log).toEqual(['preview', 'delivered']); expect(files.printed.join('\n')).toContain('Written into your files. No commit was made; index and branches are unchanged.');
+  expect(files.cards.some(card => card.title.startsWith('Adopt'))).toBe(false);
   // A queue target: enqueue, then the exact batch card; declining it publishes nothing.
   const queued = await run(['deliver', 'deliver', 'no'], { queue: true });
   expect(queued.log).toEqual(['preview', 'enqueued', 'error:DELIVERY_CONFIRMATION_DECLINED']);
@@ -298,6 +302,7 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
 });
 
 it('alpha.53 D1: a task read without --scope uses the configured scope and says so; without one it is CLI_SCOPE_REQUIRED (exit 2), a change never defaults', async () => {
+  registerProviderConfig();
   const root = await project({ terminal: { scopeId: 's' } });
   const seen: string[] = [];
   const handlers = { async previewWorkspacePatch(_root: string, identity: { scopeId: string }) { seen.push(identity.scopeId); return patchResult('ok();\nnew();\n'); }, renderUnifiedDiff: unifiedDiff };
@@ -344,4 +349,29 @@ it('BeUser M-33: setting a result aside or bringing it back is the person\'s ter
     expect(refused.code).not.toBe(0); expect(refused.err).toContain('AUTHORITY_WITNESS_REQUIRED');
   }
   expect(calls).toEqual([]);
+});
+
+it('D1 CLI prints each delivery kind truthfully and a denied adoption of delivered files stays exit 78', async () => {
+  const root = await project(), args = ['task', 'integration-deliver', ...patchArgs.slice(2), '--command-id', 'd', '--candidate-command-id', 'c'];
+  let attempts = 0;
+  for (const command of ["chmod go-w -- '/project/.git'", '']) {
+    const warning = { path: '/project/.git', command, before: '0775', after: '0755' };
+    for (const env of [{}, { AI_AGENT: '1' }]) {
+      const refused = await run([...args, '--json'], { gitDeliveryPermission: async () => warning, deliverWorkspaceIntegration: async () => { attempts++; } }, root, env);
+      expect(refused.code).toBe(1); expect(JSON.parse(refused.err)).toMatchObject({ code: 'PATCH_UNSAFE' }); expect(refused.err).toContain(command || 'no command is offered');
+      if (!command) expect(refused.err).not.toContain('chmod');
+    }
+  }
+  expect(attempts).toBe(0);
+  for (const lang of ['en', 'tr']) {
+    const files = await run([...args, '--lang', lang], { async deliverWorkspaceIntegration() { return { status: 'working-tree-delivered', plan: { ref: 'ref', commit: 'c' } }; } }, root);
+    expect(files.code).toBe(0); expect(files.text).toContain(lang === 'en' ? 'Written into your files. No commit was made; index and branches are unchanged.' : 'Dosyalarınıza yazıldı. Commit atılmadı; index ve dallar değişmedi.');
+    const refs = await run([...args, '--lang', lang], { async deliverWorkspaceIntegration() { return { status: 'reference-delivered', plan: { ref: 'ref', commit: 'c' } }; } }, root);
+    expect(refs.text).toContain(lang === 'en' ? 'Delivered commit c at ref.' : 'Commit c, ref referansına teslim edildi.');
+    const denied = await run(['task', 'integration-adopt', ...patchArgs.slice(2), '--command-id', 'adopt', '--delivery-command-id', 'd', '--target', 'refs/heads/denied', '--lang', lang], {
+      async adoptWorkspaceIntegration() { throw ErrorRegistry.createError('ADOPTION_TARGET_DENIED'); },
+      async inspectRun() { return { run: view([{ resultBrief: { attemptId: 'a', runDelivery: { schemaVersion: 2, application: 'working-tree', state: 'delivered', commandId: 'd' } } }]) }; },
+    }, root);
+    expect(denied.code).toBe(78); expect(denied.err).toContain(lang === 'en' ? 'Your files were delivered without a commit.' : 'Dosyalarınız teslim edildi, commit atılmadı.');
+  }
 });

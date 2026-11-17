@@ -1,3 +1,4 @@
+import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView, QueueConsent } from '#engine/index.js';
@@ -11,6 +12,7 @@ import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */
 export interface DeliveryWindowLabels {
+  readonly permissionHints?: string; readonly permissionCard?: (path: string, before: string, after: string, command: string) => CliCardRequest;
   readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   /** TESLIM-KARTI-OZET (shared renderer): a ticket's or Attempt's summary lines (`brief` leaves out what the window shows itself: title, operation,
@@ -22,7 +24,7 @@ export interface DeliveryWindowLabels {
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
   /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
-  readonly deliveredTitle: string; readonly adoptNone: string;
+  readonly candidateTitle?: string; readonly deliveredTitle: string; readonly adoptNone: string;
   /** R9p working-tree mode: where the yes writes, the confirm line, the result row and summary, and the next step of a file conflict. */
   readonly whereFiles: string; readonly confirmFiles: string; readonly deliveredFiles: string; readonly summaryWritten: string; readonly setAside: string; readonly nextConflictFiles: string;
   /** L1c (owner "güncel hâle göre yeniden yap sunar"): the `r` hint of a working-tree conflict whose task request the Run recorded. */ readonly redoFiles: string;
@@ -42,7 +44,7 @@ export interface DeliveryWindowLabels {
 }
 type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
-type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
+type Stage = Readonly<{ kind: 'permission'; card: CliCardRequest; resolve: (yes: boolean) => void }> | Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
   | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; summaries?: readonly (DeliverySummary | null)[]; resolve: (yes: boolean) => void }>
   | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'verify' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
 /** The verification choice of the selected branch: the candidates (null while read), the selected row and the last refusal or read failure. */
@@ -56,14 +58,16 @@ const QUEUE_REPREPARE = new Set(['PATCH_BASE_ADVANCED', 'ADOPTION_BASE_CHANGED',
 const VERIFY_RETRY = new Set(['ADOPTION_NOT_VERIFIED', 'ADOPTION_VERIFICATION_MISMATCH', 'ADOPTION_VERIFICATION_CRITERIA_WEAKER', 'ADOPTION_VERIFICATION_FAILED',
   'ADOPTION_VERIFICATION_PENDING', 'ADOPTION_VERIFICATION_UNSETTLED', 'ADOPTION_VERIFICATION_CANCELLED']);
 interface Entry {
-  readonly target: DeliveryTarget; readonly sinceMs: number;
-  opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
+  target: DeliveryTarget; readonly sinceMs: number;
+  opening: DeliveryOpening; generation: number; inputRevision: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
   reattempt?: boolean; queueBlocked?: string; patch?: DeliveryPreview; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
+/** Each new question, including another exact card of the same kind, starts its own existing Window quiet period. */
+const showQuestion = (entry: Entry, stage: Stage) => { entry.stage = stage; entry.inputRevision++; };
 
 interface DeliveryWindowsInput {
   readonly port: TerminalDeliveryPort | undefined; readonly labels: DeliveryWindowLabels | undefined;
@@ -96,13 +100,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   }, [changed]);
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
-    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
+    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; showQuestion(entry, { kind: 'queue' }); summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false; delete entry.queueBlocked; delete entry.patch;
     // BeUser M-25/DR2-07: an already-delivered result opens on its adoption step (no second delivery, no integration check).
     const delivered = entry.target.delivered;
     if (delivered && current.previewDelivered) { current.previewDelivered(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.delivered = delivered;
-      entry.stage = { kind: preview.workingTree ? 'done' : 'delivered' }; if (preview.workingTree) entry.settled = true; changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
+      if (preview.workingTree) { entry.stage = { kind: 'done' }; entry.settled = true; } else showQuestion(entry, { kind: 'delivered' }); changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
+    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; showQuestion(entry, { kind: 'ready' }); changed(); } },
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
         // BeUser M-32: a refused check still shows the worker's changes (read-only diffs of the retained patch); a failed read shows nothing more.
@@ -120,10 +124,10 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     seen.current.add(target.key);
     let entry = entries.current.get(target.key);
     if (!entry) {
-      entry = { target, sinceMs: Date.now(), opening, generation: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
+      entry = { target, sinceMs: Date.now(), opening, generation: 0, inputRevision: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
         selected: 0, closed: false, settled: false, verify: null };
       entries.current.set(target.key, entry); load(entry);
-    } else if (entry.closed && !entry.delivered) load(entry);
+    } else if (!entry.delivered && (entry.closed || entry.stage.kind === 'failed')) { entry.target = target; load(entry); }
     entry.closed = false; entry.opening = opening; entry.generation++;
     order.current = opening === 'foreground' ? [target.key, ...order.current.filter(key => key !== target.key)]
       : order.current.includes(target.key) ? order.current : [...order.current, target.key];
@@ -134,7 +138,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const targets = useMemo(() => labels ? awaitingDeliveryTargets(input.runs, labels.fallbackTitle) : [], [input.runs, labels]);
   useEffect(() => { for (const target of targets) if (!seen.current.has(target.key)) open(target, 'background'); }, [targets, open]);
   // An unmounted terminal answers every waiting card with no.
-  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); else if (entry.stage.kind === 'queue-confirm') entry.stage.resolve(false); }, []);
+  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); else if (entry.stage.kind === 'queue-confirm' || entry.stage.kind === 'permission') entry.stage.resolve(false); }, []);
 
   const answer = useCallback((entry: Entry) => async (view: EffectConfirmationView): Promise<boolean> => {
     const consent = entry.consent; entry.consent = null;
@@ -144,7 +148,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       const back = view.operation === 'adopt-integration' ? 'adopting' : 'working';
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); if (entry.stage.kind === 'confirm') { entry.stage = { kind: back }; changed(); } resolve(yes); };
-      entry.stage = { kind: 'confirm', waiting: { view, resolve: finish } }; changed();
+      showQuestion(entry, { kind: 'confirm', waiting: { view, resolve: finish } }); changed();
     });
   }, [changed]);
   const fail = useCallback((entry: Entry, error: unknown) => {
@@ -154,13 +158,14 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const queue = latest.current.port?.queue;
     if (!queue || !entry.queue) return;
     queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => {
-      if (view) { entry.queue = view; entry.stage = { kind: 'queue' }; entry.settled = view.state === 'settled'; summarize(entry); changed(); }
+      if (view) { if (entry.stage.kind !== 'queue' || entry.queue?.state !== view.state) showQuestion(entry, { kind: 'queue' });
+        entry.queue = view; entry.settled = view.state === 'settled'; summarize(entry); changed(); }
     }, error => fail(entry, error));
   }, [changed, fail, summarize]);
   const prepareCurrent = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue; if (!queue) return;
     entry.stage = { kind: 'queue-working' }; changed();
-    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => fail(entry, error));
+    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; showQuestion(entry, { kind: 'queue' }); summarize(entry); changed(); }, error => fail(entry, error));
   }, [changed, fail, summarize]);
   const confirmQueue = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue;
@@ -169,7 +174,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const ask = (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => new Promise<boolean>(resolve => {
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'queue-working' }; changed(); resolve(yes); };
-      entry.stage = { kind: 'queue-confirm', view, summaries, resolve: finish }; changed();
+      showQuestion(entry, { kind: 'queue-confirm', view, summaries, resolve: finish }); changed();
     });
     queue.confirm(entry.target.scopeId, entry.queue.commandId, ask).then(() => refreshQueue(entry), error => fail(entry, error));
   }, [changed, fail, refreshQueue]);
@@ -180,10 +185,15 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     entry.consent = { operation: 'deliver-integration', scopeId: preview.identity.scopeId, runId: preview.identity.runId, taskId: preview.identity.taskId,
       commandId: entry.ids.delivery, files: preview.files.map(file => file.path), from: preview.base, ...(preview.changes ? { changes: preview.changes } : {}) };
     entry.stage = { kind: 'working' }; changed();
-    current.deliver(preview, entry.ids, answer(entry)).then(outcome => {
+    const permission = words.permissionCard ? (path: string, before: string, after: string, command: string) => new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
+      const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'working' }; changed(); resolve(yes); };
+      showQuestion(entry, { kind: 'permission', card: words.permissionCard!(path, before, after, command), resolve: finish }); changed();
+    }) : undefined;
+    current.deliver(preview, entry.ids, answer(entry), permission).then(outcome => {
       entry.delivered = outcome; entry.consent = null;
-      entry.stage = { kind: preview.adoptionTargets.length ? 'delivered' : 'done' };
-      if (!preview.adoptionTargets.length) entry.settled = true;
+      if (!preview.workingTree && preview.adoptionTargets.length) showQuestion(entry, { kind: 'delivered' });
+      else { entry.stage = { kind: 'done' }; entry.settled = true; }
       latest.current.summary(fillTemplate(preview.workingTree ? words.summaryWritten : words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref,
         command: outcome.commandId }) + (outcome.setAside?.length ? `\n${fillTemplate(words.setAside, { files: outcome.setAside.join(', ') })}` : ''));
       changed();
@@ -192,9 +202,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   // Y1: the candidates of the configured verification kind, read again on `r`; a failed read is the step's status (nothing is chosen for the person).
   const readVerification = useCallback((entry: Entry) => {
     const current = latest.current.port, preview = entry.preview; if (!current || !preview) return;
+    const previous = entry.verify?.runs, selected = entry.verify?.selected ?? 0;
     const verify: Verify = { runs: null, selected: 0, status: entry.verify?.status ?? '' }; entry.verify = verify; changed();
-    current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs; changed(); } },
-      error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error); changed(); } });
+    current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs;
+      if (!previous || runs.length !== previous.length || runs.some((run, index) => run.runId !== previous[index]!.runId || run.taskId !== previous[index]!.taskId)) entry.inputRevision++;
+      else verify.selected = selected;
+      changed(); } }, error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error);
+        if (!previous || previous.length) entry.inputRevision++; changed(); } });
   }, [changed]);
   const adopt = useCallback((entry: Entry, verificationRunId?: string) => {
     const current = latest.current.port, preview = entry.preview, delivered = entry.delivered, words = latest.current.labels!;
@@ -213,7 +227,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       entry.consent = null;
       // A verification refusal moved nothing: back to the choice with the reason; a retry is a new adoption command.
       if (preview.verification && VERIFY_RETRY.has(codeOf(error) ?? '')) {
-        entry.ids = { ...entry.ids, adopt: ids().adopt }; entry.stage = { kind: 'verify' };
+        entry.ids = { ...entry.ids, adopt: ids().adopt }; showQuestion(entry, { kind: 'verify' });
         entry.verify = { runs: entry.verify?.runs ?? null, selected: entry.verify?.selected ?? 0, status: latest.current.errorText(error) };
         if (entry.verify.runs === null) readVerification(entry); else changed();
         return;
@@ -224,7 +238,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const close = useCallback((entry: Entry) => {
     const words = latest.current.labels!;
     if (entry.stage.kind === 'working' || entry.stage.kind === 'adopting' || entry.stage.kind === 'queue-working') return;
-    if (entry.stage.kind === 'queue-confirm') { entry.stage.resolve(false); return; }
+    if (entry.stage.kind === 'queue-confirm' || entry.stage.kind === 'permission') { entry.stage.resolve(false); return; }
     if (entry.stage.kind === 'confirm') { entry.stage.waiting.resolve(false); return; }
     // The one transcript line of a window that ends without a new result: left waiting, or why it was not done (a success already wrote its line).
     const title = humanRecordText(entry.target.title, latest.current.known), stage = entry.stage;
@@ -243,9 +257,11 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
       body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
+      inputRevision={visible.inputRevision}
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
+        if (stage.kind === 'permission') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
         if (text === 'r' && !key.ctrl && !key.meta && redoable(visible) && input.redo) { input.redo(`/do ${visible.target.request}`); close(visible); return true; }
         if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
@@ -294,7 +310,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           if ((key.upArrow || key.downArrow) && options.length) { verify.selected = (verify.selected + (key.upArrow ? options.length - 1 : 1)) % options.length; changed(); return true; }
           if (key.return) return false;
           if (decision === 'yes') { const chosen = options[verify.selected]; if (chosen === undefined) return false; adopt(visible, chosen ?? undefined); return true; }
-          if (decision === 'no') { visible.stage = { kind: 'delivered' }; visible.verify = null; changed(); return true; }
+          if (decision === 'no') { showQuestion(visible, { kind: 'delivered' }); visible.verify = null; changed(); return true; }
           if (text === 'r' && !key.ctrl && !key.meta) { readVerification(visible); return true; }
           return false;
         }
@@ -303,7 +319,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         if (decision === 'yes') {
           if (stage.kind === 'ready') deliver(visible);
           // With a configured verification bar the branch's y opens the verification choice first (the CLI's --verification-run).
-          else if (stage.kind === 'delivered' && visible.preview?.verification) { visible.stage = { kind: 'verify' }; visible.verify = null; readVerification(visible); }
+          else if (stage.kind === 'delivered' && visible.preview?.verification) { showQuestion(visible, { kind: 'verify' }); visible.verify = null; readVerification(visible); }
           else if (stage.kind === 'delivered') adopt(visible);
           else return false;
           return true;
@@ -319,7 +335,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     if (!labels) return [];
     const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
     // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).
-    return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
+    return [...awaiting.map(target => target.candidateCommandId && labels.candidateTitle ? Object.freeze({ ...target, title: fillTemplate(labels.candidateTitle, { title: target.title }) }) : target), ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
       && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
     target: (key: string) => entries.current.get(key)?.target ?? null,
@@ -343,6 +359,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'queue-confirm': return labels.confirmHints;
     case 'ready': return entry.preview?.diffs?.length ? entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : `${labels.hints} · ${labels.diffListHints}` : labels.hints;
     case 'confirm': return labels.confirmHints;
+    case 'permission': return labels.permissionHints ?? labels.confirmHints;
     case 'delivered': return labels.adoptHints;
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
@@ -360,6 +377,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
+  if (stage.kind === 'permission') return [line(stage.card.title, { bold: true }), ...(stage.card.body ?? []).map(value => line(value)), ...stage.card.options.map(option => line(option.label))];
   const rows: WindowLine[] = [line(fillTemplate(labels.ids, { run: shortId(target.runId), task: target.taskId }), { role: 'muted' })];
   // The summary stands ABOVE the exact card or status, never inside it (the consent stays bound to the card's digest).
   if (stage.kind === 'queue-confirm' && labels.queue) return [...rows, ...(labels.cardSummary?.consent(stage.summaries ?? []) ?? []).map(value => line(value)),
@@ -389,7 +407,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     if (!delivered) {
       if (preview.summary !== undefined && labels.cardSummary) rows.push(...labels.cardSummary.lines(preview.summary, true, preview.workingTree === true).map(value => line(value)));
       rows.push(line(preview.workingTree ? labels.whereFiles : labels.where, { role: 'muted' }));
-      if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
+      if (!preview.workingTree && preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
       if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));
     }
   }

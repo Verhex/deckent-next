@@ -126,3 +126,16 @@ describe('exited work awaiting evaluation without a retained patch (M2)', () => 
     expect(waiting(true, undefined)).toMatchObject({ detail: null }); expect(waiting(false, false)).toMatchObject({ detail: null });
   });
 });
+
+it('D1 a prepared or refused candidate still awaits delivery; another task or Attempt cannot hide it', () => {
+  const run = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]), base = evidence(run, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true })]);
+  const receipt = (task: string, state: 'integrated' | 'delivering' | 'delivered', generation = 1) => ({ identity: { ...identity(task), generation }, receipt: { state, commit: null } });
+  for (const state of ['integrated', 'delivering'] as const) {
+    const e = { ...base, run: { ...base.run, delivery: { state, commit: null }, deliveryReceipts: [receipt('w', state), receipt('x', 'delivered')] } };
+    expect(project(e).deliveryOutlook).toBe('awaiting-delivery');
+  }
+  const stale = { ...base, run: { ...base.run, deliveryReceipts: [receipt('w', 'delivered', 2), receipt('x', 'delivered')] } };
+  expect(project(stale).deliveryOutlook).toBe('awaiting-delivery');
+  const settled = { ...base, run: { ...base.run, deliveryReceipts: [receipt('w', 'delivered'), receipt('x', 'delivered')] } };
+  expect(project(settled).deliveryOutlook).not.toBe('awaiting-delivery');
+});

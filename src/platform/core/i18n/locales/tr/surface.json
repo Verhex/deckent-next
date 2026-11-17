@@ -579,7 +579,7 @@
   "monitor.approval.summaryHidden": "özet görme izniniz yok",
   "monitor.col.delivery": "Teslim",
   "monitor.delivery.integrating": "birleştiriliyor",
-  "monitor.delivery.integrated": "birleştirildi",
+  "monitor.delivery.integrated": "aday hazır; teslim edilmedi",
   "monitor.delivery.delivering": "teslim ediliyor",
   "monitor.delivery.delivered": "teslim edildi",
   "monitor.delivery.adopting": "benimseniyor",

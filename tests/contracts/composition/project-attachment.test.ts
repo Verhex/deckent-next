@@ -1,3 +1,5 @@
+import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
+import { execFileSync } from 'node:child_process';
 import * as platform from '#platform/index.js';
 import { FilePolicySource } from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
@@ -799,4 +801,75 @@ it('attachment reader: public tier-all uninstall refuses before confirmation or 
     { confirm, backupPassphrase }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_NEWER_RECORD' });
   expect(confirm).not.toHaveBeenCalled(); expect(backupPassphrase).not.toHaveBeenCalled();
   expect(await snapshotBytes(f.root)).toEqual(before);
+});
+
+async function deliveryPermissionFixture(gitDirectoryName?: string) {
+  const root = await mkdtemp(join(tmpdir(), "deckent git 'permission-")); roots.push(root);
+  const git = join(root, gitDirectoryName ?? '.git');
+  const env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'global') }, options = { env };
+  await mkdir(join(root, '.deckent'));
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ execution: { git: { gitExecutable: '/usr/bin/git' } } }));
+  execFileSync('/usr/bin/git', ['-C', root, 'init', '-q', ...(gitDirectoryName ? ['--separate-git-dir', git] : [])]);
+  const config = await loadComposedConfig(root, options);
+  for (const key of [...config.cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  personEffectWitness.allowed = true;
+  const child = join(git, 'objects'); await fs.chmod(git, 0o775); await fs.chmod(child, 0o777);
+  return { root, options, git, child };
+}
+it.skipIf(process.platform !== 'linux')('D1 the Git card narrows only the pinned root on yes; no and AI-marked answers change nothing', async () => {
+  const f = await deliveryPermissionFixture(), before = await snapshotBytes(f.root);
+  const warning = await configuredGitDeliveryPermission(f.root, f.options);
+  expect(warning?.path).toBe(f.git);
+  expect(warning?.command).toBe(`chmod go-w -- '${f.git.replaceAll("'", "'\"'\"'")}'`);
+  // Execute the offered command against this disposable ordinary path: quoting preserves both its space and single quote.
+  execFileSync('/bin/sh', ['-c', warning!.command]); expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o755); await fs.chmod(f.git, 0o775);
+  const no = vi.fn(async () => false);
+  await expect(configuredGitDeliveryPermission(f.root, f.options, no)).rejects.toMatchObject({ code: 'PATCH_UNSAFE', params: { reason: 'git-directory-declined' } });
+  expect(no).toHaveBeenCalledOnce(); expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o775);
+  const yes = vi.fn(async () => true);
+  await expect(configuredGitDeliveryPermission(f.root, { env: { ...f.options.env, AI_AGENT: '1' } }, yes)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(yes).not.toHaveBeenCalled(); expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o775);
+  await configuredGitDeliveryPermission(f.root, f.options, yes);
+  expect(yes).toHaveBeenCalledWith(f.git, '0775', '0755', warning!.command); expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o755);
+  expect((await fs.lstat(f.child)).mode & 0o777).toBe(0o777); expect(await snapshotBytes(f.root)).toEqual(before);
+  expect(await configuredGitDeliveryPermission(f.root, f.options)).toBeNull();
+});
+it.skipIf(process.platform !== 'linux')('D1 unsafe path display never becomes a command or a chmod target; the person still narrows the pinned inode', async () => {
+  const f = await deliveryPermissionFixture("deckent-\u001b[31mred\n\t'permission-"), display = f.git.replace('\u001b[31m', '').replace('\n\t', '  ');
+  const warning = await configuredGitDeliveryPermission(f.root, f.options);
+  expect(warning).toEqual({ path: display, command: '', before: '0775', after: '0755' });
+  const { inspectGitDeliveryDirectory } = await import('#adapters/index.js');
+  const refusal = await inspectGitDeliveryDirectory({ sourceRoot: f.root, workspaceRoot: f.root, gitExecutable: '/usr/bin/git', timeoutMs: 30_000, outputBytes: 65536 })
+    .catch((error: unknown) => queryFailure(error));
+  expect(refusal).toMatchObject({ code: 'PATCH_UNSAFE' });
+  expect((refusal as platform.DeckentError).params).toEqual({ ...warning, reason: 'git-directory-write' });
+  expect(JSON.stringify(refusal)).not.toContain('\\u001b');
+  for (const locale of ['en', 'tr'] as const) {
+    const error = platform.ErrorRegistry.createError('PATCH_UNSAFE', { locale, params: { ...warning, reason: 'git-directory-write' } });
+    const card = cliHuman.directoryPermissionCard(warning!.path, warning!.before, warning!.after, locale, warning!.command);
+    for (const text of [error.message, ...card.body!]) {
+      for (const control of ['\u001b', '\n', '\r', '\t']) expect(text).not.toContain(control);
+      expect(text).not.toContain('chmod');
+    }
+    expect(error.message).toContain(locale === 'en' ? 'no command is offered' : 'komut sunulmuyor');
+    expect(card.body).toContain(error.message); expect(card.body).toContain(display);
+  }
+  const no = vi.fn(async () => false);
+  const declined = await configuredGitDeliveryPermission(f.root, f.options, no).catch((error: unknown) => queryFailure(error));
+  expect(declined).toMatchObject({ code: 'PATCH_UNSAFE', params: { path: display, command: '', reason: 'git-directory-declined' } });
+  expect(platform.ErrorRegistry.createError('PATCH_UNSAFE', { params: (declined as platform.DeckentError).params, locale: 'en' }).message).toContain('no command is offered');
+  const yes = vi.fn(async () => true), inode = (await fs.lstat(f.git)).ino;
+  await expect(configuredGitDeliveryPermission(f.root, { env: { ...f.options.env, AI_AGENT: '1' } }, yes)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED', params: { path: display } });
+  expect(yes).not.toHaveBeenCalled(); expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o775);
+  await configuredGitDeliveryPermission(f.root, f.options, yes);
+  expect(yes).toHaveBeenCalledWith(display, '0775', '0755', ''); expect((await fs.lstat(f.git)).ino).toBe(inode);
+  expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o755); expect((await fs.lstat(f.child)).mode & 0o777).toBe(0o777);
+  expect(await configuredGitDeliveryPermission(f.root, f.options)).toBeNull();
+});
+it.skipIf(process.platform !== 'linux')('D1 a Git folder replaced during the card is never chmodded', async () => {
+  const f = await deliveryPermissionFixture(), original = f.git + '-original';
+  await expect(configuredGitDeliveryPermission(f.root, f.options, async () => {
+    await rename(f.git, original); await cp(original, f.git, { recursive: true }); await fs.chmod(f.git, 0o775); return true;
+  })).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  expect((await fs.lstat(f.git)).mode & 0o777).toBe(0o775); expect((await fs.lstat(original)).mode & 0o777).toBe(0o775);
 });

@@ -594,3 +594,18 @@ it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with 
   await check(legacy, 0);
   await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
 });
+
+it('D1 doctor reports the shared Git directory warning and command without offering repair', async () => {
+  const root = await project();
+  for (const command of ["chmod go-w -- '/project/.git'", '']) for (const lang of ['en', 'tr']) for (const json of [false, true]) {
+    let out = '', inspections = 0;
+    await runKernelCommand(['doctor', '--lang', lang, ...(json ? ['--json'] : [])], { root, env: { HOME: join(root, 'home') }, stdout: { write: (text: string) => { out += text; } }, stderr: { write() {} },
+      gitDeliveryPermission: async (_root, _options, confirm) => { expect(confirm).toBeUndefined(); inspections++; return { path: '/project/.git', command, before: '0775', after: '0755' }; },
+    });
+    expect(inspections).toBe(1);
+    if (json) { expect(JSON.parse(out)).toHaveProperty('summary'); expect(out).not.toContain('chmod go-w'); continue; }
+    expect(out).toContain('/project/.git');
+    expect(out).toContain(command || (lang === 'en' ? 'no command is offered' : 'komut sunulmuyor'));
+    if (!command) expect(out).not.toContain('chmod go-w');
+  }
+});

@@ -224,3 +224,14 @@ it('RC-C1: a company/pool stop during the model preflight cancels before the loc
   open = false; release(); await until(() => view.stdout.text.includes('NOT RUN'), 'policy recheck cancels');
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUNS HERE');
 });
+
+it('D1 the first /do warns once and both requests still reach planning', async () => {
+  let warnings = 0, plans = 0;
+  const view = mountWorkline({ doPlan: { ...words, warning: async () => { warnings++; return 'GIT FOLDER WRITABLE'; }, lines: () => ['PLANNED'],
+    plan: async () => { plans++; return { ...pendingBrainFixture(), proposal: { ...pendingBrainFixture().proposal, status: 'rejected', reason: null, approval: null } }; } } });
+  mounted.push(view); await settle(40);
+  view.stdin.write('/do first\r'); await until(() => plans === 1, 'first planning');
+  await until(() => view.stdout.text.includes('PLANNED'), 'first result'); view.stdin.write('\u000f'); await settle(60); view.stdin.write('\u001b'); await settle(100);
+  view.stdin.write('/do second\r'); await until(() => plans === 2, 'second planning');
+  expect(warnings).toBe(1); expect(view.stdout.text).toContain('GIT FOLDER WRITABLE');
+});

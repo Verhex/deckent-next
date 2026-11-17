@@ -97,7 +97,7 @@ export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal
 type WorklineErrorText = (error: unknown) => string;
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
-  readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
+  readonly doPlan?: { readonly warning?: () => Promise<string | null>; readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
     /** `check`: the Run card's line when the folder has uncommitted changes (worded for the delivery mode), null when none applies (lead 2026-11-09:
      * one line on the one Run card, for /do and a chat turn's `propose_work` alike; no card of its own). */
@@ -378,7 +378,7 @@ export function WorklineApp(props: WorklineProps) {
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   // alpha.64 B (/do parity): /do and a chat turn's `propose_work` share one plan view — the Run card's uncommitted-changes line, the quota wait and
   // the /tasks handoff of an admitted Run (the turn's `work` events, v31, map onto exactly these).
-  const doPlan = props.doPlan;
+  const doPlan = props.doPlan, doWarningShown = useRef(false);
   const dirtyLine = useCallback(async () => { const body = doPlan?.dirty ? await doPlan.dirty.check().catch(() => null) : null; return body ? `${doPlan!.dirty!.title}. ${body}` : null; }, [doPlan]);
   const planProgress = useCallback((progress: Readonly<{ kind: 'planning' }> | (QuotaWaitView & { readonly kind: 'quota-wait' })) => {
     if (progress.kind === 'planning' || !doPlan?.quotaWait) { setPlanWait(null); setActiveDo(current => current && { ...current, phase: 'planning', untilText: undefined }); return; }
@@ -558,6 +558,7 @@ export function WorklineApp(props: WorklineProps) {
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
+      if (!doWarningShown.current) { doWarningShown.current = true; const warning = await props.doPlan.warning?.().catch(() => null); if (warning) push([notice('warning', warning)]); }
       const observe = (progress: BrainPlanProgress) => {
         if (progress.kind === 'billing-switch') { push([notice('info', fillTemplate(props.doPlan!.billingSwitch, { model: progress.reference.modelId }))]); return; }
         planProgress(progress);

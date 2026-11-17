@@ -14,7 +14,7 @@ export class WorkspacePatchError extends CodedError {
   constructor(override readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT'
     | 'PATCH_BASE_ADVANCED' | 'PATCH_SCOPE_VIOLATION' | 'PATCH_SCOPE_UNDECLARED' | 'PATCH_INSTRUCTION_SURFACE_WRITE' | 'PATCH_WORKING_TREE_BUSY' | 'PATCH_WORKING_TREE_PARTIAL' | 'PATCH_WORKING_TREE_KEPT' | 'PATCH_WORKING_TREE_RECORD_UNSUPPORTED' | 'PATCH_WORKING_TREE_UNSUPPORTED' | 'PATCH_WORKING_TREE_SUBFOLDER' | 'PATCH_WORKING_TREE_FILTER' | 'PATCH_WORKING_TREE_FILTERED' | 'PATCH_WORKING_TREE_GIT_VERSION' | 'PATCH_WORKING_TREE_LISTING_LIMIT' | 'PATCH_WORKING_TREE_COPY_LIMIT' | 'PATCH_WORKING_TREE_NOT_WRITTEN' | 'PATCH_WORKING_TREE_CHANGED',
     readonly detail?: WorkspacePatchLimitDetail,
-    /** Bounded, repository-relative facts for the error text (K6 scope refusal: count, shown paths, omitted); never host paths or content. */
+    /** Catalog facts, never file content. Owner 140 permits the Git-directory refusal to name its local canonical path and repair command; scope facts stay repository-relative. */
     override readonly params?: Readonly<Record<string, string | number>>) {
     super(code); this.name = 'WorkspacePatchError';
   }

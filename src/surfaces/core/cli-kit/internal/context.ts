@@ -1,11 +1,13 @@
 import type { Readable } from 'node:stream';
-import type { Locale, OutputSink, MessageKey, Params, ProjectRootResolution } from '#platform/index.js';
+import type { ConfigLoadOptions, Locale, OutputSink, MessageKey, Params, ProjectRootResolution } from '#platform/index.js';
 
 /** An existing installation wins; otherwise propose the repository top, or the launch folder outside Git. */
 export const offerTarget = (found: boolean, gitTop: string | null, cwd: string): string => found ? cwd : gitTop ?? cwd;
 
 /** What every CLI command gets from its host: project root, environment, output sinks, stdin, cancellation and the chosen locale. */
 export interface CliBaseContext {
+  /** Local Git permission warning/repair; the composition verifies a person again before any chmod. */
+  gitDeliveryPermission?: (root: string, options: ConfigLoadOptions, confirm?: (path: string, before: string, after: string, command: string) => Promise<boolean>) => Promise<Readonly<{ path: string; command: string; before: string; after: string }> | null>;
   /** Read-only help data, loaded only for a recognized command help request. */
   helpParams?: (key: MessageKey) => Promise<Params>;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;

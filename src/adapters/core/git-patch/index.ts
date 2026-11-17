@@ -14,3 +14,4 @@ export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';
  * assert its exact contents rather than only its effect. */
 export { GIT_LOCAL_ENV, localGitArgs } from './internal/local-git.js';
 export { applyAcceptedPredecessorPatches } from './internal/handoff-start.js';
+export { inspectGitDeliveryDirectory } from './internal/git-command.js';

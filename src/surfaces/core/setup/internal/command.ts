@@ -1,6 +1,6 @@
-import { optionalField, ErrorRegistry, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, formatHumanError, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, type SetupPhase, type SetupObservation, type SetupPlan, SetupStageRegistry } from '#engine/index.js';
-import { cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { askCliCard, directoryPermissionCard, cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { observeSetup } from './observe.js';
@@ -71,6 +71,15 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     await resolveCommandScope({ command: 'deckent init --yes', locale, explicit: flags.scope, mutating: true, interactive: false, listScopes: async () => scopes });
   }
   const person = format === 'interactive' && !flags.yes;
+  const permission = await context.gitDeliveryPermission?.(root, { env }).catch(() => null);
+  if (permission) {
+    emit(ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, { ...sinks, level: 'warning' });
+    if (person) {
+      try { await context.gitDeliveryPermission!(root, { env }, async (path, before, after, command) => await askCliCard(directoryPermissionCard(path, before, after, locale, command), { ...context, locale, env }) === 'yes'); }
+      catch (error) { emit(formatHumanError(error instanceof DeckentError ? error : ErrorRegistry.createError('PATCH_UNSAFE'), { locale, noColor: true }), { ...sinks, level: 'warning' }); }
+    }
+  }
+  context.signal?.throwIfAborted();
   let observed = await observeSetup(context, root, flags.lang, person);
   if (person) {
     const stdin = (context.stdin ?? process.stdin) as NodeJS.ReadStream, stdout = (context.stdout ?? process.stdout) as NodeJS.WriteStream;

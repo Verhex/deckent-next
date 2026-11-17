@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as observe from '#surfaces/core/cli-observe/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
-import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
+import { ErrorRegistry, MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { runForegroundStage, createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
@@ -495,4 +495,36 @@ it('B27a: the foreground final check passes the invocation language explicitly t
     expect(await runForegroundStage(harness().context, '/x', stage, null, 'en')).toMatchObject({ status: 'applied' });
     expect(doctor).toHaveBeenCalledWith(['doctor', '--lang', 'en'], expect.objectContaining({ locale: 'en' }));
   } finally { doctor.mockRestore(); }
+});
+
+it('D1 init warns with the shared Git refusal, while --json and --yes never ask a permission card', async () => {
+  for (const command of ["chmod go-w -- '/project/.git'", '']) for (const flags of [['--json'], ['--yes', '--scope', 'my-erp', '--json']]) {
+    const run = harness(), calls: boolean[] = [];
+    await setupInitCommand(['init', ...flags], { ...run.context, gitDeliveryPermission: async (_root, _options, confirm) => {
+      calls.push(Boolean(confirm)); return { path: '/project/.git', command, before: '0775', after: '0755' };
+    }, applySetupStage: async (_root, stage) => ({ stage: stage.id, operation: stage.operation!.id, status: 'declined' }) });
+    expect(run.err()).toContain('Other accounts can write to Git folder /project/.git');
+    expect(run.err()).toContain(command || 'no command is offered'); if (!command) expect(run.err()).not.toContain('chmod');
+    expect(calls).toEqual([false]); expect(JSON.parse(run.out())).toHaveProperty('schemaVersion');
+  }
+});
+
+it('D1 human init offers the same pinned-folder card; decline stays a localized warning before setup continues', async () => {
+  const card = vi.spyOn(cards, 'askCliCard').mockResolvedValue('no');
+  try {
+    for (const command of ["chmod go-w -- '/project/.git'", '']) for (const lang of ['en', 'tr'] as const) {
+      const run = harness({ stdin: tty, stdout: tty }), stop = new Error('observation reached'); let calls = 0;
+      const warning = { path: '/project/.git', command, before: '0775', after: '0755' };
+      await expect(setupInitCommand(['init', '--lang', lang], { ...run.context, observeSetup: async () => { throw stop; },
+        gitDeliveryPermission: async (_root, _options, confirm) => {
+          calls++; if (!confirm) return warning;
+          expect(await confirm(warning.path, warning.before, warning.after, warning.command)).toBe(false);
+          throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-declined' } });
+        } })).rejects.toBe(stop);
+      expect(calls).toBe(2); expect(card.mock.calls.at(-1)![0]).toMatchObject({ initial: 'no', title: lang === 'en' ? 'Others can write to this folder; narrow the permission?' : 'Başkaları bu klasöre yazabiliyor; izni daraltalım mı?' });
+      expect(card.mock.calls.at(-1)![0].body!.join('\n')).toContain(command || (lang === 'en' ? 'no command is offered' : 'komut sunulmuyor'));
+      if (!command) expect(run.err()).not.toContain('chmod');
+      expect(run.err()).toContain(lang === 'en' ? "This is the person's decision." : 'Bu karar kişiye aittir.');
+    }
+  } finally { card.mockRestore(); }
 });

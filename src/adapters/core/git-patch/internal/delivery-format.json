@@ -1,5 +1,6 @@
 {
   "schemaVersion": 3,
+  "directoryPermissionCommand": "chmod go-w -- {path}",
   "authorName": "deckent",
   "legacyAuthorName": "Deckent",
   "authorEmail": "delivery@deckent.invalid"

@@ -1,3 +1,5 @@
+import { directoryPermissionCard } from '#surfaces/index.js';
+import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
 import { openConfiguredModelInspection } from './model-inspection.js';
 import { openSqliteModelInvocationReader } from '#adapters/index.js';
 import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
@@ -44,7 +46,7 @@ import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalH
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, t, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -76,10 +78,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
     // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
     const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
-    const answer = await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
-      ...(mode === null ? [] : [t('setup.attachment.narrowPermissionMode', { before: mode.toString(8).padStart(4, '0'), after: (mode & ~0o022).toString(8).padStart(4, '0') }, language)])], initial: 'no', options: [
-      { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
-    ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
+    const answer = await askCliCard(directoryPermissionCard(path, mode === null ? null : mode.toString(8).padStart(4, '0'), mode === null ? null : (mode & ~0o022).toString(8).padStart(4, '0'), language),
+      { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
     if (setup && answer !== 'yes') {
       const error = ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { locale: language, params: { reason: 'declined', path: terminalSafeText(path) } });
       emit(error.message); throw error;
@@ -90,7 +90,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
   const person = (options: { env?: NodeJS.ProcessEnv }) => headlessPersonWitness(options.env ?? process.env, base.agentEnvironment ?? getConfigFieldDefault('cli').agentEnvironment);
-  const host: Parameters<typeof runCli>[1] & object = { ...base, initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
+  const host: Parameters<typeof runCli>[1] & object = { ...base, gitDeliveryPermission: (...args) => typed(configuredGitDeliveryPermission(...args)), initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
     walkBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args)),
     readBeuserReport: async (...args) => typed((await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args)),
     setupBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args)),
