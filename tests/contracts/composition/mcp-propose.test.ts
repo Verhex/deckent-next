@@ -1,4 +1,5 @@
 import * as execution from '#composition/core/execution/index.js';
+import * as runs from '#composition/core/runs/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -401,10 +402,15 @@ async function sessionRuntime(progress = true) {
   };
   return { ...w, launched, propose, ask, restart, errors, pool };
 }
-it.skipIf(process.platform !== 'linux')('119-C1 iii: a pre-restart pending card answered fresh through the real socket starts after the re-send', async () => {
+it.skipIf(process.platform !== 'linux')('119-C1 F2: old pending replay stays pending without membership; a fresh socket answer then opens iii', async () => {
   const f = await sessionRuntime(), answer = await f.ask('pending-card'); await f.restart();
+  const request = vi.spyOn(RunSessionRegistry.prototype, 'request'), decision = vi.spyOn(RunSessionRegistry.prototype, 'decision'), admission = vi.spyOn(RunSessionRegistry.prototype, 'admission');
+  await expect(f.propose('pending-card')).resolves.toMatchObject({ proposal: { status: 'pending', reason: 'RUN_APPROVAL_REQUIRED', approval: { approvalId: answer.approvalId } } });
+  expect(request).not.toHaveBeenCalled(); expect(decision).not.toHaveBeenCalled(); expect(admission).not.toHaveBeenCalled();
+  expect(f.launched).toEqual([]); expect(runsOf(f)).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]); expect(f.errors).toEqual([]);
   expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true });
   await f.propose('pending-card');
+  expect(decision).toHaveBeenCalledTimes(1); expect(admission).toHaveBeenCalledTimes(1);
   await expect.poll(() => f.launched, { timeout: 6000 }).toEqual(['pending-card']);
   expect(f.errors).toEqual([]);
 }, 30000);
@@ -435,6 +441,8 @@ it.skipIf(process.platform !== 'linux')('119-C1 shipped v20 only: a newly discov
   const f = await sessionRuntime(false); await f.restart(); const answer = await f.ask('v20-only');
   expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('v20-only');
   await expect.poll(() => f.errors.some(error => error.id === 'v20-only' && error.code === 'POLICY_DENIED'), { timeout: 6000 }).toBe(true);
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'v20-only', code: 'RUN_PROGRESSION_PARK_UNAVAILABLE' });
+  expect(f.errors.filter(error => error.id === 'v20-only' && error.code === 'POLICY_DENIED')).toHaveLength(1);
   expect(f.errors.some(error => error.code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED')).toBe(false); expect(f.launched).toEqual([]);
   expect(f.rows('SELECT * FROM attempts')).toEqual([]);
 }, 30000);
@@ -507,6 +515,18 @@ it.skipIf(process.platform !== 'linux')('119-C1 configured FIFO execution and er
     expect(receipts.filter(value => value.action === 'reserve-run-tasks' || value.action === 'park-progression').map(value => value.actor)).toEqual([actor, expect.objectContaining(actor)]);
     expect(runsOf(f)[0]).toMatchObject({ progress: [{ phase: 'active' }] });
   } finally { release?.(); }
+}, 30000);
+
+it.skipIf(process.platform !== 'linux')('119-C1 F4: eligible new AI can park its first refusal before any launch or reservation', async () => {
+  const f = await sessionRuntime(); await f.restart();
+  vi.spyOn(runs, 'reserveConfiguredRunTasks').mockRejectedValue(ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED'));
+  const answer = await f.ask('prelaunch-refusal');
+  expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('prelaunch-refusal');
+  await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'prelaunch-refusal', code: 'RUN_PROGRESSION_PARKED' });
+  const ai = withMcpPrincipal(readLocalOsIdentity);
+  const receipts = f.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)));
+  expect(receipts.filter(value => value.action === 'park-progression')).toEqual([expect.objectContaining({ runId: 'prelaunch-refusal', actor: expect.objectContaining({ id: ai.id, issuer: ai.issuer, subject: ai.subject }) })]);
+  expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]); expect(f.rows('SELECT * FROM dispatches')).toEqual([]);
 }, 30000);
 
 it.skipIf(process.platform !== 'linux')('119-C1 configured cancellation while FIFO waits prevents actual dispatch without borrowing the person identity', async () => {

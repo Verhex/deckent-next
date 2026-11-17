@@ -28,18 +28,19 @@ export function selectProgressionActor(actor: ProgressionQuery['actor'], read: (
 export async function selectRunProgression(query: ProgressionCursor, ledger: string, companyId: string,
   source: { readRunProgressionIntent(scopeId: string, runId: string, companyId: string): { actor: ProgressionQuery['actor']; commandId: string } | null;
     loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>; loadBoundDispatch(identity: import('#domain/index.js').AttemptIdentity): Promise<DispatchRecord | null> },
-  read: (channel: 'mcp' | undefined) => ProgressionQuery['actor'], session?: RunSessionRegistry, checkStart = true) {
+  read: (channel: 'mcp' | undefined) => ProgressionQuery['actor'], session?: RunSessionRegistry, purpose: 'start' | 'maintenance' = 'start') {
   const intent = source.readRunProgressionIntent(query.scopeId, query.runId, companyId);
   if (!intent) throw ErrorRegistry.createError('RUN_PROGRESSION_AUTHORITY_REQUIRED');
   let channel = selectProgressionActor(intent.actor, read), maintenance = false;
-  if (checkStart && channel === 'mcp') {
+  if (channel === 'mcp') {
     const run = await source.loadRun(query.scopeId, query.runId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND');
-    if (!session?.eligible({ ledger, companyId, ...query, commandId: intent.commandId, actor: intent.actor }, run)) {
-      const actor = progressionCustodyActor(run, await Promise.all(run.bindings.map(binding => source.loadBoundDispatch(binding.identity))));
-      if (!actor) throw ErrorRegistry.createError('RUN_PROGRESSION_REPROPOSE_REQUIRED');
-      channel = selectProgressionActor(actor, read); maintenance = true;
-    }
+    const eligible = session?.eligible({ ledger, companyId, ...query, commandId: intent.commandId, actor: intent.actor }, run);
+    const actor = progressionCustodyActor(run, await Promise.all(run.bindings.map(binding => source.loadBoundDispatch(binding.identity))));
+    if (actor) {
+      const custodyChannel = selectProgressionActor(actor, read);
+      if (purpose === 'maintenance' || !eligible || custodyChannel !== channel) { channel = custodyChannel; maintenance = true; }
+    } else if (!eligible) throw ErrorRegistry.createError('RUN_PROGRESSION_REPROPOSE_REQUIRED');
   }
   return { channel, maintenance };
 }
@@ -61,6 +62,7 @@ export function progressionCustodyActor(run: import('#domain/index.js').RunSnaps
   let actor: ProgressionQuery['actor'] | null = null;
   for (const [index, binding] of run.bindings.entries()) {
     const dispatch = dispatches[index];
+    if (!dispatch && (binding.observedKind === 'started' || binding.observedKind === 'exited')) throw ErrorRegistry.createError('DISPATCH_NOT_ADMITTED');
     if (!dispatch || dispatch.launch !== 'granted') continue;
     if (!dispatch.grant || (!dispatch.worker && !dispatch.terminal && binding.observedKind !== 'started' && binding.observedKind !== 'exited')) throw ErrorRegistry.createError('DISPATCH_NOT_ADMITTED');
     const current = dispatch.grant.principal;

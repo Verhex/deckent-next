@@ -22,17 +22,26 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
     const ledger = await inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
     return { current, ledger, store: await openConfiguredLedger({ config: current, path: async () => ledger }, { migration: 'forbid' }) };
   };
-  async function asActor<T>(query: ProgressionCursor, work: (maintenance: boolean) => Promise<T>, checkStart = true): Promise<T> {
+  async function asActor<T>(query: ProgressionCursor, work: (maintenance: boolean) => Promise<T>, purpose: 'start' | 'maintenance' = 'start'): Promise<T> {
     const { current, ledger, store } = await storeFor();
     let selected: Awaited<ReturnType<typeof selectRunProgression>>;
     try {
-      selected = await selectRunProgression(query, sha256(ledger), current.company.id, store, identity, session, checkStart);
+      selected = await selectRunProgression(query, sha256(ledger), current.company.id, store, identity, session, purpose);
     } finally { store.close(); }
-    return withLocalPrincipalChannel(selected.channel, () => work(selected.maintenance));
+    try { return await withLocalPrincipalChannel(selected.channel, () => work(selected.maintenance)); }
+    catch (error) {
+      if (error instanceof RunProgressionFailure) throw new RunProgressionFailure(error.cause, error.revision, selected.channel === 'mcp' ? 'ai' : 'person');
+      if (selected.channel === 'mcp') throw new RunProgressionFailure(error, null, 'ai');
+      throw error;
+    }
   }
   return new RunLifecycleRuntimeLoop({
     async discover(after, dueAfter, now) {
-      await session?.sweep(settings.pageSize);
+      const cleanup = await session?.sweep(settings.pageSize);
+      for (const code of cleanup?.codes ?? []) {
+        try { await observer.onError?.(null, ErrorRegistry.createError(code, { params: { count: cleanup!.failed } })); }
+        catch { /* Reporting has no execution authority and cannot stop discovery. */ }
+      }
       const { current, store } = await storeFor();
       try {
         const pages = [], due = [], skipped = [];
@@ -53,8 +62,8 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
       if (!(error instanceof RunProgressionFailure) || error.revision === null) throw ErrorRegistry.createError('RUN_PROGRESSION_PARK_UNAVAILABLE');
       try { await parkConfiguredRunProgression(projectRoot, { schemaVersion: 1, ...query, commandId: randomUUID(), expectedRevision: error.revision, failureCode: queryFailure(error.cause).code }, options); return 'parked' as const; }
       catch (failure) { if (queryFailure(failure).code === 'RUN_STORE_CONFLICT') return 'changed' as const; throw failure; }
-    }, false),
-    expire: query => asActor(query, async () => { await advanceConfiguredRunLifecycle(projectRoot, { schemaVersion: 1, ...query }, options); }, false),
+    }, 'maintenance'),
+    expire: query => asActor(query, async () => { await advanceConfiguredRunLifecycle(projectRoot, { schemaVersion: 1, ...query }, options); }, 'maintenance'),
     advance: (query, signal) => asActor(query, maintenance => advanceConfiguredRun(projectRoot, { schemaVersion: 1, ...query }, signal, options, admitExecution, settings.maxReservationsPerTurn, maintenance)),
   }, { ...(observer.onRun ? { onRun: observer.onRun } : {}),
     onScopeSkipped: note => observer.onScopeSkipped?.(ErrorRegistry.createError('RUN_PROGRESSION_SCOPE_SKIPPED', { params: { scopeId: note.scopeId, reason: note.reason } })),

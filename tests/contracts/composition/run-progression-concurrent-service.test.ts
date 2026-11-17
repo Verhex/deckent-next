@@ -2,17 +2,20 @@ import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
-import { readLocalOsIdentity } from '#adapters/index.js';
+import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { ErrorRegistry, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import * as execution from '#composition/core/execution/index.js';
+import * as runs from '#composition/core/runs/index.js';
 import { RuntimeServiceLifecycle } from '#engine/index.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { hostBound } from '../support/host-bounds.js';
+import { dispatchAdmission, dockerDispatchProfile } from '../support/custody.js';
 
 const nativeAvailable = process.platform === 'linux' && existsSync(resolve('src/adapters/core/local-runtime-socket/native/build/Release/peer_credentials.node'));
 const roots: string[] = [];
@@ -24,7 +27,7 @@ function bounded<T>(promise: Promise<T>) {
     promise.then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
   });
 }
-async function fixture(maxConcurrentExecutions: number, parkAuthority = false) {
+async function fixture(maxConcurrentExecutions: number, parkAuthority = false, aiAdmission = false) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-run-concurrent-service-')); roots.push(project);
   await mkdir(join(project, '.deckent'), { mode: 0o700 });
   const home = join(project, 'home');
@@ -47,7 +50,8 @@ async function fixture(maxConcurrentExecutions: number, parkAuthority = false) {
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
-  for (const runId of ['a', 'b']) await opened.store.createRun({ commandId: `create-${runId}`, actor: { id: actor.id, issuer: actor.issuer, subject: actor.subject }, identity: { scopeId: 's', runId, layoutRevision: opened.layout.revision },
+  const creator = aiAdmission ? withMcpPrincipal(readLocalOsIdentity) : actor;
+  for (const runId of ['a', 'b']) await opened.store.createRun({ commandId: `create-${runId}`, actor: { id: creator.id, issuer: creator.issuer, subject: creator.subject }, identity: { scopeId: 's', runId, layoutRevision: opened.layout.revision },
     graph, execution: fixtureExecution(graph), now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
   const layout = opened.layout; opened.store.close(); return { project, env, layout, actor };
 }
@@ -189,5 +193,91 @@ it.for([true, false])('configured progression persists a typed park when cancel 
       if (parkAuthority) expect((await opened.store.listRunProgression({ actor: { id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject }, after: null, limit: 8 })).items).not.toContainEqual({ scopeId: 's', runId: 'a' });
       else expect(reports).toContain('POLICY_DENIED');
     } finally { opened.store.close(); }
+  } finally { controller.abort(); await work; }
+});
+
+async function personCustody(f: Awaited<ReturnType<typeof fixture>>, runId: string) {
+  const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+  try {
+    const run = (await opened.store.loadRun('s', runId))!, identity = { ...run.identity, taskId: 't', attemptId: `attempt-${runId}`, generation: 1 };
+    const actor = { id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject };
+    await opened.store.reserveRunTasks({ actor, scopeId: 's', runId, commandId: `reserve-${runId}`, expectedRevision: run.revision, now: 1, identities: [identity] });
+    const claim = { request: { protocolVersion: 1 as const, identity, workspace: '/fixture', argv: ['fixture'] }, owner: 'fixture' };
+    await opened.store.claimDispatch(dispatchAdmission(claim, dockerDispatchProfile()));
+    await opened.store.grantLaunch({ claim, principal: { ...f.actor, scopeIds: ['s'] }, now: 2 });
+    await opened.store.finishDispatch(claim, { handle: identity.attemptId, exitCode: 0, interrupted: false });
+  } finally { opened.store.close(); }
+}
+function lifecycleReceipts(path: string) {
+  const db = new DatabaseSync(path);
+  try { return db.prepare('SELECT command FROM run_receipts').all().map(row => JSON.parse(String(row.command)) as { action: string; runId: string; actor: unknown }); }
+  finally { db.close(); }
+}
+
+it.skipIf(process.platform === 'win32')('119-C1 F4: due leaves old unlaunched AI untouched and expires started person custody as that person', async () => {
+  const f = await fixture(2, true, true); await personCustody(f, 'b');
+  const opened = await openConfiguredAttemptStore(f.project, { env: f.env }), controller = new AbortController(), reports: string[] = [];
+  const execute = vi.spyOn(execution, 'executeConfiguredTask'), reserve = vi.spyOn(runs, 'reserveConfiguredRunTasks');
+  try {
+    const ai = withMcpPrincipal(readLocalOsIdentity), policyPath = productResourcePath(f.layout, 'policy'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.push({ id: 'ai-maintenance', effect: 'allow', actions: ['inspect', 'cancel'], scopes: ['s'], principals: [{ issuer: ai.issuer, subject: ai.subject }], resource: { kind: 'run', ids: 'all' } });
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    for (const runId of ['a', 'b']) {
+      const run = (await opened.store.loadRun('s', runId))!;
+      await opened.store.commitRunLifecycle({ schemaVersion: 1, scopeId: 's', runId, commandId: `park-${runId}`, expectedRevision: run.revision, actor: f.actor,
+        now: 1, timeoutMs: 1, ...(runId === 'a' ? { action: 'park-progression' as const, failureCode: 'POLICY_DENIED' } : { action: 'park-task' as const, taskId: 't', reason: 'evaluation-unknown' as const }) }, () => {});
+    }
+    const before = await opened.store.loadRun('s', 'a');
+    const loop = await prepareConfiguredRunRuntime(f.project, { onError(query, error) { reports.push(`${query?.runId}:${error.code}`); } }, work => work(), { env: f.env });
+    const work = loop.run(controller.signal);
+    try {
+      await expect.poll(() => lifecycleReceipts(opened.path).filter(value => value.action === 'expire'), { timeout: hostBound(3000) }).toEqual([
+        expect.objectContaining({ runId: 'b', actor: expect.objectContaining({ id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject }) }),
+      ]);
+      expect(reports).toContain('a:RUN_PROGRESSION_REPROPOSE_REQUIRED');
+      expect(await opened.store.loadRun('s', 'a')).toEqual(before);
+      expect((await opened.store.loadRun('s', 'b'))?.state).toEqual({ kind: 'terminal', outcome: 'failed', reason: 'park-timeout' });
+      expect(execute).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+    } finally { controller.abort(); await work; }
+  } finally { opened.store.close(); }
+});
+
+it.skipIf(process.platform === 'win32')('119-C1 F4: old AI admission parks a failing maintenance turn under its started person grant', async () => {
+  const f = await fixture(2, true, true); await personCustody(f, 'a');
+  const controller = new AbortController(), attention = deferred(), actors: string[] = [];
+  vi.spyOn(runs, 'evaluateConfiguredTask').mockImplementation(async () => { actors.push(readLocalOsIdentity().id); throw ErrorRegistry.createError('POLICY_DENIED'); });
+  const execute = vi.spyOn(execution, 'executeConfiguredTask'), reserve = vi.spyOn(runs, 'reserveConfiguredRunTasks');
+  const loop = await prepareConfiguredRunRuntime(f.project, { onError(query, error) {
+    if (query?.runId === 'a' && error.code === 'RUN_PROGRESSION_PARKED') attention.resolve();
+  } }, work => work(), { env: f.env });
+  const work = loop.run(controller.signal);
+  try {
+    await bounded(attention.promise);
+    expect(actors).toEqual([f.actor.id, f.actor.id]);
+    const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+    try { expect(lifecycleReceipts(opened.path).filter(value => value.action === 'park-progression')).toEqual([
+      expect.objectContaining({ runId: 'a', actor: expect.objectContaining({ id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject }) }),
+    ]); } finally { opened.store.close(); }
+    expect(execute).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+  } finally { controller.abort(); await work; }
+});
+
+it.skipIf(process.platform === 'win32')('119-C1 F3: person policy denial retains the configured failure threshold and backoff', async () => {
+  const f = await fixture(2, true), controller = new AbortController(), attention = deferred(), failures: number[] = [];
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_root, identity) => {
+    if (identity.runId === 'a') { failures.push(Date.now()); throw ErrorRegistry.createError('POLICY_DENIED'); }
+    return undefined as never;
+  });
+  const loop = await prepareConfiguredRunRuntime(f.project, { onError(query, error) {
+    if (query?.runId === 'a' && error.code === 'RUN_PROGRESSION_PARKED') attention.resolve();
+  } }, work => work(), { env: f.env });
+  const work = loop.run(controller.signal);
+  try {
+    await bounded(attention.promise);
+    expect(failures).toHaveLength(2);
+    expect(failures[1]! - failures[0]!).toBeGreaterThanOrEqual(100);
+    const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+    try { expect((await opened.store.loadRun('s', 'a'))?.state).toMatchObject({ kind: 'parked', failureCode: 'POLICY_DENIED' }); }
+    finally { opened.store.close(); }
   } finally { controller.abort(); await work; }
 });

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import { isAiPrincipal, isWorkloadPrincipalRef, approvalSubject, encodeCommandProjection, identitySchema, type ApprovalActor, type ApprovalRecord, type RunSnapshot } from '#domain/index.js';
-import { ErrorRegistry, sha256 } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, sha256 } from '#platform/index.js';
 import { approvalRequestDigest, decidedRefusal } from '#engine/core/approval/index.js';
 import data from './session-registry.json' with { type: 'json' };
 
@@ -16,13 +16,14 @@ type Basis = Readonly<{ approvalId: string; requestDigest: string; actionDigest:
 type Admission = Readonly<{ authorityDigest: string; eligible: boolean }>;
 type Slot = { identity: RunSessionIdentity; generation: number; pins: Set<symbol>; basis: Basis | null; admission: Admission | null; unknown: boolean; baseline: string | null };
 export type RunSessionPin = Readonly<{ key: string; slot: object; producer: symbol }>;
+type SweepResult = Readonly<{ failed: number; codes: readonly string[] }>;
 const digest = (value: unknown) => sha256(encodeCommandProjection('run-session:1', value));
 const actorEqual = (a: ApprovalActor, b: ApprovalActor) => a.id === b.id && a.issuer === b.issuer && a.subject === b.subject;
 const keyOf = (value: RunSessionIdentity) => JSON.stringify([value.ledger, value.companyId, value.scopeId, value.commandId, value.actor.id, value.actor.issuer, value.actor.subject]);
 /** Empty at service custody. Q/D/A are actual commit provenance, never timestamps or evidence of permission. */
 export class RunSessionRegistry {
   private readonly slots = new Map<string, Slot>();
-  private sweepWork: Promise<void> | undefined;
+  private sweepWork: Promise<SweepResult> | undefined;
   private sweepFull = false;
   private sweepOffset = 0;
   constructor(private readonly read: RunSessionRead, readonly limit = runSessionRegistryData.maxEntries) {
@@ -34,12 +35,15 @@ export class RunSessionRegistry {
     if (slot && digest(slot.identity) !== digest(identity)) throw ErrorRegistry.createError('RUN_COMMAND_CONFLICT');
     return slot;
   }
-  async reserve(input: RunSessionIdentity, baseline: ApprovalRecord | null = null, operation: 'proposal' | 'approval' = 'proposal'): Promise<RunSessionPin> {
+  async reserve(input: RunSessionIdentity, baseline?: ApprovalRecord | null, operation: 'proposal' | 'approval' = 'proposal'): Promise<RunSessionPin> {
     const identity = keySchema.parse(input);
     if (!this.existing(identity) && this.count >= this.limit) await this.sweep();
     let slot = this.existing(identity);
     if (!slot) {
-      if (this.count >= this.limit) throw ErrorRegistry.createError('AI_RUN_SESSION_CAPACITY', { params: { count: this.count, limit: this.limit, operation } });
+      if (this.count >= this.limit) throw ErrorRegistry.createError('AI_RUN_SESSION_CAPACITY', { params: { count: this.count, limit: this.limit, operation,
+        unknown: [...this.slots.values()].filter(entry => entry.unknown).length } });
+      // Verified pre-operation state is only a rollback baseline, never Q/D/A. Recheck slot and capacity after I/O.
+      if (baseline === undefined && operation === 'proposal') return this.reserve(identity, (await this.read(identity, null)).approval, operation);
       slot = { identity, generation: 0, pins: new Set(), basis: null, admission: null, unknown: false, baseline: baseline ? digest(baseline) : null };
       this.slots.set(keyOf(identity), slot);
     }
@@ -73,7 +77,7 @@ export class RunSessionRegistry {
   }
   eligible(identity: RunSessionIdentity, run: RunSnapshot): boolean {
     const slot = this.existing(identity);
-    return !!slot?.admission?.eligible && slot.admission.authorityDigest === digest(run.authority ?? null);
+    return !!slot?.admission?.eligible && !slot.unknown && slot.admission.authorityDigest === digest(run.authority ?? null);
   }
   /** Rollback and retirement differ: transient failure needs verified durable absence, terminal work may be retired. */
   async finish(pin: RunSessionPin) {
@@ -115,16 +119,25 @@ export class RunSessionRegistry {
     slot.unknown = false;
   }
   /** One coalesced sweep. Producers never hold a lock across these bounded tracked-key reads. */
-  sweep(pageSize?: number): Promise<void> {
+  sweep(pageSize?: number): Promise<SweepResult> {
     if (this.sweepWork) { if (pageSize === undefined) this.sweepFull = true; return this.sweepWork; }
     const all = [...this.slots], count = pageSize === undefined ? all.length : Math.min(pageSize, all.length);
     this.sweepFull = pageSize === undefined;
-    let visited = 0;
+    let visited = 0, failed = 0;
+    const codes = new Set<string>();
     const work = (async () => {
-      while (visited < (this.sweepFull ? all.length : count)) {
-        const [key, slot] = all[(this.sweepOffset + visited++) % all.length]!; await this.reconcile(key, slot);
-      }
-      this.sweepOffset = all.length ? (this.sweepOffset + visited) % all.length : 0;
+      try {
+        while (visited < (this.sweepFull ? all.length : count)) {
+          const [key, slot] = all[(this.sweepOffset + visited++) % all.length]!, generation = slot.generation;
+          try { await this.reconcile(key, slot); }
+          catch (error) {
+            if (this.slots.get(key) === slot && slot.generation === generation) slot.unknown = true;
+            failed++;
+            codes.add(error instanceof Error && 'code' in error && typeof error.code === 'string' && isCodedError(error, error.code) && ErrorRegistry.has(error.code) ? error.code : 'QUERY_UNEXPECTED_FAILURE');
+          }
+        }
+        return { failed, codes: [...codes] };
+      } finally { this.sweepOffset = all.length ? (this.sweepOffset + visited) % all.length : 0; }
     })();
     this.sweepWork = work.finally(() => { this.sweepWork = undefined; });
     return this.sweepWork;

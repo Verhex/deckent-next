@@ -1,13 +1,16 @@
-import { RunSessionRegistry, runSessionRegistryData, selectProgressionActor, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
-import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
+import { RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
+import { createHmacIntegrity, ErrorRegistry, clearConfigCache, loadConfig, productResourcePath, sha256 } from '#platform/index.js';
 import type { ApprovalRecord, RunSnapshot } from '#domain/index.js';
 import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { openSqliteApprovalStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { openSqliteApprovalStore, openSqliteAttemptStore, readLocalOsIdentity, withMcpPrincipal, type SqliteAttemptStore } from '#adapters/index.js';
+import { prepareConfiguredRunRuntime } from '#composition/core/run-progression/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { RunLifecycleApplication, RunPolicyAuthorization, RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -402,9 +405,98 @@ it('119-C1 cleanup: unknown reads preserve entries and concurrent sweeps share a
   let fail = false, block = false, release!: () => void;
   const read = vi.fn(async () => { if (fail) throw Error('READ_UNAVAILABLE'); if (block) await new Promise<void>(resolve => { release = resolve; }); return { ...emptySessionState(), approval: sessionCard() }; });
   const registry = new RunSessionRegistry(read), pin = await registry.reserve(sessionKey()); registry.request(pin, sessionCard()); await registry.finish(pin);
-  fail = true; await expect(registry.sweep()).rejects.toThrow('READ_UNAVAILABLE'); expect(registry.count).toBe(1);
+  fail = true; await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['QUERY_UNEXPECTED_FAILURE'] }); expect(registry.count).toBe(1);
   fail = false; block = true; const before = read.mock.calls.length, first = registry.sweep(), second = registry.sweep();
   expect(first).toBe(second); expect(read.mock.calls.length - before).toBe(1); release(); await first; expect(registry.count).toBe(1);
+});
+it('119-C1 secfix: a poisoned slot does not stop later reconciliation or the next page frontier', async () => {
+  let fail = false;
+  const read = vi.fn(async (identity: ReturnType<typeof sessionKey>) => {
+    if (fail && identity.commandId === 'first') throw ErrorRegistry.createError('APPROVAL_CONFLICT');
+    return { ...emptySessionState(), approval: sessionCard(identity.commandId, identity.commandId) };
+  });
+  const registry = new RunSessionRegistry(read);
+  for (const command of ['first', 'second', 'third']) {
+    const pin = await registry.reserve(sessionKey(command)); registry.request(pin, sessionCard(command, command)); await registry.finish(pin);
+  }
+  fail = true; read.mockClear();
+  await expect(registry.sweep(2)).resolves.toEqual({ failed: 1, codes: ['APPROVAL_CONFLICT'] });
+  expect(read.mock.calls.map(([identity]) => identity.commandId)).toEqual(['first', 'second']);
+  read.mockClear();
+  await expect(registry.sweep(1)).resolves.toEqual({ failed: 0, codes: [] });
+  expect(read.mock.calls.map(([identity]) => identity.commandId)).toEqual(['third']); expect(registry.count).toBe(3);
+});
+it('119-C1 secfix: unknown capacity is distinguished without writes and unknown admission cannot start', async () => {
+  const f = await fixture(), run = admittedSessionRun((await f.store.loadRun('s', 'r'))!);
+  let fail = false, mismatch = false;
+  const registry = new RunSessionRegistry(async () => {
+    if (fail) throw ErrorRegistry.createError('RUN_STORE_CORRUPT');
+    return { ...emptySessionState(), run, intent: { actor: mismatch ? actor : sessionActor, commandId: sessionKey().commandId } };
+  }, 1);
+  const pin = await registry.reserve(sessionKey()); registry.admission(pin, run, sessionActor, sessionKey().commandId); await registry.finish(pin);
+  expect(registry.eligible(sessionKey(), run)).toBe(true);
+  fail = true;
+  await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['RUN_STORE_CORRUPT'] });
+  expect(registry.eligible(sessionKey(), run)).toBe(false);
+  const write = vi.fn();
+  await expect(registry.reserve(sessionKey('overflow')).then(write)).rejects.toMatchObject({ code: 'AI_RUN_SESSION_CAPACITY', params: { count: 1, limit: 1, unknown: 1, operation: 'proposal' } });
+  expect(write).not.toHaveBeenCalled(); expect(registry.count).toBe(1);
+  const params = { count: 1, limit: 1, unknown: 1, operation: 'proposal' };
+  expect(ErrorRegistry.get('AI_RUN_SESSION_CAPACITY', 'en', params)!.message).toBe('AI work capacity reached (1/1). The state of 1 entries could not be verified. Resolve the reported read or reconciliation errors.');
+  expect(ErrorRegistry.get('AI_RUN_SESSION_CAPACITY', 'tr', params)!.message).toBe('Yapay zekâ iş kapasitesi dolu (1/1). 1 kaydın durumu doğrulanamadı. Bildirilen okuma veya uzlaştırma hatalarını giderin.');
+  fail = false;
+  await expect(registry.sweep()).resolves.toEqual({ failed: 0, codes: [] });
+  expect(registry.eligible(sessionKey(), run)).toBe(true); expect(registry.count).toBe(1);
+  mismatch = true;
+  await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['RUN_STORE_CORRUPT'] });
+  await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['RUN_STORE_CORRUPT'] });
+  expect(registry.eligible(sessionKey(), run)).toBe(false); expect(registry.count).toBe(1);
+});
+it.skipIf(process.platform === 'win32')('119-C1 secfix: configured discovery advances person and healthy AI despite poisoned cleanup and a failing diagnostic observer', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'deckent-progression-cleanup-')); roots.push(project);
+  await mkdir(join(project, '.deckent'), { mode: 0o700 });
+  const home = join(project, 'home'), env = { HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home };
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') },
+    runRuntime: { pollIntervalMs: 1, failureBackoffMs: 10, pageSize: 2, maxConcurrentRuns: 2, maxReservationsPerTurn: 1 } }));
+  const opened = await openConfiguredAttemptStore(project, { env }); stores.push(opened.store);
+  const ref = ({ id, issuer, subject }: ReturnType<typeof readLocalOsIdentity>) => ({ id, issuer, subject });
+  const person = ref(readLocalOsIdentity()), ai = ref(withMcpPrincipal(readLocalOsIdentity));
+  const principals = [person, ai].map(({ issuer, subject }) => ({ issuer, subject }));
+  await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'cleanup-fixture', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
+  ] }), { mode: 0o600 });
+  await ensureConfiguredTerminalIdentity(project, 's', { env });
+  const config = await loadConfig(project, { env, heal: false }), capacity = { executionSlots: 2, inFlightSlots: 2 };
+  const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'a', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
+    criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
+  await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
+  for (const [runId, owner] of [['person', person], ['ai', ai]] as const) await opened.store.createRun({ commandId: runId, actor: owner,
+    identity: { scopeId: 's', runId, layoutRevision: opened.layout.revision }, graph, execution: fixtureExecution(graph), now: 0,
+    policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['a'] } });
+  // Held capacity makes the real turn publish without starting a worker; both discoveries must still reach it.
+  await opened.store.applyPoolHold({ command: { scopeId: 's', commandId: 'hold', poolId: 'p', action: 'hold', reason: 'discovery fixture' }, actor: { issuer: person.issuer, subject: person.subject }, atMs: 0 }, () => {});
+  const run = (await opened.store.loadRun('s', 'ai'))!, identity = { ...sessionKey('ai'), ledger: sha256(opened.path), companyId: config.company.id, runId: 'ai', actor: ai };
+  const registry = new RunSessionRegistry(async key => {
+    if (key.commandId === 'poison') throw ErrorRegistry.createError('APPROVAL_CONFLICT', { params: { private: 'must never be reported' } });
+    return { ...emptySessionState(), run, intent: { actor: ai, commandId: 'ai' } };
+  });
+  const poison = await registry.reserve({ ...identity, commandId: 'poison', runId: 'poison' }, null);
+  await expect(registry.finish(poison)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' });
+  const pin = await registry.reserve(identity); registry.admission(pin, run, ai, 'ai'); await registry.finish(pin);
+  const controller = new AbortController(), seen = new Set<string>(), diagnostics: unknown[] = [];
+  const loop = await prepareConfiguredRunRuntime(project, {
+    onRun(cursor) { seen.add(cursor.runId); if (seen.size === 2) controller.abort(); },
+    onError(cursor, error) { diagnostics.push({ cursor, code: error.code, params: error.params }); throw Error('OBSERVER_UNAVAILABLE'); },
+  }, work => work(), { env }, registry);
+  const work = loop.run(controller.signal);
+  try {
+    await expect.poll(() => [...seen].sort(), { timeout: 5000 }).toEqual(['ai', 'person']);
+    expect(diagnostics).toContainEqual({ cursor: null, code: 'APPROVAL_CONFLICT', params: { count: 1 } });
+    expect(diagnostics.every(value => JSON.stringify(value) === JSON.stringify({ cursor: null, code: 'APPROVAL_CONFLICT', params: { count: 1 } }))).toBe(true);
+    expect(registry.count).toBe(2); expect(registry.eligible(identity, run)).toBe(true);
+    for (const runId of ['person', 'ai']) expect((await opened.store.loadRun('s', runId))!.bindings).toHaveLength(0);
+  } finally { controller.abort(); await work; clearConfigCache(); }
 });
 it('119-C1 capacity coalesces with a partial sweep and completes the full tracked pass before refusing a new slot', async () => {
   let now = 30, blocked = false, release!: () => void;
@@ -422,8 +514,23 @@ it('119-C1 cleanup: verified rollback, deny and unused approval expiry release; 
   await registry.finish(await registry.reserve(sessionKey())); expect(registry.count).toBe(0);
   const pin = await registry.reserve(sessionKey()), card = sessionCard(); registry.request(pin, card); state = { ...state, approval: card }; await registry.finish(pin);
   state = { ...state, now: 100 }; await registry.sweep(); expect(registry.count).toBe(0);
-  const unknown = await registry.reserve(sessionKey()); state = { ...state, now: 30 };
+  const unknown = await registry.reserve(sessionKey(), null); state = { ...state, now: 30 };
   await expect(registry.finish(unknown)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); expect(registry.count).toBe(1);
+});
+it('119-C1 F2: a changed or newly committed approval after the verified baseline stays unknown, including after expiry', async () => {
+  let state: RunSessionState = { ...emptySessionState(), approval: sessionCard() };
+  const registry = new RunSessionRegistry(async () => state, 1), pin = await registry.reserve(sessionKey());
+  state = { ...state, approval: allowSessionCard(state.approval!) };
+  await expect(registry.finish(pin)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' });
+  state = { ...state, now: 1000 };
+  await expect(registry.sweep()).resolves.toEqual({ failed: 1, codes: ['APPROVAL_CONFLICT'] });
+  await expect(registry.reserve(sessionKey('other'))).rejects.toMatchObject({ code: 'AI_RUN_SESSION_CAPACITY', params: { unknown: 1 } });
+  expect(registry.count).toBe(1);
+  const other = new RunSessionRegistry(async () => state, 1);
+  state = { ...state, approval: null };
+  const external = await other.reserve(sessionKey()); state = { ...state, approval: sessionCard() };
+  await expect(other.finish(external)).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' });
+  expect(other.count).toBe(1);
 });
 it('119-C1 maintenance never calls either start branch or reserves, but evaluates proven exited work', async () => {
   const f = await fixture('pass', [], ['a', 'b'], 1);
@@ -493,4 +600,14 @@ it('119-C1 custody selection: unlaunched binding is not maintenance; proven star
   expect(progressionCustodyActor((await f.store.loadRun('s', 'r'))!, [dispatch])).toEqual(dispatch.grant!.principal);
   expect(progressionCustodyActor(run, [{ ...dispatch, launch: 'pending', grant: null }])).toBeNull();
   expect(() => progressionCustodyActor(run, [{ ...dispatch, worker: null, terminal: null }])).toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
+  const exited = (await f.store.loadRun('s', 'r'))!;
+  const source = { readRunProgressionIntent: () => ({ actor: sessionActor, commandId: 'session-command' }), loadRun: async () => exited,
+    loadBoundDispatch: vi.fn(async () => dispatch) };
+  const read = (channel: 'mcp' | undefined) => channel === 'mcp' ? sessionActor : dispatch.grant!.principal;
+  await expect(selectRunProgression(query, 'fixture-ledger', 'company', source, read, undefined, 'maintenance')).resolves.toEqual({ channel: undefined, maintenance: true });
+  source.loadBoundDispatch.mockResolvedValue({ ...dispatch, grant: { ...dispatch.grant!, principal: { ...actor, id: 'foreign' } } });
+  await expect(selectRunProgression(query, 'fixture-ledger', 'company', source, read, undefined, 'maintenance')).rejects.toMatchObject({ code: 'RUN_PROGRESSION_AUTHORITY_REQUIRED' });
+  expect(() => progressionCustodyActor(exited, [null])).toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
+  expect(() => progressionCustodyActor({ ...exited, bindings: [binding, binding] }, [dispatch, { ...dispatch, grant: { ...dispatch.grant!, principal: actor } }]))
+    .toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
 });

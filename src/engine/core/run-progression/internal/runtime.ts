@@ -46,7 +46,8 @@ export class RunLifecycleRuntimeLoop {
     if (code === 'RUN_PROGRESSION_REPROPOSE_REQUIRED' || code === 'RUN_PROGRESSION_AUTHORITY_REQUIRED') {
       this.suspended.add(key); await this.report(query, error); return;
     }
-    const denied = code === 'POLICY_DENIED' || code === 'POLICY_APPROVAL_UNSUPPORTED';
+    const denied = error instanceof RunProgressionFailure && error.actorClass === 'ai'
+      && (code === 'POLICY_DENIED' || code === 'POLICY_APPROVAL_UNSUPPORTED');
     const prior = this.failures.get(key), count = denied ? this.failureLimit : prior?.revision === revision ? prior.count + 1 : 1;
     this.failures.set(key, { revision, count });
     await this.report(query, error);
