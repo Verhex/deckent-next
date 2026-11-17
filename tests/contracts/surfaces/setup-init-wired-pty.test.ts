@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
@@ -154,8 +154,9 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     // The carrier's full-auto grant rewrote the policy revision (PRE-9 chain); the first-run anchor keeps it installed (above: policyCurrent).
     const path = join(f.root, '.deckent', 'policy.json'), chained = JSON.parse(await readFile(path, 'utf8')) as { revision: string; grants: { id: string }[] };
     expect(chained.revision).toMatch(/^a-/u);
+    expect(chained.grants.some(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false); // missing optional execution is not a baseline upgrade
     // A newer template's rule missing from that policy is still offered through the same add-only upgrade, never as hand-written.
-    const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    const delta: readonly string[] = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS;
     await writeFile(path, JSON.stringify({ ...chained, grants: chained.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     // NEGATIVE: without the first-run anchor the document is hand-written and setup leaves it unchanged.
@@ -222,7 +223,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const f = await fixture('erp');
     expect((await f.deckent(['init', '--yes', '--scope', 'erp'])).code).toBe(0);
     const path = join(f.root, '.deckent', 'policy.json'), current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
-    const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    const delta: readonly string[] = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS;
     await writeFile(path, JSON.stringify({ ...current, revision: `first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION - 1}`, grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
@@ -235,6 +236,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent' });
     const upgraded = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
     expect(delta.every(id => upgraded.grants.some(rule => rule.id === id))).toBe(true);
+    expect(upgraded.grants.some(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false); // the wizard baseline card never adds the optional family
   }, 240_000);
 
   // U4 onboarding + U6-S3/S4 own this handoff; init no longer offers execution stages. Keep the sudo/witness assertions for migration.

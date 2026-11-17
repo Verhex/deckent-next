@@ -61,7 +61,7 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v18 (alpha.56 U10C): named-person lifecycle and exact uninstall operation grants; the witness/card remain mandatory. */
 /** v19 (alpha.63 R4a, owner 2026-11-05 option 3): the MCP actor (native agent and external MCP clients) gets the person's first-run tool rules (`v19Rules`). v20: its proposals (`v20Rules`). */
 /** v21 (owner 133/134): standing MCP execution in the granted scope, applied by the person; no ownership predicate. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 21;
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 20;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -155,7 +155,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: number) {
       ...(version >= 15 ? v15Rules(principal, [scopeId]) : []),
       ...(version >= 16 ? v16Rules(principal, [scopeId], input.recoveryRules) : []),
       ...(version >= 17 ? v17Rules(principal, [scopeId], input.firstCommitOperationId) : []),
-      ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []), ...(version >= 19 ? v19Rules(principal, [scopeId], input) : []), ...(version >= 20 ? v20Rules(principal, [scopeId]) : []), ...(version >= 21 ? v21Rules(principal, [scopeId]) : []),
+      ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []), ...(version >= 19 ? v19Rules(principal, [scopeId], input) : []), ...(version >= 20 ? v20Rules(principal, [scopeId]) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: firstRunBindingsRevision(revision), bindings: [] });

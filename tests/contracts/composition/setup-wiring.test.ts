@@ -71,6 +71,9 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     // A62-ONCE: the selected personal language belongs to the global layer; opening B only observes it.
     const policy = join(f.root, '.deckent', 'policy.json');
     expect(await readFile(policy, 'utf8')).toContain('erp-demo');
+    const firstPolicy = JSON.parse(await readFile(policy, 'utf8'));
+    expect(firstPolicy.grants.filter((rule: { id: string }) => rule.id.startsWith('first-run-mcp-propose-'))).toHaveLength(4);
+    expect(firstPolicy.grants.some((rule: { id: string }) => rule.id.startsWith('first-run-mcp-progress-'))).toBe(false);
     const projectConfig = join(f.root, '.deckent', 'config.json'), globalConfig = join(f.home, '.deckent', 'config.json');
     expect(JSON.parse(await readFile(globalConfig, 'utf8'))).toMatchObject({ language: 'tr' });
     expect(JSON.parse(await readFile(projectConfig, 'utf8'))).not.toHaveProperty('language');

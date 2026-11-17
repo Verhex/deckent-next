@@ -4,11 +4,18 @@ import { chmod, lstat, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { applyInstallation, inspectInstallation } from '../../../src/index.js';
-import { fixture, unsupported } from './installation-apply-process.fixture.js';
+import { firstRunPolicyTemplate, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
+import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
+import { readLocalOsIdentity } from '#adapters/index.js';
+import { fixture, rehash, unsupported } from './installation-apply-process.fixture.js';
 
 
 it.skipIf(unsupported).each([0o775])('publishes a relocated installation in project mode %s through SDK and replays through compiled CLI', async mode => {
   const f = await fixture(); await chmod(f.project, mode);
+  const baseline = firstRunPolicyTemplate({ scopeId: 'scope-1', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
+  // Keep the profile's required concrete pool grant; the template's v20 proposal family fits the unwitnessed bound.
+  f.profile.policy.grants = [...f.profile.policy.grants, ...baseline.policy.grants.filter(rule => FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(rule.id))] as typeof f.profile.policy.grants;
+  rehash(f.profile);
   const control = { allowShutdown: false, dockerExecutable: '/usr/bin/docker' };
   const evidence = await inspectInstallation(f.project, f.profile, control);
   const installed = await applyInstallation(f.project, f.profile, { ...control, proposalDigest: evidence.proposalDigest, acceptCustom: true });
@@ -22,7 +29,10 @@ it.skipIf(unsupported).each([0o775])('publishes a relocated installation in proj
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8'));
   const journal = JSON.parse(await readFile(join(f.project, '.deckent/installation/journal.json'), 'utf8'));
   expect(config.layout.root).toBe(f.data);
-  expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'))).toEqual(f.profile.policy);
+  const published = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'));
+  expect(published).toEqual(f.profile.policy);
+  expect(published.grants.filter((rule: { id: string }) => FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(rule.id))).toHaveLength(4);
+  expect(published.grants.some((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false);
   expect(journal).toMatchObject({ schemaVersion: 2, transactionId: installed.transactionId, phase: 'committed', blockers: [],
     resources: expect.arrayContaining(['config', 'policy', 'ledger'].map(resource => expect.objectContaining({ resource, state: 'published' }))) });
   const db = new DatabaseSync(join(f.data, 'state/ledger.db'), { readOnly: true });
@@ -37,5 +47,6 @@ it.skipIf(unsupported).each([0o775])('publishes a relocated installation in proj
     '--accept-custom', '--json'])).stdout);
   expect(replayed).toMatchObject({ status: 'replayed', transactionId: installed.transactionId, proposalDigest: evidence.proposalDigest,
     trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
+  expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'))).toEqual(published);
 // Inspect + apply + a compiled-CLI replay measured 27.5-28.1 s on this host and 30.4 s under a running local model server.
 }, 90_000);

@@ -72,7 +72,7 @@ describe.skipIf(process.platform === 'win32')('119-C2: policy card security', ()
       const rules = firstRunExecutionRules([], actor, ['s']).wanted;
       const input = { schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) };
       const upgrade = new PolicyTemplateUpgrade({ policy: f.source, administration: f.admin, approve: async () => { throw new Error('preview must not approve'); } }, FIRST_RUN_TOOL_NAMES);
-      expect(await upgrade.run({ scopeId: 's', principal: f.principal, mode: 'preview', reason: 'hand-built policy' })).toMatchObject({ status: 'unavailable', reason: 'not-first-run' });
+      expect(await upgrade.run({ scopeId: 's', principal: f.principal, mode: 'preview', reason: 'hand-built policy' })).toMatchObject({ status: 'unavailable', reason: 'person-not-named' });
       const pending = await new PolicyAdministrationApplication({ ...f.deps, locale }).submit(f.command(`short-${locale}`, input));
       if (pending.status !== 'approval-pending') throw new Error('pending expected');
       const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary, binding = summary.split('\n')[0]!;

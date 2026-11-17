@@ -1,8 +1,8 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, isAiPrincipal, authorityDocuments, firstRunBindingsRevision, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, firstRunExecutionRules, firstRunProposalRules, matchFirstRunPolicyTemplate, mcpPrincipalRef, planPolicyChange, principalGrants,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_VERSION, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, isAiPrincipal, authorityDocuments, immutableJsonObjectSchema, policyFileSchema, firstRunBindingsRevision, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, namedPersonPolicyAdditions, firstRunTemplateRollback, firstRunExecutionRules, firstRunProposalRules, matchFirstRunPolicyTemplate, mcpPrincipalRef, planPolicyChange, principalGrants,
   type FirstRunPolicyTemplateInput, type FirstRunProposalCover, type Policy, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { optionalField, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { administeredSince, policyTemplateUpgradeKeyVersion, type AuthorityRevision, type AuthorityHistorySource } from '#engine/core/policy/index.js';
+import { administeredSince, policyTemplateUpgradeKey, policyTemplateUpgradeKeyVersion, type AuthorityRevision, type AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 /** The upgrade's approval card id (`approval`/`decide`, an AI-floored authority card) and its change kind (the command id's tag). */
 const UPGRADE = 'policy-template-upgrade';
@@ -42,32 +42,56 @@ export class PolicyTemplateUpgrade {
     if (!delegationWithin(policy, principal, touched).ok) out.push('delegation');
     return out;
   }
-  private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string, proposals: boolean): boolean {
+  private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string, proposals: boolean, rule?: PolicyGrant): boolean {
+    if (rule && (entry.before.grants.some(item => item.id === rule.id)
+      || JSON.stringify(entry.after.grants.find(item => item.id === rule.id)) !== JSON.stringify(rule))) return false;
     // The installer's key must name a version that can actually have added the current delta (v20's proposal rules; the automatic upgrade too).
     // Earlier template upgrades cannot prove custody of this later grant.
     const installer = policyTemplateUpgradeKeyVersion(entry.key);
-    if (installer !== null && installer >= (proposals ? FIRST_RUN_PROPOSAL_UPGRADE_VERSION : FIRST_RUN_CURRENT_UPGRADE_VERSION) && installer <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
+    if (installer !== null && proposals) return installer >= FIRST_RUN_PROPOSAL_UPGRADE_VERSION && installer <= FIRST_RUN_CURRENT_UPGRADE_VERSION;
+    if (installer !== null) {
+      if (installer !== FIRST_RUN_CURRENT_UPGRADE_VERSION || entry.before.schemaVersion !== 2) return false;
+      const files = authorityDocuments(entry.before), plan = firstRunTemplateAdditions(files.policy,
+        { person: principal, scopeId, ...this.names, only: 'ai-execution', aiGrants: principalGrants(entry.before, mcpPrincipalRef(principal)) });
+      const named = plan.status === 'unavailable' && plan.reason === 'not-first-run' ? namedPersonPolicyAdditions(files.policy,
+        { person: principal, scopeId, ...this.names, only: 'ai-execution', aiGrants: principalGrants(entry.before, mcpPrincipalRef(principal)) }) : plan;
+      if (named.status !== 'plan') return false;
+      const prior = policyFileSchema.parse(files.policy);
+      const body = { ...prior, grants: [...prior.grants, ...named.rules] };
+      const revision = `a-${sha256(`policy-template-upgrade:1\0${prior.revision}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}`;
+      const after = { ...body, revision };
+      return entry.key === policyTemplateUpgradeKey(FIRST_RUN_CURRENT_UPGRADE_VERSION, sha256(`${prior.revision}\0${JSON.stringify(immutableJsonObjectSchema.parse(after))}`))
+        && JSON.stringify(policyFileSchema.parse(authorityDocuments(entry.after).policy)) === JSON.stringify(policyFileSchema.parse(after))
+        && JSON.stringify(authorityDocuments(entry.after).bindings) === JSON.stringify(files.bindings);
+    }
     if (entry.before.schemaVersion !== 2) return false;
     // The historical plan's own service id (the stop rule this entry added), not today's configuration: a later identity change keeps it recognizable.
     const before = entry.before, added = entry.after.schemaVersion === 2 ? entry.after.grants.find(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown
       && !before.grants.some(item => item.id === rule.id)) : undefined;
     const serviceId = added && added.resource.ids !== 'all' && added.resource.ids.length === 1 ? added.resource.ids[0] : this.names.serviceId;
-    const prior = authorityDocuments(entry.before).policy, aiGrants = principalGrants(entry.before, mcpPrincipalRef(principal)), plan = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), aiGrants });
+    const prior = authorityDocuments(entry.before).policy, aiGrants = principalGrants(entry.before, mcpPrincipalRef(principal));
+    const additions = (only?: 'ai-proposals' | 'ai-execution') => {
+      const names = { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), ...optionalField('only', only), aiGrants };
+      const firstRun = firstRunTemplateAdditions(prior, names);
+      return firstRun.status === 'unavailable' && firstRun.reason === 'not-first-run' ? namedPersonPolicyAdditions(prior, names) : firstRun;
+    };
+    const plan = additions();
     if (plan.status !== 'plan') return false;
     // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
     // made before option A, owner 2026-10-16, must stay recognizable).
     // Astra 2598: when the historical stop was covered by another allow (no stop rule added), the plan then was today's without its stop rule; the
     // exact effect key below decides which one it was.
     const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
-    const variants = [without(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
+    const variants = [without(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), without([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
       .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
-    const execution = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), only: 'ai-execution', aiGrants });
-    const scoped = firstRunTemplateAdditions(prior, { person: principal, scopeId, ...this.names, ...optionalField('serviceId', serviceId), only: 'ai-proposals', aiGrants });
+    const execution = additions('ai-execution');
+    const scoped = additions('ai-proposals');
     return [plan.change, ...variants.map(changes => ({ ...plan.change, changes })), ...(scoped.status === 'plan' ? [scoped.change] : []), ...(execution.status === 'plan' ? [execution.change] : [])].some(change => { // scoped: /policy's re-enable (alpha.64)
       const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
       const commandId = sha256(`${UPGRADE}:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
-      return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
-        target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: entry.before.revision });
+      return (!rule || change.changes.some(item => item.kind === 'grant.add' && JSON.stringify(item.grant) === JSON.stringify(rule)))
+        && entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
+          target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: entry.before.revision });
     });
   }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
@@ -95,28 +119,34 @@ export class PolicyTemplateUpgrade {
       const installed = installedAt(policy);
       if (!history || history.length === 0 && !installed) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
       // Follow exact effective revisions back from the snapshot, never infer provenance from an id or current template alone.
-      const chain = []; let revision = policy.revision;
+      const chain: AuthorityRevision[] = []; let revision = policy.revision;
       const visited = new Set<string>();
-      while (!visited.has(revision)) {
+      while (true) {
+        if (visited.has(revision)) return result('unavailable', { reason: 'history-unavailable' });
         visited.add(revision);
         const candidates = history.filter(entry => entry.after.revision === revision);
         if (candidates.length > 1) return result('unavailable', { reason: 'history-unavailable' });
         const entry = candidates[0];
         if (!entry) {
-          if (administeredSince(revision)) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
+          if (administeredSince(revision)) {
+            // Only an exact selected-rule ADD proves custody above an unavailable older prefix; a v20 upgrade is no witness.
+            if (input.only === 'ai-proposals' || !chain.some(item => delta.rules.some(rule => this.upgraded(item, input.principal, input.scopeId, false, rule))))
+              return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
+          }
           break;
         }
+        if (input.only !== 'ai-proposals' && history.filter(item => item.before.revision === entry.before.revision).length > 1)
+          return result('unavailable', { reason: 'history-unavailable' });
         chain.push(entry); revision = entry.before.revision;
       }
-      if (chain.some(entry => entry.before.revision === policy.revision)) return result('unavailable', { reason: 'history-unavailable' });
       // A later family change must not erase custody of a fresh template's other family. Trust only the verified chain's complete initial delta.
       const initial = installedAt(chain.at(-1)?.before ?? policy);
       const conflicts = [...delta.conflicts], held: string[] = [];
       for (const rule of delta.rules) {
         const changes = chain.filter(entry => JSON.stringify(entry.before.grants.find(item => item.id === rule.id)) !== JSON.stringify(entry.after.grants.find(item => item.id === rule.id)));
         const added = changes.find(entry => !entry.before.grants.some(item => item.id === rule.id));
-        if (!added) { if (initial) { if (changes.length) conflicts.push(rule.id); else held.push(rule.id); } continue; }
-        if (!this.upgraded(added, input.principal, input.scopeId, input.only === 'ai-proposals')) { conflicts.push(rule.id); continue; }
+        if (!added) { if (initial) { if (changes.length) conflicts.push(rule.id); else held.push(rule.id); } else if (input.only !== 'ai-proposals') conflicts.push(rule.id); continue; }
+        if (!this.upgraded(added, input.principal, input.scopeId, input.only === 'ai-proposals', input.only === 'ai-proposals' ? undefined : rule)) { conflicts.push(rule.id); continue; }
         if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
         else conflicts.push(rule.id);
       }
@@ -134,7 +164,9 @@ export class PolicyTemplateUpgrade {
       const remaining = (input.only === 'ai-proposals' ? firstRunProposalRules : firstRunExecutionRules)(principalGrants(after, mcpPrincipalRef(input.principal)), input.principal, [input.scopeId]);
       return result('rolled-back', { reason: held.join(','), conflicts, covered: remaining.skipped });
     }
-    const plan = firstRunTemplateAdditions(files.policy, { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}), aiGrants: principalGrants(policy, mcpPrincipalRef(input.principal)) });
+    const names = { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}), aiGrants: principalGrants(policy, mcpPrincipalRef(input.principal)) };
+    const firstRun = firstRunTemplateAdditions(files.policy, names);
+    const plan = firstRun.status === 'unavailable' && firstRun.reason === 'not-first-run' ? namedPersonPolicyAdditions(files.policy, names) : firstRun;
     const held = input.only === 'ai-proposals' /* the delta rules held now (what a rollback removes) and those an allow covers: /policy's row and its cards */ ? { held: FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)), ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) } : { ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) };
     if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason, ...held });
     if (plan.status === 'current') return result('current', { conflicts: plan.conflicts, ...held });

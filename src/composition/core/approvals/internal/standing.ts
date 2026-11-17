@@ -1,10 +1,11 @@
-import { ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
+import { automationMarker, ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
-  PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
+  PolicyAdministrationInspection, PolicyTemplateUpgrade, assertAuthorityWitness, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
@@ -90,8 +91,13 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * `deckent policy upgrade --template current`: current first-run additions for this local person through the governed chain. Preview reads
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
-export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }): Promise<TemplateUpgradeResult> {
+export async function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, agents?: readonly string[]): Promise<TemplateUpgradeResult> {
+  if (input.mode !== 'preview' && input.only !== 'ai-proposals') {
+    const config = await loadComposedConfig(root, { ...options, heal: false });
+    await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), { attest: async () =>
+      automationMarker(options.env ?? process.env, agents ?? config.cli.agentEnvironment) === null && await attestLocalInteractiveTerminal() });
+  }
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
     new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));

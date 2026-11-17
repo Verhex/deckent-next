@@ -1,6 +1,6 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, evaluatePolicy, firstRunExecutionRules, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
@@ -54,7 +54,7 @@ it('exact v13 becomes exactly the current template; edited and hand-built polici
     resource: { kind: 'agent-tool', ids: ['fetch_url'] } }] };
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
   // This historical call supplies no recovery rule versions, so it cannot add the three versioned promote cells.
-  const all = current.policy.grants.filter(rule => [...v14ids, ...v15ids].includes(rule.id) && !rule.id.startsWith('first-run-recovery-promote-'));
+  const all = [...current.policy.grants.filter(rule => [...v14ids, ...v15ids].includes(rule.id) && !rule.id.startsWith('first-run-recovery-promote-')), ...firstRunExecutionRules([], person, ['installation']).wanted];
   expect(all.slice(-3).map(rule => rule.id)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
   for (const policy of [edited, handBuilt]) {
     const next = (grants: typeof policy.grants) => policy === edited ? firstRunTemplateAdditions({ ...policy, grants }, { ...names, person }) : namedPersonPolicyAdditions({ ...policy, grants }, { ...names, person, scopeId: 'installation' });

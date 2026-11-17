@@ -1,6 +1,6 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, namedPersonPolicyAdditions, mcpPrincipalRef,
+import { firstRunExecutionRules, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, namedPersonPolicyAdditions, mcpPrincipalRef,
   FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { DispatchPolicyAuthorization, PoolControlPolicyAuthorization, WorkTargetPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
@@ -87,7 +87,7 @@ it('preserves customized v11 ids and existing coverage; since v13 no v11 rule is
   if (plan.status !== 'plan') throw new Error('missing v11 plan');
   expect(plan.rules.map(rule => rule.id)).toEqual([ids[2], ...v12ids, ...v13ids].slice(0, POLICY_CHANGE_MAX));
   // The rollback holds only the current delta: neither the content-equal v11 rules nor the customized one are touched or reported.
-  const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person, undefined);
+  const rollback = firstRunTemplateRollback({ ...built.policy, grants: [...built.policy.grants, ...firstRunExecutionRules([], person, ['installation']).wanted].map(rule => rule.id === changed.id ? changed : rule) }, person, undefined);
   expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
   expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person), undefined)).toEqual({ rules: [], conflicts: [] });
   expect(firstRunPolicyTemplate({ ...input, principal: mcpPrincipalRef(person) }).policy.grants.filter(rule => ids.includes(rule.id))).toEqual([]);

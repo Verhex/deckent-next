@@ -396,6 +396,9 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     const context = await loadConfiguredScopeContext(f.b, 'target', f.options, 'write');
     expect(context.projectId).not.toBe((await loadConfiguredScopeContext(f.a, 'source', f.options, 'read')).projectId);
     expect(context.layout.root).toBe(join(f.b, '.deckent'));
+    const firstPolicy = JSON.parse(await fs.readFile(join(context.layout.root, 'policy.json'), 'utf8'));
+    expect(firstPolicy.grants.filter((rule: { id: string }) => rule.id.startsWith('first-run-mcp-propose-'))).toHaveLength(4);
+    expect(firstPolicy.grants.some((rule: { id: string }) => rule.id.startsWith('first-run-mcp-progress-'))).toBe(false);
     expect(await target.app.apply('target', preview.planDigest, commandId)).toMatchObject({ status: 'attached', attachment: attached.attachment });
     // Retained crash prefix: earlier resources published, the last attachment publication and journal commit unfinished.
     await withInstallationJournal(f.b, { timeoutMs: 2000 }, async journal => {

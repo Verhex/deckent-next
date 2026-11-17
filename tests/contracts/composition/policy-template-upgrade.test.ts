@@ -6,20 +6,20 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, withMcpPrincipal } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate, mcpPrincipalRef, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { openPermissionModesInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, getConfigFieldDefault } from '#platform/index.js';
 import { policyPanelPort, type PolicyTemplateUpgradePort } from '#surfaces/core/cli-terminal/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
 const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
-  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
+  upgradeInstallation(args[0], args[1], args[2], args[3], { ...args[4], env: args[4]?.env ?? { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DECKENT_GLOBAL_HOME: process.env.DECKENT_GLOBAL_HOME } }, args[5], args[6], { attest: async () => true });
 
 // Owner request 2026-10-07 (lead): the existing-installation migration as one governed product command, `deckent policy upgrade --template v5`
 // (preview, then apply through `policy.administer@1`: I2, `expect` revision, `authority-change` audit, authority archive as backup, rollback by id;
@@ -65,7 +65,9 @@ async function project(shape: 'owner-role' | 'pure') {
     grants: shape === 'owner-role' ? [...policy.grants, ...v4Grants(), HAND_ADDED] : v4Grants() }), { mode: 0o600 });
   writeFileSync(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b-v4', modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode: 'full-auto' }],
     bindings: shape === 'owner-role' ? [{ id: 'root', principals: me, roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }] : [] }), { mode: 0o600 });
-  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals' | 'ai-execution') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(f, 'policy-upgrade', 'scope',
+  // This positive control is a markerless person; the PTY helper otherwise inherits the test host's agent markers.
+  const personTerminal = { ...f, env: { ...f.env, ...Object.fromEntries(getConfigFieldDefault('cli').agentEnvironment.map(name => [name, undefined])) } };
+  const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals' | 'ai-execution') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(personTerminal, 'policy-upgrade', 'scope',
     { mode, reason: 'test upgrade', ...(expect ? { expect } : {}), ...(only ? { only } : {}) });
   const grants = () => (JSON.parse(readFileSync(join(f.data, 'policy.json'), 'utf8')) as { grants: { id: string; resource: { kind: string; ids: unknown } }[] }).grants;
   return { f, upgrade, grants, bytes: () => readFileSync(join(f.data, 'policy.json'), 'utf8') };
@@ -84,6 +86,9 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const { f, bytes } = await project('owner-role');
     const before = bytes();
     await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'apply', reason: 'headless' }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    // The v20-only entry still reaches the subordinate human decision and retains its own noninteractive refusal.
+    await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'apply', only: 'ai-proposals', reason: 'headless subordinate decision' }))
       .rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
     expect(bytes()).toBe(before);
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
@@ -158,11 +163,11 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const preview = await upgradePolicyTemplateInstallation(f.project, 'scope', false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', revision: 'first-run-template-v4', wireRules: ['hand-mcp-files'], conflicts: [] });
     // v7: the harness's own model-invocation rule (ids all, this scope) covers the invocation rule; only activation is added.
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX));
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS));
     expect(grants().map(grant => grant.id)).toEqual(before);
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded' });
     const firstBatch = grants().map(grant => grant.id);
-    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX)]);
+    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS)]);
     // The rest (POLICY_CHANGE_MAX per change; since v19 two more batches), then current.
     expect(await applyAll(() => upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env }))).toBe(2);
     expect(grants().map(grant => grant.id).slice(0, firstBatch.length)).toEqual(firstBatch);
@@ -194,7 +199,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
       scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
       shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
       policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy;
-    writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...v5, grants: v5.grants.filter(rule => rule.id !== 'first-run-policy-administer')
+    writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...v5, grants: [...v5.grants, ...firstRunExecutionRules([], me[0]!, ['scope']).wanted].filter(rule => rule.id !== 'first-run-policy-administer')
       .map(asPersonAdmin) }), { mode: 0o600 });
     const before = bytes();
     expect(await upgrade('rollback')).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', conflicts: [MODIFIED] });
@@ -259,9 +264,9 @@ describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner
     const fresh = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, ...FIRST_RUN_TOOL_NAMES });
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify(fresh.policy), { mode: 0o600 }); writeFileSync(join(f.data, 'bindings.json'), JSON.stringify(fresh.bindings), { mode: 0o600 }); clearConfigCache();
     const before = bytes(), changes = () => f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
-    await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'headless' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
+    await expect(configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'headless', only: 'ai-proposals' })).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
     // The MCP actor owns no template delta and cannot administer policy: its rollback finds nothing it may remove and writes nothing.
-    expect(await withMcpPrincipal(() => configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'mcp' })))
+    expect(await withMcpPrincipal(() => configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'rollback', reason: 'mcp', only: 'ai-proposals' })))
       .toMatchObject({ status: 'refused', missing: ['policy-administer'] });
     expect(bytes()).toBe(before); expect(changes()).toBe(0);
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(','), conflicts: [] });

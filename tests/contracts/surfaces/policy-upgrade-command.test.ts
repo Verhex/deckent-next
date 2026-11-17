@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { homeEnv } from '../support/host-platform.js';
-import { firstRunPolicyTemplate, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
+import { firstRunPolicyTemplate, firstRunExecutionRules } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, policyExecutionLines } from '#engine/index.js';
 
 // Owner request 2026-10-07: `deckent policy upgrade --template v5` — preview by default (writes nothing), `--apply [--expect <revision>]`, `--rollback`;
@@ -19,7 +19,7 @@ const PREVIEW = { schemaVersion: 1, status: 'preview', revision: 'first-run-temp
 
 it('119-C2: all EN/TR person previews show genuine breadth, withhold it for reused ids, and preserve a genuine partial upgrade', async () => {
   const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'person', subject: 'one' }, ...FIRST_RUN_TOOL_NAMES });
-  const rules = template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id));
+  const rules = firstRunExecutionRules([], { issuer: 'person', subject: 'one' }, ['scope']).wanted;
   for (const locale of ['en', 'tr'] as const) for (const variant of [
     { changed: rules, executionContext: [], included: true },
     { changed: rules.map(rule => ({ ...rule, scopes: ['scope', 'other'] })), executionContext: [], included: false },

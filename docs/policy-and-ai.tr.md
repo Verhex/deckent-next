@@ -115,9 +115,12 @@ dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, ba
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 izinlerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
 
-## Kalıcı yapay zekâ yürütme izinleri (şablon v21)
+## İsteğe bağlı kalıcı yapay zekâ yürütme izinleri (aile 21)
 
-Yeni v21 politikası kurulu kapsamda açık MCP kimliğine üç kural ekler: `run/reserve`,
+İlk kurulum şablonu, öneri kurallarını içeren baseline v20’dir; kalıcı yapay zekâ
+yürütme izni içermez. Düz politika kurulumu, sihirbaz ve bağlama aynı baseline’ı
+kullanır; tanıksız verilen profiller aynı yetki sınırında kalır. Terminaldeki kişi
+aile 21’i ayrıca ekleyebilir: kurulu kapsamda açık MCP kimliğine üç kural: `run/reserve`,
 `run/cancel` ve `attempt/execute,evaluate,read-output,recover-output`. Sahiplik koşulu
 yoktur: aynı yapay zekâ kimliği MCP araçlarıyla senin veya başka aktörün aynı kapsamdaki
 işlerinde de bu izinleri kullanabilir; eski takılmış işi başlatmayı deneyebilir, çıktı
@@ -127,7 +130,7 @@ onaylanmış ama başlamamış öneri yeniden önerilmelidir; iş kaydı varsa �
 Henüz cevaplanmamış eski kart, güncel kontroller geçerliyken yeni servis oturumunda
 taze bir cevapla onaylanabilir.
 
-Mevcut kurulumlara başlangıçta v21 yürütme izni eklenmez. Kişi
+Başlangıç aile 21’i eklemez ve geri alınmış v20 öneri izinlerini yeniden açmaz. Mevcut kurulumlara başlangıçta v21 yürütme izni eklenmez. Kişi
 `deckent init policy --scope SCOPE_ID --upgrade --preview` ile yapay zekâ kimliğini,
 kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; kendi terminalinde
 çıktıdaki tam uygulama komutunu ve `--expect` değerini kullanır. Elle kurulmuş politika
@@ -137,6 +140,20 @@ için kişi açıkça adlandırılır. Yetkili yöneticinin diğer yolu
 yapay zekâ uygulayamaz veya geri alamaz. Aynı kimlikli değiştirilmiş kurallar ve özel
 yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
 gereğini aşmaz.
+
+Yetkili yükseltmede `--only ai-execution` yalnız üç yürütme kuralını,
+`--only ai-proposals` yalnız v20 ailesini seçer. Installer yükseltmesi baseline veya
+system-row güncellemesini önce, aile 21’i kendi sürüm-21 arşiv anahtarıyla ayrıca
+yayımlar. Bu iki yayın birlikte atomik değildir: ikinci adım ancak ilk adımın sonucu
+doğrulandıktan sonra, doğrulanmış durum üzerinde başlar. Araya başka bir yazım girerse
+çakışma oluşur. İkinci adımın yazılmadığı veya yazım öncesinde reddedildiği kanıtlanırsa
+baseline kalır; eksik izni eklemeden önce yeniden önizle. Kesilen yazım aynı arşiv
+anahtarıyla uzlaştırılır: uygulandığı kanıtlanmışsa izin eklenmiştir; bilinmeyen sonuç
+iznin eklenmediği anlamına gelmez. Yeniden denemeden önce saklanan kanıtı incele;
+kendiliğinden tekrar yazım yapılmaz.
+Elle düzenleme, verilen profil veya eski adayın birleşik yayını, yönetilen aile-21
+kaynağını kanıtlamaz; geri alma soy zincirini kanıtlayamıyorsa yetkili politika
+düzenleme yolunu kullan.
 
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback`, kişinin
 mevcut onay yoluyla yalnız değiştirilmemiş ve yönetilen kaynağı kanıtlanmış v21

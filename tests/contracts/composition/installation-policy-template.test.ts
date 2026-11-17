@@ -11,7 +11,7 @@ import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/in
 import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 
@@ -24,7 +24,7 @@ const V13: readonly string[] = ['first-run-execution-environment-install', 'firs
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
 const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
-  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
+  upgradeInstallation(args[0], args[1], args[2], args[3], { ...args[4], env: args[4]?.env ?? { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DECKENT_GLOBAL_HOME: process.env.DECKENT_GLOBAL_HOME } }, args[5], args[6], { attest: async () => true });
 const bindingNotRun = await installationBindingNotRunReason();
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): a real journal + real adapters
@@ -39,6 +39,10 @@ it('previews without touching disk, then a real apply journals and writes policy
   const preview = await previewPolicyTemplateInstallation(root, 'installation');
   expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION } });
   await expect(stat(join(root, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
+  const fresh = preview.policy as { grants: { id: string }[] };
+  expect(preview.template.version).toBe(20);
+  expect(fresh.grants.filter(rule => FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(rule.id))).toHaveLength(4);
+  expect(fresh.grants.some(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false);
   const identity = readLocalOsIdentity();
   expect(preview.principal).toEqual({ issuer: identity.issuer, subject: identity.subject });
   expect(await inspectPolicyTemplate(root)).toBeNull(); // no policy file yet
@@ -153,15 +157,15 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 4 });
 
   const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
-  expect(preview).toMatchObject({ status: 'preview', template: { to: 21 } });
+  expect(preview).toMatchObject({ status: 'preview', template: { to: 20 } });
   expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-read-tools', 'first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', ...V13]);
   expect(await readFile(policyPath, 'utf8')).toBe(v4Bytes);
 
-  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { to: 21 } });
-  expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { to: 20 } });
+  expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual({ ...v5, revision: expect.stringMatching(/^a-/u), grants: [...v5.grants, ...preview.rules.filter((rule: unknown) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes((rule as { id: string }).id))] });
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600);
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: FIRST_RUN_POLICY_TEMPLATE_VERSION });
+  expect(await inspectPolicyTemplate(root)).toBeNull(); // adding the separate family is an administered revision, not a new baseline
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'current' });
 });
 
@@ -182,7 +186,7 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   const bindingsBefore = await readFile(bindingsPath, 'utf8');
   const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
   expect(preview).toMatchObject({ status: 'preview', revision: edited.revision, conflicts: ['first-run-approvals'], wireRules: ['hand-mcp-github'] });
-  expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX)); // one policy change holds POLICY_CHANGE_MAX rules; the rest is the next run's
+  expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS)); // baseline batch, then the separate execution publication; one policy change holds POLICY_CHANGE_MAX rules; the rest is the next run's
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true, 'stale')).toMatchObject({ status: 'conflict' });
   const applied = await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!);
   expect(applied).toMatchObject({ status: 'upgraded' });
@@ -287,7 +291,7 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   await writeFile(bindingPath, JSON.stringify(oldBindings), { mode: 0o600 });
   const before = await readFile(path, 'utf8'), bindings = await readFile(bindingPath, 'utf8');
   const output: string[] = [], errors: string[] = [];
-  const ctx = { root, initialize() {}, upgradePolicyTemplateInstallation, stdout: { write(value: string) { output.push(value); } },
+  const ctx = { root, initialize() {}, upgradePolicyTemplateInstallation: (root: string, scope: string, apply: boolean, expect?: string) => upgradePolicyTemplateInstallation(root, scope, apply, expect), stdout: { write(value: string) { output.push(value); } },
     stderr: { write(value: string) { errors.push(value); } } };
   for (const locale of ['en', 'tr']) {
     output.length = 0;
@@ -305,7 +309,7 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   expect(await readFile(path, 'utf8')).toBe(before);
   output.length = 0;
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', token!, '--json'], ctx)).toBe(0);
-  expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 21 } });
-  expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(current); expect(await readFile(bindingPath, 'utf8')).toBe(bindings);
+  expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 20 } });
+  expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ ...current, revision: expect.stringMatching(/^a-/u), grants: [...current.grants, ...firstRunExecutionRules([], readLocalOsIdentity(), ['installation']).wanted] }); expect(await readFile(bindingPath, 'utf8')).toBe(bindings);
   expect(errors).toEqual([]);
 });

@@ -1,6 +1,6 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunExecutionRules, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
@@ -23,7 +23,7 @@ const names = { readToolNames, scratchToolNames, editShellToolNames, scratchWrit
   policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds, recoveryRules: FIRST_RUN_RECOVERY_RULES };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
 const current = firstRunPolicyTemplate(input), ids: readonly string[] = FIRST_RUN_V15_RULE_IDS, v16ids: readonly string[] = POST_V15_RULE_IDS;
-const v16 = current.policy.grants.filter(rule => v16ids.includes(rule.id));
+const v16 = [...current.policy.grants.filter(rule => v16ids.includes(rule.id)), ...firstRunExecutionRules([], person, ['installation']).wanted];
 const built = { ...current, version: 15, policy: { ...current.policy, revision: 'first-run-template-v15', grants: current.policy.grants.filter(rule => !v16ids.includes(rule.id)) },
   bindings: { ...current.bindings as object, revision: 'first-run-template-v15-bindings' } };
 const v15 = built.policy.grants.filter(rule => ids.includes(rule.id));

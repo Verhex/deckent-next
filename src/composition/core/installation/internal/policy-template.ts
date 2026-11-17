@@ -5,7 +5,7 @@ import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInt
 import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { optionalField, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { optionalField, automationMarker, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
@@ -80,16 +80,18 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
  * refused for the MCP actor, with `AUTHORITY_WITNESS_REQUIRED` before any configuration, policy, identity or audit is read or written. */
 export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {},
   callerUid: number | undefined = process.getuid?.(), person?: { readonly issuer: string; readonly subject: string },
-  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }, baselineOnly = false) {
   if (apply) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), witness);
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
+  if (apply && !baselineOnly) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(),
+    { attest: async () => automationMarker(options.env ?? process.env, config.cli.agentEnvironment) === null && await witness.attest() });
   if (apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
   // missing, foreign or unreadable documents fail closed as `not-owner`.
   const owner = await ownsAuthority(layout, callerUid);
   const writer = contextPolicySource({ layout, config, ownerUid: callerUid });
-  const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
+  const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply, baselineOnly,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...optionalField('expect', expect), ...optionalField('person', person) };
   const observed = await observeBootstrapState(projectRoot), seeded = observed.record?.phase === 'committed' ? observed.record.recovery['systemRows'] : null;
   const history = await writer.authorityHistory();

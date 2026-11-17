@@ -51,7 +51,7 @@ export interface SetupCommandContext extends CliBaseContext {
   /** BR1 (composition/core/setup): the person's worker image, built after a card or adopted (`imageId`); `present|declined|built|adopted`. */
   prepareWorkerImage?: (root: string, io: CliCardIo, request?: Readonly<{ imageId?: string }>) => Promise<string>;
   /** The first-run policy upgrade (`init policy --upgrade`): preview (`apply: false`) gives `expect`; the apply needs the terminal witness. */
-  upgradePolicyTemplateInstallation?: (root: string, scopeId: string, apply: boolean, expect?: string) => Promise<Readonly<{ status: string; expect?: string | null;
+  upgradePolicyTemplateInstallation?: (root: string, scopeId: string, apply: boolean, expect?: string, person?: { readonly issuer: string; readonly subject: string }, options?: ConfigLoadOptions, baselineOnly?: boolean) => Promise<Readonly<{ status: string; expect?: string | null;
     rules?: readonly unknown[] }>>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
   /** The pool ledger read doctor uses (`deckent pool status`); read-only. */

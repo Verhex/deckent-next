@@ -116,9 +116,13 @@ The native agent and external MCP clients share this actor. No AI decision step,
 other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
 
-## Standing AI execution permissions (template v21)
+## Optional standing AI execution permissions (family 21)
 
-Fresh v21 policy adds three explicit MCP rules in the installed scope: `run/reserve`,
+The first-run template is baseline v20: it includes its proposal rules and carries
+no standing AI execution permission.
+Plain policy install, setup and attachment share this baseline; supplied profiles
+without a witness stay within the same authority bound. A person at a terminal can
+separately add family 21, three explicit MCP rules in the installed scope: `run/reserve`,
 `run/cancel`, and `attempt/execute,evaluate,read-output,recover-output`. There is no
 ownership condition: the same AI identity can use its MCP tools on your or another
 actor's Runs in that scope, including trying old stuck work, reading output, preparing
@@ -127,7 +131,7 @@ old stuck AI Runs. A proposal approved but not started before restart must be pr
 again; cancel its Run first if one exists. A still-pending older card can be answered
 fresh in the new service session, subject to current checks.
 
-Existing installations receive no v21 execution permission at startup. The person
+Startup never adds family 21, and never restores revoked v20 proposal permissions. Existing installations receive no v21 execution permission at startup. The person
 previews `deckent init policy --scope SCOPE_ID --upgrade --preview`, checks the named
 AI identity, scopes, cells, conflicts and existing coverage, then repeats the exact
 printed apply command and `--expect` token at their own terminal. Hand-built policies
@@ -137,8 +141,21 @@ require the explicitly named person. The governed administrator alternative is
 roll back. Same-id changes and custom denials remain visible and are never overridden.
 An allow or role coverage does not override a deny or an approval requirement.
 
+The governed command accepts `--only ai-execution` for just the three execution
+rules, or `--only ai-proposals` for the v20 family. An installer upgrade with a baseline
+or system-row update publishes that update first, then family 21 separately, with its
+own version-21 archive key. These two publications are not atomic together: the second
+starts only after the first is verified, on its verified state. A foreign change between
+them causes a conflict. If the second step is proven absent or refused before writing,
+the baseline stays; preview again before adding the missing permission. An interrupted
+write is reconciled by the same archive key: proven applied means added; an unknown
+outcome never means permission was not added. Inspect the retained evidence before
+trying again; there is no automatic rewrite. A hand edit, supplied profile or combined older
+candidate publication does not establish managed family-21 custody; use authorized
+policy editing when the managed rollback cannot prove its lineage.
+
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback` removes only
-unmodified, provably managed v21 execution rules through the person's existing
+unmodified, provably managed family-21 execution rules through the person's existing
 approval route. It preserves v20 proposals, pool/target use and all earlier rules.
 The **AI proposals** toggle remains v20; CLI rollback of that family uses `--rollback
 --only ai-proposals`. Revoking it remains off after restart. Custom or role grants can
