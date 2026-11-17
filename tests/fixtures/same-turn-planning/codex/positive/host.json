@@ -1,0 +1,61 @@
+{
+  "pin": "fixture-pin-A",
+  "actor": {
+    "issuer": "fixture/mcp",
+    "subject": "owner"
+  },
+  "scopeId": "s",
+  "turnId": "fixture-turn",
+  "generation": 1,
+  "deckentCallId": "prepare-1",
+  "argumentsJson": "{\"request\":\"prepare a purchase\"}",
+  "contextDigest": "2e66c62a31398f39d416a25081bff218c22df185c1bf8bbeb6948dbd48cfaa6c",
+  "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "P": "No admission or external effect. Return exactly this line followed by LF and one BrainDraft JSON object:\nDECKENT-PLAN-CHALLENGE/1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "P_sha256": "1f9b4c818a2eae4f02056114fe6669c48fb1742b2de3bfd36cad6362c316c63f",
+  "D": "{\"graph\":{\"schemaVersion\":4,\"revision\":1,\"tasks\":[{\"id\":\"task\",\"kind\":\"purchase\",\"workClass\":\"business\",\"dependencies\":[],\"acceptanceCriteria\":[\"readback\"]}],\"criterionDefinitions\":[{\"id\":\"readback\",\"version\":1,\"description\":\"Durable business readback\",\"evaluator\":{\"id\":\"process-exit\",\"version\":1},\"parameters\":{\"acceptedExitCodes\":[0]}}]},\"budgetCeiling\":{\"currency\":\"USD\",\"limitMinorUnits\":200},\"requiredPermissions\":[]}",
+  "D_sha256": "762ab3a0d0b7c99f5803dd2f13ac899fccc46ba61865baef75b25e8a2ff8fbfc",
+  "events": [
+    "claim-permitted",
+    "P-frozen",
+    "W-projected-unchanged",
+    "durable-settlement-ok",
+    "native-release",
+    "delivery-observed",
+    "terminal-selected",
+    "native-close",
+    "response-retained",
+    "session-drained",
+    "finalize",
+    "source-check",
+    "proposal-persisted",
+    "card"
+  ],
+  "finish": {
+    "exited": true,
+    "exitCode": 0,
+    "closed": true,
+    "drained": true,
+    "stdoutTruncated": false,
+    "stderrTruncated": false,
+    "limit": null
+  },
+  "expected": {
+    "cards": 1,
+    "runsBeforeDecision": 0,
+    "claimAttempts": 1,
+    "sends": 1,
+    "source": "same-retained-D",
+    "denyRuns": 0,
+    "expiryRuns": 0,
+    "allowRuns": 1,
+    "replayedCards": 0,
+    "replayedAdmissions": 0
+  },
+  "publicSinks": {
+    "log": "Preparing the plan",
+    "ui": "Preparing the plan",
+    "history": "Preparing the plan",
+    "diagnostic": "Preparing the plan"
+  }
+}

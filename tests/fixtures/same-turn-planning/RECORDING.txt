@@ -1,0 +1,95 @@
+# Lead-only recording kit — not executed by K3a
+
+Use one authorized disposable sandbox per CLI. The lead prepares the subscription
+realm/login and launcher; this lane does not inspect any login directory or state.
+No installation configuration, admission, real preparation or production raw retention
+is involved. `record.mjs` invokes the CLI once through the existing isolated runner,
+never runs login/version/help, and never retries a failed recording.
+
+`preparation.mjs` exports the harmless one-tool session. It accepts only the fixed
+request, creates one random challenge, freezes P including the challenge, appends
+and fsyncs the fixture settlement before release, and reuses the same result for
+the same-call replay. It calls no product planner/store/approval/admission. This
+fsync is recording-fixture custody, not a product durable receipt or source proof.
+
+The exact system/stdin prompts are exported as `recordingSystem`/`recordingStdin`.
+They request an early unframed draft, exactly one `propose_work` preparation call,
+then a separate final message with the delivered challenge line + LF + one complete
+BrainDraft object. No challenge is in the prompts. A model's obedience is not assumed.
+The sample business draft is shape data, not acceptance of a purchase.
+
+Prepare a private input JSON (paths are examples, never account defaults):
+
+```json
+{
+  "outDir": "/tmp/k3a-codex-once",
+  "sandboxConfigDir": "<lead-prepared sandbox login locator>",
+  "executable": "<absolute authorized CLI binary>",
+  "isolationModule": "<absolute lead sandbox isolation-port module.mjs>",
+  "catalogFile": "assets/model-catalog/codex-cli-subscription.json",
+  "modelId": "<exact active id selected from that catalog>",
+  "cliVersion": "<exact numeric version already verified by the lead>",
+  "versionEvidence": "<lead version/binary proof reference>",
+  "timeoutMs": 60000
+}
+```
+
+The isolation module exports `isolation`, the existing `HeadlessIsolation` port
+returning a measured `BubblewrapCapability`. Use the sandbox's authorized launcher,
+not a host execution fallback. The existing isolated runner alone binds the lead's
+sandbox login and gateway. Do not point this kit at an installation's live state.
+For Claude select its catalog and a fresh output directory. The model minimum is
+checked against registry data; no model/CLI/transport substitution is made.
+
+Run once for each prepared input, under the heavy lock and outside a Vitest run:
+
+```sh
+flock /tmp/claude-1000/deckent-heavy.lock node tests/fixtures/same-turn-planning/record.mjs <private-input.json>
+```
+
+`nativeAgentLaunch` calls **codexAgentArgv** / **prepareClaudeAgentRun**. The script
+prints and records their complete effective argv; it never hand-derives flags.
+[argv.from-source.json](argv.from-source.json) was printed by calling those two
+producers directly from the lead-built base, with a disposable directory and a
+fixture-only bridge credential, without launching a CLI. Its models came from the
+first active registry rows; those print examples are not the lead's model selection
+or a recording. No partial-message flag or chat max-turns is introduced.
+
+Capture and review both CLI streams in order:
+
+- Codex: thread/turn, early assistant, MCP start/call/args, fixture P settlement and
+  release, correlated completed MCP result W, one completed assistant id containing
+  challenge + D, turn.completed/usage, process exit/close/drain. No START is invented.
+- Claude: init/session/version/model, early assistant, tool_use.id + arguments,
+  P settlement/release, equal user.tool_result W, separate top-level final message.id
+  with null parent and challenge + D, equal result.result in the same session,
+  success/is_error=false/explicit end_turn, exit/close/drain. Result UUID is not a
+  message id. Null/unknown stop or text/session/parent disagreement is failure.
+
+The manifest records recording provenance; binary realpath/hash and supplied version
+proof; model minimum/catalog revision/hash and flag-set digest; exact argv/digest;
+stdin/system digests; raw stdout/stderr hash/bytes/lines; invocation/preparation count;
+exit/signal/truncation/limit and egress evidence. `custody.jsonl` binds call/turn/
+generation/correlation, argsDigest, token-inclusive P bytes/resultDigest and release.
+Actual W remains in captured native stdout. The public manifest never stores the
+bridge credential, child environment or private MCP config. Run files are disposed.
+
+Before persisting raw stdout/stderr the kit checks the bridge's known-secret snapshot
+and credential/JWT/email patterns. A hit writes only failure metadata, never raw
+streams. This heuristic is not a proof that all possible secrets are absent; the lead
+must review all files, including custody, before copying/publishing any fixture.
+The challenge is fixture evidence, separate from bridge authentication. No production
+redaction bypass or raw-retention path is added.
+
+A fresh output directory is the one-shot marker. Nonzero exit, refused startup,
+truncation/limit, missing/extra preparation or secret-check failure is reported with
+exit 1 and must not be blindly repeated. Exit 0 means capture awaiting protocol
+review, not protocol PASS. Missing early draft, delivery correlation, framing, normal
+completion or exact D is a failed positive; report it to the lead without retry.
+
+Only after both real wire positives pass review may the lead open K1/K2. K3 later
+replays the same D through the real planner/finalizer/source/approval stores: one
+receipt/source/card, zero Run before decision, deny/expiry zero, allow one, replay
+no new claim/send/card/admission. Crash/unknown and beta.2-reader proof remain open.
+Codex's unreported provider truncation remains indistinguishable; challenge does not
+establish normal finish, semantic use of preparation or plan correctness.

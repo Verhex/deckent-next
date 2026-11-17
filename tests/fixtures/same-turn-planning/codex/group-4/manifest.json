@@ -1,0 +1,186 @@
+{
+  "cli": "codex",
+  "group": 4,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "length",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "30f825decffd0dc7f2f4a7e3b65fd154fb6bccf6bf5eb834d02154107cdf4d82",
+          "replacementBytes": 8
+        }
+      ]
+    },
+    {
+      "case": "limit",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "2d056c0111ed28e7dbee2e3a669613720fb9b89b1ecb2471ec297c616d0b6545",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "stdout-truncation",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "98728962bede4e5495dc1c3bc669c4ff3244e0015f92be0ba463d75c4fe76de2",
+          "replacementBytes": 19
+        },
+        {
+          "path": "/host/finish/stdoutTruncated",
+          "replacementSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "stderr-truncation",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "0cfa63a30a7c6d0a99da58483a1d146fbc68752eb425db3733d117cf4129b029",
+          "replacementBytes": 19
+        },
+        {
+          "path": "/host/finish/stderrTruncated",
+          "replacementSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "cancelled",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "06234c1cf33df85364aedb5de2e65dc2fcb144ff65a249457c5f140fde7ee1d4",
+          "replacementBytes": 11
+        }
+      ]
+    },
+    {
+      "case": "failed",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "33d04bd775e7b6c6436742508b41fa693a15bd2c902fcd994253392abd717740",
+          "replacementBytes": 8
+        }
+      ]
+    },
+    {
+      "case": "unknown",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "eb8bf0d80db323992f6b634aab492b1e6d9e96a8e87a511c2a0db75ab929452c",
+          "replacementBytes": 9
+        }
+      ]
+    },
+    {
+      "case": "missing-completion",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "d11026010f34c8b091db4102d3a2f57031247a158fa16a80ef655c7cf73b9e2e",
+          "replacementBytes": 20
+        },
+        {
+          "path": "/wire",
+          "replacementSha256": "8cf393548b490d6d1c33ba6c4fc584e8a541616fc929d32a5005a7c448b7e03e",
+          "replacementBytes": 2098
+        }
+      ]
+    },
+    {
+      "case": "conflicting-completion",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "79b212b9f97c22e30ebcc412401e8b320fee699cdf9e95388c95bc5515d3d467",
+          "replacementBytes": 24
+        }
+      ]
+    },
+    {
+      "case": "multiple-json",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "f19104a37c3d5a998d0e76b80ad0d888f1368ada5a948aabec9d0efdba1472b8",
+          "replacementBytes": 580
+        }
+      ]
+    },
+    {
+      "case": "trailing-payload",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "4d9f226680568761d3d77a267d45bb46cf5900b75da8a02c87c11ae9c13d666b",
+          "replacementBytes": 585
+        }
+      ]
+    },
+    {
+      "case": "second-envelope",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "8caa835f3e00ef0fc35feec28805e0da0ee279f4fb942ef0625f311257a730ee",
+          "replacementBytes": 1152
+        }
+      ]
+    },
+    {
+      "case": "oversize",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "047f865a32ece736eeee3e0a584686fd93704d62afb05caa714595a21f64b3dd",
+          "replacementBytes": 66112
+        }
+      ]
+    },
+    {
+      "case": "turn-failed",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/6",
+          "replacementSha256": "f5508060d946e092edfe5eed466d356f184a735abc75cc73a3d751061ef7bf0c",
+          "replacementBytes": 60
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "3f4200b25f6723fbad7d855753df3db872b108c86e77575e8b4c9abedbc5d1d0",
+      "bytes": 197534,
+      "lines": 14
+    }
+  ]
+}
