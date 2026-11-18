@@ -169,6 +169,27 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       expect(JSON.parse(observed.stdout)).toMatchObject({ executionHistory: 'unknown' }); // Governed CLI stays archive-only.
       // A real, witnessed non-execution write before a second init must preserve the fresh-origin default.
       await run(['init', 'policy', '--modes', 'full-auto', '--scope', 'erp', '--apply', '--lang', locale], [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']]);
+      // The installer grant publication above is keyed; permanent /mode writes are two distinct keyless edges.
+      const modes = await execute(process.execPath, ['--input-type=module', '-e', `
+        const { FilePolicySource, LocalOsSessionAuthority } = await import(${JSON.stringify(resolve('dist/adapters/index.js'))});
+        const { PermissionModeApplication } = await import(${JSON.stringify(resolve('dist/engine/index.js'))});
+        const { resolveProductLayout, productResourcePath, getConfigFieldDefault } = await import(${JSON.stringify(resolve('dist/platform/index.js'))});
+        const layout = resolveProductLayout({ projectRoot: process.cwd() });
+        const source = new FilePolicySource({ path: productResourcePath(layout, 'policy'), bindingsPath: productResourcePath(layout, 'bindings'),
+          archivePath: productResourcePath(layout, 'audit') + '/authority-revisions', ownerUid: process.getuid(), maxBytes: getConfigFieldDefault('inspection').policyMaxBytes });
+        const clock = { sample: () => ({ wallMs: Date.now(), monotonicMs: 0 }) };
+        const sessions = await LocalOsSessionAuthority.create(['erp'], 600000, clock);
+        const { principal } = await sessions.verifySession(undefined);
+        const app = new PermissionModeApplication(source, () => {}, Date.now);
+        for (const mode of ['full-auto', 'standart']) {
+          const result = await app.set(principal, { schemaVersion: 1, scopeId: 'erp', mode, expectedRevision: (await source.load()).revision });
+          if (!result.changed) throw new Error('mode must write');
+        }
+        console.log(JSON.stringify(await source.authorityHistory()));
+      `], { cwd: root, env, timeout: 120_000 });
+      const keyless = (JSON.parse(modes.stdout) as { key: string | null; after: { revision: string } }[]).filter(entry => entry.key === null);
+      expect(keyless).toHaveLength(2);
+      expect(new Set(keyless.map(entry => entry.after.revision)).size).toBe(2);
       const wizardPreview = await execute(process.execPath, ['--input-type=module', '-e', `
         const { createCliHost } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))});
         const host = createCliHost({ root: process.cwd(), locale: 'en', signal: new AbortController().signal });
@@ -207,7 +228,7 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       expect(rules.every(rule => JSON.stringify(rule.scopes) === '["erp"]')).toBe(true);
       expect(accepted.output.match(new RegExp(title.replace('?', '\\?'), 'gu'))?.length).toBeGreaterThan(0);
       expect(accepted.output).not.toContain('Approval required');
-      const rollback = await run(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale], []);
+      const rollback = await run(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale], [[locale === 'en' ? 'Withdraw managed permission?' : 'Yönetilen izin kaldırılsın mı?', '\u001b[A'], [keys, '\r']]);
       expect(rollback.output).not.toContain(title);
       const snapshot = async () => {
         const result: Record<string, string | null> = {};
@@ -255,3 +276,52 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
     }
   }, 240_000);
 });
+
+it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long affected scope before the EN/TR rollback card; decline writes nothing; JSON retains scopes', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const scopes of [
+    ['erp', 'other'], ['erp', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(70)}`)],
+  ]) {
+    const home = await mkdtemp(join(tmpdir(), 'deckent-rollback-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-rollback-root-'));
+    roots.push(home, root);
+    const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
+    await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp', '--lang', locale, '--json'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000 });
+    const policyPath = join(root, '.deckent/policy.json'), baseline = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { scopes: 'all' | string[] }[] };
+    await writeFile(policyPath, JSON.stringify({ ...baseline, revision: 'a-long-baseline', grants: baseline.grants.map(rule => rule.scopes === 'all' ? rule : { ...rule, scopes }) }));
+    const drive = async (args: string[], steps: unknown[]) => {
+      const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, ...args]), root],
+        { env, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
+      const result = JSON.parse(stdout) as { status: number; output: string; timeout?: string; snapshots: Record<string, string | null>[] };
+      expect(result.timeout, result.output).toBeUndefined(); expect(result.status, result.output).toBe(0);
+      return result;
+    };
+    expect((await drive(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--apply', '--lang', locale], [])).output)
+      .toContain(locale === 'en' ? 'added' : 'eklendi');
+    await execute(process.execPath, ['--input-type=module', '-e', `
+      const { FilePolicySource } = await import(${JSON.stringify(resolve('dist/adapters/index.js'))});
+      const { resolveProductLayout, productResourcePath, getConfigFieldDefault } = await import(${JSON.stringify(resolve('dist/platform/index.js'))});
+      const layout = resolveProductLayout({ projectRoot: process.cwd() });
+      const source = new FilePolicySource({ path: productResourcePath(layout, 'policy'), bindingsPath: productResourcePath(layout, 'bindings'),
+        archivePath: productResourcePath(layout, 'audit') + '/authority-revisions', ownerUid: process.getuid(), maxBytes: getConfigFieldDefault('inspection').policyMaxBytes });
+      await source.updateAuthority(snapshot => ({ write: { policy: { ...snapshot.policy, revision: 'a-narrowed-anchor',
+        grants: snapshot.policy.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['erp'] } : rule) },
+        bindings: null, order: 'policy-first' }, result: null }), 'narrow-anchor');
+    `], { cwd: root, env, timeout: 120_000 });
+    const title = locale === 'en' ? 'Withdraw managed permission?' : 'Yönetilen izin kaldırılsın mı?';
+    const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale];
+    // The snapshot step already consumed the armed hint; its next frame need not repeat that hint.
+    const declined = await drive(args, [[title, 'SNAPSHOT'], ['', '\r']]);
+    const card = declined.output.indexOf(title);
+    expect(card).toBeGreaterThan(0);
+    for (const scope of scopes) expect(declined.output.slice(0, card)).toContain(scope);
+    expect(declined.output).toContain(locale === 'en' ? 'Permission kept; nothing was written.' : 'İzin korundu; hiçbir şey yazılmadı.');
+    const snapshot: Record<string, string | null> = {};
+    for (const entry of await readdir(join(root, '.deckent'), { recursive: true, withFileTypes: true })) {
+      const path = join(entry.parentPath, entry.name), relative = path.slice(join(root, '.deckent').length + 1);
+      snapshot[entry.isDirectory() ? `${relative}/` : relative] = entry.isDirectory() ? null : (await import('node:crypto')).createHash('sha256').update(await readFile(path)).digest('hex');
+    }
+    expect(snapshot).toEqual(declined.snapshots[0]);
+    const applied = await drive([...args, '--json'], []);
+    const line = applied.output.split(/\r?\n/u).find(value => value.startsWith('{"schemaVersion":1,"status":'))!;
+    expect(JSON.parse(line)).toMatchObject({ status: 'rolled-back', executionScopes: scopes });
+  }
+}, 120_000);

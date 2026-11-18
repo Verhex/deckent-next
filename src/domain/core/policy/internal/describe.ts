@@ -47,11 +47,21 @@ function changeLines(changes: readonly Change[], oldGrants: readonly PolicyGrant
   const first = (item: Change): boolean => {
     if (item.kind === 'grant.add' || item.kind === 'grant.replace') {
       const next = item.grant, old = grants.get(next.id);
+      if (item.kind === 'grant.replace' && !old && namesAi(next.principals)) return true;
+      if (item.kind === 'grant.replace' && old?.effect === 'deny' && namesAi(old.principals)) {
+        const preservesDeny = next.effect === 'deny' && next.resource.kind === old.resource.kind && subset(old.resource.ids, next.resource.ids)
+          && subset(old.actions, next.actions) && subset(old.scopes, next.scopes) && peopleWithin(old.principals, next.principals);
+        if (!preservesDeny) return true;
+      }
       return next.effect !== 'deny' && namesAi(next.principals) && !(item.kind === 'grant.replace' && old && grantWithin(next, old));
     }
     if (item.kind === 'role.add') return positiveRole(item.role.id) && aiBindings.some(binding => binding.roles.includes(item.role.id));
     if (item.kind === 'binding.add' || item.kind === 'binding.replace') {
       const next = item.binding, old = entries.get(next.id);
+      if (item.kind === 'binding.replace' && !old && namesAi(next.principals)) return true;
+      if (item.kind === 'binding.replace' && old && namesAi(old.principals)
+        && old.roles.some(id => roles.get(id)?.permissions.some(permission => permission.effect === 'deny') ?? true)
+        && !(subset(old.roles, next.roles) && subset(old.scopes, next.scopes) && peopleWithin(old.principals, next.principals))) return true;
       if (!namesAi(next.principals) || !next.roles.some(positiveRole)) return false;
       // Unknown roles and mixed deny replacements cannot prove narrowing from the available binding facts.
       const narrowing = old && subset(next.roles, old.roles) && subset(next.scopes, old.scopes) && peopleWithin(next.principals, old.principals)

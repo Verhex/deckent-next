@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { planPolicyChange, policyChangeSchema, resolvePolicyBindings, delegationWithin, describePolicyChange } from '#domain/index.js';
+import { planPolicyChange, policyChangeSchema, resolvePolicyBindings, delegationWithin, describePolicyChange, evaluatePolicy } from '#domain/index.js';
 import { t } from '#platform/index.js';
 
 const actor = { issuer: 'fixture', subject: 'admin' };
@@ -89,4 +89,34 @@ it('119-C2-P: detects MCP-specific and mode widenings, and binding narrowing; bu
     expect(description.isWellFormed()).toBe(true);
     if (budget >= 128) expect(description).toContain('This card does not show 1 of the changes in full.');
   }
+});
+
+
+it('3280 F3a: narrowing an AI deny exposes an allowed cell and leads the description', () => {
+  const ai = { issuer: 'fixture/mcp', subject: 'worker' };
+  const allow = { ...policy.grants[0]!, principals: [ai], scopes: ['s', 'other'] };
+  const deny = { ...allow, id: 'deny-ai', effect: 'deny' };
+  const before = { ...policy, grants: [allow, deny] };
+  const input = change([{ kind: 'grant.add', grant: { ...policy.grants[0]!, id: 'human' } },
+    { kind: 'grant.replace', grant: { ...deny, scopes: ['other'] } }]);
+  const plan = planPolicyChange(before, bindings, input);
+  const request = { principal: { ...ai, id: 'worker', assurance: 'os-user', scopeIds: ['s', 'other'] }, scopeId: 's', action: 'inspect', resource: { kind: 'run', id: 'r' } };
+  expect(evaluatePolicy(resolvePolicyBindings(before, bindings), request).decision).toBe('deny');
+  expect(evaluatePolicy(resolvePolicyBindings({ ...plan.policy, revision: 'next' }, bindings), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings }, input)!.split('\n')[1]).toContain('~ grant deny-ai:');
+});
+
+it('3280 F3b: replacing an old AI deny binding exposes an allowed cell and leads the description', () => {
+  const ai = { issuer: 'fixture/mcp', subject: 'worker' };
+  const denyRole = { ...role, id: 'denier', permissions: role.permissions.map(permission => ({ ...permission, effect: 'deny' })) };
+  const before = { ...policy, roles: [denyRole], grants: [{ ...policy.grants[0]!, principals: [ai] }] };
+  const bound = { ...addBinding.binding, id: 'deny-ai', roles: [denyRole.id], principals: [ai] };
+  const prior = { ...bindings, bindings: [bound] };
+  const input = change([{ kind: 'grant.add', grant: { ...policy.grants[0]!, id: 'human' } },
+    { kind: 'binding.replace', binding: { ...bound, principals: [actor] } }]);
+  const plan = planPolicyChange(before, prior, input);
+  const request = { principal: { ...ai, id: 'worker', assurance: 'os-user', scopeIds: ['s', 'other'] }, scopeId: 's', action: 'inspect', resource: { kind: 'run', id: 'r' } };
+  expect(evaluatePolicy(resolvePolicyBindings(before, prior), request).decision).toBe('deny');
+  expect(evaluatePolicy(resolvePolicyBindings(before, { ...plan.bindings, revision: 'next' }), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings: prior }, input)!.split('\n')[1]).toContain('~ binding deny-ai:');
 });

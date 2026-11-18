@@ -801,3 +801,61 @@ describe.skipIf(process.platform !== 'linux')('read-only execution history obser
     expect(await v20.request({ scopeId: 's', principal: v20.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' })).toMatchObject({ executionHistory: 'never' });
   });
 });
+
+
+it.skipIf(process.platform !== 'linux')('3280 F1: an intermediate canonical grant through general policy.administer cannot prove never', async () => {
+  const f = await fixture(undefined, false, 'ai-execution'), root = await f.source.load();
+  const rule = firstRunExecutionRules([], f.principal, ['s']).wanted[0]!;
+  for (const [index, change] of [{ kind: 'grant.add', grant: rule }, { kind: 'grant.remove', id: rule.id }].entries()) {
+    const commandId = `general-${index}`;
+    const command = { schemaVersion: 1 as const, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId,
+      input: { schemaVersion: 1, changes: [change] }, expectedVersion: (await f.source.load()).revision };
+    const pending = await f.administration.submit(command);
+    if (pending.status !== 'approval-pending') throw new Error('pending expected');
+    await f.approve(pending.approval, `decide-${index}`, 'general administration');
+    expect(await f.administration.submit(command)).toMatchObject({ status: 'settled' });
+  }
+  expect((await f.source.authorityHistory())!).toHaveLength(2);
+  expect(await f.request({ scopeId: 's', principal: f.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' }, root))
+    .toMatchObject({ executionHistory: 'unknown' });
+});
+
+
+it.skipIf(process.platform !== 'linux')('3280 F4: a genuine long multi-scope rollback has a read-only full-scope decision preview', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const scopes of [
+    ['s', 'other'], ['s', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(70)}`)],
+  ]) {
+    const f = await fixture(undefined, false, 'ai-execution', locale), initial = JSON.parse(await f.bytes());
+    await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...initial, revision: 'a-long-baseline',
+      grants: initial.grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes }) }));
+    expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+    const granted = JSON.parse(await f.bytes());
+    await f.source.updateAuthority(() => ({ write: { policy: { ...granted, revision: 'a-long-narrowed-anchor',
+      grants: granted.grants.map((rule: PolicyGrant) => rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['s'] } : rule) },
+      bindings: null, order: 'policy-first' }, result: null }), 'long-narrowed-anchor');
+    const bytes = await f.bytes(), history = await f.source.authorityHistory(), cards = f.cards;
+    let preview = await f.request({ scopeId: 's', principal: f.principal, mode: 'preview', previewRollback: true, reason: 'inspect removal' });
+    expect(preview).toMatchObject({ status: 'preview', executionScopes: scopes });
+    expect(await f.bytes()).toBe(bytes); expect(await f.source.authorityHistory()).toEqual(history); expect(f.cards).toBe(cards);
+    await f.source.updateAuthority(snapshot => ({ write: { policy: { ...snapshot.policy, revision: 'a-after-removal-preview' },
+      bindings: null, order: 'policy-first' }, result: null }), 'after-removal-preview');
+    const movedBytes = await f.bytes(), movedHistory = await f.source.authorityHistory();
+    expect(await f.rollback(preview.revision)).toMatchObject({ status: 'conflict', revision: (await f.source.load()).revision });
+    expect(await f.bytes()).toBe(movedBytes); expect(await f.source.authorityHistory()).toEqual(movedHistory); expect(f.cards).toBe(cards);
+    const priorRevision = preview.revision;
+    preview = await f.request({ scopeId: 's', principal: f.principal, mode: 'preview', previewRollback: true, reason: 'reinspect removal' });
+    expect(preview).toMatchObject({ status: 'preview', executionScopes: scopes }); expect(preview.revision).not.toBe(priorRevision);
+    expect(await f.rollback(preview.revision)).toMatchObject({ status: 'rolled-back', executionScopes: scopes });
+    const card = f.records().find(record => record.request.summary.includes('- grant first-run-mcp-progress-run-reserve'))!;
+    expect(card.request.subject).toMatchObject({ expectedVersion: preview.revision });
+    const removed = (await f.source.authorityHistory())!.find(entry => entry.before.revision === preview.revision)!;
+    expect(removed.before.grants.filter(rule => !removed.after.grants.some(after => after.id === rule.id))).toEqual(preview.rules);
+    const summary = f.records().find(record => record.request.summary.includes('- grant first-run-mcp-progress-run-reserve'))!.request.summary;
+    expect(summary.length).toBeLessThanOrEqual(2048);
+    expect(summary).toContain(scopes.length === 2 ? locale === 'en'
+      ? 'will be withdrawn in: s, other.' : 'şu kapsamlarda kaldırılacak: s, other.' : locale === 'en'
+      ? 'This card does not list all 8 affected scopes; the full list is shown above in the command output.'
+      : 'Etkilenen 8 kapsamın tamamı bu kartta listelenmiyor; tam liste yukarıda komut çıktısında gösteriliyor.');
+  }
+});
