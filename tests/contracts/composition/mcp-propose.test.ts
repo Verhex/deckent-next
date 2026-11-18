@@ -222,7 +222,9 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     // C3: this Docker-profile AI proposal also seals the own-person mode before the person's card, without borrowing that person's execution identity.
     const ceiling = { mode: 'standart', askEdits: false };
     expect(run).toMatchObject({ execution: { workerMode: ceiling } });
-    expect(cardOf(admitted.events)!.summary).toContain('The worker runs at most in this mode: standard');
+    expect(cardOf(admitted.events)!.summary).toContain('Recorded worker ceiling: standard');
+    expect(cardOf(admitted.events)!.summary).toContain('its own sandbox/profile limits apply; no per-tool mode check.');
+    expect(cardOf(admitted.events)!.summary).not.toContain('destructive commands always ask');
     expect(cardOf(admitted.events)!.summary).toContain("Work starts under the AI's own execution permissions; this card grants no missing policy permission.");
     const create = w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command))).find(row => row.action === 'create-run');
     expect(create.execution.workerMode).toEqual(ceiling);

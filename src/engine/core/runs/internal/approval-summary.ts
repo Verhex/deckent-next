@@ -1,5 +1,5 @@
 import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, isWorkloadPrincipalRef, resolveTaskWorkClass,
-  type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
+  NATIVE_CLI_WORKER_ADAPTER_ID, type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, shortId, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
@@ -36,7 +36,14 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const aiProposal = !!command.proposal && isWorkloadPrincipalRef(create.actor);
   const unknown = t('approval.plan.undeclared', {}, locale), executionOf = (id: string) => create.execution.tasks.find(row => row.taskId === id);
   const taskTitle = (task: (typeof tasks)[number]) => field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known), assigned = tasks.slice(0, limits.taskRows).map(task => ({ task, rows: assignmentRows(executionOf(task.id)?.assignment, locale, known, executionOf(task.id)?.agent) }));
-  const taskRows = assigned.map(({ task, rows }) => [t('approval.plan.task', { title: taskTitle(task) }, locale), ...rows.head].join('\n'));
+  const taskRows = assigned.map(({ task, rows }) => {
+    const profile = executionOf(task.id)?.profile;
+    const boundary = profile && create.execution.workerMode ? profile.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID
+      ? t('approval.plan.workerMode.native', { profile: field(profile.id, limits.assignmentChars, known) }, locale)
+      : t('approval.plan.workerMode.profile', { profile: field(profile.id, limits.assignmentChars, known) }, locale) : undefined;
+    return [t('approval.plan.task', { title: taskTitle(task) }, locale), ...rows.head,
+      ...(boundary ? [boundary] : [])].join('\n');
+  });
   const taskDetailRows = assigned.map(({ task, rows }, index) => [t('approval.plan.taskDetail', { n: index + 1, kind: field(task.kind, limits.taskKindChars, known),
     workClass: field(executionOf(task.id)?.acceptance?.workClass ?? task.workClass ?? task.workInput?.workClass ?? unknown, limits.workClassChars, known) }, locale), ...rows.detail].join('\n'));
   const catalog = runProposalPermissionCatalog(registry); // accept_mark (owner 2026-10-18): an unrecognised model entry is marked, never refused.

@@ -1,4 +1,4 @@
-import { runProgressionMissingPermissions, RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
+import { runProgressionMissingPermissions, runProgressionUnreservedCoverage, RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
 import { createHmacIntegrity, ErrorRegistry, clearConfigCache, loadConfig, productResourcePath, sha256 } from '#platform/index.js';
 import { policySchema, type VerifiedPrincipal } from '#domain/index.js';
 import type { ApprovalRecord, RunSnapshot } from '#domain/index.js';
@@ -616,6 +616,34 @@ it('119-C1 custody selection: unlaunched binding is not maintenance; proven star
     .toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
 });
 
+it('119-rev F5: finished-task permission withdrawal and another attempt denial do not block the next concrete attempt', async () => {
+  const f = await fixture(), ai: VerifiedPrincipal = { id: 'ai', issuer: 'host/mcp', subject: 'ai', assurance: 'workload-verified', scopeIds: ['s'] };
+  const principals = [{ issuer: ai.issuer, subject: ai.subject }];
+  const policy = policySchema.parse({ schemaVersion: 1, revision: 'current', restrictions: [{ id: 'another-attempt', actions: ['execute'], scopes: ['s'], principals,
+    resource: { kind: 'attempt', ids: ['other-attempt'] } }], grants: [
+    { id: 'run', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
+  ] });
+  await f.operations.reserve({ ...query, commandId: 'reserve-first', expectedRevision: 0 });
+  for (const binding of (await f.store.loadRun('s', 'r'))!.bindings) await f.operations.execute(binding.identity);
+  let sequence = 0;
+  const finished = new RunProgressionTurn(f.operations, 2, { commandId: () => `finish-first-${++sequence}` }, 1);
+  const execute = vi.spyOn(f.operations, 'execute');
+  // Evaluate the completed tasks before reserving the dependent task.
+  const run = (await f.store.loadRun('s', 'r'))!;
+  for (const binding of run.bindings) await f.operations.evaluate({ schemaVersion: 1, commandId: `evaluate-${binding.identity.taskId}`, identity: binding.identity,
+    expectedRevision: (await f.store.loadRun('s', 'r'))!.revision });
+  const pending = (await f.store.loadRun('s', 'r'))!;
+  const withdrawn = policySchema.parse({ ...policy, restrictions: [...policy.restrictions, { id: 'finished', actions: ['execute'], scopes: ['s'], principals,
+    resource: { kind: 'attempt', ids: pending.bindings.map(binding => binding.identity.attemptId) } }] });
+  const gaps = runProgressionMissingPermissions(pending, ai, withdrawn, false);
+  expect(gaps).toEqual([]);
+  expect(runProgressionUnreservedCoverage(pending, ai, withdrawn)).toContainEqual(expect.objectContaining({ kind: 'attempt', id: 'all', action: 'execute', reason: 'DENIED' }));
+  f.operations.canExecute = async identity => { const { evaluatePolicy } = await import('#domain/index.js'); return evaluatePolicy(withdrawn, { principal: ai, scopeId: 's', action: 'execute', resource: { kind: 'attempt', id: identity.attemptId } }).decision === 'allow'; };
+  expect((await finished.advance(query, new AbortController().signal)).attempted).toBe(1);
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+
 it('119-C4: diagnosis keeps exact current cells, restrictions and approval apart; maintenance never asks for a new start cell', async () => {
   const f = await fixture(), run = (await f.store.loadRun('s', 'r'))!;
   const ai: VerifiedPrincipal = { id: 'ai', issuer: 'host/mcp', subject: 'ai', assurance: 'workload-verified', scopeIds: ['s'] };
@@ -624,10 +652,11 @@ it('119-C4: diagnosis keeps exact current cells, restrictions and approval apart
   const missing = runProgressionMissingPermissions(run, ai, empty, false);
   expect(missing).toContainEqual({ kind: 'run', id: 'r', action: 'reserve', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
   expect(missing).toContainEqual({ kind: 'run', id: 'r', action: 'cancel', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
-  expect(missing).toContainEqual({ kind: 'attempt', id: 'all', action: 'execute', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
+  expect(runProgressionUnreservedCoverage(run, ai, empty)).toContainEqual({ kind: 'attempt', id: 'all', action: 'execute', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
   const policy = policySchema.parse({ ...empty, grants: [{ id: 'start', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] });
   expect(runProgressionMissingPermissions(run, ai, policy, false)).toEqual([]);
+  expect(runProgressionUnreservedCoverage(run, ai, policy)).toEqual([]);
   const denied = policySchema.parse({ ...policy, restrictions: [{ id: 'company', actions: ['reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] });
   expect(runProgressionMissingPermissions(run, ai, denied, false)).toEqual([{ kind: 'run', id: 'r', action: 'reserve', scope: 's', reason: 'DENIED', code: 'POLICY_DENIED' }]);
   const asks = policySchema.parse({ ...policy, grants: [...policy.grants, { id: 'ask', effect: 'require-approval', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] });

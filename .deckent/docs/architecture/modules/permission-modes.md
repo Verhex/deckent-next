@@ -359,6 +359,8 @@ verified own-MCP actor's own person for the mode; that person never becomes the 
 records standard with `askEdits`; full access never passes to the worker. The card states that work uses the AI's own execution
 permissions and grants no missing policy permission. A plain create admitted without a card (policy allow, CLI/SDK) still removes
 the ceiling; older Runs receive none retroactively. Without a ceiling the worker follows the person's current effective mode, as before.
+The card labels each displayed worker profile: native profiles alone promise the per-tool check and later mode reductions;
+other profiles show the recorded ceiling and their own sandbox/profile boundary. Mixed plans keep those protections attributed.
 The minimum-mode enforcement described here belongs to the native worker tool broker; non-native profiles retain their existing
 sandbox/profile limits and do not gain that broker by recording a ceiling. On every native call with a ceiling, the person's current mode is recomputed (stored full
 access capped at full-auto under `fullAutoGrant` on that snapshot, else standart). The mode applied is the lower of the two;

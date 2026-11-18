@@ -5,13 +5,15 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
-import { ErrorRegistry, clearConfigCache, productResourcePath } from '#platform/index.js';
+import { ErrorRegistry, clearConfigCache, productResourcePath, sha256 } from '#platform/index.js';
+import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
+import * as scopedRequest from '#composition/core/scoped-request/index.js';
 import * as execution from '#composition/core/execution/index.js';
 import * as runs from '#composition/core/runs/index.js';
-import { RuntimeServiceLifecycle } from '#engine/index.js';
+import { RuntimeServiceLifecycle, RunSessionRegistry, withRunProgressionSession, withRunProgressionObservation } from '#engine/index.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { hostBound } from '../support/host-bounds.js';
@@ -213,6 +215,56 @@ function lifecycleReceipts(path: string) {
   try { return db.prepare('SELECT command FROM run_receipts').all().map(row => JSON.parse(String(row.command)) as { action: string; runId: string; actor: unknown }); }
   finally { db.close(); }
 }
+
+it.skipIf(process.platform === 'win32')('119-rev F2: AI and another inspected person cannot see the maintaining person policy; that person can', async () => {
+  const f = await fixture(2, true, true); await personCustody(f, 'a');
+  const ai = withMcpPrincipal(readLocalOsIdentity), other = { id: 'another-person', issuer: f.actor.issuer, subject: 'another-person', assurance: 'os-user' as const, scopeIds: ['s'] };
+  const policyPath = productResourcePath(f.layout, 'policy'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+  policy.grants.push(...[ai, other].map((principal, i) => ({ id: `reader-${i}`, effect: 'allow', actions: ['inspect'], scopes: ['s'],
+    principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'run', ids: 'all' } })));
+  await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+  const registry = new RunSessionRegistry(async () => { throw new Error('inspection must not sweep'); });
+  const inspect = () => withRunProgressionSession(registry, () => withRunProgressionObservation({ observation: () => ({ suspended: false, parkUnavailable: false }) },
+    () => runs.inspectConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'a' }, { env: f.env })));
+  const own = (await inspect()).progression!;
+  expect(own).toMatchObject({ state: 'maintenance-only', actorClass: 'person', actor: { id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject }, policyRevision: 'concurrent-test' });
+  expect(own.missing.length).toBeGreaterThan(0);
+  const hidden = [(await withMcpPrincipal(inspect)).progression!];
+  // The trusted scope-context seam supplies an already verified second reader; this adds no remote identity ingress.
+  const load = scopedRequest.loadConfiguredScopeContext;
+  vi.spyOn(scopedRequest, 'loadConfiguredScopeContext').mockImplementationOnce(async (...args) => ({ ...await load(...args), principal: other }));
+  hidden.push((await inspect()).progression!);
+  for (const diagnosis of hidden) {
+    expect(diagnosis).toMatchObject({ state: 'maintenance-only', actorClass: 'person', reason: 'RUN_PROGRESSION_MAINTENANCE_ONLY', missing: [] });
+    expect(diagnosis).not.toHaveProperty('actor'); expect(diagnosis).not.toHaveProperty('policyRevision');
+    expect(JSON.stringify(diagnosis)).not.toContain(`"subject":"${f.actor.subject}"`);
+  }
+});
+
+it.skipIf(process.platform === 'win32')('119-rev F5: broad coverage uncertainty is not a concrete blocker or an add-permission instruction (EN/TR)', async () => {
+  const f = await fixture(2, true, true), ai = withMcpPrincipal(readLocalOsIdentity);
+  const policyPath = productResourcePath(f.layout, 'policy'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+  const principals = [{ issuer: ai.issuer, subject: ai.subject }];
+  policy.grants.push({ id: 'ai-run', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: 'ai-attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } });
+  policy.restrictions.push({ id: 'other-attempt', actions: ['execute'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['unrelated-attempt'] } });
+  await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+  const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+  try {
+    const run = (await opened.store.loadRun('s', 'b'))!, { config } = await scopedRequest.loadConfiguredScopeContext(f.project, 's', { env: f.env }, 'read');
+    const key = { ledger: sha256(opened.path), companyId: config.company.id, scopeId: 's', runId: 'b', commandId: 'create-b', actor: { id: ai.id, issuer: ai.issuer, subject: ai.subject } };
+    const registry = new RunSessionRegistry(async () => ({ run, intent: { actor: ai, commandId: 'create-b' }, approval: null, now: 1, admissionWindowMs: 1000 }));
+    const pin = await registry.reserve(key); registry.admission(pin, run, ai, 'create-b'); await registry.finish(pin);
+    const inspected = await withRunProgressionSession(registry, () => withRunProgressionObservation({ observation: () => ({ suspended: false, parkUnavailable: false }) },
+      () => runs.inspectConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'b' }, { env: f.env })));
+    expect(inspected.progression).toMatchObject({ state: 'unknown', session: 'eligible', reason: 'RUN_PROGRESSION_COVERAGE_UNVERIFIED', missing: [] });
+    for (const locale of ['en', 'tr'] as const) {
+      const text = runProgressionLines(inspected.run!, inspected.progression, locale).join('\n');
+      expect(text).toContain(locale === 'en' ? 'no concrete execution blocker is proved' : 'somut bir yürütme engeli kanıtlanmadı');
+      expect(text).not.toContain('--only ai-execution'); expect(text).not.toContain(locale === 'en' ? 'cancel this Run and propose it again' : 'bu işi iptal edip servis üzerinden yeniden önerin');
+    }
+  } finally { opened.store.close(); }
+});
 
 it.skipIf(process.platform === 'win32')('119-C1 F4: due leaves old unlaunched AI untouched and expires started person custody as that person', async () => {
   const f = await fixture(2, true, true); await personCustody(f, 'b');

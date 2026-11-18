@@ -595,6 +595,22 @@ it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with 
   await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
 });
 
+it('119-rev F3: doctor distinguishes no grant, denial and approval while keeping model checks separate (EN/TR)', () => {
+  const run = { runId: 'r', scopeId: 'live', revision: 1 }, now = Date.now();
+  for (const locale of ['en', 'tr'] as const) for (const reason of ['NO_GRANT', 'DENIED', 'APPROVAL_REQUIRED']) {
+    const progression = { schemaVersion: 1 as const, ...run, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+      state: 'blocked' as const, reason: 'POLICY_DENIED', session: 'eligible' as const, suspended: false, parkUnavailable: false,
+      missing: [{ kind: 'run' as const, id: 'r', action: 'reserve', scope: 'live', reason, code: 'POLICY_DENIED' as const }] };
+    const checks = doctorChecks(report, facts({ progressionRuns: [{ run, progression }], modelConnections: [{ profile: 'offline-model', tools: 'unknown', stale: false }] }), locale);
+    const text = checks.find(row => row.id === 'work.progression')!.text;
+    expect(text).toContain(reason === 'DENIED' ? locale === 'en' ? 'AI execution is explicitly denied' : 'Yapay zekâ yürütmesi açıkça reddedildi'
+      : reason === 'APPROVAL_REQUIRED' ? locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor'
+        : locale === 'en' ? 'AI execution permission is missing' : 'Yapay zekâ yürütme izni eksik');
+    if (reason !== 'NO_GRANT') expect(text).not.toContain('--only ai-execution');
+    expect(checks.find(row => row.id === 'work.modelConnection')!.text).toContain('offline-model');
+  }
+});
+
 it('119-C4: doctor separates service policy diagnosis from unavailable login/model; missing or stale diagnosis is unknown (EN/TR)', () => {
   const run = { runId: 'r', scopeId: 'live', revision: 1 }, now = Date.now();
   const diagnostic = { schemaVersion: 1 as const, ...run, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,

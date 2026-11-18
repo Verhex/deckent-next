@@ -71,4 +71,9 @@ it('119-C4: inspect response compatibility accepts absent or sibling progression
   reply({ ...old, progression });
   const response = await client().inspectRun(query);
   expect(response).toEqual({ ...old, progression }); expect(response.run).toEqual(old.run); expect(response.run).not.toHaveProperty('progression');
+  const redacted = { ...progression, state: 'maintenance-only', actorClass: 'person', reason: 'RUN_PROGRESSION_MAINTENANCE_ONLY', missing: [] };
+  reply({ ...old, progression: redacted });
+  const maintenance = await client().inspectRun(query);
+  expect(maintenance).toEqual({ ...old, progression: redacted }); expect(maintenance.progression).not.toHaveProperty('actor');
+  expect(maintenance.progression).not.toHaveProperty('policyRevision'); expect(maintenance.run).toEqual(old.run);
 });

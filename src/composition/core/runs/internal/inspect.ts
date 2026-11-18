@@ -30,7 +30,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     let run = await observeConfiguredRunResults(config, options.env, inspected.run, principal, authorization, undefined, dismissed);
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
-    const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options);
+    const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options, principal);
     return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) });
   } catch (error) { throw queryFailure(error); }
 }

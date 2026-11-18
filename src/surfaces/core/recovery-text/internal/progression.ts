@@ -10,9 +10,12 @@ export function readRunProgressionDiagnostic(run: Pick<RunView, 'runId' | 'scope
     && value.observedAtMs <= now && now <= value.validUntilMs ? value : undefined;
 }
 export function runProgressionWord(input: RunProgressionDiagnostic | undefined, locale: Locale): string {
+  if (input?.state === 'unknown' && input.reason === 'RUN_PROGRESSION_COVERAGE_UNVERIFIED') return t('run.progression.coverageUnknown', {}, locale);
   if (!input || input.state === 'unknown') return t('run.progression.unknown', {}, locale);
   if (input.state === 'maintenance-only') return t('run.progression.maintenance', {}, locale);
-  if (input.missing.length) return t('run.progression.blocked', {}, locale);
+  if (input.missing.some(cell => cell.reason === 'DENIED')) return t('run.progression.denied', {}, locale);
+  if (input.missing.some(cell => cell.reason === 'APPROVAL_REQUIRED')) return t('run.progression.approvalRequired', {}, locale);
+  if (input.missing.length) return input.missing.every(cell => cell.reason === 'NO_GRANT') ? t('run.progression.blocked', {}, locale) : t('run.progression.restricted', {}, locale);
   if (input.session === 'ineligible') return t('run.progression.repropose', {}, locale);
   return input.state === 'eligible' ? t('run.progression.eligible', {}, locale) : t('run.progression.suspended', {}, locale);
 }
@@ -30,7 +33,7 @@ export function runProgressionLines(run: Pick<RunView, 'runId' | 'scopeId' | 're
       command: `deckent policy upgrade --template current --only ai-execution --scope ${commandArgument(missing[0]!.scope)} --preview` }, locale));
     if (value.missing.some(cell => cell.reason !== 'NO_GRANT')) lines.push(t('run.progression.adminReview', {}, locale));
     if (value.parkUnavailable) lines.push(t('run.progression.parkUnavailable', {}, locale));
-    if (value.state !== 'maintenance-only' && (value.session === 'ineligible' || value.suspended)) lines.push(t('run.progression.reproposeNext', {}, locale));
+    if (value.state === 'blocked' && (value.reason === 'RUN_PROGRESSION_REPROPOSE_REQUIRED' || value.session === 'ineligible' || value.parkUnavailable)) lines.push(t('run.progression.reproposeNext', {}, locale));
   }
   lines.push(t('run.progression.inspectNext', { command: inspect }, locale));
   if (value && value.state !== 'eligible') lines.push(t('run.progression.controls', { hold: `deckent run hold --scope ${scope} --id ${id}`,

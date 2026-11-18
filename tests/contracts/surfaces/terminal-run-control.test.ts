@@ -297,5 +297,16 @@ it('119-C4: /runs Enter opens the bound diagnosis; h and cancel remain person op
     await until(() => cancel.mock.calls.length === 1, 'person cancel');
     expect(cancel).toHaveBeenCalledWith(RUNNING, 7);
     h.instance.unmount();
+    for (const reason of ['DENIED', 'APPROVAL_REQUIRED']) {
+      const restricted = { ...ledger, inspectRunObservation: async (id: string) => id === RUNNING ? { ...item, progression: { ...progression,
+        missing: [{ ...progression.missing[0]!, reason }] } } : runs[id] ?? null };
+      const frame = await open(restricted, locale);
+      expect(frame.stdout.frame).toContain(reason === 'DENIED' ? locale === 'en' ? 'AI execution is explicitly denied' : 'Yapay zekâ yürütmesi açıkça reddedildi'
+        : locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor');
+      await press(frame, '\r', 150);
+      await until(() => frame.stdout.frame.includes(reason), 'restricted policy detail');
+      expect(squeeze(frame.stdout.frame)).not.toContain('--onlyai-execution');
+      frame.instance.unmount();
+    }
   }
 });

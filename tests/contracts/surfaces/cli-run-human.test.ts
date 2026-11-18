@@ -303,6 +303,18 @@ it('report groups visible attempt usage by channel and leaves missing API or sub
   expect(text).toContain('No billing period or reset is inferred'); expect(report.attempts).toHaveLength(3);
 });
 
+it('119-rev F4: transient unknown suspension asks for inspection without cancelling and reproposing (EN/TR)', async () => {
+  const root = await project(), item = view(), st = store([item]), now = Date.now();
+  const progression = { schemaVersion: 1, scopeId: 's', runId: LONG, revision: 7, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai',
+    state: 'unknown', reason: 'RUN_PROGRESSION_SESSION_UNVERIFIED', session: 'unknown', suspended: true, parkUnavailable: false, missing: [] };
+  const handlers = { ...st.context, async inspectRun() { return { schemaVersion: 1, layout: {}, run: item, progression }; } };
+  for (const locale of ['en', 'tr']) {
+    const output = await run(['run', 'list', '--scope', 's', '--lang', locale], handlers, root);
+    expect(output.code).toBe(0); expect(output.text).toContain('deckent run inspect --scope s --id a1b2c3d4');
+    expect(output.text).not.toContain(locale === 'en' ? 'cancel this Run and propose it again' : 'bu işi iptal edip servis üzerinden yeniden önerin');
+  }
+});
+
 it('119-C4: list and JSON keep RunView unchanged while showing the service diagnosis in both languages', async () => {
   const root = await project(), item = view(), st = store([item]), now = Date.now();
   const progression = { schemaVersion: 1, scopeId: 's', runId: LONG, revision: 7, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
@@ -312,6 +324,14 @@ it('119-C4: list and JSON keep RunView unchanged while showing the service diagn
     const output = await run(['run', 'list', '--scope', 's', '--lang', locale], handlers, root);
     expect(output.code).toBe(0); expect(output.text).toContain(locale === 'en' ? 'Propose again' : 'Yeniden önerin');
     expect(output.text).toContain('deckent run cancel --scope s --id a1b2c3d4');
+    for (const reason of ['DENIED', 'APPROVAL_REQUIRED']) {
+      const restricted = { ...handlers, async inspectRun() { return { schemaVersion: 1, layout: {}, run: item, progression: { ...progression, session: 'eligible',
+        missing: [{ kind: 'run', id: LONG, action: 'reserve', scope: 's', reason, code: 'POLICY_DENIED' }] } }; } };
+      const shown = await run(['run', 'list', '--scope', 's', '--lang', locale], restricted, root);
+      expect(shown.text).toContain(reason === 'DENIED' ? locale === 'en' ? 'AI execution is explicitly denied' : 'Yapay zekâ yürütmesi açıkça reddedildi'
+        : locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor');
+      expect(shown.text).not.toContain('--only ai-execution');
+    }
   }
   const json = await run(['run', 'list', '--scope', 's', '--json'], handlers, root), parsed = JSON.parse(json.text);
   expect(parsed.runs).toEqual([item]); expect(parsed.progression).toEqual([progression]); expect(item).not.toHaveProperty('progression');

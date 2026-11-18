@@ -1,12 +1,13 @@
 import { sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { withLocalPrincipalChannel, readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
-import { runProgressionSession, runProgressionObservation, selectRunProgression, runProgressionMissingPermissions, runProgressionDiagnosticSchema,
+import type { VerifiedPrincipal } from '#domain/index.js';
+import { runProgressionSession, runProgressionObservation, selectRunProgression, runProgressionMissingPermissions, runProgressionUnreservedCoverage, runProgressionDiagnosticSchema,
   type RunProgressionDiagnostic, type RunQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 /** Called only after the caller's scope and Run inspect authorization. No admission, migration or stored diagnostic. */
-export async function inspectConfiguredRunProgression(root: string, query: RunQuery, revision: number, options: ConfigLoadOptions): Promise<RunProgressionDiagnostic | undefined> {
+export async function inspectConfiguredRunProgression(root: string, query: RunQuery, revision: number, options: ConfigLoadOptions, caller: VerifiedPrincipal): Promise<RunProgressionDiagnostic | undefined> {
   const observedAtMs = Date.now();
   const base = { ...query, revision, observedAtMs, validUntilMs: observedAtMs,
     state: 'unknown' as const, actorClass: 'ai' as const, reason: 'RUN_PROGRESSION_SESSION_UNVERIFIED', session: 'unknown' as const, suspended: false, parkUnavailable: false, missing: [] };
@@ -26,21 +27,29 @@ export async function inspectConfiguredRunProgression(root: string, query: RunQu
         const session = runProgressionSession(), observed = runProgressionObservation(identity);
         if (!session || !observed) return runProgressionDiagnosticSchema.parse(current);
         let actorClass: 'ai' | 'person' = 'ai';
-        let maintenance = false, selectionReason: string | undefined, effective = { principal, document };
+        let maintenance = false, disclose = true, selectionReason: string | undefined, effective = { principal, document };
         try {
           const selected = await selectRunProgression(identity, sha256(ledger), config.company.id, store,
             channel => withLocalPrincipalChannel(channel, readLocalOsIdentity), session);
           maintenance = selected.maintenance; actorClass = selected.channel === 'mcp' ? 'ai' : 'person';
-          if (maintenance && selected.channel !== 'mcp') effective = await withLocalPrincipalChannel(selected.channel, () => loadConfiguredScopeContext(root, query.scopeId, options, 'read'));
+          if (maintenance && selected.channel !== 'mcp') {
+            const person = withLocalPrincipalChannel(selected.channel, readLocalOsIdentity);
+            disclose = caller.assurance === 'os-user' && caller.id === person.id && caller.issuer === person.issuer && caller.subject === person.subject;
+            if (disclose) effective = await withLocalPrincipalChannel(selected.channel, () => loadConfiguredScopeContext(root, query.scopeId, options, 'read'));
+          }
         } catch (error) { selectionReason = queryFailure(error).code; }
         const admission = session.admissionState({ ledger: sha256(ledger), companyId: config.company.id, ...identity, commandId: intent.commandId, actor: intent.actor }, run);
-        const missing = runProgressionMissingPermissions(run, effective.principal, effective.document, maintenance);
-        const unknown = selectionReason && selectionReason !== 'RUN_PROGRESSION_REPROPOSE_REQUIRED';
-        const reason = unknown ? selectionReason : missing[0]?.code ?? selectionReason
+        const missing = disclose ? runProgressionMissingPermissions(run, effective.principal, effective.document, maintenance) : [];
+        const coverage = disclose && !maintenance && runProgressionUnreservedCoverage(run, effective.principal, effective.document).length > 0;
+        const unknownReason = selectionReason && selectionReason !== 'RUN_PROGRESSION_REPROPOSE_REQUIRED' ? selectionReason
+          : !maintenance && !missing.length && coverage && !observed.suspended && admission === 'eligible' ? 'RUN_PROGRESSION_COVERAGE_UNVERIFIED' : undefined;
+        const reason = !disclose ? 'RUN_PROGRESSION_MAINTENANCE_ONLY' : unknownReason ?? missing[0]?.code ?? selectionReason
           ?? (observed.parkUnavailable ? 'RUN_PROGRESSION_PARK_UNAVAILABLE' : observed.suspended ? 'RUN_PROGRESSION_PARKED' : maintenance ? 'RUN_PROGRESSION_MAINTENANCE_ONLY' : 'RUN_PROGRESSION_ELIGIBLE');
         if ((await store.loadRun(query.scopeId, query.runId))?.revision !== revision) return runProgressionDiagnosticSchema.parse({ ...current, reason: 'RUN_STORE_CONFLICT' });
-        return runProgressionDiagnosticSchema.parse({ ...current, actorClass, actor: { id: effective.principal.id, issuer: effective.principal.issuer, subject: effective.principal.subject }, policyRevision: effective.document.revision, session: admission, ...observed, missing: unknown ? [] : missing, reason,
-          state: unknown ? 'unknown' : maintenance ? 'maintenance-only' : missing.length || selectionReason || observed.suspended || run.state.kind !== 'running' || run.cancelRequested ? 'blocked' : 'eligible' });
+        return runProgressionDiagnosticSchema.parse({ ...current, actorClass,
+          ...(disclose ? { actor: { id: effective.principal.id, issuer: effective.principal.issuer, subject: effective.principal.subject }, policyRevision: effective.document.revision } : {}),
+          session: admission, ...observed, missing: unknownReason ? [] : missing, reason,
+          state: unknownReason ? 'unknown' : maintenance ? 'maintenance-only' : missing.length || selectionReason || observed.suspended || run.state.kind !== 'running' || run.cancelRequested ? 'blocked' : 'eligible' });
       } finally { store.close(); }
     });
   } catch (error) { return runProgressionDiagnosticSchema.parse({ ...base, reason: queryFailure(error).code }); }

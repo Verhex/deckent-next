@@ -79,13 +79,13 @@ it('AI card, authority basis, receipt and general execution snapshot seal the sa
   const admit = async () => app.admitEvaluated(aiCommand, ai, await f.authority.evaluate(aiCommand, ai));
   await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' });
   const card = f.approvals.findRunCreate('s', 'create')!;
-  expect(card.request.summary).toContain('The worker runs at most in this mode: standard');
+  expect(card.request.summary).toContain('Recorded worker ceiling: standard');
   expect(card.request.summary).toContain("Work starts under the AI's own execution permissions; this card grants no missing policy permission.");
   await f.decide(); f.state.mode = 'full-access'; f.state.askEdits = true; f.state.revision = 'p2';
   await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' }); noEffects(f);
   const fresh = f.approvals.findRunCreate('s', 'create')!;
   expect(fresh.request.approvalId).not.toBe(card.request.approvalId);
-  expect(fresh.request.summary).toContain('The worker runs at most in this mode: full auto');
+  expect(fresh.request.summary).toContain('Recorded worker ceiling: full auto');
   await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: fresh.request.approvalId, commandId: 'decide-current-mode', expectedRevision: 0, decision: 'allow', reason: 'Reviewed the current own-person ceiling' });
   await admit();
   const receipt = (await f.store.loadRunReceipt('s', 'create'))!, persisted = JSON.parse(receipt.command);
@@ -191,7 +191,7 @@ it('approve-card-then-assert: creates one Run bound to that decision and approva
   expect(f.db.prepare('SELECT count(*) AS n FROM run_execution_intents').get()!.n).toBe(1);
   f.state.now = 9000; expect(await f.app().create(command)).toEqual(first);
   // R9: the card showed the person's mode as the worker ceiling (in the sealed request) and the Run keeps exactly it (bound in the approved basis).
-  expect(request.request.summary).toContain('The worker runs at most in this mode: standard'); expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual({ mode: 'standart', askEdits: false });
+  expect(request.request.summary).toContain('Recorded worker ceiling: standard'); expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual({ mode: 'standart', askEdits: false });
 });
 it.each(['graph', 'run', 'actor', 'layout', 'policy'] as const)('approve-card-then-assert: changed %s cannot consume the old approval', async changed => {
   const f = await fixture(); await pending(f); await f.decide(); let altered = command;

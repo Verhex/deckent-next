@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderRunCreateApprovalSummary, type BoundRunAdmission, type RunCreate } from '#engine/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
-import { mcpPrincipalRef } from '#domain/index.js';
+import { mcpPrincipalRef, NATIVE_CLI_WORKER_ADAPTER_ID } from '#domain/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const proposal = proposalFixture();
@@ -12,6 +12,21 @@ const create: RunCreate = { commandId: command.commandId, actor: proposal.propos
   identity: { scopeId: 's', runId: command.runId, layoutRevision: 'layout' }, now: 1, execution: fixtureExecution(command.graph),
   policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['task'] } };
 const verdict = { decision: 'require-approval', revision: 'p1', ruleId: 'owner-purchase', reason: 'APPROVAL_REQUIRED' } as const;
+it('119-rev F1: Docker and mixed cards attribute tool protection only to the native worker (EN/TR)', () => {
+  const task = command.graph.tasks[0]!, row = create.execution.tasks[0]!;
+  const docker = { ...row, profile: { ...row.profile, id: 'docker-profile', adapter: { id: 'docker', version: 2 } } };
+  const native = { ...row, taskId: 'native-task', profile: { ...row.profile, id: 'native-profile', adapter: { id: NATIVE_CLI_WORKER_ADAPTER_ID, version: 1 } } };
+  for (const locale of ['en', 'tr'] as const) {
+    const only = renderRunCreateApprovalSummary(command, { ...create, execution: { ...create.execution, tasks: [docker], workerMode: { mode: 'standart', askEdits: false } } }, verdict, locale);
+    expect(only).toContain(locale === 'en' ? 'Recorded worker ceiling: standard' : 'Kayıtlı işçi tavanı: standart');
+    expect(only).toContain(locale === 'en' ? 'docker-profile: its own sandbox/profile limits apply; no per-tool mode check.' : 'docker-profile: kendi sandbox/profil sınırları geçerlidir; araç başına mod denetimi yoktur.');
+    expect(only).not.toContain(locale === 'en' ? 'destructive commands always ask' : 'yıkıcı komutlar her zaman sorulur');
+    const graph = { ...command.graph, tasks: [task, { ...task, id: 'native-task' }] };
+    const mixed = renderRunCreateApprovalSummary({ ...command, graph }, { ...create, graph, execution: { ...create.execution, tasks: [docker, native], workerMode: { mode: 'standart', askEdits: false } } }, verdict, locale);
+    expect(mixed).toContain(locale === 'en' ? 'native-profile: per-tool mode check; lowering your mode applies; full access never passes; destructive commands always ask.' : 'native-profile: araç başına mod denetimi; modunuzu düşürmeniz uygulanır; tam erişim aktarılmaz; yıkıcı komutlar her zaman sorulur.');
+    expect(mixed).toContain('docker-profile');
+  }
+});
 for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses titles/classes, permissions, ceiling and the exact asking rule`, () => {
   const text = renderRunCreateApprovalSummary(command, create, verdict, locale);
   expect(text).toContain(locale === 'tr' ? 'Plan · görevler: 1' : 'Plan · tasks: 1');
@@ -23,7 +38,7 @@ for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses 
   expect(text.indexOf(locale === 'tr' ? 'Ayrıntılar:' : 'Details:')).toBeGreaterThan(text.indexOf('• task'));
   expect(text.indexOf(locale === 'tr' ? 'Ayrıntılar:' : 'Details:')).toBeLessThan(text.indexOf('owner-purchase'));
   // R9: a Run with a worker shows the recorded worker ceiling; without one the card has no such line.
-  const line = locale === 'tr' ? 'İşçi en fazla şu modda çalışır: ' : 'The worker runs at most in this mode: ';
+  const line = locale === 'tr' ? 'Kayıtlı işçi tavanı: ' : 'Recorded worker ceiling: ';
   expect(text).not.toContain(line);
   const ai = renderRunCreateApprovalSummary(command, { ...create, actor: { ...create.actor, ...mcpPrincipalRef(create.actor) } }, verdict, locale);
   expect(ai).toContain(locale === 'tr' ? "İş AI'ın kendi yürütme izinleriyle başlar; bu kart eksik politika izni vermez."
