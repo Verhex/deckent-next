@@ -12,9 +12,8 @@ import { composeModelRolePolicy, decideRoleModelInScope, isOwnedRoleOverlay, rol
 import { isRunIntentResult, type RunPlanningResult, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
 import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
-import type { BrainPreparation } from './internal/same-turn.js';
-export { SameTurnPlanningApplication } from './internal/same-turn.js';
-export type { BrainPreparation, SameTurnPlanningInput, SameTurnPlanningPorts, SameTurnBrainSettings } from './internal/same-turn.js';
+import { SameTurnPlanningApplication, type BrainPreparation, type SameTurnPlanningPorts } from './internal/same-turn.js';
+export type { SameTurnPlanningApplication, BrainPreparation, SameTurnPlanningInput, SameTurnPlanningPorts, SameTurnBrainSettings } from './internal/same-turn.js';
 /** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
 export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => brainPlannerConfigSchema.parse(config).quotaWait;
 /** D-02: the configured corrective re-plans (`brain_planner.correctionRetries`, registry default 1, 0 disables). */
@@ -167,6 +166,10 @@ function correctedInvocation(command: BrainPlanCommand, invocation: ModelInvocat
 /** One model step (a correctable refusal may re-plan within `correctionRetries`, D-02); no tool loop, Run writer or approval decision. */
 export class BrainPlanApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly ports: BrainPlanPorts) {}
+  /** Give the host the verified finalizer, never the internal proposal completion callback. */
+  createSameTurnPlanning(ports: SameTurnPlanningPorts): SameTurnPlanningApplication {
+    return new SameTurnPlanningApplication(this.#completeSameTurn.bind(this), ports);
+  }
   /** `observe`: the surface that shows progress. Only a caller that shows the wait gets one (owner Q-H4: a short VISIBLE wait); without it a
    * quota refusal is the typed refusal at once. */
   /** The responded answer as a checked draft: content, truncation, JSON and schema, the assignment rule and the registered kinds (typed refusals). */
@@ -268,7 +271,7 @@ export class BrainPlanApplication {
     return this.complete(command, proposer, prepared, invocation, result, draft, signal);
   }
   /** Same-turn custody has already proved completion/drain and retained-body equality. No invoke, correction or quota loop. */
-  async completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
+  async #completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
     assertActive(signal);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const proposer = { id: principal.id, issuer: principal.issuer, subject: principal.subject };

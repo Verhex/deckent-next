@@ -1,14 +1,14 @@
 import { expect, it } from 'vitest';
-import { CORE_WORK_CLASSES, parseModelInvocationReceipt, modelInvocationRequestEvidence, resolveModelBindingDefinition, encodeModelBindingDefinition } from '#domain/index.js';
-import { prepareBrainPrompt } from '#capabilities/index.js';
-import { BrainPlanApplication, SameTurnPlanningApplication, brainRunId, type SameTurnPlanningPorts } from '#engine/core/run-planner/index.js';
+import { CORE_WORK_CLASSES, parseModelInvocationReceipt, modelInvocationRequestEvidence, resolveModelBindingDefinition, encodeModelBindingDefinition, type AgentTurnEvent, type AgentTurnMessage } from '#domain/index.js';
+import { prepareBrainPrompt, selectedBrainTemplate } from '#capabilities/index.js';
+import { BrainPlanApplication, brainRunId, type SameTurnPlanningPorts } from '#engine/core/run-planner/index.js';
 import { modelInvocationRequestDigest, modelInvocationProfileDigest, createModelInvocationResponseRecord } from '#engine/core/model-invocation/index.js';
-import { agentTurnResultDigest, agentToolArgumentsDigest, runDurableAgentTurn, AI_PROPOSAL_TOOL_SPECS, type AgentTurnStore } from '#engine/core/agent-turn/index.js';
+import { agentTurnResultDigest, agentToolArgumentsDigest, runDurableAgentTurn, AI_PROPOSAL_TOOL_SPECS, type AgentTurnStore, type AgentTurnPorts } from '#engine/core/agent-turn/index.js';
 import { assertRunProposalSource } from '#engine/core/run-proposal/index.js';
 import { sha256, knownSecretValues, ErrorRegistry } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 
-function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: unknown) {
+function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: unknown, config = {}) {
   const proposal = proposalFixture(), principal = { ...proposal.proposer, assurance: 'os-user' as const, scopeIds: ['s'] };
   const reference = { providerId: 'test', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'test', version: 1,
@@ -23,7 +23,7 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
     authorization: { revision: 'policy', ruleId: 'invoke' }, definition, activationRevision: 1, profile, profileDigest,
     claim: { scopeId: 's', commandId: 'chat', invocationId: 'invocation', requestDigest, profileDigest }, claimedAtMs: 1, outcome: null });
   const command = { schemaVersion: 1 as const, commandId: 'plan', scopeId: 's', intent: 'prepare a purchase' };
-  const prompt = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
+  const prompt = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, config);
   const { graph, budgetCeiling, requiredPermissions } = proposal;
   const draft = ' \n' + JSON.stringify({ graph, budgetCeiling, requiredPermissions }) + '\t\n';
   const record = createModelInvocationResponseRecord(claimed, { schemaVersion: 1, native: { text: draft }, usage: null }, 2);
@@ -35,13 +35,13 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
     propose: async value => { assertRunProposalSource(value, retained.receipt, draft); proposals++;
       expect(value.source.kind).toBe('model'); expect(value.runId).toBe(brainRunId(command));
       if (proposeError) throw proposeError; return { proposal: { proposal: value } } as never; } });
-  const planning = new SameTurnPlanningApplication(brain, { randomBytes: size => { randomCalls++; return new Uint8Array(size).fill(0xaa); },
+  const planning = brain.createSameTurnPlanning({ randomBytes: size => { randomCalls++; return new Uint8Array(size).fill(0xaa); },
     projectDelivery: value => value, toolResultDigest: agentTurnResultDigest, text: result => result.response?.native['text'] as string ?? null,
     readResult: async () => { reads++; return retained; }, revalidate: async input => input,
     publicText: 'Preparing the plan', ...overrides });
   const pin = planning.claimed(invocation, claimed);
   planning.bindNativeSession(pin, 'session');
-  const input = { command, prepared: { invocation, prompt, kinds: ['purchase'] }, config: {},
+  const input = { command, prepared: { invocation, prompt, kinds: ['purchase'] }, config,
     settings: { cap: { value: null, origin: 'brain-default' as const }, reasoning: { value: 'model-default' as const, origin: 'brain-default' as const }, applied: null },
     call: { turnId: 'turn', generation: 1, callId: 'prepare', argsDigest: agentToolArgumentsDigest('propose_work', { request: 'prepare a purchase' }) },
     bounds: { preparationMaxBytes: 131072, draftMaxBytes: 131072 } };
@@ -54,11 +54,133 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
   const terminal = () => planning.terminalEnvelope(pin, { ...input.call, messageId: 'final', sessionId: 'session', parentId: null,
     line: 'DECKENT-PLAN-CHALLENGE/1 ' + 'aa'.repeat(32), draft });
   const close = () => planning.nativeClosed(pin, { state: 'normal', closed: true, drained: true });
-  return { planning, pin, input, claimed, invocation, retained, draft, settle, terminal, close, counts: () => ({ proposals, randomCalls, reads }) };
+  return { brain, planning, pin, input, claimed, invocation, retained, draft, settle, terminal, close, counts: () => ({ proposals, randomCalls, reads }) };
 }
+
+function productionTurn(f: ReturnType<typeof fixture>, invokeAgent: NonNullable<AgentTurnPorts['invokeAgent']>,
+  options: { parent?: AbortController; completionLimitTokens?: number } = {}) {
+  const events: AgentTurnEvent[] = [], executions: string[] = [], targets: string[] = [], records: string[] = [];
+  let finalizers = 0, history: readonly AgentTurnMessage[] = [];
+  const tools = [AI_PROPOSAL_TOOL_SPECS.find(tool => tool.name === 'propose_work')!,
+    { name: 'read_item', version: 1, toolClass: 'read' as const, description: 'Read an item.',
+      inputSchema: { type: 'object' as const, required: ['path'], properties: { path: { type: 'string' } } } }];
+  const store: AgentTurnStore = { claim: async () => ({ status: 'new' }), finish: async () => undefined,
+    interruptRunning: async () => ({ interrupted: 0, corrupt: [] }), recordToolCall: async record => { records.push(record.callId); } };
+  const running = runDurableAgentTurn({ messages: [{ role: 'user', content: 'prepare a purchase' }], tools, signal: (options.parent ?? new AbortController()).signal, language: 'en',
+    ...(options.completionLimitTokens === undefined ? {} : { admission: { outputReserveTokens: 0, safetyReserveTokens: 0, completionLimitTokens: options.completionLimitTokens } }),
+    nativeSession: { schemaVersion: 1, turnId: 'turn', generation: 1, tools, approvalTtlMs: 1000 },
+    claim: { scopeId: 's', turnId: 'turn', principalKey: 'test:owner', requestDigest: sha256('turn-request'), claimedAtMs: 1 }, emit: event => events.push(event) }, store,
+  { planning: f.planning, now: () => 1, describe: (_tool, args) => { if (typeof args['path'] !== 'string') return null; targets.push(args['path']); return args['path']; },
+    authorize: async () => 'allow', invokeRound: async () => { throw new Error('SECOND_MODEL'); },
+    execute: async (tool, _args, _signal, callId) => { executions.push(callId); return tool.name === 'propose_work'
+      ? (await f.planning.prepare(f.pin, f.input)).outcome : { status: 'ok', text: 'Item read' }; },
+    invokeAgent: (input, delta, signal) => { history = input.messages; return invokeAgent(input, delta, signal); },
+    finishPlanning: async signal => { finalizers++; await f.planning.finalize(f.pin, f.retained, signal); return 'Prepared plan'; } });
+  return { running, events, executions, targets, records, history: () => history, finalizers: () => finalizers };
+}
+const prepareCall = { id: 'prepare', name: 'propose_work', argumentsJson: '{"request":"prepare a purchase"}' };
+const correlation = (id: string) => ({ kind: 'codex-mcp' as const, deckentCallId: id, callId: `rpc-${id}`, itemId: `item-${id}` });
+const normalAnswer = (content: string) => ({ status: 'responded' as const, content, reasoning: '', finish: 'stop', toolCalls: [], usage: null });
+
+it('refuses post-preparation requests before publication, including earlier cache hits and already queued calls, but replays preparation', async () => {
+  for (const mode of ['new', 'earlier-replay', 'queued', 'preparation-replay'] as const) {
+    const f = fixture();
+    let refusedStatus = '', privateP = '';
+    const earlier = { id: 'earlier', name: 'read_item', argumentsJson: '{"path":"previous-item"}' };
+    const queued = { id: 'after', name: 'read_item', argumentsJson: '{"path":"queued-private-plan"}' };
+    const p = productionTurn(f, async ({ session }, _delta, signal) => {
+      if (mode === 'earlier-replay') expect((await session.propose(earlier, correlation(earlier.id), signal)).outcome.status).toBe('ok');
+      const preparation = session.propose(prepareCall, correlation(prepareCall.id), signal);
+      // Both requests enter before the preparation starts; the second must be checked again when its queue entry runs.
+      const waiting = mode === 'queued' ? session.propose(queued, correlation(queued.id), signal) : null;
+      const result = await preparation; privateP = result.outcome.text;
+      if (waiting) { refusedStatus = (await waiting).outcome.status; return normalAnswer(f.draft); }
+      f.planning.preparationDelivered(f.pin, result);
+      const call = mode === 'earlier-replay' ? earlier : mode === 'preparation-replay' ? prepareCall
+        : { id: 'after', name: 'read_item', argumentsJson: JSON.stringify({ path: privateP + f.draft }) };
+      const repeated = await session.propose(call, correlation(call.id), signal); refusedStatus = repeated.outcome.status;
+      if (mode === 'preparation-replay') { expect(repeated).toBe(result); f.terminal(); f.close(); }
+      return normalAnswer(f.draft);
+    });
+    const outcome = await p.running, allowed = mode === 'preparation-replay';
+    const afterMessages = p.history().filter(message => message.role === 'assistant' && message.toolCalls.some(call => call.id === 'after'));
+    const afterEvents = p.events.filter(event => (event.kind === 'tool.started' || event.kind === 'tool.finished') && event.callId === 'after');
+    const observed = { mode, refusedStatus, afterMessages: afterMessages.length, afterEvents: afterEvents.length,
+      targets: p.targets.length, executions: p.executions, records: p.records, proposals: f.counts().proposals, finalizers: p.finalizers() };
+    process.stdout.write(`${JSON.stringify(observed)}\n`);
+    expect.soft(afterMessages).toHaveLength(0); expect.soft(afterEvents).toHaveLength(0);
+    expect.soft(JSON.stringify(p.history())).not.toContain('aa'.repeat(32)); expect.soft(JSON.stringify(p.events)).not.toContain('aa'.repeat(32));
+    expect.soft(JSON.stringify(p.history())).not.toContain(f.draft); expect.soft(JSON.stringify(p.events)).not.toContain(f.draft);
+    expect.soft(p.history().some(message => message.content.includes(f.draft))).toBe(false);
+    expect.soft(JSON.stringify(p.events)).not.toContain('queued-private-plan');
+    expect.soft(p.targets).toEqual(mode === 'earlier-replay' ? ['previous-item'] : []);
+    expect.soft(p.executions).toEqual(mode === 'earlier-replay' ? ['earlier', 'prepare'] : ['prepare']);
+    expect.soft(p.records).toEqual(p.executions); expect.soft(refusedStatus).toBe(allowed ? 'ok' : 'error');
+    expect.soft(f.counts()).toMatchObject({ proposals: allowed ? 1 : 0, randomCalls: 1 }); expect.soft(outcome.finish).toBe(allowed ? 'stop' : 'error');
+  }
+});
+
+it('frames temporary preparation for a legacy template, retaining its identity and the whole-P bounds/redaction/settlement', async () => {
+  const config = { selected: { id: 'run-proposal', version: 1 } }, f = fixture({}, undefined, config);
+  const { envelope, custody } = await f.settle(), content = envelope.outcome.text;
+  expect(content).toContain('copy the first line of this preparation result exactly at byte zero, then one LF and exactly one BrainDraft JSON object');
+  expect(content).toContain('Call no more tools and write no other text.');
+  expect(content).toContain(JSON.stringify(f.input.prepared.prompt.messages));
+  expect(custody).toMatchObject({ content, bytes: Buffer.byteLength(content), resultDigest: agentTurnResultDigest(content) });
+  expect(f.input.prepared.prompt.template).toEqual(prepareBrainPrompt(f.input.command, CORE_WORK_CLASSES, {}, config).template);
+  f.terminal(); f.close(); await f.planning.finalize(f.pin, f.retained); expect(f.counts().proposals).toBe(1);
+  const exact = fixture({}, undefined, config);
+  await expect(exact.planning.prepare(exact.pin, { ...exact.input, bounds: { ...exact.input.bounds,
+    preparationMaxBytes: Buffer.byteLength(JSON.stringify(envelope)) } })).resolves.toEqual(envelope);
+  const short = fixture({}, undefined, config);
+  await expect(short.planning.prepare(short.pin, { ...short.input, bounds: { ...short.input.bounds,
+    preparationMaxBytes: Buffer.byteLength(JSON.stringify(envelope)) - 1 } })).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED' });
+  const redaction = fixture({ knownSecrets: knownSecretValues(['copy the first line of this preparation result']) }, undefined, config);
+  await expect(redaction.planning.prepare(redaction.pin, redaction.input)).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED' });
+});
+
+it('keeps the separate Brain invocation on its unchanged authored plain-JSON instruction', async () => {
+  const f = fixture(), prompt = f.input.prepared.prompt;
+  let sends = 0, proposals = 0;
+  const brain = new BrainPlanApplication({ verify: async () => ({ ...f.claimed.actor, scopeIds: ['s'] }) }, {
+    inspect: async () => null, prepare: async () => ({ ...f.input.prepared, invocation: { ...f.invocation, nativeRequest: { messages: prompt.messages } } }),
+    invoke: async invocation => {
+      sends++; expect(invocation.nativeRequest['messages']).toEqual(prompt.messages);
+      expect(prompt.messages[0]!.content).toBe(selectedBrainTemplate({}).instruction);
+      expect(prompt.messages[0]!.content).toContain('Return exactly one JSON object conforming to the supplied schema, without Markdown or tools.');
+      expect(prompt.messages[0]!.content.endsWith('Otherwise return plain JSON as above.')).toBe(true);
+      expect(JSON.stringify(invocation.nativeRequest)).not.toContain('copy the first line of this preparation result');
+      const requestDigest = modelInvocationRequestDigest(invocation), claimed = { ...f.claimed, request: modelInvocationRequestEvidence(invocation, requestDigest),
+        claim: { ...f.claimed.claim, commandId: invocation.commandId, requestDigest } };
+      const record = createModelInvocationResponseRecord(claimed, { schemaVersion: 1, native: { text: f.draft }, usage: null }, 2);
+      return { ...f.retained, receipt: record.receipt, response: record.content!.kind === 'native-response' ? record.content!.response : null };
+    }, text: () => f.draft, stoppedAtLength: () => false, propose: async () => { proposals++; return {} as never; } });
+  await brain.plan(f.input.command); expect({ sends, proposals }).toEqual({ sends: 1, proposals: 1 });
+});
+
+it('refuses contradictory loop completion before the finalizer even after K2 reported normal close', async () => {
+  for (const contradiction of ['length', 'provider-stop', 'unknown-finish', 'missing-k2-close', 'reported-limit', 'parent-cancel'] as const) {
+    const f = fixture(), parent = new AbortController();
+    const p = productionTurn(f, async ({ session }, _delta, signal) => {
+      const result = await session.propose(prepareCall, correlation(prepareCall.id), signal);
+      f.planning.preparationDelivered(f.pin, result); f.terminal();
+      if (contradiction !== 'missing-k2-close') f.close();
+      if (contradiction === 'parent-cancel') parent.abort();
+      return { ...normalAnswer(f.draft), finish: contradiction === 'length' ? 'length' : contradiction === 'unknown-finish' ? 'unknown' : 'stop',
+        ...(contradiction === 'reported-limit' ? { usage: { promptTokens: 1, completionTokens: 8 } } : {}),
+        ...(contradiction === 'provider-stop' ? { providerStop: 'context-window' as const } : {}) };
+    }, { parent, ...(contradiction === 'reported-limit' ? { completionLimitTokens: 8 } : {}) });
+    const outcome = await p.running;
+    process.stdout.write(`${JSON.stringify({ contradiction, finalizers: p.finalizers(), proposals: f.counts().proposals, finish: outcome.finish })}\n`);
+    expect.soft(p.finalizers()).toBe(0); expect.soft(f.counts().proposals).toBe(0); expect.soft(outcome.finish).toBe(contradiction === 'parent-cancel' ? 'cancelled' : 'error');
+    expect.soft(JSON.stringify(p.events)).not.toContain(f.draft); expect.soft(JSON.stringify(p.history())).not.toContain(f.draft);
+  }
+});
 
 it('keeps one immutable preparation, binds durable settlement before delivery, and finalizes the exact retained D once', async () => {
   const f = fixture(), first = f.planning.prepare(f.pin, f.input), replay = f.planning.prepare(f.pin, f.input);
+  expect(f.brain).not.toHaveProperty('completeSameTurn');
+  expect(f.planning).not.toHaveProperty('complete');
   expect(replay).toBe(first);
   const { envelope } = await f.settle();
   expect(await first).toBe(envelope); expect(f.counts().randomCalls).toBe(1);
@@ -80,7 +202,7 @@ it('refuses a foreign pin, a receipt replay and a different second proposal with
   const foreign = fixture();
   await expect(foreign.planning.prepare(Object.freeze({}) as typeof foreign.pin, foreign.input)).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED' });
   const replay = fixture();
-  expect(() => new SameTurnPlanningApplication({} as never, {} as never).claimed(replay.invocation, replay.retained.receipt))
+  expect(() => replay.brain.createSameTurnPlanning({} as never).claimed(replay.invocation, replay.retained.receipt))
     .toThrow(expect.objectContaining({ code: 'BRAIN_SAME_TURN_REFUSED' }));
   const second = fixture(); await second.planning.prepare(second.pin, second.input);
   await expect(second.planning.prepare(second.pin, { ...second.input, command: { ...second.input.command, intent: 'different purchase' } }))
@@ -160,7 +282,7 @@ it('treats every Brain numeric cap origin equally, refuses unknown origin and ne
   const f = fixture(), invocation = { ...f.invocation, nativeRequest: { max_completion_tokens: 8 } };
   const requestDigest = modelInvocationRequestDigest(invocation);
   const claimed = { ...f.claimed, request: modelInvocationRequestEvidence(invocation, requestDigest), claim: { ...f.claimed.claim, requestDigest } };
-  const inherited = new SameTurnPlanningApplication({} as never, { randomBytes: size => new Uint8Array(size), projectDelivery: value => value,
+  const inherited = f.brain.createSameTurnPlanning({ randomBytes: size => new Uint8Array(size), projectDelivery: value => value,
     toolResultDigest: agentTurnResultDigest, readResult: async () => f.retained, text: () => f.draft, revalidate: async input => input, publicText: 'Preparing the plan' });
   const pin = inherited.claimed(invocation, claimed);
   await expect(inherited.prepare(pin, { ...f.input, prepared: { ...f.input.prepared, invocation } })).resolves.toMatchObject({ outcome: { status: 'ok' } });

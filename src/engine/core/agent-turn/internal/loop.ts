@@ -331,7 +331,7 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
   push: (message: AgentTurnMessage) => AgentTurnMessage, historyBytes: () => number) {
   const controller = new AbortController(), records = new Map<string, { fingerprint: string; result: Promise<NativeAgentToolResult> }>();
   const pending = new Set<string>();
-  let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false;
+  let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false, planningRefused = false;
   const envelope = (deckentCallId: string, outcome: AgentToolOutcome): NativeAgentToolResult => Object.freeze({ schemaVersion: 1,
     turnId: session.turnId, generation: session.generation, deckentCallId, outcome: Object.freeze({ ...outcome }) });
   const refusal = (id: string, reason: string) => envelope(id, { status: 'error', text: `[deckent] error=${reason}` });
@@ -343,6 +343,16 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
   const abandon = (reason: 'cancelled' | 'preparation-unsettled') => {
     if (coordinator.planning?.pin && coordinator.planning.active) coordinator.planning.abandon(coordinator.planning.pin, reason);
   };
+  const checkPlanning = (call: AgentToolCall): boolean => {
+    if (!coordinator.planning?.active) return true;
+    try {
+      coordinator.planning.beforeTool(call.id, agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson || '{}') as Record<string, unknown>));
+      return true;
+    } catch {
+      planningRefused = true; closed = true; controller.abort(); abandon('preparation-unsettled');
+      return false;
+    }
+  };
   const port: SameTurnToolSessionPort = { session, ...(coordinator.planning ? { planning: coordinator.planning } : {}),
     async propose(rawCall, rawCorrelation, signal) {
       const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
@@ -350,6 +360,7 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
       if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) return refusal(callId, 'tool-correlation-invalid');
       const call = Object.freeze(checked.data), correlation = parsed.data;
       if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed');
+      if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
       const fingerprint = createHash('sha256').update(canonical({ call, correlation })).digest('hex'), prior = records.get(call.id);
       if (prior) {
         if (prior.fingerprint === fingerprint) return prior.result;
@@ -363,7 +374,12 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
       pending.add(call.id); pendingBytes += bytes;
       const result = queue.then(async () => {
         pendingBytes -= bytes;
-        try { push({ role: 'assistant', content: '', toolCalls: [call] }); return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome); }
+        try {
+          // A request queued before preparation must pass the same fence before any history, event or target publication.
+          if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
+          push({ role: 'assistant', content: '', toolCalls: [call] });
+          return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome);
+        }
         catch { failedSettlement = true; closed = true; controller.abort(); abandon('preparation-unsettled'); return refusal(call.id, 'tool-settlement-unknown'); }
         finally { pending.delete(call.id); }
       });
@@ -374,7 +390,7 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
     async revoke() { interrupted = true; abandon('cancelled'); return { kind: 'revoked', ...close() }; },
   };
   return { port, close, signal: AbortSignal.any([input.signal, controller.signal]), get interrupted() { return interrupted; },
-    get failedSettlement() { return failedSettlement; }, drain: async () => { await queue; } };
+    get planningRefused() { return planningRefused; }, get failedSettlement() { return failedSettlement; }, drain: async () => { await queue; } };
 }
 
 /**
@@ -514,11 +530,17 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
           : { status: 'failed', state: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' }; }
         finally { native.close(); await native.drain(); }
         if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown' };
+        else if (native.planningRefused) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
         else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled' };
         // Native transport already submitted proposals. Returned calls must never become a second execution path.
         if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
         if (ports.planning?.active && outcome.status === 'responded') {
-          if (!ports.finishPlanning) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
+          const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
+          if (signal.aborted || outcome.providerStop || outcome.finish !== 'stop' || truncated || !ports.planning.normalClosed) {
+            if (ports.planning.pin) ports.planning.abandon(ports.planning.pin, signal.aborted ? 'cancelled'
+              : truncated ? 'output-truncated' : outcome.providerStop ? 'native-failed' : 'completion-unknown');
+            outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
+          } else if (!ports.finishPlanning) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           else {
             try { outcome = { ...outcome, content: await ports.finishPlanning(signal), reasoning: '' }; }
             catch (error) {

@@ -15,9 +15,8 @@ import type { BrainQuotaWaitPolicy } from './quota-wait.js';
   /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
   /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
   /** Owner 2026-11-06: the Brain model is below the recommended class (response-only note for the card). */ readonly brainBelowRecommended?: boolean }
-interface SameTurnBrainFinalizer {
-  completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult>;
-}
+type SameTurnBrainFinalizer = (command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand,
+  result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal) => Promise<RunProposalResult>;
 
 /** Authored origin is separate from the resolved Brain requirement. Terminal request policy is never cap application evidence. */
 type Origin = 'person' | 'project' | 'company' | 'brain-default' | 'unknown';
@@ -58,6 +57,7 @@ const frozenCopy = <T>(value: T): T => {
   const copied = structuredClone(value); freeze(copied); return copied;
 };
 const identity = (receipt: ModelInvocationReceipt) => ({ ...receipt, outcome: null });
+const SAME_TURN_FRAMING_INSTRUCTION = 'For this same-turn preparation, copy the first line of this preparation result exactly at byte zero, then one LF and exactly one BrainDraft JSON object conforming to the supplied schema. Call no more tools and write no other text.';
 
 /** One ephemeral claim, one preparation and one finalization owner. Restart deliberately loses this capability. */
 export class SameTurnPlanningApplication implements SameTurnPlanningPort {
@@ -79,12 +79,15 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
   private privateKnown: KnownSecretSnapshot | undefined;
   private deliveryProjection: SameTurnPlanningPorts['projectDelivery'];
   private deliveryKnown: KnownSecretSnapshot;
-  constructor(private readonly brain: SameTurnBrainFinalizer, private readonly ports: SameTurnPlanningPorts) {
+  readonly #complete: SameTurnBrainFinalizer;
+  constructor(complete: SameTurnBrainFinalizer, private readonly ports: SameTurnPlanningPorts) {
+    this.#complete = complete;
     this.deliveryProjection = ports.projectDelivery; this.deliveryKnown = ports.knownSecrets ?? EMPTY_KNOWN_SECRETS;
   }
   get pin(): SameTurnPlanningPin | null { return this.currentPin; }
   /** Stays closed to publication through finalize/refusal, even after challenge custody has been erased. */
   get active() { return this.preparationStarted; }
+  get normalClosed() { return this.normal && this.failure === null; }
   private refuse(reason: SameTurnPlanningRefusal): never {
     this.failure ??= reason; this.challenge = null; this.privateKnown = undefined;
     this.result = null; this.custody = null; this.terminal = null; this.preparing = null;
@@ -147,7 +150,7 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
         if (!(bytes instanceof Uint8Array) || bytes.byteLength !== SAME_TURN_PLANNING_POLICY.challengeBytes || SAME_TURN_PLANNING_POLICY.encoding !== 'hex') this.refuse('preparation-unsettled');
         this.challenge = Buffer.from(bytes).toString('hex');
         this.privateKnown = combineKnownSecrets(this.deliveryKnown, knownSecretValues([this.challenge]));
-        const content = `${SAME_TURN_CHALLENGE_PREFIX}${this.challenge}\n${JSON.stringify(input.prepared.prompt.messages)}`;
+        const content = `${SAME_TURN_CHALLENGE_PREFIX}${this.challenge}\n${JSON.stringify(input.prepared.prompt.messages)}\n${SAME_TURN_FRAMING_INSTRUCTION}`;
         if (redactForRecord(content, this.deliveryKnown) !== content) this.refuse('preparation-unsettled');
         const rawResult: NativeAgentToolResult = frozenCopy({ schemaVersion: 1, turnId: input.call.turnId, generation: input.call.generation,
           deckentCallId: input.call.callId, outcome: { status: 'ok', text: content } });
@@ -239,7 +242,7 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
       this.check(pin);
       if (!isDeepStrictEqual(refreshed, input)) this.refuse('settings-mismatch');
       if (parentSignal?.aborted) this.refuse('cancelled');
-      return this.brain.completeSameTurn(input.command, input.prepared, this.invocation!, readback, this.ports.credential, parentSignal);
+      return this.#complete(input.command, input.prepared, this.invocation!, readback, this.ports.credential, parentSignal);
     }).finally(() => { this.challenge = null; this.privateKnown = undefined; this.result = null; this.custody = null; this.terminal = null; this.preparing = null; });
     return this.finalizing;
   }

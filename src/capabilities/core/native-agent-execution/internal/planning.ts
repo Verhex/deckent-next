@@ -31,6 +31,8 @@ export interface SameTurnPlanningFinish {
 export interface SameTurnPlanningPort {
   readonly pin: SameTurnPlanningPin | null;
   readonly active: boolean;
+  /** K1's independently verified K2 close/drain observation; an outer round cannot override it. */
+  readonly normalClosed: boolean;
   /** K2 supplies its EXISTING configured+bridge credential projector before preparing P. No credential values are exported. */
   bindDeliveryProjection(pin: SameTurnPlanningPin, project: (result: NativeAgentToolResult) => NativeAgentToolResult, known: KnownSecretSnapshot): void;
   bindNativeSession(pin: SameTurnPlanningPin, sessionId: string): void;
