@@ -1306,6 +1306,7 @@
   "policy.aiExecution.withdrawAllShort": "Etkilenen kapsamlar: {scopes}. Kaldırmanın tam ayrıntıları bu kartta gösterilmiyor. Şablon geri alma önizlemesi bu isteği incelemez.",
   "policy.aiExecution.rollbackPreview": "Geri çekme önizlemesi (revizyon {revision}); hiçbir şey yazılmadı. Etkilenen kapsamların tam listesi aşağıdadır.",
   "policy.aiExecution.rollbackScopes": "Etkilenen kapsamlar ({count}), tam liste:\n{scopes}",
+  "policy.aiExecution.rollbackNamedScopes": "Ayrıca adıyla belirtilen kapsamlar ({count}):\n{scopes}",
   "policy.aiExecution.rollbackTitle": "Yönetilen izin kaldırılsın mı?",
   "policy.aiExecution.rollbackYes": "İzni kaldır",
   "policy.aiExecution.rollbackNo": "İzni koru",

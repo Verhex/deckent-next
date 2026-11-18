@@ -10,8 +10,9 @@ export function policyExecutionWithdrawalLines(rules: readonly PolicyGrant[], lo
 
 /** All-scope selection is separate from every explicit scope ID, including a literal star. */
 export function policyExecutionScopeList(scopes: readonly string[], allScopes: boolean, locale: Locale): string {
+  const params = { count: scopes.length, scopes: scopes.map(terminalRecordText).join('\n') };
   return [...(allScopes ? [t('policy.aiExecution.allScopes', {}, locale)] : []),
-    ...(!allScopes || scopes.length ? [t('policy.aiExecution.rollbackScopes', { count: scopes.length, scopes: scopes.map(terminalRecordText).join('\n') }, locale)] : [])].join('\n');
+    ...(!allScopes || scopes.length ? [allScopes ? t('policy.aiExecution.rollbackNamedScopes', params, locale) : t('policy.aiExecution.rollbackScopes', params, locale)] : [])].join('\n');
 }
 
 /** The notice checks actual cells against the trusted planner's scopes; an arbitrary card defaults to its one scope. */

@@ -1306,6 +1306,7 @@
   "policy.aiExecution.withdrawAllShort": "Affected scopes: {scopes}. The full removal details are not shown on this card. The template rollback preview does not inspect this request.",
   "policy.aiExecution.rollbackPreview": "Withdrawal preview (revision {revision}); nothing was written. The full affected scope list follows.",
   "policy.aiExecution.rollbackScopes": "Affected scopes ({count}), full list:\n{scopes}",
+  "policy.aiExecution.rollbackNamedScopes": "Also named explicitly ({count}):\n{scopes}",
   "policy.aiExecution.rollbackTitle": "Withdraw managed permission?",
   "policy.aiExecution.rollbackYes": "Withdraw permission",
   "policy.aiExecution.rollbackNo": "Keep permission",

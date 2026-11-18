@@ -160,8 +160,9 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
     const offFrame = value.frames.find(([label]) => label === '+ai off decline')![1];
     const offScreen = terminalBuffers(offFrame, 100, 40).text;
-    const affected = locale === 'en' ? 'Affected scopes (1), full list:' : 'Etkilenen kapsamlar (1), tam liste:';
+    const affected = locale === 'en' ? 'Also named explicitly (1):' : 'Ayrıca adıyla belirtilen kapsamlar (1):';
     expect(offScreen).toContain(affected);
+    expect(offScreen).not.toContain(locale === 'en' ? 'Affected scopes (1), full list:' : 'Etkilenen kapsamlar (1), tam liste:');
     expect(offScreen).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar');
     expect(offScreen).not.toContain('"*"');
     for (const shown of ['"scope"']) {

@@ -11,7 +11,7 @@ import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationAp
 import { createHmacIntegrity, sha256, t } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, describePolicyChange, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
-import { policyExecutionLines } from '#engine/index.js';
+import { policyExecutionLines, policyExecutionScopeList } from '#engine/index.js';
 import { ModelInvocationPolicyAuthorization, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { main } from '#surfaces/index.js';
 import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
@@ -913,24 +913,36 @@ it.skipIf(process.platform !== 'linux')('3293 P1: the sealed general card preser
   }
 });
 
+it('3297: scope headings distinguish only named IDs, only all scopes and mixed selections in EN/TR', () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const all = locale === 'en' ? 'All scopes' : 'Tüm kapsamlar';
+    const full = locale === 'en' ? 'Affected scopes (2), full list:' : 'Etkilenen kapsamlar (2), tam liste:';
+    const named = locale === 'en' ? 'Also named explicitly (2):' : 'Ayrıca adıyla belirtilen kapsamlar (2):';
+    expect(policyExecutionScopeList(['scope', '*'], false, locale)).toBe(`${full}\n"scope"\n"*"`);
+    expect(policyExecutionScopeList([], true, locale)).toBe(all);
+    expect(policyExecutionScopeList(['scope', '*'], true, locale)).toBe(`${all}\n${named}\n"scope"\n"*"`);
+  }
+});
+
 it.skipIf(process.platform !== 'linux')('3293 P2: all scopes and literal star survive the removal plan, CLI, policy window, sealed card and JSON', async () => {
   for (const locale of ['en', 'tr'] as const) {
     const f = await fixture(undefined, false, 'ai-proposals', locale, 1_048_576, '*');
     const preview = await f.request({ scopeId: '*', principal: f.principal, mode: 'preview', previewRollback: true, only: 'ai-proposals', reason: 'inspect selections' });
     expect(preview).toMatchObject({ status: 'preview', executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
     const all = locale === 'en' ? 'All scopes' : 'Tüm kapsamlar';
+    const named = locale === 'en' ? 'Also named explicitly (1):' : 'Ayrıca adıyla belirtilen kapsamlar (1):';
     const out: string[] = [], ctx = { root: f.root, env: homeEnv(f.root), stdout: { write: (value: string) => { out.push(value); } },
       upgradePolicyTemplate: async () => preview };
     const args = ['policy', 'upgrade', '--template', 'current', '--scope', '*', '--rollback', '--preview', '--lang', locale];
     expect(await main(args, ctx as never)).toBe(0);
-    expect(out.join('')).toContain(all); expect(out.join('').split('\n')).toContain('"*"'); out.length = 0;
+    expect(out.join('')).toContain(`${all}\n${named}\n"*"`); expect(out.join('').split('\n')).toContain('"*"'); out.length = 0;
     expect(await main([...args, '--json'], ctx as never)).toBe(0);
     expect(JSON.parse(out.join(''))).toEqual(preview);
     expect(JSON.parse(out.join(''))).toMatchObject({ executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
     const panel = policyPanelPort(f.root, {} as never, { env: homeEnv(f.root) }, locale, undefined, undefined, async () => preview);
     const window = await panel.preview('*', ':ai-proposals', 'revoke');
     const text = window.lines.map(line => line.text).join('\n');
-    expect(text).toContain(all); expect(text.split('\n')).toContain('"*"');
+    expect(text).toContain(`${all}\n${named}\n"*"`); expect(text.split('\n')).toContain('"*"');
     expect(await f.rollback()).toMatchObject({ status: 'rolled-back', executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
     const card = f.records()[0]!.request.summary;
     expect(card).toContain(all); expect(card).toContain('"*"'); expect(card.length).toBeLessThanOrEqual(2048);
