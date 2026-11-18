@@ -1,5 +1,7 @@
 # Bilinen sınırlar
 
+- **Git klasörünün izinleri (beta.2.1 adayı).** Başka hesapların yazabildiği Git dizinine teslim hâlâ reddedilir. Init, doctor ve ilk `/do`, teslimin kendi denetimiyle uyarır. Init ve reddedilen teslim, yalnız o dizinin grup/diğer hesap yazma iznini kaldırmak için kişi kartı sunar; yapay zekâ işaretli çağrı, `--json` veya `--yes` bu kartı cevaplayamaz. Klasör sabitlenir ve değişiklikten önce yeniden denetlenir. Bu kök denetimi alt klasörlerin izinlerini incelemez; bilerek paylaşılan depolar bu onarımın dışındadır. Hazırlanmış aday, başarılı teslim makbuzuna kadar `/deliver` içinde kalır. Kurulu kabul için beta.2.1 yürüyüşü hâlâ gereklidir.
+
 - **Claude abonelik sınırları ve ücretli ek kullanım.** Metin sohbeti, araç turu ve worker aynı kayıt sınıflamasını kullanır. Reddedilen plan sınırı, ücretli kullanım açıkça etkin değilse durur (`isUsingOverage` / `overageInUse` true veya reddedilen durumla birlikte kayıt verisinde izinli bir metin `overageStatus`). Bilinmeyen veya bozuk ek kullanım bilgisi devam izni vermez. Canlı bildirim geri çağırımı olan terminal metin ve araç yolları, varsayılan olarak yalnız olay geldiğinde bildirim teslim edildikten sonra devam eder; oturum ve kapsam başına bir kez gösterilir. Teslim, canlı terminal soketine başarılı yazmadır; kişinin okuduğunun kanıtı değildir. Düşen, atlanan, kapanan, taşan veya iptal edilen teslim sonraki bildirimi bastırmaz. Geri çağırım yoksa veya teslim başarısızsa sınırda durur. Planner, Brain, genel çağrılar ve worker çağrıları sınırda durur; beta.2 worker politikası ücretli devamı reddeder. deckent sağlayıcının ücret tutarını göremez. İki sohbet yolunu da durdurmak için `deckent config set models.headless.paidExtraUsage '"stop-at-limit"'`, varsayılana dönmek için `deckent config set models.headless.paidExtraUsage '"continue"'` kullanın. Bilinmeyen/eksik ana durum araç turunu açıkça durdurur; metin sohbetinde bilgi olarak kalır.
 - **Konteyner worker kota durdurması.** Ücretli kullanım olmadan normal reddedilen sınır dahil, sınıra ulaşıldığında bootstrap CLI için sahip olduğu süreç grubunu öldürür ve boruların kapanmasını en çok bir saniye bekler. Bir alt süreç gruptan ayrılıp boruyu açık tutarsa bootstrap kendi boru uçlarını kapatır ve son kota çıkış kanıtını `capacity:quota-stop-incomplete` ile yazar; sonraki çıktı alınmaz. Gruptan kaçan süreç kota olayında durdurulmaz; mevcut konteyner durdurması onu son sürede durdurur. Önceden üretilen kısmi çıktı ve etkiler girişimin mevcut gözetiminde kalır.
 - **beta.2 ücretli kullanım kaydı ve geri dönüş.** Ücretli ek kullanımla devam edip daha sonra hata, iptal veya zaman aşımıyla biten tur bildirimi gösterdi, ancak ücretli kullanım kaydı bırakmadı. Başarılı yanıtlar sınırlı durum/pencere/saat bilgisini mevcut açık native yanıt haritasında tutar; başarılı araç turları teslim edilen bildirimi mevcut tur notunda da tutar. beta.2, başarısız bitişler dahil beta.2.1 plan-usage v2 gözlemlerini ve saklanmış işçi `cli.observation` satırlarını okur; plan-usage v1 yazmayı sürdürür ve yeni işçi gözlemi üretmez. Tam kayıt ve worker kapsamı beta.2.1'de gelir. Makine çağrı sırasında, kayıt kesinleşmeden çökerse o çağrının eklenti veya ücretli kullanım bilgileri deckent kaydına girmez; ücret sağlayıcının faturasında görünür. `models.headless.paidExtraUsage`, eski sürümün sıkı config okuyucusunun kabul etmediği yeni bir config değeridir: eski sürüme dönmeden önce bu ayarı kaldırın. Sıkı politika preset'leri değişmedi. Model yanında yüzde ve Codex sınır sinyalleri kapsam dışıdır.
@@ -399,17 +401,20 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT (Codex CLI) abonelikleri deckent araçlı sohbetini sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
-- **Abonelik işçisi araç yolunda henüz değişiklik üretmedi (ilk gerçek hesap koşusu 2026-11-16, beta.2).** Abonelik işçisinin CLI'ı
-  bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. İlk gerçek koşuda Codex işçisi hiçbir yazma aracı
-  çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi; Claude işçi türü henüz koşmadı. Kaynak okuması, bir koşuda görülmedi:
+- **Codex abonelik işçisi, kayıtlı koşularda araç yolunda değişiklik üretmedi; bir Claude işçisi teslimi bir kayıt kurulumunda belgeli.** Abonelik işçisinin CLI'ı
+  bilerek salt okunur çalışır ve dosyaları yalnız deckent'in araçlarıyla değiştirir. Codex: beta.1.2 kayıt kurulumundaki üç yazma
+  denemesi (2026-11-12) dosya üretmedi: ilkinde okuma çağrılarının ardından hata oluştu, diğer ikisinde işçi olayı görünmeden ret
+  kaydedildi; oradaki daha sonraki paralel deneme de reddedildi. Gerçek hesaplı bir beta.2 kurulumundaki bir koşuda (2026-11-16)
+  işçi hiçbir yazma aracı çağırmadı ve çalışma alanının salt okunur olduğunu bildirdi. Claude: beta.1.2 kayıt kurulumunda bir işçinin dosyası çıkış koduyla kabul edilip teslim edildi (README'deki üçüncü
+  kayıt); o koşunun araç çağrıları dökümden doğrulanmadı ve beta.2'de kayıtlı Claude işçisi koşusu yok. Kaynak okuması, bir koşuda görülmedi:
   beta.2'de Codex yolunda işçi koşusu dokuzuncu araç çağrısında biter (Claude yolu doğrulanmadı); ana dal 128 çağrıya izin verir ve
   işçiye kendi ortamının salt okunur uyarısının deckent'in araçlarını kapsamadığını söyler (henüz yayımlanmadı, beta.2.1 için);
   incelenen kurulumda çalışma kopyasında `node_modules` yoktu, bu yüzden ona bağlı kontrol komutları orada çalışamadı; işçinin `npm` ve `node` komutları, yalnız etkileşimli terminaldeki kişinin
   cevaplayabildiği bir kart ister ve bu bekleme işçinin kendi süresinden yer. İşçisi başlamadan bekletilen bir iş, iptal edilene kadar
   (`deckent run cancel`) girişin tek yerini tutar; o sırada aynı girişle sohbet ve planlama durur.
-- **Sohbetten önerilen iş kabul edilir ama başlamaz (beta.2; düzeltmesi beta.2.1 için kabul edildi).** Sohbetteki yapay zekâ bir iş
-  önerip siz kartı onayladığınızda iş kabul edilir ve listelenir, ama servis onu ilerletmez (depoya alınmamış geçici bir kaynak denemesiyle gösterildi;
-  kurulu sürümde denenmedi). İşi bunun yerine terminalde `/do` ya da `deckent do --request` ile başlatın.
+- **Yapay zekânın önerdiği iş kabul edilir ama başlamaz (beta.2; düzeltmesi beta.2.1 için kabul edildi).** Sohbetteki yapay zekâ ya da
+  MCP üzerinden bağlanan bir yapay zekâ istemcisi iş önerip siz kartı onayladığınızda iş kabul edilir ve listelenir, ama servis onu ilerletmez (sohbet durumu depoya alınmamış geçici bir kaynak denemesiyle gösterildi;
+  MCP durumu kaynak okumasıdır; ikisi de kurulu sürümde denenmedi). İşi bunun yerine terminalde `/do` ya da `deckent do --request` ile başlatın.
 - **Docker'sız abonelik işçisi (alpha.63, R8b; yazar kanıtı, gerçek hesap ve BeUser kabulü açık).** Bağlantınıza bağlı Claude ya da Codex
   CLI işçisi deckent'in bubblewrap yalıtım alanında çalışır; bu yüzden `execution.docker` olmayabilir. Linux (ya da WSL) ve bubblewrap gerekir,
   yoksa işçi reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`). Düz Docker işçileri ve ChatGPT tarayıcı girişi (SIWC) işçisi Docker ayarı ve imaj
@@ -584,6 +589,13 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **çalışma kartı iş hedefini henüz bağlamaz.** Bir çalışmanın kartı planına, havuzuna ve çalışma profiline bağlıdır; yapılandırılmış iş hedefinin
   kimliğine bağlı değildir (çalışma onu kaydetmez; iş hedeflerinin 1. dilimi). Kart ile kabul arasında yapılandırmada değişen hedef yeniden
   denetlenir (`work-target/use`) ama kartta adı geçmez. *Yol:* bir çalışma kartı açıkken `execution.workTargets`'ı değiştirmeyin.
+- **Sohbet ile planlayıcı (Brain) tek yerli aynı abonelik girişini paylaşıyorsa sohbette önerilen iş kart üretmez.** Kaynak
+  okumasına göre süren sohbet turu o girişin tek yerini tutar; planlayıcının tur içindeki kendi çağrısı reddedilir, kart da iş
+  de oluşmaz. Bir kez, main derlemesiyle kurulmuş bir deneme kurulumu yürüyüşünde görüldü (kurulu beta.2'de değil): iki
+  denemeden biri yapılandırmada, biri bu kapasite reddinde durdu; kişi genel bir araç hatası gördü. `/do` sohbet turunun
+  dışında ayrı bir çağrıdır ve bu iç içe çağrının parçası değildir. Başka bir girişteki ya da API bağlantısındaki Brain, kaynak
+  okumasına göre bu çakışmayı önler; o yol yürünmedi. Sohbet turunun içinde planlama beta.2.1 için kararlaştırıldı, henüz
+  yapılmadı. *Yol (yürünmedi):* `/do` kullanın ya da Brain'i başka bir girişteki ya da API bağlantısındaki bir modele ayarlayın.
 
 ## Bütçe ve harcama
 
@@ -707,6 +719,11 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   2.40.0 ya da sonrasını gerektirir (`PATCH_WORKING_TREE_GIT_VERSION`). Özel taban HEAD'in bütün geçmişini kopyalar;
   `execution.git.copyBytes` değerini (ayarlanmamışsa 8 GiB) aşan bir geçmiş çalışmayı reddeder (`PATCH_WORKING_TREE_COPY_LIMIT`). setuid,
   setgid ya da sticky biti olan bir dosyaya hiç teslim yapılmaz (`PATCH_UNSAFE`, alpha.64). *Yol:* `deckent config set execution.deliveryMode reference`.
+- **Grubun ya da başkalarının yazabildiği `.git` klasörü teslimi reddeder; kurulu beta.2 nedenini söylemez.** Deponun Git
+  klasörü grup ya da başkaları tarafından yazılabiliyorsa (örneğin umask değeri 0002 olan bir hesap) çalışma klasörüne teslim
+  `PATCH_UNSAFE` ile durur. Denetim bilerek vardır ve kalır. Main'de (henüz kurulu değil) ret klasörü adlandırır ve terminal
+  kişiye kök klasörün izinlerini daraltmak için tek kart sunar; deckent bunu yapay zekâ çağıranı için asla yapmaz. Bir deneme
+  kurulumu yürüyüşünde Codex işçisiyle görüldü; kurulu bir derlemede yeniden yürünmedi. *Yol:* `chmod go-w <depo>/.git`.
 - **Başka dosya sistemindeki kenar dosya sizin için silinmez.** deckent'in durumu ile proje farklı dosya sistemlerindeyse (örneğin
   `/mnt/c` altındaki bir WSL projesi), teslimin ya da geri almanın değiştirdiği dosya yanında gizli `.deckent-<uuid>.aside` olarak
   kalır ve not onu adlandırır. deckent bunu hiç silmez; bu dosyalar birikir ve `git status`'ta izlenmeyen dosya olarak görünür.

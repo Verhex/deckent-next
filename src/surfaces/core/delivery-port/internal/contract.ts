@@ -11,7 +11,8 @@ import PORT from './deliver-port.json' with { type: 'json' };
 /** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
 /** `setAside` (BeUser M-33): a set-aside row in /deliver carrying its own title; opening it brings the result back first. */
 /** `request`: the task's request as the Run recorded it (L1c: `r` on a working-tree conflict prepares `/do <request>`). */
-export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string; request?: string }>;
+/** `candidateCommandId`: the existing integration receipt reopens its retained candidate; no new persisted field. */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; candidateCommandId?: string; setAside?: string; request?: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -56,7 +57,7 @@ export interface TerminalDeliveryPort {
   /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
   dismiss?(target: DeliveryTarget, action: 'dismiss' | 'restore'): Promise<void>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
-  deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
+  deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer, permission?: (path: string, before: string, after: string, command: string) => Promise<boolean>): Promise<DeliveryOutcome>;
   /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's
    * `--verification-run`; its kind is read from the configuration at that moment, never from the window. */
   adopt(preview: DeliveryPreview, delivery: DeliveryOutcome, targetRef: string, commandId: string, answer: DeliveryAnswer, verificationRunId?: string): Promise<AdoptionOutcome>;
@@ -118,7 +119,8 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
       const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
       if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
       const key = `${run.scopeId}:${run.runId}:${task.id}`, title = taskTitle(task, fallbackTitle);
-      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(aside ? { setAside: title } : {}) }));
+      const delivery = task.resultBrief?.runDelivery, candidate = delivery?.state === 'integrated' ? delivery.commandId : delivery?.receipts?.filter(value => value.state === 'integrated').at(-1)?.commandId;
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(candidate ? { candidateCommandId: candidate } : {}), ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);

@@ -1318,5 +1318,10 @@
   "cli.init.policyUpgrade.executionAdded": "AI execution permission was added in a verified publication (revision {revision}).",
   "cli.init.policyUpgrade.executionNotAdded": "AI execution permission was not added. Preview the permission: {command}",
   "cli.init.policyUpgrade.executionUnknown": "The state of the AI execution permission could not be verified (operation {key}). Inspect the authority evidence before trying again: {command}",
-  "cli.init.policyUpgrade.publicationUnknown": "The policy publication could not be verified (operation {key}); no second publication was started. Inspect the authority evidence before trying again: {command}"
+  "cli.init.policyUpgrade.publicationUnknown": "The policy publication could not be verified (operation {key}); no second publication was started. Inspect the authority evidence before trying again: {command}",
+  "error.PATCH_UNSAFE.gitDirectoryWrite": "Other accounts can write to Git folder {path}, so deckent cannot safely deliver here. Run: {command}",
+  "error.PATCH_UNSAFE.gitDirectoryDeclined": "You chose to leave the Git folder permission unchanged: {path}. This is the person's decision. Delivery is still blocked. To narrow it later: {command}",
+  "error.ADOPTION_TARGET_DENIED.files": "Your files were delivered without a commit. Adoption is not needed for this path. Branch delivery needs its own configuration and approval; the requested branch was not changed.",
+  "error.PATCH_UNSAFE.gitDirectoryWriteUnsafePath": "Other accounts can write to Git folder {path}, so deckent cannot safely deliver here. The folder name contains characters that cannot be shown safely, so no command is offered.",
+  "error.PATCH_UNSAFE.gitDirectoryDeclinedUnsafePath": "You chose to leave the Git folder permission unchanged: {path}. This is the person's decision. Delivery is still blocked. The folder name contains characters that cannot be shown safely, so no command is offered."
 }

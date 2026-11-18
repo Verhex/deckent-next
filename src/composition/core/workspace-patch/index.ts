@@ -4,3 +4,4 @@ export { changeConfiguredDeliveryDismissal, inspectConfiguredDismissedDeliveries
 export { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, adoptWorkspaceIntegrationWithConfirmation, rollbackWorkspaceIntegrationWithConfirmation } from './internal/adoption.js';
 export { interactiveDeliveryHandlers, verifiedDeliveryConfirmation } from './internal/terminal.js';
 export { describeConfiguredDeliverySummaries } from './internal/summary.js';
+export { configuredGitDeliveryPermission } from './internal/permission.js';

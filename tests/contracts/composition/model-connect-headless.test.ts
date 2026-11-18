@@ -20,6 +20,8 @@ import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
+import { inspectConfiguredWorkerReadiness } from '#composition/core/runs/index.js';
+import { setupMessage } from '#surfaces/core/setup/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
 import { inspectPolicyTemplate } from '#composition/core/installation/index.js';
 import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
@@ -27,11 +29,12 @@ import { main } from '#surfaces/core/cli/index.js';
 import { Writable } from 'node:stream';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
-import { parseModelInvocationProfile } from '#domain/index.js';
+import { parseModelInvocationProfile, CORE_MODEL_ROLES, WORK_CLASS_WORKER_ROLE } from '#domain/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import seed from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
+import workClasses from '../../../assets/native-coding/work-classes.json' with { type: 'json' };
 import codexSeed from '../../../assets/model-catalog/codex-cli-subscription.json' with { type: 'json' };
 import { textOnlyModelInvocationRequest, roleModelInvocationReference, planSetup } from '#engine/index.js';
 import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
@@ -181,7 +184,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     // a plain Docker registry without an image stays refused.
     config.execution = { git: { gitExecutable: 'git', timeoutMs: 5000 } }; delete config.admission; await writeFile(path, JSON.stringify(config)); platform.clearConfigCache();
     // NF-2: onboarding's "use my subscription" answer, once the Git setting is written, proposes the first kind from that connection (it read Docker-only facts).
-    const answers = { 'work:kind': { connection: profile.id } }, wired = configuredSetup({ listIdentityProfiles, inspectPolicyTemplate });
+    const answers = { 'work:kind': { connection: profile.id } }, wired = configuredSetup({ listIdentityProfiles, inspectPolicyTemplate, inspectWorkerReadiness: inspectConfiguredWorkerReadiness });
     const observed = await wired.observeSetup(h.f.project, { ...options, person: true, answers });
     expect(planSetup(observed.observation, { schemaVersion: 2, values: answers }, observed.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind'))
       .toMatchObject({ state: 'ready', operation: { id: 'work.registry', input: { connection: profile.id, provider: 'codex' } } });
@@ -192,6 +195,41 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const proved = (JSON.parse(await readFile(join(profile.adapter.definition.stateDir, 'preflight.json'), 'utf8')) as { version: string }).version;
     expect(proved).not.toBe(profile.adapter.definition.minCliVersion); expect(first.profile.parameters['invocation']).toMatchObject({ cliVersion: proved, discovery: { mode: 'disabled' } });
     expect((await configureNativeCodingTemplate(h.f.project, { ...request, kind: 'review', apply: true }, options, person)).registry.kinds.map(row => row.kind)).toEqual(['coding', 'review']);
+    // D2: registry setup is not worker activation. Observation never changes either catalog activation.
+    const observedWorker = await wired.observeSetup(h.f.project, { ...options, person: true });
+    const stage = planSetup(observedWorker.observation, { schemaVersion: 2, values: {} }, observedWorker.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind')!;
+    expect(stage.state).toBe('blocked');
+    expect(stage.reason.code).toBe('setup.work.workerMissing');
+    expect(stage.cli).toEqual(['deckent', 'models', 'connect', '--scope', 'scope', '--connection', codexSeed.providers[0]!.id, '--model',
+      workClasses.candidatePolicies.find(row => row.id === workClasses.classes.find(row => row.id === 'small')!.candidatePolicyId)!.candidates.find(row => 'channelId' in row && row.channelId === codexSeed.providers[0]!.id)!.modelId]);
+    const beforeRead = await readFile(path, 'utf8');
+    const catalogBefore = await inspectConfiguredModelCatalog(h.f.project, { schemaVersion: 1, scopeId: 'scope' }, options);
+    await wired.observeSetup(h.f.project, options);
+    expect(await readFile(path, 'utf8')).toBe(beforeRead);
+    expect(await inspectConfiguredModelCatalog(h.f.project, { schemaVersion: 1, scopeId: 'scope' }, options)).toEqual(catalogBefore);
+    await connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId: 'd2-reconnect', scopeId: 'scope', connection: stage.cli![6]!,
+      model: { nativeId: stage.cli![8]! }, cli: { executable, configDir } }, options);
+    const ready = await wired.observeSetup(h.f.project, options);
+    expect(planSetup(ready.observation, { schemaVersion: 2, values: {} }, ready.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind')).toMatchObject({ state: 'done' });
+    // An active small model without its worker role needs a role decision, not another reconnect.
+    const smallModel = stage.cli![8]!;
+    const role = CORE_MODEL_ROLES.models.find(row => row.channelId === stage.cli![6] && row.modelId === smallModel)!;
+    const rolePath = await platform.resolveGlobalConfigReadPath(h.f.env), globalBefore = await readFile(rolePath, 'utf8').catch(() => '{}');
+    await mkdir(join(rolePath, '..'), { recursive: true });
+    await writeFile(rolePath, JSON.stringify({ ...JSON.parse(globalBefore), model_roles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'd2-no-worker-role', roles: [], exceptions: [],
+      models: [{ ...role, roles: role.roles.filter(value => value !== WORK_CLASS_WORKER_ROLE), version: role.version + 1, override: { previousVersion: role.version } }] }] } })); platform.clearConfigCache();
+    const withoutRole = await wired.observeSetup(h.f.project, options);
+    const missingRole = planSetup(withoutRole.observation, { schemaVersion: 2, values: {} }, withoutRole.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind')!;
+    expect(setupMessage(missingRole.reason.code, missingRole.reason.params, 'en')).toContain('does not allow the worker role');
+    expect(setupMessage(missingRole.reason.code, missingRole.reason.params, 'tr')).toContain('çalışan rolüne izin vermiyor');
+    const unreadable = await configuredSetup({ listIdentityProfiles, inspectPolicyTemplate, inspectWorkerReadiness: async () => { throw new Error('unreadable'); } }).observeSetup(h.f.project, options);
+    const unknown = planSetup(unreadable.observation, { schemaVersion: 2, values: {} }, unreadable.registry, { phase: 'onboarding' }).stages.find(row => row.id === 'work:kind')!;
+    expect(unknown).toMatchObject({ state: 'blocked', reason: { code: 'setup.work.workerUnknown' } });
+    expect(platform.messageText(unknown.reason.code, 'en', unknown.reason.params)).toBe('Small worker readiness could not be read.');
+    expect(missingRole.state).toBe('blocked'); expect(missingRole.reason.params).toMatchObject({ code: 'WORKER_MODEL_ROLE_REFUSED' });
+    expect(missingRole.cli).toEqual(['deckent', 'models', 'roles', 'set', '--scope', 'scope', '--channel', role.channelId, '--model', role.modelId, '--tier', '<tier>', '--roles', '<roles>']);
+    await writeFile(rolePath, globalBefore); platform.clearConfigCache();
+
   });
 
   it('S3-5/A62: connects without a preview switch; subscription text chat streams, carries history and Esc cancels in the built terminal', async () => {

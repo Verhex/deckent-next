@@ -1,5 +1,7 @@
 # Known limits
 
+- **Git folder permissions (beta.2.1 candidate).** Delivery still refuses a Git directory writable by other accounts. Init, doctor and the first `/do` warn using the delivery check. Init and refused delivery offer a person card to remove group/other write permission from that directory only; an AI-marked caller, `--json` or `--yes` cannot answer it. The folder is pinned and checked again before the change. This root check does not inspect permissions of its children, and deliberately shared repositories remain outside this repair. A prepared candidate stays in `/deliver` until its successful delivery receipt. Installed acceptance still requires the beta.2.1 walk.
+
 - **Claude subscription limits and paid extra usage.** Text chat, agent tool turns and workers share the registry classification. A rejected plan limit stops unless paid usage is explicitly active (`isUsingOverage` / `overageInUse` true, or a rejected status with a registry-allowed string `overageStatus`). Unknown or malformed overage availability never grants permission. On terminal text and tool paths with a live notice callback, the default is to continue only after the notice is delivered when the event arrives, once per session and scope. Delivery means a successful write to a live terminal socket, not proof that a person read it. Dropped, skipped, finished, overflowed or cancelled deliveries do not suppress the next notice. A missing callback or failed delivery stops at the limit. Planner, Brain, generic and worker calls stop at the limit; worker policy refuses paid continuation in beta.2. deckent cannot see the provider's paid amount. Use `deckent config set models.headless.paidExtraUsage '"stop-at-limit"'` to stop both chat paths instead, or `deckent config set models.headless.paidExtraUsage '"continue"'` to restore the default. Unknown/missing main statuses stop agent turns explicitly; text chat keeps them informational.
 - **Container worker quota stop.** At a reached limit, including an ordinary rejection without paid usage, the bootstrap kills the CLI's owned process group and waits up to one second for its pipes to close. If a descendant leaves that group and holds a pipe open, the bootstrap closes its pipe ends and writes the final quota exit evidence with `capacity:quota-stop-incomplete`; later output is ignored. Such an escaped process remains under the existing container stop at the deadline, rather than being stopped by the quota event. Partial output and effects already produced remain in the attempt's existing custody.
 - **beta.2 paid-usage evidence and rollback.** A turn that continued on paid extra usage and then ended by error, cancel or timeout showed the notice but left no record of the paid usage. Successful responses keep bounded status/window/reset facts in the existing open native response map; successful agent turns also keep the delivered notice in their existing note. beta.2 reads beta.2.1 plan-usage v2 observations and retained worker `cli.observation` lines, including failed endings; it keeps writing plan-usage v1 and emits no new worker observation. Full recording and worker coverage come in beta.2.1. A host crash mid-call, before settlement, leaves no deckent record of that call’s plugin or paid-usage facts; the provider bill shows the charge. `models.headless.paidExtraUsage` is a new config value that an older build's strict config reader does not accept: remove the setting before rolling back to an older version. Strict-policy presets are unchanged. Model-side percentages and Codex limit signals remain outside this change.
@@ -402,17 +404,20 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
-- **Subscription workers have not produced a change on the tool path yet (first real-account run 2026-11-16, beta.2).** The CLI of a
-  subscription worker runs read-only on purpose and changes files only through deckent's tools. In the first real run a Codex worker
-  called no write tool and reported a read-only workspace; the Claude worker kind has not run. Source reading, not seen in a run: on the
+- **Codex subscription workers have not produced a change on the tool path in the runs on record; a Claude worker delivery is documented on a recording installation.** The CLI of a
+  subscription worker runs read-only on purpose and changes files only through deckent's tools. Codex: three write attempts on a
+  beta.1.2 recording installation (2026-11-12) produced no file: the first made read calls and then ended in an error, the other two
+  were recorded as refused with no worker event visible; a later parallel attempt there was refused as well. In one run on a
+  real-account beta.2 installation (2026-11-16) the worker called no write tool and reported a read-only workspace. Claude: on the beta.1.2 recording installation a worker's file was accepted on exit code and delivered (the third
+  recording in the README); that run's tool calls were not verified from a transcript, and no Claude worker run on beta.2 is on record. Source reading, not seen in a run: on the
   Codex path a worker run ends at its ninth tool call in beta.2 (the Claude path is not verified); the main branch allows 128 calls and tells
   the worker that its own runtime's read-only notice does not cover deckent's tools (not released yet, for beta.2.1); on the installation
   examined the work tree had no `node_modules`, so the check commands that need it could not run there; `npm` and `node` commands of a worker ask for a card that only a person at an interactive terminal can answer, inside the
   worker's own time. A Run parked before its worker started keeps the sign-in's single slot until it is cancelled (`deckent run cancel`);
   chat and planning on that sign-in stop meanwhile.
-- **Work proposed from chat is admitted but not started (beta.2; fix admitted for beta.2.1).** When the chat AI proposes work and you
-  approve the card, the Run is admitted and listed, but the service does not advance it (shown by a throwaway source probe that is not in the repository; not
-  tried on an installed release). Start the work with `/do` in the terminal or `deckent do --request` instead.
+- **Work proposed by the AI is admitted but not started (beta.2; fix admitted for beta.2.1).** When the chat AI or an AI client over MCP
+  proposes work and you approve the card, the Run is admitted and listed, but the service does not advance it (the chat case was shown by a throwaway source probe that is not in the
+  repository; the MCP case is a source reading; neither was tried on an installed release). Start the work with `/do` in the terminal or `deckent do --request` instead.
 - **Subscription workers without Docker (alpha.63, R8b; author evidence, real-account and BeUser acceptance open).** A Claude or Codex CLI
   worker bound to your connection runs in deckent's bubblewrap sandbox, so `execution.docker` may be absent; it needs Linux (or WSL) with
   bubblewrap, otherwise the worker is refused (`HEADLESS_ISOLATION_UNAVAILABLE`). Plain Docker workers and the ChatGPT browser sign-in (SIWC)
@@ -591,6 +596,13 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   configured work target's id (the Run does not record it; Slice 1 of work targets). A target changed in configuration between the card and
   admission is checked again (`work-target/use`) but is not named on the card. *Workaround:* do not change `execution.workTargets` while a
   Run card is open.
+- **Work proposed in chat produces no card when chat and the planner (Brain) share one single-slot subscription sign-in.**
+  By source reading, the running chat turn holds that sign-in's only slot, so the planner's own call inside the turn is
+  refused and no card or Run appears. Seen once in a sandbox walk on a build of main (not on installed beta.2): of two
+  attempts, one stopped on configuration and one on this capacity refusal; the person saw a general tool error. `/do` is a
+  separate call outside a chat turn and is not part of this nesting. A Brain on another sign-in or on an API connection
+  avoids the clash by source reading; that path has not been walked. Planning inside the chat turn is decided for beta.2.1
+  and not built yet. *Workaround (not walked):* use `/do`, or set the Brain to a model on another sign-in or API connection.
 
 ## Budgets and spend
 
@@ -713,6 +725,12 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   (`PATCH_WORKING_TREE_GIT_VERSION`). The private base copies all of HEAD's history; a history over `execution.git.copyBytes`
   (unset: 8 GiB) refuses the Run (`PATCH_WORKING_TREE_COPY_LIMIT`). A file with a setuid, setgid or sticky bit is never delivered into
   (`PATCH_UNSAFE`, alpha.64). *Workaround:* `deckent config set execution.deliveryMode reference`.
+- **A `.git` folder that group or others may write refuses delivery, and installed beta.2 does not say why.** Delivery into
+  your working tree stops with `PATCH_UNSAFE` when the repository's Git directory is writable by group or others (for example
+  an account whose umask is 0002). The check is deliberate and stays. On main (not installed yet) the refusal names the folder
+  and the terminal offers the person one card to narrow the root folder's permissions; deckent never narrows them for an AI
+  caller. Seen in one sandbox walk on a Codex worker; not walked again on an installed build. *Workaround:*
+  `chmod go-w <repository>/.git`.
 - **A cross-device aside is never deleted for you.** When deckent's state and the project are on different filesystems (for
   example a WSL project under `/mnt/c`), the file a delivery or rollback replaces stays beside it as a hidden
   `.deckent-<uuid>.aside`, and the note names it. deckent never deletes it, so these files accumulate and show as untracked in

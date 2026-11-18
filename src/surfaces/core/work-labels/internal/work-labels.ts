@@ -1,3 +1,4 @@
+import { directoryPermissionCard } from '#surfaces/core/cli-human/index.js';
 import { cardSummaryLabels, queueWindowLabels } from './queue-labels.js';
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
@@ -100,7 +101,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
     approvalExpires: t('terminal.approval.expires', {}, locale), approvalPrompt: t('terminal.approval.prompt', {}, locale), approvalPending: t('terminal.approval.pending', {}, locale),
     approvalAllowed: t('terminal.approval.allowed', {}, locale), approvalDenied: t('terminal.approval.denied', {}, locale),
     approvalUnsettled: t('terminal.approval.unsettled', {}, locale), approvalIdentity: t('terminal.approval.identity', {}, locale), approvalMore: t('terminal.approval.more', {}, locale),
-    approvalNotify: t('terminal.approval.notify', {}, locale), approvalPollFailed: t('terminal.approval.pollFailed', {}, locale),
+    approvalNotify: t('terminal.approval.notify', {}, locale), approvalNotifyPartial: t('terminal.approval.notifyPartial', {}, locale), approvalCountUnknown: t('terminal.approval.countUnknown', {}, locale), approvalPollFailed: t('terminal.approval.pollFailed', {}, locale),
     approvalCard: { risk: t('terminal.approval.card.risk', {}, locale), notDeclared: t('terminal.approval.card.notDeclared', {}, locale),
       onExpiry: t('terminal.approval.card.onExpiry', {}, locale), assuranceTurnHere: t('terminal.approval.card.assuranceTurnHere', {}, locale),
       assuranceTurnElsewhere: t('terminal.approval.card.assuranceTurnElsewhere', {}, locale), assurancePeer: t('terminal.approval.card.assurancePeer', {}, locale),
@@ -274,7 +275,7 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     confirmRef: t('terminal.delivery.confirmRef', {}, locale), confirmHints: t('terminal.delivery.confirmHints', {}, locale),
     delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),
     adoptTarget: t('terminal.delivery.adoptTarget', {}, locale), adoptHints: t('terminal.delivery.adoptHints', {}, locale),
-    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), deliveredTitle: t('terminal.delivery.deliveredTitle', {}, locale), adoptNone: t('terminal.delivery.adoptNone', {}, locale),
+    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), permissionHints: t('terminal.delivery.permissionHints', {}, locale), permissionCard: (path, before, after, command) => directoryPermissionCard(path, before, after, locale, command), candidateTitle: t('terminal.delivery.candidateTitle', {}, locale), deliveredTitle: t('terminal.delivery.deliveredTitle', {}, locale), adoptNone: t('terminal.delivery.adoptNone', {}, locale),
     whereFiles: t('terminal.delivery.whereFiles', {}, locale), confirmFiles: t('terminal.delivery.confirmFiles', {}, locale), deliveredFiles: t('terminal.delivery.deliveredFiles', {}, locale),
     summaryWritten: t('terminal.delivery.summaryWritten', {}, locale), setAside: t('cli.task.integration.setAside', {}, locale), nextConflictFiles: t('terminal.delivery.nextConflictFiles', {}, locale), redoFiles: t('terminal.delivery.redoFiles', {}, locale),
     dismissHint: t('terminal.delivery.dismissHint', {}, locale), dismissed: t('terminal.delivery.dismissed', {}, locale), dismissedTitle: t('terminal.delivery.dismissedTitle', {}, locale), restored: t('terminal.delivery.restored', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),

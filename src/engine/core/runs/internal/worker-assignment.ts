@@ -31,7 +31,7 @@ const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.slice(
 export async function assignTaskWorker(task: Readonly<{ id: string; kind: string; workClass?: string | undefined }>, input: WorkInput,
   template: ExecutionProfileDefinition, registry: WorkClassRegistry | undefined, reader: ModelCatalogReader,
   compile: (template: ExecutionProfileDefinition, input: WorkInput, evidence?: CatalogPinModelEvidence) => ExecutionProfileDefinition,
-  context: WorkerAssignmentContext): Promise<PendingWorkerAssignment> {
+  context: WorkerAssignmentContext, observeSkip?: (row: WorkerAssignmentSkip) => void): Promise<PendingWorkerAssignment> {
   const refuse = (code: 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE', workClass: string | null, skipped: readonly WorkerAssignmentSkip[] = []): never => {
     throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-', ...(skippedMore(skipped) > 0 ? { skippedMore: skippedMore(skipped) } : {}) }));
   };
@@ -43,6 +43,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
   const list = resolveWorkClassCandidates(policy, workClass);
   if (!list) return refuse('WORKER_ASSIGNMENT_NO_CANDIDATES', workClass.id);
   const skipped: WorkerAssignmentSkip[] = [], tried = new Set<string>(), today = new Date(context.nowMs).toISOString().slice(0, 10);
+  const skip = (row: WorkerAssignmentSkip) => { const value = Object.freeze(row); skipped.push(value); observeSkip?.(value); };
   // Permission for the tier/role registry is the scope's registered-catalog activation (the one worker admission enforces), never the
   // declared invocation catalog. Only measured rows can drop a dated exception, so only they are read before a row list is taken.
   const active = async (channelId: string, modelId: string) => (await reader.activation(context.scopeId, channelId, modelId))?.state === 'active';
@@ -81,7 +82,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
     for (const candidate of targets) {
       tried.add(roleModelKey(candidate));
       if (!candidate.selector && !(await workerKeys()).has(roleModelKey(candidate))) {
-        skipped.push(Object.freeze({ index, channelId: candidate.channelId, modelId: candidate.modelId, reason: ROLE_REFUSED })); continue;
+        skip({ index, channelId: candidate.channelId, modelId: candidate.modelId, reason: ROLE_REFUSED }); continue;
       }
       const chosen: WorkInput = { ...input, model: { channelId: candidate.channelId, modelId: candidate.modelId, auxiliaryModelIds: [] } };
       // The candidate's pin carries the catalog's session-start names exactly as a pinned model's does (owner K1/K2), or admission refuses it.
@@ -89,7 +90,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
       try { await admitWorkerModels([{ taskId: task.id, profile }], context.scopeId, reader, context.nowMs, [], { imageRefreshInProgress: context.imageRefreshInProgress === true }); }
       catch (error) {
         if (!(error instanceof WorkerModelAdmissionError)) throw error;
-        skipped.push(Object.freeze({ index, channelId: candidate.channelId, modelId: candidate.modelId, reason: error.code })); continue;
+        skip({ index, channelId: candidate.channelId, modelId: candidate.modelId, reason: error.code }); continue;
       }
       const entry = (await reader.models(candidate.channelId)).find(row => row.modelId === candidate.modelId);
       const activation = await reader.activation(context.scopeId, candidate.channelId, candidate.modelId);

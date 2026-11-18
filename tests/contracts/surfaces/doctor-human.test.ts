@@ -627,3 +627,29 @@ it('119-C4: doctor separates service policy diagnosis from unavailable login/mod
     expect(doctorChecks(report, facts({ progressionRuns: null }), locale).find(row => row.id === 'work.progression')).toMatchObject({ state: 'untested' });
   }
 });
+
+it('D1 doctor reports the shared Git directory warning and command without offering repair', async () => {
+  const root = await project();
+  for (const command of ["chmod go-w -- '/project/.git'", '']) for (const lang of ['en', 'tr']) for (const json of [false, true]) {
+    let out = '', inspections = 0;
+    await runKernelCommand(['doctor', '--lang', lang, ...(json ? ['--json'] : [])], { root, env: { HOME: join(root, 'home') }, stdout: { write: (text: string) => { out += text; } }, stderr: { write() {} },
+      gitDeliveryPermission: async (_root, _options, confirm) => { expect(confirm).toBeUndefined(); inspections++; return { path: '/project/.git', command, before: '0775', after: '0755' }; },
+    });
+    expect(inspections).toBe(1);
+    if (json) { expect(JSON.parse(out)).toHaveProperty('summary'); expect(out).not.toContain('chmod go-w'); continue; }
+    expect(out).toContain('/project/.git');
+    expect(out).toContain(command || (lang === 'en' ? 'no command is offered' : 'komut sunulmuyor'));
+    if (!command) expect(out).not.toContain('chmod go-w');
+  }
+});
+
+
+it('D2 a recorded pool does not mean the small worker is ready (EN/TR)', () => {
+  const workerReadiness = { ready: false, code: 'WORKER_MODEL_NOT_ACTIVE', cli: ['deckent', 'models', 'connect', '--scope', 'live', '--connection', 'fixture-connection', '--model', 'fixture-small'] };
+  for (const locale of ['en', 'tr'] as const) {
+    const rows = doctorChecks(report, facts({ poolStatus: 'ready', workerReadiness } as never), locale);
+    const pool = rows.find(row => row.id === 'work.pool')!;
+    expect(pool.state).toBe('warning'); expect(pool.next).toBe(workerReadiness.cli.join(' '));
+    expect(pool.text).toContain(locale === 'en' ? 'Small worker is not ready' : 'Küçük iş çalışanı hazır değil');
+  }
+});

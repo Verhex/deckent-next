@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,6 +16,8 @@ import { homeEnv } from '../support/host-platform.js';
 import { ErrorRegistry, type DeckentError } from '#platform/index.js';
 import { DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
+import { prepareAttachmentDirectory } from '#adapters/index.js';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 
 // TESLIM-PENCERESI (owner 2026-10-14): "bu teslimleri neden CLI'dan yapıyorum; … bana sorulması gerekiyorsa terminalden bana sorsun".
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
@@ -92,7 +94,7 @@ function recordingPort(options: PortOptions = {}) {
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
-function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number } = {}) {
+function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number; decisionArmMs?: number } = {}) {
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
   const withAside = (view: RunView): RunView => ({ ...view, tasks: view.tasks.map(task => recorded.aside.has(`${view.runId}/${task.id}`) && task.resultBrief?.deliveryOutlook === 'awaiting-delivery'
@@ -104,9 +106,9 @@ function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly R
     ...(options.port === false ? {} : { delivery: { port: recorded.port, confirmTimeoutMs: 60_000 } }),
     doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', lines: () => ['PLAN-RESULT'],
       plan: async () => ({ ...pending, run: current, proposal: { ...pending.proposal, status: 'accepted', approval: null } }) },
-    ...(options.fullscreen ? { fullscreen: true } : {}) }, 160, { rows: options.rows ?? 48 });
+    ...(options.fullscreen ? { fullscreen: true } : {}), decisionArmMs: options.decisionArmMs ?? 0 }, 160, { rows: options.rows ?? 48 });
   mounted.push(view.instance);
-  return { view, ...recorded, set: (next: RunView) => { current = next; } };
+  return { view, ...recorded, armMs: options.decisionArmMs ?? 0, set: (next: RunView) => { current = next; } };
 }
 type Harness = ReturnType<typeof harness>;
 const frame = (h: Harness) => h.view.stdout.frame;
@@ -117,8 +119,8 @@ const press = async (h: Harness, keys: string, ms = 60) => { h.view.stdin.write(
 /** /do admits the Run; its automatic result and /tasks windows are closed explicitly, as a person would. */
 async function admit(h: Harness) {
   await settle(80); await press(h, '/do process order\r');
-  await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O); await press(h, ESC);
-  await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O); await press(h, ESC);
+  await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O, h.armMs + 60); await press(h, ESC);
+  await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O, h.armMs + 60); await press(h, ESC);
   await until(() => frame(h).includes(`ORDER-TASK · r · ${EN.jobs!.runStates['running']}`), 'running row');
 }
 const windowTitle = 'Delivery · ORDER-TASK';
@@ -520,9 +522,9 @@ describe('delivery window on the real Workline', () => {
   async function toVerification(h: Harness) {
     await admit(h); h.set(awaiting());
     await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
-    await press(h, CTRL_O); await press(h, 'y', 120);
+    await press(h, CTRL_O, h.armMs + 60); await press(h, 'y', h.armMs + 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
-    await press(h, 'y', 120);
+    await press(h, 'y', h.armMs + 120);
     await until(() => frame(h).includes('Verification for refs/heads/main: choose an accepted Run of kind verify'), 'verification step');
   }
 
@@ -559,10 +561,47 @@ describe('delivery window on the real Workline', () => {
     expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-1']);
   });
 
+  it('D1 an identical-list refresh preserves V2 for the next separate-read y', async () => {
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[V1, V2]], decisionArmMs: DECISION_ARM_DEFAULT });
+    const read = h.port.verificationRuns;
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>(resolve => { finishRefresh = resolve; });
+    h.port.verificationRuns = async (...args) => {
+      const runs = await read(...args);
+      if (h.calls.filter(call => call === 'verification-runs').length > 1) await refresh;
+      return runs.map(run => ({ ...run }));
+    };
+    await toVerification(h);
+    await press(h, DOWN); expect(frame(h)).toMatch(/› Run verify-run-2/u);
+    await press(h, 'r'); expect(frame(h)).toContain(WORDS.verifyLoading);
+    expect(h.adoptions).toEqual([]); finishRefresh();
+    await until(() => frame(h).includes('Run verify-run-2 · task check · accepted'), 'same candidates returned');
+    await press(h, 'y');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-2']);
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'adopted with preserved V2');
+  });
+
+  it('D1 reordered, changed-task and shortened verification lists reset selection and require a fresh answer', async () => {
+    const changedTask = { ...V1, taskId: 'other-check' };
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED,
+      candidates: [[V1, V2], [V2, V1], [V2, changedTask], [V2]], decisionArmMs: DECISION_ARM_DEFAULT });
+    await toVerification(h);
+    for (const selected of [V2, V1, changedTask]) {
+      await press(h, DOWN); expect(frame(h)).toContain(`› Run ${selected.runId} · task ${selected.taskId} · accepted`);
+      await press(h, 'r'); expect(frame(h)).toMatch(/› Run verify-run-2 · task check/u);
+      await press(h, 'y'); expect(h.adoptions).toEqual([]);
+      await settle(DECISION_ARM_DEFAULT + 60);
+    }
+    await press(h, 'y');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-2']);
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'fresh answer on the shortened list');
+  });
+
   it('an optional verification also offers adopting without one, recorded as not verified', async () => {
     const h = harness({ targets: ['refs/heads/main'], verification: { kind: 'verify', required: false }, candidates: [[V1]] }); await toVerification(h);
     await until(() => frame(h).includes('Adopt without verification'), 'unverified row');
     await press(h, DOWN); expect(frame(h)).toMatch(/› Adopt without verification/u);
+    await press(h, 'r'); expect(frame(h)).toMatch(/› Adopt without verification/u);
     await press(h, 'y', 150);
     await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
     expect(h.adoptions.map(item => item.verificationRunId)).toEqual([undefined]);
@@ -878,4 +917,97 @@ describe('delivery card summaries in the window and its port (alpha.53 A3)', () 
     expect(await unbound.preview(target)).not.toHaveProperty('summary'); expect(unbound.queue!.summary).toBeUndefined();
     await unbound.queue!.confirm('s', 'q1', async (_view, summaries) => { seen = summaries; return false; }); expect(seen).toEqual([]);
   });
+});
+
+/** Real Window arming and pinned-directory narrowing; the recording port isolates the transition from worker execution. */
+function permissionTransition(workingTree = true) {
+  const root = mkdtempSync(join(tmpdir(), 'deckent-permission-transition-')), directory = join(root, '.git');
+  mkdirSync(directory); chmodSync(directory, 0o775);
+  const h = harness({ workingTree, targets: workingTree ? [] : ['refs/heads/main'], decisionArmMs: DECISION_ARM_DEFAULT }), original = h.port.deliver, preview = h.port.preview;
+  h.port.preview = async target => ({ ...await preview(target), workingTree });
+  h.port.deliver = async (preview, ids, answer, permission) => {
+    try { await prepareAttachmentDirectory(directory, async () => undefined, async path => await permission!(path, '0775', '0755', `chmod go-w -- ${shellWord(path)}`)); }
+    catch { throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: directory, command: 'chmod go-w -- folder' } }); }
+    return original(preview, ids, answer);
+  };
+  return { h, mode: () => statSync(directory).mode & 0o777,
+    async close() { h.view.instance.unmount(); await settle(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 transition NEGATIVE: separately read held y keys cannot answer the new permission question', async () => {
+  const fixture = permissionTransition(), { h } = fixture;
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    // Each write is a separate read, inside the production quiet period; no paste/burst is involved.
+    for (let repeat = 0; repeat < 3; repeat++) await press(h, 'y', DECISION_ARM_DEFAULT / 4);
+    await settle(DECISION_ARM_DEFAULT + 60);
+    expect(fixture.mode()).toBe(0o775); expect(h.calls).not.toContain('publish');
+    expect(frame(h)).toContain('Others can write to this folder');
+    await press(h, ESC); await until(() => frame(h).includes('You chose to leave'), 'permission declined');
+    expect(fixture.mode()).toBe(0o775);
+  } finally { await fixture.close(); }
+});
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 transition POSITIVE: a fresh y after quiet narrows the pinned root and delivery proceeds once', async () => {
+  const fixture = permissionTransition(), { h } = fixture;
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    await press(h, 'y'); // carried-over single key, before the new question has armed
+    expect(fixture.mode()).toBe(0o775); expect(h.calls).not.toContain('publish');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Written into your files'), 'delivery after fresh permission answer');
+    expect(fixture.mode()).toBe(0o755); expect(h.calls.filter(call => call === 'publish')).toHaveLength(1);
+    await press(h, 'y'); await press(h, '\r');
+    expect(h.calls.filter(call => call === 'publish')).toHaveLength(1);
+  } finally { await fixture.close(); }
+});
+
+it.skipIf(process.platform === 'win32' || !process.getuid)('D1 delayed adoption question rejects an old separate-read y and accepts a fresh y after its own quiet period', async () => {
+  const fixture = permissionTransition(false), { h } = fixture, deliver = h.port.deliver;
+  let finishWork!: () => void;
+  const work = new Promise<void>(resolve => { finishWork = resolve; });
+  h.port.deliver = async (...args) => { const outcome = await deliver(...args); await work; return outcome; };
+  try {
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O, DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => h.calls.includes('publish'), 'permission answered and delivery still working');
+    expect(fixture.mode()).toBe(0o755);
+    // No input while the asynchronous work outlasts the previous question's quiet period.
+    await settle(DECISION_ARM_DEFAULT + 60); finishWork();
+    await until(() => frame(h).includes('› refs/heads/main'), 'new adoption question');
+    await press(h, 'y'); // first separate-read repeat carried from the permission answer
+    expect(h.adoptions).toEqual([]); expect(h.calls).not.toContain('adopt:refs/heads/main');
+    expect(frame(h)).toContain('› refs/heads/main');
+    await settle(DECISION_ARM_DEFAULT + 60); await press(h, 'y');
+    await until(() => h.calls.includes('adopt:refs/heads/main'), 'fresh adoption answer');
+    expect(h.adoptions).toHaveLength(1);
+  } finally { finishWork(); await fixture.close(); }
+});
+
+it('D1 the delivery permission card requires its own explicit answer; no leaves it refused, yes continues without adoption', async () => {
+  for (const command of ['chmod go-w -- folder', '']) for (const choice of ['n', '\r', 'y']) {
+    const yes = choice === 'y';
+    const h = harness({ workingTree: true, targets: ['refs/heads/main'] }), original = h.port.deliver, preview = h.port.preview;
+    h.port.preview = async target => ({ ...await preview(target), workingTree: true });
+    h.port.deliver = async (preview, ids, answer, permission) => {
+      expect(permission).toBeTypeOf('function');
+      if (!await permission!("/project's/.git", '0775', '0755', command)) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-declined', path: "/project's/.git", command } });
+      return original(preview, ids, answer);
+    };
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('1 files changed'), 'delivery preview');
+    await press(h, CTRL_O); await press(h, 'y');
+    await until(() => frame(h).includes('Others can write to this folder'), 'permission card');
+    expect(frame(h)).toContain("/project's/.git"); expect(frame(h)).toContain('0775 → 0755');
+    if (!command) { expect(squeeze(frame(h))).toContain(squeeze('no command is offered')); expect(frame(h)).not.toContain('chmod'); }
+    await press(h, choice);
+    await until(() => yes ? frame(h).includes('Written into your files') : frame(h).includes('You chose to leave'), 'permission answer');
+    expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false);
+    h.view.instance.unmount();
+  }
 });

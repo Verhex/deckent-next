@@ -12,3 +12,4 @@ export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/
 export { withFounderStep } from './internal/refusal.js';
 export { heldPoolId, runStatusKey } from './internal/run-status.js';
 export { reopenRetiredFolder } from './internal/reopen.js';
+export { directoryPermissionCard } from './internal/card.js';

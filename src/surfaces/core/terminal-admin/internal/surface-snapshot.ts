@@ -7,7 +7,7 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
   return { ...ports, readSurfaceSnapshot: async (kinds: readonly SurfacePublicationKind[], signal: AbortSignal): Promise<WorklineSurfaceSnapshot> => {
     const denied = new Set<SurfacePublicationKind>();
     const admitted = signal.aborted ? null : await access();
-    const data: { runs?: readonly RunView[]; workers?: WorkerObservationReport; approvals?: readonly WorklineApproval[] } = {};
+    const data: { runs?: readonly RunView[]; workers?: WorkerObservationReport; approvals?: readonly WorklineApproval[]; approvalsTruncated?: boolean } = {};
     for (const kind of new Set(kinds)) {
       if (signal.aborted) break;
       const current = await access();
@@ -17,7 +17,10 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
         if (kind === 'worker') data.workers = await ports.listWorkers();
         // The terminal-ledger and approval-presentation barrels reach the Ink/React UI; the CLI entry graph reaches them only when a snapshot reads.
         if (kind === 'run') data.runs = await (await import('#surfaces/core/terminal-ledger/index.js')).loadRunViewsForWatch(ports);
-        if (kind === 'approval' && ports.listApprovalPage) data.approvals = (await (await import('#surfaces/core/approval-presentation/index.js')).scanPendingApprovals(ports.listApprovalPage, Date.now())).pending;
+        if (kind === 'approval' && ports.listApprovalPage) {
+          const scan = await (await import('#surfaces/core/approval-presentation/index.js')).scanPendingApprovals(ports.listApprovalPage, Date.now());
+          data.approvals = scan.pending; data.approvalsTruncated = scan.truncated;
+        }
       } catch (error) { const code = (error as { code?: unknown } | null)?.code;
         if (typeof code === 'string' && isCodedError(error, code) && isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS })) denied.add(kind);
         else throw error;
@@ -30,6 +33,6 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
     return { scopeId: ports.scopeId, denied: [...denied],
       ...(!denied.has('run') && data.runs ? { runs: data.runs } : {}),
       ...(!denied.has('worker') && data.workers ? { workers: data.workers } : {}),
-      ...(!denied.has('approval') && data.approvals ? { approvals: data.approvals } : {}) };
+      ...(!denied.has('approval') && data.approvals ? { approvals: data.approvals, approvalsTruncated: data.approvalsTruncated } : {}) };
   } };
 }

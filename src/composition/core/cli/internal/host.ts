@@ -1,3 +1,5 @@
+import { directoryPermissionCard } from '#surfaces/index.js';
+import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
 import { openConfiguredModelInspection } from './model-inspection.js';
 import { openSqliteModelInvocationReader } from '#adapters/index.js';
 import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
@@ -37,7 +39,7 @@ import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConf
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, headlessIsolationRefusal, headlessLoginDir, headlessPersonWitness, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
+import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
@@ -77,10 +79,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
     // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
     const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
-    const answer = await askCliCard({ title: t('setup.attachment.narrowPermission', {}, language), body: [path, t('setup.attachment.narrowPermissionScope', {}, language),
-      ...(mode === null ? [] : [t('setup.attachment.narrowPermissionMode', { before: mode.toString(8).padStart(4, '0'), after: (mode & ~0o022).toString(8).padStart(4, '0') }, language)])], initial: 'no', options: [
-      { id: 'yes', label: t('setup.window.yes', {}, language), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, language), role: 'no' },
-    ] }, { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
+    const answer = await askCliCard(directoryPermissionCard(path, mode === null ? null : mode.toString(8).padStart(4, '0'), mode === null ? null : (mode & ~0o022).toString(8).padStart(4, '0'), language),
+      { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
     if (setup && answer !== 'yes') {
       const error = ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { locale: language, params: { reason: 'declined', path: terminalSafeText(path) } });
       emit(error.message); throw error;
@@ -91,7 +91,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
   const person = (options: { env?: NodeJS.ProcessEnv }) => headlessPersonWitness(options.env ?? process.env, base.agentEnvironment ?? getConfigFieldDefault('cli').agentEnvironment);
-  const host: Parameters<typeof runCli>[1] & object = { ...base, initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
+  const host: Parameters<typeof runCli>[1] & object = { ...base, gitDeliveryPermission: (...args) => typed(configuredGitDeliveryPermission(...args)), initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
     walkBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args)),
     readBeuserReport: async (...args) => typed((await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args)),
     setupBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args)),
@@ -184,7 +184,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
     openModelInspection: openConfiguredModelInspection,
-    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, inspectWorkerReadiness: inspectConfiguredWorkerReadiness, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,

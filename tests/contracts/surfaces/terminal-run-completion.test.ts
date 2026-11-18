@@ -17,6 +17,7 @@ vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
   } };
 });
 const runId = 'do-run', EN = workSurfaceLabels('en'), TR = workSurfaceLabels('tr');
+const unknownProgression = 'Current service diagnosis is unavailable; automatic progression is unknown.';
 const brief = projectResultBrief('attempt', { verdict: 'accepted' }, { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: {
   schemaVersion: 1, summary: 'CLAIM-SENTINEL', changedFiles: [], checks: [{ command: 'verify-order', outcome: 'failed' }], openIssues: ['ISSUE-SENTINEL'],
 } }, null, { deliveryOutlook: 'awaiting-delivery', failedTests: { count: 2, names: ['TEST-SENTINEL'], truncated: true } });
@@ -150,4 +151,40 @@ it.each(['en', 'tr'] as const)('%s completion line names what an accepted verdic
   expect(lines[1]).toMatch(locale === 'en' ? /^Accepted on: / : /^Kabul dayanağı: /);
   const rejected = { ...withCriteria, tasks: withCriteria.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, evaluation: { verdict: 'rejected' as const } } })) } as unknown as RunView;
   expect(runCompletionText(rejected, jobs)).not.toMatch(/Accepted on|Kabul dayanağı/);
+});
+
+
+it('D2 refreshes an open Runs window on push and removes hold on completion', async () => {
+  const control = vi.fn(), h = harness();
+  Object.assign(h.ledger, { controlRun: control });
+  await until(() => h.reads() > 0, 'opening snapshot');
+  h.view.stdin.write('/runs\r');
+  await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'running window');
+  h.view.stdin.write('\u001b[B'); await settle();
+  const before = h.reads(); h.pulse();
+  await until(() => h.reads() > before, 'push refresh with second row selected'); await settle();
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  h.view.stdin.write('\u001b[A'); await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'first row selected');
+  h.finish();
+  await until(() => h.view.stdout.frame.includes(`[completed] · ${unknownProgression} · do-run`), 'completed open window');
+  expect(h.view.stdout.frame).not.toContain(EN.runControl!.keyHold);
+  h.view.stdin.write('h'); await settle(); expect(control).not.toHaveBeenCalled();
+});
+
+
+it('D2 F2 keeps the selected identity across insertion/reorder and resets a vanished row and a new window', async () => {
+  const h = harness(); let ids = [runId, 'foreign'];
+  Object.assign(h.ledger, { controlRun: vi.fn(), listRunIds: async () => ids, inspectRun: async id => run(id, id !== runId) });
+  await until(() => h.reads() > 0, 'opening'); h.view.stdin.write('/runs\r');
+  await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'window');
+  h.view.stdin.write('\u001b[B'); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`), 'selected B');
+  ids = ['new', runId, 'foreign']; h.pulse();
+  await until(() => h.view.stdout.frame.includes(`[completed] · ${unknownProgression} · new`), 'inserted C');
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  ids = ['foreign', 'new', runId]; h.pulse(); await settle(80);
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  ids = [runId, 'new']; h.pulse(); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`), 'vanished reset');
+  h.view.stdin.write('\u001b[B'); await settle(); h.view.stdin.write('\u001b'); await settle();
+  h.view.stdin.write('/runs\r'); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`), 'new window reset');
+  h.pulse(); await settle(80); expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`);
 });

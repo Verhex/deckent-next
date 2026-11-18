@@ -1,9 +1,11 @@
+import { directoryPermissionCard } from '#surfaces/core/cli-human/index.js';
+import { withGitDeliveryPermission } from '#surfaces/core/delivery-port/index.js';
 import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
 import { inspectTask, phaseWord } from './task-inspect.js';
 import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -238,9 +240,12 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     const commandId = values.get('--command-id'), integrationCommandId = values.get('--candidate-command-id');
     if (!commandId || !integrationCommandId) throw usage(!commandId ? '--command-id' : '--candidate-command-id');
     if (!context.deliverWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-    const result = await context.deliverWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, identity, commandId, integrationCommandId }, options);
+    const root = context.root ?? process.cwd();
+    if (cliMode(context, json).mode !== 'interactive') { const warning = await context.gitDeliveryPermission?.(root, options); if (warning) throw ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-write' } }); }
+    const result = await withGitDeliveryPermission(() => context.deliverWorkspaceIntegration!(root, { schemaVersion: 1, identity, commandId, integrationCommandId }, options), context, root, options,
+      cliMode(context, json).mode === 'interactive' ? async (path, before, after, command) => await (await menuIo(context, locale)).ask(directoryPermissionCard(path, before, after, locale, command)) === 'yes' : undefined);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
-      [t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
+      [data.status === 'working-tree-delivered' ? t('cli.task.integration.written', {}, locale) : t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale), ...data.setAside?.length ? [t('cli.task.integration.setAside', { files: data.setAside.join(', ') }, locale)] : []].join('\n') }); return;
   }
   if (action === 'integration-adopt' || action === 'integration-rollback') {
     const commandId = values.get('--command-id') ?? (lightAdopt ? `cli-${action === 'integration-adopt' ? 'adopt' : 'rollback'}-${randomUUID()}` : undefined); if (!commandId) throw usage('--command-id');
@@ -258,8 +263,18 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
       // The verifying kind is the installation's (config); the adoption application re-checks it against the same configuration.
       const verificationKind = verificationRunId === undefined ? undefined : (await loadConfig(root, options)).execution?.adoption.verification?.kind;
       if (verificationRunId !== undefined && verificationKind === undefined) throw ErrorRegistry.createError('ADOPTION_VERIFICATION_NOT_CONFIGURED');
-      emit(await context.adoptWorkspaceIntegration(root, { schemaVersion: 2, commandId, identity, deliveryCommandId, targetRef,
+      try {
+        emit(await context.adoptWorkspaceIntegration(root, { schemaVersion: 2, commandId, identity, deliveryCommandId, targetRef,
         ...(verificationRunId === undefined || verificationKind === undefined ? {} : { verificationRunId, verificationKind }) }, options), { ...sinks, render }); return;
+      } catch (error) {
+        if (isCodedError(error, 'ADOPTION_TARGET_DENIED') && context.inspectRun) {
+          const run = await context.inspectRun(root, { schemaVersion: 1, scopeId: identity.scopeId, runId: identity.runId }, options).then(value => value.run, () => null);
+          const brief = run?.tasks.find(task => task.id === identity.taskId)?.resultBrief, delivered = brief?.runDelivery;
+          if (brief?.attemptId === identity.attemptId && delivered && 'application' in delivered && delivered.application === 'working-tree' && delivered.state === 'delivered' && delivered.commandId === deliveryCommandId)
+            throw ErrorRegistry.createError('ADOPTION_TARGET_DENIED', { params: { application: 'working-tree' } });
+        }
+        throw error;
+      }
     }
     const adoptionCommandId = values.get('--adoption-command-id'), deliveryCommandId = values.get('--delivery-command-id');
     if (!adoptionCommandId && deliveryCommandId) { // L1c: a working-tree delivery's files go back (the same card and authority as the delivery)

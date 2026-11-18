@@ -1,6 +1,7 @@
-import type { AttemptIdentity, RunSnapshot } from '#domain/index.js';
+import { sameAttemptIdentity, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import type { Environment, ResolvedConfig } from '#platform/index.js';
 import { projectRunWithDismissals, projectResultBrief, type ResultBrief } from '#engine/index.js';
+import { aggregateDelivery } from './receipt-observation.js';
 import { prepareMonitorInstall } from './install.js';
 /** The same typed evidence and read-output gate as the monitor, restricted to the explicitly inspected Run and its exact revision. */
 export async function readMonitorRunResults(config: ResolvedConfig, env: Environment | undefined, query: { scopeId: string; runId: string }, expected: { revision: number; layoutRevision: string },
@@ -22,9 +23,15 @@ export async function readMonitorRunResults(config: ResolvedConfig, env: Environ
     return !binding || permitted.has(binding.identity.attemptId);
   }).map(task => {
     const content = run.attempts.find(attempt => attempt.attemptId === task.lastAttempt?.attemptId)?.content;
-    const bound = source.snapshot.bindings.some(value => value.identity.taskId === task.taskId);
+    const binding = source.snapshot.bindings.find(value => value.identity.taskId === task.taskId), bound = Boolean(binding);
+    const delivery = binding ? aggregateDelivery((run.deliveryReceipts ?? []).filter(value => value.identity && sameAttemptIdentity(value.identity, binding.identity))) : null;
+    const definition = source.snapshot.graph.tasks.find(value => value.id === task.taskId);
+    const recorded = run.attempts.find(value => value.attemptId === binding?.identity.attemptId)?.dispatch?.patchRecorded;
+    const outlook: ResultBrief['deliveryOutlook'] = projected.state === 'accepted' && run.deliveryOutputPermitted !== false && task.phase === 'accepted'
+      ? !definition?.workInput ? 'none' : ['delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back'].includes(delivery?.state ?? '') ? undefined
+        : recorded === true ? 'awaiting-delivery' : recorded === false ? 'patch-not-prepared' : undefined : undefined;
     return [task.taskId, projectResultBrief(task.lastAttempt?.attemptId ?? null, { verdict: task.evaluation.verdict,
-      ...(task.evaluation.reason ? { reason: task.evaluation.reason } : {}) }, content?.finalReport ?? null, bound ? run.delivery ?? null : null,
-      { ...(task.lastAttempt?.failedTests ? { failedTests: task.lastAttempt.failedTests } : {}), ...(bound && projected.deliveryOutlook ? { deliveryOutlook: projected.deliveryOutlook } : {}), ...(bound && setAside(task.taskId) ? { setAside: true as const } : {}), ...(bound && unread ? { dismissalUnread: unread } : {}) })];
+      ...(task.evaluation.reason ? { reason: task.evaluation.reason } : {}) }, content?.finalReport ?? null, delivery,
+      { ...(task.lastAttempt?.failedTests ? { failedTests: task.lastAttempt.failedTests } : {}), ...(bound && outlook ? { deliveryOutlook: outlook } : {}), ...(bound && outlook === 'awaiting-delivery' && setAside(task.taskId) ? { setAside: true as const } : {}), ...(bound && unread ? { dismissalUnread: unread } : {}) })];
   }));
 }

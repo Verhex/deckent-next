@@ -426,7 +426,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   MCP_TOOL_UNKNOWN: 'usage', MCP_TOOL_SUMMARY_UNAVAILABLE: 'usage',
   // The Deckent MCP server's own refusals (Ek A: an MCP error carries its localized message).
   MCP_BUSY: 'error', MCP_INPUT_INVALID: 'usage', MCP_RESPONSE_LIMIT: 'error', MCP_TOOL_FAILED: 'error', MCP_REGISTRY_FILE_INVALID: 'config',
-  MCP_SERVER_NOT_TRUSTED: 'usage', MCP_TRUST_STORE_UNAVAILABLE: 'error', EFFECT_TARGET_UNAVAILABLE: 'error', EFFECT_CORRUPT: 'error', ADOPTION_TARGET_DENIED: 'config',
+  MCP_SERVER_NOT_TRUSTED: 'usage', MCP_TRUST_STORE_UNAVAILABLE: 'error', EFFECT_TARGET_UNAVAILABLE: 'error', EFFECT_CORRUPT: 'error',
   ADOPTION_TARGET_MISSING: 'error', ADOPTION_TARGET_CHECKED_OUT: 'error',
 }), {
   ADOPTION_BASE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_BASE_CHANGED', p, l), suggestion: t('remedy.ADOPTION_BASE_CHANGED', p, l) }) }, // BeUser DR2-08: the real next steps
@@ -437,9 +437,15 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   ADOPTION_VERIFICATION_CRITERIA_WEAKER: 'error', ADOPTION_FENCE_MISMATCH: 'error', ADOPTION_RELEASED: 'error', ADOPTION_NOT_APPLIED: 'error',
   ADOPTION_REPOSITORY_CHANGED: 'error', ADOPTION_VERIFICATION_NOT_CONFIGURED: 'config', PATCH_UNSUPPORTED: 'error',
 }), {
+  ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: p['application'] === 'working-tree' ? t('error.ADOPTION_TARGET_DENIED.files', p, l) : t('error.ADOPTION_TARGET_DENIED', p, l) }) },
+  PATCH_UNSAFE: { category: 'error', render: (p, l) => {
+    if (p['reason'] === 'git-directory-declined') return { message: p['command'] ? t('error.PATCH_UNSAFE.gitDirectoryDeclined', p, l) : t('error.PATCH_UNSAFE.gitDirectoryDeclinedUnsafePath', p, l) };
+    if (p['reason'] === 'git-directory-write') return { message: p['command'] ? t('error.PATCH_UNSAFE.gitDirectoryWrite', p, l) : t('error.PATCH_UNSAFE.gitDirectoryWriteUnsafePath', p, l) };
+    return { message: t('error.PATCH_UNSAFE', p, l) };
+  } },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: patchLimit(p, l) }) },
 }, plainErrors('error.', {
-  PATCH_UNSAFE: 'error', WORKER_OBSERVATION_INVALID: 'error', WORKER_OBSERVATION_UNAVAILABLE: 'error', WORKER_EVENTS_SEAL_FAILED: 'error', PATCH_UNAVAILABLE: 'error',
+  WORKER_OBSERVATION_INVALID: 'error', WORKER_OBSERVATION_UNAVAILABLE: 'error', WORKER_EVENTS_SEAL_FAILED: 'error', PATCH_UNAVAILABLE: 'error',
   NATIVE_CREDENTIAL_UNAVAILABLE: 'error', NATIVE_CONNECTION_UNAVAILABLE: 'error', TASK_EVALUATOR_INVALID: 'error', TASK_KIND_NOT_REGISTERED: 'error',
   TASK_EVALUATOR_NOT_REGISTERED: 'error', EXECUTION_REGISTRY_VALIDATOR_INVALID: 'error', BRAIN_INPUT_INVALID: 'error', BRAIN_TEMPLATE_UNAVAILABLE: 'error',
   BRAIN_OUTPUT_INVALID: 'error', BRAIN_OUTPUT_TRUNCATED: 'error', BRAIN_CONTEXT_TOO_LARGE: 'error',

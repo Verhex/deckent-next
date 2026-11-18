@@ -285,6 +285,8 @@ flowchart LR
   L --> R["Git reference<br/><sub>branch adoption is separate</sub>"]
 ```
 
+For a new repository, run `umask 022; git init` in that shell; deckent never changes your global umask.
+
 Start in a Git project with at least one commit and a connected model. For a Claude or ChatGPT subscription,
 sign in and connect through `/provider`, then open `/setup` to prepare the worker. These Claude/Codex CLI workers run
 inside bubblewrap on Linux/WSL and need no Docker image. Signing in to a CLI outside deckent does not complete this setup.

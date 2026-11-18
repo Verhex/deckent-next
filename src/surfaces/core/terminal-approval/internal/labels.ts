@@ -24,6 +24,7 @@ export interface ApprovalSurfaceLabels {
   readonly approvalIdentity?: string;
   readonly approvalMore: string;
   readonly approvalNotify: string;
+  readonly approvalNotifyPartial?: string; readonly approvalCountUnknown?: string;
   readonly approvalPollFailed: string;
   /** Single card lines (B1): `risk` with `{risk}`/`{undo}`; nothing runs on expiry; assurance turn-bound here / elsewhere / peer-session / other `{level}`. */
   readonly approvalCard: { readonly risk: string; readonly notDeclared: string; readonly onExpiry: string; readonly assuranceTurnHere: string; readonly assuranceTurnElsewhere: string; readonly assurancePeer: string; readonly assuranceOther: string };

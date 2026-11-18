@@ -4,7 +4,7 @@ import type { DeliverySummary, EffectConfirmationView, QueueConsent, TargetQueue
 import { consentSummaryLines, renderDeliverySummary, ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
 import { deliveryCardText, deliveryOperationLabel, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
-import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
+import { directoryPermissionCard, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import REGISTRY from './task.json' with { type: 'json' };
 
 /** The person's answer on one card (the CLI card launcher in production): an option id, or null when cancelled. */
@@ -73,10 +73,10 @@ export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTa
     view = await queue.inspect(target.scopeId, view.commandId) ?? view;
     await status(view); return;
   }
-  const delivered = await port.deliver(preview, { candidate: `cli-candidate-${randomUUID()}`, delivery: `cli-delivery-${randomUUID()}` }, answer);
-  print(t('cli.task.integration.delivered', { ref: delivered.ref, commit: delivered.commit }, locale));
+  const delivered = await port.deliver(preview, { candidate: `cli-candidate-${randomUUID()}`, delivery: `cli-delivery-${randomUUID()}` }, answer, async (path, before, after, command) => await ask(directoryPermissionCard(path, before, after, locale, command)) === 'yes');
+  print(preview.workingTree ? t('cli.task.integration.written', {}, locale) : t('cli.task.integration.delivered', { ref: delivered.ref, commit: delivered.commit }, locale));
   if (delivered.setAside?.length) print(t('cli.task.integration.setAside', { files: delivered.setAside.join(', ') }, locale));
-  if (!preview.adoptionTargets.length) return;
+  if (preview.workingTree || !preview.adoptionTargets.length) return;
   const targetRef = await ask({ title: t('cli.task.menu.adopt.title', { commit: delivered.commit.slice(0, 12) }, locale), body: [t('cli.task.menu.adopt.body', {}, locale)],
     options: [...preview.adoptionTargets.map(ref => ({ id: `ref:${ref}`, label: ref })), { id: 'no', label: t('cli.task.menu.adopt.later', {}, locale), key: 'n' }] });
   if (!targetRef?.startsWith('ref:')) { print(t('cli.task.menu.adopt.left', { command: delivered.commandId }, locale)); return; }

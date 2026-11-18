@@ -5,7 +5,7 @@ import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
 import type { StandingScope, SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
 export interface WorklineSurfaceSnapshot { readonly scopeId: string; readonly denied: readonly SurfacePublicationKind[];
-  readonly runs?: readonly RunView[]; readonly workers?: WorkerObservationReport; readonly approvals?: readonly WorklineApproval[];
+  readonly runs?: readonly RunView[]; readonly workers?: WorkerObservationReport; readonly approvals?: readonly WorklineApproval[]; readonly approvalsTruncated?: boolean;
 }
 export interface WorklineLedgerPorts {
   /** Collection-authorized current state. Required for production push startup, invalidation and resync. */

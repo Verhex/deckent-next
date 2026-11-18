@@ -65,3 +65,11 @@ export async function askCliCard(request: CliCardRequest, io: CliCardIo): Promis
   } finally { giveBack(); }
 }
 // Scope picker for resolveCommandScope: `pick: request => askCliCard(request, io)`.
+
+/** One folder permission card for project attachment and Git delivery; never authorizes the change itself. */
+export function directoryPermissionCard(path: string, before: string | null, after: string | null, locale: Locale, command?: string): CliCardRequest {
+  return { title: t('setup.attachment.narrowPermission', {}, locale), body: [path, t('setup.attachment.narrowPermissionScope', {}, locale),
+    ...(before === null || after === null ? [] : [t('setup.attachment.narrowPermissionMode', { before, after }, locale)]),
+    ...(command === undefined ? [] : [ErrorRegistry.createError('PATCH_UNSAFE', { params: { reason: 'git-directory-write', path, command }, locale }).message])], initial: 'no', options: [
+    { id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }] };
+}

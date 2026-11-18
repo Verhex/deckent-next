@@ -64,3 +64,5 @@ export { runAdmissionStorePerCall, createRunAdmissionContext } from './internal/
 export { createRunCreationAuthority } from './internal/authority.js';
 
 export { runCapacityBindingsSchema, type RunCapacityBinding } from './internal/capacity-resource.js';
+
+export { inspectWorkerReadiness } from './internal/worker-readiness.js';

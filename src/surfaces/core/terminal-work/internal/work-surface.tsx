@@ -1,4 +1,4 @@
-import { standingAnswerNotice, clearStandingNotice } from '#surfaces/core/approval-presentation/index.js';
+import { standingAnswerNotice, clearStandingNotice, isPendingApproval } from '#surfaces/core/approval-presentation/index.js';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { RunView } from '#engine/index.js';
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts, APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
@@ -41,6 +41,10 @@ export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: numbe
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 const APPROVAL_NOTIFY_MIN_MS = 10_000;
+function approvalNotice(work: WorkSurfaceLabels, count: number, partial: boolean): string {
+  return partial ? count ? fillTemplate(work.approvalNotifyPartial ?? work.approvalsTruncated, { count, pages: APPROVAL_SCAN_MAX_PAGES }) : work.approvalCountUnknown ?? work.approvalPollFailed
+    : count ? fillTemplate(work.approvalNotify, { count }) : '';
+}
 export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive, context }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
@@ -48,27 +52,28 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' || presentation?.kind === 'window' || presentation?.kind === 'job-window' || presentation?.kind === 'job-picker'
     || presentation?.kind === 'runs-window' || presentation?.kind === 'run-control' || presentation?.kind === 'run-answer' ? presentation : null;
   // A list window's decision carries the reason typed on the approval window it opened (the picker answer itself is only allow/deny).
-  const pickedReason = useRef<string | undefined>(undefined);
+  const pickedReason = useRef<string | undefined>(undefined), slashSummary = useRef<string[] | null>(null);
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
-  const slashSummary = useRef<string[] | null>(null);
   const output = useCallback((text: string) => { if (slashSummary.current) slashSummary.current.push(text); else push([systemSummaryEntry(text)]); }, [push]);
   const [approvalStatus, setApprovalStatus] = useState('');
-  const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
+  const runSelection = useRef<string | null>(null), approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
   useEffect(() => { if (!watchingWorkers && !ledger?.readSurfaceSnapshot) setWorkers([]); }, [watchingWorkers, ledger?.readSurfaceSnapshot]);
-  const observeApprovals = useCallback((items: readonly WorklineApproval[]) => {
-    const { state, fresh } = approvalWatchStep(approvalWatch.current, { items, nextAfter: null }, Date.now());
-    approvalWatch.current = state;
-    if (work && fresh.length) setApprovalStatus(fillTemplate(work.approvalNotify, { count: fresh.length }));
+  const observeApprovals = useCallback((items: readonly WorklineApproval[], truncated = true) => {
+    const pending = items.filter(item => isPendingApproval(item, Date.now()));
+    approvalWatch.current = approvalWatchStep(EMPTY_APPROVAL_WATCH, { items: pending, nextAfter: null }, Date.now()).state;
+    if (work) setApprovalStatus(approvalNotice(work!, pending.length, truncated));
   }, [work]);
+  const observeRuns = useCallback(() => { const snapshot = panel.controller.snapshot(); if (panel.presentation(snapshot)?.kind === 'runs-window') panel.choose(snapshot.picker?.pickerHandle, 'refresh'); }, [panel]);
   const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => { setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker')); }, []);
   // Without push snapshots: one bounded approval page per tick, never faster than APPROVAL_NOTIFY_MIN_MS.
   const connected = pushLive ?? Boolean(ledger?.followEvents);
   useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !connected && !ledger?.readSurfaceSnapshot, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
-    const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
+    const after = approvalWatch.current.cursor, page = await ledger!.listApprovalPage!(after);
     if (!current()) return;
-    const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());
+    const { state } = approvalWatchStep(approvalWatch.current, page, Date.now());
     approvalWatch.current = state;
-    if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
+    // Notification memory is capped and may contain older pages: only this page supplies a current lower bound.
+    setApprovalStatus(approvalNotice(work!, page.items.filter(item => isPendingApproval(item, Date.now())).length, after !== null || page.nextAfter !== null));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
   const run = async (command: 'approvals' | 'cancel' | 'runs', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
     if (!work || !ledger) return;
@@ -76,7 +81,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     slashSummary.current = [];
     try {
       // Y1: the Runs window with its hold/resume/close keys (only when the port and its words are both there); each key has its own y/N card.
-      if (command === 'runs') { output(await runRunsControl(panel, execution, ledger, work, errorText, () => pickedReason.current)); return; }
+      if (command === 'runs') { output(await runRunsControl(panel, execution, ledger, work, errorText, () => pickedReason.current, runSelection)); return; }
       if (command === 'cancel') {
         const selected = selectedRunId ? await ledger.inspectRun(selectedRunId) : null;
         const view = selectedRunId ? selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null : await pickRun(panel, execution, ledger, work, true);
@@ -87,12 +92,12 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
         return;
       }
       const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage!, Date.now());
-      if (!pending.length) setApprovalStatus('');
+      setApprovalStatus(approvalNotice(work!, pending.length, truncated));
       const clearSession = ledger.clearSessionStanding && work.sessionStandingClear ? work.jobs!.clearSession : undefined;
-      const status = truncated ? fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES }) : approvalStatus;
+      const status = truncated ? fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES }) : approvalNotice(work!, pending.length, false);
       if (!pending.length && !clearSession) {
-        await panel.pick(execution, { kind: 'window', title, body: [work.approvalsNone, ...(status ? [status] : [])], hints: work.jobs!.hints, confirm: false }, ['close']);
-        output(work.approvalsNone); return;
+        await panel.pick(execution, { kind: 'window', title, body: [truncated ? work.approvalCountUnknown ?? work.approvalPollFailed : work.approvalsNone, ...(status ? [status] : [])], hints: work.jobs!.hints, confirm: false }, ['close']);
+        output(truncated ? work.approvalCountUnknown ?? work.approvalPollFailed : work.approvalsNone); return;
       }
       const choice = selectedApprovalId ? String(pending.findIndex(item => item.approvalId === selectedApprovalId)) : await panel.pick(execution, { kind: 'approvals', rows: pending, ...(clearSession ? { clearSession } : {}), ...(status ? { status } : {}) },
         [...pending.map((_, index) => String(index)), ...(clearSession ? ['clear-session'] : [])]);
@@ -134,7 +139,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     const result: string[] = [];
     try {
       const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing, reason);
-      setApprovalStatus(remaining > 0 ? fillTemplate(work!.approvalMore, { count: remaining }) : '');
+      setApprovalStatus(work!.approvalCountUnknown ?? work!.approvalPollFailed);
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       result.push(identified(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, record.approvalId));
       if (record.deciderLabel) result.push(record.deciderLabel);
@@ -171,7 +176,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
         else { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }
       }} />;
   } else if (work?.runControl && modal?.kind === 'runs-window') {
-    card = <RunsControlWindow key={state.picker?.pickerHandle} value={modal} labels={work.runControl} position={work.window.position} onAnswer={choice => { panel.choose(state.picker?.pickerHandle, choice); }} />;
+    card = <RunsControlWindow key={state.picker?.pickerHandle} value={modal} labels={work.runControl} position={work.window.position} onSelect={runId => { runSelection.current = runId; }} onAnswer={choice => { panel.choose(state.picker?.pickerHandle, choice); }} />;
   } else if (work?.runControl && modal?.kind === 'run-control') {
     card = <RunControlDecisionCard key={`run-control:${state.picker?.pickerHandle}`} value={modal} work={work} labels={labels.render ?? {}} pending={!state.picker}
       onDecide={(yes, reason) => { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }} />;
@@ -195,7 +200,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       {card}
     </>
   );
-  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
+  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, observeRuns, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {
