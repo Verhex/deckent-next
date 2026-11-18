@@ -1,4 +1,5 @@
-import { t, terminalRecordText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { policyExecutionScopeList } from '#engine/index.js';
 import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { delegationWords, delegationLines, mcpCapabilityWords, mcpCapabilityPreviewLines, type DelegationHandlers, type McpCapabilityHandlers } from '#surfaces/core/work-labels/index.js';
 import type { TerminalLaunchContext } from './context.js';
@@ -9,7 +10,7 @@ const AI_PROPOSALS = ':ai-proposals';
 type AiState = 'on' | 'off' | 'partial' | 'covered' | 'unavailable';
 /** The governed current first-run upgrade (`deckent policy upgrade --template current`, and this row): the engine's result, which a surface only words. */
 export interface PolicyUpgradeView { readonly executionHistory?: 'never' | 'withdrawn' | 'unknown'; readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[];
-  /** A scoped (`only`) read: the rules it would add and the current delta's rules held now. */ readonly rules?: readonly { readonly id: string }[]; readonly executionContext?: readonly unknown[]; readonly executionScopes?: readonly string[]; readonly held?: readonly string[];
+  /** A scoped (`only`) read: the rules it would add and the current delta's rules held now. */ readonly rules?: readonly { readonly id: string }[]; readonly executionContext?: readonly unknown[]; readonly executionScopes?: readonly string[]; readonly executionScopeSelection?: { readonly all: boolean; readonly ids: readonly string[] }; readonly held?: readonly string[];
   /** A scoped read: the delta rules an existing allow covers instead, with that allow's id. */ readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[] }
 export type PolicyTemplateUpgradePort = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly previewRollback?: boolean; readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
@@ -57,8 +58,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
         const on = action !== 'revoke', view = on ? await proposals(scopeId)
           : await upgrade(root, scopeId, { mode: 'preview', previewRollback: true, reason, only: 'ai-proposals' }, env);
         const ids = (view.rules ?? []).map(rule => rule.id), applicable = ids.length > 0 && view.status === 'preview' && !view.missing.length;
-        const scopes = !on && view.executionScopes ? [t('policy.aiExecution.rollbackScopes', {
-          count: view.executionScopes.length, scopes: view.executionScopes.map(terminalRecordText).join('\n') }, locale)] : [];
+        const scopes = !on && view.executionScopes ? [policyExecutionScopeList(view.executionScopeSelection?.ids ?? view.executionScopes, view.executionScopeSelection?.all === true, locale)] : [];
         const head = !ids.length ? t('policy.aiProposals.nothing', { state: described(view) }, locale) : on ? t('policy.aiProposals.onCard', { ids: ids.join(', ') }, locale) : t('policy.aiProposals.offCard', { ids: ids.join(', ') }, locale);
         return { scopeId, groupId, action, digest: view.revision, applicable, lines: [...scopes, head, ...(on && ids.length && view.missing.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking(view)] : [])].map(text => ({ label: '', text })) };
       }

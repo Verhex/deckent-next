@@ -1,11 +1,17 @@
-import { describePolicyGrants, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunExecutionRules, policyGrantSchema, type PolicyGrant } from '#domain/index.js';
-import { t, terminalSafeText, type Locale } from '#platform/index.js';
+import { describePolicyGrants, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, firstRunExecutionRules, policyGrantSchema, type PolicyGrant } from '#domain/index.js';
+import { t, terminalRecordText, terminalSafeText, type Locale } from '#platform/index.js';
 
 /** Describe the actual old rules removed by the change, without claiming that every other grant is revoked. */
 export function policyExecutionWithdrawalLines(rules: readonly PolicyGrant[], locale: Locale): string[] {
-  const removed = rules.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id));
-  return removed.flatMap(rule => rule.scopes === 'all' ? [] : [t('policy.aiExecution.withdraw', {
-    id: terminalSafeText(rule.id), scopes: terminalSafeText(rule.scopes.join(', ')) }, locale)]);
+  const removed = rules.filter(rule => [...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS].some(id => id === rule.id));
+  return removed.map(rule => t('policy.aiExecution.withdraw', {
+    id: terminalRecordText(rule.id), scopes: rule.scopes === 'all' ? t('policy.aiExecution.allScopes', {}, locale) : rule.scopes.map(terminalRecordText).join('\n') }, locale));
+}
+
+/** All-scope selection is separate from every explicit scope ID, including a literal star. */
+export function policyExecutionScopeList(scopes: readonly string[], allScopes: boolean, locale: Locale): string {
+  return [...(allScopes ? [t('policy.aiExecution.allScopes', {}, locale)] : []),
+    ...(!allScopes || scopes.length ? [t('policy.aiExecution.rollbackScopes', { count: scopes.length, scopes: scopes.map(terminalRecordText).join('\n') }, locale)] : [])].join('\n');
 }
 
 /** The notice checks actual cells against the trusted planner's scopes; an arbitrary card defaults to its one scope. */

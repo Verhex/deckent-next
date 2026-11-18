@@ -18,7 +18,9 @@ export interface TemplateUpgradeResult {
   readonly rules: readonly PolicyGrant[];
   /** Effective grants used only to describe a genuine partial execution upgrade. */
   readonly executionContext?: readonly PolicyGrant[];
-  /** Validated scopes from the addition or removal planner (`*` includes all scopes); response only. */ readonly executionScopes?: readonly string[];
+  /** Legacy scope projection from the planner (`*` may mean all scopes on removal); preserved for existing callers. Response only. */ readonly executionScopes?: readonly string[];
+  /** Exact removal selection before the legacy projection: all scopes and explicit IDs stay distinct. Response only. */
+  readonly executionScopeSelection?: { readonly all: boolean; readonly ids: readonly string[] };
   /** Read-only observation of witnessed execution adds for this principal and scope; never persisted. */
   readonly executionHistory?: 'never' | 'withdrawn' | 'unknown';
   /** Complete ordered change description for previews/results; the separately sealed card keeps its own 2048 bound. */
@@ -211,14 +213,16 @@ export class PolicyTemplateUpgrade {
       if (evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'execute', resource: { kind: 'operation', id: POLICY_ADMINISTER_OPERATION.operation.id } }).decision !== 'allow'
         || evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'decide', resource: { kind: 'approval', id: UPGRADE } }).decision !== 'allow') missing.push('lockout');
       // These are the current bodies of the proven remove ids on this plan's revision, never a fresh add plan's scopes.
+      const executionScopeSelection = { all: planned.touched.some(rule => rule.scopes === 'all'),
+        ids: [...new Set(planned.touched.flatMap(rule => rule.scopes === 'all' ? [] : rule.scopes))] };
       const executionScopes = [...new Set(planned.touched.flatMap(rule => rule.scopes === 'all' ? ['*'] : rule.scopes))];
-      const removal = { rules: delta.rules.filter(rule => held.includes(rule.id)), executionScopes, summary: describePolicyChange(files, change), conflicts, missing };
+      const removal = { rules: delta.rules.filter(rule => held.includes(rule.id)), executionScopes, executionScopeSelection, summary: describePolicyChange(files, change), conflicts, missing };
       if (missing.length) return result('refused', removal);
       if (input.mode === 'preview') return result('preview', removal);
       await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change, tag: `template-v5-rollback:${held.join(',')}`,
         reason: input.reason, revision: policy.revision, kind: UPGRADE });
       const remaining = (input.only === 'ai-proposals' ? firstRunProposalRules : firstRunExecutionRules)(principalGrants(after, mcpPrincipalRef(input.principal)), input.principal, [input.scopeId]);
-      return result('rolled-back', { reason: held.join(','), conflicts, executionScopes, covered: remaining.skipped });
+      return result('rolled-back', { reason: held.join(','), conflicts, executionScopes, executionScopeSelection, covered: remaining.skipped });
     }
     const names = { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}), aiGrants: principalGrants(policy, mcpPrincipalRef(input.principal)) };
     const firstRun = firstRunTemplateAdditions(files.policy, names);

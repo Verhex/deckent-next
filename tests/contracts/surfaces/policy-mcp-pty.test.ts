@@ -160,9 +160,11 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
     const offFrame = value.frames.find(([label]) => label === '+ai off decline')![1];
     const offScreen = terminalBuffers(offFrame, 100, 40).text;
-    const affected = locale === 'en' ? 'Affected scopes (2), full list:' : 'Etkilenen kapsamlar (2), tam liste:';
+    const affected = locale === 'en' ? 'Affected scopes (1), full list:' : 'Etkilenen kapsamlar (1), tam liste:';
     expect(offScreen).toContain(affected);
-    for (const shown of ['"scope"', '"*"']) {
+    expect(offScreen).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar');
+    expect(offScreen).not.toContain('"*"');
+    for (const shown of ['"scope"']) {
       const line = offScreen.split('\n').find(line => line.includes(shown));
       expect(line, shown).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(shown);
     }
@@ -186,7 +188,7 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
 
 
 it.skipIf(process.platform !== 'linux')('3286 F4: the real /policy decision window distinguishes comma, bidi and zero-width scope ids in EN/TR', async () => {
-  for (const locale of ['en', 'tr'] as const) for (const scopeId of ['scope,west', 'scope\u202eabc', 'scope\u200babc']) {
+  for (const locale of ['en', 'tr'] as const) for (const scopeId of ['scope,west', 'scope\u202eabc', 'scope\u200babc', '*']) {
     const f = await runtime();
     const template = firstRunPolicyTemplate({ scopeId, principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
       scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
@@ -198,7 +200,7 @@ it.skipIf(process.platform !== 'linux')('3286 F4: the real /policy decision wind
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.cancellationRuntime.scopeIds = [scopeId]; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
     const ai = locale === 'en' ? 'AI proposals' : 'Yapay zekâ önerileri', off = locale === 'en' ? 'Turn off: removes these rules' : 'Kapat: şu kuralları';
-    const steps = [['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
+    const steps = [['READY', [...'/policy', ENTER], 'start'], [scopeId === '*' ? '> *' : '> scope', [ENTER], '+scopes'],
       [words[locale].groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [ai, [ENTER], '+ai'],
       [words[locale].action, [DOWN, ENTER], '+action'], [off, [ESC, ESC, ESC], '+decision']];
     const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none', scopeId],
@@ -208,7 +210,9 @@ it.skipIf(process.platform !== 'linux')('3286 F4: the real /policy decision wind
     expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
     const frame = value.frames.find(([label]) => label === '+decision')![1], screen = terminalBuffers(frame, 100, 40).text;
     const shown = JSON.stringify(scopeId).replace(/\u202e/gu, '\\u202e').replace(/\u200b/gu, '\\u200b');
-    for (const record of [shown, '"*"']) {
+    expect(screen).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar');
+    if (scopeId !== '*') expect(screen).not.toContain('"*"');
+    for (const record of [shown]) {
       const line = screen.split('\n').find(line => line.includes(record));
       expect(line, screen).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(record);
     }
