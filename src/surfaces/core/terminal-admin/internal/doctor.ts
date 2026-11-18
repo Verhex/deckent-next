@@ -125,5 +125,7 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
   const hasTotals = totals && [totals.ok, totals.check, totals.failed, totals.untested].every(value => Number.isSafeInteger(value) && value >= 0);
   return { model: { title: t('terminal.info.doctor.title', {}, locale),
     chips: hasTotals ? [chip('ok'), chip('warn'), chip('fail')].map((value, index) => ({ ...value, text: `${[totals.ok, totals.check, totals.failed][index]} ${value.text}` })) : [chip('neutral')],
-    summary: hasTotals ? t('terminal.info.doctor.summary', totals, locale) : t('terminal.info.chip.unknown', {}, locale), sections } };
+    summary: [...(data?.status === 'ready' || data?.status === 'degraded' ? [data.status === 'degraded' ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale)] : []),
+      hasTotals ? t('terminal.info.doctor.summary', totals, locale) : t('terminal.info.chip.unknown', {}, locale),
+      ...(hasTotals && totals.untested ? [t('doctor.summary.untested', { n: totals.untested }, locale)] : [])].join(' · '), sections } };
 }

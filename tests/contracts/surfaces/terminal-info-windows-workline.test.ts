@@ -156,7 +156,7 @@ describe('information windows on the real workline (SW-1)', () => {
 
   it('/doctor groups the structured doctor report by area with chips; without it the doctor text is one section', async () => {
     const root = await project();
-    const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', summary: { ok: 3, check: 1, failed: 1, untested: 0 }, host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
+    const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'degraded', summary: { ok: 3, check: 1, failed: 1, untested: 0 }, host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
       company: { companyId: 'default' }, principal: { id: 'host:1000' }, secretStore: { backend: 'core.secret-store.encrypted-file@1', status: 'ready', code: null },
       serviceConfig: 'stale', imageRefresh: { status: 'failed', reason: 'network', imageVersion: null }, installationBinding: { capability: 'supported', strength: 'machine', source: 'platform',
         filesystemIdentity: { status: 'available', kind: 'linux.ext4.statfs-fsid.v1' } },
@@ -173,7 +173,7 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(infoModelText(tr).join('\n')).toContain("deckent'in işçileri ve yalıtım alanı bu anahtarları okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir.");
     expect(frame).toContain('Filesystem identity: available (linux.ext4.statfs-fsid.v1)');
     await type(view, ESC);
-    await until(() => view.stdout.frame.includes(`${MARK} · Health: 3 ok · 1 to check · 1 failed`), 'doctor summary');
+    await until(() => view.stdout.frame.includes(`${MARK} · Status: needs attention · Health: 3 ok · 1 to check · 1 failed`), 'doctor summary');
     const text = (await admin(root, {}).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
     expect(infoModelText(text)).toEqual(expect.arrayContaining(['  - DOCTOR-TEXT-1', 'The structured report could not be read; this is the doctor text.']));
   });
@@ -205,7 +205,7 @@ describe('information windows on the real workline (SW-1)', () => {
       expect(human).toContain(t('doctor.summary.warnings', { n: report.summary.check }, locale));
       const ports = admin(root, {}, { locale, doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) });
       const model = (await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
-      expect(model.summary).toBe(t('terminal.info.doctor.summary', report.summary, locale));
+      expect(model.summary).toBe(`${t('doctor.summary.ready', {}, locale)} · ${t('terminal.info.doctor.summary', report.summary, locale)} · ${t('doctor.summary.untested', { n: report.summary.untested }, locale)}`);
       expect(model.sections.find(section => section.title === t('terminal.info.doctor.section.pools', {}, locale))?.chip?.state).toBe('warn');
       expect(infoModelText(model).join('\n')).not.toContain('could not be read');
     }
