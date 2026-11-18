@@ -343,13 +343,14 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
   const abandon = (reason: 'cancelled' | 'preparation-unsettled') => {
     if (coordinator.planning?.pin && coordinator.planning.active) coordinator.planning.abandon(coordinator.planning.pin, reason);
   };
+  const refusePlanning = () => { planningRefused = true; close(); abandon('preparation-unsettled'); };
   const checkPlanning = (call: AgentToolCall): boolean => {
     if (!coordinator.planning?.active) return true;
     try {
       coordinator.planning.beforeTool(call.id, agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson || '{}') as Record<string, unknown>));
       return true;
     } catch {
-      planningRefused = true; closed = true; controller.abort(); abandon('preparation-unsettled');
+      refusePlanning();
       return false;
     }
   };
@@ -357,7 +358,10 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
     async propose(rawCall, rawCorrelation, signal) {
       const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
       const callId = parsed.success ? parsed.data.deckentCallId : checked.success ? checked.data.id : 'invalid-call';
-      if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) return refusal(callId, 'tool-correlation-invalid');
+      if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) {
+        if (coordinator.planning?.active) refusePlanning();
+        return refusal(callId, 'tool-correlation-invalid');
+      }
       const call = Object.freeze(checked.data), correlation = parsed.data;
       if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed');
       if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
@@ -535,7 +539,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         // Native transport already submitted proposals. Returned calls must never become a second execution path.
         if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
         if (ports.planning?.active && outcome.status === 'responded') {
-          const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
+          // Reaching the chat's token threshold does not prove that a tool-less answer was cut short.
+          const truncated = outcome.finish === 'length';
           if (signal.aborted || outcome.providerStop || outcome.finish !== 'stop' || truncated || !ports.planning.normalClosed) {
             if (ports.planning.pin) ports.planning.abandon(ports.planning.pin, signal.aborted ? 'cancelled'
               : truncated ? 'output-truncated' : outcome.providerStop ? 'native-failed' : 'completion-unknown');

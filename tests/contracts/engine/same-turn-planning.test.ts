@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { CORE_WORK_CLASSES, parseModelInvocationReceipt, modelInvocationRequestEvidence, resolveModelBindingDefinition, encodeModelBindingDefinition, type AgentTurnEvent, type AgentTurnMessage } from '#domain/index.js';
-import { prepareBrainPrompt, selectedBrainTemplate } from '#capabilities/index.js';
+import { prepareBrainPrompt, selectedBrainTemplate, type SameTurnToolSessionPort } from '#capabilities/index.js';
 import { BrainPlanApplication, brainRunId, type SameTurnPlanningPorts } from '#engine/core/run-planner/index.js';
 import { modelInvocationRequestDigest, modelInvocationProfileDigest, createModelInvocationResponseRecord } from '#engine/core/model-invocation/index.js';
 import { agentTurnResultDigest, agentToolArgumentsDigest, runDurableAgentTurn, AI_PROPOSAL_TOOL_SPECS, type AgentTurnStore, type AgentTurnPorts } from '#engine/core/agent-turn/index.js';
@@ -58,11 +58,13 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
 }
 
 function productionTurn(f: ReturnType<typeof fixture>, invokeAgent: NonNullable<AgentTurnPorts['invokeAgent']>,
-  options: { parent?: AbortController; completionLimitTokens?: number } = {}) {
+  options: { parent?: AbortController; completionLimitTokens?: number; priorEffectUnknown?: boolean } = {}) {
   const events: AgentTurnEvent[] = [], executions: string[] = [], targets: string[] = [], records: string[] = [];
   let finalizers = 0, history: readonly AgentTurnMessage[] = [];
   const tools = [AI_PROPOSAL_TOOL_SPECS.find(tool => tool.name === 'propose_work')!,
     { name: 'read_item', version: 1, toolClass: 'read' as const, description: 'Read an item.',
+      inputSchema: { type: 'object' as const, required: ['path'], properties: { path: { type: 'string' } } } },
+    { name: 'write_item', version: 1, toolClass: 'edit' as const, description: 'Write an item.',
       inputSchema: { type: 'object' as const, required: ['path'], properties: { path: { type: 'string' } } } }];
   const store: AgentTurnStore = { claim: async () => ({ status: 'new' }), finish: async () => undefined,
     interruptRunning: async () => ({ interrupted: 0, corrupt: [] }), recordToolCall: async record => { records.push(record.callId); } };
@@ -73,7 +75,8 @@ function productionTurn(f: ReturnType<typeof fixture>, invokeAgent: NonNullable<
   { planning: f.planning, now: () => 1, describe: (_tool, args) => { if (typeof args['path'] !== 'string') return null; targets.push(args['path']); return args['path']; },
     authorize: async () => 'allow', invokeRound: async () => { throw new Error('SECOND_MODEL'); },
     execute: async (tool, _args, _signal, callId) => { executions.push(callId); return tool.name === 'propose_work'
-      ? (await f.planning.prepare(f.pin, f.input)).outcome : { status: 'ok', text: 'Item read' }; },
+      ? (await f.planning.prepare(f.pin, f.input)).outcome : tool.name === 'write_item' && options.priorEffectUnknown
+        ? { status: 'error', text: 'Item effect unknown' } : { status: 'ok', text: 'Item read' }; },
     invokeAgent: (input, delta, signal) => { history = input.messages; return invokeAgent(input, delta, signal); },
     finishPlanning: async signal => { finalizers++; await f.planning.finalize(f.pin, f.retained, signal); return 'Prepared plan'; } });
   return { running, events, executions, targets, records, history: () => history, finalizers: () => finalizers };
@@ -158,8 +161,8 @@ it('keeps the separate Brain invocation on its unchanged authored plain-JSON ins
   await brain.plan(f.input.command); expect({ sends, proposals }).toEqual({ sends: 1, proposals: 1 });
 });
 
-it('refuses contradictory loop completion before the finalizer even after K2 reported normal close', async () => {
-  for (const contradiction of ['length', 'provider-stop', 'unknown-finish', 'missing-k2-close', 'reported-limit', 'parent-cancel'] as const) {
+it('distinguishes normal completion at the chat threshold from contradictory completion before finalization', async () => {
+  for (const contradiction of ['length', 'provider-stop', 'unknown-finish', 'missing-k2-close', 'normal-at-threshold', 'parent-cancel'] as const) {
     const f = fixture(), parent = new AbortController();
     const p = productionTurn(f, async ({ session }, _delta, signal) => {
       const result = await session.propose(prepareCall, correlation(prepareCall.id), signal);
@@ -167,13 +170,44 @@ it('refuses contradictory loop completion before the finalizer even after K2 rep
       if (contradiction !== 'missing-k2-close') f.close();
       if (contradiction === 'parent-cancel') parent.abort();
       return { ...normalAnswer(f.draft), finish: contradiction === 'length' ? 'length' : contradiction === 'unknown-finish' ? 'unknown' : 'stop',
-        ...(contradiction === 'reported-limit' ? { usage: { promptTokens: 1, completionTokens: 8 } } : {}),
+        usage: { promptTokens: 1, completionTokens: 8 },
         ...(contradiction === 'provider-stop' ? { providerStop: 'context-window' as const } : {}) };
-    }, { parent, ...(contradiction === 'reported-limit' ? { completionLimitTokens: 8 } : {}) });
+    }, { parent, completionLimitTokens: 8 });
     const outcome = await p.running;
     process.stdout.write(`${JSON.stringify({ contradiction, finalizers: p.finalizers(), proposals: f.counts().proposals, finish: outcome.finish })}\n`);
-    expect.soft(p.finalizers()).toBe(0); expect.soft(f.counts().proposals).toBe(0); expect.soft(outcome.finish).toBe(contradiction === 'parent-cancel' ? 'cancelled' : 'error');
+    const normal = contradiction === 'normal-at-threshold';
+    expect.soft(p.finalizers()).toBe(normal ? 1 : 0); expect.soft(f.counts().proposals).toBe(normal ? 1 : 0);
+    expect.soft(outcome.finish).toBe(normal ? 'stop' : contradiction === 'parent-cancel' ? 'cancelled' : 'error');
     expect.soft(JSON.stringify(p.events)).not.toContain(f.draft); expect.soft(JSON.stringify(p.history())).not.toContain(f.draft);
+  }
+});
+
+it('closes an active candidate and session on invalid correlation without publishing or executing the refused call, preserving prior uncertain effects', async () => {
+  for (const priorEffectUnknown of [false, true]) {
+    const f = fixture();
+    let sessionPort!: SameTurnToolSessionPort;
+    const p = productionTurn(f, async ({ session }, _delta, signal) => {
+      sessionPort = session;
+      if (priorEffectUnknown) expect((await session.propose({ id: 'prior', name: 'write_item', argumentsJson: '{"path":"previous-item"}' }, correlation('prior'), signal)).outcome.status).toBe('error');
+      const result = await session.propose(prepareCall, correlation(prepareCall.id), signal);
+      f.planning.preparationDelivered(f.pin, result);
+      const refused = await session.propose({ id: 'invalid', name: 'write_item', argumentsJson: '{"path":"unpublished-item"}' }, correlation('foreign'), signal);
+      expect.soft(refused.outcome).toMatchObject({ status: 'error', text: '[deckent] error=tool-correlation-invalid' });
+      expect.soft(signal.aborted).toBe(true);
+      expect.soft((await session.propose(prepareCall, correlation(prepareCall.id), signal)).outcome.text).toContain('tool-session-closed');
+      expect.soft(() => { f.terminal(); f.close(); }).toThrow(expect.objectContaining({ code: 'BRAIN_SAME_TURN_REFUSED' }));
+      return normalAnswer(f.draft);
+    }, { priorEffectUnknown });
+    const outcome = await p.running, closed = await sessionPort.cancel();
+    const publications = p.events.filter(event => ((event.kind === 'tool.started' || event.kind === 'tool.finished') && event.callId === 'invalid')
+      || (event.kind === 'message' && event.message.role === 'assistant' && event.message.toolCalls.some(call => call.id === 'invalid')));
+    process.stdout.write(`${JSON.stringify({ priorEffectUnknown, finalizers: p.finalizers(), proposals: f.counts().proposals,
+      publications: publications.length, executions: p.executions, records: p.records, effects: closed.effects, finish: outcome.finish })}\n`);
+    expect.soft(publications).toHaveLength(0); expect.soft(JSON.stringify(p.history())).not.toContain('unpublished-item');
+    expect.soft(JSON.stringify(p.events)).not.toContain('unpublished-item'); expect.soft(p.targets).toEqual(priorEffectUnknown ? ['previous-item'] : []);
+    expect.soft(p.executions).toEqual(priorEffectUnknown ? ['prior', 'prepare'] : ['prepare']); expect.soft(p.records).toEqual(p.executions);
+    expect.soft(p.finalizers()).toBe(0); expect.soft(f.counts().proposals).toBe(0); expect.soft(outcome.finish).toBe('error');
+    expect.soft(closed).toMatchObject({ pendingCallIds: [], effects: priorEffectUnknown ? 'unknown' : 'settled', termination: 'unverified' });
   }
 });
 
