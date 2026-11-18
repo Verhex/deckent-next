@@ -112,7 +112,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture();
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       // U4E G2: a person's interactive install ends in the profile's starting mode (core:solo: full auto) through the previewed carrier card.
       ['Confirm the previewed permissions', '1\r'], ['Starting permissions: applied', '\u001b']], { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
@@ -146,7 +146,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const repeat = await f.deckent(['init', '--yes', '--scope', 'erp-demo', '--json']);
     expect(repeat.code, repeat.stderr).toBe(0);
     expect(JSON.parse(repeat.stdout).apply.results).toEqual([]);
-    const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['deckent setup', '\u001b']]);
+    const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['Let AI carry out work?', 'n'], ['deckent setup', '\u001b']]);
     expect(rerun.timeout, rerun.output?.slice(-3000)).toBeUndefined();
     expect(rerun.status).toBe(0);
     expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile Solo is already saved in your user's configuration.");
@@ -169,7 +169,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const f = await fixture();
     // BeUser walk16: the yes/no cards of the same flow take the letter they show, (y) on the question and (y) on its apply step.
     const run = await f.pty('interrupt', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['No (n)', 'y'], ['Apply now (y)', 'y'], ['Permissions: applied', '\u001b']]);
+      ['No (n)', 'y'], ['Apply now (y)', 'y'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('Yes (y)'); expect(run.output).toContain('Not now (n)');
     expect(run.status).toBe(0);
@@ -197,7 +197,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(pending.stages.find((stage: { id: string }) => stage.id === 'core:policy')).toMatchObject({ state: 'needs-answer', reason: { code: 'setup.reason.policyPending' } });
     expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8')).toBe(journal);
     const run = await f.pty('resume-pending', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b']]);
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status).toBe(0);
     expect(run.output).toContain('An earlier install stopped midway; what it wrote is unknown');
@@ -209,7 +209,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture();
     const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '2\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       ['Who uses this installation: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status).toBe(0);
@@ -227,7 +227,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await writeFile(path, JSON.stringify({ ...current, revision: `first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION - 1}`, grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Add these rules', 'y'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status).toBe(0);
     const card = run.output.indexOf('Upgrade the permissions'), reopened = run.output.indexOf('Permissions: applied', card);

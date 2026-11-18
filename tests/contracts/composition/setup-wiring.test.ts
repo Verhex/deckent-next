@@ -4,10 +4,13 @@ import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } fro
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
-import { loadConfigLanguage } from '#platform/index.js';
+import * as platform from '#platform/index.js';
+import { verifiedFirstPublicationPolicy, openPermissionModesInstallation } from '#composition/core/installation/index.js';
+import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
+import { loadConfigLanguage, observeBootstrapState, encodeBootstrapJournal, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { createSetupController, setupInitCommand, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
@@ -64,6 +67,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     const first = await f.run(['init', '--yes', '--scope', 'erp-demo', '--lang', 'tr', '--json']);
     expect(first.code, first.stderr).toBe(0);
     const one = f.document(first.stdout);
+    expect(JSON.parse(first.stdout).executionPermission).toMatchObject({ key: 'setup.aiExecution.notAdded', params: { command: 'deckent policy upgrade --template current --only ai-execution --scope erp-demo --preview' } });
     expect(one.apply.results.map(result => [result.stage, result.operation, result.status])).toEqual([['core:policy', 'installation.policy-template', 'applied'],
       ['core:language', 'config.set', 'applied']]);
     const state = (doc: Document, id: string) => doc.stages.find(stage => stage.id === id)?.state;
@@ -243,4 +247,47 @@ describe('I-S3 surface: refusals are typed and name the stage; the window never 
     expect(await controller.step('apply')).toBeNull();
     expect(run.applied).toEqual(['config.set']);
   });
+});
+
+
+describe.skipIf(process.platform !== 'linux')('119 verified first-publication root', () => {
+  it('proves a fresh origin across non-execution writes; rejects unproved journals and changes no bytes', async () => {
+    const f = await fixture();
+    expect((await f.run(['init', '--yes', '--scope', 'erp-demo', '--lang', 'en', '--json'])).code).toBe(0);
+    const tree = async () => {
+      const walk = async (dir: string): Promise<unknown> => Promise.all((await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map(async entry =>
+        [entry.name, entry.isDirectory() ? await walk(join(dir, entry.name)) : (await readFile(join(dir, entry.name))).toString('hex')]));
+      return JSON.stringify(await walk(f.base));
+    };
+    const before = await tree(), root = await verifiedFirstPublicationPolicy(f.root, 'erp-demo', { env: f.env });
+    expect(root).not.toBeNull(); expect(await tree()).toBe(before);
+    const preview = async () => configuredPolicyTemplateUpgrade(f.root, 'erp-demo', { env: f.env },
+      { mode: 'preview', only: 'ai-execution', reason: 'observe' }, undefined, await verifiedFirstPublicationPolicy(f.root, 'erp-demo', { env: f.env }));
+    expect(await preview()).toMatchObject({ executionHistory: 'never' });
+    expect(await configuredPolicyTemplateUpgrade(f.root, 'erp-demo', { env: f.env }, { mode: 'preview', only: 'ai-execution', reason: 'governed CLI' })).toMatchObject({ executionHistory: 'unknown' });
+    const modes = async (modes: readonly string[]) => openPermissionModesInstallation(f.root, 'erp-demo', { modes, apply: true }, { env: f.env }, process.getuid?.(), { attest: async () => true });
+    expect(await modes(['full-auto'])).toMatchObject({ status: 'applied' });
+    expect(await modes([])).toMatchObject({ status: 'applied' });
+    expect(await preview()).toMatchObject({ executionHistory: 'never' });
+    const afterWrites = await tree(); await verifiedFirstPublicationPolicy(f.root, 'erp-demo', { env: f.env }); expect(await tree()).toBe(afterWrites);
+    expect(await verifiedFirstPublicationPolicy(f.root, 'other', { env: f.env })).toBeNull();
+    const path = productResourcePath(resolveProductLayout({ projectRoot: f.root }), 'installationJournal');
+    const original = await readFile(path, 'utf8'), observed = await observeBootstrapState(f.root);
+    const { checksum: ignored, ...payload } = observed.record!; void ignored;
+    // Distinct risks: another plan, adopted bytes, relocated resource paths and no retained journal.
+    await writeFile(path, encodeBootstrapJournal({ ...payload, planDigest: 'f'.repeat(64) }));
+    expect(await preview()).toMatchObject({ executionHistory: 'unknown' });
+    await writeFile(path, encodeBootstrapJournal({ ...payload, resources: payload.resources.map(item => item.resource === 'bindings' ? { ...item, preimageDigest: item.targetDigest } : item) }));
+    expect(await preview()).toMatchObject({ executionHistory: 'unknown' });
+    await writeFile(path, encodeBootstrapJournal({ ...payload, resources: payload.resources.map(item => ({ ...item, path: join(f.base, 'relocated', item.resource) })) }));
+    expect(await preview()).toMatchObject({ executionHistory: 'unknown' });
+    await rm(path); expect(await preview()).toMatchObject({ executionHistory: 'unknown' });
+    await writeFile(path, original, { mode: 0o600 });
+    const observer = vi.spyOn(platform, 'observeBootstrapState');
+    observer.mockResolvedValue({ ...observed, generation: 'changed' });
+    observer.mockResolvedValueOnce(observed);
+    try { expect(await verifiedFirstPublicationPolicy(f.root, 'erp-demo', { env: f.env })).toBeNull(); } finally { observer.mockRestore(); }
+    const archive = join(f.root, '.deckent', 'audit', 'authority-revisions');
+    await rm(archive, { recursive: true }); expect(await preview()).toMatchObject({ executionHistory: 'unknown' });
+  }, 120_000);
 });

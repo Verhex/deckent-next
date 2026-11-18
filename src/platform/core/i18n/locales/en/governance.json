@@ -1301,5 +1301,11 @@
   "policy.aiExecution.previewShort": "Standing AI execution grant for {actor} in {scopes}: beyond this proposal, including your and other actors' Runs.",
   "policy.aiExecution.withdraw": "Managed permission line {id} will be withdrawn in: {scopes}. Custom or role grants can still permit these actions.",
   "policy.aiExecution.covered": "Existing grants cover these cells (removing managed rules does not revoke them): {grants}",
-  "policy.aiExecution.cell": "Rule {id}: {effect} {actions} / {kind} {ids}; scopes {scopes}; principals {actors}"
+  "policy.aiExecution.cell": "Rule {id}: {effect} {actions} / {kind} {ids}; scopes {scopes}; principals {actors}",
+  "cli.init.policyUpgrade.publications": "Publications, in order: {versions}. These are separate publications, not one atomic update. The execution permission is published only after the baseline and system rows are verified.",
+  "cli.init.policyUpgrade.baselineUpdated": "The baseline was updated and verified (revision {baselineRevision}).",
+  "cli.init.policyUpgrade.executionAdded": "AI execution permission was added in a verified publication (revision {revision}).",
+  "cli.init.policyUpgrade.executionNotAdded": "AI execution permission was not added. Preview the permission: {command}",
+  "cli.init.policyUpgrade.executionUnknown": "The state of the AI execution permission could not be verified (operation {key}). Inspect the authority evidence before trying again: {command}",
+  "cli.init.policyUpgrade.publicationUnknown": "The policy publication could not be verified (operation {key}); no second publication was started. Inspect the authority evidence before trying again: {command}"
 }

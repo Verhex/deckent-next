@@ -496,3 +496,41 @@ it('B27a: the foreground final check passes the invocation language explicitly t
     expect(doctor).toHaveBeenCalledWith(['doctor', '--lang', 'en'], expect.objectContaining({ locale: 'en' }));
   } finally { doctor.mockRestore(); }
 });
+
+
+it('119-F1b: one fresh execution preview feeds the witnessed apply and safe history defaults; cancellation and refusals never apply', async () => {
+  const saved: SetupObservation = { ...base, language: { configured: 'en', requested: null, system: null },
+    folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' }, policy: { state: 'current' } };
+  const run = harness({ stdin: tty, stdout: tty, env: { TERM: 'xterm-256color' }, observation: () => saved });
+  const requests: unknown[] = [];
+  let history: 'never' | 'withdrawn' | 'unknown' = 'never', status = 'preview', conflicts: string[] = [], missing: string[] = [], applyStatus = 'upgraded';
+  const preview = () => ({ status, revision: 'a-preview', summary: '+ run/reserve,cancel; attempt/execute,evaluate,read-output,recover-output', missing, reason: null, conflicts,
+    executionHistory: history, executionScopes: ['my-erp', 'other'], rules: [{ id: 'first-run-mcp-progress-reserve', principals: [{ issuer: 'os-user/mcp', subject: 'person' }] }] });
+  run.context.upgradePolicyTemplate = async (_root, _scope, input) => { requests.push(input);
+    return input.mode === 'apply' ? { ...preview(), status: applyStatus } : requests.some(value => (value as { mode: string }).mode === 'apply') && applyStatus === 'upgraded' ? { ...preview(), status: 'current' } : preview(); };
+  const controller = () => createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: saved, registry }, flags: { json: false, yes: false } });
+  const card = vi.spyOn(cards, 'askCliCard');
+  try {
+    card.mockResolvedValue('grant');
+    const first = controller(); await first.offerExecution(); await first.offerExecution();
+    expect(card).toHaveBeenCalledTimes(1);
+    expect(card.mock.calls[0]![0]).toMatchObject({ initial: 'grant', options: [{ id: 'grant', label: 'Grant permission and continue', role: 'yes' }, { id: 'not-now', label: 'Not now', role: 'no' }] });
+    expect(card.mock.calls[0]![0].body!.join('\n')).toContain('Chat and every MCP client');
+    expect(card.mock.calls[0]![0].body!.join('\n')).toContain('my-erp, other');
+    expect(requests).toEqual([{ mode: 'preview', only: 'ai-execution', reason: expect.any(String) }, { mode: 'apply', expect: 'a-preview', only: 'ai-execution', reason: expect.any(String) }, { mode: 'preview', only: 'ai-execution', reason: expect.any(String) }]);
+    for (const prior of ['withdrawn', 'unknown'] as const) {
+      history = prior; requests.length = 0; card.mockClear().mockResolvedValue('not-now');
+      await controller().offerExecution();
+      expect(card.mock.calls[0]![0].initial).toBe('not-now');
+      expect(card.mock.calls[0]![0].body!.join('\n')).toContain(prior === 'withdrawn' ? 'withdrawn on this installation earlier' : 'could not be verified');
+      expect(requests).toHaveLength(1);
+    }
+    requests.length = 0; card.mockClear().mockResolvedValue(null); await controller().offerExecution(); expect(requests).toHaveLength(1);
+    conflicts = ['custom-deny']; requests.length = 0; card.mockClear(); await controller().offerExecution(); expect(card).not.toHaveBeenCalled(); expect(requests).toHaveLength(1);
+    conflicts = []; missing = ['delegation']; await controller().offerExecution(); expect(card).not.toHaveBeenCalled();
+    missing = []; status = 'current'; await controller().offerExecution(); expect(card).not.toHaveBeenCalled();
+    status = 'preview'; history = 'never'; requests.length = 0; applyStatus = 'conflict'; card.mockResolvedValue('grant'); await controller().offerExecution(); expect(run.out()).toContain('Policy changed; preview again'); expect(requests).toHaveLength(2);
+    requests.length = 0; applyStatus = 'unavailable'; await controller().offerExecution(); expect(run.out()).toContain('Outcome could not be verified'); expect(requests).toHaveLength(2);
+    requests.length = 0; run.context.env = { TERM: 'xterm', CODEX_THREAD_ID: 'synthetic-marker' }; card.mockClear(); await controller().offerExecution(); expect(card).not.toHaveBeenCalled(); expect(requests).toHaveLength(1);
+  } finally { card.mockRestore(); }
+});

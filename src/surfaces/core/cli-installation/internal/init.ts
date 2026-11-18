@@ -194,16 +194,18 @@ export async function initCommand(argv: readonly string[], context: Installation
 
 /** `init policy --upgrade` in the person's words: what happened, the exact next command, the rules added, and what is kept as it is. */
 function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>, scope: string, locale: Locale, typed: string): string {
-  // A partial publication must never inherit a generic refusal's claim that nothing was written.
-  if (value.executionStatus || value.publicationStatus) return formatValue({ ...value,
-    nextCommand: value.executionStatus === 'not-added' ? `deckent init policy --scope ${terminalSafeText(scope)} --upgrade --preview${value.person ? ` --person ${terminalSafeText(`${value.person.issuer}/${value.person.subject}`)}` : ''}`
-      : `deckent policy status --scope ${terminalSafeText(scope)}` });
   const revision = value.revision ?? '-', who = (item: Person) => terminalSafeText(`${item.issuer}/${item.subject}`), named = value.person ? who(value.person) : '-';
   // The next command repeats `--person` whenever it was given: without it the apply could be refused or name another person.
   const person = value.person ? ` --person ${named}` : '', handBuilt = value.basis === 'named-person';
   const people = (value.people ?? []).map(who).join(', ') || '-';
   const expect = value.expect ?? revision; // the apply must repeat exactly this token (policy revision + service identity)
-  const head = value.status === 'preview' ? handBuilt ? t('cli.init.policyUpgrade.previewPerson', { scope, revision: expect, person }, locale) : t('cli.init.policyUpgrade.preview', { scope, revision: expect, person }, locale)
+  const command = value.executionStatus === 'not-added' ? `deckent init policy --scope ${terminalSafeText(scope)} --upgrade --preview${person}` : `deckent policy status --scope ${terminalSafeText(scope)}`;
+  // A proven refusal and an unverified publication have different next steps; neither inherits "nothing was written".
+  const head = value.executionStatus === 'added' ? t('cli.init.policyUpgrade.executionAdded', { revision: terminalSafeText(revision) }, locale)
+    : value.executionStatus === 'not-added' ? t('cli.init.policyUpgrade.executionNotAdded', { command }, locale)
+    : value.executionStatus === 'unknown' ? t('cli.init.policyUpgrade.executionUnknown', { key: terminalSafeText(value.publicationKey ?? '-'), command }, locale)
+    : value.publicationStatus === 'unknown' ? t('cli.init.policyUpgrade.publicationUnknown', { key: terminalSafeText(value.publicationKey ?? '-'), command }, locale)
+    : value.status === 'preview' ? handBuilt ? t('cli.init.policyUpgrade.previewPerson', { scope, revision: expect, person }, locale) : t('cli.init.policyUpgrade.preview', { scope, revision: expect, person }, locale)
     : value.status === 'upgraded' ? handBuilt ? t('cli.init.policyUpgrade.upgradedPerson', {}, locale) : t('cli.init.policyUpgrade.upgraded', {}, locale)
     : value.status === 'current' ? handBuilt ? t('cli.init.policyUpgrade.currentPerson', {}, locale) : t('cli.init.policyUpgrade.current', {}, locale)
     : value.reason === 'service-identity-changed' ? t('cli.init.policyUpgrade.serviceIdentityChanged', { scope }, locale)
@@ -221,7 +223,9 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
   const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
   const rows = value.systemRows ? [t('beuser.installation.systemRows', { status: value.systemRows.status, digest: value.systemRows.packageDigest, reason: value.systemRows.reason ?? '-', conflicts: value.systemRows.conflicts.join(', ') || '-', withheld: value.systemRows.withheld.join(', ') || '-' }, locale)] : [];
-  return [head, ...(value.publications?.length ? [formatValue({ publications: value.publications, publicationsAtomic: value.publicationsAtomic })] : []), ...policyExecutionLines(value.rules ?? [], scope, locale, value.executionContext, 'full', value.executionScopes), ...rules, ...kept, ...(value.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(value.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
+  return [...(value.baselineRevision ? [t('cli.init.policyUpgrade.baselineUpdated', { baselineRevision: terminalSafeText(value.baselineRevision) }, locale)] : []), head,
+    ...(value.publications?.length ? [t('cli.init.policyUpgrade.publications', { versions: value.publications.join(' → ') }, locale)] : []),
+    ...policyExecutionLines(value.rules ?? [], scope, locale, value.executionContext, 'full', value.executionScopes), ...rules, ...kept, ...(value.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(value.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...wire, ...rows, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
 }
 /** The `service.identity` line (v12): only when something was written, is planned, names another scope or was refused; kept/skipped say nothing. */
 function serviceIdentityText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>['serviceIdentity'], locale: Locale): string[] {

@@ -92,7 +92,7 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
 export async function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, agents?: readonly string[]): Promise<TemplateUpgradeResult> {
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, agents?: readonly string[], verifiedRoot?: import('#domain/index.js').Policy | null): Promise<TemplateUpgradeResult> {
   if (input.mode !== 'preview' && input.only !== 'ai-proposals') {
     const config = await loadComposedConfig(root, { ...options, heal: false });
     await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), { attest: async () =>
@@ -100,7 +100,7 @@ export async function configuredPolicyTemplateUpgrade(root: string, scopeId: str
   }
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
     new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
-      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));
+      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }, input.mode === 'preview' ? verifiedRoot : null));
 }
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {

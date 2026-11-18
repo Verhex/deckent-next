@@ -131,6 +131,18 @@ old stuck AI Runs. A proposal approved but not started before restart must be pr
 again; cancel its Run first if one exists. A still-pending older card can be answered
 fresh in the new service session, subject to current checks.
 
+At a markerless interactive terminal, `deckent init` offers one separate execution
+permission card after reading the installed baseline and before starting permissions.
+Its full body names the AI identity, scopes, permission cells and withdrawal command.
+A verified never-granted history preselects **Grant permission and continue**; a
+witnessed earlier withdrawal or an unverified history preselects **Not now** and says
+why. A plain **Not now** is not saved, so a later init can offer again. Esc and Ctrl+C
+continue without granting. Scripts, AI-marked terminals, `--yes` and `--json` never
+accept this card. Accepting uses the existing witnessed administrator path and the
+exact preview revision; a changed or unknown result is reported without retry.
+
+When earlier permission state cannot be verified (older or profile-based installations, a moved project, or a damaged archive), the card preselects "Not now".
+
 Startup never adds family 21, and never restores revoked v20 proposal permissions. Existing installations receive no v21 execution permission at startup. The person
 previews `deckent init policy --scope SCOPE_ID --upgrade --preview`, checks the named
 AI identity, scopes, cells, conflicts and existing coverage, then repeats the exact

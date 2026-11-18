@@ -107,7 +107,7 @@ export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplate
   readonly policy: unknown; readonly bindings: unknown;
   readonly systemRows?: { readonly key: string; readonly packageDigest: string; readonly before: import('#domain/index.js').Policy; readonly after: import('#domain/index.js').Policy };
 }
-export interface PreparedPolicyTemplateInstallation { readonly preview: PolicyTemplatePreview; readonly targets: readonly PolicyTemplatePublishTarget[] }
+export interface PreparedPolicyTemplateInstallation { readonly resolvedPolicy: Policy; readonly preview: PolicyTemplatePreview; readonly targets: readonly PolicyTemplatePublishTarget[] }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplateInstallationPorts {
   readonly journal: { observe(): Promise<BootstrapObservation>; write(expected: BootstrapObservation, next: BootstrapJournalPayload): Promise<BootstrapObservation> };
   inspectPreimage(target: PolicyTemplatePublishTarget): Promise<string | null>;
@@ -162,7 +162,7 @@ export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateIn
   const preview: PolicyTemplatePreview = Object.freeze({ schemaVersion: 1, status: 'preview', scopeId, principal, executionScopes: Object.freeze([scopeId]),
     template: { id: template.id, version: template.version }, planDigest, transactionId, paths: { ...input.paths },
     policy: documents.policy, bindings: documents.bindings, ...(rows ? { systemRows: { key: rows.key, packageDigest: rows.packageDigest, before: resolvePolicyBindings(template.policy, template.bindings), after: resolvePolicyBindings(documents.policy, documents.bindings) } } : {}) });
-  return Object.freeze({ preview, targets });
+  return Object.freeze({ preview, targets, resolvedPolicy: resolvePolicyBindings(preview.policy, preview.bindings) });
 }
 
 /**

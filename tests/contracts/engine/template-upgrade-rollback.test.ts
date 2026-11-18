@@ -566,9 +566,11 @@ it.skipIf(process.platform !== 'linux')('119-F1a-2: a proven absent step2 failur
     let printed = '';
     expect(await main(['init', 'policy', '--scope', 's', '--upgrade', '--apply', '--lang', locale], { root: f.root, env: homeEnv(f.root),
       upgradePolicyTemplateInstallation: async () => ({ ...absent, executionStatus: 'unknown' as const }), stdout: { write(value: string) { printed += value; } } })).toBe(0);
-    expect(printed).toContain('unknown'); expect(printed).toContain('deckent policy status --scope s');
+    expect(printed).toContain(locale === 'en' ? 'The state of the AI execution permission could not be verified' : 'Yapay zekâ yürütme izninin durumu doğrulanamadı');
+    expect(printed).toContain(key21); expect(printed).toContain('deckent policy status --scope s');
     expect(printed).not.toContain(t('cli.init.policyUpgrade.unavailable', {}, locale));
     expect(printed).not.toContain('not-added');
+    expect(printed).not.toContain(locale === 'en' ? 'AI execution permission was not added' : 'Yapay zekâ yürütme izni eklenmedi');
   }
 });
 
@@ -716,4 +718,63 @@ it.skipIf(process.platform !== 'linux')('119-C2-R: canonical widened after scope
   const upgrade = new PolicyTemplateUpgrade({ administration: f.administration, approve: f.approve, policy: { load: () => f.source.load(), authorityHistory: async () => forged } }, names);
   expect(await upgrade.run({ scopeId: 's', principal: f.principal, mode: 'rollback', reason: 'forged multi-scope add' })).toMatchObject({ status: 'nothing-to-roll-back', conflicts: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS });
   expect(await f.bytes()).toBe(bytes); expect(f.cards).toBe(cards);
+});
+
+
+describe.skipIf(process.platform !== 'linux')('read-only execution history observation', () => {
+  it('requires revision and full canonical terminal content for a verified root, including bindings and connected edges', async () => {
+    const f = await fixture(grants => grants, false, 'ai-execution');
+    await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...JSON.parse(await f.bytes()), revision: 'a-first-publication' }), { mode: 0o600 });
+    const root = await f.source.load(), input = { scopeId: 's', principal: f.principal, mode: 'preview' as const, only: 'ai-execution' as const, reason: 'observe' };
+    expect(await f.request(input)).toMatchObject({ executionHistory: 'unknown' });
+    expect(await f.request(input, Object.fromEntries(Object.entries(root).reverse()) as typeof root)).toMatchObject({ executionHistory: 'never' });
+    expect(await f.request(input, { ...root, revision: 'a-another' })).toMatchObject({ executionHistory: 'unknown' });
+    expect(await f.request(input, { ...root, grants: root.grants.slice(1) })).toMatchObject({ executionHistory: 'unknown' });
+    expect(await f.request(input, { ...root, bindings: { ...root.bindings, revision: 'other' } } as typeof root)).toMatchObject({ executionHistory: 'unknown' });
+    await f.apply(); await f.rollback();
+    expect(await f.request(input, root)).toMatchObject({ executionHistory: 'withdrawn' });
+    const history = (await f.source.authorityHistory())!;
+    const broken = new PolicyTemplateUpgrade({ administration: f.administration, approve: f.approve, policy: { load: () => f.source.load(),
+      authorityHistory: async () => history.map(entry => ({ ...entry, after: { ...entry.after, grants: [] } })) } }, names);
+    expect(await broken.run(input, root)).toMatchObject({ executionHistory: 'unknown' });
+    const lost = new PolicyTemplateUpgrade({ administration: f.administration, approve: f.approve, policy: { load: () => f.source.load(), authorityHistory: async () => [] } }, names);
+    expect(await lost.run(input, root)).toMatchObject({ executionHistory: 'unknown' });
+  });
+  it('distinguishes never, witnessed governed/installer withdrawal and unprovable history without any write', async () => {
+    const fresh = await fixture(grants => grants, false, 'ai-execution');
+    const preview = () => fresh.request({ scopeId: 's', principal: fresh.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' });
+    const bytes = async () => {
+      const walk = async (dir: string): Promise<unknown> => Promise.all((await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map(async entry =>
+        [entry.name, entry.isDirectory() ? await walk(join(dir, entry.name)) : (await readFile(join(dir, entry.name))).toString('hex')]));
+      return JSON.stringify(await walk(fresh.root));
+    };
+    const before = await bytes();
+    expect(await preview()).toMatchObject({ status: 'preview', executionHistory: 'never' });
+    expect(await fresh.request({ scopeId: 's', principal: fresh.principal, mode: 'preview', reason: 'default preview' })).toMatchObject({ executionHistory: 'never' });
+    expect(await fresh.request({ scopeId: 's', principal: fresh.principal, mode: 'preview', only: 'ai-proposals', reason: 'proposal read' })).not.toHaveProperty('executionHistory');
+    expect(await bytes()).toBe(before); expect(fresh.events).toEqual([]); expect(fresh.records()).toEqual([]); expect(fresh.cards).toBe(0);
+    const uncertain = async (history: readonly AuthorityRevision[] | null | 'throws') => new PolicyTemplateUpgrade({ administration: fresh.administration, approve: fresh.approve,
+      policy: { load: () => fresh.source.load(), authorityHistory: async () => { if (history === 'throws') throw new Error('unreadable'); return history; } } }, names)
+      .run({ scopeId: 's', principal: fresh.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' });
+    expect(await uncertain(null)).toMatchObject({ executionHistory: 'unknown' });
+    expect(await uncertain('throws')).toMatchObject({ executionHistory: 'unknown' });
+    await fresh.apply();
+    await fresh.rollback();
+    expect(await preview()).toMatchObject({ status: 'preview', executionHistory: 'withdrawn' });
+    const history = (await fresh.source.authorityHistory())!;
+    expect(await uncertain([...history, history[0]!])).toMatchObject({ executionHistory: 'unknown' });
+    expect(await uncertain(history.slice(-1))).toMatchObject({ executionHistory: 'unknown' });
+    expect(await uncertain([...history, { ...history[0]!, after: history[0]!.before }])).toMatchObject({ executionHistory: 'unknown' });
+    const installer = await fixture(grants => grants, true, 'ai-execution');
+    await installer.rollback();
+    expect(await installer.request({ scopeId: 's', principal: installer.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' })).toMatchObject({ executionHistory: 'withdrawn' });
+    const gap = await fixture(grants => grants, false, 'ai-execution');
+    await writeFile(join(gap.root, 'policy.json'), JSON.stringify({ ...JSON.parse(await gap.bytes()), revision: 'a-unavailable-prefix', grants: JSON.parse(await gap.bytes()).grants.map((rule: PolicyGrant) => rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) }), { mode: 0o600 });
+    await gap.apply(); await gap.rollback();
+    expect(await gap.request({ scopeId: 's', principal: gap.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' })).toMatchObject({ executionHistory: 'withdrawn' });
+    expect(await gap.request({ scopeId: 'other', principal: gap.principal, mode: 'preview', only: 'ai-execution', reason: 'same removed multi-scope permission' })).toMatchObject({ executionHistory: 'withdrawn' });
+    const v20 = await fixture(grants => grants, false, 'ai-execution');
+    await v20.source.updateAuthority(snapshot => ({ write: { policy: { ...snapshot.policy, revision: 'a-v20-only' }, bindings: null, order: 'policy-first' }, result: null }), 'v20-only');
+    expect(await v20.request({ scopeId: 's', principal: v20.principal, mode: 'preview', only: 'ai-execution', reason: 'observe' })).toMatchObject({ executionHistory: 'never' });
+  });
 });

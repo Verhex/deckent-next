@@ -12,7 +12,7 @@ export function decisionArmLabels(locale: Locale): DecisionArmLabels {
 /** One answer of a CLI card (the terminal's question option): a yes/no answer declares `role` (the card shows and takes (y)/(n)); others may show a `key`. */
 export type CliCardOption = QuestionOption;
 /** A card: title, body lines (untrusted text is redacted and made terminal-safe), answers; `initial` preselects one (none: Enter alone answers nothing). */
-export type CliCardRequest = Readonly<{ title: string; body?: readonly string[]; options: readonly CliCardOption[]; initial?: string }>;
+export type CliCardRequest = Readonly<{ title: string; body?: readonly string[]; options: readonly CliCardOption[]; initial?: string; hints?: string }>;
 export type CliCardIo = Readonly<{ locale: Locale; stdin?: Readable & { isTTY?: boolean; setRawMode?: unknown }; stdout?: unknown; env?: NodeJS.ProcessEnv;
   agentEnvironment?: readonly string[]; signal?: AbortSignal; known?: KnownSecretSnapshot }>;
 
@@ -61,7 +61,7 @@ export async function askCliCard(request: CliCardRequest, io: CliCardIo): Promis
   const giveBack = lendHeldInput(stdin);
   try {
     return await view.mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
-      ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: t('cli.human.card.hints', {}, io.locale) });
+      ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: request.hints === undefined ? t('cli.human.card.hints', {}, io.locale) : request.hints });
   } finally { giveBack(); }
 }
 // Scope picker for resolveCommandScope: `pick: request => askCliCard(request, io)`.

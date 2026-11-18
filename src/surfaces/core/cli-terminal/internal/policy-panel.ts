@@ -8,7 +8,7 @@ import type { PolicyPanelPort } from '#surfaces/core/terminal-panels/index.js';
 const AI_PROPOSALS = ':ai-proposals';
 type AiState = 'on' | 'off' | 'partial' | 'covered' | 'unavailable';
 /** The governed current first-run upgrade (`deckent policy upgrade --template current`, and this row): the engine's result, which a surface only words. */
-export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[];
+export interface PolicyUpgradeView { readonly executionHistory?: 'never' | 'withdrawn' | 'unknown'; readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[];
   /** A scoped (`only`) read: the rules it would add and the current delta's rules held now. */ readonly rules?: readonly { readonly id: string }[]; readonly executionContext?: readonly unknown[]; readonly executionScopes?: readonly string[]; readonly held?: readonly string[];
   /** A scoped read: the delta rules an existing allow covers instead, with that allow's id. */ readonly covered?: readonly { readonly ruleId: string; readonly heldBy: string }[] }
 export type PolicyTemplateUpgradePort = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' },

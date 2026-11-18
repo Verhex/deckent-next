@@ -1301,5 +1301,11 @@
   "policy.aiExecution.previewShort": "Kalıcı yapay zekâ yürütme izni: {actor}, {scopes} kapsamında bu öneriyle sınırlı değildir; senin ve başkalarının işlerini de kapsar.",
   "policy.aiExecution.withdraw": "Yönetilen izin satırı {id} şu kapsamlarda kaldırılacak: {scopes}. Özel veya rol izinleri bu eylemlere hâlâ izin verebilir.",
   "policy.aiExecution.covered": "Bu hücreleri mevcut izinler karşılıyor (yönetilen kuralları kaldırmak bunları geri almaz): {grants}",
-  "policy.aiExecution.cell": "Kural {id}: {effect} {actions} / {kind} {ids}; kapsamlar {scopes}; kimlikler {actors}"
+  "policy.aiExecution.cell": "Kural {id}: {effect} {actions} / {kind} {ids}; kapsamlar {scopes}; kimlikler {actors}",
+  "cli.init.policyUpgrade.publications": "Yayın sırası: {versions}. Bunlar ayrı yayınlardır; birlikte tek bir işlem olarak tamamlanmazlar. Yürütme izni ancak temel politika ve sistem kuralları doğrulandıktan sonra yayımlanır.",
+  "cli.init.policyUpgrade.baselineUpdated": "Temel politika güncellendi ve doğrulandı (sürüm {baselineRevision}).",
+  "cli.init.policyUpgrade.executionAdded": "Yapay zekâ yürütme izni doğrulanmış bir yayınla eklendi (sürüm {revision}).",
+  "cli.init.policyUpgrade.executionNotAdded": "Yapay zekâ yürütme izni eklenmedi. İzni önizle: {command}",
+  "cli.init.policyUpgrade.executionUnknown": "Yapay zekâ yürütme izninin durumu doğrulanamadı (işlem {key}). Yeniden denemeden önce yetki kanıtını incele: {command}",
+  "cli.init.policyUpgrade.publicationUnknown": "Politika yayını doğrulanamadı (işlem {key}); ikinci yayın başlatılmadı. Yeniden denemeden önce yetki kanıtını incele: {command}"
 }

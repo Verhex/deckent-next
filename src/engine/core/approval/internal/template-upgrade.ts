@@ -19,6 +19,8 @@ export interface TemplateUpgradeResult {
   /** Effective grants used only to describe a genuine partial execution upgrade. */
   readonly executionContext?: readonly PolicyGrant[];
   /** Validated scopes from the template planner, for the execution notice only. */ readonly executionScopes?: readonly string[];
+  /** Read-only observation of witnessed execution adds for this principal and scope; never persisted. */
+  readonly executionHistory?: 'never' | 'withdrawn' | 'unknown';
   readonly summary: string | null;
   readonly missing: readonly TemplateUpgradeMissing[];
   readonly reason: string | null;
@@ -94,11 +96,46 @@ export class PolicyTemplateUpgrade {
           target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: entry.before.revision });
     });
   }
+  private async executionHistory(policy: Policy, principal: VerifiedPrincipal, scopeId: string, root?: Policy | null): Promise<'never' | 'withdrawn' | 'unknown'> {
+    try {
+      const history = await this.deps.policy.authorityHistory?.();
+      if (!history || new Set(history.map(entry => entry.key)).size !== history.length) return 'unknown';
+      const chain: AuthorityRevision[] = [], visited = new Set<string>();
+      const canonical = (value: Policy) => JSON.stringify(immutableJsonObjectSchema.parse(value));
+      let terminal = policy, revision = policy.revision;
+      while (true) {
+        if (visited.has(revision)) return 'unknown';
+        visited.add(revision);
+        const candidates = history.filter(entry => entry.after.revision === revision);
+        if (candidates.length > 1) return 'unknown';
+        const entry = candidates[0];
+        if (!entry) break;
+        if (history.filter(item => item.before.revision === entry.before.revision).length !== 1) return 'unknown';
+        if (canonical(entry.after) !== canonical(terminal)) return 'unknown';
+        chain.push(entry); terminal = entry.before; revision = entry.before.revision;
+      }
+      // Disconnected, truncated or duplicate archive branches cannot prove the installation's earlier state.
+      if (chain.length !== history.length) return 'unknown';
+      const family = (rule: PolicyGrant) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id) && rule.scopes !== 'all'
+        && rule.scopes.includes(scopeId) && firstRunExecutionRules([], principal, rule.scopes).wanted.some(want => JSON.stringify(want) === JSON.stringify(rule));
+      const witnessed = chain.flatMap(entry => entry.after.grants.filter(rule => family(rule) && rule.scopes !== 'all' && rule.scopes.some(scope => this.upgraded(entry, principal, scope, false, rule))));
+      if ([...terminal.grants, ...(root?.grants ?? [])].some(family)
+        || policy.grants.some(rule => family(rule) && !witnessed.some(added => JSON.stringify(added) === JSON.stringify(rule)))) return 'unknown';
+      if (witnessed.some(rule => !policy.grants.some(held => JSON.stringify(held) === JSON.stringify(rule)))) return 'withdrawn';
+      // A witnessed add proves withdrawal above a missing older prefix, just as rollback does; absence never proves 'never'.
+      if (administeredSince(revision) && !(root && terminal.revision === root.revision && canonical(terminal) === canonical(root))) return 'unknown';
+      // An unproved current/initial execution rule must never be described as never granted.
+      if (policy.grants.some(family) || (chain.at(-1)?.before.grants ?? []).some(family)) return 'unknown';
+      return 'never';
+    } catch { return 'unknown'; }
+  }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
-    readonly reason: string; /** The v20 proposal toggle/rollback selects its family explicitly. */ readonly only?: 'ai-proposals' | 'ai-execution' }): Promise<TemplateUpgradeResult> {
+    readonly reason: string; /** The v20 proposal toggle/rollback selects its family explicitly. */ readonly only?: 'ai-proposals' | 'ai-execution' }, verifiedRoot?: Policy | null): Promise<TemplateUpgradeResult> {
     const policy = await this.deps.policy.load();
+    const executionHistory = input.mode === 'preview' && input.only !== 'ai-proposals'
+      ? { executionHistory: await this.executionHistory(policy, input.principal, input.scopeId, verifiedRoot) } : {};
     const result = (status: TemplateUpgradeResult['status'], extra: Partial<TemplateUpgradeResult> = {}): TemplateUpgradeResult => Object.freeze({ schemaVersion: 1, status,
-      revision: policy.revision, rules: [], summary: null, missing: [], reason: null, conflicts: [], ...extra });
+      revision: policy.revision, rules: [], summary: null, missing: [], reason: null, conflicts: [], ...executionHistory, ...extra });
     if (policy.schemaVersion !== 2) return result('unavailable', { reason: 'invalid' });
     if (input.mode !== 'preview' && isAiPrincipal(input.principal)) return result('refused', { missing: ['policy-administer'] });
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });

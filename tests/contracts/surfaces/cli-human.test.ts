@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 import { toInputJsonSchema } from '#platform/core/validate/index.js';
 import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, resolveGlobalConfigPaths, validateConfig, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
@@ -314,6 +315,13 @@ describe('TTY card contract', () => {
     return { stdin, stdout, written };
   };
   const settledWithin = <T,>(work: Promise<T>, ms: number) => Promise.race([work, new Promise<'still-waiting'>(resolve => { setTimeout(() => resolve('still-waiting'), ms).unref(); })]);
+  it('119: an existing card keeps its exact default hint bytes when no custom hints are supplied', async () => {
+    const controller = new AbortController(), io = terminalPair(() => { if (io.written.join('').includes('Enter confirm')) controller.abort(); });
+    await askCliCard({ title: 'Existing card', options: [{ id: 'a', label: 'A' }] },
+      { locale: 'en', env: { NO_COLOR: '1' }, stdin: io.stdin, stdout: io.stdout, signal: controller.signal });
+    const row = terminalBuffers(io.written.join(''), 80, 24).text.split('\n').find(line => line.includes('↑↓ choose'));
+    expect(row).toBe(`│ ${'↑↓ choose · Enter confirm · Esc cancel · Ctrl+Y copy (card and options)'.padEnd(76)} │`);
+  });
   it('108 probe 3: /policy typed in separate reads never answers a CLI card whose default is No', async () => {
     const io = terminalPair(), controller = new AbortController();
     let answer: string | null | undefined;

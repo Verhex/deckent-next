@@ -35,6 +35,16 @@ type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonl
  * reads only the existing read-only handlers below, and every apply answers `not-wired`.
  */
 export interface SetupCommandContext extends CliBaseContext {
+  /** Existing governed upgrade, exposed on setup's host context; preview reads, apply uses its witnessed writer. */
+  upgradePolicyTemplate?: (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, options: { readonly env: NodeJS.ProcessEnv }) => Promise<Readonly<{
+    status: string; revision: string; summary: string | null; missing: readonly string[]; reason: string | null; conflicts?: readonly string[];
+    executionHistory?: 'never' | 'withdrawn' | 'unknown'; executionScopes?: readonly string[]; held?: readonly string[];
+    rules?: readonly { readonly id: string; readonly principals?: 'all' | readonly { readonly issuer: string; readonly subject: string }[] }[];
+    executionContext?: readonly unknown[]; covered?: readonly { readonly ruleId: string; readonly heldBy: string }[];
+  }>>;
+
+  /** Wizard-only preview; composition supplies the verified first-publication root, never the request. */
+  previewSetupExecutionPermission?: (root: string, scopeId: string, options: { readonly env: NodeJS.ProcessEnv }) => ReturnType<NonNullable<SetupCommandContext['upgradePolicyTemplate']>>;
   observeSetup?: SetupObserveHandler;
   applySetupStage?: SetupApplyHandler;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;

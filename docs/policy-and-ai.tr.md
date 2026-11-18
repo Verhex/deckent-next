@@ -130,6 +130,19 @@ onaylanmış ama başlamamış öneri yeniden önerilmelidir; iş kaydı varsa �
 Henüz cevaplanmamış eski kart, güncel kontroller geçerliyken yeni servis oturumunda
 taze bir cevapla onaylanabilir.
 
+Ajan işareti bulunmayan kişinin etkileşimli terminalinde `deckent init`, kurulu ilk
+politikayı okuduktan sonra ve başlangıç izinlerinden önce ayrı bir yürütme izni kartı
+sunar. Tam gövde yapay zekâ kimliğini, kapsamları, izin hücrelerini ve geri alma
+komutunu gösterir. Geçmişte hiç verilmediği doğrulanırsa **İzni ver ve devam et**;
+önceki geri alma doğrulanırsa veya geçmiş doğrulanamazsa **Şimdi değil** seçilidir ve
+nedeni söylenir. Yalnız **Şimdi değil** cevabı saklanmaz; sonraki kurulum yeniden
+sorabilir. Esc ve Ctrl+C izin vermeden devam eder. Betikler, yapay zekâ işaretli
+terminaller, `--yes` ve `--json` bu kartı onaylamaz. Kabul mevcut tanıklı yönetici
+yolunu ve önizlemenin tam sürümünü kullanır; değişmiş veya belirsiz sonuç yeniden
+denenmeden bildirilir.
+
+Önceki izin durumu doğrulanamadığında (eski veya profil tabanlı kurulum, taşınmış proje ya da hasarlı arşiv) kart "Şimdi değil" seçeneğini öne çıkarır.
+
 Başlangıç aile 21’i eklemez ve geri alınmış v20 öneri izinlerini yeniden açmaz. Mevcut kurulumlara başlangıçta v21 yürütme izni eklenmez. Kişi
 `deckent init policy --scope SCOPE_ID --upgrade --preview` ile yapay zekâ kimliğini,
 kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; kendi terminalinde

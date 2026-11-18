@@ -8,7 +8,8 @@ import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from '
 import { planFor, unattendedAnswers, type SetupFlags } from './command.js';
 import { observeSetup } from './observe.js';
 import { isForegroundStage, runForegroundStage } from './foreground.js';
-import { applyLine, languageName, stageCommand, stageStateLabel, stageText, stageTitle } from './render.js';
+import { setupMessage, applyLine, languageName, stageCommand, stageStateLabel, stageText, stageTitle } from './render.js';
+import { offerExecutionPermission, type ExecutionPermissionNotice } from './execution-permission.js';
 import registry from './modes.json' with { type: 'json' };
 
 type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
@@ -61,7 +62,19 @@ const errorCode = (error: unknown) => { const value = (error as { code?: unknown
 export function createSetupController(input: Readonly<{ context: SetupCommandContext; root: string; locale: Locale; observed: Observed; flags: SetupFlags }>) {
   const { context, root, flags } = input, later = new Set<string>(), results: SetupApplyResult[] = [];
   let locale = input.locale, observed = input.observed, values = unattendedAnswers(observed.observation, flags, true, observed.registry), note = '', pending: SetupStage | null = null;
+  let executionOffered = false, executionNotice: ExecutionPermissionNotice | undefined;
   const plan = () => planFor(observed, values);
+  const canOfferExecution = () => !executionOffered && !!context.upgradePolicyTemplate && !!scopeId()
+    && plan().stages.some(stage => stage.id === 'core:policy' && (stage.state === 'done' || stage.state === 'skipped'));
+  const offerExecution = async () => {
+    if (!canOfferExecution()) return false;
+    executionOffered = true;
+    executionNotice = await offerExecutionPermission(context, root, scopeId()!, locale, true);
+    const text = setupMessage(executionNotice.key, executionNotice.params, locale);
+    if (!note) note = text;
+    (context.stdout ?? process.stdout).write(`${text}\n`);
+    return true;
+  };
   const scopeId = () => typeof values['core:folder'] === 'string' ? values['core:folder'] : observed.observation.folder.configuredScope ?? null;
   const choices = (stage: SetupStage | null) => stageChoices(stage, observed.observation, locale, observed.registry, context.listIdentityProfiles?.([]).profiles);
   const model = (): SetupWindowModel => {
@@ -106,15 +119,16 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
       await settle(stage, await (context.applySetupStage ?? notWiredApply)(root, target, options)
         .catch((error: unknown): SetupApplyResult => ({ stage: stage.id, operation: target.operation!.id, status: 'refused', code: errorCode(error) })));
     }
-    return model();
+    return canOfferExecution() ? null : model();
   };
   /** Runs the stage `step` closed the window for, on the plain terminal; false when nothing is pending (the person closed the window). */
   const runPending = async (): Promise<boolean> => {
     const stage = pending;
     pending = null;
-    if (!stage) return false;
+    if (!stage) return await offerExecution() && !executionNotice?.interrupted;
     await settle(stage, await runForegroundStage(context, root, stage, scopeId(), locale));
-    return true;
+    await offerExecution();
+    return !executionNotice?.interrupted;
   };
-  return { model, step, runPending, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
+  return { model, step, runPending, offerExecution, interrupted: () => executionNotice?.interrupted, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
 }

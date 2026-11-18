@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -16,15 +17,28 @@ const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const ROWS = 40, COLUMNS = 100;
 /** python3 `pty` driver: each step waits for its text in the output written after the previous step's keys, then sends its keys one per write. */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, hashlib, json, os, pty, select, struct, sys, termios, time
 steps, argv, cwd = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(cwd)
     os.execvp(argv[0], argv)
-fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', ${ROWS}, ${COLUMNS}, 0, 0))
+size = json.loads(sys.argv[4]) if len(sys.argv) > 4 else [${ROWS}, ${COLUMNS}]
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', size[0], size[1], 0, 0))
 out = b''
+snapshots = []
 marks = []
+def snapshot():
+    result = {}
+    root = os.path.join(cwd, '.deckent')
+    for directory, dirs, files in os.walk(root):
+        for name in dirs:
+            result[os.path.relpath(os.path.join(directory, name), root) + '/'] = None
+        for name in files:
+            path = os.path.join(directory, name)
+            with open(path, 'rb') as source:
+                result[os.path.relpath(path, root)] = hashlib.sha256(source.read()).hexdigest()
+    return result
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -37,17 +51,28 @@ def read_for(seconds):
             out += chunk
     return True
 since = 0
-for wait, send in steps:
+for step in steps:
+    wait, send = step[:2]
     deadline = time.time() + 25
     while wait.encode() not in out[since:]:
         alive = read_for(0.1)
         if wait.encode() in out[since:]: break
         if time.time() > deadline or not alive:
             os.kill(pid, 9); sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
-    read_for(0.4)
+    read_for(step[2] if len(step) > 2 else 0.4)
     marks.append(len(out.decode('utf8', 'replace')))
     since = len(out)
-    if send.startswith('\x1b['):
+    if send == 'SNAPSHOT':
+        snapshots.append(snapshot())
+    elif send.startswith('RESIZE:'):
+        rows, columns = json.loads(send[7:])
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, columns, 0, 0))
+        os.kill(pid, 28)
+    elif send.startswith('SIGNAL:'):
+        os.kill(pid, int(send[7:]))
+    elif send.startswith('RAW:'):
+        os.write(fd, send[4:].encode())
+    elif send.startswith('\x1b['):
         os.write(fd, send.encode()); time.sleep(0.15)
     else:
         for char in send:
@@ -61,7 +86,7 @@ while status is None and time.time() < deadline:
 if status is None:
     os.kill(pid, 9); status = 'killed'
 read_for(0.2)
-sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace'), 'marks': marks}))
+sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace'), 'marks': marks, 'snapshots': snapshots}))
 `;
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -123,4 +148,110 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
     expect(run.output.slice(run.marks[2])).toContain('deckent setup plan'); expect(run.output).toContain('Nothing was applied.');
     expect(await readdir(root)).toEqual(['package.json']);
   }, 150_000);
+});
+
+
+describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the production init PTY', () => {
+  it('EN/TR: guarded quiet Enter adds exactly six cells once; rollback and missing history preselect not-now; skips write nothing', async () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const home = await mkdtemp(join(tmpdir(), 'deckent-init-execution-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-execution-root-'));
+      roots.push(home, root);
+      const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
+      const run = async (args: string[], steps: unknown[], size = [24, 60], argv = [process.execPath, cli, ...args]) => {
+        const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify(argv), root, JSON.stringify(size)],
+          { env, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
+        const result = JSON.parse(stdout) as { status: number; output: string; marks: number[]; snapshots: Record<string, string | null>[]; timeout?: string };
+        expect(result.timeout, result.output?.slice(-4000)).toBeUndefined(); expect(result.status, result.output?.slice(-4000)).toBe(0);
+        return result;
+      };
+      await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp', '--lang', locale, '--json'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000 });
+      const observed = await execute(process.execPath, [cli, 'policy', 'upgrade', '--template', 'current', '--only', 'ai-execution', '--scope', 'erp', '--preview', '--json'], { cwd: root, env, timeout: 120_000 });
+      expect(JSON.parse(observed.stdout)).toMatchObject({ executionHistory: 'unknown' }); // Governed CLI stays archive-only.
+      // A real, witnessed non-execution write before a second init must preserve the fresh-origin default.
+      await run(['init', 'policy', '--modes', 'full-auto', '--scope', 'erp', '--apply', '--lang', locale], [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']]);
+      const wizardPreview = await execute(process.execPath, ['--input-type=module', '-e', `
+        const { createCliHost } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))});
+        const host = createCliHost({ root: process.cwd(), locale: 'en', signal: new AbortController().signal });
+        console.log(JSON.stringify(await host.previewSetupExecutionPermission(process.cwd(), 'erp', { env: process.env })));
+      `], { cwd: root, env, timeout: 120_000 });
+      expect(JSON.parse(wizardPreview.stdout)).toMatchObject({ executionHistory: 'never' });
+      const title = locale === 'en' ? 'Let AI carry out work?' : 'Yapay zekâya işleri yürütme izni verilsin mi?';
+      const keys = locale === 'en' ? 'Enter confirm' : 'Enter onayla', profile = locale === 'en' ? '> 5. Who uses' : '> 5. Kurulumu kim';
+      const typed = locale === 'en' ? 'Text typed here is not an answer.' : 'Buraya yazılan metin bir cevap değildir.';
+      const unchosen = locale === 'en' ? 'Nothing was chosen.' : 'Hiçbir şey seçilmedi.';
+      const grant = locale === 'en' ? 'Grant permission and continue' : 'İzni ver ve devam et';
+      const notNow = locale === 'en' ? 'Not now' : 'Şimdi değil';
+      // No input, buffered Return/repeat/burst/paste, and text+Enter must all leave this very same card open.
+      const accepted = await run(['init', '--lang', locale], [[title, '\r\r\r\r', 0], [keys, 'RAW:\r\r'], ['', 'RAW:\u001b[200~grant\r\u001b[201~'],
+        [typed, '\r'], [unchosen, '\u001b[A'], ['', '/policy'], [typed, '\r'], [unchosen, '\u001b[A'],
+        ['', '\u001b[6~'], ['', '\u001b[5~'], ['', '\u001b[F'], ['', '\u001b[H'], ['', 'RESIZE:[30,90]'], ['', '\r'], [profile, '\u001b']]);
+      const transcripts = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (transcripts) await writeFile(join(transcripts, `119-execution-${locale}.json`), JSON.stringify(accepted));
+      const first = terminalBuffers(accepted.output.slice(0, accepted.marks[1]!), 60, 24).text;
+      expect(first).toContain('PageUp/PageDown');
+      expect(first).toContain(grant); expect(first).toContain(notNow); expect(first).toMatch(/[›>] 1\./u); expect(first).toMatch(/\d+-\d+\/\d+/u);
+      const fixedHintRows: number[] = [];
+      for (const mark of [8, 9, 10, 11]) {
+        const screen = terminalBuffers(accepted.output.slice(0, accepted.marks[mark]!), 60, 24).text;
+        expect(screen).toContain(grant); expect(screen).toContain(notNow); expect(screen).toContain('PageUp/PageDown');
+        fixedHintRows.push(screen.split('\n').findIndex(row => row.includes('PageUp/PageDown')));
+      }
+      expect(fixedHintRows).toEqual(fixedHintRows.map(() => fixedHintRows[0]));
+      const resized = terminalBuffers(accepted.output.slice(0, accepted.marks[13]!), 90, 30).text;
+      expect(resized).toContain('PageUp/PageDown'); expect(resized).toContain(grant); expect(resized).toContain(notNow);
+      const policyPath = join(root, '.deckent', 'policy.json');
+      const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; actions: string[]; resource: { kind: string; ids: string[] }; scopes: string[] }[] };
+      const rules = policy.grants.filter(rule => rule.id.startsWith('first-run-mcp-progress-'));
+      expect(rules).toHaveLength(3);
+      expect(rules.flatMap(rule => rule.actions.map(action => `${rule.resource.kind}/${action}`)).sort()).toEqual(['attempt/evaluate', 'attempt/execute', 'attempt/read-output', 'attempt/recover-output', 'run/cancel', 'run/reserve']);
+      expect(rules.every(rule => JSON.stringify(rule.scopes) === '["erp"]')).toBe(true);
+      expect(accepted.output.match(new RegExp(title.replace('?', '\\?'), 'gu'))?.length).toBeGreaterThan(0);
+      expect(accepted.output).not.toContain('Approval required');
+      const rollback = await run(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale], []);
+      expect(rollback.output).not.toContain(title);
+      const snapshot = async () => {
+        const result: Record<string, string | null> = {};
+        const walk = async (path: string, prefix = ''): Promise<void> => {
+          for (const file of await readdir(path, { withFileTypes: true })) {
+            const name = prefix + file.name;
+            if (file.isDirectory()) { result[name + '/'] = null; await walk(join(path, file.name), name + '/'); }
+            else result[name] = createHash('sha256').update(await readFile(join(path, file.name))).digest('hex');
+          }
+        };
+        await walk(join(root, '.deckent')); return result;
+      };
+      const withdrawn = locale === 'en' ? 'This permission was withdrawn on this installation earlier.' : 'Bu izin bu kurulumda daha önce geri alınmıştı.';
+      const skipped = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']]);
+      const screen = terminalBuffers(skipped.output.slice(0, skipped.marks[0]!), 60, 24).text;
+      expect(screen).toContain(withdrawn.slice(0, 35)); expect(screen).toMatch(/[›>] 2\./u); expect(await snapshot()).toEqual(skipped.snapshots[0]);
+      // Esc, Ctrl+C and the raw terminal's Ctrl+D cancel without touching any retained installation state.
+      for (const key of ['\u001b', '\u0003', '\u0004']) {
+        const cancelled = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', key], [profile, '\u001b']]);
+        expect(await snapshot()).toEqual(cancelled.snapshots[0]);
+      }
+      await rm(join(root, '.deckent', 'audit', 'authority-revisions'), { recursive: true, force: true });
+      const unknown = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']]);
+      const unknownScreen = terminalBuffers(unknown.output.slice(0, unknown.marks[0]!), 60, 24).text;
+      expect(unknownScreen).toMatch(/[›>] 2\./u);
+      const unknownWords = unknownScreen.split('\n').map(line => line.replace(/^│\s*|\s*│$/gu, '').trim()).join(' ').replace(/\s+/gu, ' ');
+      expect(unknownWords).toContain(locale === 'en' ? 'The earlier state of this permission could not be verified. Not now is preselected.' : 'Bu iznin önceki durumu doğrulanamadı. Şimdi değil seçili.');
+      expect(await snapshot()).toEqual(unknown.snapshots[0]);
+      // Deliver actual stream end and AbortSignal to the assembled production card on this owned PTY.
+      // init's executable has no signal-to-abort adapter; this tiny driver supplies its existing host signal seam.
+      const interrupted = `
+        const { createCliHost } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))});
+        const { setupInitCommand } = await import(${JSON.stringify(resolve('dist/surfaces/core/setup/index.js'))});
+        const controller = new AbortController();
+        process.once('SIGUSR1', () => process.stdin.push(null)); process.on('SIGUSR2', () => controller.abort());
+        const host = createCliHost({ root: process.cwd(), locale: ${JSON.stringify(locale)}, signal: controller.signal });
+        host.initialize();
+        await setupInitCommand(['init', '--lang', ${JSON.stringify(locale)}], host);
+      `;
+      const eof = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:10']], [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
+      expect(eof.output).toContain(locale === 'en' ? 'Setup interrupted; the first policy was kept.' : 'Kurulum kesildi; ilk politika korundu.');
+      expect(await snapshot()).toEqual(eof.snapshots[0]);
+      const aborted = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:12'], [profile, '\u001b']], [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
+      expect(await snapshot()).toEqual(aborted.snapshots[0]);
+    }
+  }, 240_000);
 });

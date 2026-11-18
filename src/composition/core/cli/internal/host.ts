@@ -42,7 +42,7 @@ import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredP
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
-import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
+import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, verifiedFirstPublicationPolicy, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, t, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -70,7 +70,8 @@ type CliHostBase = { readonly root: string; readonly locale: Locale; readonly si
  * COLDSTART: every host operation of the CLI, bound to its composition unit. The entry loads this module only when a command or the terminal
  * runs (`loadHost`), so help, `--version` and an unknown command never evaluate the adapters and engine graph behind these imports.
  */
-export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & object {
+type SetupExecutionPreview = (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => ReturnType<typeof configuredPolicyTemplateUpgrade>;
+export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & { readonly previewSetupExecutionPermission: SetupExecutionPreview } & object {
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
   const narrowDirectory = async (path: string, json = false, language: Locale = locale, setup = false) => {
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
@@ -282,5 +283,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   };
-  return { ...host, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
+  const previewSetupExecutionPermission = async (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => typed(configuredPolicyTemplateUpgrade(root, scopeId, options,
+    { mode: 'preview', only: 'ai-execution', reason: t('cli.policy.upgrade.reason', {}, locale) }, base.agentEnvironment, await verifiedFirstPublicationPolicy(root, scopeId, options)));
+  return { ...host, previewSetupExecutionPermission, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
 }
