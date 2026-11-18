@@ -693,6 +693,7 @@
   "error.BRAIN_OUTPUT_TRUNCATED": "Planning used its completion budget ({maxCompletionTokens} tokens) without an answer. Increase brain_planner.maxCompletionTokens within the model profile and context limits, or select brain_planner.reasoning=off if the model supports it. Submit a new request. No Run was created.",
   "error.BRAIN_OUTCOME_UNKNOWN": "The planning invocation has no confirmed response. Inspect its receipt before continuing; no automatic retry.",
   "error.BRAIN_CANCELLED": "Planning was cancelled. No Run was admitted. Provider effects remain subject to invocation settlement.",
+  "error.BRAIN_SAME_TURN_REFUSED": "Plan not completed; no work started.",
   "brain.preview": "Plan for Run {run} · {status}",
   "brain.scope": "Scope {scope} · requested by {actor}",
   "brain.task": "Task {id}: {text} · kind {kind} · WorkClass {workClass}",

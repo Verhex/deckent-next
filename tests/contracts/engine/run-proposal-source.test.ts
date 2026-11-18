@@ -85,3 +85,17 @@ it('accepts a system-narrowed Brain ceiling and refuses one the model never auth
   for (const altered of [brain(10_001), brain(100, 'EUR'), { ...brain(100), graph: { ...modelProposal.graph, revision: 2 } }])
     expect(() => assertRunProposalSource(altered, receipt, JSON.stringify(draft))).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
 });
+
+it('keeps the same-turn response receipt distinct from the validated brain-output projection and refuses framing in the stored draft', () => {
+  const draft = { graph: modelProposal.graph, budgetCeiling: modelProposal.budgetCeiling, requiredPermissions: modelProposal.requiredPermissions };
+  if (modelProposal.source.kind !== 'model') throw new Error('fixture');
+  const D = ' \n' + JSON.stringify(draft) + '\t\n';
+  const contribution = { schemaVersion: 2 as const, billingAxis: 'metered' as const, template: { id: 'fixture', version: 1, digest: sha256('template') },
+    inputDigest: sha256('input'), contextDigest: sha256('planning context'), outputDigest: brainOutputDigest(draft), requestDigest,
+    activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
+  const brain = { ...modelProposal, source: { ...modelProposal.source, contribution } };
+  expect(contribution.outputDigest).not.toBe(sha256(D)); expect(contribution.outputDigest).not.toBe(responseDigest);
+  expect(() => assertRunProposalSource(brain, receipt, D)).not.toThrow();
+  expect(() => assertRunProposalSource(brain, receipt, 'DECKENT-PLAN-CHALLENGE/1 ' + 'aa'.repeat(32) + '\n' + D))
+    .toThrow(expect.objectContaining({ code: 'BRAIN_OUTPUT_INVALID' }));
+});

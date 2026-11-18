@@ -28,11 +28,18 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   let result: AgentTurnResult;
   try {
     result = await runAgentTurn(input, { ...ports, settled: async settled => {
-      await ports.settled?.(settled);
+      const privateResult = ports.planning?.privateResult(settled.call.id, settled.content);
       await store.recordToolCall({ scopeId: claim.scopeId, turnId: claim.turnId, round: settled.round, index: settled.index, callId: settled.call.id,
         tool: settled.call.name, toolVersion: settled.tool?.version ?? 0, argsDigest: settled.argsDigest, target: settled.target, status: settled.status,
         bytes: Buffer.byteLength(settled.content, 'utf8'), resultDigest: agentTurnResultDigest(settled.content), atMs: ports.now(),
         ...(settled.diagnostic ? { diagnostic: settled.diagnostic } : {}) });
+      if (privateResult) {
+        if (!ports.planning?.pin || !input.nativeSession || settled.argsDigest === null || settled.status !== 'ok') throw new Error('TOOL_SETTLEMENT_UNAVAILABLE');
+        ports.planning.preparationSettled(ports.planning.pin, { turnId: claim.turnId, generation: input.nativeSession.generation,
+          callId: settled.call.id, argsDigest: settled.argsDigest, content: settled.content, bytes: Buffer.byteLength(settled.content, 'utf8'),
+          resultDigest: agentTurnResultDigest(settled.content) });
+      }
+      await ports.settled?.(privateResult ? { ...settled, content: privateResult.publicText } : settled);
     } });
   } catch (error) {
     const steer = ports.steer?.close();

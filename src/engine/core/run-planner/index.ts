@@ -9,9 +9,12 @@ import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { composeModelRolePolicy, decideRoleModelInScope, isOwnedRoleOverlay, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
-import { isRunIntentResult, type RunPlanningResult, type PlanningMemoryNote, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
+import { isRunIntentResult, type RunPlanningResult, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
 import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
+import type { BrainPreparation } from './internal/same-turn.js';
+export { SameTurnPlanningApplication } from './internal/same-turn.js';
+export type { BrainPreparation, SameTurnPlanningInput, SameTurnPlanningPorts, SameTurnBrainSettings } from './internal/same-turn.js';
 /** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
 export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => brainPlannerConfigSchema.parse(config).quotaWait;
 /** D-02: the configured corrective re-plans (`brain_planner.correctionRetries`, registry default 1, 0 disables). */
@@ -61,12 +64,6 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
       unit: measurement ? 'tokens' : 'estimated-tokens' } });
   }
 }
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
-  readonly unavailableKinds?: readonly import('#engine/core/toolchain-currency/index.js').WorkerKindAvailability[];
-  /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
-  /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
-  /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
-  /** Owner 2026-11-06: the Brain model is below the recommended class (response-only note for the card). */ readonly brainBelowRecommended?: boolean }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunPlanningResult | null>;
@@ -173,7 +170,7 @@ export class BrainPlanApplication {
   /** `observe`: the surface that shows progress. Only a caller that shows the wait gets one (owner Q-H4: a short VISIBLE wait); without it a
    * quota refusal is the typed refusal at once. */
   /** The responded answer as a checked draft: content, truncation, JSON and schema, the assignment rule and the registered kinds (typed refusals). */
-  private validated(prepared: BrainPreparation, result: ModelInvocationResult, invocation: ModelInvocationCommand): ReturnType<typeof parseBrainDraft> {
+  private validated(prepared: BrainPreparation, result: ModelInvocationResult, invocation: ModelInvocationCommand, exact = false): ReturnType<typeof parseBrainDraft> {
     if (result.receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
     const text = this.ports.text(result);
     const outputCap = invocation.nativeRequest['max_completion_tokens'];
@@ -182,7 +179,7 @@ export class BrainPlanApplication {
       : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
     let draft: ReturnType<typeof parseBrainDraft>;
     // A JSON answer cut at the output limit is truncated, not invalid (2026-10-14 finding): the person raises the limit, not the template.
-    try { draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }); } catch (error) {
+    try { draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true, exact }); } catch (error) {
       const failure = error as { code?: unknown; params?: { stage?: unknown } };
       if (failure.code === 'BRAIN_OUTPUT_INVALID' && failure.params?.stage === 'json' && this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED',
         { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } });
@@ -268,6 +265,23 @@ export class BrainPlanApplication {
         receipt = result.receipt;
       }
     }
+    return this.complete(command, proposer, prepared, invocation, result, draft, signal);
+  }
+  /** Same-turn custody has already proved completion/drain and retained-body equality. No invoke, correction or quota loop. */
+  async completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
+    assertActive(signal);
+    const principal = await authenticate(this.verifier, credential, command.scopeId);
+    const proposer = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+    assertBrainReceipt(invocation, result, command, proposer);
+    if (prepared.prompt.inputDigest !== brainInputDigest(command, this.ports.knownSecrets)) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+    if (this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED', { params: { reason: 'output-truncated' } });
+    const draft = this.validated(prepared, result, invocation, true);
+    return this.complete(command, proposer, prepared, invocation, result, draft, signal);
+  }
+  private async complete(command: BrainPlanCommand, proposer: RunProposal['proposer'], prepared: BrainPreparation, invocation: ModelInvocationCommand,
+    result: ModelInvocationResult, draft: ReturnType<typeof parseBrainDraft>, signal?: AbortSignal): Promise<RunProposalResult> {
+    const runId = brainRunId(command);
+    const receipt = result.receipt;
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN'); // narrowed; validated() already refused otherwise
     const usage = openAiChatUsageSchema.safeParse(result.response?.usage);
     const prompt = prepared.prompt, limit = prompt.summaryChars;

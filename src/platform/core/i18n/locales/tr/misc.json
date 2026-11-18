@@ -693,6 +693,7 @@
   "error.BRAIN_OUTPUT_TRUNCATED": "Planlama, yanıt üretmeden tamamlama bütçesini ({maxCompletionTokens} token) tüketti. Model profili ve bağlam sınırları içinde brain_planner.maxCompletionTokens değerini artırın veya model destekliyorsa brain_planner.reasoning=off seçin. Yeni bir istek gönderin. İş oluşturulmadı.",
   "error.BRAIN_OUTCOME_UNKNOWN": "Planlama çağrısının doğrulanmış yanıtı yok. Devam etmeden makbuzunu inceleyin; otomatik tekrar yapılmaz.",
   "error.BRAIN_CANCELLED": "Planlama iptal edildi. Hiçbir iş başlatılmadı. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir.",
+  "error.BRAIN_SAME_TURN_REFUSED": "Plan tamamlanmadı; iş başlatılmadı.",
   "brain.preview": "İş {run} için plan · {status}",
   "brain.scope": "Kapsam {scope} · isteyen {actor}",
   "brain.task": "Görev {id}: {text} · tür {kind} · iş sınıfı {workClass}",
