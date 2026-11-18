@@ -1360,7 +1360,7 @@
         "src/engine/core/monitor",
         "src/platform/core/common",
         "src/surfaces/core/recovery-text",
-        "src/engine/core/run-progression"
+        "src/domain/core/run"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4018,8 +4018,7 @@
         "src/platform/core/common",
         "src/surfaces/core/recovery-text",
         "src/engine/core/config",
-        "src/surfaces/core/terminal-ledger",
-        "src/engine/core/run-progression"
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4701,7 +4700,7 @@
         "src/platform/core/i18n",
         "src/domain/core/recovery",
         "src/engine/core/recovery",
-        "src/engine/core/run-progression",
+        "src/domain/core/run",
         "src/engine/core/runs",
         "src/platform/core/output"
       ],

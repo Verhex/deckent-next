@@ -1,4 +1,5 @@
-import { runProgressionDiagnosticSchema, type RunProgressionDiagnostic, type RunView } from '#engine/index.js';
+import { runProgressionDiagnosticSchema, type RunProgressionDiagnostic } from '#domain/index.js';
+import type { RunView } from '#engine/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 /** Private presentation projection; the public RunView and its serialized form are unchanged. */
 export type ObservedRun = RunView & { readonly progression?: RunProgressionDiagnostic | undefined };

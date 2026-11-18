@@ -25,6 +25,9 @@ it('119-rev F1: Docker and mixed cards attribute tool protection only to the nat
     const mixed = renderRunCreateApprovalSummary({ ...command, graph }, { ...create, graph, execution: { ...create.execution, tasks: [docker, native], workerMode: { mode: 'standart', askEdits: false } } }, verdict, locale);
     expect(mixed).toContain(locale === 'en' ? 'native-profile: per-tool mode check; lowering your mode applies; full access never passes; destructive commands always ask.' : 'native-profile: araç başına mod denetimi; modunuzu düşürmeniz uygulanır; tam erişim aktarılmaz; yıkıcı komutlar her zaman sorulur.');
     expect(mixed).toContain('docker-profile');
+    const generated = renderRunCreateApprovalSummary({ ...command, graph }, { ...create, graph, execution: { ...create.execution,
+      tasks: [docker, { ...native, profile: { ...native.profile, id: 'native-profile-' + 'a'.repeat(64) } }], workerMode: { mode: 'standart', askEdits: false } } }, verdict, locale);
+    expect(generated).toContain('native-profile-aaaaaaaa:'); expect(generated).not.toContain('a'.repeat(64));
   }
 });
 for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses titles/classes, permissions, ceiling and the exact asking rule`, () => {
@@ -63,7 +66,8 @@ it('raw create reports undeclared permissions/ceiling/class; a registry gate is 
 });
 it('redacts complete fields before cutting and again after ANSI/control reconstruction, including known secrets', () => {
   const task = command.graph.tasks[0]!;
-  const known = snapshotKnownSecrets([{ value: 'private-fixture-value', name: 'FIXTURE' }]);
+  const hexSecret = '0123456789abcdef'.repeat(4);
+  const known = snapshotKnownSecrets([{ value: 'private-fixture-value', name: 'FIXTURE' }, { value: hexSecret, name: 'HEX' }]);
   const id = 'x'.repeat(70) + 'sk-approval-fixture-token' + '\u001b[31m private-fixture-value\u001b[0m';
   const graph = { ...command.graph, tasks: [{ ...task, id }] };
   const text = renderRunCreateApprovalSummary({ ...command, graph }, { ...create, graph }, verdict, 'en', known);
@@ -71,6 +75,10 @@ it('redacts complete fields before cutting and again after ANSI/control reconstr
   const reconstructed = { ...graph, tasks: [{ ...task, id: 'token=sk-\u001b[31mfixture-secret' }] };
   expect(renderRunCreateApprovalSummary({ ...command, graph: reconstructed }, { ...create, graph: reconstructed }, verdict)).toContain('[REDACTED]');
   expect(renderRunCreateApprovalSummary({ ...command, graph: reconstructed }, { ...create, graph: reconstructed }, verdict)).not.toContain('fixture-secret');
+  const row = create.execution.tasks[0]!;
+  const boundary = renderRunCreateApprovalSummary(command, { ...create, execution: { ...create.execution,
+    tasks: [{ ...row, profile: { ...row.profile, id: 'profile-' + hexSecret } }], workerMode: { mode: 'standart', askEdits: false } } }, verdict, 'en', known);
+  expect(boundary).toContain('profile-‹secret:HEX›:'); expect(boundary).not.toContain(hexSecret.slice(0, 8));
 });
 it('prefers the declared title over the instruction, masks its secrets, and preserves the input unchanged', () => {
   const graph = { ...command.graph, tasks: [{ ...command.graph.tasks[0]!, workInput: { schemaVersion: 1 as const,

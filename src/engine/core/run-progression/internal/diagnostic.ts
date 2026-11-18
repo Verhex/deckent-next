@@ -1,21 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { z } from 'zod';
-import { counterSchema, identitySchema, evaluatePolicy, delegationWithin, type Policy, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
+import { evaluatePolicy, delegationWithin, type Policy, type RunSnapshot, type VerifiedPrincipal, type RunProgressionDiagnostic } from '#domain/index.js';
 import type { ProgressionCursor } from './journal.js';
 import type { RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 
-/** Ephemeral service observation, deliberately outside RunView and every persisted record. */
-export const runProgressionDiagnosticSchema = z.strictObject({
-  schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, revision: counterSchema,
-  observedAtMs: counterSchema, validUntilMs: counterSchema,
-  state: z.enum(['eligible', 'blocked', 'maintenance-only', 'unknown']), reason: identitySchema,
-  actor: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).optional(), policyRevision: identitySchema.optional(),
-  actorClass: z.enum(['ai', 'person']),
-  session: z.enum(['eligible', 'ineligible', 'unknown']), suspended: z.boolean(), parkUnavailable: z.boolean(),
-  missing: z.array(z.strictObject({ kind: z.enum(['run', 'attempt']), id: identitySchema, action: identitySchema, scope: identitySchema,
-    reason: identitySchema, code: z.enum(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED']) })).readonly(),
-}).readonly();
-export type RunProgressionDiagnostic = z.infer<typeof runProgressionDiagnosticSchema>;
+export { runProgressionDiagnosticSchema, type RunProgressionDiagnostic } from '#domain/index.js';
 type RuntimeObservation = Readonly<{ suspended: boolean; parkUnavailable: boolean }>;
 const runtime = new AsyncLocalStorage<{ observation(query: ProgressionCursor): RuntimeObservation }>();
 export const withRunProgressionObservation = <T>(source: { observation(query: ProgressionCursor): RuntimeObservation }, work: () => T): T => runtime.run(source, work);

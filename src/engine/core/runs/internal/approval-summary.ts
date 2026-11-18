@@ -38,9 +38,10 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const taskTitle = (task: (typeof tasks)[number]) => field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known), assigned = tasks.slice(0, limits.taskRows).map(task => ({ task, rows: assignmentRows(executionOf(task.id)?.assignment, locale, known, executionOf(task.id)?.agent) }));
   const taskRows = assigned.map(({ task, rows }) => {
     const profile = executionOf(task.id)?.profile;
+    const label = profile ? field(profile.id, limits.assignmentChars, known).replace(/[0-9a-f]{32,}/giu, shortId) : '';
     const boundary = profile && create.execution.workerMode ? profile.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID
-      ? t('approval.plan.workerMode.native', { profile: field(profile.id, limits.assignmentChars, known) }, locale)
-      : t('approval.plan.workerMode.profile', { profile: field(profile.id, limits.assignmentChars, known) }, locale) : undefined;
+      ? t('approval.plan.workerMode.native', { profile: label }, locale)
+      : t('approval.plan.workerMode.profile', { profile: label }, locale) : undefined;
     return [t('approval.plan.task', { title: taskTitle(task) }, locale), ...rows.head,
       ...(boundary ? [boundary] : [])].join('\n');
   });

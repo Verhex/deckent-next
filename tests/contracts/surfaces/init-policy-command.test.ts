@@ -114,7 +114,7 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
   const text = output.join('');
   expect(text).toContain('deckent init policy --scope installation --upgrade --apply --expect first-run-template-v4');
-  expect(text).toContain('Rule first-run-mcp-servers: allow invoke / mcp-server *; scopes installation; principals person/one');
+  expect(text).toContain('+ grant first-run-mcp-servers: allow mcp-server* actions[invoke] scopes[installation] principals [person:one]');
   expect(text).toContain('Kept as they are (same id, other content; review them): first-run-approvals');
   expect(text).toContain('no longer used for MCP calls');
   output.length = 0; result = { status: 'unavailable', reason: 'not-this-person' };
