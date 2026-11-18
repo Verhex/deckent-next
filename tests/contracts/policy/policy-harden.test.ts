@@ -146,7 +146,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (PO
     expect(big.approval.summary.length).toBeLessThanOrEqual(2048);
     // APPROVAL-SURFACE §B (B1 card): the binding line comes first, so the cut description can never push it off the card.
     expect(big.approval.summary).toMatch(/^policy\.administer@1 · authority-document\/installation · [0-9a-f]{12}\n/);
-    expect(big.approval.summary).toMatch(/… \+\d+ more$/);
+    expect(big.approval.summary).toMatch(/\nThis card does not show [1-9]\d* of the changes in full\. Review the full change before answering\.$/);
     expect(big.approval.summary).toContain('policy.administer@1 · 32 changes');
   });
 });

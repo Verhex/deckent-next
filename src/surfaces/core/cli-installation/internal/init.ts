@@ -1,4 +1,4 @@
-import { policyExecutionLines } from '#engine/index.js';
+import { policyGrantDescription, policyExecutionLines } from '#engine/index.js';
 import { ownerBaselineCommand, parseBaseline } from './owner-baseline.js';
 import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
@@ -215,11 +215,8 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
     : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people, typed }, locale)
     : value.reason === 'person-not-named' ? t('cli.init.policyUpgrade.personNotNamed', { scope, person: named, people }, locale)
     : t('cli.init.policyUpgrade.unavailable', {}, locale);
-  const rules = (value.rules ?? []).map(rule => {
-    const grant = rule as { id?: string; effect?: string; actions?: readonly string[]; scopes?: 'all' | readonly string[]; principals?: 'all' | readonly Person[]; resource?: { kind?: string; ids?: 'all' | readonly string[] } };
-    return t('policy.aiExecution.cell', { id: grant.id ?? '-', effect: grant.effect ?? '-', actions: grant.actions?.join(', ') ?? '-', kind: grant.resource?.kind ?? '-',
-      ids: Array.isArray(grant.resource?.ids) ? grant.resource.ids.join(', ') : '*', scopes: Array.isArray(grant.scopes) ? grant.scopes.join(', ') : '*', actors: Array.isArray(grant.principals) ? grant.principals.map(who).join(', ') : '*' }, locale);
-  });
+  const description = policyGrantDescription(value.rules ?? []);
+  const rules = description ? [description] : [];
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
   const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
   const rows = value.systemRows ? [t('beuser.installation.systemRows', { status: value.systemRows.status, digest: value.systemRows.packageDigest, reason: value.systemRows.reason ?? '-', conflicts: value.systemRows.conflicts.join(', ') || '-', withheld: value.systemRows.withheld.join(', ') || '-' }, locale)] : [];

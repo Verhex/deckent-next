@@ -10,7 +10,7 @@ import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerP
   describePolicyChange, firstRunExecutionRules, evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, auditPolicyDigest, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
   PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection, PolicyTemplateUpgrade, FIRST_RUN_TOOL_NAMES, policyExecutionLines } from '#engine/index.js';
-import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
+import { createHmacIntegrity, ErrorRegistry, t } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 // POLICY-ADMIN P3: `policy.administer@1` is a Core catalog operation over the C11 effect port. Every change opens a C12 approval (a card)
@@ -65,6 +65,38 @@ const addRead = (id: string, to: Actor) => ({ schemaVersion: 1, changes: [{ kind
 const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
 
 describe.skipIf(process.platform === 'win32')('119-C2: policy card security', () => {
+  it('119-C2-P: AI lines submitted last lead the sealed card; EN/TR disclose omitted and partial changes within 2048', async () => {
+    const f = await fixture(() => [], ownerRoot);
+    for (const locale of ['en', 'tr'] as const) {
+      const human = Array.from({ length: 25 }, (_, i) => ({ ...readTool(`human-${i}`, f.me), actions: ['inspect', 'read-output', 'cancel', 'reserve', 'execute', 'evaluate'], resource: { kind: 'run', ids: 'all' } }));
+      const ai = firstRunExecutionRules([], f.me, ['s']).wanted;
+      const onlyAi = Array.from({ length: 10 }, (_, i) => firstRunExecutionRules([], { ...f.me, subject: `ai-${i}` }, ['s']).wanted.map(rule => ({ ...rule, id: `ai-${i}-${rule.id}` }))).flat();
+      const permissions = Array.from({ length: 60 }, (_, i) => ({ id: `permission-${i}`, effect: 'allow', actions: ['inspect'], resource: { kind: 'run', ids: 'all' } }));
+      const inputs = [[...human, ...ai], onlyAi].map(grants => ({ schemaVersion: 1, changes: grants.map(grant => ({ kind: 'grant.add', grant })) }));
+      const huge = { schemaVersion: 2, profile: { id: 'large', version: 1, digest: '1'.repeat(64), registryDigest: '2'.repeat(64), previewDigest: '3'.repeat(64) },
+        changes: [{ kind: 'role.add', role: { id: 'huge', permissions } }] };
+      for (const [index, input] of [...inputs, huge].entries()) {
+        const pending = await new PolicyAdministrationApplication({ ...f.deps, locale }).submit(f.command(`order-${locale}-${index}`, input));
+        if (pending.status !== 'approval-pending') throw new Error('pending expected');
+        const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary;
+        expect(summary.length).toBeLessThanOrEqual(2048);
+        expect(summary).toContain(locale === 'en' ? 'of the changes in full. Review the full change before answering.'
+          : 'değişiklik bu kartta tam gösterilmiyor. Cevaplamadan önce değişikliğin tamamını incele.');
+        expect(summary).not.toContain(' more');
+        if (index === 0) {
+          expect(summary.split('\n')[2]).toContain(`+ grant ${ai[0]!.id}:`);
+          for (const rule of ai) expect(summary).toContain(`+ grant ${rule.id}:`);
+        }
+        const complete = describePolicyChange(await f.files(), input)!;
+        expect(complete.split('\n')).toHaveLength(input.changes.length + 1);
+        expect(complete.length).toBeGreaterThan(2048);
+        if (index === 2) expect(summary).toContain(locale === 'en' ? 'This card does not show 1 of the changes in full.' : '1 değişiklik bu kartta tam gösterilmiyor.');
+        const binding = summary.split('\n')[0]!;
+        expect(summary.slice(binding.length + 1)).toBe(describePolicyChange(await f.files(), input, {
+          budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, locale) }));
+      }
+    }
+  });
   it('119-C2 P2: a hand-built policy short card makes no unavailable full-text promise in EN/TR', async () => {
     for (const locale of ['en', 'tr'] as const) {
       const f = await fixture(() => [], ownerRoot);
@@ -76,7 +108,7 @@ describe.skipIf(process.platform === 'win32')('119-C2: policy card security', ()
       const pending = await new PolicyAdministrationApplication({ ...f.deps, locale }).submit(f.command(`short-${locale}`, input));
       if (pending.status !== 'approval-pending') throw new Error('pending expected');
       const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary, binding = summary.split('\n')[0]!;
-      const diff = describePolicyChange(await f.files(), input, 2048 - binding.length - 1)!;
+      const diff = describePolicyChange(await f.files(), input, { budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, locale) })!;
       const short = locale === 'en' ? `Standing AI execution grant for ${actor.issuer}/mcp/${actor.subject} in s: beyond this proposal, including your and other actors' Runs.`
         : `Kalıcı yapay zekâ yürütme izni: ${actor.issuer}/mcp/${actor.subject}, s kapsamında bu öneriyle sınırlı değildir; senin ve başkalarının işlerini de kapsar.`;
       expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
@@ -95,7 +127,7 @@ describe.skipIf(process.platform === 'win32')('119-C2: policy card security', ()
       if (pending.status !== 'approval-pending') throw new Error('pending expected');
       const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary;
       const binding = summary.split('\n')[0]!;
-      expect(summary.slice(binding.length + 1)).toBe(describePolicyChange(await f.files(), input, 2048 - binding.length - 1));
+      expect(summary.slice(binding.length + 1)).toBe(describePolicyChange(await f.files(), input, { budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, 'en') }));
       expect(policyExecutionLines(rules, 's', 'en')).toEqual([]);
       expect(summary).toContain(index === 0 ? 'scopes[s,other]' : 'principals [' + f.me.issuer + '/mcp:other]');
     }
@@ -110,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('119-C2: policy card security', ()
       const pending = await f.admin.submit(f.command(`room-${index}`, input));
       if (pending.status !== 'approval-pending') throw new Error('pending expected');
       const summary = f.journal.store.load('s', pending.approval.approvalId)!.request.summary;
-      const binding = summary.split('\n')[0]!, diff = describePolicyChange(await f.files(), input, 2048 - binding.length - 1)!;
+      const binding = summary.split('\n')[0]!, diff = describePolicyChange(await f.files(), input, { budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, 'en') })!;
       expect(summary.slice(binding.length + 1, binding.length + 1 + diff.length)).toBe(diff);
       const tail = summary.slice(binding.length + 1 + diff.length), notice = policyExecutionLines(grants, 's', 'en').join('\n');
       expect(tail === '' || tail === `\n${notice}`).toBe(true);
@@ -118,6 +150,15 @@ describe.skipIf(process.platform === 'win32')('119-C2: policy card security', ()
       if (index === 0) expect(tail).toBe(`\n${notice}`);
       else expect(tail).toBe('');
     }
+    // Removal cards must also give the real diff its full budget before an optional withdrawal notice.
+    const removal = await fixture(() => many, ownerRoot);
+    const input = { schemaVersion: 1, changes: many.map(grant => ({ kind: 'grant.remove', id: grant.id })) };
+    const pending = await removal.admin.submit(removal.command('remove-room', input));
+    if (pending.status !== 'approval-pending') throw new Error('pending expected');
+    const summary = removal.journal.store.load('s', pending.approval.approvalId)!.request.summary, binding = summary.split('\n')[0]!;
+    expect(summary.slice(binding.length + 1)).toBe(describePolicyChange(await removal.files(), input, {
+      budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, 'en') }));
+    expect(summary.length).toBeLessThanOrEqual(2048);
   });
 });
 

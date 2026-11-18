@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { homeEnv } from '../support/host-platform.js';
-import { firstRunPolicyTemplate, firstRunExecutionRules } from '#domain/index.js';
+import { describePolicyChange, firstRunPolicyTemplate, firstRunExecutionRules } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, policyExecutionLines } from '#engine/index.js';
 
 // Owner request 2026-10-07: `deckent policy upgrade --template v5` — preview by default (writes nothing), `--apply [--expect <revision>]`, `--rollback`;
@@ -16,6 +16,30 @@ function context(result: Record<string, unknown>, calls: unknown[] = []) {
     async upgradePolicyTemplate(_root: string, scopeId: string, input: unknown) { calls.push([scopeId, input]); return result; } } as never };
 }
 const PREVIEW = { schemaVersion: 1, status: 'preview', revision: 'first-run-template-v4+b', summary: 'policy.administer@1 · 3 changes\n+ grant first-run-mcp-servers: allow mcp-server*', missing: [], reason: null, rules: [] };
+
+it('119-C2-P: governed and installer previews show every ordered line, including an AI-only overflow; JSON stays an object', async () => {
+  const person = { issuer: 'person', subject: 'one' }, ai = firstRunExecutionRules([], person, ['scope']).wanted;
+  const human = Array.from({ length: 26 }, (_, i) => ({ ...ai[0]!, id: `human-${i}`, principals: [person] }));
+  const onlyAi = Array.from({ length: 10 }, (_, i) => ai.map(rule => ({ ...rule, id: `ai-${i}-${rule.id}` }))).flat();
+  for (const rules of [[...human, ...ai], onlyAi]) {
+    const summary = describePolicyChange({ policy: { schemaVersion: 2, revision: 'p', roles: [], grants: [], restrictions: [], separationOfDuties: [] },
+      bindings: { schemaVersion: 2, revision: 'b', bindings: [], modes: [] } }, { schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) })!;
+    expect(summary.length).toBeGreaterThan(2048);
+    expect(summary.split('\n')).toHaveLength(rules.length + 1);
+    const result = { ...PREVIEW, summary, rules };
+    const { out, ctx } = context(result);
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--preview'], ctx)).toBe(0);
+    expect(out.join('')).toContain(summary); out.length = 0;
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--preview', '--json'], ctx)).toBe(0);
+    expect(JSON.parse(out.join(''))).toEqual(result); out.length = 0;
+    const installation = { ...ctx, async upgradePolicyTemplateInstallation() { return { status: 'preview', basis: 'first-run', rules, revision: 'r', conflicts: [], wireRules: [] }; } };
+    expect(await main(['init', 'policy', '--scope', 'scope', '--upgrade', '--preview', '--lang', 'en'], installation)).toBe(0);
+    const printed = out.join('');
+    for (const rule of rules) expect(printed).toContain(rule.id);
+    if (rules === onlyAi) expect(printed).toContain('ai-9-');
+    else expect(printed.indexOf(ai[0]!.id)).toBeLessThan(printed.indexOf('human-0'));
+  }
+});
 
 it('119-C2: all EN/TR person previews show genuine breadth, withhold it for reused ids, and preserve a genuine partial upgrade', async () => {
   const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'person', subject: 'one' }, ...FIRST_RUN_TOOL_NAMES });

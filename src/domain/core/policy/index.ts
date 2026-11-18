@@ -16,7 +16,7 @@ export type { /** @deprecated No importer in Core; barrel name kept for one rele
 export { authorityDocuments, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
   policyChangeSchema, POLICY_RECOVERY_CHANGE_KIND, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RECOVERY_RAISE_KINDS, type DelegationOptions } from './internal/administer.js';
 export type { DelegatedRule, DelegationCell, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
-export { describePolicyChange, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
+export { describePolicyChange, describePolicyGrants, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
 export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';
 export type { PolicyBinding, PolicyGrant } from './internal/schema.js';
 export { isStandingGrantId, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, STANDING_PATTERN_MAX_CHARS, standingCell, standingCovers, standingGrantChange, standingGrantId,

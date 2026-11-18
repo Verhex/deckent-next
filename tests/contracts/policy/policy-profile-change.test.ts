@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { planPolicyChange, policyChangeSchema, resolvePolicyBindings, delegationWithin, describePolicyChange } from '#domain/index.js';
+import { t } from '#platform/index.js';
 
 const actor = { issuer: 'fixture', subject: 'admin' };
 const role = { id: 'selected-reader', permissions: [{ id: 'inspect', effect: 'allow', actions: ['inspect'], resource: { kind: 'run', ids: 'all' } }] };
@@ -34,5 +35,58 @@ it('refuses duplicate roles, unbound references, oversized changes and mixed gra
   for (const changes of [[addRole, addRole], [addBinding, addRole], Array.from({ length: 33 }, () => addRole),
     [addRole, { kind: 'grant.remove', id: 'owned-read' }]]) {
     expect(() => planPolicyChange(policy, bindings, change(changes))).toThrowError(expect.objectContaining({ code: 'POLICY_CHANGE_INVALID' }));
+  }
+});
+
+it('119-C2-P: stably puts AI permission additions and uncertain widenings first, preserving pure narrowing and removal order', () => {
+  const ai = { issuer: 'directory/mcp', subject: 'member' };
+  const grant = { ...policy.grants[0]!, principals: [ai], actions: ['inspect', 'cancel'] };
+  const previous = { ...policy, roles: [role], grants: [{ ...grant, id: 'narrow' }, { ...grant, id: 'widen', actions: ['inspect'] }] };
+  const bound = { ...addBinding.binding, principals: [ai] };
+  const input = change([
+    { kind: 'grant.add', grant: { ...grant, id: 'human', principals: [actor] } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'narrow', actions: ['inspect'] } },
+    { kind: 'grant.remove', id: 'narrow' },
+    { kind: 'grant.add', grant: { ...grant, id: 'denial', effect: 'deny' } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'widen' } },
+    { kind: 'binding.add', binding: bound },
+    { kind: 'role.add', role: { ...role, id: 'new-ai-role' } },
+    { kind: 'binding.add', binding: { ...bound, id: 'new-ai-binding', roles: ['new-ai-role'] } },
+    { kind: 'grant.add', grant: { ...grant, id: 'ask', effect: 'require-approval' } },
+  ]);
+  const described = describePolicyChange({ policy: previous, bindings }, input)!;
+  const ids = described.split('\n').slice(1).map(line => line.split(':')[0]);
+  expect(ids).toEqual(['~ grant widen', '+ binding selected-member', '+ role new-ai-role', '+ binding new-ai-binding', '+ grant ask',
+    '+ grant human', '~ grant narrow', '- grant narrow', '+ grant denial']);
+  expect(describePolicyChange({ policy: previous, bindings }, input)).toBe(described);
+});
+
+it('119-C2-P: detects MCP-specific and mode widenings, and binding narrowing; budgets count a partial Unicode line once', () => {
+  const ai = { issuer: 'directory/mcp', subject: 'member' };
+  const grant = { ...policy.grants[0]!, principals: [ai], effect: 'require-approval' };
+  const old = { ...policy, roles: [role], grants: [{ ...grant, id: 'generic', effect: 'allow', principals: 'all' }, { ...grant, id: 'mode' },
+    { ...grant, id: 'allow', effect: 'allow' }, { ...grant, id: 'ask-all', principals: 'all' }, { ...grant, id: 'allow-all', effect: 'allow', principals: 'all' }] };
+  const binding = { ...addBinding.binding, principals: [ai], scopes: ['s', 'other'] };
+  const before = { ...bindings, bindings: [binding] };
+  const input = change([
+    { kind: 'binding.replace', binding: { ...binding, scopes: ['s'] } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'allow' } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'ask-all' } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'allow-all', principals: 'all' } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'generic', effect: 'allow' } },
+    { kind: 'grant.replace', grant: { ...grant, id: 'mode', modeEligible: true } },
+    { kind: 'binding.add', binding: { ...binding, id: 'unresolved', roles: ['unknown'] } },
+  ]);
+  expect(describePolicyChange({ policy: old, bindings: before }, input)!.split('\n').slice(1).map(line => line.split(':')[0])).toEqual([
+    '~ grant allow-all', '~ grant generic', '~ grant mode', '+ binding unresolved', '~ binding selected-member', '~ grant allow', '~ grant ask-all',
+  ]);
+  const long = change([{ kind: 'role.add', role: { id: 'huge', permissions: Array.from({ length: 60 }, (_, i) => ({
+    ...role.permissions[0]!, id: `p-${i}`, resource: { kind: 'run', ids: ['😀'.repeat(48)] },
+  })) } }]);
+  for (const budget of [0, 16, 128, 512, 2048]) {
+    const description = describePolicyChange({ policy, bindings }, long, { budget, elision: count => t('policy.change.elision', { count }, 'en') })!;
+    expect(description.length).toBeLessThanOrEqual(budget);
+    expect(description.isWellFormed()).toBe(true);
+    if (budget >= 128) expect(description).toContain('This card does not show 1 of the changes in full.');
   }
 });

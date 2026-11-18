@@ -21,6 +21,7 @@ export interface TemplateUpgradeResult {
   /** Validated scopes from the template planner, for the execution notice only. */ readonly executionScopes?: readonly string[];
   /** Read-only observation of witnessed execution adds for this principal and scope; never persisted. */
   readonly executionHistory?: 'never' | 'withdrawn' | 'unknown';
+  /** Complete ordered change description for previews/results; the separately sealed card keeps its own 2048 bound. */
   readonly summary: string | null;
   readonly missing: readonly TemplateUpgradeMissing[];
   readonly reason: string | null;

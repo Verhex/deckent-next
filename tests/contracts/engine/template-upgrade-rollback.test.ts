@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, firstRunExecutionRules, upgradeFirstRunPolicy, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, firstRunExecutionRules, upgradeFirstRunPolicy, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationApplication, PolicyTemplateUpgrade, RecoveryPolicyCard, administerOwnPolicyChange, nervousStandingApproval,
   upgradePolicyTemplate, upgradeFirstRunProposalRules } from '#engine/index.js';
 import { createHmacIntegrity, sha256, t } from '#platform/index.js';
@@ -353,6 +353,29 @@ it.skipIf(process.platform !== 'linux')('119-C2: v21 rollback is family-specific
   }
 });
 
+it.skipIf(process.platform !== 'linux')('119-C2-P: a genuine large v18 upgrade preview crosses 2048 and prints all twelve changes without opening a card', async () => {
+  const f = await fixture(undefined, false, 'ai-execution', 'en', 1_048_576, 's', true);
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS;
+  const absent = [ids.mcpModelInvocation, ids.mcpReadTools, ids.mcpScratchTools, ids.mcpEditShellTools, ids.mcpToolOperations, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+  const current = JSON.parse(await f.bytes());
+  await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...current, revision: 'first-run-template-v18', grants: current.grants.filter((rule: PolicyGrant) => !absent.includes(rule.id)) }), { mode: 0o600 });
+  const input = { scopeId: 's', principal: f.principal, mode: 'preview' as const, reason: 'full preview' };
+  const before = await f.bytes(), preview = await f.request(input);
+  expect(preview.status).toBe('preview');
+  expect(preview.rules).toHaveLength(12);
+  expect(preview.summary!.length).toBeGreaterThan(2048);
+  expect(preview.summary!.split('\n')).toHaveLength(13);
+  for (const id of absent) expect(preview.summary).toContain(`+ grant ${id}:`);
+  await mkdir(join(f.root, '.deckent'));
+  let printed = '';
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 's', '--preview', '--lang', 'en'], {
+    root: f.root, env: homeEnv(f.root), stdout: { write(value: string) { printed += value; } },
+    upgradePolicyTemplate: async (_root, scope, request) => f.request({ ...request, scopeId: scope, principal: f.principal }),
+  })).toBe(0);
+  expect(printed).toContain(preview.summary);
+  expect(f.cards).toBe(0); expect(await f.bytes()).toBe(before);
+});
+
 it.skipIf(process.platform !== 'linux')('119-C2 security: measures real v19/v20 upgrades with a UUID scope and near-maximum identity, EN/TR', async () => {
   const scopeId = '12345678-1234-4234-8234-123456789abc';
   for (const locale of ['en', 'tr'] as const) for (const version of [19, 20]) for (const only of ['ai-execution', undefined] as const) {
@@ -379,7 +402,7 @@ it.skipIf(process.platform !== 'linux')('119-C2 security: measures real v19/v20 
     expect(await f.request({ ...input, mode: 'apply' })).toMatchObject({ status: 'upgraded' });
     const summary = f.records()[0]!.request.summary, binding = summary.split('\n')[0]!;
     const change = { schemaVersion: 1, changes: preview.rules.map(grant => ({ kind: 'grant.add', grant })) };
-    const diff = describePolicyChange({ policy: { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) }, bindings }, change, 2048 - binding.length - 1)!;
+    const diff = describePolicyChange({ policy: { ...current, revision, grants: current.grants.filter((rule: PolicyGrant) => !removed.includes(rule.id)) }, bindings }, change, { budget: 2048 - binding.length - 1, elision: count => t('policy.change.elision', { count }, locale) })!;
     const short = t('policy.aiExecution.previewShort', { actor: `${f.principal.issuer}/mcp/${f.principal.subject}`, scope: scopeId, scopes: scopeId }, locale);
     console.log('119-C2 measurement', JSON.stringify({ locale, version, only: only ?? 'default', issuer: f.principal.issuer.length, subject: f.principal.subject.length, scope: scopeId.length,
       binding: binding.length, diff: diff.length, full: notice.length, short: short.length, shortSummary: binding.length + 1 + diff.length + 1 + short.length, fullSummary: binding.length + 1 + diff.length + 1 + notice.length, sealed: summary.length }));

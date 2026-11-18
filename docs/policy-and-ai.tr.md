@@ -210,6 +210,15 @@ yönetici ihlali değişikliği reddeder. Terminal `/policy` paneli aynı kayıt
 özel/rol izinleri eyleme izin vermeyi sürdürebilir. Ardından **effective** (etkin) durumu
 inceleyin. Geri alma geçmiş etkileri silmez.
 
+Politika onay kartının 2048 karakter sınırı korunur. Yapay zekâ kimliğine izin veren
+veya iznini genişleten değişiklikler önce gösterilir; diğer satırlar gönderilen sırayı
+korur. Değişiklik yine gönderilen sırayla uygulanır. Satırları sayan veya kesen kart,
+kaç değişikliğin tam gösterilmediğini söyler ve cevaplamadan önce değişikliğin tamamını
+incelemenizi ister. Yalnız yapay zekâ satırları bile karta sığmayabilir; kart bütün
+izinleri gösterme garantisi değildir. Yukarıdaki iki yükseltme önizlemesi her değişiklik
+satırını gösterir; satır içinde değerler 48 karaktere, listeler altı öğe ve kalan sayısına
+kısaltılır. Genişlik açıklaması mühürlü kartta ancak değişiklikten sonra tamamı sığarsa eklenir.
+
 Kalıcı araç izinleri ve şablon bakımı ayrı komutlardır:
 
 ```sh

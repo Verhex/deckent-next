@@ -208,6 +208,15 @@ policy editor. Group availability and effective state come from `list`, not a co
 A revoke removes that group's managed grants only: custom/role grants can still permit the
 action. Inspect the **effective** state after revocation. No revocation erases past effects.
 
+Policy approval cards keep their 2048-character bound. Changes that grant or widen an AI
+identity's permissions come first; other lines keep their submitted order. The stored
+change still executes in submitted order. A card that omits or cuts lines says how many
+changes are not shown in full and asks you to review the full change before answering.
+AI lines alone can exceed the card, so this is no guarantee that every AI permission is
+visible there. Both upgrade previews above show every change line; values within a line
+remain shortened to 48 characters and lists to six entries plus a count. The breadth
+explanation is appended to the sealed card only if it fits whole after the change.
+
 Standing tool permissions and template maintenance have separate commands:
 
 ```sh

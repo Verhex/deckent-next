@@ -1,7 +1,7 @@
 import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
   effectCommandSchema, policyChangeSchema, type DelegationOptions, PolicyChangeError, PolicyLastAdminError, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
-import type { IntegrityAuthority, TrustedClock, Locale } from '#platform/index.js';
+import { t, type IntegrityAuthority, type TrustedClock, type Locale } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
 import { AuthorityChangeError, delegationExceeded, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
 import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, type EffectAdmission, type EffectApplyRequest, type EffectApprovalContext,
@@ -149,14 +149,16 @@ export class PolicyAdministrationApplication {
     if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
     // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
     const describe = async (asked: EffectCommand, budget: number) => {
+      const elision = (count: number) => t('policy.change.elision', { count }, deps.locale ?? 'en');
       const change = policyChangeSchema.parse(asked.input), snapshot = await deps.policy.load(), files = authorityDocuments(snapshot);
       const removed = change.changes.flatMap(item => item.kind === 'grant.remove' ? snapshot.grants.filter(rule => rule.id === item.id) : []);
       const withdrawal = policyExecutionWithdrawalLines(removed, deps.locale ?? 'en').join('\n');
-      if (withdrawal && change.changes.every(item => item.kind === 'grant.remove') && withdrawal.length < budget)
-        return `${withdrawal}\n${describePolicyChange(files, asked.input, budget - withdrawal.length - 1) ?? ''}`;
       const rules = change.changes.flatMap(item => item.kind === 'grant.add' || item.kind === 'grant.replace' ? [item.grant] : []);
-      const diff = describePolicyChange(files, asked.input, budget);
+      const diff = describePolicyChange(files, asked.input, { budget, elision });
       if (!diff) return diff;
+      const room = budget - diff.length - 1;
+      if (withdrawal && change.changes.every(item => item.kind === 'grant.remove'))
+        return withdrawal.length <= room ? `${diff}\n${withdrawal}` : diff;
       let heldRules: readonly unknown[] = [];
       let lines = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en');
       if (!lines.length) try {
@@ -166,7 +168,6 @@ export class PolicyAdministrationApplication {
         lines = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en', heldRules);
       } catch { /* A snapshot-dependent invalid plan still shows the original diff. */ }
       const notice = lines.join('\n');
-      const room = budget - diff.length - 1;
       if (notice && notice.length <= room) return `${diff}\n${notice}`;
       const short = policyExecutionLines(rules, asked.scopeId, deps.locale ?? 'en', heldRules, 'short').join('\n');
       return short && short.length <= room ? `${diff}\n${short}` : diff;
