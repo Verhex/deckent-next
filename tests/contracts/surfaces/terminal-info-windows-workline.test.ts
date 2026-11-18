@@ -256,3 +256,37 @@ describe('information window words (SW-1)', () => {
     expect(ports('tr').systemLabel).toBe('deckent sistemi');
   });
 });
+
+describe('doctor verdict in the open window (3315)', () => {
+  async function check(worker: 'not-ready' | 'unknown' | 'ready') {
+    const root = await project();
+    for (const locale of ['en', 'tr'] as const) {
+      const report = { schemaVersion: 2, scope: 'kernel', status: worker === 'ready' ? 'ready' : 'degraded',
+        summary: { ok: worker === 'ready' ? 1 : 0, check: worker === 'not-ready' ? 1 : 0, failed: 0, untested: worker === 'unknown' ? 1 : 0 },
+        poolReadiness: { status: 'ready', drift: null } };
+      const info = admin(root, {}, { locale, doctorReport: async sink => { sink.write(JSON.stringify(report)); } }).info;
+      const view = mountWorkline({ info, labels: { ...worklineLabels(locale, 'FIXTURE-STATUS'), windows: slashWindowLabels(locale),
+        composer: { ...worklineLabels(locale, '').composer, slash: terminalComposerLabels(locale).slash } } }, 80);
+      views.push(view);
+      await until(() => view.stdout.frame.includes(locale === 'en' ? 'Ready' : 'Hazır'), 'workline ready');
+      await type(view, '/doctor\r');
+      await until(() => view.stdout.frame.includes(locale === 'en' ? '▸ Pools' : '▸ Havuzlar'), 'open doctor window');
+      const frame = view.stdout.frame;
+      expect(frame).not.toContain(locale === 'en' ? '◆ deckent system' : '◆ deckent sistemi');
+      expect(frame).toContain(locale === 'en' ? 'Readiness' : 'Hazırlık');
+      expect(frame).toContain(locale === 'en' ? '▸ Pools [✓ ok]' : '▸ Havuzlar [✓ tamam]');
+      expect(frame).toContain(locale === 'en'
+        ? `[✓ ${report.summary.ok} ok] [! ${report.summary.check} check] [✗ 0 failed]`
+        : `[✓ ${report.summary.ok} tamam] [! ${report.summary.check} kontrol et] [✗ 0 hata]`);
+      const verdict = locale === 'en' ? worker === 'ready' ? 'Status: ready' : 'Status: needs attention'
+        : worker === 'ready' ? 'Durum: hazır' : 'Durum: ilgi bekliyor';
+      expect(frame).toContain(worker === 'unknown' ? `${verdict} · ${locale === 'en' ? '1 not tested' : '1 sınanmadı'}` : verdict);
+      if (worker !== 'unknown') expect(frame).not.toContain(locale === 'en' ? 'not tested' : 'sınanmadı');
+      await type(view, ESC);
+      await until(() => view.stdout.frame.includes(locale === 'en' ? '◆ deckent system' : '◆ deckent sistemi'), 'doctor closes');
+    }
+  }
+  it('shows the overall verdict before Esc when the first worker is not ready (EN/TR, 80 columns)', async () => { await check('not-ready'); });
+  it('shows the verdict and untested count before Esc when the first worker is unmeasured (EN/TR, 80 columns)', async () => { await check('unknown'); });
+  it('keeps ready counts and pool capacity while showing the ready verdict before Esc (EN/TR, 80 columns)', async () => { await check('ready'); });
+});

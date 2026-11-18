@@ -123,9 +123,12 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
   }
   const totals = data?.summary;
   const hasTotals = totals && [totals.ok, totals.check, totals.failed, totals.untested].every(value => Number.isSafeInteger(value) && value >= 0);
+  const verdict = data?.status === 'degraded' ? t('doctor.summary.attention', {}, locale)
+    : data?.status === 'ready' ? t('doctor.summary.ready', {}, locale) : null;
+  const untested = hasTotals && totals.untested ? t('doctor.summary.untested', { n: totals.untested }, locale) : null;
+  if (verdict || untested) sections.unshift({ notes: [[verdict, untested].filter(Boolean).join(' · ')] });
   return { model: { title: t('terminal.info.doctor.title', {}, locale),
     chips: hasTotals ? [chip('ok'), chip('warn'), chip('fail')].map((value, index) => ({ ...value, text: `${[totals.ok, totals.check, totals.failed][index]} ${value.text}` })) : [chip('neutral')],
-    summary: [...(data?.status === 'ready' || data?.status === 'degraded' ? [data.status === 'degraded' ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale)] : []),
-      hasTotals ? t('terminal.info.doctor.summary', totals, locale) : t('terminal.info.chip.unknown', {}, locale),
-      ...(hasTotals && totals.untested ? [t('doctor.summary.untested', { n: totals.untested }, locale)] : [])].join(' · '), sections } };
+    summary: [...(verdict ? [verdict] : []), hasTotals ? t('terminal.info.doctor.summary', totals, locale) : t('terminal.info.chip.unknown', {}, locale),
+      ...(untested ? [untested] : [])].join(' · '), sections } };
 }
