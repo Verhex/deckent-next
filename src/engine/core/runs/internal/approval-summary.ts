@@ -1,4 +1,4 @@
-import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, resolveTaskWorkClass,
+import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, isWorkloadPrincipalRef, resolveTaskWorkClass,
   type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, shortId, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
@@ -33,6 +33,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   locale: Locale = 'en', known?: KnownSecretSnapshot, registry?: WorkClassRegistry, askedAtExecution: readonly string[] = []): string {
   // A proposal's checked set is system-derived from the graph; its own list is advisory only (live 2026-10-18) and shown as such.
   const tasks = create.graph.tasks, permissions = command.proposal ? advisoryProposalPermissions(command.proposal.requiredPermissions, command.graph) : undefined;
+  const aiProposal = !!command.proposal && isWorkloadPrincipalRef(create.actor);
   const unknown = t('approval.plan.undeclared', {}, locale), executionOf = (id: string) => create.execution.tasks.find(row => row.taskId === id);
   const taskTitle = (task: (typeof tasks)[number]) => field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known), assigned = tasks.slice(0, limits.taskRows).map(task => ({ task, rows: assignmentRows(executionOf(task.id)?.assignment, locale, known, executionOf(task.id)?.agent) }));
   const taskRows = assigned.map(({ task, rows }) => [t('approval.plan.task', { title: taskTitle(task) }, locale), ...rows.head].join('\n'));
@@ -51,12 +52,13 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   // g4-cift-onay (owner-approved card text 2026-10-18): a task approval is asked once, when that task runs; the plan card says so instead of asking it here.
   const asked = askedAtExecution.length ? [t('approval.plan.askedAtExecution', { tasks: askedAtExecution.slice(0, limits.taskRows).map(title).join(', ')
     + (askedAtExecution.length > limits.taskRows ? ' ' + t('approval.plan.moreTasks', { count: askedAtExecution.length - limits.taskRows }, locale) : '') }, locale)] : [];
-  const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [], mode = create.execution.workerMode ? [t('approval.plan.workerMode', { mode: create.execution.workerMode.mode === 'full-auto' ? t('approval.plan.workerMode.full-auto', {}, locale) : create.execution.workerMode.askEdits ? t('approval.plan.workerMode.ask-edits', {}, locale) : t('approval.plan.workerMode.standart', {}, locale) }, locale)] : []; // R9 worker ceiling
+  const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [], mode = create.execution.workerMode ? [t('approval.plan.workerMode', { mode: create.execution.workerMode.mode === 'full-auto' ? aiProposal && create.execution.workerMode.askEdits ? t('approval.plan.workerMode.full-auto-ask-edits', {}, locale) : t('approval.plan.workerMode.full-auto', {}, locale) : create.execution.workerMode.askEdits ? t('approval.plan.workerMode.ask-edits', {}, locale) : t('approval.plan.workerMode.standart', {}, locale) }, locale)] : []; // R9/C3 worker ceiling
   const rule = verdict.ruleId ? field(verdict.ruleId, limits.ruleChars, known) : t('approval.plan.registryGate', {}, locale), required = t('approval.plan.required', {}, locale); // the plain requirement needs no code beside its words
   const decision = verdict.reason === 'APPROVAL_REQUIRED' ? t('approval.plan.decisionRule', { decision: required, rule }, locale) : t('approval.plan.decision', { decision: required, rule, reason: field(verdict.reason, limits.reasonChars, known) }, locale);
   const render = () => [t('approval.plan.tasks', { count: tasks.length }, locale), ...taskRows,
     ...(tasks.length > taskRows.length ? [t('approval.plan.moreTasks', { count: tasks.length - taskRows.length }, locale)] : []),
-    ...mode, ...(command.proposal ? asked : []), ...(command.proposal?.delivery ? [t('approval.plan.delivery', { target: field(command.proposal.delivery.target.id, limits.runChars, known) }, locale)] : []),
+    ...mode, ...(aiProposal ? [t('approval.plan.aiAuthorityNotice', {}, locale)] : []),
+    ...(command.proposal ? asked : []), ...(command.proposal?.delivery ? [t('approval.plan.delivery', { target: field(command.proposal.delivery.target.id, limits.runChars, known) }, locale)] : []),
     ...(metered ? [t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale)] : []),
     ...(edges.length ? [t('approval.plan.conflictEdges', { count: edges.length }, locale), ...edgeRows] : []),
     ...(edges.length > edgeRows.length ? [t('approval.plan.moreConflictEdges', { count: edges.length - edgeRows.length }, locale)] : []),

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderRunCreateApprovalSummary, type BoundRunAdmission, type RunCreate } from '#engine/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const proposal = proposalFixture();
@@ -24,6 +25,13 @@ for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses 
   // R9: a Run with a worker shows the recorded worker ceiling; without one the card has no such line.
   const line = locale === 'tr' ? 'İşçi en fazla şu modda çalışır: ' : 'The worker runs at most in this mode: ';
   expect(text).not.toContain(line);
+  const ai = renderRunCreateApprovalSummary(command, { ...create, actor: { ...create.actor, ...mcpPrincipalRef(create.actor) } }, verdict, locale);
+  expect(ai).toContain(locale === 'tr' ? "İş AI'ın kendi yürütme izinleriyle başlar; bu kart eksik politika izni vermez."
+    : "Work starts under the AI's own execution permissions; this card grants no missing policy permission.");
+  expect(text).not.toContain(locale === 'tr' ? 'AI\'ın kendi yürütme' : "AI's own execution");
+  expect(renderRunCreateApprovalSummary(command, { ...create, actor: { ...create.actor, ...mcpPrincipalRef(create.actor) },
+    execution: { ...create.execution, workerMode: { mode: 'full-auto', askEdits: true } } }, verdict, locale))
+    .toContain(locale === 'tr' ? 'tam otomatik, düzenlemeler için onayla' : 'full auto, with approval for edits');
   for (const [workerMode, word] of [[{ mode: 'full-auto', askEdits: false }, locale === 'tr' ? 'tam otomatik' : 'full auto'], [{ mode: 'standart', askEdits: true }, locale === 'tr' ? 'dikkatli' : 'careful']] as const)
     expect(renderRunCreateApprovalSummary(command, { ...create, execution: { ...create.execution, workerMode } }, verdict, locale)).toContain(line + word);
 });

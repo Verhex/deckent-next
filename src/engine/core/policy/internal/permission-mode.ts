@@ -49,15 +49,17 @@ const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxab
   ?? (workerRead(request) ? WORKER_READ : undefined)
   ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
 /** R9: the mode a background worker may use for this person now — full access never passes to a worker, its ceiling is full-auto under the
- * company's full-auto grant (PRE-9), else standart; `askEdits` and the entry id are kept. The plan card records it for a person's Run. */
+ * company's full-auto grant (PRE-9), else standart; `askEdits` and the entry id are kept. The plan card records this ceiling. */
 function workerPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string) {
   const person = principalPermissionMode(policy, principal, scopeId);
   return Object.freeze({ ...person, mode: person.mode !== 'standart' && fullAutoGrant(policy, principal, scopeId).decision === 'allow' ? 'full-auto' as const : 'standart' as const });
 }
-/** The plan card's worker ceiling for the Run's creator; an AI creator has no mode of its own, so nothing is recorded (the person's current mode applies). */
-export const runWorkerMode = (policy: unknown, principal: VerifiedPrincipal, scopeId: string): WorkerPlanMode | undefined => {
-  if (isAiPrincipal(principal)) return undefined;
-  const { mode, askEdits } = workerPermissionMode(policy, principal, scopeId); return Object.freeze({ mode, askEdits });
+/** An AI proposal observes only its verified own person's mode; an unknown relation freezes the safe standard/askEdits ceiling. */
+export const runWorkerMode = (policy: unknown, principal: VerifiedPrincipal, scopeId: string, person?: VerifiedPrincipal): WorkerPlanMode => {
+  const owner = isAiPrincipal(principal) ? person && !isAiPrincipal(person) && person.scopeIds.includes(scopeId)
+    && samePrincipalRef(mcpPrincipalRef(person), { issuer: principal.issuer, subject: principal.subject }) ? person : null : principal;
+  if (!owner) return Object.freeze({ mode: 'standart', askEdits: true });
+  const { mode, askEdits } = workerPermissionMode(policy, owner, scopeId); return Object.freeze({ mode, askEdits });
 };
 type WorkerPlanMode = { readonly mode: 'standart' | 'full-auto'; readonly askEdits: boolean };
 

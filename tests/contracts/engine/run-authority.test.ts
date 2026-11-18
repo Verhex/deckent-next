@@ -3,9 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, readMonitorLedger, type SqliteAttemptStore } from '#adapters/index.js';
-import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, sealApproval, type RunCreate } from '#engine/index.js';
-import { mcpPrincipalRef, type VerifiedPrincipal } from '#domain/index.js';
-import { MAX_WALL_SKEW_MS } from '#platform/index.js';
+import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, parseRunProposal, runProposalDigest, sealApproval, type BoundRunAdmission, type RunCreate } from '#engine/index.js';
+import { SqliteRunProposals } from '#adapters/core/run-proposal-store/index.js';
+import { encodeCommandProjection, mcpPrincipalRef, resolvePolicyBindings, type PermissionMode, type VerifiedPrincipal } from '#domain/index.js';
+import { MAX_WALL_SKEW_MS, sha256 } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { fixtureRunAuthority } from '../support/run-authority.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli-terminal/index.js';
@@ -19,11 +20,15 @@ async function fixture(effect: 'allow' | 'deny' | 'require-approval' = 'require-
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-authority-')), path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 2000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 1000 });
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  const state = { now: 100, principal: actor, effect, revision: 'p1', layout: 'layout', changeDuringResolution: false };
-  const source = { async load() { return { schemaVersion: 1, revision: state.revision, restrictions: [], grants: [
+  const state = { now: 100, principal: actor, effect, revision: 'p1', layout: 'layout', changeDuringResolution: false,
+    mode: undefined as PermissionMode | undefined, askEdits: false };
+  const source = { async load() { const policy = { schemaVersion: 1, revision: state.revision, restrictions: [], grants: [
     { id: 'run-rule', effect: state.effect, actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: 'all' } },
     { id: 'approval-rule', effect: 'allow', actions: 'all', scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'approval', ids: 'all' } },
-  ] }; } };
+  ] }; return state.mode === undefined ? policy : resolvePolicyBindings({ ...policy, schemaVersion: 2, roles: [], separationOfDuties: [], grants: [...policy.grants.map(row => row.id === 'run-rule'
+    ? { ...row, principals: [{ issuer: actor.issuer, subject: actor.subject }, mcpPrincipalRef(actor)] } : row),
+    { id: 'auto', effect: 'allow', actions: ['set'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] },
+    { schemaVersion: 3, revision: state.revision, bindings: [], modes: [{ id: 'person-mode', principal: { issuer: actor.issuer, subject: actor.subject }, scopes: ['s'], mode: state.mode, ...(state.askEdits ? { askEdits: true } : {}) }] }); } };
   const f = fixtureRunAuthority(path, source, () => state.now);
   const context = { async resolve(admitted: typeof command) {
     if (state.changeDuringResolution) state.revision = 'p2';
@@ -43,7 +48,7 @@ async function fixture(effect: 'allow' | 'deny' | 'require-approval' = 'require-
       expectedRevision: 0, decision, reason: 'Reviewed this exact business-process graph' });
   };
   fixtures.push({ root, close: () => { f.close(); store.close(); } });
-  return { ...f, root, path, state, source, store, app, approval, decide };
+  return { ...f, root, path, state, source, store, app, approval, decide, context };
 }
 async function pending(f: Awaited<ReturnType<typeof fixture>>) {
   await expect(f.app().create(command)).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED', params: { approvalId: expect.any(String), decisionRecordId: expect.any(String) } });
@@ -54,6 +59,63 @@ async function pending(f: Awaited<ReturnType<typeof fixture>>) {
 function noEffects(f: Awaited<ReturnType<typeof fixture>>) {
   for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(f.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0);
 }
+async function aiCommandFor(f: Awaited<ReturnType<typeof fixture>>, ai: VerifiedPrincipal): Promise<BoundRunAdmission> {
+  const proposal = parseRunProposal({ ...command, proposalId: 'ai-plan', proposer: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
+    source: { kind: 'human' }, budgetCeiling: { currency: 'USD', limitMinorUnits: 200 }, requiredPermissions: [] });
+  const digest = runProposalDigest(proposal), binding = { schemaVersion: 1 as const, proposalId: proposal.proposalId, digest, budgetCeiling: proposal.budgetCeiling, requiredPermissions: [],
+    admission: { registryRevision: 'business', registryDigest: 'b'.repeat(64), standingAdmission: true, budgetSemantics: 'admission-check-only' as const,
+      budget: { budgetId: 'configured', budgetRevision: 1, checkpointDigest: 'c'.repeat(64), remainingMinorUnits: 1000, checkedAt: 100, source: 'configured' as const } } };
+  await new SqliteRunProposals(f.db).recordProposal({ schemaVersion: 1, proposal, digest, revision: 0, recordedAt: 100,
+    status: 'recorded', binding, reason: null, approval: null, authority: null });
+  return { ...command, schemaVersion: 1, graph: proposal.graph, proposal: binding };
+}
+it('AI card, authority basis, receipt and general execution snapshot seal the same own-person ceiling without changing the executor', async () => {
+  const f = await fixture('allow'); f.state.mode = 'standart';
+  const ai: VerifiedPrincipal = { ...actor, ...mcpPrincipalRef(actor), id: 'ai', assurance: 'workload-verified' };
+  const aiCommand = await aiCommandFor(f, ai);
+  const app = new RunAdmissionApplication(f.store, { verify: async () => ai }, f.authority, { authorize: async (_pool, _scope, principal) => { expect(principal).toEqual(ai); } },
+    { ...f.context, modelUse: { async person(principal) { expect(principal).toEqual(ai); return actor; },
+      async pin(execution, principal) { expect(principal).toEqual(ai); return execution; }, async recheck(_execution, principal) { expect(principal).toEqual(ai); } } });
+  const admit = async () => app.admitEvaluated(aiCommand, ai, await f.authority.evaluate(aiCommand, ai));
+  await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' });
+  const card = f.approvals.findRunCreate('s', 'create')!;
+  expect(card.request.summary).toContain('The worker runs at most in this mode: standard');
+  expect(card.request.summary).toContain("Work starts under the AI's own execution permissions; this card grants no missing policy permission.");
+  await f.decide(); f.state.mode = 'full-access'; f.state.askEdits = true; f.state.revision = 'p2';
+  await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' }); noEffects(f);
+  const fresh = f.approvals.findRunCreate('s', 'create')!;
+  expect(fresh.request.approvalId).not.toBe(card.request.approvalId);
+  expect(fresh.request.summary).toContain('The worker runs at most in this mode: full auto');
+  await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: fresh.request.approvalId, commandId: 'decide-current-mode', expectedRevision: 0, decision: 'allow', reason: 'Reviewed the current own-person ceiling' });
+  await admit();
+  const receipt = (await f.store.loadRunReceipt('s', 'create'))!, persisted = JSON.parse(receipt.command);
+  const ceiling = { mode: 'full-auto', askEdits: true };
+  expect(receipt.snapshot.execution.workerMode).toEqual(ceiling); expect(persisted.execution.workerMode).toEqual(ceiling);
+  expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual(ceiling); expect(persisted.actor).toEqual({ id: ai.id, issuer: ai.issuer, subject: ai.subject });
+  const { action, now, authority, ...create } = persisted;
+  expect(action).toBe('create-run'); expect(now).toBe(f.state.now); expect(authority).toEqual(receipt.snapshot.authority);
+  const record = f.audit.load('s', receipt.snapshot.authority!.decision.eventId)!;
+  const basisDigest = sha256(encodeCommandProjection('run-admission-basis:1', { create, workspace: null }));
+  expect(record.event.subject).toMatchObject({ basisDigest }); expect(fresh.request).toMatchObject({ subject: { admissionDigest: basisDigest } });
+  expect(f.approvals.load('s', card.request.approvalId)!.request).toEqual(card.request);
+});
+it('an AI mode or policy change retires an unused yes, preserves its sealed summary and requires the new ceiling card', async () => {
+  const f = await fixture('allow'); f.state.mode = 'standart';
+  const ai: VerifiedPrincipal = { ...actor, ...mcpPrincipalRef(actor), id: 'ai', assurance: 'workload-verified' };
+  const aiCommand = await aiCommandFor(f, ai);
+  // No native/model-use hook: the safe unknown-person ceiling must still be recorded by general admission.
+  const app = new RunAdmissionApplication(f.store, { verify: async () => ai }, f.authority, { authorize: async () => {} }, f.context);
+  const admit = async () => app.admitEvaluated(aiCommand, ai, await f.authority.evaluate(aiCommand, ai));
+  await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' });
+  const first = f.approvals.findRunCreate('s', 'create')!; expect(first.request.summary).toContain('careful'); await f.decide();
+  f.state.mode = 'full-auto'; f.state.revision = 'p2';
+  await expect(admit()).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' }); noEffects(f);
+  const fresh = f.approvals.findRunCreate('s', 'create')!;
+  expect(fresh.request.approvalId).not.toBe(first.request.approvalId);
+  expect(f.approvals.load('s', first.request.approvalId)!.request).toEqual(first.request);
+  await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: fresh.request.approvalId, commandId: 'decide-new-mode', expectedRevision: 0, decision: 'allow', reason: 'Reviewed current ceiling' });
+  await admit(); expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual({ mode: 'standart', askEdits: true });
+});
 it('seals an allow before the Run and exposes the identical durable reference in its view and receipt', async () => {
   const f = await fixture('allow'), result = await f.app().create(command), receipt = (await f.store.loadRunReceipt('s', 'create'))!;
   expect(result.run.authority).toEqual(receipt.snapshot.authority); expect(receipt.snapshot.execution.workerMode).toBeUndefined(); // R9: no card, no worker ceiling

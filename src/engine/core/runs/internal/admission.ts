@@ -1,4 +1,4 @@
-import { clientCommandIdSchema, branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
+import { clientCommandIdSchema, branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, isAiPrincipal, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { runWorkerMode, type PoolAuthorization } from '#engine/core/policy/index.js';
@@ -28,6 +28,8 @@ export interface RunAdmissionContext {
 
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
   modelUse?: {
+    /** Mode observation only: never used as the admission, reservation or execution principal. */
+    person?(principal: VerifiedPrincipal): Promise<VerifiedPrincipal | undefined>;
     pin(execution: RunCreate['execution'], principal: VerifiedPrincipal, workerMode?: RunCreate['execution']['workerMode']): Promise<RunCreate['execution']>; // R9: recorded for a Run with a worker
     recheck(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<void>;
   };
@@ -94,7 +96,11 @@ export class RunAdmissionApplication {
       const graph = resolved?.graph ?? command.graph;
       const context = await this.context.resolve({ ...command, graph }, principal);
       await this.poolAuthorization.authorize(context.policy.poolId, command.scopeId, principal);
-      const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal, runWorkerMode(evaluation.policy, principal, command.scopeId)) : context.execution;
+      const aiProposal = !!command.proposal && isAiPrincipal(principal);
+      const workerMode = aiProposal ? runWorkerMode(evaluation.policy, principal, command.scopeId, await this.context.modelUse?.person?.(principal))
+        : isAiPrincipal(principal) ? undefined : runWorkerMode(evaluation.policy, principal, command.scopeId);
+      let execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal, workerMode) : context.execution;
+      if (aiProposal) execution = { ...execution, workerMode }; // C3: general snapshot, independent of a native profile's pinning hook
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
         identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
     } catch (error) {

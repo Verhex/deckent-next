@@ -219,6 +219,13 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     const callId = (cardOf(admitted.events)!).callId;
     expect(admitted.events.filter(event => event.kind === 'work')).toEqual([{ kind: 'work', callId, phase: 'planning', attempt: 1 }, { kind: 'work', callId, phase: 'admitted', runId: run!.identity.runId }]);
     expect(run).toMatchObject({ progress: [{ phase: 'pending' }] }); expect(requesters(w)).toEqual([AI]);
+    // C3: this Docker-profile AI proposal also seals the own-person mode before the person's card, without borrowing that person's execution identity.
+    const ceiling = { mode: 'standart', askEdits: false };
+    expect(run).toMatchObject({ execution: { workerMode: ceiling } });
+    expect(cardOf(admitted.events)!.summary).toContain('The worker runs at most in this mode: standard');
+    expect(cardOf(admitted.events)!.summary).toContain("Work starts under the AI's own execution permissions; this card grants no missing policy permission.");
+    const create = w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command))).find(row => row.action === 'create-run');
+    expect(create.execution.workerMode).toEqual(ceiling);
     const journal = openSqliteApprovalStore(w.ledger, { busyTimeoutMs: 1_000, journalMode: 'delete', durability: 'full' });
     try { expect(journal.store.load('scope', run!.authority!.approval!.approvalId)).toMatchObject({ status: 'decided', request: { requester: { issuer: AI.issuer, subject: AI.subject } },
       decision: { decision: 'allow', actor: { issuer: me[0]!.issuer, subject: me[0]!.subject } } }); } finally { journal.close(); }
@@ -331,8 +338,11 @@ it.skipIf(process.platform !== 'linux')('119-C1/C2: the person applies v21; chat
   const w = await modeRuntime({ grants: [...template.policy.grants.filter(rule => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)), ...cells('person', me),
     { id: 'person-create', effect: 'allow', actions: ['create'], scopes: ['scope'], principals: me, resource: { kind: 'run', ids: 'all' } }],
     mode: null, planWork: planServiceRun, brain: JSON.stringify({ graph, budgetCeiling, requiredPermissions }) });
-  const upgrade = (mode: 'preview' | 'apply') => terminalApplication<{ status: string; rules: { id: string }[] }>(w, 'policy-upgrade', 'scope', { mode, only: 'ai-execution', reason: 'C2 person grants execution' });
+  // The execution permission is applied only from a person's terminal: no AI-agent or CI marker (owner 143; the suite itself may run under one).
+  const upgrade = (mode: 'preview' | 'apply', f: { project: string; env: NodeJS.ProcessEnv } = w, person = true) => terminalApplication<{ status: string; rules: { id: string }[] }>(f, 'policy-upgrade', 'scope', { mode, only: 'ai-execution', reason: 'C2 person grants execution' }, person);
   expect(await upgrade('preview')).toMatchObject({ status: 'preview', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id })) });
+  await expect(upgrade('apply', { ...w, env: { ...w.env, AI_AGENT: '1' } }, false)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); // an AI-marked terminal never applies it
+  expect(await upgrade('preview')).toMatchObject({ status: 'preview' }); // and nothing was written by the refused apply
   expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
   expect(await upgrade('apply')).toMatchObject({ status: 'current' });
   // Real workspace preparation, dispatch, artifact storage and evaluation; only Docker's process boundary is controlled.
