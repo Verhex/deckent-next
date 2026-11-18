@@ -146,14 +146,15 @@ lock 39–70 lost updates, with it 0. The `POLICY_*` refusal codes have en/tr te
 (Since POLICY-ADMIN P4/P5 the `deckent policy` family and the terminal `/policy` window exist, and the last-admin invariant refuses with
 `POLICY_LAST_ADMIN`; see "POLITIKA-P0" below.)
 
-Policy change descriptions put AI widenings first, including removal of an AI deny by replacement; this order grants no authority.
+Policy change descriptions put AI widenings first, including lost AI deny or require-approval coverage in a replacement or removal; this order grants no authority.
 The wizard claims execution permission was never given only over a proved continuous history with no unexplained canonical grant
 in any state; distinct keyless mode writes remain ordinary history edges. Managed rollback has a read-only removal preview using
 its existing provenance and delegation checks. Before an interactive CLI rollback decision (and the `/policy` proposal withdrawal),
-the surface shows all affected scopes from the current bodies of the proven removal ids without shortening; the later apply uses
+the surface shows all affected scopes from the current bodies of the proven removal ids as one lossless quoted record per line, with invisible and directional marks escaped; the later apply uses
 the same change and preview revision. The `/policy` decision window carries the list in its scrollable body, including `*` for an
 all-scopes rule. A narrowed read anchor never narrows the removal list. The sealed summary
 keeps the real diff's whole 2048-character budget and appends a whole withdrawal notice, or a whole scope-count notice if it fits.
+The persisted count notice points to the current read-only `--rollback --preview` command; it never claims a list was printed.
 JSON rollback results include the full validated scope array; the installer has no rollback command of its own.
 
 **Authority hardening (POLICY-HARDEN P3-R, seventh batch).** `ApprovalApplication` takes a `restriction { catalog, surface?, refused? }`:

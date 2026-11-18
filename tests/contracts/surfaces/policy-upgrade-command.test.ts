@@ -114,3 +114,28 @@ it.each([
   expect(missing.out.join('')).toContain(refused); expect(missing.out.join('')).toContain('deckent policy status --scope scope');
   for (const out of [installed.out, missing.out]) expect(out.join('')).not.toMatch(/not a first-run policy|ilk kurulum policy'si değil/u);
 });
+
+
+it('3286 F4: rollback preview is an explicit read in either flag order, with full EN/TR records and unchanged JSON', async () => {
+  const scopes = ['scope', 'team,west', 'team\u202eabc', 'team\u200babc', 'team\\u202eabc'];
+  const rules = firstRunExecutionRules([], { issuer: 'person', subject: 'one' }, scopes).wanted;
+  const summary = describePolicyChange({ policy: { schemaVersion: 2, revision: 'p', roles: [], grants: rules, restrictions: [], separationOfDuties: [] },
+    bindings: { schemaVersion: 3, revision: 'b', bindings: [], modes: [] } }, { schemaVersion: 1, changes: rules.map(rule => ({ kind: 'grant.remove', id: rule.id })) });
+  const result = { ...PREVIEW, summary, rules, executionScopes: scopes };
+  for (const locale of ['en', 'tr'] as const) for (const flags of [['--rollback', '--preview'], ['--preview', '--rollback']]) {
+    const calls: unknown[] = [], { out, ctx } = context(result, calls);
+    const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--lang', locale, ...flags];
+    expect(await main(args, ctx)).toBe(0);
+    expect(calls).toEqual([['scope', { mode: 'preview', previewRollback: true, reason: expect.any(String) }]]);
+    expect(out.join('')).toContain(locale === 'en' ? 'Affected scopes (5), full list:' : 'Etkilenen kapsamlar (5), tam liste:');
+    for (const shown of ['"scope"', '"team,west"', '"team\\u202eabc"', '"team\\u200babc"', '"team\\\\u202eabc"']) expect(out.join('').split('\n')).toContain(shown);
+    expect(out.join('')).not.toMatch(/[\u202e\u200b]/u);
+    expect(out.join('')).not.toContain('--apply');
+    expect(out.join('')).not.toContain(locale === 'en' ? 'This standing grant lets AI identity' : 'Bu kalıcı izin,');
+    expect(out.join('')).toContain('- grant first-run-mcp-progress-run-reserve:');
+    out.length = 0;
+    expect(await main([...args, '--json'], ctx)).toBe(0);
+    expect(JSON.parse(out.join(''))).toEqual(result);
+    expect(calls).toHaveLength(2);
+  }
+});
