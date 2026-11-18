@@ -73,6 +73,15 @@ kullanılamayan yalıtım alanı veya sınanmamış kontrol varsa bağımlı eyl
 paylaşmayın. Kesinti sonrası kayıtlı sonucu inceleyin; belirsiz etki çözülmemiştir, kör tekrar izni değildir.
 Mevcut derleme istenen yolu sunamıyorsa bilinen sınırlar sayfasını kullanın.
 
+## beta.2.1 yükseltmesi: yapay zekâ yürütme izni (119)
+
+Yapay zekânın başlangıç kartını onaylamak eksik yürütme izni vermez. Kişi kendi sade terminalinde
+`deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview` önizlemesini açar, geniş izni
+inceler ve `--preview` yerine `--apply` kullanarak uygular. Yapay zekâ işaretli
+terminal reddedilir. Gerçek eksik hücreyi ve kurtarma komutunu `/runs`, iş ayrıntısı veya `deckent run inspect` ile okuyun.
+Servis yeniden başlamadan önce onaylanmış ama başlamamış öneri yeniden önerilir; kayıtlı iş varsa önce kişinin kendi
+izinleriyle iptal edilir. [Kurtarma ve yükseltme ayrıntıları](known-limits.tr.md#beta21-yükseltmesinden-sonra-yapay-zekâ-işi-119).
+
 ## Kaldırma
 
 Kaldırma planını uygulamadan inceleyebilirsiniz:

@@ -802,7 +802,7 @@ export function WorklineApp(props: WorklineProps) {
     taskActionRef.current({ action: 'run', target: liveRunEntry(item.target.run, 'active-work') });
     if (item.target.run.state.kind === 'terminal') completion.dismiss(item.target.run.runId);
   };
-  const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
+  const ledgerLabels: LedgerEntryLabels = { locale: labels.work?.jobs?.locale ?? 'en', system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
   useAttentionNotice(props.notify, { working: turnRunning || doRunning, awaitingAnswer: Boolean(state.approval) || work.modalOpen });

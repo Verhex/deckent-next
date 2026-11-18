@@ -326,7 +326,7 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
   }, 180_000);
 });
 
-it.skipIf(process.platform !== 'linux')('119-C1/C2: the person applies v21; chat approval advances from configured discovery as AI through launch and evaluation; person control', async () => {
+it.skipIf(process.platform !== 'linux')('119-C1/C2/C4: deny → the person applies v21 → a new proposal advances; chat approval advances from configured discovery as AI through launch and evaluation; person control', async () => {
   // C2 reuses C1's configured-loop proof with the real v20 template and the person's governed v21 apply.
   const cells = (prefix: string, principals: unknown) => [
     { id: `${prefix}-run`, effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['scope'], principals, resource: { kind: 'run', ids: 'all' } },
@@ -340,11 +340,6 @@ it.skipIf(process.platform !== 'linux')('119-C1/C2: the person applies v21; chat
     mode: null, planWork: planServiceRun, brain: JSON.stringify({ graph, budgetCeiling, requiredPermissions }) });
   // The execution permission is applied only from a person's terminal: no AI-agent or CI marker (owner 143; the suite itself may run under one).
   const upgrade = (mode: 'preview' | 'apply', f: { project: string; env: NodeJS.ProcessEnv } = w, person = true) => terminalApplication<{ status: string; rules: { id: string }[] }>(f, 'policy-upgrade', 'scope', { mode, only: 'ai-execution', reason: 'C2 person grants execution' }, person);
-  expect(await upgrade('preview')).toMatchObject({ status: 'preview', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id })) });
-  await expect(upgrade('apply', { ...w, env: { ...w.env, AI_AGENT: '1' } }, false)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); // an AI-marked terminal never applies it
-  expect(await upgrade('preview')).toMatchObject({ status: 'preview' }); // and nothing was written by the refused apply
-  expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
-  expect(await upgrade('apply')).toMatchObject({ status: 'current' });
   // Real workspace preparation, dispatch, artifact storage and evaluation; only Docker's process boundary is controlled.
   const git = (...args: string[]) => execFileSync('git', ['-C', w.project, ...args], { stdio: 'pipe' });
   git('init', '-q'); git('config', 'user.email', 'fixture@example.invalid'); git('config', 'user.name', 'Fixture');
@@ -369,9 +364,28 @@ it.skipIf(process.platform !== 'linux')('119-C1/C2: the person applies v21; chat
     launched.push(request.identity.runId);
     return { handle: identifyDockerRequest(request, options).handle, result: { kind: 'exited', exitCode: 0 }, stdout: 'business-result', stderr: '', interrupted: false, outputCompleteness: 'complete' };
   });
+  // C4: real service discovery refuses the admitted AI Run, including cancel; the authorized person's controls stay separate.
+  const refused = await w.call('propose_work', { request: 'blocked before the person grants execution' }, 'allow');
+  expect(refused, w.evidence(refused)).toMatchObject({ card: true, status: 'ok' });
+  const deniedRun = runsOf(w)[0]!.identity.runId;
+  const query = { schemaVersion: 1 as const, scopeId: 'scope', runId: deniedRun };
+  await expect.poll(async () => (await w.client.inspectRun(query)).progression, { timeout: 8000 }).toMatchObject({ state: 'blocked', parkUnavailable: true,
+    missing: expect.arrayContaining([{ kind: 'run', id: deniedRun, action: 'reserve', scope: 'scope', reason: 'NO_GRANT', code: 'POLICY_DENIED' },
+      { kind: 'run', id: deniedRun, action: 'cancel', scope: 'scope', reason: 'NO_GRANT', code: 'POLICY_DENIED' }]) });
+  expect(launched).toEqual([]);
+  const unstarted = (await w.client.inspectRun(query)).run!;
+  const held = await runs.applyConfiguredRunLifecycle(w.project, { ...query, commandId: 'person-holds-denied-ai', action: 'hold', holdReason: 'person control', expectedRevision: unstarted.revision }, { env: w.env });
+  expect(held.lifecycle.run.state).toMatchObject({ kind: 'parked', reason: 'operator-hold' });
+  await w.client.requestRunCancellation({ ...query, commandId: 'person-cancels-denied-ai', action: 'cancel', expectedRevision: held.lifecycle.run.revision });
+  expect(await upgrade('preview')).toMatchObject({ status: 'preview', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id })) });
+  await expect(upgrade('apply', { ...w, env: { ...w.env, AI_AGENT: '1' } }, false)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); // an AI-marked terminal never applies it
+  expect(await upgrade('preview')).toMatchObject({ status: 'preview' }); // and nothing was written by the refused apply
+  expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
+  expect(await upgrade('apply')).toMatchObject({ status: 'current' });
   const admitted = await w.call('propose_work', { request: 'complete the business operation' }, 'allow');
   expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' });
-  const aiRun = runsOf(w)[0]!.identity.runId;
+  const aiRun = runsOf(w).find(run => run.identity.runId !== deniedRun)!.identity.runId;
+  expect(aiRun).not.toBe(deniedRun);
   const receipts = () => w.rows('SELECT command FROM run_receipts').map(row => JSON.parse(String((row as { command: string }).command)) as { action: string; actor: unknown; scopeId?: string; runId?: string; commandId?: string });
   await expect.poll(() => receipts().filter(receipt => receipt.action === 'reserve-run-tasks' && receipt.runId === aiRun), { timeout: 8000 }).toHaveLength(1);
   await expect.poll(() => w.rows('SELECT * FROM task_evaluation_observations'), { timeout: 8000 }).toHaveLength(1);
@@ -538,6 +552,7 @@ it.skipIf(process.platform !== 'linux')('119-C1 i: an approved committed but uns
   expect((await terminalRequest(f, 'decideApproval', answer)).response).toMatchObject({ ok: true }); await f.propose('committed-before');
   await f.restart(); await f.pool('resume'); await f.propose('committed-before');
   await expect.poll(() => f.errors, { timeout: 6000 }).toContainEqual({ id: 'committed-before', code: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
+  expect((await f.client.inspectRun({ schemaVersion: 1, scopeId: 'scope', runId: 'committed-before' })).progression).toMatchObject({ state: 'blocked', session: 'ineligible', reason: 'RUN_PROGRESSION_REPROPOSE_REQUIRED' });
   expect(f.launched).toEqual([]); expect(f.rows('SELECT * FROM attempts')).toEqual([]);
 }, 30000);
 it.skipIf(process.platform !== 'linux')('119-C1 external decision: answering the old card outside the service does not create D', async () => {

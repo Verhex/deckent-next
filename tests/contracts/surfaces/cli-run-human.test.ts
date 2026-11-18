@@ -302,3 +302,17 @@ it('report groups visible attempt usage by channel and leaves missing API or sub
   expect(text).toMatch(/unknown\s+1\s+unknown\s+1\s+unknown/u);
   expect(text).toContain('No billing period or reset is inferred'); expect(report.attempts).toHaveLength(3);
 });
+
+it('119-C4: list and JSON keep RunView unchanged while showing the service diagnosis in both languages', async () => {
+  const root = await project(), item = view(), st = store([item]), now = Date.now();
+  const progression = { schemaVersion: 1, scopeId: 's', runId: LONG, revision: 7, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+    state: 'blocked', reason: 'RUN_PROGRESSION_REPROPOSE_REQUIRED', session: 'ineligible', suspended: false, parkUnavailable: false, missing: [] };
+  const handlers = { ...st.context, async inspectRun() { return { schemaVersion: 1, layout: {}, run: item, progression }; } };
+  for (const locale of ['en', 'tr']) {
+    const output = await run(['run', 'list', '--scope', 's', '--lang', locale], handlers, root);
+    expect(output.code).toBe(0); expect(output.text).toContain(locale === 'en' ? 'Propose again' : 'Yeniden önerin');
+    expect(output.text).toContain('deckent run cancel --scope s --id a1b2c3d4');
+  }
+  const json = await run(['run', 'list', '--scope', 's', '--json'], handlers, root), parsed = JSON.parse(json.text);
+  expect(parsed.runs).toEqual([item]); expect(parsed.progression).toEqual([progression]); expect(item).not.toHaveProperty('progression');
+});

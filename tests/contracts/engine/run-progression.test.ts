@@ -1,5 +1,6 @@
-import { RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
+import { runProgressionMissingPermissions, RunSessionRegistry, runSessionRegistryData, selectProgressionActor, selectRunProgression, mergeProgressionPages, progressionCustodyActor, sealApproval, approvalRequestDigest, type RunSessionState } from '#engine/index.js';
 import { createHmacIntegrity, ErrorRegistry, clearConfigCache, loadConfig, productResourcePath, sha256 } from '#platform/index.js';
+import { policySchema, type VerifiedPrincipal } from '#domain/index.js';
 import type { ApprovalRecord, RunSnapshot } from '#domain/index.js';
 import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -613,4 +614,23 @@ it('119-C1 custody selection: unlaunched binding is not maintenance; proven star
   expect(() => progressionCustodyActor(exited, [null])).toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
   expect(() => progressionCustodyActor({ ...exited, bindings: [binding, binding] }, [dispatch, { ...dispatch, grant: { ...dispatch.grant!, principal: actor } }]))
     .toThrowError(expect.objectContaining({ code: 'DISPATCH_NOT_ADMITTED' }));
+});
+
+it('119-C4: diagnosis keeps exact current cells, restrictions and approval apart; maintenance never asks for a new start cell', async () => {
+  const f = await fixture(), run = (await f.store.loadRun('s', 'r'))!;
+  const ai: VerifiedPrincipal = { id: 'ai', issuer: 'host/mcp', subject: 'ai', assurance: 'workload-verified', scopeIds: ['s'] };
+  const principals = [{ issuer: ai.issuer, subject: ai.subject }];
+  const empty = policySchema.parse({ schemaVersion: 1, revision: 'v20', grants: [], restrictions: [] });
+  const missing = runProgressionMissingPermissions(run, ai, empty, false);
+  expect(missing).toContainEqual({ kind: 'run', id: 'r', action: 'reserve', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
+  expect(missing).toContainEqual({ kind: 'run', id: 'r', action: 'cancel', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
+  expect(missing).toContainEqual({ kind: 'attempt', id: 'all', action: 'execute', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' });
+  const policy = policySchema.parse({ ...empty, grants: [{ id: 'start', effect: 'allow', actions: ['inspect', 'reserve', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+    { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] });
+  expect(runProgressionMissingPermissions(run, ai, policy, false)).toEqual([]);
+  const denied = policySchema.parse({ ...policy, restrictions: [{ id: 'company', actions: ['reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] });
+  expect(runProgressionMissingPermissions(run, ai, denied, false)).toEqual([{ kind: 'run', id: 'r', action: 'reserve', scope: 's', reason: 'DENIED', code: 'POLICY_DENIED' }]);
+  const asks = policySchema.parse({ ...policy, grants: [...policy.grants, { id: 'ask', effect: 'require-approval', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] });
+  expect(runProgressionMissingPermissions(run, ai, asks, false)).toEqual([{ kind: 'run', id: 'r', action: 'cancel', scope: 's', reason: 'APPROVAL_REQUIRED', code: 'POLICY_APPROVAL_UNSUPPORTED' }]);
+  expect(runProgressionMissingPermissions(run, ai, empty, true)).toEqual([]);
 });

@@ -1356,7 +1356,9 @@
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
         "src/engine/core/monitor",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/surfaces/core/recovery-text",
+        "src/engine/core/run-progression"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -1629,7 +1631,8 @@
         "src/surfaces/core/mcp-presentation",
         "src/engine/core/provider-catalog",
         "src/platform/core/utils",
-        "src/capabilities/core/native-agent-execution"
+        "src/capabilities/core/native-agent-execution",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "SURFACES",
       "ink": true
@@ -2349,7 +2352,8 @@
         "src/domain/core/command",
         "src/domain/core/principal",
         "src/platform/core/integrity",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/domain/core/policy"
       ],
       "plan": "EXECUTION"
     },
@@ -4006,7 +4010,8 @@
         "src/platform/core/common",
         "src/surfaces/core/recovery-text",
         "src/engine/core/config",
-        "src/surfaces/core/terminal-ledger"
+        "src/surfaces/core/terminal-ledger",
+        "src/engine/core/run-progression"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4127,7 +4132,8 @@
         "src/engine/core/recovery",
         "src/engine/core/provider-catalog",
         "src/platform/core/utils",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/surfaces/core/cli-run"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4685,7 +4691,10 @@
       "dependencies": [
         "src/platform/core/i18n",
         "src/domain/core/recovery",
-        "src/engine/core/recovery"
+        "src/engine/core/recovery",
+        "src/engine/core/run-progression",
+        "src/engine/core/runs",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES",
       "ink": false

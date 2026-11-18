@@ -9,7 +9,7 @@ import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
-import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines, readRunProgressionDiagnostic, recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
@@ -71,6 +71,7 @@ export interface DoctorCheckFacts {
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
   /** BeUser D-05: this install's Runs parked after a failure, with the typed failure code (monitor snapshot); null or absent when not read. */
+  readonly progressionRuns?: { run: Pick<import('#engine/index.js').RunView, 'runId' | 'scopeId' | 'revision'>; progression?: import('#engine/index.js').RunProgressionDiagnostic }[] | null;
   readonly stuckRuns?: readonly Readonly<{ runId: string; code: string }>[] | null;
   /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
   readonly egress?: DoctorEgress | null;
@@ -191,6 +192,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   // runtime service stopped repeatedly while starting its work. Each names the inspect step; resume follows once the cause is fixed.
   for (const { runId, code } of f.stuckRuns ?? []) { const run = runId.slice(0, 12);
     rows.push(row('work', 'work.stuckRun', 'warning', code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l) : t('doctor.check.run.parked', { run, code }, l), scoped(`deckent run inspect --id ${run}`, f))); }
+  if (f.progressionRuns === null) rows.push(row('work', 'work.progression', 'untested', t('run.progression.unknown', {}, l), 'deckent run list'));
+  for (const entry of f.progressionRuns ?? []) {
+    const diagnostic = readRunProgressionDiagnostic(entry.run, entry.progression);
+    rows.push(row('work', 'work.progression', !diagnostic || diagnostic.state === 'unknown' ? 'untested' : diagnostic.state === 'eligible' ? 'ok' : 'warning',
+      runProgressionLines(entry.run, diagnostic, l).join(' ')));
+  }
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
     ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)

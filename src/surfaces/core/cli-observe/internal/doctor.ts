@@ -1,5 +1,5 @@
 import {
-  ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation,
+  ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
@@ -39,7 +39,19 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const mcpUsers = (name: string) => inventory?.rows.find(row => row.name === name && row.vault === 'main')?.usedBy.filter(user => user.startsWith('mcp:')).map(user => user.slice(4)) ?? [];
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
+  let progressionRuns: DoctorCheckFacts['progressionRuns'] = null;
+  if (scopeId && context.inspectSurfaceRunIds && context.inspectRun) {
+    const ids = await context.inspectSurfaceRunIds(root, scopeId, options).catch(() => null);
+    if (ids) {
+      progressionRuns = [];
+      for (const runId of ids.slice(0, ((config.terminal ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns)) {
+        const data = await context.inspectRun(root, { schemaVersion: 1, scopeId, runId }, options).catch(() => null);
+        progressionRuns.push({ run: data?.run ?? { scopeId, runId, revision: 0 }, ...(data?.progression ? { progression: data.progression } : {}) });
+      }
+    }
+  }
   return {
+    progressionRuns,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
     codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
     egress: await egressFacts(root, config, context, options),

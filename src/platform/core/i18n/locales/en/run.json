@@ -486,5 +486,20 @@
   "error.RUN_PROGRESSION_REPROPOSE_REQUIRED": "No automatic start record exists in this service session; this Run will not start automatically. Cancel this Run and propose it again through the service, then answer the new card.",
   "error.RUN_PROGRESSION_SESSION_UNVERIFIED": "This Run's automatic start record could not be verified. Resolve the reported read or reconciliation errors; the service will recheck the same record before starting work.",
   "run.sessionCapacity.proposalNextStep": "Try the proposal again after capacity becomes available.",
-  "run.sessionCapacity.approvalNextStep": "Answer the same card again if it is still valid; if it expired, propose again."
+  "run.sessionCapacity.approvalNextStep": "Answer the same card again if it is still valid; if it expired, propose again.",
+  "run.progression.eligible": "Eligible for automatic progression in this service session; this is not proof of a start.",
+  "run.progression.blocked": "AI execution permission is missing",
+  "run.progression.repropose": "Propose again: no automatic start record exists in this service session.",
+  "run.progression.maintenance": "Started work is under maintenance; no new task will be started. Inspect uncertain effects before recovery.",
+  "run.progression.unknown": "Current service diagnosis is unavailable; automatic progression is unknown.",
+  "run.progression.suspended": "Automatic progression is stopped or held; inspect the cause before proposing again.",
+  "run.progression.observation": "Service observation at {at}: actor {actor}, scope {scope}, Run revision {revision}, policy {policy}, reason {reason}. Current policy observation, not a past refusal.",
+  "run.progression.cell": "Missing permission: {cell}, scope {scope}: {code} ({reason}). An unreserved attempt uses all ids.",
+  "run.progression.permissionMissing": "AI execution permission is missing; a person should preview it at their terminal: {command}",
+  "run.progression.adminReview": "Ask an authorized administrator to review the company denial or approval requirement; adding an allow may not resolve it.",
+  "run.progression.parkUnavailable": "The service could not durably park this Run (RUN_PROGRESSION_PARK_UNAVAILABLE); the Run is not shown as parked on that basis.",
+  "run.progression.reproposeNext": "Under your own permissions, cancel this Run and propose it again through the service; answer the new card. Applying permission alone does not restart a suspended Run.",
+  "run.progression.inspectNext": "Read the current cause and next step: {command}",
+  "run.progression.controls": "Use your own permissions: hold (h): {hold}; cancel: {cancel}. Your policy may refuse these actions. Cancellation does not prove termination or settle uncertain effects.",
+  "run.progression.openDetail": "Enter details"
 }

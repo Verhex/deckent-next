@@ -486,5 +486,20 @@
   "error.RUN_PROGRESSION_REPROPOSE_REQUIRED": "Bu servis oturumunun otomatik başlangıç kaydı yok; bu iş kendiliğinden başlamayacak. Bu işi iptal edip servis üzerinden yeniden önerin, ardından yeni kartı cevaplayın.",
   "error.RUN_PROGRESSION_SESSION_UNVERIFIED": "Bu işin otomatik başlangıç kaydı doğrulanamadı. Bildirilen okuma veya uzlaştırma hatalarını giderin; servis işe başlamadan önce aynı kaydı yeniden denetleyecek.",
   "run.sessionCapacity.proposalNextStep": "Yer açıldıktan sonra öneriyi yeniden deneyin.",
-  "run.sessionCapacity.approvalNextStep": "Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin."
+  "run.sessionCapacity.approvalNextStep": "Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin.",
+  "run.progression.eligible": "Bu servis oturumunda otomatik ilerletmeye uygun; bu, başlamış olduğunun kanıtı değildir.",
+  "run.progression.blocked": "Yapay zekâ yürütme izni eksik",
+  "run.progression.repropose": "Yeniden önerin: bu servis oturumunun otomatik başlangıç kaydı yok.",
+  "run.progression.maintenance": "Başlamış işin bakımı sürüyor; yeni görev başlatılmayacak. Kurtarmadan önce belirsiz etkileri inceleyin.",
+  "run.progression.unknown": "Güncel servis tanısı okunamadı; otomatik ilerleme durumu bilinmiyor.",
+  "run.progression.suspended": "Otomatik ilerleme durduruldu veya bekletiliyor; yeniden önermeden önce sebebi inceleyin.",
+  "run.progression.observation": "Servis gözlemi {at}: aktör {actor}, kapsam {scope}, iş sürümü {revision}, politika {policy}, sebep {reason}. Geçmiş ret değil, güncel politika gözlemidir.",
+  "run.progression.cell": "Eksik izin: {cell}, kapsam {scope}: {code} ({reason}). Henüz ayrılmamış deneme bütün kimlikleri kapsayan izin gerektirir.",
+  "run.progression.permissionMissing": "Yapay zekâ yürütme izni eksik; kişi kendi terminalinde şu önizlemeyi açsın: {command}",
+  "run.progression.adminReview": "Şirket yasağını veya onay gereğini yetkili yöneticiyle inceleyin; allow eklemek sorunu çözmeyebilir.",
+  "run.progression.parkUnavailable": "Servis bu işi kalıcı olarak beklemeye alamadı (RUN_PROGRESSION_PARK_UNAVAILABLE); bu sebeple iş beklemeye alınmış sayılmaz.",
+  "run.progression.reproposeNext": "Kendi izinlerinizle bu işi iptal edip servis üzerinden yeniden önerin; yeni kartı cevaplayın. Yalnız izni uygulamak durdurulmuş işi yeniden başlatmaz.",
+  "run.progression.inspectNext": "Güncel sebebi ve sonraki adımı okuyun: {command}",
+  "run.progression.controls": "Kendi izinlerinizi kullanın: beklet (h): {hold}; iptal: {cancel}. Politikanız bu işlemleri reddedebilir. İptal, sonlandırma kanıtı değildir ve belirsiz etkileri uzlaştırmaz.",
+  "run.progression.openDetail": "Enter ayrıntı"
 }

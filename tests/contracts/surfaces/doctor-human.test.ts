@@ -594,3 +594,20 @@ it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with 
   await check(legacy, 0);
   await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
 });
+
+it('119-C4: doctor separates service policy diagnosis from unavailable login/model; missing or stale diagnosis is unknown (EN/TR)', () => {
+  const run = { runId: 'r', scopeId: 'live', revision: 1 }, now = Date.now();
+  const diagnostic = { schemaVersion: 1 as const, ...run, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+    state: 'blocked' as const, reason: 'POLICY_DENIED', session: 'eligible' as const, suspended: true, parkUnavailable: true,
+    missing: [{ kind: 'run' as const, id: 'r', action: 'reserve', scope: 'live', reason: 'NO_GRANT', code: 'POLICY_DENIED' as const }] };
+  for (const locale of ['en', 'tr'] as const) {
+    const checks = doctorChecks(report, facts({ progressionRuns: [{ run, progression: diagnostic }], modelConnections: [{ profile: 'offline-model', tools: 'unknown', stale: false }] }), locale);
+    const policy = checks.find(row => row.id === 'work.progression')!;
+    expect(policy.state).toBe('warning'); expect(policy.text).toContain('--only ai-execution --scope live --preview');
+    expect(policy.text).toContain('run/r/reserve'); expect(policy.text).toContain('RUN_PROGRESSION_PARK_UNAVAILABLE');
+    expect(checks.find(row => row.id === 'work.modelConnection')!.text).toContain('offline-model');
+    const stale = doctorChecks(report, facts({ progressionRuns: [{ run: { ...run, revision: 2 }, progression: diagnostic }] }), locale).find(row => row.id === 'work.progression')!;
+    expect(stale.state).toBe('untested'); expect(stale.text).not.toContain('--only ai-execution');
+    expect(doctorChecks(report, facts({ progressionRuns: null }), locale).find(row => row.id === 'work.progression')).toMatchObject({ state: 'untested' });
+  }
+});

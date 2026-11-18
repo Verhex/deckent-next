@@ -1,6 +1,6 @@
 import { createTargetQueueHost } from './queue-host.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
-import { withRunProgressionSession, AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
+import { withRunProgressionObservation, withRunProgressionSession, AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateExecutionSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -144,7 +144,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onError: async (query, failure) => { await reportFailure(failure); await observer.onRunProgressionError?.(query, failure); },
     onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note),
   }, (work, onSlotWait) => lifecycle.admitExecution(() => idle.track(work), onSlotWait), options, runSession);
-  const server = await guard.start((request, peer, stream, turn) => withLocalPrincipalChannel(request.channel, () => withRunProgressionSession(runSession, () => idle.track(async () => {
+  const server = await guard.start((request, peer, stream, turn) => withLocalPrincipalChannel(request.channel, () => withRunProgressionSession(runSession, () => withRunProgressionObservation(preparedRunRuntime, () => idle.track(async () => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admitBounded(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
@@ -181,7 +181,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
-  })), peer));
+  }))), peer));
   /* Started once the listener is up: a start that fails before leaves no sweep running after its custody is released. */ startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
   /* WORKER-AUTO-REFRESH: never awaited by readiness; the controller's signal ends its interval timer and a running build when the service stops, and the stop waits for what is left (above). */ auditSchedule = auditMonitor.run(config.audit.checkpointIntervalMs, controller.signal,

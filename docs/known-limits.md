@@ -871,6 +871,36 @@ in the policy file, as in every other audit record; do not put private text in r
 
 ## Recovery and upgrades
 
+### AI work after the beta.2.1 upgrade (119)
+
+The first policy does not grant AI execution permission. When a service Run diagnosis says that permission is missing,
+a person should preview it at their own plain terminal (outside an AI tool's terminal):
+
+```sh
+deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
+```
+
+Check the named AI identity, scopes and broad permission before using the same command with `--apply`
+in place of `--preview`. An explicit company denial or approval requirement needs an authorized administrator's review;
+adding an allow may not resolve it. This permission is not restricted to the AI's own proposals.
+
+Use `/runs` (Enter for details), `deckent run inspect --scope SCOPE_ID --id RUN_ID` or `deckent doctor` to read the
+current service observation. The cause includes actor, scope and missing permission cells. `attempt/all` is coverage for
+not-yet-reserved attempts, not an invented Attempt id. A missing, stale or unavailable observation says unknown;
+recorded Run state remains separate. No observation is stored in the Run record. Eligible means current progression
+prerequisites, not proof of launch or acceptance; model, login and network checks remain separate.
+
+An AI proposal approved but not started before a service restart must be proposed again. If a Run was recorded,
+cancel it under your own permissions with `deckent run cancel --scope SCOPE_ID --id RUN_ID`, then make a new proposal
+through the service and answer the new card. A missing service-session start record does not establish when the Run
+was created. A card opened earlier but genuinely answered fresh through the new service can still admit fresh work.
+If AI cancel permission is also missing, the service may be unable to park the Run durably; applying permission alone
+does not restart that suspended Run. Your hold (`h` or `deckent run hold --scope SCOPE_ID --id RUN_ID`) and cancel
+use your own current permissions and can themselves be refused. Started or uncertain work stays under maintenance;
+cancellation neither proves worker termination nor settles uncertain effects. Revocation does not undo past effects.
+Assembled-release and real-account journey acceptance remain open.
+
+
 - **Before rolling back from beta.2 to beta.1.2, remove the paid-usage key while still on beta.2.** In each project where you set it, run:
 
   ```sh

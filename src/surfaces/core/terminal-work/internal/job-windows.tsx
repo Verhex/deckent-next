@@ -1,3 +1,4 @@
+import { readRunProgressionDiagnostic, runProgressionWord, runProgressionLines, type ObservedRun } from '#surfaces/core/recovery-text/index.js';
 import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
 import { readWorkerToolCard } from '#capabilities/index.js';
@@ -70,7 +71,7 @@ export async function queueRowSummaries(run: RunView, read: WorklineLedgerPorts[
   const views = run.targetQueue?.records ?? [];
   return read && views.length ? read(views).catch(() => views.map(() => [])) : undefined;
 }
-export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?: readonly (readonly string[])[]): WindowLine[] {
+export function runDetailLines(run: ObservedRun, work: WorkSurfaceLabels, summaries?: readonly (readonly string[])[]): WindowLine[] {
   const labels = work.jobs!;
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
@@ -80,6 +81,7 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?
   return [section(labels.state), { spans: [span(`[${runStateText(run, labels)}]`, { role: run.cancellationRequested ? 'warning' : 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] },
     ...(parked ? [{ spans: [span(reason ?? parked.reason, { role: 'warning' }), ...(parked.failureCode && labels.parkCode ? [span(` · ${fillTemplate(labels.parkCode, { code: parked.failureCode })}`, { role: 'muted' })] : []),
       ...(note && labels.parkNote ? [span(` · ${fillTemplate(labels.parkNote, { note })}`)] : [])] }] : []),
+    ...runProgressionLines(run, run.progression, labels.locale).map(text => ({ spans: [span(text)] })),
     section(labels.tasks), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(index), { bold: true })], spans: [span(`[${fillTemplate(work.workerLine.card?.runPhases[task.phase] ?? task.phase, { count: 1 })}]`, { role: 'accent' }), span(` · ${displayId(task.id)}`, { role: 'muted' })] })),
     section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
     section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(index), { bold: true })], spans: task.resultBrief?.runDelivery
@@ -114,10 +116,10 @@ export async function pickRun(panel: WorklinePanel, execution: LocalExecution, l
     await panel.pick(execution, { kind: 'job-window', title: work.jobs!.runTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']); return null;
   }
   const choice = await panel.pick(execution, { kind: 'job-picker', title: cancellable ? work.jobs!.cancelPickerTitle : work.live!.runsTitle,
-    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runListStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
+    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runListStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${runProgressionWord(readRunProgressionDiagnostic(run, run.progression), work.jobs!.locale)}`), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return null;
   // Refresh revision and cancellation eligibility after the choice; the service remains the authority at mutation time.
-  const selected = await ledger.inspectRun(runs[Number(choice)]!.runId);
+  const selected = await (ledger.inspectRunObservation ?? ledger.inspectRun)(runs[Number(choice)]!.runId);
   return selected && (!cancellable || (selected.state?.kind !== 'terminal' && !selected.cancellationRequested)) ? selected : null;
 }
 
@@ -127,7 +129,7 @@ const listWindow: JobWindowOpen = async (command, panel, execution, ledger, work
   const labels = work.jobs!, workers = command === 'workers' ? (await ledgerEntriesForWorkers(ledger, 'list')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker') : [];
   const runs = command === 'runs' ? await loadRunViewsForWatch(ledger) : [];
   const lines = command === 'workers' ? liveWindowLines('workers', { workers, runs: [] }, { live: work.live!, panel: work.panel, workerLine: work.workerLine }, Number.POSITIVE_INFINITY)
-    : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
+    : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), span(` · ${runProgressionWord(readRunProgressionDiagnostic(run, run.progression), labels.locale)}`), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
   const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
   await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
   if (command === 'runs') onSeen?.();

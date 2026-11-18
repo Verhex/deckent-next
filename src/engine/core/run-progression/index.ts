@@ -7,3 +7,6 @@ export { RunLifecycleRuntimeLoop } from './internal/runtime.js';
 
 export { RunSessionRegistry, runSessionRegistryData, runProgressionSession, withRunProgressionSession, beginRunSession, beginRunDecisionSession } from './internal/session-registry.js';
 export type { RunSessionIdentity, RunSessionState, RunSessionRead, RunSessionPin } from './internal/session-registry.js';
+
+export { runProgressionDiagnosticSchema, runProgressionMissingPermissions, runProgressionObservation, withRunProgressionObservation } from './internal/diagnostic.js';
+export type { RunProgressionDiagnostic } from './internal/diagnostic.js';

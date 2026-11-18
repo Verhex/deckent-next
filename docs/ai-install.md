@@ -75,6 +75,15 @@ unavailable sandbox or unverified check means stop the dependent action and repo
 logs. After an interruption inspect the recorded result; an unknown effect is unresolved, not permission to retry it blindly.
 Use the known limits page when the current build cannot provide the requested path.
 
+## beta.2.1 upgrade: AI execution permission (119)
+
+An AI-approved start card grants no missing execution permission. A person uses their own plain terminal to preview
+`deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview`, reviews the broad permission,
+then applies it with `--apply` in place of `--preview`. An AI-marked terminal is refused.
+Use `/runs`, Run details or `deckent run inspect` for the real missing cell and recovery command. A proposal approved
+but not started before a service restart is proposed again; cancel its recorded Run first under the person's permissions.
+[Recovery and upgrade details](known-limits.md#ai-work-after-the-beta21-upgrade-119).
+
 ## Uninstall
 
 You may inspect the removal plan without applying it:

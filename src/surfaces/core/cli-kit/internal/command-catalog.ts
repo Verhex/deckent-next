@@ -239,7 +239,7 @@ export const CLI_CATALOG = [
     action('undelegate', 'approvals', 'policy.delegate.revoke', 'cli.help.policy', { requires: ['--step <id>'] }),
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy', { requires: ['<id>'] }),
-    action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy', { requires: ['--template current'] }),
+    { ...action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy', { requires: ['--template current'] }), args: '[--preview|--apply|--rollback] [--only ai-proposals|ai-execution] [--expect <revision>] [--scope <id>] [--json] [--lang en|tr]' },
     // alpha.56 G2 + G3: lost-worker recovery grants and rule promotions (a person's card; off a terminal it only reads).
     action('recovery', 'approvals', 'cli.help.action.policyRecovery', 'cli.help.policy'),
     { name: 'mcp', group: 'approvals', summary: 'cli.help.action.policy.mcp', detail: 'cli.help.policy', children: [

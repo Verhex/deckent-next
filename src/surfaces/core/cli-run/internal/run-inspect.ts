@@ -4,7 +4,7 @@ import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
 import { hasLiveWork } from '#domain/index.js';
 import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderTaskAgentLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
-import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines, runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { runStateWord, runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
@@ -12,7 +12,7 @@ import REGISTRY from './run.json' with { type: 'json' };
 const localTime = (ms: number, locale: Locale) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'long' }).format(ms);
 
 type TaskView = RunView['tasks'][number];
-type InspectData = Pick<Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>, 'run' | 'models'>;
+type InspectData = Pick<Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>, 'run' | 'models' | 'progression'>;
 
 function phaseText(phase: TaskView['phase'], locale: Locale): string {
   const phases: Readonly<Record<TaskView['phase'], () => string>> = {
@@ -99,6 +99,7 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     t('cli.run.inspect.request', { title: runTitle(run, locale) }, locale),
     ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []),
     t('cli.run.inspect.status', { state: runStateWord(run, locale) }, locale),
+    ...runProgressionLines(run, data.progression, locale, runShown),
     ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-ask' ? quotaAskLines((run.quotaWaits ?? []).map(wait => wait.resetsAtMs), locale) : []),

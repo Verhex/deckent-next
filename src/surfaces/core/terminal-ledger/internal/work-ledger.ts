@@ -1,4 +1,5 @@
-import type { RunView, WorkerObservation, WorkerObservationReport, WorkerSidecars } from '#engine/index.js';
+import type { ObservedRun } from '#surfaces/core/recovery-text/index.js';
+import type { RunProgressionDiagnostic, RunView, WorkerObservation, WorkerObservationReport, WorkerSidecars } from '#engine/index.js';
 import type { AssistantUnit, ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 export const WORK_LEDGER_SCHEMA_VERSION = 1;
@@ -46,6 +47,7 @@ export type WorkLedgerRunEntry = Readonly<{
   readonly revision: number;
   readonly cancellationRequested: boolean;
   readonly taskPhases: string;
+  readonly progression?: RunProgressionDiagnostic | undefined;
   readonly observedAtMs?: number;
 }>;
 
@@ -87,7 +89,7 @@ function phaseSummary(run: RunView): string {
   return [...counts.entries()].map(([phase, count]) => `${phase}:${count}`).join(' ') || '—';
 }
 
-export function runViewToLedgerEntry(run: RunView, entryId: string): WorkLedgerRunEntry {
+export function runViewToLedgerEntry(run: ObservedRun, entryId: string): WorkLedgerRunEntry {
   return Object.freeze({
     schemaVersion: WORK_LEDGER_SCHEMA_VERSION,
     kind: 'run',
@@ -97,6 +99,7 @@ export function runViewToLedgerEntry(run: RunView, entryId: string): WorkLedgerR
     revision: run.revision,
     cancellationRequested: run.cancellationRequested,
     taskPhases: phaseSummary(run),
+    ...(run.progression ? { progression: run.progression } : {}),
   });
 }
 

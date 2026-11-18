@@ -1,3 +1,4 @@
+import { readRunProgressionDiagnostic } from '#surfaces/core/recovery-text/index.js';
 import { readWorkerToolCard } from '#capabilities/index.js';
 import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -84,6 +85,10 @@ export function createWorklineLedgerPorts(input: {
     ...optionalField('workerHeartbeatMs', workerHeartbeatMs),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
+    async inspectRunObservation(runId: string) {
+      const data = await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options);
+      return data.run ? { ...data.run, progression: readRunProgressionDiagnostic(data.run, data.progression) } : null;
+    },
     ...(input.describeQueueSummaries ? { async queueSummaryLines(views) {
       const read = await input.describeQueueSummaries!(root, views.map(view => queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)), options).catch(() => null);
       return views.map((_, index) => ticketSummaryBlock(read?.[index] ?? null, undefined, locale));

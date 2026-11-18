@@ -30,6 +30,9 @@ export class RunLifecycleRuntimeLoop {
   private readonly retryNotBefore = new Map<string, number>();
   private readonly failures = new Map<string, { revision: number | null; count: number }>();
   private readonly suspended = new Set<string>();
+  private readonly parkUnavailable = new Set<string>();
+  /** Read-only service-session state; reading cannot resume a suspended Run. */
+  observation(query: ProgressionCursor) { const key = this.key(query); return { suspended: this.suspended.has(key), parkUnavailable: this.parkUnavailable.has(key) }; }
   private readonly failureLimit: number;
   private readonly notedScopes = new Set<string>();
   constructor(private readonly operations: RunLifecycleRuntimeOperations, private readonly observer: RunLifecycleRuntimeObserver,
@@ -62,10 +65,11 @@ export class RunLifecycleRuntimeLoop {
     try {
       if (!this.operations.park) throw ErrorRegistry.createError('RUN_PROGRESSION_PARK_UNAVAILABLE');
       const outcome = await this.operations.park(query, error);
-      this.suspended.delete(key); this.failures.delete(key);
+      this.suspended.delete(key); this.failures.delete(key); this.parkUnavailable.delete(key);
       this.retryNotBefore.set(key, this.now() + this.settings.failureBackoffMs);
       if (outcome === 'parked') await this.report(query, ErrorRegistry.createError('RUN_PROGRESSION_PARKED'));
     } catch (parkError) {
+      this.parkUnavailable.add(key);
       await this.report(query, parkError);
       await this.report(query, ErrorRegistry.createError('RUN_PROGRESSION_PARK_UNAVAILABLE'));
       // No policy bypass or repeated dispatch while durable parking is unavailable. Restore policy/storage and restart the driver.
@@ -142,7 +146,7 @@ export class RunLifecycleRuntimeLoop {
         }
         if (!signal.aborted) await wait(Math.max(this.settings.pollIntervalMs, backoffUntil - this.now()), signal);
       }
-    } finally { await Promise.allSettled(this.inFlight.values()); this.running = false; this.failures.clear(); this.suspended.clear(); this.retryNotBefore.clear(); }
+    } finally { await Promise.allSettled(this.inFlight.values()); this.running = false; this.failures.clear(); this.suspended.clear(); this.retryNotBefore.clear(); this.parkUnavailable.clear(); }
   }
 }
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {

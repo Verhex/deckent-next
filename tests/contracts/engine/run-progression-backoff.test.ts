@@ -141,3 +141,17 @@ it('shutdown drains and reports a failing turn without creating a new durable pa
   const work = loop.run(controller.signal); await vi.advanceTimersByTimeAsync(10); await work;
   expect(park).not.toHaveBeenCalled(); expect(onError).toHaveBeenCalledTimes(1);
 });
+
+it('119-C4: read-only observation retains actual failed durable parking without retrying or mutating the Run', async () => {
+  vi.useFakeTimers(); const controller = new AbortController();
+  const advance = vi.fn(async () => { throw new RunProgressionFailure(ErrorRegistry.createError('POLICY_DENIED'), 3, 'ai'); });
+  const loop = new RunLifecycleRuntimeLoop({ async discover() { return { page: { items: [run('r')], next: null }, due: none }; },
+    async expire() {}, advance, async park() { throw ErrorRegistry.createError('POLICY_DENIED'); } }, {}, { pollIntervalMs: 10, failureBackoffMs: 100, maxConsecutiveFailures: 1 });
+  expect(loop.observation(run('r'))).toEqual({ suspended: false, parkUnavailable: false });
+  const work = loop.run(controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(500);
+    expect(loop.observation(run('r'))).toEqual({ suspended: true, parkUnavailable: true });
+    expect(loop.observation(run('r'))).toEqual({ suspended: true, parkUnavailable: true }); expect(advance).toHaveBeenCalledTimes(1);
+  } finally { controller.abort(); await vi.advanceTimersByTimeAsync(10); await work; }
+});
