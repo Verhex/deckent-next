@@ -7,6 +7,7 @@ import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS
 import { clearConfigCache } from '#platform/index.js';
 import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time
@@ -139,6 +140,8 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
       // Nine capability groups (S4 added `memory`, S7 `agents`) and the AI proposals row sit above the AI delegation entry; the opt-in `dogfood-worker`
       // group is not listed unless held or named in policy.mcp.optInGroups (alpha.56 U5-S2, d3fca0899).
       [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [`${ai.row} · ${ai.on}`, [ENTER], '+ai row'], [w.action, [DOWN, ENTER], '+ai off action'],
+      [ai.offCard, [ESC], '+ai off decline'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after decline'],
+      [`${ai.row} · ${ai.on}`, [ENTER], '+ai still on'], [w.action, [DOWN, ENTER], '+ai off again'],
       [ai.offCard, [ENTER], '+ai off card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after off'], [`${ai.row} · ${ai.off}`, [ENTER], '+ai row off'],
       [w.action, [ENTER], '+ai on action'], [ai.onCard, [ENTER], '+ai on card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after on'],
       [`${ai.row} · ${ai.on}`, [DOWN, ENTER], '+ai row on'],
@@ -151,10 +154,15 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none'],
       { env: { ...process.env, ...f.env, TERM: 'xterm-256color', NO_COLOR: '1', FORCE_COLOR: '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })
       .catch(error => ({ stdout: String(error.stdout ?? '') }));
-    const value = JSON.parse(result.stdout) as { timeout?: string; output: string };
+    const value = JSON.parse(result.stdout) as { timeout?: string; output: string; frames: [string, string][] };
     expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
     const text = stripVTControlCharacters(value.output);
     expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
+    const offFrame = value.frames.find(([label]) => label === '+ai off decline')![1];
+    const offScreen = terminalBuffers(offFrame, 100, 40).text;
+    const affected = locale === 'en' ? 'Affected scopes (2): scope, *' : 'Etkilenen kapsamlar (2): scope, *';
+    expect(offScreen).toContain(affected);
+    expect(offScreen.indexOf(affected)).toBeLessThan(offScreen.indexOf(ai.offCard));
     const view = await inspectConfiguredDecisionDelegations(f.project, { schemaVersion: 1, scopeId: 'scope' }, { env: f.env });
     expect(view.steps[0]).toMatchObject({ step: { id: 'run-resume' }, managed: 'none', effective: 'denied' });
     const changes = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record'])))

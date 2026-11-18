@@ -10,7 +10,7 @@ const UPGRADE = 'policy-template-upgrade';
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
-  /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
+  /** `preview`: would add `rules` (or remove them with `previewRollback`); `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
    * `unavailable`: not a first-run lineage, or (rollback) its archived history is missing (`reason`); `rolled-back` / `nothing-to-roll-back`: upgrade
    * rules removed (a provably fresh install's own delta too, owner 2026-11-05) / none held (`no-upgrade-recorded` is no longer produced). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'refused' | 'unavailable' | 'rolled-back' | 'nothing-to-roll-back' | 'conflict';
@@ -18,7 +18,7 @@ export interface TemplateUpgradeResult {
   readonly rules: readonly PolicyGrant[];
   /** Effective grants used only to describe a genuine partial execution upgrade. */
   readonly executionContext?: readonly PolicyGrant[];
-  /** Validated scopes from the template planner, for the execution notice only. */ readonly executionScopes?: readonly string[];
+  /** Validated scopes from the addition or removal planner (`*` includes all scopes); response only. */ readonly executionScopes?: readonly string[];
   /** Read-only observation of witnessed execution adds for this principal and scope; never persisted. */
   readonly executionHistory?: 'never' | 'withdrawn' | 'unknown';
   /** Complete ordered change description for previews/results; the separately sealed card keeps its own 2048 bound. */
@@ -100,7 +100,9 @@ export class PolicyTemplateUpgrade {
   private async executionHistory(policy: Policy, principal: VerifiedPrincipal, scopeId: string, root?: Policy | null): Promise<'never' | 'withdrawn' | 'unknown'> {
     try {
       const history = await this.deps.policy.authorityHistory?.();
-      if (!history || new Set(history.map(entry => entry.key)).size !== history.length) return 'unknown';
+      if (!history) return 'unknown';
+      const keys = history.flatMap(entry => entry.key === null ? [] : [entry.key]);
+      if (new Set(keys).size !== keys.length) return 'unknown';
       const chain: AuthorityRevision[] = [], visited = new Set<string>();
       const canonical = (value: Policy) => JSON.stringify(immutableJsonObjectSchema.parse(value));
       let terminal = policy, revision = policy.revision;
@@ -119,9 +121,13 @@ export class PolicyTemplateUpgrade {
       if (chain.length !== history.length) return 'unknown';
       const family = (rule: PolicyGrant) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id) && rule.scopes !== 'all'
         && rule.scopes.includes(scopeId) && firstRunExecutionRules([], principal, rule.scopes).wanted.some(want => JSON.stringify(want) === JSON.stringify(rule));
-      const witnessed = chain.flatMap(entry => entry.after.grants.filter(rule => family(rule) && rule.scopes !== 'all' && rule.scopes.some(scope => this.upgraded(entry, principal, scope, false, rule))));
+      const recognized = (entry: AuthorityRevision, rule: PolicyGrant) => rule.scopes !== 'all' && rule.scopes.some(scope => this.upgraded(entry, principal, scope, false, rule));
+      const witnessed = chain.flatMap(entry => entry.after.grants.filter(rule => family(rule) && recognized(entry, rule)));
+      const states = [policy, terminal, ...(root ? [root] : []), ...chain.flatMap(entry => [entry.before, entry.after])];
       if ([...terminal.grants, ...(root?.grants ?? [])].some(family)
-        || policy.grants.some(rule => family(rule) && !witnessed.some(added => JSON.stringify(added) === JSON.stringify(rule)))) return 'unknown';
+        || states.some(state => state.grants.some(rule => family(rule) && !witnessed.some(added => JSON.stringify(added) === JSON.stringify(rule))))
+        || chain.some(entry => entry.after.grants.some(rule => family(rule)
+          && !entry.before.grants.some(old => JSON.stringify(old) === JSON.stringify(rule)) && !recognized(entry, rule)))) return 'unknown';
       if (witnessed.some(rule => !policy.grants.some(held => JSON.stringify(held) === JSON.stringify(rule)))) return 'withdrawn';
       // A witnessed add proves withdrawal above a missing older prefix, just as rollback does; absence never proves 'never'.
       if (administeredSince(revision) && !(root && terminal.revision === root.revision && canonical(terminal) === canonical(root))) return 'unknown';
@@ -130,7 +136,7 @@ export class PolicyTemplateUpgrade {
       return 'never';
     } catch { return 'unknown'; }
   }
-  async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
+  async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly previewRollback?: boolean; readonly expect?: string;
     readonly reason: string; /** The v20 proposal toggle/rollback selects its family explicitly. */ readonly only?: 'ai-proposals' | 'ai-execution' }, verifiedRoot?: Policy | null): Promise<TemplateUpgradeResult> {
     const policy = await this.deps.policy.load();
     const executionHistory = input.mode === 'preview' && input.only !== 'ai-proposals'
@@ -141,7 +147,7 @@ export class PolicyTemplateUpgrade {
     if (input.mode !== 'preview' && isAiPrincipal(input.principal)) return result('refused', { missing: ['policy-administer'] });
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
-    if (input.mode === 'rollback') {
+    if (input.mode === 'rollback' || input.mode === 'preview' && input.previewRollback) {
       const selected = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, input.only);
       const history = await this.deps.policy.authorityHistory?.();
       // Origin first: the historical BEFORE planner and exact key must prove each absent-before/add-after rule.
@@ -204,11 +210,15 @@ export class PolicyTemplateUpgrade {
       const after = resolvePolicyBindings({ ...(planned.policy ?? files.policy as object), revision: 'planned' }, files.bindings);
       if (evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'execute', resource: { kind: 'operation', id: POLICY_ADMINISTER_OPERATION.operation.id } }).decision !== 'allow'
         || evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'decide', resource: { kind: 'approval', id: UPGRADE } }).decision !== 'allow') missing.push('lockout');
-      if (missing.length) return result('refused', { missing, conflicts });
+      // These are the current bodies of the proven remove ids on this plan's revision, never a fresh add plan's scopes.
+      const executionScopes = [...new Set(planned.touched.flatMap(rule => rule.scopes === 'all' ? ['*'] : rule.scopes))];
+      const removal = { rules: delta.rules.filter(rule => held.includes(rule.id)), executionScopes, summary: describePolicyChange(files, change), conflicts, missing };
+      if (missing.length) return result('refused', removal);
+      if (input.mode === 'preview') return result('preview', removal);
       await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change, tag: `template-v5-rollback:${held.join(',')}`,
         reason: input.reason, revision: policy.revision, kind: UPGRADE });
       const remaining = (input.only === 'ai-proposals' ? firstRunProposalRules : firstRunExecutionRules)(principalGrants(after, mcpPrincipalRef(input.principal)), input.principal, [input.scopeId]);
-      return result('rolled-back', { reason: held.join(','), conflicts, covered: remaining.skipped });
+      return result('rolled-back', { reason: held.join(','), conflicts, executionScopes, covered: remaining.skipped });
     }
     const names = { person: input.principal, scopeId: input.scopeId, ...this.names, ...(input.only ? { only: input.only } : {}), aiGrants: principalGrants(policy, mcpPrincipalRef(input.principal)) };
     const firstRun = firstRunTemplateAdditions(files.policy, names);

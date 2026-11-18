@@ -42,7 +42,7 @@
     "src/domain/core/policy/internal/ai-floor.ts": "1aef758554fc427d0f7faeaa9b5c84a3b8d2e5faeec82d9c35933858eb94ea37",
     "src/domain/core/policy/internal/decision-step.ts": "14cb20fd04e31b6f36df54e00c9194ddcb8c5ec05bee44053d36137c650f3b42",
     "src/domain/core/policy/internal/delegations.ts": "6546b036e43863772a916e0e84fc81cdaebc0d07f23ca88739a14d865a146cb0",
-    "src/domain/core/policy/internal/describe.ts": "d0b0bba89697f3243f681ea72896818879b395fcab43df37adb173f8c486c39a",
+    "src/domain/core/policy/internal/describe.ts": "3149bb9993b4c63777e35d2e939d1b05cb1457d5f992874a6e0c8655593a0035",
     "src/domain/core/policy/internal/evaluate.ts": "f2ec39b32a15f374867c8b91cbeac47c986535366b6526ec9877b6fef52163d6",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "786b00828728799abfa6543043ab9dcdded8866f5c1b17a097a9ee63d5b3b20c",
     "src/domain/core/policy/internal/mcp-grant.ts": "a05b34671f9dd88b6c0b6ebbb9d7b05d81b9fc0a6c49675ff25946fdc29f6d23",
