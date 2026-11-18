@@ -661,5 +661,5 @@ it('119-C4: diagnosis keeps exact current cells, restrictions and approval apart
   expect(runProgressionMissingPermissions(run, ai, denied, false)).toEqual([{ kind: 'run', id: 'r', action: 'reserve', scope: 's', reason: 'DENIED', code: 'POLICY_DENIED' }]);
   const asks = policySchema.parse({ ...policy, grants: [...policy.grants, { id: 'ask', effect: 'require-approval', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] });
   expect(runProgressionMissingPermissions(run, ai, asks, false)).toEqual([{ kind: 'run', id: 'r', action: 'cancel', scope: 's', reason: 'APPROVAL_REQUIRED', code: 'POLICY_APPROVAL_UNSUPPORTED' }]);
-  expect(runProgressionMissingPermissions(run, ai, empty, true)).toEqual([]);
+  expect(runProgressionMissingPermissions(run, ai, empty, true)).toEqual([{ kind: 'run', id: 'r', action: 'inspect', scope: 's', reason: 'NO_GRANT', code: 'POLICY_DENIED' }]);
 });

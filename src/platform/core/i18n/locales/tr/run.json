@@ -507,5 +507,6 @@
   "run.progression.denied": "Yapay zekâ yürütmesi açıkça reddedildi",
   "run.progression.approvalRequired": "Yapay zekâ yürütmesi için onay gerekiyor",
   "run.progression.restricted": "Yapay zekâ yürütmesi politikayla sınırlandırıldı",
-  "run.progression.coverageUnknown": "Gelecekteki tüm denemelerin izin kapsamı garanti edilemiyor; somut bir yürütme engeli kanıtlanmadı. İş ayrıldıktan sonra yeniden inceleyin."
+  "run.progression.coverageUnknown": "Gelecekteki tüm denemelerin izin kapsamı garanti edilemiyor; somut bir yürütme engeli kanıtlanmadı. İş ayrıldıktan sonra yeniden inceleyin.",
+  "run.progression.evaluationUnknown": "Yama hazırlamak ek izin gerektirebilir; bu değerlendirmede gerekip gerekmediği doğrulanmadı. Yeniden inceleyin."
 }

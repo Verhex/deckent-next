@@ -10,6 +10,7 @@ export function readRunProgressionDiagnostic(run: Pick<RunView, 'runId' | 'scope
     && value.observedAtMs <= now && now <= value.validUntilMs ? value : undefined;
 }
 export function runProgressionWord(input: RunProgressionDiagnostic | undefined, locale: Locale): string {
+  if (input?.state === 'unknown' && input.reason === 'RUN_PROGRESSION_EVALUATION_UNVERIFIED') return t('run.progression.evaluationUnknown', {}, locale);
   if (input?.state === 'unknown' && input.reason === 'RUN_PROGRESSION_COVERAGE_UNVERIFIED') return t('run.progression.coverageUnknown', {}, locale);
   if (!input || input.state === 'unknown') return t('run.progression.unknown', {}, locale);
   if (input.state === 'maintenance-only') return t('run.progression.maintenance', {}, locale);

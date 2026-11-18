@@ -507,5 +507,6 @@
   "run.progression.denied": "AI execution is explicitly denied",
   "run.progression.approvalRequired": "AI execution requires approval",
   "run.progression.restricted": "AI execution is restricted by policy",
-  "run.progression.coverageUnknown": "Permission coverage for every future attempt cannot be guaranteed; no concrete execution blocker is proved. Inspect again after reservation."
+  "run.progression.coverageUnknown": "Permission coverage for every future attempt cannot be guaranteed; no concrete execution blocker is proved. Inspect again after reservation.",
+  "run.progression.evaluationUnknown": "Patch preparation may need additional permission; whether it is needed for this evaluation is unverified. Inspect again."
 }
