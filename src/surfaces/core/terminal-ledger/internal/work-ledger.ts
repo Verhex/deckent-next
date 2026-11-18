@@ -46,6 +46,7 @@ export type WorkLedgerRunEntry = Readonly<{
   readonly scopeId: string;
   readonly revision: number;
   readonly cancellationRequested: boolean;
+  readonly runState: RunView['state'];
   readonly taskPhases: string;
   readonly progression?: RunProgressionDiagnostic | undefined;
   readonly observedAtMs?: number;
@@ -98,6 +99,7 @@ export function runViewToLedgerEntry(run: ObservedRun, entryId: string): WorkLed
     scopeId: run.scopeId,
     revision: run.revision,
     cancellationRequested: run.cancellationRequested,
+    runState: run.state,
     taskPhases: phaseSummary(run),
     ...(run.progression ? { progression: run.progression } : {}),
   });

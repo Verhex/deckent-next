@@ -72,7 +72,7 @@ export interface DoctorCheckFacts {
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
   /** BeUser D-05: this install's Runs parked after a failure, with the typed failure code (monitor snapshot); null or absent when not read. */
-  readonly progressionRuns?: { run: Pick<import('#engine/index.js').RunView, 'runId' | 'scopeId' | 'revision'>; progression?: import('#engine/index.js').RunProgressionDiagnostic }[] | null;
+  readonly progressionRuns?: { run: Pick<import('#engine/index.js').RunView, 'runId' | 'scopeId' | 'revision'> & Partial<Pick<import('#engine/index.js').RunView, 'state' | 'cancellationRequested'>>; progression?: import('#engine/index.js').RunProgressionDiagnostic }[] | null;
   readonly stuckRuns?: readonly Readonly<{ runId: string; code: string }>[] | null;
   /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
   readonly egress?: DoctorEgress | null;
@@ -198,8 +198,9 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (f.progressionRuns === null) rows.push(row('work', 'work.progression', 'untested', t('run.progression.unknown', {}, l), 'deckent run list'));
   for (const entry of f.progressionRuns ?? []) {
     const diagnostic = readRunProgressionDiagnostic(entry.run, entry.progression);
-    rows.push(row('work', 'work.progression', !diagnostic || diagnostic.state === 'unknown' ? 'untested' : diagnostic.state === 'eligible' ? 'ok' : 'warning',
-      runProgressionLines(entry.run, diagnostic, l).join(' ')));
+    const lines = runProgressionLines(entry.run, diagnostic, l);
+    if (lines.length) rows.push(row('work', 'work.progression', !diagnostic || diagnostic.state === 'unknown' ? 'untested' : diagnostic.state === 'eligible' ? 'ok' : 'warning',
+      lines.join(' ')));
   }
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'

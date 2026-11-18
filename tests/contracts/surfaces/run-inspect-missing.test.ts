@@ -80,3 +80,24 @@ it('119-C4: recovery command arguments cannot become shell syntax', () => {
     expect(runProgressionLines({ scopeId: "s'cope", runId: 'r', revision: 0 }, undefined, locale).join('\n')).toContain("--scope 's'\\''cope' --id r");
   }
 });
+
+
+it('119-3308: terminal and cancellation-requested CLI inspection keeps state/id and JSON without progression text (EN/TR)', async () => {
+  for (const locale of ['en', 'tr']) for (const state of [
+    { ...run, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' } },
+    { ...run, cancellationRequested: true },
+  ]) {
+    const h = harness(state);
+    expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], h.context)).toBe(0);
+    const text = h.out.join('');
+    expect(text).toContain(locale === 'en' ? 'Run r' : 'İş r');
+    expect(text).toContain(locale === 'en' ? state.state.kind === 'terminal' ? 'completed' : 'running' : state.state.kind === 'terminal' ? 'tamamlandı' : 'çalışıyor');
+    expect(text).not.toContain(locale === 'en' ? 'Current service diagnosis is unavailable' : 'Güncel servis tanısı okunamadı');
+    expect(text).not.toContain(locale === 'en' ? 'Inspect again for the current cause and next step:' : 'Güncel neden ve sonraki adım için yeniden inceleyin:');
+    if (state.cancellationRequested) expect(text).toContain(locale === 'en' ? 'Cancellation: request recorded; worker termination is not confirmed.' : 'İptal: istek kaydedilmiş; işçi sonlanması doğrulanmadı.');
+    expect(h.err).toEqual([]);
+    const json = harness(state);
+    expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r', '--json'], json.context)).toBe(0);
+    expect(JSON.parse(json.out.join('')).run).toEqual(state);
+  }
+});

@@ -625,6 +625,9 @@ it('119-C4: doctor separates service policy diagnosis from unavailable login/mod
     const stale = doctorChecks(report, facts({ progressionRuns: [{ run: { ...run, revision: 2 }, progression: diagnostic }] }), locale).find(row => row.id === 'work.progression')!;
     expect(stale.state).toBe('untested'); expect(stale.text).not.toContain('--only ai-execution');
     expect(doctorChecks(report, facts({ progressionRuns: null }), locale).find(row => row.id === 'work.progression')).toMatchObject({ state: 'untested' });
+    for (const closed of [{ ...run, state: { kind: 'terminal' as const, outcome: 'completed' as const, reason: 'completed' as const } }, { ...run, cancellationRequested: true }]) {
+      expect(doctorChecks(report, facts({ progressionRuns: [{ run: closed, progression: diagnostic }] }), locale).find(row => row.id === 'work.progression')).toBeUndefined();
+    }
   }
 });
 

@@ -1,4 +1,4 @@
-import { readRunProgressionDiagnostic, runProgressionWord, runProgressionLines, type ObservedRun } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines, type ObservedRun } from '#surfaces/core/recovery-text/index.js';
 import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
 import { readWorkerToolCard } from '#capabilities/index.js';
@@ -116,7 +116,7 @@ export async function pickRun(panel: WorklinePanel, execution: LocalExecution, l
     await panel.pick(execution, { kind: 'job-window', title: work.jobs!.runTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']); return null;
   }
   const choice = await panel.pick(execution, { kind: 'job-picker', title: cancellable ? work.jobs!.cancelPickerTitle : work.live!.runsTitle,
-    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runListStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${runProgressionWord(readRunProgressionDiagnostic(run, run.progression), work.jobs!.locale)}`), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
+    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runListStateText(run, work.jobs!)}]`, { role: 'accent' }), ...runProgressionLines(run, run.progression, work.jobs!.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return null;
   // Refresh revision and cancellation eligibility after the choice; the service remains the authority at mutation time.
   const selected = await (ledger.inspectRunObservation ?? ledger.inspectRun)(runs[Number(choice)]!.runId);
@@ -129,7 +129,7 @@ const listWindow: JobWindowOpen = async (command, panel, execution, ledger, work
   const labels = work.jobs!, workers = command === 'workers' ? (await ledgerEntriesForWorkers(ledger, 'list')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker') : [];
   const runs = command === 'runs' ? await loadRunViewsForWatch(ledger) : [];
   const lines = command === 'workers' ? liveWindowLines('workers', { workers, runs: [] }, { live: work.live!, panel: work.panel, workerLine: work.workerLine }, Number.POSITIVE_INFINITY)
-    : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), span(` · ${runProgressionWord(readRunProgressionDiagnostic(run, run.progression), labels.locale)}`), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
+    : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), ...runProgressionLines(run, run.progression, labels.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
   const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
   await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
   if (command === 'runs') onSeen?.();

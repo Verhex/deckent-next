@@ -308,7 +308,13 @@ it.skipIf(process.platform === 'win32')('119-C4 rev2 point 1: cancelled-before-s
         principal: { id: f.actor.id }, secretStore: null, imageRefresh: null, installationBinding: null };
       const checks = doctorChecks(report, { scopeId: 's', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null,
         retiringModels: null, poolStatus: 'ready', toolchainUpdateEnabled: false, progressionRuns: [{ run: inspected.run!, ...(inspected.progression ? { progression: inspected.progression } : {}) }] }, locale);
-      texts.push(checks.find(row => row.id === 'work.progression')!.text);
+      const progressionCheck = checks.find(row => row.id === 'work.progression');
+      if (inspected === cancelled) expect(progressionCheck).toBeUndefined();
+      texts.push(progressionCheck?.text ?? '');
+      if (inspected === cancelled) for (const text of texts) {
+        expect(text).not.toContain(locale === 'en' ? 'automatic progression is unknown' : 'otomatik ilerleme durumu bilinmiyor');
+        expect(text).not.toContain(locale === 'en' ? 'Inspect again for the current cause and next step:' : 'Güncel neden ve sonraki adım için yeniden inceleyin:');
+      }
       for (const text of texts) if (inspected === cancelled) expect(text).not.toContain(direction); else expect(text).toContain(direction);
     }
   }

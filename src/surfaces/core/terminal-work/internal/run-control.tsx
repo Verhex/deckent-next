@@ -5,7 +5,7 @@ import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisio
 import { fillTemplate, loadRunViewsForWatch, runControlActions, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { runProgressionWord, readRunProgressionDiagnostic } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
 import { runHoldText, runStateText, runTitle, runDetailLines, queueRowSummaries } from './job-windows.js';
 import RUN_CONTROL from './run-control.json' with { type: 'json' };
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
@@ -147,7 +147,7 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     selection.current = runs[selected]?.runId ?? null; // A vanished row resets to the first remaining row.
     const answerable = Boolean(ledger.answerTask && work.runAnswer && words.keyAnswer);
     const rows = runs.map(run => ({ runId: run.runId, actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
-      span(` · ${runProgressionWord(readRunProgressionDiagnostic(run, run.progression), jobs.locale)}`), span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
+      ...runProgressionLines(run, run.progression, jobs.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
     const choices = ['close', 'refresh', ...rows.map((_, index) => `inspect:${index}`), ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
     const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected, detailHint: t('run.progression.openDetail', {}, jobs.locale) }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;

@@ -21,7 +21,8 @@ export function runProgressionWord(input: RunProgressionDiagnostic | undefined, 
   return input.state === 'eligible' ? t('run.progression.eligible', {}, locale) : t('run.progression.suspended', {}, locale);
 }
 const commandArgument = (value: string) => /^[A-Za-z0-9._/:@%+=,-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-export function runProgressionLines(run: Pick<RunView, 'runId' | 'scopeId' | 'revision'>, input: unknown, locale: Locale, shownRunId = run.runId): string[] {
+export function runProgressionLines(run: Pick<RunView, 'runId' | 'scopeId' | 'revision'> & Partial<Pick<RunView, 'state' | 'cancellationRequested'>>, input: unknown, locale: Locale, shownRunId = run.runId): string[] {
+  if (run.state?.kind === 'terminal' || run.cancellationRequested) return [];
   const value = readRunProgressionDiagnostic(run, input), scope = commandArgument(run.scopeId), id = commandArgument(shownRunId);
   const inspect = `deckent run inspect --scope ${scope} --id ${id}`;
   const lines = [runProgressionWord(value, locale)];

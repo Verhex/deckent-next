@@ -18,6 +18,7 @@ vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
 });
 const runId = 'do-run', EN = workSurfaceLabels('en'), TR = workSurfaceLabels('tr');
 const unknownProgression = 'Current service diagnosis is unavailable; automatic progression is unknown.';
+const inspectProgression = 'Inspect again for the current cause and next step:';
 const brief = projectResultBrief('attempt', { verdict: 'accepted' }, { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: {
   schemaVersion: 1, summary: 'CLAIM-SENTINEL', changedFiles: [], checks: [{ command: 'verify-order', outcome: 'failed' }], openIssues: ['ISSUE-SENTINEL'],
 } }, null, { deliveryOutlook: 'awaiting-delivery', failedTests: { count: 2, names: ['TEST-SENTINEL'], truncated: true } });
@@ -112,10 +113,14 @@ describe('session /do completion and shared /run briefs', () => {
   it.each(['en', 'tr'] as const)('%s /run renders shared CLAIM, open issues, failed tests and delivery outlook', async locale => {
     const work = workSurfaceLabels(locale), current = run(runId, true);
     const text = runDetailLines(current, work).map(line => line.spans.map(item => item.text).join('')).join('\n');
+    expect(text).not.toContain(locale === 'en' ? unknownProgression : 'Güncel servis tanısı okunamadı; otomatik ilerleme durumu bilinmiyor.');
+    expect(text).not.toContain(locale === 'en' ? inspectProgression : 'Güncel neden ve sonraki adım için yeniden inceleyin:');
     for (const detail of ['CLAIM-SENTINEL', 'ISSUE-SENTINEL', 'TEST-SENTINEL', 'verify-order']) expect(text).toContain(detail);
     const h = harness(); h.view.instance.unmount();
     const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work }, ledger: { ...h.ledger, followEvents: undefined, readSurfaceSnapshot: undefined, inspectRun: async () => current } }, 220, { rows: 100 });
     mounted.push(view); await settle(); view.stdin.write('/run\r'); await until(() => view.stdout.frame.includes('> TASK-SENTINEL'), 'run picker');
+    expect(view.stdout.frame).not.toContain(locale === 'en' ? unknownProgression : 'Güncel servis tanısı okunamadı; otomatik ilerleme durumu bilinmiyor.');
+    expect(view.stdout.frame).not.toContain(locale === 'en' ? inspectProgression : 'Güncel neden ve sonraki adım için yeniden inceleyin:');
     view.stdin.write('\r'); await until(() => view.stdout.frame.includes('CLAIM-SENTINEL'), 'rendered brief');
     expect(view.stdout.frame).toContain('ISSUE-SENTINEL'); expect(view.stdout.frame).toContain('TEST-SENTINEL');
     if (process.env['DONGU_FRAME_PROOF']) appendFileSync(process.env['DONGU_FRAME_PROOF'], `\n## /run ${locale}\n${view.stdout.frame}\n`);
@@ -160,15 +165,22 @@ it('D2 refreshes an open Runs window on push and removes hold on completion', as
   await until(() => h.reads() > 0, 'opening snapshot');
   h.view.stdin.write('/runs\r');
   await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'running window');
+  expect(h.view.stdout.frame).toContain(`[running] · ${unknownProgression} · do-run`);
   h.view.stdin.write('\u001b[B'); await settle();
   const before = h.reads(); h.pulse();
   await until(() => h.reads() > before, 'push refresh with second row selected'); await settle();
-  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · foreign`);
   h.view.stdin.write('\u001b[A'); await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'first row selected');
   h.finish();
-  await until(() => h.view.stdout.frame.includes(`[completed] · ${unknownProgression} · do-run`), 'completed open window');
+  await until(() => h.view.stdout.frame.includes(`[completed] · do-run`), 'completed open window');
   expect(h.view.stdout.frame).not.toContain(EN.runControl!.keyHold);
+  expect(h.view.stdout.frame).not.toContain(unknownProgression);
+  expect(h.view.stdout.frame).not.toContain(inspectProgression);
   h.view.stdin.write('h'); await settle(); expect(control).not.toHaveBeenCalled();
+  h.view.stdin.write('\r'); await until(() => h.view.stdout.frame.includes('CLAIM-SENTINEL'), 'completed detail opens by id');
+  expect(h.view.stdout.frame).toContain('do-run');
+  expect(h.view.stdout.frame).not.toContain(unknownProgression);
+  expect(h.view.stdout.frame).not.toContain(inspectProgression);
 });
 
 
@@ -177,14 +189,33 @@ it('D2 F2 keeps the selected identity across insertion/reorder and resets a vani
   Object.assign(h.ledger, { controlRun: vi.fn(), listRunIds: async () => ids, inspectRun: async id => run(id, id !== runId) });
   await until(() => h.reads() > 0, 'opening'); h.view.stdin.write('/runs\r');
   await until(() => h.view.stdout.frame.includes(EN.runControl!.keyHold), 'window');
-  h.view.stdin.write('\u001b[B'); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`), 'selected B');
+  h.view.stdin.write('\u001b[B'); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [completed] · foreign`), 'selected B');
   ids = ['new', runId, 'foreign']; h.pulse();
-  await until(() => h.view.stdout.frame.includes(`[completed] · ${unknownProgression} · new`), 'inserted C');
-  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  await until(() => h.view.stdout.frame.includes(`[completed] · new`), 'inserted C');
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · foreign`);
   ids = ['foreign', 'new', runId]; h.pulse(); await settle(80);
-  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · ${unknownProgression} · foreign`);
+  expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [completed] · foreign`);
   ids = [runId, 'new']; h.pulse(); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`), 'vanished reset');
   h.view.stdin.write('\u001b[B'); await settle(); h.view.stdin.write('\u001b'); await settle();
   h.view.stdin.write('/runs\r'); await until(() => h.view.stdout.frame.includes(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`), 'new window reset');
   h.pulse(); await settle(80); expect(h.view.stdout.frame).toContain(`› TASK-SENTINEL [running] · ${unknownProgression} · do-run`);
+});
+
+
+it('119-3308: a cancellation-requested Run keeps its row, id and normal detail without progression instructions (EN/TR)', async () => {
+  for (const work of [EN, TR]) {
+    const current = { ...run(), cancellationRequested: true }, inspectRun = vi.fn(async () => current), control = vi.fn();
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work }, ledger: { scopeId: 'scope-a', listRunIds: async () => [runId], inspectRun, controlRun: control } }, 220, { rows: 100 });
+    mounted.push(view); await settle(); view.stdin.write('/runs\r');
+    await until(() => view.stdout.frame.includes('TASK-SENTINEL') && view.stdout.frame.includes('do-run'), 'cancelling row');
+    expect(view.stdout.frame).toContain(`[${work.jobs!.runStates['running']}]`);
+    const absent = work === EN ? [unknownProgression, inspectProgression] : ['Güncel servis tanısı okunamadı; otomatik ilerleme durumu bilinmiyor.', 'Güncel neden ve sonraki adım için yeniden inceleyin:'];
+    for (const text of absent) expect(view.stdout.frame).not.toContain(text);
+    const before = inspectRun.mock.calls.length; view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('CLAIM-SENTINEL'), 'cancelling detail');
+    expect(inspectRun.mock.calls.length).toBeGreaterThan(before); expect(inspectRun).toHaveBeenLastCalledWith(runId);
+    expect(view.stdout.frame).toContain('do-run');
+    for (const text of absent) expect(view.stdout.frame).not.toContain(text);
+    expect(control).not.toHaveBeenCalled(); view.instance.unmount();
+  }
 });

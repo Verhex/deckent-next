@@ -87,7 +87,7 @@ function LedgerEntryBody({ entry, labels, groupView }: { readonly entry: WorkLed
         <Text {...ink.muted}>{head}</Text>
         <Text>{revision}</Text>
         <Text {...ink.muted}>{phases}</Text>
-        {runProgressionLines(entry, entry.progression, labels.locale ?? 'en').map((line, index) => <Text key={index}>{line}</Text>)}
+        {runProgressionLines({ ...entry, state: entry.runState }, entry.progression, labels.locale ?? 'en').map((line, index) => <Text key={index}>{line}</Text>)}
       </Box>
     );
   }

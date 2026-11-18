@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AssistantLive, AssistantUnitRow, WorklineApp, renderAssistantStream, startAssistantStream, streamStepEntries, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
   type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import type { ToolUnit } from '#surfaces/core/terminal-render/index.js';
+import { runViewToLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import type { RunView } from '#engine/index.js';
 import { LedgerEntryRow, stepSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
@@ -316,4 +318,18 @@ describe('declined vs policy-denied tool line (T2-FOLLOWUP DENY-WORDING)', () =>
       }
     }
   });
+});
+
+
+it('119-3308: Run ledger cards suppress progression for known terminal or cancellation-requested state (EN/TR)', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const state of [
+    { state: { kind: 'terminal', outcome: 'completed', reason: 'completed' }, cancellationRequested: false },
+    { state: { kind: 'running' }, cancellationRequested: true },
+  ]) {
+    const run = { schemaVersion: 3, runId: 'finished-run', scopeId: 'scope-a', revision: 2, tasks: [], ...state } as RunView;
+    const view = mountElement(createElement(LedgerEntryRow, { entry: runViewToLedgerEntry(run, 'finished-card'), labels: { ...labels, locale } }));
+    await until(() => view.stdout.last.includes('finished-run'), 'finished Run card');
+    expect(view.stdout.last).not.toContain(locale === 'en' ? 'automatic progression is unknown' : 'otomatik ilerleme durumu bilinmiyor');
+    expect(view.stdout.last).not.toContain('deckent run inspect');
+  }
 });

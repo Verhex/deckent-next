@@ -1,7 +1,7 @@
 import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { formatAgo } from '#surfaces/core/cli-human/index.js';
 import { cliMode, cliTableStyle, renderCliTable } from '#surfaces/core/cli-human/index.js';
-import { readRunProgressionDiagnostic, runProgressionLines, runProgressionWord } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
 import type { RunProgressionDiagnostic, RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
 import { familyScope, readScopeRuns, runHumanIo, runStateWord, runTitle, scopeLine, shownId } from './run-human.js';
@@ -12,7 +12,7 @@ function renderRunTable(runs: readonly RunView[], context: RunCommandContext, lo
   const ids = runs.map(run => run.runId);
   return renderCliTable([{ header: t('cli.run.list.col.id', {}, locale), shrink: false }, { header: t('cli.run.list.col.state', {}, locale) },
     { header: t('cli.run.list.col.tasks', {}, locale), align: 'right', shrink: false }, { header: t('cli.run.list.col.title', {}, locale) }],
-  runs.map(run => [shownId(run.runId, ids), `${runStateWord(run, locale)} · ${runProgressionWord(readRunProgressionDiagnostic(run, observations.get(run.runId)), locale)}`, `${run.tasks.filter(task => task.phase === 'accepted').length}/${run.tasks.length}`, runTitle(run, locale)]),
+  runs.map(run => [shownId(run.runId, ids), [runStateWord(run, locale), ...runProgressionLines(run, observations.get(run.runId), locale).slice(0, 1)].join(' · '), `${run.tasks.filter(task => task.phase === 'accepted').length}/${run.tasks.length}`, runTitle(run, locale)]),
   cliTableStyle(context));
 }
 

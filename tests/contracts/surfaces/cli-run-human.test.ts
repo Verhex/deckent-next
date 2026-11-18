@@ -316,7 +316,7 @@ it('119-rev F4: transient unknown suspension asks for inspection without cancell
 });
 
 it('119-C4: list and JSON keep RunView unchanged while showing the service diagnosis in both languages', async () => {
-  const root = await project(), item = view(), st = store([item]), now = Date.now();
+  const root = await project(), item = view([{ taskBrief: brief('Fix checkout') }]), st = store([item]), now = Date.now();
   const progression = { schemaVersion: 1, scopeId: 's', runId: LONG, revision: 7, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
     state: 'blocked', reason: 'RUN_PROGRESSION_REPROPOSE_REQUIRED', session: 'ineligible', suspended: false, parkUnavailable: false, missing: [] };
   const handlers = { ...st.context, async inspectRun() { return { schemaVersion: 1, layout: {}, run: item, progression }; } };
@@ -332,6 +332,20 @@ it('119-C4: list and JSON keep RunView unchanged while showing the service diagn
         : locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor');
       expect(shown.text).not.toContain('--only ai-execution');
     }
+  }
+  for (const locale of ['en', 'tr']) for (const closed of [
+    { ...item, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' } },
+    { ...item, cancellationRequested: true },
+  ]) {
+    const output = await run(['run', 'list', '--scope', 's', '--lang', locale], {
+      ...handlers, async inspectRun() { return { schemaVersion: 1, layout: {}, run: closed, progression }; },
+    }, root);
+    expect(output.code).toBe(0); expect(output.text).toContain('a1b2c3d4'); expect(output.text).toContain('Fix checkout');
+    expect(output.text).not.toContain(locale === 'en' ? 'Propose again' : 'Yeniden önerin');
+    expect(output.text).not.toContain(locale === 'en' ? 'Inspect again for the current cause and next step:' : 'Güncel neden ve sonraki adım için yeniden inceleyin:');
+    expect(output.text).toContain(locale === 'en' ? 'Details: deckent run inspect --id <short id>' : 'Ayrıntı: deckent run inspect --id <kısa kimlik>');
+    expect(output.text).not.toContain('deckent run cancel');
+    expect(output.text).not.toContain(locale === 'en' ? 'automatic progression' : 'otomatik ilerleme');
   }
   const json = await run(['run', 'list', '--scope', 's', '--json'], handlers, root), parsed = JSON.parse(json.text);
   expect(parsed.runs).toEqual([item]); expect(parsed.progression).toEqual([progression]); expect(item).not.toHaveProperty('progression');
