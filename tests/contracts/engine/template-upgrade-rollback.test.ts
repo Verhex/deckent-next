@@ -855,7 +855,38 @@ it.skipIf(process.platform !== 'linux')('3280 F4: a genuine long multi-scope rol
     expect(summary.length).toBeLessThanOrEqual(2048);
     expect(summary).toContain(scopes.length === 2 ? locale === 'en'
       ? 'will be withdrawn in: s, other.' : 'şu kapsamlarda kaldırılacak: s, other.' : locale === 'en'
-      ? 'This card does not list all 8 affected scopes; the full list is shown above in the command output.'
-      : 'Etkilenen 8 kapsamın tamamı bu kartta listelenmiyor; tam liste yukarıda komut çıktısında gösteriliyor.');
+      ? 'Affected scope count: 8. Read the current withdrawal preview: deckent policy upgrade --template current --rollback --preview --scope <id>.'
+      : 'Etkilenen kapsam sayısı: 8. Güncel geri çekme önizlemesini okuyun: deckent policy upgrade --template current --rollback --preview --scope <id>.');
+  }
+});
+
+
+it.skipIf(process.platform !== 'linux')('3286 F4: a general administration card keeps a truthful, inspectable scope-count notice', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const crowded of [false, true]) {
+    const scopes = crowded ? ['s', 'other'] : ['s', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(220)}`)];
+    const f = await fixture(grants => grants.map(rule => {
+      const scoped = rule.scopes === 'all' ? rule : { ...rule, scopes };
+      return crowded && FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => id === rule.id) ? { ...scoped,
+        resource: { ...rule.resource, ids: Array.from({ length: 3 }, (_, i) => `resource-${i}-${'x'.repeat(38)}`) },
+        principals: Array.from({ length: 6 }, (_, i) => ({ issuer: `fixture-${i}-${'i'.repeat(30)}/mcp`, subject: 'p'.repeat(40) })) } : scoped;
+    }), false, 'ai-execution', locale);
+    const command = { schemaVersion: 1, commandId: 'general-withdrawal', scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: 'general-withdrawal',
+      input: { schemaVersion: 1, changes: (crowded ? FIRST_RUN_CURRENT_UPGRADE_RULE_IDS : FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.slice(0, 1)).map(id => ({ kind: 'grant.remove', id })) }, expectedVersion: (await f.source.load()).revision };
+    const before = await f.bytes(), history = await f.source.authorityHistory();
+    const pending = await f.administration.submit(command);
+    expect(pending.status).toBe('approval-pending');
+    const expected = locale === 'en'
+      ? `Affected scope count: ${scopes.length}. Read the current withdrawal preview: deckent policy upgrade --template current --rollback --preview --scope <id>.`
+      : `Etkilenen kapsam sayısı: ${scopes.length}. Güncel geri çekme önizlemesini okuyun: deckent policy upgrade --template current --rollback --preview --scope <id>.`;
+    const stored = f.records()[0]!;
+    expect(stored.request.summary).toContain(expected);
+    expect(stored.request.summary).not.toMatch(/above|yukarıda|does not list all|tamamı bu kartta listelenmiyor/u);
+    if (crowded) expect(stored.request.summary).toContain('scopes[s,other]');
+    expect(stored.request.summary.length).toBeLessThanOrEqual(2048);
+    expect(stored.request.summary.indexOf('- grant ')).toBeLessThan(stored.request.summary.indexOf(expected));
+    expect(await f.bytes()).toBe(before); expect(await f.source.authorityHistory()).toEqual(history);
+    // Reading the retained card later must not imply an earlier command printed anything.
+    expect(f.records()[0]!.request.summary).toBe(stored.request.summary);
   }
 });

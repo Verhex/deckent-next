@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent, t,
+  resolveLocale, getConfigValue, terminalRecordText, unexpectedQueryFailure, CodedError, isCodedError, errorCodeOf, isAbsent, t,
 } from '../../../src/platform/index.js';
 import { CodedError as DomainCodedError, isCodedError as isDomainCodedError, PolicyError } from '../../../src/domain/index.js';
 
@@ -164,5 +164,19 @@ it('keeps contextual witness guidance in both locales and never offers an automa
     const refused = formatHumanError(ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: 'deckent.service', command } }), { noColor: true, locale });
     expect(refused).toContain(command);
     expect(refused).not.toContain('deckent uninstall --disable-unit');
+  }
+});
+
+
+it('3286 F4: terminal records preserve complete ids and make controls, hidden marks and literal escapes distinct', () => {
+  const ids = ['team,west', 'team\u202eabc', 'team\u200babc', 'team\\u202eabc', '"quoted"', 'long-' + 'x'.repeat(251),
+    'a\u0085b', 'a\u2028b', 'a\u2066b', 'a\u00adb', 'a\u{e0001}b', 'a\n\u001bb'];
+  const shown = ids.map(terminalRecordText);
+  expect(shown.slice(0, 5)).toEqual(['"team,west"', '"team\\u202eabc"', '"team\\u200babc"', '"team\\\\u202eabc"', '"\\"quoted\\""']);
+  expect(new Set(shown).size).toBe(ids.length);
+  expect(shown.map(value => JSON.parse(value))).toEqual(ids);
+  for (const value of shown) {
+    expect(value.split('\n')).toHaveLength(1);
+    expect(value).not.toMatch(/[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Zl}\p{Zp}]/u);
   }
 });

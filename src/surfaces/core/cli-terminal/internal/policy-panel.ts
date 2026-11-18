@@ -1,4 +1,4 @@
-import { t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { t, terminalRecordText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { delegationWords, delegationLines, mcpCapabilityWords, mcpCapabilityPreviewLines, type DelegationHandlers, type McpCapabilityHandlers } from '#surfaces/core/work-labels/index.js';
 import type { TerminalLaunchContext } from './context.js';
@@ -58,7 +58,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
           : await upgrade(root, scopeId, { mode: 'preview', previewRollback: true, reason, only: 'ai-proposals' }, env);
         const ids = (view.rules ?? []).map(rule => rule.id), applicable = ids.length > 0 && view.status === 'preview' && !view.missing.length;
         const scopes = !on && view.executionScopes ? [t('policy.aiExecution.rollbackScopes', {
-          count: view.executionScopes.length, scopes: view.executionScopes.map(terminalSafeText).join(', ') }, locale)] : [];
+          count: view.executionScopes.length, scopes: view.executionScopes.map(terminalRecordText).join('\n') }, locale)] : [];
         const head = !ids.length ? t('policy.aiProposals.nothing', { state: described(view) }, locale) : on ? t('policy.aiProposals.onCard', { ids: ids.join(', ') }, locale) : t('policy.aiProposals.offCard', { ids: ids.join(', ') }, locale);
         return { scopeId, groupId, action, digest: view.revision, applicable, lines: [...scopes, head, ...(on && ids.length && view.missing.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking(view)] : [])].map(text => ({ label: '', text })) };
       }

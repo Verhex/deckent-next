@@ -168,6 +168,10 @@ Elle düzenleme, verilen profil veya eski adayın birleşik yayını, yönetilen
 kaynağını kanıtlamaz; geri alma soy zincirini kanıtlayamıyorsa yetkili politika
 düzenleme yolunu kullan.
 
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback --preview`, hiçbir şey yazmadan güncel geri çekme kapsamlarını listeler.
+CLI ve `/policy` tam kimlikleri ayrı satırlarda, tırnak içinde gösterir; görünmez ve yön değiştiren karakterler kaçış dizileriyle görünür olur.
+Saklanan kısa kart yalnız kapsam sayısını ve güncel okuma komutunu belirtir; geçmiş bir listenin konumunu iddia etmez.
+
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback`, kişinin
 mevcut onay yoluyla yalnız değiştirilmemiş ve yönetilen kaynağı kanıtlanmış v21
 yürütme kurallarını kaldırır. Birkaç kapsam için eklenmiş yönetilen kural, `SCOPE_ID`

@@ -160,8 +160,12 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
     const offFrame = value.frames.find(([label]) => label === '+ai off decline')![1];
     const offScreen = terminalBuffers(offFrame, 100, 40).text;
-    const affected = locale === 'en' ? 'Affected scopes (2): scope, *' : 'Etkilenen kapsamlar (2): scope, *';
+    const affected = locale === 'en' ? 'Affected scopes (2), full list:' : 'Etkilenen kapsamlar (2), tam liste:';
     expect(offScreen).toContain(affected);
+    for (const shown of ['"scope"', '"*"']) {
+      const line = offScreen.split('\n').find(line => line.includes(shown));
+      expect(line, shown).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(shown);
+    }
     expect(offScreen.indexOf(affected)).toBeLessThan(offScreen.indexOf(ai.offCard));
     const view = await inspectConfiguredDecisionDelegations(f.project, { schemaVersion: 1, scopeId: 'scope' }, { env: f.env });
     expect(view.steps[0]).toMatchObject({ step: { id: 'run-resume' }, managed: 'none', effective: 'denied' });
@@ -179,3 +183,38 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `delegation-${locale}.txt`), text); }
   }, 120_000);
 });
+
+
+it.skipIf(process.platform !== 'linux')('3286 F4: the real /policy decision window distinguishes comma, bidi and zero-width scope ids in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const scopeId of ['scope,west', 'scope\u202eabc', 'scope\u200babc']) {
+    const f = await runtime();
+    const template = firstRunPolicyTemplate({ scopeId, principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
+      scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
+      shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...template.policy,
+      roles: [{ id: 'owner', permissions: installationOwnerPermissions(getPolicyVocabulary().resources.map(resource => resource.kind)) }] }), { mode: 0o600 });
+    await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ ...template.bindings,
+      bindings: [{ id: 'owner', principals: me, roles: ['owner'], scopes: [scopeId] }] }), { mode: 0o600 });
+    const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+    config.cancellationRuntime.scopeIds = [scopeId]; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+    const ai = locale === 'en' ? 'AI proposals' : 'Yapay zekâ önerileri', off = locale === 'en' ? 'Turn off: removes these rules' : 'Kapat: şu kuralları';
+    const steps = [['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
+      [words[locale].groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [ai, [ENTER], '+ai'],
+      [words[locale].action, [DOWN, ENTER], '+action'], [off, [ESC, ESC, ESC], '+decision']];
+    const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none', scopeId],
+      { env: { ...process.env, ...f.env, TERM: 'xterm-256color', NO_COLOR: '1', FORCE_COLOR: '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })
+      .catch(error => ({ stdout: String(error.stdout ?? '') }));
+    const value = JSON.parse(result.stdout) as { timeout?: string; output: string; frames: [string, string][] };
+    expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
+    const frame = value.frames.find(([label]) => label === '+decision')![1], screen = terminalBuffers(frame, 100, 40).text;
+    const shown = JSON.stringify(scopeId).replace(/\u202e/gu, '\\u202e').replace(/\u200b/gu, '\\u200b');
+    for (const record of [shown, '"*"']) {
+      const line = screen.split('\n').find(line => line.includes(record));
+      expect(line, screen).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(record);
+    }
+    expect(screen).not.toMatch(/[\u202e\u200b]/u);
+    expect(screen.indexOf(shown)).toBeLessThan(screen.indexOf(off));
+    expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants).toEqual(template.policy.grants);
+    expect(f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record']))).filter(row => row.event.subject.kind === 'authority-change')).toEqual([]);
+  }
+}, 120_000);

@@ -166,6 +166,10 @@ trying again; there is no automatic rewrite. A hand edit, supplied profile or co
 candidate publication does not establish managed family-21 custody; use authorized
 policy editing when the managed rollback cannot prove its lineage.
 
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback --preview` reads the current withdrawal scopes without writing.
+CLI and `/policy` show each complete id as a quoted record on its own line, escaping invisible and directional marks.
+The persisted short card states only the scope count and current read command; it makes no claim about an earlier printed list.
+
 `deckent policy upgrade --template current --scope SCOPE_ID --rollback` removes only
 unmodified, provably managed family-21 execution rules through the person's existing
 approval route. A managed rule added for several scopes is removed with all its scopes,

@@ -78,7 +78,7 @@ it('119-C2-P: detects MCP-specific and mode widenings, and binding narrowing; bu
     { kind: 'binding.add', binding: { ...binding, id: 'unresolved', roles: ['unknown'] } },
   ]);
   expect(describePolicyChange({ policy: old, bindings: before }, input)!.split('\n').slice(1).map(line => line.split(':')[0])).toEqual([
-    '~ grant allow-all', '~ grant generic', '~ grant mode', '+ binding unresolved', '~ binding selected-member', '~ grant allow', '~ grant ask-all',
+    '~ grant ask-all', '~ grant allow-all', '~ grant generic', '~ grant mode', '+ binding unresolved', '~ binding selected-member', '~ grant allow',
   ]);
   const long = change([{ kind: 'role.add', role: { id: 'huge', permissions: Array.from({ length: 60 }, (_, i) => ({
     ...role.permissions[0]!, id: `p-${i}`, resource: { kind: 'run', ids: ['😀'.repeat(48)] },
@@ -119,4 +119,42 @@ it('3280 F3b: replacing an old AI deny binding exposes an allowed cell and leads
   expect(evaluatePolicy(resolvePolicyBindings(before, prior), request).decision).toBe('deny');
   expect(evaluatePolicy(resolvePolicyBindings(before, { ...plan.bindings, revision: 'next' }), request).decision).toBe('allow');
   expect(describePolicyChange({ policy: before, bindings: prior }, input)!.split('\n')[1]).toContain('~ binding deny-ai:');
+});
+
+
+it('3286 F3: losing AI require-approval grant coverage exposes an explicit allow and leads the description', () => {
+  const ai = { issuer: 'fixture/mcp', subject: 'worker' };
+  const allow = { ...policy.grants[0]!, principals: [ai], scopes: ['s', 'other'] };
+  const ask = { ...allow, id: 'ask-ai', effect: 'require-approval' };
+  const before = { ...policy, grants: [allow, ask] };
+  const input = change([{ kind: 'grant.add', grant: { ...policy.grants[0]!, id: 'human' } },
+    { kind: 'grant.replace', grant: { ...ask, scopes: ['other'] } }]);
+  const plan = planPolicyChange(before, bindings, input);
+  const request = { principal: { ...ai, id: 'worker', assurance: 'os-user', scopeIds: ['s', 'other'] }, scopeId: 's', action: 'inspect', resource: { kind: 'run', id: 'r' } };
+  expect(evaluatePolicy(resolvePolicyBindings(before, bindings), request).decision).toBe('require-approval');
+  expect(evaluatePolicy(resolvePolicyBindings({ ...plan.policy, revision: 'next' }, bindings), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings }, input)!.split('\n')[1]).toContain('~ grant ask-ai:');
+  const removal = change([input.changes[0], { kind: 'grant.remove', id: ask.id }]);
+  const removed = planPolicyChange(before, bindings, removal);
+  expect(evaluatePolicy(resolvePolicyBindings({ ...removed.policy, revision: 'removed' }, bindings), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings }, removal)!.split('\n')[1]).toContain('- grant ask-ai:');
+});
+
+it('3286 F3: losing an AI approval-only binding scope exposes an explicit allow and leads the description', () => {
+  const ai = { issuer: 'fixture/mcp', subject: 'worker' };
+  const askRole = { ...role, id: 'reviewer', permissions: role.permissions.map(permission => ({ ...permission, effect: 'require-approval' })) };
+  const before = { ...policy, roles: [askRole], grants: [{ ...policy.grants[0]!, principals: [ai], scopes: ['s', 'other'] }] };
+  const bound = { ...addBinding.binding, id: 'ask-ai', roles: [askRole.id], principals: [ai], scopes: ['s', 'other'] };
+  const prior = { ...bindings, bindings: [bound] };
+  const input = change([{ kind: 'grant.add', grant: { ...policy.grants[0]!, id: 'human' } },
+    { kind: 'binding.replace', binding: { ...bound, scopes: ['other'] } }]);
+  const plan = planPolicyChange(before, prior, input);
+  const request = { principal: { ...ai, id: 'worker', assurance: 'os-user', scopeIds: ['s', 'other'] }, scopeId: 's', action: 'inspect', resource: { kind: 'run', id: 'r' } };
+  expect(evaluatePolicy(resolvePolicyBindings(before, prior), request).decision).toBe('require-approval');
+  expect(evaluatePolicy(resolvePolicyBindings(before, { ...plan.bindings, revision: 'next' }), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings: prior }, input)!.split('\n')[1]).toContain('~ binding ask-ai:');
+  const removal = change([input.changes[0], { kind: 'binding.remove', id: bound.id }]);
+  const removed = planPolicyChange(before, prior, removal);
+  expect(evaluatePolicy(resolvePolicyBindings(before, { ...removed.bindings, revision: 'removed' }), request).decision).toBe('allow');
+  expect(describePolicyChange({ policy: before, bindings: prior }, removal)!.split('\n')[1]).toContain('- binding ask-ai:');
 });

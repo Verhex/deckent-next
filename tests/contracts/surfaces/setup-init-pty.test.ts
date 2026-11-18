@@ -279,7 +279,7 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
 
 it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long affected scope before the EN/TR rollback card; decline writes nothing; JSON retains scopes', async () => {
   for (const locale of ['en', 'tr'] as const) for (const scopes of [
-    ['erp', 'other'], ['erp', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(70)}`)],
+    ['erp', 'other'], ['erp', 'team,west', 'team\u202eabc', 'team\u200babc', 'team\\u202eabc'], ['erp', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(70)}`)],
   ]) {
     const home = await mkdtemp(join(tmpdir(), 'deckent-rollback-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-rollback-root-'));
     roots.push(home, root);
@@ -312,7 +312,12 @@ it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long aff
     const declined = await drive(args, [[title, 'SNAPSHOT'], ['', '\r']]);
     const card = declined.output.indexOf(title);
     expect(card).toBeGreaterThan(0);
-    for (const scope of scopes) expect(declined.output.slice(0, card)).toContain(scope);
+    for (const scope of scopes) {
+      const shown = JSON.stringify(scope).replace(/\u202e/gu, '\\u202e').replace(/\u200b/gu, '\\u200b');
+      const lines = declined.output.slice(0, card).split(/\r?\n/u);
+      expect(lines).toContain(shown);
+    }
+    expect(declined.output.slice(0, card)).not.toMatch(/[\u202e\u200b]/u);
     expect(declined.output).toContain(locale === 'en' ? 'Permission kept; nothing was written.' : 'İzin korundu; hiçbir şey yazılmadı.');
     const snapshot: Record<string, string | null> = {};
     for (const entry of await readdir(join(root, '.deckent'), { recursive: true, withFileTypes: true })) {
