@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "codex-cli-subscription-2026-10-23",
+  "revision": "codex-cli-subscription-2026-11-18",
   "providers": [
     {
       "id": "codex-cli-subscription",
@@ -98,7 +98,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 1,
+          "priority": 6,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -187,7 +187,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 2,
+          "priority": 7,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -276,7 +276,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 3,
+          "priority": 8,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -363,7 +363,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 4,
+          "priority": 9,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -452,7 +452,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 5,
+          "priority": 10,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -541,7 +541,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 8,
+          "priority": 11,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -628,7 +628,7 @@
           },
           "minClientVersion": "0.159.2",
           "visibility": "list",
-          "priority": 9,
+          "priority": 12,
           "provenance": {
             "localPath": "~/.codex/models_cache.json",
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
@@ -729,6 +729,165 @@
               "observedAt": "2026-10-23"
             }
           ]
+        },
+        {
+          "id": "gpt-6.2-sol",
+          "version": 1,
+          "nativeId": "gpt-6.2-sol",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.169.1",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6.2-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6.2-sol",
+          "displayName": "GPT-6.2-Sol",
+          "description": "Fast, go-to model for coding and everyday work.",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "audio"
+            ],
+            "output": []
+          },
+          "contextWindow": 500000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "low"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "codex debug models",
+              "fetchedOn": "2026-11-18T17:58:00Z",
+              "clientVersion": "0.169.1"
+            },
+            "asOf": "2026-11-18"
+          },
+          "minClientVersion": "0.169.1",
+          "visibility": "list",
+          "priority": 2,
+          "provenance": {
+            "localPath": "codex debug models",
+            "fetchedOn": "2026-11-18T17:58:00Z",
+            "clientVersion": "0.169.1"
+          }
+        },
+        {
+          "id": "gpt-6.2-astra",
+          "version": 1,
+          "nativeId": "gpt-6.2-astra",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.169.1",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6.2-astra",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6.2-astra",
+          "displayName": "GPT-6.2-Astra",
+          "description": "Our most capable model for complex coding and professional work.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "low"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "codex debug models",
+              "fetchedOn": "2026-11-18T17:58:00Z",
+              "clientVersion": "0.169.1"
+            },
+            "asOf": "2026-11-18"
+          },
+          "minClientVersion": "0.169.1",
+          "visibility": "list",
+          "priority": 3,
+          "provenance": {
+            "localPath": "codex debug models",
+            "fetchedOn": "2026-11-18T17:58:00Z",
+            "clientVersion": "0.169.1"
+          }
         }
       ]
     }
@@ -741,7 +900,9 @@
         "gpt-6-astra",
         "gpt-6-sol",
         "gpt-6-luna",
-        "gpt-5.6-sol"
+        "gpt-5.6-sol",
+        "gpt-6.2-sol",
+        "gpt-6.2-astra"
       ]
     }
   ]

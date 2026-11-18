@@ -20,11 +20,31 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
   it('has exactly the visible Codex selection, source provenance, ultra, retirement and recommendations', async () => {
     const raw = await seed('codex-cli-subscription'); const doc = parseProviderCatalogDocument(raw);
     expect(doc.schemaVersion).toBe(3);
-    expect(doc.providers[0]!.models.map(m => m.nativeId).sort()).toEqual(['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'].sort());
+    const existingIds = ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'];
+    expect(doc.providers[0]!.models.map(m => m.nativeId).sort()).toEqual([...existingIds, 'gpt-6.2-sol', 'gpt-6.2-astra'].sort());
+    expect([...raw.providers[0].models].sort((a, b) => a.priority - b.priority).map(m => m.nativeId)).toEqual([
+      'gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5',
+    ]);
     expect(raw.providers[0].channel).toMatchObject({ client: 'codex', billing: 'subscription', provenance: { fetchedOn: expect.any(String), etag: expect.any(String), clientVersion: expect.stringMatching(/^0\.\d+\.\d+$/) } });
     expect(raw.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'gpt-5.5').lifecycle).toMatchObject({ state: 'deprecated', retiredOn: '2026-10-14', replacementModelId: 'gpt-6.1-sol' });
-    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'].sort());
-    for (const m of raw.providers[0].models) expect(m).toMatchObject({ canonicalModelId: m.nativeId, vendorId: 'openai', contextWindow: 272000, maxOutputTokens: null, minClientVersion: '0.159.2', pricing: { kind: 'subscription' } });
+    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'].sort());
+    for (const id of existingIds) expect(raw.providers[0].models.find((m: { nativeId: string }) => m.nativeId === id)).toMatchObject({ canonicalModelId: id, vendorId: 'openai', contextWindow: 272000, maxOutputTokens: null, minClientVersion: '0.159.2', pricing: { kind: 'subscription' } });
+    // BETA21: the CLI 0.169.1 debug catalog is observed evidence, not a vendor-declared minimum or session-start name.
+    const provenance = { localPath: 'codex debug models', fetchedOn: '2026-11-18T17:58:00Z', clientVersion: '0.169.1' };
+    for (const [id, displayName, description, contextWindow, input, priority] of [
+      ['gpt-6.2-sol', 'GPT-6.2-Sol', 'Fast, go-to model for coding and everyday work.', 500000, ['text', 'image', 'audio'], 2],
+      ['gpt-6.2-astra', 'GPT-6.2-Astra', 'Our most capable model for complex coding and professional work.', 272000, ['text', 'image'], 3],
+    ] as const) expect(doc.providers[0]!.models.find(m => m.nativeId === id)).toEqual({
+      id, version: 1, nativeId: id, channelModelId: id, canonicalModelId: id, vendorId: 'openai', displayName, description,
+      protocols: [{ family: 'codex-jsonl', version: 'v1', capabilities: [] }], aliases: [],
+      lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
+      contextWindow, maxOutputTokens: null, modalities: { input, output: [] },
+      efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      reasoning: { supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'low' },
+      capabilities: { tools: 'unknown', vision: 'supported', pdf: 'unknown', structuredOutput: 'unknown', promptCaching: 'unknown', streaming: 'unknown' },
+      minCliVersion: '0.169.1', minClientVersion: '0.169.1', visibility: 'list', priority,
+      provenance, pricing: { kind: 'subscription', source: provenance, asOf: '2026-11-18' },
+    });
   });
   it('keeps Claude recommendations passive at register and includes owner retirement', async () => {
     const raw = await seed('claude-cli-subscription'); expect(raw.schemaVersion).toBe(3);

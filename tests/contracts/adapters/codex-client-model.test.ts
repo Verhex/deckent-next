@@ -131,14 +131,22 @@ describe('switch impact: Codex profiles stamped before the capability (binding.t
 });
 
 describe('packaged Codex catalog records the client-reported names', () => {
-  it('records each model under its exact id as the turn_context.model name, so a frozen pin carries its own and the other names', async () => {
+  it('preserves the observed turn_context.model names and leaves new debug-catalog rows without unobserved names', async () => {
     const raw = JSON.parse(await readFile(new URL('../../../assets/model-catalog/codex-cli-subscription.json', import.meta.url), 'utf8'));
     const models = parseProviderCatalogDocument(raw).providers[0]!.models as readonly CatalogModel[];
-    for (const model of models) expect('reportedNames' in model && model.reportedNames).toEqual([{ name: model.nativeId, cliVersion: '0.163.0',
+    const existingIds = ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'];
+    for (const id of existingIds) {
+      const model = models.find(row => row.nativeId === id)!;
+      expect('reportedNames' in model && model.reportedNames).toEqual([{ name: model.nativeId, cliVersion: '0.163.0',
       source: 'codex rollout turn_context.model', observedAt: '2026-10-23' }]);
+    }
+    for (const id of ['gpt-6.2-sol', 'gpt-6.2-astra']) {
+      expect(models.find(row => row.nativeId === id)).not.toHaveProperty('reportedNames');
+      expect(catalogPinModelEvidence(models, id)).toEqual({ otherReportedNames: [...existingIds].sort() });
+    }
     const evidence = catalogPinModelEvidence(models, 'gpt-6-luna');
     expect(evidence.reportedNames).toEqual(['gpt-6-luna']);
-    expect(evidence.otherReportedNames).toHaveLength(models.length - 1);
-    expect(raw.revision).toBe('codex-cli-subscription-2026-10-23');
+    expect(evidence.otherReportedNames).toEqual(existingIds.filter(id => id !== 'gpt-6-luna').sort());
+    expect(raw.revision).toBe('codex-cli-subscription-2026-11-18');
   });
 });
