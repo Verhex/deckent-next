@@ -57,12 +57,14 @@ or a recording. No partial-message flag or chat max-turns is introduced.
 
 Capture and review both CLI streams in order:
 
-- Codex: thread/turn, early assistant, MCP start/call/args, fixture P settlement and
-  release, correlated completed MCP result W, one completed assistant id containing
-  challenge + D, turn.completed/usage, process exit/close/drain. No START is invented.
-- Claude: init/session/version/model, early assistant, tool_use.id + arguments,
-  P settlement/release, equal user.tool_result W, separate top-level final message.id
-  with null parent and challenge + D, equal result.result in the same session,
+- Codex: thread/turn, early assistant when present, MCP start/call/args, fixture P
+  settlement and release, correlated completed MCP result W, one completed assistant
+  id containing challenge + D, turn.completed/usage, process exit/close/drain. No
+  START is invented.
+- Claude: init/session/version/model, early assistant when present, tool_use.id +
+  arguments, P settlement/release, equal user.tool_result W, separate top-level
+  final message.id with null parent and challenge + D, equal result.result in the
+  same session,
   success/is_error=false/explicit end_turn, exit/close/drain. Result UUID is not a
   message id. Null/unknown stop or text/session/parent disagreement is failure.
 
@@ -93,8 +95,12 @@ redaction bypass or raw-retention path is added.
 A fresh output directory is the one-shot marker. Nonzero exit, refused startup,
 truncation/limit, missing/extra preparation or secret-check failure is reported with
 exit 1 and must not be blindly repeated. Exit 0 means capture awaiting protocol
-review, not protocol PASS. Missing early draft, delivery correlation, framing, normal
-completion or exact D is a failed positive; report it to the lead without retry.
+review, not protocol PASS. Missing delivery correlation, framing, normal completion
+or exact D is a failed positive; report it to the lead without retry. The early
+draft is requested, but a model that goes straight to the preparation call still
+gives a valid positive (design Rev 3 R3.7; review 3301): refusing a stale early
+draft is proved by the group-1 negatives, not by the recording. Record whether an
+early draft appeared.
 
 Only after both real wire positives pass review may the lead open K1/K2. K3 later
 replays the same D through the real planner/finalizer/source/approval stores: one
