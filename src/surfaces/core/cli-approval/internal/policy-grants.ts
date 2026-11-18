@@ -1,7 +1,7 @@
-import { policyExecutionLines } from '#engine/index.js';
+import { policyExecutionLines, policyExecutionScopeList } from '#engine/index.js';
 import { createInterface } from 'node:readline/promises';
 import type { PolicyTemplateUpgradePort, PolicyUpgradeView } from '#surfaces/core/cli-terminal/index.js';
-import { optionalField, ErrorRegistry, emit, loadConfig, t, terminalRecordText, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -108,8 +108,8 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
     if (mode === 'rollback' && !json && cliMode(context).mode === 'interactive') {
       const preview = await context.upgradePolicyTemplate!(root, scopeId, { ...request, mode: 'preview', previewRollback: true }, { env });
       if (preview.status !== 'preview') return preview;
-      const scopes = preview.executionScopes ?? [];
-      (context.stdout ?? process.stdout).write(`${t('policy.aiExecution.rollbackScopes', { count: scopes.length, scopes: scopes.map(terminalRecordText).join('\n') }, locale)}\n`);
+      const scopes = preview.executionScopeSelection?.ids ?? preview.executionScopes ?? [];
+      (context.stdout ?? process.stdout).write(`${policyExecutionScopeList(scopes, preview.executionScopeSelection?.all === true, locale)}\n`);
       const answer = await askCliCard({ title: t('policy.aiExecution.rollbackTitle', {}, locale), body: (preview.summary ?? '').split('\n'),
         initial: 'no', options: [{ id: 'yes', label: t('policy.aiExecution.rollbackYes', {}, locale), role: 'yes' },
           { id: 'no', label: t('policy.aiExecution.rollbackNo', {}, locale), role: 'no' }] },
@@ -135,7 +135,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       : t('cli.policy.upgrade.unavailable', { reason: upgradeReason(view.reason, locale) }, locale);
     // A preview that would be refused says so before anything is tried.
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
-    return [head, ...((view.status === 'rolled-back' || previewRollback) && view.executionScopes ? [t('policy.aiExecution.rollbackScopes', { count: view.executionScopes.length, scopes: view.executionScopes.map(terminalRecordText).join('\n') }, locale)] : []), ...(previewRollback ? [] : policyExecutionLines(view.rules ?? [], scopeId, locale, view.executionContext, 'full', view.executionScopes)), ...(view.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(view.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
+    return [head, ...((view.status === 'rolled-back' || previewRollback) && view.executionScopes ? [policyExecutionScopeList(view.executionScopeSelection?.ids ?? view.executionScopes, view.executionScopeSelection?.all === true, locale)] : []), ...(previewRollback ? [] : policyExecutionLines(view.rules ?? [], scopeId, locale, view.executionContext, 'full', view.executionScopes)), ...(view.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(view.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
   } });
 }
 

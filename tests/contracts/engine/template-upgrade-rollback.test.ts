@@ -14,6 +14,7 @@ import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEvent
 import { policyExecutionLines } from '#engine/index.js';
 import { ModelInvocationPolicyAuthorization, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { main } from '#surfaces/index.js';
+import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { homeEnv } from '../support/host-platform.js';
 import { answerOnCard } from '#surfaces/core/cli-approval/index.js';
 import { approvalWindowLines } from '#surfaces/core/terminal-approval/index.js';
@@ -702,11 +703,11 @@ it.skipIf(process.platform !== 'linux')('119-C2-R: genuine governed and installe
     expect(JSON.parse(await f.bytes()).grants).toEqual(before.grants.filter((rule: PolicyGrant) => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)));
     expect(notice).toContain(locale === 'en' ? 'withdraws these managed permission lines in: s, other' : 'yönetilen izin satırlarını şu kapsamlarda kaldırır: s, other');
     const card = f.records().find(record => record.request.summary.includes('- grant first-run-mcp-progress-run-reserve'))!;
-    const removal = locale === 'en' ? 'Managed permission line first-run-mcp-progress-run-reserve will be withdrawn in: s, other.' : 'Yönetilen izin satırı first-run-mcp-progress-run-reserve şu kapsamlarda kaldırılacak: s, other.';
+    const removal = locale === 'en' ? 'Managed permission line "first-run-mcp-progress-run-reserve" will be withdrawn in: "s"\n"other".' : 'Yönetilen izin satırı "first-run-mcp-progress-run-reserve" şu kapsamlarda kaldırılacak: "s"\n"other".';
     expect(card.request.summary).toContain(removal);
     let body = '';
     await answerOnCard(card, undefined, 's', {}, async view => { body = view.body!.join('\n'); return null; }, locale);
-    expect(body).toContain(removal);
+    expect(body).toContain(removal.replace('\n', '\n  '));
     const lines = approvalWindowLines({ approvalId: card.request.approvalId, summary: card.request.summary, requester: 'person', runId: '-', taskId: '-', expiresAt: 99_999 }, workSurfaceLabels(locale).approvalWindow, 1_000);
     expect(lines.map(line => line.spans.map(span => span.text).join('')).join('\n')).toContain(removal);
   }
@@ -854,9 +855,9 @@ it.skipIf(process.platform !== 'linux')('3280 F4: a genuine long multi-scope rol
     const summary = f.records().find(record => record.request.summary.includes('- grant first-run-mcp-progress-run-reserve'))!.request.summary;
     expect(summary.length).toBeLessThanOrEqual(2048);
     expect(summary).toContain(scopes.length === 2 ? locale === 'en'
-      ? 'will be withdrawn in: s, other.' : 'şu kapsamlarda kaldırılacak: s, other.' : locale === 'en'
-      ? 'Affected scope count: 8. Read the current withdrawal preview: deckent policy upgrade --template current --rollback --preview --scope <id>.'
-      : 'Etkilenen kapsam sayısı: 8. Güncel geri çekme önizlemesini okuyun: deckent policy upgrade --template current --rollback --preview --scope <id>.');
+      ? 'will be withdrawn in: "s"\n"other".' : 'şu kapsamlarda kaldırılacak: "s"\n"other".' : locale === 'en'
+      ? 'Affected scope count: 8. The full scope list is not shown on this card. The template rollback preview does not inspect this request.'
+      : 'Etkilenen kapsam sayısı: 8. Tam kapsam listesi bu kartta gösterilmiyor. Şablon geri alma önizlemesi bu isteği incelemez.');
   }
 });
 
@@ -877,10 +878,12 @@ it.skipIf(process.platform !== 'linux')('3286 F4: a general administration card 
     const pending = await f.administration.submit(command);
     expect(pending.status).toBe('approval-pending');
     const expected = locale === 'en'
-      ? `Affected scope count: ${scopes.length}. Read the current withdrawal preview: deckent policy upgrade --template current --rollback --preview --scope <id>.`
-      : `Etkilenen kapsam sayısı: ${scopes.length}. Güncel geri çekme önizlemesini okuyun: deckent policy upgrade --template current --rollback --preview --scope <id>.`;
+      ? `Affected scope count: ${scopes.length}. The full scope list is not shown on this card. The template rollback preview does not inspect this request.`
+      : `Etkilenen kapsam sayısı: ${scopes.length}. Tam kapsam listesi bu kartta gösterilmiyor. Şablon geri alma önizlemesi bu isteği incelemez.`;
     const stored = f.records()[0]!;
     expect(stored.request.summary).toContain(expected);
+    expect(stored.request.summary).not.toContain('deckent policy upgrade');
+    expect(stored.request.summary).toContain(locale === 'en' ? 'does not inspect this request' : 'bu isteği incelemez');
     expect(stored.request.summary).not.toMatch(/above|yukarıda|does not list all|tamamı bu kartta listelenmiyor/u);
     if (crowded) expect(stored.request.summary).toContain('scopes[s,other]');
     expect(stored.request.summary.length).toBeLessThanOrEqual(2048);
@@ -888,5 +891,64 @@ it.skipIf(process.platform !== 'linux')('3286 F4: a general administration card 
     expect(await f.bytes()).toBe(before); expect(await f.source.authorityHistory()).toEqual(history);
     // Reading the retained card later must not imply an earlier command printed anything.
     expect(f.records()[0]!.request.summary).toBe(stored.request.summary);
+  }
+});
+
+
+it.skipIf(process.platform !== 'linux')('3293 P1: the sealed general card preserves comma and direction-mark scope IDs as separate records', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const scopes = ['s', 'team,west', 'team\u202eabc', 'team\u200babc'];
+    const f = await fixture(grants => grants.map(rule => rule.scopes === 'all' ? rule : { ...rule, scopes }), false, 'ai-execution', locale);
+    const id = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS[0]!;
+    expect(await f.administration.submit({ schemaVersion: 1, commandId: 'record-withdrawal', scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: 'record-withdrawal',
+      input: { schemaVersion: 1, changes: [{ kind: 'grant.remove', id }] }, expectedVersion: (await f.source.load()).revision })).toMatchObject({ status: 'approval-pending' });
+    const summary = f.records()[0]!.request.summary;
+    const notice = locale === 'en' ? 'will be withdrawn in:' : 'şu kapsamlarda kaldırılacak:';
+    const line = summary.slice(summary.indexOf(notice));
+    expect(line).toContain('"s"\n"team,west"\n"team\\u202eabc"\n"team\\u200babc"');
+    expect(line).not.toMatch(/[\u202e\u200b]/u);
+    expect(summary.length).toBeLessThanOrEqual(2048);
+    expect(summary.indexOf('- grant ')).toBeLessThan(summary.indexOf(notice));
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('3293 P2: all scopes and literal star survive the removal plan, CLI, policy window, sealed card and JSON', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const f = await fixture(undefined, false, 'ai-proposals', locale, 1_048_576, '*');
+    const preview = await f.request({ scopeId: '*', principal: f.principal, mode: 'preview', previewRollback: true, only: 'ai-proposals', reason: 'inspect selections' });
+    expect(preview).toMatchObject({ status: 'preview', executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
+    const all = locale === 'en' ? 'All scopes' : 'Tüm kapsamlar';
+    const out: string[] = [], ctx = { root: f.root, env: homeEnv(f.root), stdout: { write: (value: string) => { out.push(value); } },
+      upgradePolicyTemplate: async () => preview };
+    const args = ['policy', 'upgrade', '--template', 'current', '--scope', '*', '--rollback', '--preview', '--lang', locale];
+    expect(await main(args, ctx as never)).toBe(0);
+    expect(out.join('')).toContain(all); expect(out.join('').split('\n')).toContain('"*"'); out.length = 0;
+    expect(await main([...args, '--json'], ctx as never)).toBe(0);
+    expect(JSON.parse(out.join(''))).toEqual(preview);
+    expect(JSON.parse(out.join(''))).toMatchObject({ executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
+    const panel = policyPanelPort(f.root, {} as never, { env: homeEnv(f.root) }, locale, undefined, undefined, async () => preview);
+    const window = await panel.preview('*', ':ai-proposals', 'revoke');
+    const text = window.lines.map(line => line.text).join('\n');
+    expect(text).toContain(all); expect(text.split('\n')).toContain('"*"');
+    expect(await f.rollback()).toMatchObject({ status: 'rolled-back', executionScopes: ['*'], executionScopeSelection: { all: true, ids: ['*'] } });
+    const card = f.records()[0]!.request.summary;
+    expect(card).toContain(all); expect(card).toContain('"*"'); expect(card.length).toBeLessThanOrEqual(2048);
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('3293 P3: a mixed general removal with all scopes never presents a partial count as its whole effect', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const scopes = ['s', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(220)}`)];
+    const f = await fixture(grants => grants.map(rule => rule.id === FIRST_RUN_CURRENT_UPGRADE_RULE_IDS[0] ? { ...rule, scopes: 'all' }
+      : rule.scopes === 'all' ? rule : { ...rule, scopes }), false, 'ai-execution', locale);
+    const ids = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.slice(0, 2);
+    expect(await f.administration.submit({ schemaVersion: 1, commandId: 'mixed-withdrawal', scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: 'mixed-withdrawal',
+      input: { schemaVersion: 1, changes: ids.map(id => ({ kind: 'grant.remove', id })) }, expectedVersion: (await f.source.load()).revision })).toMatchObject({ status: 'approval-pending' });
+    const summary = f.records()[0]!.request.summary;
+    expect(summary).toContain(locale === 'en' ? 'Affected scopes: All scopes.' : 'Etkilenen kapsamlar: Tüm kapsamlar.');
+    expect(summary).not.toContain(locale === 'en' ? 'Affected scope count:' : 'Etkilenen kapsam sayısı:');
+    expect(summary).not.toContain('deckent policy upgrade'); expect(summary.length).toBeLessThanOrEqual(2048);
   }
 });

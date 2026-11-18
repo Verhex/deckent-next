@@ -159,7 +159,10 @@ export class PolicyAdministrationApplication {
       const room = budget - diff.length - 1;
       if (withdrawal && change.changes.every(item => item.kind === 'grant.remove')) {
         const count = new Set(removed.flatMap(rule => rule.scopes === 'all' ? [] : rule.scopes)).size;
-        const notice = withdrawal.length <= room ? withdrawal : t('policy.aiExecution.withdrawShort', { count }, deps.locale ?? 'en');
+        const short = removed.some(rule => rule.scopes === 'all')
+          ? t('policy.aiExecution.withdrawAllShort', { scopes: t('policy.aiExecution.allScopes', {}, deps.locale ?? 'en') }, deps.locale ?? 'en')
+          : t('policy.aiExecution.withdrawShort', { count }, deps.locale ?? 'en');
+        const notice = withdrawal.length <= room ? withdrawal : short;
         return notice.length <= room ? `${diff}\n${notice}` : diff;
       }
       let heldRules: readonly unknown[] = [];
