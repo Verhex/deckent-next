@@ -17,7 +17,7 @@ const matches = (patterns: readonly string[], text: string) => patterns.some(pat
  * own source) or login (registry patterns), otherwise invalid output. The answer is the last completed agent message (each completed message is
  * also a presentation delta). The stream names no model: the answer is attributed to the argv-pinned id (`modelEvidence: argv`).
  */
-export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): Omit<HeadlessTurn, 'line'> & { line(raw: string): Refusal | null } {
+export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS, responseText?: (answer: string) => string): Omit<HeadlessTurn, 'line'> & { line(raw: string): Refusal | null } {
   const { guards } = prepared.entry.headless;
   if (!('allowedItems' in guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const quotaPatterns = nativeQuotaPolicy().codexPatterns;
@@ -69,7 +69,7 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
       // The response counts cache reads and writes apart from the input, as for Claude.
       const cacheRead = usage.cached_input_tokens, cacheWrite = usage.cache_write_input_tokens, input = usage.input_tokens - cacheRead - cacheWrite, output = usage.output_tokens;
       return { response: Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model,
-        choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }],
+        choices: [{ index: 0, message: { role: 'assistant', content: responseText ? responseText(answer) : answer }, finish_reason: 'stop' }],
         headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: null, modelEvidence: 'argv', egress: { ...egress, ...headlessEgressReasons(egress) } } },
       usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
         modelUsage: { [prepared.model]: { inputTokens: input, outputTokens: output, cacheReadInputTokens: cacheRead, cacheCreationInputTokens: cacheWrite } }, quota: {} } }) };
