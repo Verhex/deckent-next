@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { CORE_WORK_CLASSES, parseModelInvocationReceipt, modelInvocationRequestEvidence, resolveModelBindingDefinition, encodeModelBindingDefinition, type AgentTurnEvent, type AgentTurnMessage } from '#domain/index.js';
 import { prepareBrainPrompt, selectedBrainTemplate, type SameTurnToolSessionPort } from '#capabilities/index.js';
 import { BrainPlanApplication, brainRunId, type SameTurnPlanningPorts } from '#engine/core/run-planner/index.js';
@@ -29,7 +29,9 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
   const record = createModelInvocationResponseRecord(claimed, { schemaVersion: 1, native: { text: draft }, usage: null }, 2);
   const retained = { replayed: false, receipt: record.receipt, response: record.content!.kind === 'native-response' ? record.content!.response : null,
     contentStatus: 'retained' as const, purge: null };
-  let proposals = 0, randomCalls = 0, reads = 0;
+  let proposals = 0, randomCalls = 0;
+  const readResult = vi.fn<SameTurnPlanningPorts['readResult']>(overrides.readResult ?? (async () => ({ ...retained, replayed: true })));
+  const revalidate = vi.fn<SameTurnPlanningPorts['revalidate']>(overrides.revalidate ?? (async input => input));
   const brain = new BrainPlanApplication({ verify: async () => principal }, { inspect: async () => null, prepare: async () => { throw new Error('SECOND_PREPARE'); },
     invoke: async () => { throw new Error('SECOND_CALL'); }, stoppedAtLength: () => false, text: result => result.response?.native['text'] as string ?? null,
     propose: async value => { assertRunProposalSource(value, retained.receipt, draft); proposals++;
@@ -37,8 +39,7 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
       if (proposeError) throw proposeError; return { proposal: { proposal: value } } as never; } });
   const planning = brain.createSameTurnPlanning({ randomBytes: size => { randomCalls++; return new Uint8Array(size).fill(0xaa); },
     projectDelivery: value => value, toolResultDigest: agentTurnResultDigest, text: result => result.response?.native['text'] as string ?? null,
-    readResult: async () => { reads++; return retained; }, revalidate: async input => input,
-    publicText: 'Preparing the plan', ...overrides });
+    publicText: 'Preparing the plan', ...overrides, readResult, revalidate });
   const pin = planning.claimed(invocation, claimed);
   planning.bindNativeSession(pin, 'session');
   const input = { command, prepared: { invocation, prompt, kinds: ['purchase'] }, config,
@@ -54,7 +55,8 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
   const terminal = () => planning.terminalEnvelope(pin, { ...input.call, messageId: 'final', sessionId: 'session', parentId: null,
     line: 'DECKENT-PLAN-CHALLENGE/1 ' + 'aa'.repeat(32), draft });
   const close = () => planning.nativeClosed(pin, { state: 'normal', closed: true, drained: true });
-  return { brain, planning, pin, input, claimed, invocation, retained, draft, settle, terminal, close, counts: () => ({ proposals, randomCalls, reads }) };
+  return { brain, planning, pin, input, claimed, invocation, retained, draft, settle, terminal, close, readResult, revalidate,
+    counts: () => ({ proposals, randomCalls, reads: readResult.mock.calls.length }) };
 }
 
 function productionTurn(f: ReturnType<typeof fixture>, invokeAgent: NonNullable<AgentTurnPorts['invokeAgent']>,
@@ -223,6 +225,7 @@ it('keeps one immutable preparation, binds durable settlement before delivery, a
   const one = f.planning.finalize(f.pin, f.retained), two = f.planning.finalize(f.pin, f.retained);
   expect(two).toBe(one); expect(await two).toBe(await one);
   expect(f.counts()).toEqual({ proposals: 1, randomCalls: 1, reads: 1 });
+  expect(f.readResult).toHaveBeenCalledWith(f.retained.receipt);
 });
 
 it('refuses delivery before the durable settlement and never repairs the closed candidate', async () => {
@@ -369,6 +372,53 @@ it('closes on final settings/context drift, parent cancellation and lost pin, ke
   await expect(again).rejects.toMatchObject({ code: 'RUN_PROPOSAL_OUTCOME_UNKNOWN' }); expect(unknown.counts().proposals).toBe(1);
 });
 
+it('makes a denied, missing or mismatched durable readback a sticky refusal before any further planning port', async () => {
+  for (const [scenario, read] of Object.entries({
+    'unverified chat person': () => { throw new Error('unverified chat person'); },
+    'missing content permission': () => { throw new Error('missing content permission'); },
+    'missing result': () => null as never,
+    'foreign invocation id': (r: ReturnType<typeof fixture>['retained']) => ({ ...r, receipt: { ...r.receipt,
+      claim: { ...r.receipt.claim, invocationId: 'foreign' } } }),
+    'foreign request digest': (r: ReturnType<typeof fixture>['retained']) => ({ ...r, receipt: { ...r.receipt,
+      request: { ...r.receipt.request, requestDigest: sha256('foreign request') } } }),
+    'purged result': (r: ReturnType<typeof fixture>['retained']) => ({ ...r, contentStatus: 'purged' as const, response: null }),
+    'uncaptured result': (r: ReturnType<typeof fixture>['retained']) => ({ ...r, contentStatus: 'not-captured' as const, response: null }),
+    'replay with different bytes': (r: ReturnType<typeof fixture>['retained']) => ({ ...r, replayed: true, response: {
+      ...r.response!, native: { text: String(r.response!.native['text']).trim() } } }),
+  })) {
+    const f = fixture({ readResult: async (): ReturnType<SameTurnPlanningPorts['readResult']> => read(f.retained) });
+    await f.settle(); f.terminal(); f.close();
+    const first = f.planning.finalize(f.pin, f.retained);
+    const refusal = { code: 'BRAIN_SAME_TURN_REFUSED', params: { reason: 'completion-unknown' } };
+    await expect.soft(first, scenario).rejects.toMatchObject(refusal);
+    expect(f.planning.finalize(f.pin, f.retained), scenario).toBe(first);
+    await expect.soft(f.planning.prepare(f.pin, f.input), scenario).rejects.toMatchObject(refusal);
+    expect(f.revalidate, scenario).toHaveBeenCalledTimes(1);
+    expect(f.counts(), scenario).toEqual({ proposals: 0, randomCalls: 1, reads: 1 });
+  }
+});
+
+it('discards durable readback if the person cancels or the pin is abandoned during the read', async () => {
+  for (const interruption of ['cancel-then-return', 'cancel-then-reject', 'abandon'] as const) {
+    const parent = new AbortController();
+    const f = fixture({ readResult: async (): ReturnType<SameTurnPlanningPorts['readResult']> => {
+      await Promise.resolve();
+      if (interruption === 'abandon') f.planning.abandon(f.pin, 'completion-unknown');
+      else parent.abort();
+      if (interruption === 'cancel-then-reject') throw new Error('reader interrupted');
+      return f.retained;
+    } });
+    await f.settle(); f.terminal(); f.close();
+    const first = f.planning.finalize(f.pin, f.retained, parent.signal);
+    const refusal = { code: 'BRAIN_SAME_TURN_REFUSED', params: { reason: interruption === 'abandon' ? 'completion-unknown' : 'cancelled' } };
+    await expect.soft(first, interruption).rejects.toMatchObject(refusal);
+    expect(f.planning.finalize(f.pin, f.retained), interruption).toBe(first);
+    await expect.soft(f.planning.prepare(f.pin, f.input), interruption).rejects.toMatchObject(refusal);
+    expect(f.revalidate, interruption).toHaveBeenCalledTimes(1);
+    expect(f.counts(), interruption).toEqual({ proposals: 0, randomCalls: 1, reads: 1 });
+  }
+});
+
 it('refuses actor/scope/call/request/model/binding/activation/profile substitution in the retained source', async () => {
   for (const mutate of [
     (r: ReturnType<typeof fixture>['retained']['receipt']) => ({ ...r, actor: { ...r.actor, subject: 'foreign' } }),
@@ -383,10 +433,15 @@ it('refuses actor/scope/call/request/model/binding/activation/profile substituti
       if (r.outcome?.state !== 'responded') throw new Error('fixture');
       return { ...r, outcome: { ...r.outcome, content: { ...r.outcome.content, digest: sha256('foreign retained content') } } };
     },
+    (r: ReturnType<typeof fixture>['retained']['receipt']) => {
+      if (r.outcome?.state !== 'responded') throw new Error('fixture');
+      return { ...r, outcome: { ...r.outcome, content: { ...r.outcome.content, byteLength: r.outcome.content.byteLength + 1 } } };
+    },
   ]) {
     const f = fixture(); await f.settle(); f.terminal(); f.close();
     await expect(f.planning.finalize(f.pin, { ...f.retained, receipt: mutate(f.retained.receipt) })).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED' });
     expect(f.counts().proposals).toBe(0);
+    expect(f.readResult).not.toHaveBeenCalled();
   }
 });
 

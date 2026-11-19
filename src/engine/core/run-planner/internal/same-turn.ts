@@ -41,8 +41,10 @@ export interface SameTurnPlanningPorts {
   /** The existing configured-secret/bridge projection. Never put the challenge in its credential snapshot. */
   readonly projectDelivery?: (value: NativeAgentToolResult) => NativeAgentToolResult;
   toolResultDigest(content: string): string;
-  /** Read the actual retained result back from the existing invocation store, under the proposer's content right. */
-  readResult(receipt: ModelInvocationReceipt): Promise<ModelInvocationResult>;
+  /** Composition privately reads this turn's retained outer invocation under the content-read permission of the
+   * person verified on this chat connection in the same installation and scope. Throw if the person, permission
+   * or binding to the completed receipt cannot be verified. Never expose the body to the actor. */
+  readResult(completedReceipt: ModelInvocationReceipt): Promise<ModelInvocationResult>;
   text(result: ModelInvocationResult): string | null;
   /** Re-read Brain model role, activation/binding/profile, model-use/delegation, policy and settings on this actual chat model.
    * Return the current preparation snapshot; any drift is refused. This port cannot invoke a model or admit a Run. */
@@ -228,15 +230,18 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
       this.check(pin);
       if (parentSignal?.aborted) this.refuse('cancelled');
       if (!this.normal || !this.custody || !this.delivered || !this.terminal || !this.input) this.refuse('completion-unknown');
-      const input = this.input, selected = this.terminal.draft;
-      if (retained.replayed || retained.contentStatus !== 'retained' || retained.purge !== null || retained.receipt.outcome?.state !== 'responded'
-        || !isDeepStrictEqual(identity(retained.receipt), this.receipt) || this.ports.text(retained) !== selected) this.refuse('completion-unknown');
-      if (!retained.response || !isDeepStrictEqual(modelInvocationResponseContentDescriptor(retained.response), retained.receipt.outcome.content)) this.refuse('completion-unknown');
-      const readback = await this.ports.readResult(this.receipt!);
-      this.check(pin);
+      const input = this.input, selected = this.terminal.draft, completed = frozenCopy(retained);
+      const { receipt, response } = completed;
+      if (completed.replayed || completed.contentStatus !== 'retained' || completed.purge !== null || receipt.outcome?.state !== 'responded'
+        || !isDeepStrictEqual(identity(receipt), this.receipt) || this.ports.text(completed) !== selected) this.refuse('completion-unknown');
+      if (!response || !isDeepStrictEqual(modelInvocationResponseContentDescriptor(response), receipt.outcome.content)) this.refuse('completion-unknown');
+      let readback: ModelInvocationResult;
+      try { readback = await this.ports.readResult(receipt); }
+      catch { this.refuse(parentSignal?.aborted ? 'cancelled' : 'completion-unknown'); }
       if (parentSignal?.aborted) this.refuse('cancelled');
+      this.check(pin);
       // Store readback can be marked replayed by the reader, but its receipt, body and content status must be identical.
-      if (!isDeepStrictEqual({ ...readback, replayed: retained.replayed }, retained) || this.ports.text(readback) !== selected) this.refuse('completion-unknown');
+      if (!isDeepStrictEqual({ ...readback, replayed: completed.replayed }, completed) || this.ports.text(readback) !== selected) this.refuse('completion-unknown');
       parseBrainDraft(selected, this.privateKnown, { exact: true, requireCurrentGraph: true });
       const refreshed = await this.ports.revalidate(input, this.receipt!);
       this.check(pin);
