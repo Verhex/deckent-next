@@ -105,7 +105,7 @@ jobs:
     needs: prepare
     name: tests (node ${{ matrix.node }}, shard ${{ matrix.shard }}/${{ needs.prepare.outputs.shard-count }})
     runs-on: ubuntu-latest
-    # The same heavy file ran 134 s to 234 s on different hosted runners at one commit; 6 minutes cancelled balanced shards on a slow runner.
+    # 6 minutes cancelled shards whose tests had finished: PR 172 node 24 shard 6 completed all 67 files in 329 s of Vitest and was cancelled at 6m05s; PR 170 node 26 shard 6 at 6m16s.
     timeout-minutes: 8
     strategy:
       fail-fast: false
@@ -154,7 +154,7 @@ jobs:
           retention-days: 7
   journey:
     # Owner 2026-11-08: the owner journey (tests/e2e/owner-journey.test.ts) is the acceptance gate the owner asked for; it takes
-    # ~7-9 minutes, longer than a test shard's budget, so it runs here on its own and the required verify depends on it.
+    # about 7 minutes in hosted runs (6m58s and 7m22s observed), most of a test shard's budget by itself, so it runs here on its own and the required verify depends on it.
     needs: prepare
     name: owner journey (node 26)
     runs-on: ubuntu-latest
