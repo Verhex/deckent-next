@@ -10,7 +10,7 @@ export function recordInvocationPlanUsage(db: DatabaseSync, record: ModelInvocat
   db.prepare('INSERT INTO model_invocation_plan_usage(scope_id,invocation_id,record,digest) VALUES(?,?,?,?)')
     .run(usage.scopeId, usage.invocationId, JSON.stringify(usage), modelInvocationPlanUsageDigest(usage));
 }
-export function readInvocationPlanUsage(db: DatabaseSync, version: number, record: ModelInvocationRecord) {
+export function readInvocationPlanUsage(db: DatabaseSync, version: number, record: ModelInvocationRecord, checkCounters = true) {
   const profile = record.receipt.profile, subscription = profile.schemaVersion !== 1 && profile.billingAxis === 'subscription';
   if (version < MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION) {
     if (subscription) requireLedgerVersion(db, MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION);
@@ -19,7 +19,7 @@ export function readInvocationPlanUsage(db: DatabaseSync, version: number, recor
   const row = db.prepare('SELECT record,digest FROM model_invocation_plan_usage WHERE scope_id=? AND invocation_id=?')
     .get(record.receipt.claim.scopeId, record.receipt.claim.invocationId);
   try {
-    const usage = verifyModelInvocationPlanUsage(row ? JSON.parse(String(row.record)) : null, record);
+    const usage = verifyModelInvocationPlanUsage(row ? JSON.parse(String(row.record)) : null, record, checkCounters);
     if (usage && row?.digest !== modelInvocationPlanUsageDigest(usage)) throw new Error();
     return usage;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
