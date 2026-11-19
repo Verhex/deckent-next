@@ -230,7 +230,8 @@ it('keeps one immutable preparation, binds durable settlement before delivery, a
   const one = f.planning.finalize(f.pin, f.retained), two = f.planning.finalize(f.pin, f.retained);
   expect(two).toBe(one); expect(await two).toBe(await one);
   expect(f.counts()).toEqual({ proposals: 1, randomCalls: 1, reads: 1 });
-  expect(f.readResult).toHaveBeenCalledWith(f.retained.receipt);
+  expect(f.readResult).toHaveBeenCalledWith(f.retained.receipt, expect.any(Function));
+  expect(f.readResult.mock.calls[0]![1]()).toBe(false);
 });
 
 it('refuses delivery before the durable settlement and never repairs the closed candidate', async () => {
@@ -406,10 +407,12 @@ it('makes a denied, missing or mismatched durable readback a sticky refusal befo
 it('discards durable readback if the person cancels or the pin is abandoned during the read', async () => {
   for (const interruption of ['cancel-then-return', 'cancel-then-reject', 'abandon'] as const) {
     const parent = new AbortController();
-    const f = fixture({ readResult: async (): ReturnType<SameTurnPlanningPorts['readResult']> => {
+    const f = fixture({ readResult: async (_receipt, isCurrent): ReturnType<SameTurnPlanningPorts['readResult']> => {
+      expect(isCurrent()).toBe(true);
       await Promise.resolve();
       if (interruption === 'abandon') f.planning.abandon(f.pin, 'completion-unknown');
       else parent.abort();
+      expect(isCurrent()).toBe(false);
       if (interruption === 'cancel-then-reject') throw new Error('reader interrupted');
       return f.retained;
     } });

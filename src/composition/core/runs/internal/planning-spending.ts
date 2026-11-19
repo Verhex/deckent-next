@@ -1,17 +1,19 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { classifyWorkSpending, modelInvocationBillingAxis, providerSpendHasZeroTariff, isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
+export type InspectPlanningSpending = () => Promise<Pick<Awaited<ReturnType<typeof inspectConfiguredModelInvocation>>, 'invocation' | 'spending' | 'planUsage'>>;
 /** Optional observation under the invocation's own inspect policy; never changes proposal/admission authority. */
-export function withPlanningSpending(root: string, result: import('#engine/index.js').RunProposalResult, options: ConfigLoadOptions): Promise<import('#engine/index.js').RunProposalResult>;
+export function withPlanningSpending(root: string, result: import('#engine/index.js').RunProposalResult, options: ConfigLoadOptions, inspect?: InspectPlanningSpending): Promise<import('#engine/index.js').RunProposalResult>;
 export function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions): Promise<RunPlanningResult>;
-export async function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions): Promise<RunPlanningResult> {
+export async function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions, inspect?: InspectPlanningSpending): Promise<RunPlanningResult> {
   if (isRunIntentResult(result)) return result;
   const proposal = result.proposal.proposal;
   if (proposal.source.kind !== 'model') return result;
   let planningSpending: NonNullable<import('#engine/index.js').RunProposalResult['planningSpending']> = { class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' };
   try {
     const source = proposal.source.receipt;
-    const view = await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: proposal.scopeId, invocationId: source.invocationId, reference: source.reference }, options);
+    const view = inspect ? await inspect() : await inspectConfiguredModelInvocation(root,
+      { schemaVersion: 2, scopeId: proposal.scopeId, invocationId: source.invocationId, reference: source.reference }, options);
     const receipt = view.invocation;
     // Receipt identity and author are checked again before projecting optional financial evidence.
     const contribution = proposal.source.contribution;

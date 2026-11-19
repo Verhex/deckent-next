@@ -29,7 +29,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   /** Same-turn capacity counterexample: the connection and allocation start with this fixture-only capacity. */
   maxInFlight?: number;
   /** S3-4: the Brain model speaks the CLI stream family through a v2 subscription profile of the headless adapter (a fake CLI; no real CLI). */
-  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown; protocolFamily?: string }> } = {}) {
+  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown; protocolFamily?: string; nativeModel?: string }> } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
@@ -61,7 +61,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     return parsed.response;
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
-  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: options.headless ? options.headless.protocolFamily ?? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
+  const model = { id: reference.modelId, version: 1, nativeId: options.headless?.nativeModel ?? 'vendor/model', protocols: [{ family: options.headless ? options.headless.protocolFamily ?? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
     capabilities: [...(options.jsonOutput ? [{ id: 'response-format-json-object', version: 1, state: 'supported' }] : []), ...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
       ...(options.thinking && options.thinking !== 'wrong-protocol' ? [{ id: 'chat-template-enable-thinking',
         version: options.thinking === 'wrong-version' ? 2 : 1, state: options.thinking === 'wrong-version' ? 'supported' : options.thinking }] : [])] },

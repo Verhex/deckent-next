@@ -68,21 +68,26 @@ unchanged.
 
 A successful repeated command/input reads its recorded proposal and sends no
 second model request. Failed or interrupted invocation claims also forbid a
-second send. Configuration drift can conflict. The same-turn finalizer checks the framed
-draft after native close and binds the proposal source to the chat invocation. Owner 167
-requires a private read of that invocation's retained answer after the durable receipt
-is matched. The MCP actor inspects the receipt under its existing authority. The body
-read requires the current content-read permission of the person verified on that chat
-connection in the same installation and scope. The chat proposal still uses separate
-planning pending production wiring of this read. The same-turn finalizer has no quota
-or correction retry. Its v2 contribution adds the billing axis to the original contribution
+second send. Configuration drift can conflict. A planning-capable native subscription
+chat uses its actual chat model when Brain is unset or shares the login's capacity
+binding. The approval card identifies the actual model and discloses a different
+selected Brain on that login. The same-turn finalizer checks the framed draft after
+native close and binds the proposal source to the chat invocation. Under owner 167,
+the MCP actor's inspect check and the durable receipt match precede any body access.
+The person verified on that exact chat connection must have current content-read
+permission in the same installation and scope. A fresh read-only SQLite transaction
+matches the receipt and checks the live connection and turn pin before fetching and
+verifying the body once. The body goes to the single private finalizer. The source
+check verifies the draft and admission rechecks retained metadata under the actor's
+authority. A refused read ends the step and points the person to `/do`. The same-turn
+finalizer has no quota or correction retry. Its v2 contribution adds the billing axis to the original contribution
 fields: template/version/digest, input/context/output/request digests,
 binding, activation, normalized usage and bounded masked summaries. Intent and
 context are redacted before invocation; graph text and summaries are redacted
 before proposal storage. Same-turn usage covers the whole chat invocation, including planning.
-A2 source verification consumes retained response
-content under existing model `inspect-content` permission, revalidating its parsed
-output digest. Purged or unavailable content cannot authorize a fresh Run.
+A2 source verification for separate plans consumes retained response content under
+existing model `inspect-content` permission, revalidating its parsed output digest.
+Purged or unavailable content cannot authorize a fresh Run.
 Template/input summaries are planner attribution bound into the proposal, not a
 reconstructed prompt trace. A full prompt/response trace store is separate work.
 

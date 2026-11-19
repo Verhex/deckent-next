@@ -547,12 +547,20 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
             outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           } else if (!ports.finishPlanning) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           else {
-            try { outcome = { ...outcome, content: await ports.finishPlanning(signal), reasoning: '' }; }
+            try {
+              outcome = { ...outcome, content: await ports.finishPlanning(signal), reasoning: '' };
+              show({ kind: 'text', text: outcome.content });
+            }
             catch (error) {
               // Admission may already have committed: preserve the typed unknown rather than saying no work started.
-              const code = (error as { code?: unknown } | null)?.code;
+              const { code, params } = (error as { code?: unknown; params?: { reason?: unknown; commandId?: unknown } } | null) ?? {};
+              if (code === 'BRAIN_SAME_TURN_REFUSED' && params?.reason === 'read-refused')
+                return finish('error', t('brain.sameTurn.readRefused', {}, input.language));
               const rendered = typeof code === 'string' ? ErrorRegistry.get(code, input.language)?.message : undefined;
-              return finish('error', rendered ?? t('error.RUN_PROPOSAL_OUTCOME_UNKNOWN', {}, input.language));
+              const note = rendered ?? t('error.RUN_PROPOSAL_OUTCOME_UNKNOWN', {}, input.language);
+              if (code === 'RUN_PROPOSAL_OUTCOME_UNKNOWN' && typeof params?.commandId === 'string')
+                return finish('error', `${note} ${t('cli.do.command', { command: params.commandId }, input.language)}`);
+              return finish('error', note);
             }
           }
         }

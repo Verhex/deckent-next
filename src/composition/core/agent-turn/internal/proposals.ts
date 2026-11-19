@@ -5,11 +5,16 @@ import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal,
 import { CodedError, sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
+import type { createChatSameTurnPlanning } from './same-turn.js';
 
 type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' | 'work' }>) => void;
 type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver) => Promise<RunPlanningResult>;
 /** The card and choice presentation the CLI host lends the service (composition never imports surfaces; the SDK entry stays surface-free). */
-export interface AgentProposalViews { readonly cardLines: (result: RunPlanningResult, locale: Locale) => readonly string[]; readonly schemaChoices: (schema: unknown) => readonly unknown[] }
+export interface AgentProposalViews {
+  readonly cardLines: (result: RunPlanningResult, locale: Locale, pool?: undefined,
+    sameTurn?: Readonly<{ invocationId: string; chosenBrain: string | null }>) => readonly string[];
+  readonly schemaChoices: (schema: unknown) => readonly unknown[];
+}
 const said = { deny: 'the person declined; nothing was changed', expired: 'the card expired unanswered; nothing was changed', cancelled: 'the turn ended before the person answered; nothing was changed' } as const;
 const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? 'failed');
 
@@ -21,7 +26,8 @@ const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.
  * submitted again after the person's yes has an effect. A no, an expired card or an ended turn changes nothing; the model reads which.
  */
 export function createAgentProposals(input: { readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly peer: LocalPeerIdentity; readonly scopeId: string;
-  readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
+  readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan;
+  readonly sameTurn?: ReturnType<typeof createChatSameTurnPlanning>; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
   const { projectRoot, options, peer, scopeId, signal } = input;
   const ai = () => withMcpPrincipal(() => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'));
   const tag = (tool: string, text: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${tool}: ${text}` });
@@ -46,12 +52,16 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     return { keyPath, layer, current: field.value ?? null, choices: views.schemaChoices(field.schema) };
   }
   const workCommandId = (callId: string) => `propose-work-${sha256(`propose-work:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}`;
-  async function work(name: string, request: string, callId: string): Promise<AgentToolOutcome> {
+  async function work(name: string, request: string, callId: string, args: Record<string, unknown>): Promise<AgentToolOutcome> {
     const command: BrainPlanCommand = { schemaVersion: 1, commandId: workCommandId(callId), scopeId, intent: request };
     // v31 (/do parity): the plan's progress reaches the person's terminal as `/do` shows it (planning, a Brain quota wait, the admitted Run for /tasks).
     const progress = (value: BrainPlanProgress) => { if (value.kind === 'planning') input.emit({ kind: 'work', callId, phase: 'planning', attempt: value.attempt });
       else if (value.kind === 'quota-wait') input.emit({ kind: 'work', callId, phase: 'quota-wait', untilMs: value.untilMs, attempt: value.attempt, maxAttempts: value.maxAttempts }); };
     const views = await input.views?.(); if (!views) return tag('propose_work', 'unavailable');
+    if (input.sameTurn) {
+      progress({ kind: 'planning', attempt: 1 });
+      return input.sameTurn.prepare(command, args, callId, name);
+    }
     const plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
     progress({ kind: 'planning', attempt: 1 });
     let result = await plan();
@@ -66,6 +76,35 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     }
     const reason = isRunIntentResult(result) ? 'work-parked' : result.proposal.reason ?? result.proposal.status;
     return tag(name, `error=${reason}; no Run was admitted (the person can start the work with /do)`);
+  }
+  async function completeSameTurn(parentSignal: AbortSignal) {
+    const turn = input.sameTurn!;
+    let result = await turn.finalize(parentSignal);
+    const { callId, invocationId, chosenBrain } = turn;
+    if (!callId || !invocationId) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+    if (!result.run) {
+      const views = await input.views?.();
+      parentSignal.throwIfAborted();
+      if (!views || result.proposal.status !== 'pending' || !result.proposal.approval) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+      const preview = [origin, ...views.cardLines(result, input.locale, undefined, { invocationId, chosenBrain })].join('\n');
+      const decision = await card(callId, result.proposal.approval.approvalId, preview);
+      if (decision === 'deny') return t('brain.sameTurn.declined', {}, input.locale);
+      if (decision !== 'allow') throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+      parentSignal.throwIfAborted();
+      result = await turn.admit();
+      if (!result.run) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+    }
+    input.emit({ kind: 'work', callId, phase: 'admitted', runId: result.run.runId });
+    return t('brain.sameTurn.admitted', {}, input.locale);
+  }
+  async function finishSameTurn(parentSignal: AbortSignal) {
+    try { return await completeSameTurn(parentSignal); }
+    catch (error) {
+      const callId = input.sameTurn?.callId;
+      if (callId && codeOf(error) === 'RUN_PROPOSAL_OUTCOME_UNKNOWN')
+        throw new CodedError('RUN_PROPOSAL_OUTCOME_UNKNOWN', { params: { commandId: workCommandId(callId) } });
+      throw error;
+    }
   }
   async function setting(name: string, keyPath: string, choice: unknown, layer: 'project' | 'global', callId: string): Promise<AgentToolOutcome> {
     const listed = await choices(keyPath, layer);
@@ -83,7 +122,8 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       : tag(name, 'error=approval-pending; nothing was changed');
   }
   return {
-    owns: (name: string) => AI_PROPOSAL_TOOL_SPECS.some(spec => spec.name === name) && (input.plan !== undefined || name !== AI_PROPOSAL_REGISTRY.tools.work),
+    finishSameTurn,
+    owns: (name: string) => AI_PROPOSAL_TOOL_SPECS.some(spec => spec.name === name) && (!!(input.plan || input.sameTurn) || name !== AI_PROPOSAL_REGISTRY.tools.work),
     /** Offered, and each call authorized, for the AI actor while its v20 rule holds: revoking or denying it stops the proposals (fail closed). */
     async authorize(tool: AgentToolSpec): Promise<{ readonly decision: 'allow' | 'deny'; readonly revision: string }> {
       const context = await ai().catch(() => null), policy = context ? await context.policy.load().catch(() => null) : null;
@@ -91,7 +131,7 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     },
     async offered(): Promise<readonly AgentToolSpec[]> {
       const offered: AgentToolSpec[] = [];
-      for (const spec of AI_PROPOSAL_TOOL_SPECS) if ((input.plan || spec.name !== AI_PROPOSAL_REGISTRY.tools.work) && (await this.authorize(spec)).decision === 'allow') offered.push(spec);
+      for (const spec of AI_PROPOSAL_TOOL_SPECS) if (this.owns(spec.name) && (await this.authorize(spec)).decision === 'allow') offered.push(spec);
       return offered;
     },
     async apply(name: string, args: Record<string, unknown>, callId: string): Promise<AgentToolOutcome> {
@@ -99,7 +139,7 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       if (!planned.ok) return { status: 'error', text: planned.text };
       try {
         if (planned.tool === 'choices') return { status: 'ok', text: JSON.stringify(await choices(planned.keyPath, 'project')) };
-        return planned.tool === 'work' ? await work(name, planned.request, callId) : await setting(name, planned.keyPath, planned.choice, planned.layer, callId);
+        return planned.tool === 'work' ? await work(name, planned.request, callId, args) : await setting(name, planned.keyPath, planned.choice, planned.layer, callId);
       } catch (error) {
         const code = codeOf(error);
         if (planned.tool === 'work') {

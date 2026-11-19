@@ -252,11 +252,12 @@ a changed realpath, size, mtime or inode runs the preflight once, every spawn bi
 `updatedFrom` while the version differs (`readHeadlessLogins` `cliUpdated`, catalog `doctor.headless.updated`), and a path that leads to
 no executable file is `HEADLESS_CLI_UNAVAILABLE`, whose text names the reconnect command. Profiles sealed with a realpath stay valid.
 
-The native chat adapters also support a draft returned by the chat model within its existing
-tool session. This uses the chat sign-in, the authorized preparation result and a normal CLI
-close. The [same-turn finalizer](run-planning.md) requires a private read before it can
-propose the work. The chat entry point still uses separate planning. In the same-turn
-design a Brain on another sign-in or API connection keeps its separate planning call.
+In an eligible native chat, `propose_work` prepares a draft for the chat model to return
+within its existing tool session. This uses the chat sign-in, the authorized preparation
+result and a normal CLI close. The [same-turn finalizer](run-planning.md) verifies the
+retained answer in a private read before any proposal reaches the person's approval card.
+A Brain on another sign-in or API connection, chat without a native planning session,
+explicit `/do` and external MCP and SDK planning keep the separate planner.
 
 When a separate Brain call exhausts its subscription quota, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command

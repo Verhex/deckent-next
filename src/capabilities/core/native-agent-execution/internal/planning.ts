@@ -9,7 +9,7 @@ declare const pinIdentity: unique symbol;
 /** Object identity from an admitted claim, never serialized or reconstructed from a receipt/token. */
 export type SameTurnPlanningPin = Readonly<{ [pinIdentity]: true }>;
 export type SameTurnPlanningRefusal = 'stale-terminal' | 'preparation-unsettled' | 'output-truncated' | 'cancelled'
-  | 'native-failed' | 'completion-unknown' | 'settings-mismatch';
+  | 'native-failed' | 'completion-unknown' | 'settings-mismatch' | 'read-refused';
 export interface SameTurnPlanningCall {
   readonly turnId: string; readonly generation: number; readonly callId: string; readonly argsDigest: string;
 }

@@ -1,13 +1,14 @@
+import { isDeepStrictEqual } from 'node:util';
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
-  brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
-import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
+  brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type ModelInvocationReceipt, type ModelInvocationProfile, type RunProposal } from '#domain/index.js';
+import { configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, configuredSameTurnBrainSettings, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining, modelInvocationBillingAxis, modelInvocationProfileDigest, ModelInvocationPolicyAuthorization, type ModelInvocationInspection, type SameTurnPlanningInput, type SameTurnPlanningPorts } from '#engine/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, carryContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
-import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
+import { bindConfiguredTurnProposal, inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredWorkerKinds, isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
@@ -56,7 +57,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
     }
     await loadComposedConfig(root, options);
     const context = scoped = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
-    const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
+    const readBudget = configuredBrainBudget(root, options);
     return await new BrainPlanApplication(verifiedPrincipal(context.principal), {
       subscriptionAdapterIds: new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID, SIWC_INFERENCE.adapter.id]),
       knownSecrets: getConfigKnownSecrets(context.config), remainingBudget: scopeId => readBudget(scopeId).catch(() => null),
@@ -74,55 +75,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       async rejectionBody(result) { const content = (await withLocalPrincipalChannel(undefined, () => inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: result.receipt.request.scopeId,
         invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options), localPrincipalPeer())).responseContent;
       return content?.kind === 'response-body' ? content.data : null; },
-      async prepare(command) {
-        const configuredRegistry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
-        const unavailableKinds = (await configuredWorkerKinds(context.config)).filter(row => row.reason !== null);
-        const usableKinds = configuredRegistry?.kinds.filter(row => !unavailableKinds.some(value => value.kind === row.kind));
-        const registry = configuredRegistry && usableKinds ? { ...configuredRegistry, kinds: usableKinds,
-          profiles: configuredRegistry.profiles.filter(profile => usableKinds.some(row => row.profile.id === profile.id && row.profile.version === profile.version)) } : null;
-        if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
-        if (!registry.kinds.length) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: { phase: 'awaiting-confirmation',
-          ...Object.fromEntries(unavailableKinds.map((kind, index) => [`${kind.reason}.${index}`, kind.kind])) } });
-        // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
-        const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
-        const gate = await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
-        const configured = configuredInvocationProfiles(context.config);
-        const profile = configured.find(value => value.scopeId === command.scopeId
-          && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;
-        const spending = classifyWorkSpending({ kind: 'model', profile });
-        const requiresTaskBudget = registry.profiles.every(value => !isNativeCodingTemplate(value) && classifyWorkSpending({ kind: 'worker', profile: value }) === 'metered');
-        const needsBudget = spending === 'metered' || requiresTaskBudget;
-        const budget = needsBudget ? await readBudget(command.scopeId) : null;
-        if (needsBudget) {
-          if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
-          if (budget.frozen || budget.remainingMinorUnits <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED', { params: { remaining: budget.remainingMinorUnits, currency: budget.currency } });
-        }
-        const templates = registry.profiles.filter(isNativeCodingTemplate).map(value => ({ profile: { id: value.id, version: value.version }, ...nativeCodingTemplateWorker(value) }));
-        let workerModels: Awaited<ReturnType<typeof inspectAdmissibleWorkerModels>> = [];
-        if (brainAssignsWorkers(context.config['brain_planner'])) {
-          const catalog = await openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
-          try { workerModels = await inspectAdmissibleWorkerModels(templates, command.scopeId, catalog, Date.now(),
-            { imageRefreshInProgress: await isToolchainRefreshInProgress(root, options), roles: composeModelRolePolicy(context.config['model_roles']), workerRole: WORK_CLASS_WORKER_ROLE }); } finally { catalog.close(); }
-        }
-        const kinds = registry.kinds.map(row => { const template = templates.find(value => value.profile.id === row.profile.id && value.profile.version === row.profile.version);
-          const profile = template ? registry.profiles.find(value => value.id === row.profile.id && value.version === row.profile.version) : undefined;
-          return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const,
-            ...(template ? { provider: template.provider, turnLimit: nativeCodingTemplateTurnLimit(profile!) } : {}) }; });
-        // S4B-6: verified memory under the worker's rules (off: nothing read); sealed before the counter's or the model's first HTTP effect.
-        const memory = await prepareConfiguredPlanningMemory(context, { scopeId: command.scopeId, runId: brainRunId(command), commandId: command.commandId, intent: command.intent,
-          takesMemory: brainTakesMemory(context.config['brain_planner']), workClasses: registry.workClasses });
-        const prompt = prepareBrainRegistryPrompt(command, registry, budget,
-          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels, memory: memory.block, language: resolveLocale(undefined, options.env ?? process.env, context.config.language) });
-        const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
-        assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
-        await memory.seal(prompt.memory, prompt.contextDigest);
-        const measured = await measureConfiguredModel(root, prepared.command, options, signal, 'feature');
-        if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
-        assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
-        const note = memory.note();
-        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), unavailableKinds, ...(note ? { planningMemory: note } : {}),
-          quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']), brainBelowRecommended: gate.belowRecommended };
-      },
+      prepare: command => prepareConfiguredBrain(root, options, context, command, readBudget, signal),
     }).plan(input, undefined, signal, observe);
   } catch (error) {
     // BeUser D-08: a refused request (not a cancel) leaves a sealed, redacted audit record a person can find later; recording never masks the refusal.
@@ -131,6 +84,140 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       policyRevision: c.document.revision, commandId: input.commandId, request: input.intent, code: failure.code, atMs: Date.now(), known: getConfigKnownSecrets(c.config) }))).catch(() => undefined);
     throw failure;
   }
+}
+type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
+const configuredBrainBudget = (root: string, options: ConfigLoadOptions) =>
+  (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
+type ReadBudget = ReturnType<typeof configuredBrainBudget>;
+async function prepareConfiguredBrain(root: string, options: ConfigLoadOptions, context: ScopeContext, command: BrainPlanCommand,
+  readBudget: ReadBudget, signal?: AbortSignal, outer?: ModelInvocationCommand, expectedActivation?: number) {
+  const configuredRegistry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
+  const unavailableKinds = (await configuredWorkerKinds(context.config)).filter(row => row.reason !== null);
+  const usableKinds = configuredRegistry?.kinds.filter(row => !unavailableKinds.some(value => value.kind === row.kind));
+  const registry = configuredRegistry && usableKinds ? { ...configuredRegistry, kinds: usableKinds,
+    profiles: configuredRegistry.profiles.filter(profile => usableKinds.some(row => row.profile.id === profile.id && row.profile.version === profile.version)) } : null;
+  if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
+  if (!registry.kinds.length) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: { phase: 'awaiting-confirmation',
+    ...Object.fromEntries(unavailableKinds.map((kind, index) => [`${kind.reason}.${index}`, kind.kind])) } });
+  // R9b (owner D3): the caller's model, else the person's Brain model (project over user), else the chat model; the gate below decides, never a swap.
+  const selected = outer ? { command: outer } : await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference ?? configuredBrainModel(context.config['brain_planner']));
+  const gate = await gateConfiguredBrainModel(context, selected.command, expectedActivation); // S2: tier/role + activation, before the budget read or any provider effect
+  const configured = configuredInvocationProfiles(context.config);
+  const profile = configured.find(value => value.scopeId === command.scopeId
+    && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;
+  const spending = classifyWorkSpending({ kind: 'model', profile });
+  const requiresTaskBudget = registry.profiles.every(value => !isNativeCodingTemplate(value) && classifyWorkSpending({ kind: 'worker', profile: value }) === 'metered');
+  const needsBudget = spending === 'metered' || requiresTaskBudget;
+  const budget = needsBudget ? await readBudget(command.scopeId) : null;
+  if (needsBudget) {
+    if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
+    if (budget.frozen || budget.remainingMinorUnits <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED', { params: { remaining: budget.remainingMinorUnits, currency: budget.currency } });
+  }
+  const templates = registry.profiles.filter(isNativeCodingTemplate).map(value => ({ profile: { id: value.id, version: value.version }, ...nativeCodingTemplateWorker(value) }));
+  let workerModels: Awaited<ReturnType<typeof inspectAdmissibleWorkerModels>> = [];
+  if (brainAssignsWorkers(context.config['brain_planner'])) {
+    const catalog = await openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
+    try { workerModels = await inspectAdmissibleWorkerModels(templates, command.scopeId, catalog, Date.now(),
+      { imageRefreshInProgress: await isToolchainRefreshInProgress(root, options), roles: composeModelRolePolicy(context.config['model_roles']), workerRole: WORK_CLASS_WORKER_ROLE }); } finally { catalog.close(); }
+  }
+  const kinds = registry.kinds.map(row => { const template = templates.find(value => value.profile.id === row.profile.id && value.profile.version === row.profile.version);
+    const profile = template ? registry.profiles.find(value => value.id === row.profile.id && value.version === row.profile.version) : undefined;
+    return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const,
+      ...(template ? { provider: template.provider, turnLimit: nativeCodingTemplateTurnLimit(profile!) } : {}) }; });
+  // S4B-6: verified memory under the worker's rules (off: nothing read); sealed before the counter's or the model's first HTTP effect.
+  const memory = await prepareConfiguredPlanningMemory(context, { scopeId: command.scopeId, runId: brainRunId(command), commandId: command.commandId, intent: command.intent,
+    takesMemory: brainTakesMemory(context.config['brain_planner']), workClasses: registry.workClasses });
+  const prompt = prepareBrainRegistryPrompt(command, registry, budget,
+    context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels, memory: memory.block, language: resolveLocale(undefined, options.env ?? process.env, context.config.language) });
+  const prepared = outer ? { command: outer } : await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
+  assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
+  await memory.seal(prompt.memory, prompt.contextDigest);
+  const measured = outer ? null : await measureConfiguredModel(root, prepared.command, options, signal, 'feature');
+  if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
+  assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
+  const note = memory.note();
+  return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), unavailableKinds, ...(note ? { planningMemory: note } : {}),
+    quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']), brainBelowRecommended: gate.belowRecommended };
+}
+type TurnPlanPorts = Pick<SameTurnPlanningPorts, 'randomBytes' | 'toolResultDigest' | 'readResult' | 'publicText'> & Readonly<{
+  root: string; options: ConfigLoadOptions; actor: ScopeContext['principal']; config: ResolvedConfig; profile: ModelInvocationProfile; signal: AbortSignal;
+  sharesLogin(profile: ModelInvocationProfile): boolean;
+  inspect(receipt: ModelInvocationReceipt): Promise<Pick<ModelInvocationInspection, 'invocation' | 'spending' | 'planUsage'>>;
+  settingOrigins(): Promise<Record<'maxCompletionTokens' | 'reasoning', 'project' | 'person' | 'brain-default'>>;
+  recheck(): Promise<void>;
+}>;
+/** The runtime lends only the exact already-started invocation. Preparation and finalization have no second model path. */
+export function createServiceSameTurnPlanning(ports: TurnPlanPorts) {
+  const { root, options, actor, profile, signal } = ports, { scopeId } = profile;
+  const choose = (config: ResolvedConfig) => {
+    if (modelInvocationBillingAxis(profile) !== 'subscription') return undefined;
+    const selected = configuredBrainModel(config['brain_planner']);
+    if (!selected || isDeepStrictEqual(selected, profile.reference)) return null;
+    const brain = configuredInvocationProfiles(config).find(row => row.scopeId === scopeId && isDeepStrictEqual(row.reference, selected));
+    return brain?.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && modelInvocationBillingAxis(brain) === 'subscription' && ports.sharesLogin(brain)
+      ? selected.modelId : undefined;
+  };
+  const chosenBrain = choose(ports.config);
+  if (chosenBrain === undefined) return null;
+  const refuse = () => ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED');
+  const unavailable = async (): Promise<never> => { throw refuse(); };
+  const readBudget = configuredBrainBudget(root, options);
+  let admission: (() => ReturnType<typeof proposeConfiguredRun>) | undefined;
+  let known = getConfigKnownSecrets(ports.config);
+  let claimed: { invocation: ModelInvocationCommand; receipt: ModelInvocationReceipt } | undefined;
+  const settingsFor = async (context: ScopeContext) => {
+    // Compare the same plain snapshot that K1 freezes, including sections built with null prototypes.
+    const config = structuredClone(context.config['brain_planner'] ?? {});
+    return { config, settings: configuredSameTurnBrainSettings(config, await ports.settingOrigins()) };
+  };
+  const brain = new BrainPlanApplication(verifiedPrincipal(actor), {
+    inspect: unavailable, invoke: unavailable, prepare: unavailable, propose: unavailable,
+    text: extractOpenAiChatTextFromInvocation, stoppedAtLength: openAiChatStoppedAtLength,
+    get knownSecrets() { return known; },
+    remainingBudget: id => readBudget(id).catch(() => null),
+  });
+  const planning = brain.createSameTurnPlanning({ ...ports, text: extractOpenAiChatTextFromInvocation,
+    async revalidate(input, receipt) {
+      await ports.recheck();
+      const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), invocation = input.prepared.invocation;
+      const liveProfile = configuredInvocationProfiles(context.config).find(row => row.scopeId === scopeId && isDeepStrictEqual(row.reference, invocation.reference));
+      const auth = await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('invoke', { scopeId, reference: invocation.reference }, context.principal);
+      const gate = await gateConfiguredBrainModel(context, invocation, receipt.activationRevision);
+      if (!isDeepStrictEqual(actor, context.principal) || choose(context.config) !== chosenBrain || !liveProfile || modelInvocationProfileDigest(liveProfile) !== receipt.profileDigest
+        || !isDeepStrictEqual(auth, receipt.authorization) || gate.belowRecommended !== input.prepared.brainBelowRecommended) return unavailable();
+      return { ...input, ...await settingsFor(context) };
+    },
+    propose(proposal, receipt, assertSource) {
+      signal.throwIfAborted();
+      admission = bindConfiguredTurnProposal(root, proposal, options, () => ports.inspect(receipt), assertSource);
+      return admission();
+    },
+  });
+  return {
+    planning, chosenBrain,
+    claim(invocation: ModelInvocationCommand, receipt: ModelInvocationReceipt) {
+      planning.claimed(invocation, receipt);
+      claimed = { invocation, receipt };
+    },
+    async prepare(command: BrainPlanCommand, call: SameTurnPlanningInput['call'], bounds: SameTurnPlanningInput['bounds']) {
+      const pin = planning.pin;
+      if (!pin || !claimed) throw refuse();
+      try {
+        const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+        known = getConfigKnownSecrets(context.config);
+        const prepared = await prepareConfiguredBrain(root, options, context, command, readBudget, signal, claimed.invocation, claimed.receipt.activationRevision);
+        return await planning.prepare(pin, { command, prepared, call, bounds, ...await settingsFor(context) });
+      } catch (error) {
+        if (!planning.active) planning.refusePreparation(pin);
+        throw error;
+      }
+    },
+    finalize(result: ModelInvocationResult, parentSignal: AbortSignal) {
+      if (!planning.pin) throw refuse();
+      return planning.finalize(planning.pin, result, parentSignal);
+    },
+    admit() { signal.throwIfAborted(); return admission ? admission() : unavailable(); },
+  };
 }
 /** BeUser D-08: the newest refused work requests of one scope (none when the scope has no audit key yet). */
 export async function inspectConfiguredRefusedRequests(root: string, scopeId: string, limit: number, options: ConfigLoadOptions = {}) {

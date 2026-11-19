@@ -9,10 +9,10 @@ import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { composeModelRolePolicy, decideRoleModelInScope, isOwnedRoleOverlay, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
-import { isRunIntentResult, type RunPlanningResult, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
+import { assertRunProposalSource, isRunIntentResult, type RunPlanningResult, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
 import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
-import { SameTurnPlanningApplication, type BrainPreparation, type SameTurnPlanningPorts } from './internal/same-turn.js';
+import { SameTurnPlanningApplication, type BrainPreparation, type SameTurnBrainSettings, type SameTurnPlanningPorts } from './internal/same-turn.js';
 export type { SameTurnPlanningApplication, BrainPreparation, SameTurnPlanningInput, SameTurnPlanningPorts, SameTurnBrainSettings } from './internal/same-turn.js';
 /** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
 export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => brainPlannerConfigSchema.parse(config).quotaWait;
@@ -115,6 +115,14 @@ export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(confi
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
 /** R9b (owner D3): the person's chosen Brain model from the merged `brain_planner` section (project over user), or undefined (the chat model is tried). */
 export const configuredBrainModel = (config: unknown): ModelReference | undefined => brainPlannerConfigSchema.parse(config ?? {}).reference;
+export function configuredSameTurnBrainSettings(config: unknown, origins: {
+  maxCompletionTokens: SameTurnBrainSettings['cap']['origin']; reasoning: SameTurnBrainSettings['reasoning']['origin'];
+}): SameTurnBrainSettings {
+  const settings = brainPlannerConfigSchema.parse(config ?? {});
+  // The native transport supplies no numeric Brain cap or reasoning-off application evidence.
+  return { cap: { value: settings.maxCompletionTokens, origin: origins.maxCompletionTokens },
+    reasoning: { value: settings.reasoning, origin: origins.reasoning }, applied: null };
+}
 /**
  * S3-4: the typed cause of a rejected planning call. The subscription CLI step's own adapter body names it (quota with its reset, credits, login,
  * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried (a quota wait
@@ -272,7 +280,7 @@ export class BrainPlanApplication {
   }
   /** Same-turn custody has already proved completion/drain and retained-body equality. No invoke, correction or quota loop. */
   async #completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult,
-    assertPin: () => void, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
+    assertPin: () => void, credential?: unknown, signal?: AbortSignal, propose?: SameTurnPlanningPorts['propose']): Promise<RunProposalResult> {
     assertActive(signal);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const proposer = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
@@ -280,10 +288,11 @@ export class BrainPlanApplication {
     if (prepared.prompt.inputDigest !== brainInputDigest(command, this.ports.knownSecrets)) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
     if (this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED', { params: { reason: 'output-truncated' } });
     const draft = this.validated(prepared, result, invocation, true);
-    return this.complete(command, proposer, prepared, invocation, result, draft, signal, assertPin);
+    return this.complete(command, proposer, prepared, invocation, result, draft, signal, assertPin, propose);
   }
   private async complete(command: BrainPlanCommand, proposer: RunProposal['proposer'], prepared: BrainPreparation, invocation: ModelInvocationCommand,
-    result: ModelInvocationResult, draft: ReturnType<typeof parseBrainDraft>, signal?: AbortSignal, assertPin?: () => void): Promise<RunProposalResult> {
+    result: ModelInvocationResult, draft: ReturnType<typeof parseBrainDraft>, signal?: AbortSignal, assertPin?: () => void,
+    propose?: SameTurnPlanningPorts['propose']): Promise<RunProposalResult> {
     const runId = brainRunId(command);
     const receipt = result.receipt;
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN'); // narrowed; validated() already refused otherwise
@@ -302,9 +311,10 @@ export class BrainPlanApplication {
         requestDigest: receipt.request.requestDigest, activationRevision: receipt.activationRevision, bindingDigest: receipt.request.expectedBinding.digest,
         inputSummary: prompt.intent.slice(0, limit), outputSummary: redactForRecord(JSON.stringify(draft), this.ports.knownSecrets).slice(0, limit),
         usage: usage.success ? { inputTokens: usage.data.prompt_tokens, outputTokens: usage.data.completion_tokens, totalTokens: usage.data.total_tokens } : null } } };
+    const assertSource = (value: RunProposal, known: KnownSecretSnapshot) => assertRunProposalSource(value, receipt, this.ports.text(result), known);
     assertActive(signal);
     assertPin?.();
-    const recorded = await this.ports.propose(proposal);
+    const recorded = await (propose ? propose(proposal, receipt, assertSource) : this.ports.propose(proposal));
     return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
   }

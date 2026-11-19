@@ -7,6 +7,7 @@ import { SAME_TURN_PLANNING_POLICY, SAME_TURN_CHALLENGE_PREFIX, brainPlannerConf
 import { ErrorRegistry, redactForRecord, combineKnownSecrets, knownSecretValues, EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import { modelInvocationRequestDigest, modelInvocationResponseContentDescriptor, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import type { RunProposalResult, PlanningMemoryNote } from '#engine/core/run-proposal/index.js';
+import type { RunProposal } from '#domain/index.js';
 import type { BrainQuotaWaitPolicy } from './quota-wait.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
@@ -16,7 +17,8 @@ import type { BrainQuotaWaitPolicy } from './quota-wait.js';
   /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
   /** Owner 2026-11-06: the Brain model is below the recommended class (response-only note for the card). */ readonly brainBelowRecommended?: boolean }
 type SameTurnBrainFinalizer = (command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand,
-  result: ModelInvocationResult, assertPin: () => void, credential?: unknown, signal?: AbortSignal) => Promise<RunProposalResult>;
+  result: ModelInvocationResult, assertPin: () => void, credential?: unknown, signal?: AbortSignal,
+  propose?: SameTurnPlanningPorts['propose']) => Promise<RunProposalResult>;
 
 /** Authored origin is separate from the resolved Brain requirement. Terminal request policy is never cap application evidence. */
 type Origin = 'person' | 'project' | 'company' | 'brain-default' | 'unknown';
@@ -44,7 +46,10 @@ export interface SameTurnPlanningPorts {
   /** Composition privately reads this turn's retained outer invocation under the content-read permission of the
    * person verified on this chat connection in the same installation and scope. Throw if the person, permission
    * or binding to the completed receipt cannot be verified. Never expose the body to the actor. */
-  readResult(completedReceipt: ModelInvocationReceipt): Promise<ModelInvocationResult>;
+  readResult(completedReceipt: ModelInvocationReceipt, isCurrent: () => boolean): Promise<ModelInvocationResult>;
+  /** The proposal owner can run its existing source check. The verified body remains in the finalizer's closure. */
+  propose?(proposal: RunProposal, receipt: ModelInvocationReceipt,
+    assertSource: (value: RunProposal, known: KnownSecretSnapshot) => void): Promise<RunProposalResult>;
   text(result: ModelInvocationResult): string | null;
   /** Re-read Brain model role, activation/binding/profile, model-use/delegation, policy and settings on this actual chat model.
    * Return the current preparation snapshot; any drift is refused. This port cannot invoke a model or admit a Run. */
@@ -126,6 +131,11 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
       if (!applied || applied.invocationId !== this.receipt!.claim.invocationId || applied.requestDigest !== this.receipt!.request.requestDigest
         || cap.value !== null && applied.maxCompletionTokens !== cap.value || reasoning.value === 'off' && applied.reasoningOff !== true) this.refuse('settings-mismatch');
     }
+  }
+  refusePreparation(pin: SameTurnPlanningPin): void {
+    this.check(pin);
+    this.preparationStarted = true;
+    this.abandon(pin, 'preparation-unsettled');
   }
   prepare(pin: SameTurnPlanningPin, raw: SameTurnPlanningInput): Promise<NativeAgentToolResult> {
     // Keep rejected operations asynchronous, but return the EXACT same promise for an identical replay.
@@ -236,8 +246,14 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
         || !isDeepStrictEqual(identity(receipt), this.receipt) || this.ports.text(completed) !== selected) this.refuse('completion-unknown');
       if (!response || !isDeepStrictEqual(modelInvocationResponseContentDescriptor(response), receipt.outcome.content)) this.refuse('completion-unknown');
       let readback: ModelInvocationResult;
-      try { readback = await this.ports.readResult(receipt); }
-      catch { this.refuse(parentSignal?.aborted ? 'cancelled' : 'completion-unknown'); }
+      let reading = true;
+      try { readback = await this.ports.readResult(receipt, () => reading && !parentSignal?.aborted && pin === this.currentPin && this.failure === null); }
+      catch (error) {
+        const refusal = error as { code?: unknown; params?: { reason?: unknown } } | null;
+        this.refuse(parentSignal?.aborted ? 'cancelled' : refusal?.code === 'BRAIN_SAME_TURN_REFUSED' && refusal.params?.reason === 'read-refused'
+          ? 'read-refused' : 'completion-unknown');
+      }
+      finally { reading = false; }
       if (parentSignal?.aborted) this.refuse('cancelled');
       this.check(pin);
       // Store readback can be marked replayed by the reader, but its receipt, body and content status must be identical.
@@ -248,7 +264,7 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
       if (!isDeepStrictEqual(refreshed, input)) this.refuse('settings-mismatch');
       if (parentSignal?.aborted) this.refuse('cancelled');
       // The matching frozen snapshot stays stable across the finalizer's remaining awaits.
-      return this.#complete(input.command, input.prepared, this.invocation!, completed, () => this.check(pin), this.ports.credential, parentSignal);
+      return this.#complete(input.command, input.prepared, this.invocation!, completed, () => this.check(pin), this.ports.credential, parentSignal, this.ports.propose);
     }).finally(() => { this.challenge = null; this.privateKnown = undefined; this.result = null; this.custody = null; this.terminal = null; this.preparing = null; });
     return this.finalizing;
   }

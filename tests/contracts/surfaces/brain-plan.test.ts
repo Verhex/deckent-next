@@ -6,12 +6,16 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { brainProposalCardLines } from '#surfaces/core/run-planning/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, t } from '#platform/index.js';
 import { main } from '../../fixtures/cli-input.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
 const command = { schemaVersion: 1, scopeId: 's', commandId: 'brain', intent: 'Plan purchase readback' };
+it('explains a refused private read in both terminal languages', () => {
+  expect(t('brain.sameTurn.readRefused', {}, 'en')).toBe('The system could not verify access to the saved reply for this chat. No plan was sent for approval and no Run started. Use /do to request a separate plan.');
+  expect(t('brain.sameTurn.readRefused', {}, 'tr')).toBe('Sistem bu sohbetin kayıtlı yanıtına erişimi doğrulayamadı. Plan onaya sunulmadı ve iş başlamadı. Ayrı bir plan istemek için /do kullanın.');
+});
 it('CLI do passes one intent contract and returns pending JSON or human TR/EN preview without an approve flag', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-cli-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/config.json'), '{}');
