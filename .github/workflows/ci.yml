@@ -69,7 +69,7 @@ jobs:
           path: scripts/ci-test-durations.json
           key: ${{ steps.weights.outputs.key }}
           fail-on-cache-miss: true
-      # The restored main weights win unless the committed seed weighs more of this tree's test files (a PR that added tests and refreshed).
+      # Schedule with the per-file maximum of the restored main weights and the committed seed (a PR that lengthened or added tests and refreshed).
       - if: steps.weights.outputs.key != ''
         run: node scripts/ci-test-weights.mjs select .pack/ci-weights-seed.json
       - run: npm run build
