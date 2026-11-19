@@ -694,7 +694,7 @@
   "error.BRAIN_OUTCOME_UNKNOWN": "The planning invocation has no confirmed response. Inspect its receipt before continuing; no automatic retry.",
   "error.BRAIN_CANCELLED": "Planning was cancelled. No Run was admitted. Provider effects remain subject to invocation settlement.",
   "error.BRAIN_SAME_TURN_REFUSED": "The plan could not be completed in this chat turn. No Run was started by this proposal. Ask again in chat, or use /do to request a separate plan.",
-  "brain.sameTurn.author": "{model} drafted this plan in the current conversation using your {connection} sign-in.",
+  "brain.sameTurn.author": "{model} from {provider} drafted this plan using the subscription sign-in for this chat.",
   "brain.sameTurn.choice": "Your selected Brain model {model} was not used because it shares this sign-in. To use it, decline this plan and enter /do with your request.",
   "brain.sameTurn.checks": "The system checked the draft against the saved reply and evaluated the permissions required for these tasks. It did not verify that the plan will achieve your goal. Earlier messages and tool results may have influenced the plan. Review the tasks and acceptance criteria before approving.",
   "brain.sameTurn.usage": "The chat and plan used {tokens} tokens in one subscription call.",

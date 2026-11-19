@@ -694,7 +694,7 @@
   "error.BRAIN_OUTCOME_UNKNOWN": "Planlama çağrısının doğrulanmış yanıtı yok. Devam etmeden makbuzunu inceleyin; otomatik tekrar yapılmaz.",
   "error.BRAIN_CANCELLED": "Planlama iptal edildi. Hiçbir iş başlatılmadı. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir.",
   "error.BRAIN_SAME_TURN_REFUSED": "Bu sohbet turunda plan tamamlanamadı. Bu öneriyle iş başlatılmadı. İsteğinizi sohbette yeniden yazın veya ayrı bir plan için /do kullanın.",
-  "brain.sameTurn.author": "{model} bu planı açık sohbette {connection} abonelik girişinizi kullanarak hazırladı.",
+  "brain.sameTurn.author": "{provider} sağlayıcısındaki {model}, bu planı bu sohbetin abonelik girişiyle hazırladı.",
   "brain.sameTurn.choice": "Seçtiğiniz Brain modeli {model} aynı girişi paylaştığı için kullanılmadı. O modelle planlamak için bu planı reddedip isteğinizi /do ile yazın.",
   "brain.sameTurn.checks": "Sistem taslağı kayıtlı yanıtla karşılaştırdı ve görevlerin gerektirdiği izinleri denetledi. Planın amacınıza ulaşacağını doğrulamadı. Önceki mesajlar ve araç sonuçları planı etkilemiş olabilir. Onaylamadan önce görevleri ve kabul ölçütlerini gözden geçirin.",
   "brain.sameTurn.usage": "Sohbet ve plan için tek abonelik çağrısında toplam {tokens} token kullanıldı.",

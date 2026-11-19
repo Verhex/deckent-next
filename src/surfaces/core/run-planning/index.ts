@@ -46,7 +46,7 @@ export function brainProposalCardLines(result: RunPlanningResult, locale: Locale
   const chat = sameTurn && source.kind === 'model' && source.receipt.invocationId === sameTurn.invocationId
     && source.contribution?.schemaVersion === 2 && source.contribution.billingAxis === 'subscription';
   const attribution = chat ? [
-    t('brain.sameTurn.author', { model: safeName(source.receipt.reference.modelId), connection: safeName(source.receipt.reference.providerId) }, locale),
+    t('brain.sameTurn.author', { model: safeName(source.receipt.reference.modelId), provider: safeName(source.receipt.reference.providerId) }, locale),
     ...(sameTurn.chosenBrain ? [t('brain.sameTurn.choice', { model: safeName(sameTurn.chosenBrain) }, locale)] : []),
     t('brain.sameTurn.checks', {}, locale),
     source.contribution.usage ? t('brain.sameTurn.usage', { tokens: source.contribution.usage.totalTokens }, locale) : t('brain.sameTurn.usageUnknown', {}, locale),

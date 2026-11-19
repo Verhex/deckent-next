@@ -68,11 +68,15 @@ unchanged.
 
 A successful repeated command/input reads its recorded proposal and sends no
 second model request. Failed or interrupted invocation claims also forbid a
-second send; configuration drift can conflict. For same-turn planning the engine validates a
-framed draft after native close, reads the saved response again and uses the chat invocation
-as the model source. The chat proposal still uses separate planning until that read is
-bound to an authorized reader on the production path. The same-turn finalizer has no quota
-or correction retry. Its v2 contribution adds the billing axis to the original contribution fields: template/version/digest, input/context/output/request digests,
+second send. Configuration drift can conflict. The same-turn finalizer checks the framed
+draft after native close and binds the proposal source to the chat invocation. Owner 167
+requires a private read of that invocation's retained answer after the durable receipt
+is matched. The MCP actor inspects the receipt under its existing authority. The body
+read requires the current content-read permission of the person verified on that chat
+connection in the same installation and scope. The chat proposal still uses separate
+planning pending production wiring of this read. The same-turn finalizer has no quota
+or correction retry. Its v2 contribution adds the billing axis to the original contribution
+fields: template/version/digest, input/context/output/request digests,
 binding, activation, normalized usage and bounded masked summaries. Intent and
 context are redacted before invocation; graph text and summaries are redacted
 before proposal storage. Same-turn usage covers the whole chat invocation, including planning.

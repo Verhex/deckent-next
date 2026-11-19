@@ -72,6 +72,9 @@ it('attributes a same-turn draft to its chat sign-in and keeps a separate Brain 
   for (const locale of ['en', 'tr'] as const) {
     const card = brainProposalCardLines(view, locale, undefined, { invocationId: 'one', chosenBrain: 'chosen-model' }).join('\n');
     for (const word of ['chat-model', 'team-subscription', 'chosen-model', '/do', '15', 'Durable business evidence']) expect(card).toContain(word);
+    expect(card).toContain(locale === 'tr'
+      ? 'team-subscription sağlayıcısındaki chat-model, bu planı bu sohbetin abonelik girişiyle hazırladı.'
+      : 'chat-model from team-subscription drafted this plan using the subscription sign-in for this chat.');
     expect(card).toContain(locale === 'tr' ? 'Planın amacınıza ulaşacağını doğrulamadı' : 'did not verify that the plan will achieve your goal');
     expect(card).toContain(locale === 'tr' ? 'aynı girişi paylaştığı için kullanılmadı' : 'was not used because it shares this sign-in');
     expect(brainProposalCardLines(view, locale, undefined, { invocationId: 'one', chosenBrain: null }).join('\n')).not.toContain('/do');

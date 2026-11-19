@@ -254,7 +254,9 @@ no executable file is `HEADLESS_CLI_UNAVAILABLE`, whose text names the reconnect
 
 The native chat adapters also support a draft returned by the chat model within its existing
 tool session. This uses the chat sign-in, the authorized preparation result and a normal CLI
-close. A Brain on another sign-in or API connection keeps its separate planning call.
+close. The [same-turn finalizer](run-planning.md) requires a private read before it can
+propose the work. The chat entry point still uses separate planning. In the same-turn
+design a Brain on another sign-in or API connection keeps its separate planning call.
 
 When a separate Brain call exhausts its subscription quota, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command

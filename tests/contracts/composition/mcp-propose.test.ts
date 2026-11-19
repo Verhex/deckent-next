@@ -212,6 +212,7 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     expect(runsOf(w)).toEqual([]);
     expect(separateCalls()).toBe(1);
     expect(cardOf(declinedWork.events)?.preview).not.toContain('in the current conversation using your');
+    expect(cardOf(declinedWork.events)?.preview).not.toContain('the subscription sign-in for this chat');
     const admitted = await w.call('propose_work', { request: 'add a third line to notes.txt' }, 'allow');
     expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' }); expect(admitted.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
     expect(separateCalls()).toBe(2);
