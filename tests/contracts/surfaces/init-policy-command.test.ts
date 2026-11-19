@@ -15,6 +15,44 @@ function context(overrides: Record<string, unknown> = {}) {
     ...overrides };
 }
 
+it('119-F1b: words separate publications, proven refusal and unknown outcomes in EN/TR without claiming an absent grant', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const output: string[] = [];
+    const copy = locale === 'en' ? { separate: 'These are separate publications', baseline: 'The baseline was updated and verified', added: 'AI execution permission was added',
+      absent: 'AI execution permission was not added', unknown: 'The state of the AI execution permission could not be verified', firstUnknown: 'no second publication was started' }
+      : { separate: 'Bunlar ayrı yayınlardır', baseline: 'Temel politika güncellendi ve doğrulandı', added: 'Yapay zekâ yürütme izni doğrulanmış bir yayınla eklendi',
+        absent: 'Yapay zekâ yürütme izni eklenmedi', unknown: 'Yapay zekâ yürütme izninin durumu doğrulanamadı', firstUnknown: 'ikinci yayın başlatılmadı' };
+    let value: Record<string, unknown> = { status: 'preview', revision: 'r0', publications: [20, 21], publicationsAtomic: false, rules: [] };
+    const ctx = context({ async upgradePolicyTemplateInstallation() { return value; }, stdout: { write(text: string) { output.push(text); } } });
+    const run = async (preview = false) => {
+      output.length = 0;
+      expect(await main(['init', 'policy', '--scope', 's', '--upgrade', preview ? '--preview' : '--apply', '--lang', locale], ctx)).toBe(0);
+      return output.join('');
+    };
+    expect(await run(true)).toContain(copy.separate);
+    value = { status: 'upgraded', revision: 'r2', baselineRevision: 'r1', executionStatus: 'added', publications: [20, 21], publicationsAtomic: false };
+    let text = await run();
+    expect(text).toContain(copy.baseline); expect(text).toContain(copy.added); expect(text).toContain('r2'); expect(text).not.toContain(copy.absent);
+    value = { status: 'unavailable', revision: 'r1', baselineRevision: 'r1', executionStatus: 'not-added', person: { issuer: 'person', subject: 'one' } };
+    text = await run();
+    expect(text).toContain(copy.baseline); expect(text).toContain(copy.absent);
+    expect(text).toContain('deckent init policy --scope s --upgrade --preview --person person/one'); expect(text).not.toContain(copy.added);
+    value = { status: 'unavailable', revision: 'r1', baselineRevision: 'r1', executionStatus: 'unknown', publicationStatus: 'unknown', publicationKey: 'same-operation-key' };
+    text = await run();
+    expect(text).toContain(copy.baseline); expect(text).toContain(copy.unknown); expect(text).toContain('same-operation-key');
+    expect(text).toContain('deckent policy status --scope s'); expect(text).not.toContain('--apply'); expect(text).not.toContain(copy.absent); expect(text).not.toContain(copy.added);
+    value = { status: 'unavailable', publicationStatus: 'unknown', publicationKey: 'first-key' };
+    text = await run();
+    expect(text).toContain(copy.firstUnknown); expect(text).toContain('first-key'); expect(text).toContain('deckent policy status --scope s');
+    expect(text).not.toContain(copy.baseline); expect(text).not.toContain(copy.absent);
+    value = { status: 'upgraded', revision: 'r2', executionStatus: 'added' };
+    text = await run(); expect(text).toContain(copy.added); expect(text).not.toContain(copy.baseline);
+    output.length = 0;
+    expect(await main(['init', 'policy', '--scope', 's', '--upgrade', '--apply', '--json', '--lang', locale], ctx)).toBe(0);
+    expect(JSON.parse(output.join(''))).toEqual(value);
+  }
+});
+
 it('upgrade uses the saved session language and names current rules without a stale version; explicit language and environment still win', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-init-language-'));
   try {
@@ -69,20 +107,20 @@ it('is refused (exit 2, never silently ignored) when the composition root did no
 });
 it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writes only with --apply [--expect], and says in words what it adds, keeps and why', async () => {
   const calls: unknown[][] = [], output: string[] = [];
-  let result: Record<string, unknown> = { status: 'preview', revision: 'first-run-template-v4', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
+  let result: Record<string, unknown> = { status: 'preview', revision: 'first-run-template-v4', rules: [{ id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [{ issuer: 'person', subject: 'one' }], resource: { kind: 'mcp-server', ids: 'all' } }],
     conflicts: ['first-run-approvals'], wireRules: ['hand-mcp-github'] };
   const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; },
     stdout: { write(value: string) { output.push(value); } } });
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
   const text = output.join('');
   expect(text).toContain('deckent init policy --scope installation --upgrade --apply --expect first-run-template-v4');
-  expect(text).toContain('+ first-run-mcp-servers: mcp-server *');
+  expect(text).toContain('+ grant first-run-mcp-servers: allow mcp-server* actions[invoke] scopes[installation] principals [person:one]');
   expect(text).toContain('Kept as they are (same id, other content; review them): first-run-approvals');
   expect(text).toContain('no longer used for MCP calls');
   output.length = 0; result = { status: 'unavailable', reason: 'not-this-person' };
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v4', '--lang', 'tr'], ctx)).toBe(0);
   expect(output.join('')).toContain('değiştirilmedi');
-  expect(calls).toEqual([['/project', 'installation', false, undefined], ['/project', 'installation', true, 'first-run-template-v4']]);
+  expect(calls).toEqual([['/project', 'installation', false, undefined, undefined, { env: ctx.env }], ['/project', 'installation', true, 'first-run-template-v4', undefined, { env: ctx.env }]]);
   // Exactly one of --preview/--apply; --expect only with --upgrade --apply; the handler must be wired.
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade'], ctx)).toBe(2);
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--preview', '--expect', 'x'], ctx)).toBe(2);
@@ -92,16 +130,16 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
 it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with --upgrade, split at the last slash, repeated in the next command; refusals name --person and the people', async () => {
   const calls: unknown[][] = [], output: string[] = [];
   const person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
-  let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
+  let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [{ issuer: 'person', subject: 'one' }], resource: { kind: 'mcp-server', ids: 'all' } }],
     conflicts: [], wireRules: [] };
   const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; }, stdout: { write(value: string) { output.push(value); } } });
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'DESKTOP-7NLBLGA/1000', '--lang', 'en'], ctx)).toBe(0);
-  expect(calls.at(-1)).toEqual(['/project', 'live', false, undefined, person]);
+  expect(calls.at(-1)).toEqual(['/project', 'live', false, undefined, person, { env: ctx.env }]);
   expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person DESKTOP-7NLBLGA/1000');
   expect(output.join('')).toContain('hand-built policy');
   output.length = 0;
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--person', 'https://idp.example/realm/42'], ctx)).toBe(0);
-  expect(calls.at(-1)).toEqual(['/project', 'live', true, 'a-419c', { issuer: 'https://idp.example/realm', subject: '42' }]);
+  expect(calls.at(-1)).toEqual(['/project', 'live', true, 'a-419c', { issuer: 'https://idp.example/realm', subject: '42' }, { env: ctx.env }]);
   // A hand-built policy without --person: the refusal points to --person and names the people it already names (terminal-safe).
   output.length = 0; result = { status: 'unavailable', reason: 'not-first-run', people: [person, { issuer: 'evil\u001b[2J', subject: '7' }] };
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);

@@ -1,14 +1,15 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunExecutionRules, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { DecisionPolicyAuthorization } from '#engine/core/decision/index.js';
+import { DispatchPolicyAuthorization, RunPolicyAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
-// Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+// Historical fixtures exclude v16 onward, including the separate v20 proposal and v21 execution families.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // I-POL (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): one bump v12 → v13 with seven add-only rules. The named installing person
 // (the founding admin of every identity profile: the template does not depend on the profile) gets six; the MCP actor gets one read. No authority
@@ -25,7 +26,7 @@ const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NA
 // S4 + S4B-1 (alpha.55) + D1 (alpha.56): v14 (memory reads), v15, v16 and later versions are add-only deltas over v13;
 // v13 is the current one without both (`v14ids` names every later rule).
 const current = firstRunPolicyTemplate(input), v14ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory, ...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS];
-const v14 = current.policy.grants.filter(rule => v14ids.includes(rule.id));
+const v14 = [...current.policy.grants.filter(rule => v14ids.includes(rule.id)), ...firstRunExecutionRules([], person, ['installation']).wanted];
 const built = { version: 13, bindings: current.bindings, policy: { ...current.policy, revision: 'first-run-template-v13', grants: current.policy.grants.filter(rule => !v14ids.includes(rule.id)) } };
 const v13ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.environmentInstall, FIRST_RUN_UPGRADE_RULE_IDS.installationRepair, FIRST_RUN_UPGRADE_RULE_IDS.modelDeactivation,
   FIRST_RUN_UPGRADE_RULE_IDS.decisionInspect, FIRST_RUN_UPGRADE_RULE_IDS.scopeDiagnostics, FIRST_RUN_UPGRADE_RULE_IDS.standingGrantsAll, FIRST_RUN_UPGRADE_RULE_IDS.observePool];
@@ -86,6 +87,54 @@ it('the MCP actor never gets an authority action: a template built for it and ev
   expect(allows(built.policy, mcpRef, 'other', 'pool', 'inspect')).toBe(false);
 });
 
+it('v21 applied by the person adds exactly its six execution cells over v20; without the grant the same calls fail, and the authority floor still refuses every administration route', async () => {
+  const executionIds = ['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts'];
+  const withoutGrant = { ...current.policy, revision: 'first-run-template-v20', grants: current.policy.grants.filter(rule => !executionIds.includes(rule.id)) };
+  const plan = firstRunTemplateAdditions(withoutGrant, { ...names, person, only: 'ai-execution' });
+  expect(plan.status === 'plan' ? plan.rules.map(rule => rule.id) : null).toEqual(executionIds);
+  if (plan.status !== 'plan') throw new Error('missing person-applied v21 family');
+  const applied = { ...withoutGrant, grants: [...withoutGrant.grants, ...plan.rules] };
+  expect(applied.grants).toEqual([...current.policy.grants, ...firstRunExecutionRules([], person, ['installation']).wanted]);
+  const cells = ['attempt/evaluate', 'attempt/execute', 'attempt/read-output', 'attempt/recover-output', 'run/cancel', 'run/reserve'];
+  // Compare every vocabulary cell, so v20's existing tool/proposal/pool permissions cannot hide an extra v21 grant.
+  const changed: string[] = [];
+  for (const resource of getPolicyVocabulary().resources) for (const action of resource.actions) {
+    const before = allows(withoutGrant, mcpRef, 'installation', resource.kind, action), after = allows(applied, mcpRef, 'installation', resource.kind, action);
+    if (before !== after) { expect(before).toBe(false); expect(after).toBe(true); changed.push(`${resource.kind}/${action}`); }
+  }
+  expect(changed.sort()).toEqual(cells);
+  const source = (policy: unknown) => ({ async load() { return resolved(policy); } });
+  const identity = { scopeId: 'installation', runId: 'persons-run', taskId: 'task', attemptId: 'persons-attempt', generation: 1 };
+  for (const action of ['reserve', 'cancel'] as const) {
+    await expect(new RunPolicyAuthorization(source(withoutGrant)).authorize(action, identity, mcp)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(new RunPolicyAuthorization(source(applied)).authorize(action, identity, mcp)).resolves.toBeUndefined();
+    await expect(new RunPolicyAuthorization(source(applied)).authorize(action, { ...identity, scopeId: 'other' }, mcp)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  }
+  for (const action of ['execute', 'evaluate', 'read-output', 'recover-output'] as const) {
+    await expect(new DispatchPolicyAuthorization(source(withoutGrant)).authorizeIdentity(action, identity, mcp)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(new DispatchPolicyAuthorization(source(applied)).authorizeIdentity(action, identity, mcp)).resolves.toBeUndefined();
+    await expect(new DispatchPolicyAuthorization(source(applied)).authorizeIdentity(action, { ...identity, scopeId: 'other' }, mcp)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  }
+  // All pre-v21 templates and an unapplied installation lack these cells, independently of the revision label.
+  for (const policy of [v11, v12, built.policy, withoutGrant]) for (const cell of cells) {
+    const [kind, action] = cell.split('/');
+    expect(allows(policy, mcpRef, 'installation', kind!, action!), `${policy.revision} ${cell}`).toBe(false);
+  }
+  for (const [kind, id, action] of [
+    ['operation', 'policy.administer', 'execute'], ['operation', 'policy.administer', 'compensate'], ['authority-document', 'policy', 'write'],
+    ['authenticator', 'local-os', 'register'], ['approval-assurance', 'core.turn-bound@1', 'activate'],
+    ['permission-mode', 'full-auto', 'set'], ['permission-mode', 'full-access', 'set'],
+    ['secret', 'TEST_KEY', 'set'], ['secret', 'TEST_KEY', 'delete'], ['secret', 'all', 'switch'],
+    ['backup', 'set', 'restore'], ['installation', 'installation-directory-private', 'repair'],
+    ['approval', 'policy-template-upgrade', 'decide'],
+  ]) for (const policy of [withoutGrant, applied]) {
+    const request = { principal: mcp, scopeId: 'installation', action: action!, resource: { kind: kind!, id: id! } };
+    expect(evaluatePolicy(resolved(policy), request), `${policy.revision} ${kind}/${action}`).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+    const forced = { ...policy, grants: [...policy.grants, { id: 'forced-authority', effect: 'allow', actions: [action!], scopes: ['installation'], principals: [mcpRef], resource: { kind: kind!, ids: [id!] } }] };
+    expect(evaluatePolicy(resolved(forced), request), `explicit allow ${kind}/${action}`).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+  }
+});
+
 it('the existing consumers decide the new reads: decide-list (`decision inspect`) for the person, MCP `pool inspect`; v12 denies both', async () => {
   const source = (policy: unknown) => ({ async load() { return resolved(policy); } });
   await expect(new DecisionPolicyAuthorization(source(v12)).authorize('inspect', 'installation', 'installation', owner)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -112,11 +161,13 @@ it('exact v12 and v11 templates become exactly the current template; edited and 
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v13 plan');
     // Since v16 the delta over v12 exceeds one change (POLICY_CHANGE_MAX): the first batch, then the rest, then current.
     const all = [...v13, ...v14];
+    expect(all.slice(-3).map(rule => rule.id)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
     expect(plan.rules).toEqual(all.slice(0, POLICY_CHANGE_MAX)); expect(plan.remaining).toBe(all.length - POLICY_CHANGE_MAX); expect(plan.conflicts).toEqual([]);
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     const next = (policy: typeof current) => current === edited ? firstRunTemplateAdditions(policy, { ...names, person }) : namedPersonPolicyAdditions(policy, { ...names, person, scopeId: 'installation' });
     const applied = { ...current, grants: [...current.grants, ...plan.rules] }, second = next(applied);
     expect(second.status === 'plan' ? second.rules : null).toEqual(all.slice(POLICY_CHANGE_MAX));
+    expect(second.status === 'plan' && second.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(next({ ...applied, grants: [...applied.grants, ...all.slice(POLICY_CHANGE_MAX)] }).status).toBe('current');
   }
   // Never for the MCP actor or a person the policy does not name.
@@ -138,7 +189,7 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
     const plan = namedPersonPolicyAdditions(policy, { ...names, person: shapePerson, scopeId: 'live', serviceId: 'local' });
     expect(plan.status, name).toBe('plan'); if (plan.status !== 'plan') throw new Error(name);
     expect(plan.conflicts, name).toEqual([]);
-    expect(plan.rules.map(rule => rule.id), name).toEqual(['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-decision-inspect',
+    const allIds = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-decision-inspect',
       'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory',
       // v15 (S4B-1 + S7 + S4B-3): the memory distiller's D1–D4, the agent catalog rules, the person's review and the memory evaluator's V1–V5.
       'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
@@ -148,28 +199,34 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
       // S8-3: the catalog aggregator's exact list.
       'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory',
       // v16 (alpha.56 D1): the recovery cells at require-approval (the first batch of 32; a second run adds the rest).
-      ...POST_V15_RULE_IDS].slice(0, POLICY_CHANGE_MAX));
-    for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
-      : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson)
-        : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : rule.id.startsWith('first-run-catalog-aggregator') ? catalogAggregatorPrincipalRef(shapePerson) : shapePerson]);
+      ...POST_V15_RULE_IDS];
+    expect(plan.rules.map(rule => rule.id), name).toEqual(allIds.slice(0, POLICY_CHANGE_MAX));
+    expect(allIds.slice(-3)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
     expect(plan.rules.filter(rule => rule.scopes !== 'all').every(rule => rule.scopes !== 'all' && rule.scopes.length === 1 && rule.scopes[0] === 'live')).toBe(true);
     // Applied, a second plan adds only the rest of the batch, then is current: no repeated additions.
     const more = (grants: readonly unknown[]) => namedPersonPolicyAdditions({ ...policy, grants: [...policy.grants, ...grants] }, { ...names, person: shapePerson, scopeId: 'live', serviceId: 'local' });
     const rest = more(plan.rules);
     expect(rest.status === 'plan' && rest.rules.every(rule => POST_V15_RULE_IDS.includes(rule.id)), name).toBe(true);
+    expect(rest.status === 'plan' ? rest.rules.map(rule => rule.id) : null, name).toEqual(allIds.slice(POLICY_CHANGE_MAX));
+    expect(rest.status === 'plan' ? rest.conflicts : null, name).toEqual([]);
+    for (const rule of [...plan.rules, ...(rest.status === 'plan' ? rest.rules : [])]) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-') ? mcpPrincipalRef(shapePerson)
+      : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson)
+        : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : rule.id.startsWith('first-run-catalog-aggregator') ? catalogAggregatorPrincipalRef(shapePerson) : shapePerson]);
     expect(more([...plan.rules, ...(rest.status === 'plan' ? rest.rules : [])]).status).toBe('current');
   }
 });
 
 it('since v14 the rollback delta is the latest version\'s: no v13 rule is a rollback candidate (it stays like v11 and v12); doctor recognises v13', () => {
-  const delta = firstRunTemplateRollback(current.policy, person, 'installation', input);
+  expect(firstRunTemplateRollback(current.policy, person, 'installation').rules).toEqual([]);
+  const optedIn = { ...current.policy, grants: [...current.policy.grants, ...firstRunExecutionRules([], person, ['installation']).wanted] };
+  const delta = firstRunTemplateRollback(optedIn, person, 'installation');
   expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(delta.conflicts).toEqual([]);
   expect(delta.rules.some(rule => v13ids.includes(rule.id))).toBe(false);
   for (const id of [FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt, ...v12ids]) expect(v14ids.includes(id), id).toBe(false);
   // A customized v13 rule is not part of the delta: neither removed nor reported.
-  const customized = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.installationRepair ? { ...rule, scopes: ['installation'] } : rule) };
-  expect(firstRunTemplateRollback(customized, person, 'installation', input).conflicts).toEqual([]);
-  expect(firstRunTemplateRollback(current.policy, mcpRef, 'installation', input)).toEqual({ rules: [], conflicts: [] });
+  const customized = { ...optedIn, grants: optedIn.grants.map(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.installationRepair ? { ...rule, scopes: ['installation'] } : rule) };
+  expect(firstRunTemplateRollback(customized, person, 'installation').conflicts).toEqual([]);
+  expect(firstRunTemplateRollback(current.policy, mcpRef, 'installation')).toEqual({ rules: [], conflicts: [] });
   expect(matchFirstRunPolicyTemplate('first-run-template-v13')).toEqual({ id: 'first-run-template', version: 13 });
 });
 

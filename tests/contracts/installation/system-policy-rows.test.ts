@@ -227,7 +227,7 @@ it('the real guarded authority archive persists apply/replay/rollback custody wi
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it('publishes a new data revision inside the witnessed upgrade plan and seals it before the single authority write', async () => {
+it('publishes a new data revision before the separate execution family and seals each before its authority write', async () => {
   const f = fixture();
   expect((await reconcileSystemPolicyRows(f.store, f.input())).status).toBe('applied');
   const data = loadSystemPolicyRows({ ...CORE_SYSTEM_POLICY_ROWS.data, revision: 2 }).data;
@@ -248,8 +248,9 @@ it('publishes a new data revision inside the witnessed upgrade plan and seals it
   });
   expect(await upgradePolicyTemplate(g.store, { ...input, apply: true, audit: g.audit, systemRows: { data, history: g.history, lookup: g.store.lookupAuthority } })).toMatchObject({ status: 'upgraded' });
   expect((g.snapshot.policy as { roles: { permissions: { id: string }[] }[] }).roles.flatMap(role => role.permissions).some(permission => permission.id === 'own-evaluation')).toBe(false);
-  expect(g.history.at(-1)?.key).toBe(bindSystemPolicyRows(data, target).key);
-  expect(g.order.slice(-3)).toEqual(['audit', 'audit', 'archive+publish']);
+  expect(g.history.at(-2)?.key).toBe(bindSystemPolicyRows(data, target).key);
+  expect(g.history.at(-1)?.key).toMatch(/^policy-template-upgrade-v21-/u);
+  expect(g.order.slice(-5)).toEqual(['audit', 'audit', 'archive+publish', 'audit', 'archive+publish']);
   expect(await upgradePolicyTemplate(g.store, { ...input, apply: true, audit: g.audit, systemRows: { data, history: g.history, lookup: g.store.lookupAuthority } })).toMatchObject({ status: 'current' });
-  expect(g.writes).toBe(2);
+  expect(g.writes).toBe(3);
 });

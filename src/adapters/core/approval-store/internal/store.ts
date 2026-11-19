@@ -5,7 +5,7 @@ import { ledgerTransaction, openSqliteLedger, type SqliteLedgerOptions } from '#
 
 /** Uses the shared ledger; callers may supply the current reservation transaction's connection. */
 export class SqliteApprovalStore implements ApprovalStore {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(private readonly db: DatabaseSync, private readonly committed?: (record: ApprovalRecord, kind: 'create' | 'supersede' | 'transition') => void) {}
   private decode(input: unknown): ApprovalRecord {
     try { return approvalRecordSchema.parse(JSON.parse(String(input))); } catch { throw new ApprovalError('APPROVAL_INTEGRITY'); }
   }
@@ -76,14 +76,17 @@ export class SqliteApprovalStore implements ApprovalStore {
   create(input: ApprovalRecord): ApprovalRecord {
     const record = approvalRecordSchema.parse(input);
     if (record.status !== 'pending') throw new ApprovalError('APPROVAL_INVALID');
-    return this.transaction(() => {
+    let fresh = false;
+    const result = this.transaction(() => {
       const r = record.request, [kind, runId, taskId] = this.columns(record);
       const existing = kind === 'task' ? this.find(r.scopeId, runId!, taskId!, r.actionDigest) : this.findByDigest(kind, r.scopeId, r.actionDigest);
       if (existing) return existing;
       this.db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
         .run(r.scopeId, r.approvalId, kind, runId, taskId, r.actionDigest, record.revision, JSON.stringify(record));
-      this.event(record); return record;
+      this.event(record); fresh = true; return record;
     });
+    if (fresh) this.committed?.(result, 'create');
+    return result;
   }
   receipt(scopeId: string, commandId: string): ApprovalReceipt | null {
     const row = this.db.prepare('SELECT operation,fingerprint,snapshot FROM approval_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
@@ -117,14 +120,17 @@ export class SqliteApprovalStore implements ApprovalStore {
     approvalRecordSchema.parse(next);
     if (approvalSubject(previous.request).kind !== 'run-create' || approvalSubject(next.request).kind !== 'run-create' || next.status !== 'pending' || next.request.scopeId !== previous.request.scopeId
       || !(previous.status === 'expired' || (previous.status === 'decided' && previous.decision?.decision === 'allow'))) throw new ApprovalError('APPROVAL_CONFLICT');
-    return this.transaction(() => {
+    let fresh = false;
+    const result = this.transaction(() => {
       if (JSON.stringify(this.load(previous.request.scopeId, previous.request.approvalId)) !== JSON.stringify(previous)) throw new ApprovalError('APPROVAL_CONFLICT');
       if (this.db.prepare('UPDATE approvals SET current=0 WHERE scope_id=? AND approval_id=? AND current=1').run(previous.request.scopeId, previous.request.approvalId).changes !== 1) throw new ApprovalError('APPROVAL_CONFLICT');
       const r = next.request, [kind, runId, taskId] = this.columns(next);
       this.db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
         .run(r.scopeId, r.approvalId, kind, runId, taskId, r.actionDigest, next.revision, JSON.stringify(next));
-      this.event(next); return next;
+      this.event(next); fresh = true; return next;
     });
+    if (fresh) this.committed?.(result, 'supersede');
+    return result;
   }
   transition(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalRecord {
     return this.transitionWithSettlement(previous, next, receipt).record;
@@ -133,12 +139,13 @@ export class SqliteApprovalStore implements ApprovalStore {
     approvalRecordSchema.parse(next);
     if (previous.status !== 'pending' || next.status === 'pending' || next.revision !== previous.revision + 1
       || JSON.stringify(previous.request) !== JSON.stringify(next.request)) throw new ApprovalError('APPROVAL_CONFLICT');
-    return this.transaction(() => {
+    let fresh = false;
+    const result = this.transaction(() => {
       if (receipt) {
         const replay = this.receipt(receipt.scopeId, receipt.commandId);
         if (replay) {
           if (replay.operation !== (receipt.operation ?? 'decide') || replay.fingerprint !== receipt.fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
-          return { record: replay.record, commit: 'replay' };
+          return { record: replay.record, commit: 'replay' as const };
         }
       }
       const current = this.load(previous.request.scopeId, previous.request.approvalId);
@@ -148,11 +155,13 @@ export class SqliteApprovalStore implements ApprovalStore {
       if (updated.changes !== 1) throw new ApprovalError('APPROVAL_CONFLICT');
       if (receipt) this.db.prepare('INSERT INTO approval_receipts(scope_id,command_id,operation,fingerprint,snapshot) VALUES(?,?,?,?,?)')
         .run(receipt.scopeId, receipt.commandId, receipt.operation ?? 'decide', receipt.fingerprint, JSON.stringify(next));
-      this.event(next); return { record: next, commit: 'fresh' };
+      this.event(next); fresh = true; return { record: next, commit: 'fresh' as const };
     });
+    if (fresh) this.committed?.(result.record, 'transition');
+    return result;
   }
 }
-export function openSqliteApprovalStore(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'forbid') {
+export function openSqliteApprovalStore(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'forbid', committed?: ConstructorParameters<typeof SqliteApprovalStore>[1]) {
   const db = openSqliteLedger(path, options, migration);
-  return { store: new SqliteApprovalStore(db), close: () => db.close() };
+  return { store: new SqliteApprovalStore(db, committed), close: () => db.close() };
 }

@@ -3,10 +3,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time
@@ -139,6 +140,8 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
       // Nine capability groups (S4 added `memory`, S7 `agents`) and the AI proposals row sit above the AI delegation entry; the opt-in `dogfood-worker`
       // group is not listed unless held or named in policy.mcp.optInGroups (alpha.56 U5-S2, d3fca0899).
       [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [`${ai.row} · ${ai.on}`, [ENTER], '+ai row'], [w.action, [DOWN, ENTER], '+ai off action'],
+      [ai.offCard, [ESC], '+ai off decline'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after decline'],
+      [`${ai.row} · ${ai.on}`, [ENTER], '+ai still on'], [w.action, [DOWN, ENTER], '+ai off again'],
       [ai.offCard, [ENTER], '+ai off card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after off'], [`${ai.row} · ${ai.off}`, [ENTER], '+ai row off'],
       [w.action, [ENTER], '+ai on action'], [ai.onCard, [ENTER], '+ai on card'], [w.groups, Array.from({ length: 9 }, () => DOWN), '+groups after on'],
       [`${ai.row} · ${ai.on}`, [DOWN, ENTER], '+ai row on'],
@@ -151,20 +154,72 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none'],
       { env: { ...process.env, ...f.env, TERM: 'xterm-256color', NO_COLOR: '1', FORCE_COLOR: '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })
       .catch(error => ({ stdout: String(error.stdout ?? '') }));
-    const value = JSON.parse(result.stdout) as { timeout?: string; output: string };
+    const value = JSON.parse(result.stdout) as { timeout?: string; output: string; frames: [string, string][] };
     expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
     const text = stripVTControlCharacters(value.output);
     expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
+    const offFrame = value.frames.find(([label]) => label === '+ai off decline')![1];
+    const offScreen = terminalBuffers(offFrame, 100, 40).text;
+    const affected = locale === 'en' ? 'Also named explicitly (1):' : 'Ayrıca adıyla belirtilen kapsamlar (1):';
+    expect(offScreen).toContain(affected);
+    expect(offScreen).not.toContain(locale === 'en' ? 'Affected scopes (1), full list:' : 'Etkilenen kapsamlar (1), tam liste:');
+    expect(offScreen).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar');
+    expect(offScreen).not.toContain('"*"');
+    for (const shown of ['"scope"']) {
+      const line = offScreen.split('\n').find(line => line.includes(shown));
+      expect(line, shown).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(shown);
+    }
+    expect(offScreen.indexOf(affected)).toBeLessThan(offScreen.indexOf(ai.offCard));
     const view = await inspectConfiguredDecisionDelegations(f.project, { schemaVersion: 1, scopeId: 'scope' }, { env: f.env });
     expect(view.steps[0]).toMatchObject({ step: { id: 'run-resume' }, managed: 'none', effective: 'denied' });
     const changes = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record'])))
       .filter(row => row.event.subject.kind === 'authority-change');
     expect(changes).toHaveLength(4); // the AI proposals off and on, then the delegation grant and revoke
     for (const row of changes) expect(row.event.subject.decider).toEqual(me[0]);
-    const held = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants.filter((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never));
-    expect(held).toEqual(template.policy.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id as never)));
-    for (const id of FIRST_RUN_CURRENT_UPGRADE_RULE_IDS) expect(text).toContain(id); // the off card named each rule it removes
+    const grants = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants as { id: string }[];
+    const proposalIds: readonly string[] = FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, executionIds: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    expect(grants.filter(rule => proposalIds.includes(rule.id))).toEqual(template.policy.grants.filter(rule => proposalIds.includes(rule.id)));
+    expect(grants.filter(rule => executionIds.includes(rule.id))).toEqual(template.policy.grants.filter(rule => executionIds.includes(rule.id)));
+    for (const id of proposalIds) expect(text).toContain(id); // the off card names only the v20 rules it removes
+    for (const id of executionIds) expect(text).not.toContain(id); // the v20 toggle never offers to revoke v21 execution
     const directory = process.env['DECKENT_MCP_GRANT_FRAMES'];
     if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `delegation-${locale}.txt`), text); }
   }, 120_000);
 });
+
+
+it.skipIf(process.platform !== 'linux')('3286 F4: the real /policy decision window distinguishes comma, bidi and zero-width scope ids in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) for (const scopeId of ['scope,west', 'scope\u202eabc', 'scope\u200babc', '*']) {
+    const f = await runtime();
+    const template = firstRunPolicyTemplate({ scopeId, principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
+      scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
+      shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...template.policy,
+      roles: [{ id: 'owner', permissions: installationOwnerPermissions(getPolicyVocabulary().resources.map(resource => resource.kind)) }] }), { mode: 0o600 });
+    await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ ...template.bindings,
+      bindings: [{ id: 'owner', principals: me, roles: ['owner'], scopes: [scopeId] }] }), { mode: 0o600 });
+    const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+    config.cancellationRuntime.scopeIds = [scopeId]; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+    const ai = locale === 'en' ? 'AI proposals' : 'Yapay zekâ önerileri', off = locale === 'en' ? 'Turn off: removes these rules' : 'Kapat: şu kuralları';
+    const steps = [['READY', [...'/policy', ENTER], 'start'], [scopeId === '*' ? '> *' : '> scope', [ENTER], '+scopes'],
+      [words[locale].groups, Array.from({ length: 9 }, () => DOWN), '+groups'], [ai, [ENTER], '+ai'],
+      [words[locale].action, [DOWN, ENTER], '+action'], [off, [ESC, ESC, ESC], '+decision']];
+    const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none', scopeId],
+      { env: { ...process.env, ...f.env, TERM: 'xterm-256color', NO_COLOR: '1', FORCE_COLOR: '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })
+      .catch(error => ({ stdout: String(error.stdout ?? '') }));
+    const value = JSON.parse(result.stdout) as { timeout?: string; output: string; frames: [string, string][] };
+    expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
+    const frame = value.frames.find(([label]) => label === '+decision')![1], screen = terminalBuffers(frame, 100, 40).text;
+    const shown = JSON.stringify(scopeId).replace(/\u202e/gu, '\\u202e').replace(/\u200b/gu, '\\u200b');
+    expect(screen).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar');
+    if (scopeId !== '*') expect(screen).not.toContain('"*"');
+    for (const record of [shown]) {
+      const line = screen.split('\n').find(line => line.includes(record));
+      expect(line, screen).toBeDefined(); expect(line!.match(/".*"/u)?.[0]).toBe(record);
+    }
+    expect(screen).not.toMatch(/[\u202e\u200b]/u);
+    expect(screen.indexOf(shown)).toBeLessThan(screen.indexOf(off));
+    expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants).toEqual(template.policy.grants);
+    expect(f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record']))).filter(row => row.event.subject.kind === 'authority-change')).toEqual([]);
+  }
+}, 120_000);

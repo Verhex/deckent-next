@@ -64,7 +64,7 @@ export { getConfigValue } from '#platform/core/config/index.js';
 export { resolveLocalOsActorId, resolveLocalOsPrincipal, principalToActor, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ assessActorAssurance, assertActorAssurance } from '#platform/core/identity/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ PrincipalEvidence, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ActorContext } from '#platform/core/identity/index.js';
 export { colorCapability, colorTier, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ shouldUseColor, stripAnsi, terminalLineEnd, terminalSafeText } from '#platform/core/output/index.js';
-export { formatValue, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';
+export { terminalRecordText, formatValue, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';
 export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';

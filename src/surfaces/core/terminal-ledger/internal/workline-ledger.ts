@@ -1,3 +1,4 @@
+import type { ObservedRun } from '#surfaces/core/recovery-text/index.js';
 import type { SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
 import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
@@ -13,6 +14,7 @@ export interface WorklineLedgerPorts {
   readonly clearSessionStanding?: (sessionId: string) => Promise<void>;
   readonly listWorkers: () => Promise<WorkerObservationReport>;
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
+  readonly inspectRunObservation?: (runId: string) => Promise<ObservedRun | null>;
   /** alpha.54 g: the summary lines of each queue row of a Run window (same reader and renderer as the delivery card, under the person's own grants; an unreadable one renders as not available). */
   readonly queueSummaryLines?: (views: NonNullable<RunView['targetQueue']>['records']) => Promise<readonly (readonly string[])[]>;
   readonly listRunIds?: () => Promise<readonly string[]>;
@@ -41,12 +43,12 @@ export interface WorklineLedgerPorts {
 /** The human Run controls the terminal offers; `answer` (`answerTask`), `accept` and `reject` are separate decisions and are not here. */
 export type RunControlAction = 'hold' | 'resume' | 'close';
 
-export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<RunView[]> {
+export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<ObservedRun[]> {
   if (!ports.listRunIds) return [];
   const ids = await ports.listRunIds();
-  const views: RunView[] = [];
+  const views: ObservedRun[] = [];
   for (const runId of ids) {
-    const view = await ports.inspectRun(runId);
+    const view = await (ports.inspectRunObservation ?? ports.inspectRun)(runId);
     if (view) views.push(view);
   }
   return views;
@@ -63,7 +65,7 @@ export async function ledgerEntriesForWorkers(ports: WorklineLedgerPorts, idPref
 }
 
 export async function ledgerEntryForRun(ports: WorklineLedgerPorts, runId: string, idPrefix: string): Promise<WorkLedgerEntry | null> {
-  const run = await ports.inspectRun(runId);
+  const run = await (ports.inspectRunObservation ?? ports.inspectRun)(runId);
   if (!run) return null;
   return runViewToLedgerEntry(run, `${idPrefix}-run-${runId}`);
 }

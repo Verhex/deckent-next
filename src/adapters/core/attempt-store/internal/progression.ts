@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptIdentitySchema, counterSchema, RUN_LIVE_PHASES, RUN_PARKS } from '#domain/index.js';
-import { progressionQuerySchema, progressionCursorSchema, type ProgressionQuery, type ProgressionCursor } from '#engine/index.js';
+import { attemptIdentitySchema, counterSchema, RUN_LIVE_PHASES, RUN_PARKS, approvalRecordSchema, parseRun } from '#domain/index.js';
+import { progressionQuerySchema, progressionCursorSchema, type ProgressionQuery, type ProgressionCursor, type RunSessionIdentity } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 /** SQL `IN` lists generated from the domain's Run phase vocabulary (constants, never data). */
 const sqlList = (values: Iterable<string>) => `(${[...values].map(value => `'${value}'`).join(',')})`;
@@ -51,6 +51,24 @@ export class SqliteRunProgression {
     try { return Object.freeze(this.db.prepare(`SELECT DISTINCT i.scope_id AS scope_id, s.company_id AS company_id FROM run_execution_intents i JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id LEFT JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.actor_id=? AND i.issuer=? AND i.subject=? AND (CASE WHEN json_valid(r.snapshot) THEN json_extract(r.snapshot,'$.state.kind') END)!='terminal' AND (s.company_id IS NULL OR s.company_id!=?) ORDER BY i.scope_id LIMIT ?`).all(actor.id, actor.issuer, actor.subject, companyId, limit)
       .map(row => Object.freeze({ scopeId: progressionCursorSchema.shape.scopeId.parse(row.scope_id), reason: row.company_id === null ? 'unregistered' as const : 'foreign' as const }))); }
     catch (error) { throw sqliteFailure(error); }
+  }
+  intent(scopeId: string, runId: string, companyId: string) {
+    const row = this.db.prepare(`SELECT i.actor_id,i.issuer,i.subject,i.command_id FROM run_execution_intents i
+      JOIN scope_registry s ON s.scope_id=i.scope_id WHERE i.scope_id=? AND i.run_id=? AND s.company_id=?`).get(scopeId, runId, companyId);
+    return row ? { actor: progressionQuerySchema.shape.actor.parse({ id: row.actor_id, issuer: row.issuer, subject: row.subject }),
+      commandId: progressionCursorSchema.shape.runId.parse(row.command_id) } : null;
+  }
+  /** At most two indexed point reads for one tracked command; never a ledger-wide cleanup scan. */
+  readSession(identity: RunSessionIdentity) {
+    const row = this.db.prepare(`SELECT r.snapshot, i.actor_id, i.issuer, i.subject, i.command_id, s.company_id FROM runs r
+      LEFT JOIN run_execution_intents i ON i.scope_id=r.scope_id AND i.run_id=r.run_id
+      LEFT JOIN scope_registry s ON s.scope_id=r.scope_id WHERE r.scope_id=? AND r.run_id=?`).get(identity.scopeId, identity.runId);
+    if (row && row.company_id !== identity.companyId) throw new Error('RUN_SESSION_SCOPE_CONFLICT');
+    const current = this.db.prepare("SELECT snapshot FROM approvals WHERE scope_id=? AND subject_kind='run-create' AND json_extract(snapshot,'$.request.subject.commandId')=? AND current=1").get(identity.scopeId, identity.commandId);
+    return { run: row ? parseRun(JSON.parse(String(row.snapshot))) : null,
+      intent: row && typeof row.actor_id === 'string' && typeof row.issuer === 'string' && typeof row.subject === 'string' && typeof row.command_id === 'string'
+        ? { actor: { id: row.actor_id, issuer: row.issuer, subject: row.subject }, commandId: row.command_id } : null,
+      approval: current ? approvalRecordSchema.parse(JSON.parse(String(current.snapshot))) : null };
   }
   async hasTaskEvaluation(identityInput: unknown, revisionInput: number) {
     const identity = attemptIdentitySchema.parse(identityInput), revision = counterSchema.positive().parse(revisionInput);

@@ -1,3 +1,4 @@
+export { runProgressionDiagnosticSchema, type RunProgressionDiagnostic } from './internal/progression-diagnostic.js';
 export { parkRunQuota, resetRunQuota, releaseRunQuota, askRunQuota, answerRunQuota, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ QUOTA_ASK_OPEN, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerRunQuotaWrite } from './internal/quota.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RunQuotaWait, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RunQuotaChoice, RunQuotaAskPolicy } from './internal/quota.js';
 export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RUN_HOLD_SOURCES, safetyHoldSourceSchema, checkedRun, loadedRunSchema, parseRun, safeParseRun,

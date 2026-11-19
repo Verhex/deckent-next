@@ -9,7 +9,7 @@ import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labe
 import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { changeConfiguredDecisionDelegation, configuredPolicyTemplateUpgrade, inspectConfiguredDecisionDelegations, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 
-const [locale, root, tier] = process.argv.slice(2);
+const [locale, root, tier, scopeId = 'scope'] = process.argv.slice(2);
 composeCore();
 const w = key => t(key, {}, locale);
 const labels = {
@@ -33,7 +33,7 @@ const options = { heal: false };
 const view = createElement(WorklinePaletteProvider, {
   palette: resolveWorklinePalette(tier === 'none' ? 'none' : 'ansi256'),
   children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(false) }, createElement(WorklineApp, {
-    context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' },
+    context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId },
     labels, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 20,
     errorText: error => `ERR:${error?.code ?? 'error'}`, completeTurn: async () => 'unused', pollMs: 60_000, approvalPollMs: 60_000,
     panels: { labels: terminalPanelLabels(locale), ports: { policy: policyPanelPort(root, { listMcpCapabilityScopes: listConfiguredMcpCapabilityScopes, inspectMcpCapabilities: inspectConfiguredMcpCapabilities, changeMcpCapabilities: changeConfiguredMcpCapabilities }, options, locale, { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation }, undefined,

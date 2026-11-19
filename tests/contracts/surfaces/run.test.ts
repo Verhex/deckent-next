@@ -37,10 +37,19 @@ describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => 
     await f.policy(['r', 'missing']);
     const options = { cwd: f.project, env: cliChildEnv({ ...f.options.env, NO_COLOR: '1' }) };
     const args = ['run', 'inspect', '--scope', 's', '--id', 'r'];
-    const cliResult = await exec(process.execPath, [cli, ...args, '--json'], options);
+    const cliStarted = Date.now(), cliResult = await exec(process.execPath, [cli, ...args, '--json'], options), cliEnded = Date.now();
+    const sdkStarted = Date.now();
     const sdkResult = await exec(process.execPath, ['--input-type=module', '-e',
       "const {inspectRun}=await import(process.argv[1]); console.log(JSON.stringify(await inspectRun(process.cwd(),{schemaVersion:1,scopeId:'s',runId:'r'})))", sdk], options);
-    expect(atSameRunObservation(JSON.parse(cliResult.stdout))).toEqual(atSameRunObservation(JSON.parse(sdkResult.stdout)));
+    const sdkEnded = Date.now(), cliView = JSON.parse(cliResult.stdout), sdkView = JSON.parse(sdkResult.stdout);
+    for (const [view, started, ended] of [[cliView, cliStarted, cliEnded], [sdkView, sdkStarted, sdkEnded]] as const) {
+      const { observedAtMs, validUntilMs, ...diagnostic } = view.progression;
+      expect(diagnostic).toEqual({ schemaVersion: 1, scopeId: 's', runId: 'r', revision: 1, state: 'unknown', actorClass: 'ai', reason: 'POLICY_DENIED',
+        session: 'unknown', suspended: false, parkUnavailable: false, missing: [] });
+      expect(observedAtMs).toBeGreaterThanOrEqual(started); expect(observedAtMs).toBeLessThanOrEqual(ended); expect(validUntilMs).toBe(observedAtMs);
+      view.progression = { ...diagnostic, observedAtMs: 0, validUntilMs: 0 };
+    }
+    expect(atSameRunObservation(cliView)).toEqual(atSameRunObservation(sdkView));
     expect(JSON.parse(cliResult.stdout).run.tasks[0].phase).toBe('active');
     const human = await exec(process.execPath, [cli, ...args, '--lang', 'tr'], options);
     expect(human.stdout).toContain('canlı durum değil'); expect(human.stdout).toContain('Etkin'); expect(human.stdout).not.toContain('\u001b[');

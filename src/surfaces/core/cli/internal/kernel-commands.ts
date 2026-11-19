@@ -30,6 +30,7 @@ export interface CommandContext extends BeuserCommandContext, InstallationComman
   /** COLDSTART: the host's operations, loaded only when a command or the terminal runs (never for help, `--version` or an unknown command). */
   loadHost?: (yieldToInput?: () => Promise<void>) => Promise<CommandContext>;
   // The terminal launch context names these with its own narrower types; the CLI commands' types win here, as before the unit split.
+  upgradePolicyTemplate?: NonNullable<ApprovalCommandContext['upgradePolicyTemplate']>;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   previewWorkspacePatch?: TaskPatchHandler;

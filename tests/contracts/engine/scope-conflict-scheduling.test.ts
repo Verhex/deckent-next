@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, validateTaskGraph, type RunSnapshot, type TaskGraph, type TaskProgress } from '#domain/index.js';
-import { deriveRunBlocker, planSchedulingWave, renderRunCreateApprovalSummary, systemOrderedGraph, type BoundRunAdmission, type MonitorRunEvidence } from '#engine/index.js';
+import { deriveRunBlocker, planSchedulingWave, renderRunCreateApprovalSummary, systemOrderedGraph, type BoundRunAdmission, type MonitorRunEvidence, type RunCreate } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 // alpha.47 R4 (owner D7a): the scheduler never starts two tasks of one Run that change the same resource together, through the existing
@@ -63,8 +63,11 @@ describe('monitor blocker waiting-scope-conflict', () => {
 describe('the Run-create card shows the system order and the delivery intent', () => {
   const graph = systemOrderedGraph(authored([{ id: 'approve', records: ['42'] }, { id: 'invoice', records: ['42'] }, { id: 'ship', records: ['42'] }]));
   const proposal = { schemaVersion: 1 as const, proposalId: 'p', digest: 'a'.repeat(64), budgetCeiling: { currency: 'USD', limitMinorUnits: 100 }, requiredPermissions: [], admission: null };
+  const create: RunCreate = { commandId: 'c', actor: { id: 'person', issuer: 'os', subject: 'one' },
+    identity: { scopeId: 's', runId: 'r', layoutRevision: 'l' }, graph, now: 0, execution: fixtureExecution(graph),
+    policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: graph.tasks.map(task => task.id) } };
   const card = (delivery?: object, locale: 'en' | 'tr' = 'en') => renderRunCreateApprovalSummary({ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph,
-    proposal: { ...proposal, ...(delivery ? { delivery } : {}) } } as BoundRunAdmission, { graph, execution: fixtureExecution(graph) } as never,
+    proposal: { ...proposal, ...(delivery ? { delivery } : {}) } } as BoundRunAdmission, create,
   { decision: 'require-approval', revision: 'p', reason: 'APPROVAL_REQUIRED' }, locale);
   it('lists every order edge (bounded rows, exact count) in English and Turkish', () => {
     expect(card()).toContain('System order (tasks that change the same resource run one after another): 2');

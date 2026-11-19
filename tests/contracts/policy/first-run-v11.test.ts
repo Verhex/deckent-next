@@ -1,12 +1,12 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, namedPersonPolicyAdditions, mcpPrincipalRef,
-  FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
+import { firstRunExecutionRules, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, namedPersonPolicyAdditions, mcpPrincipalRef,
+  FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { DispatchPolicyAuthorization, PoolControlPolicyAuthorization, WorkTargetPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
-// Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+// Historical fixtures exclude v16 onward, including the separate v20 proposal and v21 execution families.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 const person = { issuer: 'host', subject: 'owner' };
 const principal = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
@@ -34,7 +34,7 @@ it('migrates exact v10 to v11 and plans the same named delta additively for firs
   const before = JSON.stringify(custom);
   const first = firstRunTemplateAdditions(v10, { ...names, person });
   const hand = namedPersonPolicyAdditions(custom, { ...names, person, scopeId: 'installation' });
-  for (const plan of [first, hand]) {
+  for (const [plan, policy] of [[first, v10], [hand, custom]] as const) {
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v11 delta');
     // v12 (owner 2026-10-16 option A) and v13 (I-POL): the add-only plan also carries the owner rules and the v13 delta after the v11 delta.
     // Since v16 the whole delta over v10 exceeds one change: the first POLICY_CHANGE_MAX rules in version order (a second run adds the rest).
@@ -43,6 +43,13 @@ it('migrates exact v10 to v11 and plans the same named delta additively for firs
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(plan.rules[0]).toMatchObject({ actions: ['release-quota'], scopes: 'all', principals: [person], resource: { kind: 'pool', ids: 'all' } });
     for (const rule of plan.rules.slice(1, ids.length)) expect(rule).toMatchObject({ scopes: ['installation'], principals: [person], resource: { ids: 'all' } });
+    const allIds = [...ids, ...v12ids, ...v13ids], applied = { ...policy, grants: [...policy.grants, ...plan.rules] };
+    const rest = policy === v10 ? firstRunTemplateAdditions(applied, { ...names, person }) : namedPersonPolicyAdditions(applied, { ...names, person, scopeId: 'installation' });
+    expect(rest.status === 'plan' ? rest.rules.map(rule => rule.id) : null).toEqual(allIds.slice(POLICY_CHANGE_MAX));
+    expect(rest.status === 'plan' && rest.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    expect(allIds.slice(-3)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
+    const complete = { ...applied, grants: [...applied.grants, ...(rest.status === 'plan' ? rest.rules : [])] };
+    expect((policy === v10 ? firstRunTemplateAdditions(complete, { ...names, person }) : namedPersonPolicyAdditions(complete, { ...names, person, scopeId: 'installation' })).status).toBe('current');
   }
   expect(JSON.stringify(custom)).toBe(before);
 });
@@ -80,8 +87,8 @@ it('preserves customized v11 ids and existing coverage; since v13 no v11 rule is
   if (plan.status !== 'plan') throw new Error('missing v11 plan');
   expect(plan.rules.map(rule => rule.id)).toEqual([ids[2], ...v12ids, ...v13ids].slice(0, POLICY_CHANGE_MAX));
   // The rollback holds only the current delta: neither the content-equal v11 rules nor the customized one are touched or reported.
-  const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person, undefined, input);
+  const rollback = firstRunTemplateRollback({ ...built.policy, grants: [...built.policy.grants, ...firstRunExecutionRules([], person, ['installation']).wanted].map(rule => rule.id === changed.id ? changed : rule) }, person, undefined);
   expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
-  expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person), undefined, input)).toEqual({ rules: [], conflicts: [] });
+  expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person), undefined)).toEqual({ rules: [], conflicts: [] });
   expect(firstRunPolicyTemplate({ ...input, principal: mcpPrincipalRef(person) }).policy.grants.filter(rule => ids.includes(rule.id))).toEqual([]);
 });

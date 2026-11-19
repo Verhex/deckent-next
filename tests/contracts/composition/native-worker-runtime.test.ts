@@ -45,7 +45,8 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     expect(await connectedModelProfile(context.config, 's', binding, { ...model, modelId: 'vendor/other' })).toBeNull();
     expect(await connectedModelProfile(context.config, 's', { ...binding, definition: { ...binding.definition, configDir: '/other/login' } }, model)).toBeNull();
     const admission = nativeWorkerAdmission(f.project, 's', f.options);
-    const execution = await admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, context.principal);
+    const ceiling = { mode: 'standart', askEdits: true } as const;
+    const execution = await admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, context.principal, ceiling);
     // X4: the run owner check is the strict principal compare; the same issuer and subject with another id or assurance is not the owner.
     for (const other of [{ ...context.principal, id: 'other' }, { ...context.principal, assurance: 'token-verified' as const }])
       await expect(admission.modelUse.pin({ ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, other)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
@@ -75,6 +76,7 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     await ports.recheck(request, frozen, signal);
     const slot = await ports.capacity.acquire(request, frozen, signal); expect(slot.state).toBe('acquired');
     await ports.openTools(request, frozen, signal, { inputs: [] }); expect(runtime.openTools).toHaveBeenCalledOnce();
+    expect(runtime.openTools).toHaveBeenLastCalledWith(request, frozen, signal, { inputs: [] }, ceiling);
     if (slot.state === 'acquired') await slot.release();
     resourceState.resources[0]!.occupancy.execution = resource.capacity.executionSlots + 1;
     expect(await ports.capacity.acquire(request, frozen, signal)).toEqual({ state: 'waiting' });

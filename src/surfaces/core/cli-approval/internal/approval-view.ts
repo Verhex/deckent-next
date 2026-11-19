@@ -1,5 +1,5 @@
 import { HARD_FLOOR_CARD_CELLS, approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalRecord } from '#domain/index.js';
-import { t, terminalSafeText, type Locale } from '#platform/index.js';
+import { t, terminalSafeText, redactForRecord, type Locale } from '#platform/index.js';
 import { formatAgo, formatClock, formatDuration, orderPendingFirst, renderCliTable, safeCell, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 import registry from './approval.json' with { type: 'json' };
 
@@ -67,8 +67,8 @@ export function approvalLines(record: ApprovalRecord, nowMs: number, locale: Loc
   return Object.freeze([
     t('cli.approval.line.head', { id: terminalSafeText(record.request.approvalId), state: approvalState(record, nowMs, locale) }, locale),
     t('cli.approval.line.what', { what: approvalWhat(record, locale) }, locale),
-    // BeUser: the binding line, then each described input field on its own line (an operation card shows what the command changes).
-    ...record.request.summary.split('\n').map((line, index) => index === 0 ? t('cli.approval.line.summary', { summary: safeCell(line) }, locale) : `  ${safeCell(line)}`),
+    // The bounded sealed summary is a card body, not a 256-character table cell: keep the full breadth, redacting before and after terminal scrubbing.
+    ...redactForRecord(terminalSafeText(redactForRecord(record.request.summary))).split('\n').map((line, index) => index === 0 ? t('cli.approval.line.summary', { summary: line }, locale) : `  ${line}`),
     ...(record.request.schemaVersion === 3 && record.request.preview ? record.request.preview.text.split('\n').map(line => terminalSafeText(line)) : []),
     t('cli.approval.line.requester', { requester: actor(record), scope: terminalSafeText(record.request.scopeId), at: formatClock(record.request.createdAt, locale) }, locale),
     t('cli.approval.line.risk', { risk: terminalSafeText(risk), undo: terminalSafeText(undo) }, locale),

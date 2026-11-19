@@ -12,17 +12,17 @@ import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#c
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
 const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
-  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
+  upgradeInstallation(args[0], args[1], args[2], args[3], { ...args[4], env: args[4]?.env ?? { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DECKENT_GLOBAL_HOME: process.env.DECKENT_GLOBAL_HOME } }, args[5], args[6], { attest: async () => true });
 
 // POLICY-V12 (owner 2026-10-16, clean-install rehearsal F1/F2): on a fresh `init policy --apply` installation, with nothing configured by hand,
 // the owner observes their own scope, the service's recovery passes are not refused, and `runtime restart` / `runtime shutdown` work through the
@@ -117,11 +117,12 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     await expect(stopConfiguredRuntimeService(f.project, { env: f.env })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     // Owner S6 (2026-11-09): the service start itself added exactly the v20 proposal rules to this first-run policy, with no card (archived, installer key).
     const started = JSON.parse(await readFile(f.policyPath, 'utf8')) as { revision: string; grants: { id: string }[] };
-    expect(started.grants.filter(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)).map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(started.revision).toMatch(/^a-/u);
+    expect(started.grants.filter(rule => FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.includes(rule.id)).map(rule => rule.id)).toEqual([...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS]);
+    expect(started.grants.some(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false); expect(started.revision).toMatch(/^a-/u);
     // The person's own upgrade (identity already configured at install: kept) then adds the two owner rules and the later deltas add-only.
     const preview = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', basis: 'first-run', exact: false, serviceIdentity: { status: 'kept' } });
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX)); // the add-only plan's first batch
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13].filter(id => ![...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS].includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS)); // the baseline batch followed by the separate execution publication; the add-only plan's first batch
     expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 20 } });
     await expect(inspectConfiguredInventory(f.project, { schemaVersion: 1, scopeId: SCOPE }, { env: f.env })).resolves.toMatchObject({ page: { entries: [], nextAfter: null } });
     await stopConfiguredRuntimeService(f.project, { env: f.env }); await service.done;
@@ -169,13 +170,13 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const editedPreview = await upgradePolicyTemplateInstallation(edited.project, SCOPE, false, undefined, { env: edited.env });
     expect(editedPreview).toMatchObject({ status: 'preview', basis: 'first-run', exact: false, revision: 'a-edited', serviceIdentity: { status: 'planned' } });
     // Since v16 the edited plan exceeds one change: the first POLICY_CHANGE_MAX rules, the same run again adds the rest.
-    expect(editedPreview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13].slice(0, POLICY_CHANGE_MAX));
+    expect(editedPreview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS));
     expect(JSON.parse(await config(edited.project))).not.toHaveProperty('service');
     expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, editedPreview.expect!, { env: edited.env }))
       .toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     const editedAfter = JSON.parse(await readFile(edited.policyPath, 'utf8')) as { grants: { id: string }[] };
     expect(editedAfter.grants.slice(0, before.grants.length)).toEqual(before.grants); // hand-added and every existing rule kept
-    expect(editedAfter.grants.slice(before.grants.length).map(rule => rule.id)).toEqual([...V12, ...V13].slice(0, POLICY_CHANGE_MAX));
+    expect(editedAfter.grants.slice(before.grants.length).map(rule => rule.id)).toEqual([...V12, ...V13].filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).slice(0, POLICY_CHANGE_MAX).concat(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS));
     expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, undefined, { env: edited.env })).toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'kept' } });
     expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, undefined, { env: edited.env })).toMatchObject({ status: 'current', serviceIdentity: { status: 'kept' } });
     // The edited installation now observes its scope and stops its own service; the MCP actor still cannot stop it.

@@ -6,6 +6,11 @@ export function formatValue(value: unknown): string {
   if (typeof value === 'string') return value;
   return JSON.stringify(value, null, 2) ?? 'null';
 }
+/** Lossless, single-line JSON record: quotes delimit the value; hidden and directional marks are visible escapes. */
+export function terminalRecordText(value: string): string {
+  return JSON.stringify(value).replace(/[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Zl}\p{Zp}]/gu,
+    char => char.split('').map(unit => `\\u${unit.charCodeAt(0).toString(16).padStart(4, '0')}`).join(''));
+}
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export function formatTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
   const widths = headers.map((h, i) => Math.max(stripAnsi(h).length, ...rows.map(row => stripAnsi(row[i] ?? '').length)));
   return [headers, ...rows].map(row => headers.map((_, i) => {

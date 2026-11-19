@@ -62,3 +62,18 @@ it('preserves empty inspections, rejects malformed records and preserves typed t
   transport.mockResolvedValue({ ok: false, error: { code: 'POLICY_DENIED' } });
   await expect(c.inspectOperation(input)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
+
+it('119-C4: inspect response compatibility accepts absent or sibling progression without modifying the Run view', async () => {
+  const run = { schemaVersion: 3, scopeId: 'scope', runId: 'r', revision: 0, tasks: [] }, old = { schemaVersion: 1, layout: {}, run, models: [] };
+  const query = { schemaVersion: 1 as const, scopeId: 'scope', runId: 'r' };
+  reply(old); expect(await client().inspectRun(query)).toEqual(old);
+  const progression = { schemaVersion: 1, scopeId: 'scope', runId: 'r', revision: 0, state: 'unknown' };
+  reply({ ...old, progression });
+  const response = await client().inspectRun(query);
+  expect(response).toEqual({ ...old, progression }); expect(response.run).toEqual(old.run); expect(response.run).not.toHaveProperty('progression');
+  const redacted = { ...progression, state: 'maintenance-only', actorClass: 'person', reason: 'RUN_PROGRESSION_MAINTENANCE_ONLY', missing: [] };
+  reply({ ...old, progression: redacted });
+  const maintenance = await client().inspectRun(query);
+  expect(maintenance).toEqual({ ...old, progression: redacted }); expect(maintenance.progression).not.toHaveProperty('actor');
+  expect(maintenance.progression).not.toHaveProperty('policyRevision'); expect(maintenance.run).toEqual(old.run);
+});

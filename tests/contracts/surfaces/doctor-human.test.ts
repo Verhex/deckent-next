@@ -8,13 +8,13 @@ import * as surface from '#surfaces/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { ErrorRegistry, t, clearConfigCache, productResourcePath, serializeJsonDocument } from '#platform/index.js';
 import { registerProviderConfig, captureAttachmentLocation } from '#adapters/index.js';
-import { readableInstallationRegistrationSchema } from '#domain/index.js';
+import { evaluatePolicy, firstRunExecutionRules, mcpPrincipalRef, readableInstallationRegistrationSchema, resolvePolicyBindings } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
 import { main as cliMain } from '#composition/core/cli/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
-import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
+import { executionPermissionCoverage, planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
 import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
@@ -245,16 +245,27 @@ describe('doctor subscription rows (pure)', () => {
 });
 
 const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
+const doctorRegistry = fixtureDockerRegistry(['coding']);
+const doctorDocker = {
+  docker: Object.fromEntries(Object.entries({ ...doctorRegistry.profiles[0]!.parameters, executable: 'docker' }).filter(([key]) => key !== 'argv')),
+  git: { gitExecutable: 'git', timeoutMs: 5000 },
+};
+const doctorDockerReady = async () => ({ state: 'done', reason: { code: 'setup.execution.ready', params: { runtime: 'Docker', version: '1' } } });
+const monitorPool = (held = false) => async () => ({ installs: [
+  { id: 'current', status: 'available', runs: [], pools: [{ poolId: 'fixture-pool', held, capacity: 1, inFlight: 0, executionCapacity: 1, executing: 0 }] },
+] }) as never;
+
 describe('first-worker health verdict', () => {
   async function check(workerReadiness: DoctorCheckFacts['workerReadiness'], status: 'ready' | 'degraded', pending: number) {
     registerProviderConfig();
     const capacity = { executionSlots: 1, inFlightSlots: 1 };
     const root = await project({ terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity,
-      ordering: 'input-order', registry: fixtureDockerRegistry(['coding']) } });
+      ordering: 'input-order', registry: doctorRegistry }, execution: doctorDocker });
     const env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
     await mkdir(join(env.HOME, '.deckent'), { recursive: true });
     await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
-    const context = { root, env, inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
+    const context = { root, env, inspectMonitor: monitorPool(), inspectExecutionEnvironment: doctorDockerReady, inspectWorkerImage: async () => 'present' as const,
+      inspectExecutionPermission: async () => ({ actor: 'fixture/mcp/person', total: 6, allowed: workerReadiness?.ready ? 0 : 6, restricted: false }), inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
       occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
       inspectWorkerReadiness: async (_root: string, scope: string, _options: unknown, kind?: string) => {
         expect(scope).toBe('fixture'); expect(kind).toBe('coding'); return workerReadiness ?? null;
@@ -279,6 +290,18 @@ describe('first-worker health verdict', () => {
       }
       const model = (await terminalAdminPorts({ root, scopeId: 'fixture', installationId: 'fixture-install', projectId: 'fixture-project', locale, options: { env }, context: {}, status: async () => '',
         doctor: async sink => { sink.write(human); }, doctorReport: async sink => { sink.write(json); } }).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+      const [first, permission] = result.summary.checks;
+      const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (directory && workerReadiness) await writeFile(join(directory, `119-doctor-${locale}-${workerReadiness.ready ? 'absent' : 'present'}.json`),
+        JSON.stringify({ text: human.split('\n').slice(1, 3), checks: result.summary.checks }, null, 2));
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: workerReadiness === null ? 'untested' : workerReadiness?.ready ? 'ok' : 'warning' });
+      expect(permission).toMatchObject({ id: 'work.aiExecution', state: workerReadiness?.ready ? 'warning' : 'ok' });
+      expect(permission.text).toContain('fixture/mcp/person');
+      if (workerReadiness?.ready) expect(permission.next).toBe('deckent policy upgrade --template current --only ai-execution --scope fixture --preview');
+      for (const row of [first, permission]) {
+        expect(human.split('\n').slice(1, 3).join('\n')).toContain(row.text);
+        expect(model.sections[0]?.notes?.join('\n')).toContain(row.text);
+      }
       expect(model.summary).toBe(`${verdict} · ${t('terminal.info.doctor.summary', result.summary, locale)} · ${t('doctor.summary.untested', { n: result.summary.untested }, locale)}`);
     }
     expect(await doctorVerdict(root, context, { env })).toEqual({ state: pending ? 'warnings' : 'ok', pending });
@@ -293,6 +316,97 @@ describe('first-worker health verdict', () => {
     await check(null, 'degraded', 1);
   });
 });
+it.each(['held pool', 'missing image', 'narrow grant'] as const)('3349 doctor reports the observed %s in text and JSON', async scenario => {
+  registerProviderConfig();
+  const capacity = { executionSlots: 1, inFlightSlots: 1 };
+  const person = { id: 'fixture-person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['fixture'] };
+  const [reserve] = firstRunExecutionRules([], person, ['fixture']).wanted;
+  const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], restrictions: [], separationOfDuties: [],
+    grants: [{ ...reserve, resource: { kind: 'run', ids: ['one-run'] }, principals: [mcpPrincipalRef(person)] }] },
+  { schemaVersion: 1, revision: 'b', bindings: [] });
+  expect(evaluatePolicy(policy, { principal: { ...person, ...mcpPrincipalRef(person), assurance: 'workload-verified' }, scopeId: 'fixture', action: 'reserve', resource: { kind: 'run', id: 'one-run' } }).decision).toBe('allow');
+  const coverage = executionPermissionCoverage(policy, person, 'fixture');
+  expect(coverage).toMatchObject({ allowed: 0, total: 6, restricted: false });
+  const root = await project({ terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity, ordering: 'input-order', registry: doctorRegistry },
+    execution: doctorDocker });
+  const context = { root, env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') },
+    inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, poolId: 'fixture-pool', capacity, occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
+    inspectMonitor: scenario === 'narrow grant' ? async () => { throw new Error('monitor unavailable'); } : monitorPool(scenario === 'held pool'),
+    inspectWorkerReadiness: async () => ({ ready: true, code: 'WORKER_READY', cli: [] }),
+    inspectExecutionPermission: async () => coverage,
+    inspectExecutionEnvironment: doctorDockerReady,
+    inspectWorkerImage: async () => scenario === 'missing image' ? 'missing' as const : 'present' as const };
+  for (const locale of ['en', 'tr'] as const) {
+    const run = async (args: string[]) => {
+      let output = '';
+      await runKernelCommand(['doctor', '--lang', locale, ...args], { ...context, stdout: { write: chunk => { output += chunk; } } });
+      return output;
+    };
+    const data = JSON.parse(await run(['--json'])), human = await run([]);
+    const [first, permission] = data.summary.checks;
+    const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+    if (directory) await writeFile(join(directory, `3349-doctor-${scenario.replace(' ', '-')}-${locale}.json`),
+      JSON.stringify({ text: human.split('\n').slice(1, 3), checks: data.summary.checks }, null, 2));
+    expect(data.poolReadiness.status).toBe('ready');
+    if (scenario === 'narrow grant') {
+      expect(permission).toMatchObject({ id: 'work.aiExecution', state: 'warning',
+        text: locale === 'en' ? 'No scope-wide standing AI execution permission for fixture/mcp/person in fixture.' : 'fixture/mcp/person için fixture kapsamının tamamında geçerli kalıcı yapay zekâ yürütme izni yok.' });
+      expect(human).toContain(permission.text);
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: 'untested' });
+    } else {
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: 'warning', next: expect.any(String) });
+      expect(first.text).toContain(scenario === 'held pool'
+        ? locale === 'en' ? 'pool on hold' : 'havuz bekletiliyor'
+        : locale === 'en' ? 'not on this Docker' : "bu Docker'da yok");
+      expect(human.split('\n')[1]).toContain(first.text);
+    }
+  }
+});
+
+it('3358 doctor reports full, available and unknown effective pool capacity in text and JSON (EN/TR)', async () => {
+  registerProviderConfig();
+  const capacity = { executionSlots: 2, inFlightSlots: 2 };
+  const root = await project({ max_workers: 1, terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity,
+    ordering: 'input-order', registry: doctorRegistry }, execution: doctorDocker });
+  const home = join(root, 'h'), env = { HOME: home, USERPROFILE: home };
+  await mkdir(join(home, '.deckent'), { recursive: true });
+  await writeFile(join(home, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+  const next = 'deckent pool status --scope fixture';
+  const scenarios = [
+    { state: 'warning', executionCapacity: 1, used: 1, next,
+      en: 'First worker is not ready (waiting for a pool slot).', tr: 'İlk işçi hazır değil (havuzda yer bekliyor).' },
+    { state: 'ok', executionCapacity: 1, used: 0,
+      en: 'First worker is ready.', tr: 'İlk işçi hazır.' },
+    { state: 'untested', executionCapacity: null, used: 0, next,
+      en: 'First worker readiness was not measured.', tr: 'İlk işçinin hazır olup olmadığı ölçülemedi.' },
+  ];
+  for (const locale of ['en', 'tr'] as const) {
+    let health;
+    for (const scenario of scenarios) {
+      const context = { root, env, inspectExecutionEnvironment: doctorDockerReady, inspectWorkerImage: async () => 'present' as const,
+        inspectWorkerReadiness: async () => ({ ready: true, code: 'WORKER_READY', cli: [] }),
+        inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, poolId: 'fixture-pool', capacity,
+          occupancy: { execution: scenario.used, inFlight: scenario.used }, receipt: null }),
+        inspectMonitor: async () => ({ installs: [{ id: 'current', status: 'available', runs: [], pools: [
+          { poolId: 'fixture-pool', held: false, capacity: 1, inFlight: scenario.used, executionCapacity: scenario.executionCapacity, executing: scenario.used },
+        ] }] }) as never };
+      const run = async (...args: string[]) => {
+        let output = '';
+        await runKernelCommand(['doctor', '--lang', locale, ...args], { ...context, stdout: { write: chunk => { output += chunk; } } });
+        return output;
+      };
+      const data = JSON.parse(await run('--json')), human = await run();
+      const { checks, ...counts } = data.summary;
+      health ??= { status: data.status, counts };
+      expect(data.poolReadiness.status).toBe('ready');
+      expect({ status: data.status, counts }).toEqual(health);
+      expect.soft(checks[0], `${locale} ${scenario.state}`).toEqual({ group: 'work', id: 'work.firstWorker', state: scenario.state,
+        text: scenario[locale], ...(scenario.next ? { next: scenario.next } : {}) });
+      expect.soft(human.split('\n')[1], `${locale} ${scenario.state}`).toBe([scenario[locale], scenario.next].filter(Boolean).join(' · '));
+    }
+  }
+});
+
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     registerProviderConfig();
@@ -644,6 +758,42 @@ it('ATT-D: only source-local v3 lineage mismatches produce a read-only row with 
       device: item.attachment.location.device, inode: item.attachment.location.inode } } })) };
   await check(legacy, 0);
   await check({ ...record, entries: record.entries.map(item => ({ ...item, state: 'revoked' })) }, 0);
+});
+
+it('119-rev F3: doctor distinguishes no grant, denial and approval while keeping model checks separate (EN/TR)', () => {
+  const run = { runId: 'r', scopeId: 'live', revision: 1 }, now = Date.now();
+  for (const locale of ['en', 'tr'] as const) for (const reason of ['NO_GRANT', 'DENIED', 'APPROVAL_REQUIRED']) {
+    const progression = { schemaVersion: 1 as const, ...run, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+      state: 'blocked' as const, reason: 'POLICY_DENIED', session: 'eligible' as const, suspended: false, parkUnavailable: false,
+      missing: [{ kind: 'run' as const, id: 'r', action: 'reserve', scope: 'live', reason, code: 'POLICY_DENIED' as const }] };
+    const checks = doctorChecks(report, facts({ progressionRuns: [{ run, progression }], modelConnections: [{ profile: 'offline-model', tools: 'unknown', stale: false }] }), locale);
+    const text = checks.find(row => row.id === 'work.progression')!.text;
+    expect(text).toContain(reason === 'DENIED' ? locale === 'en' ? 'AI execution is explicitly denied' : 'Yapay zekâ yürütmesi açıkça reddedildi'
+      : reason === 'APPROVAL_REQUIRED' ? locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor'
+        : locale === 'en' ? 'AI execution permission is missing' : 'Yapay zekâ yürütme izni eksik');
+    if (reason !== 'NO_GRANT') expect(text).not.toContain('--only ai-execution');
+    expect(checks.find(row => row.id === 'work.modelConnection')!.text).toContain('offline-model');
+  }
+});
+
+it('119-C4: doctor separates service policy diagnosis from unavailable login/model; missing or stale diagnosis is unknown (EN/TR)', () => {
+  const run = { runId: 'r', scopeId: 'live', revision: 1 }, now = Date.now();
+  const diagnostic = { schemaVersion: 1 as const, ...run, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+    state: 'blocked' as const, reason: 'POLICY_DENIED', session: 'eligible' as const, suspended: true, parkUnavailable: true,
+    missing: [{ kind: 'run' as const, id: 'r', action: 'reserve', scope: 'live', reason: 'NO_GRANT', code: 'POLICY_DENIED' as const }] };
+  for (const locale of ['en', 'tr'] as const) {
+    const checks = doctorChecks(report, facts({ progressionRuns: [{ run, progression: diagnostic }], modelConnections: [{ profile: 'offline-model', tools: 'unknown', stale: false }] }), locale);
+    const policy = checks.find(row => row.id === 'work.progression')!;
+    expect(policy.state).toBe('warning'); expect(policy.text).toContain('--only ai-execution --scope live --preview');
+    expect(policy.text).toContain('run/r/reserve'); expect(policy.text).toContain('RUN_PROGRESSION_PARK_UNAVAILABLE');
+    expect(checks.find(row => row.id === 'work.modelConnection')!.text).toContain('offline-model');
+    const stale = doctorChecks(report, facts({ progressionRuns: [{ run: { ...run, revision: 2 }, progression: diagnostic }] }), locale).find(row => row.id === 'work.progression')!;
+    expect(stale.state).toBe('untested'); expect(stale.text).not.toContain('--only ai-execution');
+    expect(doctorChecks(report, facts({ progressionRuns: null }), locale).find(row => row.id === 'work.progression')).toMatchObject({ state: 'untested' });
+    for (const closed of [{ ...run, state: { kind: 'terminal' as const, outcome: 'completed' as const, reason: 'completed' as const } }, { ...run, cancellationRequested: true }]) {
+      expect(doctorChecks(report, facts({ progressionRuns: [{ run: closed, progression: diagnostic }] }), locale).find(row => row.id === 'work.progression')).toBeUndefined();
+    }
+  }
 });
 
 it('D1 doctor reports the shared Git directory warning and command without offering repair', async () => {

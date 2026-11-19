@@ -12,7 +12,7 @@ import { productResourcePath } from '#platform/index.js';
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
 const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
-  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
+  upgradeInstallation(args[0], args[1], args[2], args[3], { ...args[4], env: args[4]?.env ?? { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DECKENT_GLOBAL_HOME: process.env.DECKENT_GLOBAL_HOME } }, args[5], args[6], { attest: async () => true });
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -48,15 +48,18 @@ it.skipIf(process.platform === 'win32').each([false, true])('installer template/
   try {
     const integrity = await openLocalIntegrityAuthority(f.config.productLayout, f.config.approvals.keyFile);
     const records = new AuditApplication(store, integrity).list('s', 0, 100);
-    expect(records).toHaveLength(named ? 5 : 2); // original init, optional named-person data, then the template batches
+    expect(records).toHaveLength(named ? 6 : 3); // original init, optional named-person data, then the template batches
     const dataRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis === 'system-policy-rows');
     expect(dataRecords).toHaveLength(named ? 2 : 1);
     const templateRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis !== 'system-policy-rows');
-    expect(templateRecords).toHaveLength(named ? 3 : 1);
+    expect(templateRecords).toHaveLength(named ? 4 : 2);
     for (const record of records) expect(verifyAuditRecord(record, integrity)).toEqual(record);
     const record = templateRecords[0]!;
+    const execution = templateRecords.find(item => item.event.subject.kind === 'authority-change' && item.event.subject.installer?.template.version === 21)!;
+    expect(execution.event.subject).toMatchObject({ kind: 'authority-change', installer: { template: { version: 21 } },
+      revision: { before: expect.any(String), after: applied.revision }, counts: { grantsAdded: 3, grantsRemoved: 0 } });
     expect(record.event.subject).toMatchObject({ kind: 'authority-change', installer: { basis: named ? 'named-person' : 'first-run', person: f.person },
-      revision: { before: 'first-run-template-v4', after: applied.revision }, counts: { grantsAdded: applied.rules.length, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } });
+      revision: { before: 'first-run-template-v4', after: (execution.event.subject as { revision: { before: string } }).revision.before }, counts: { grantsAdded: applied.rules.length - 3, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } });
     expect(record.event.subject).not.toHaveProperty('approvalId'); expect(record.event.subject).not.toHaveProperty('decider');
     expect(auditEventSchema.safeParse({ ...record.event, subject: { ...record.event.subject, approvalId: 'fabricated' } }).success).toBe(false);
     expect(verifyAuditRecord(record, integrity)).toEqual(record);

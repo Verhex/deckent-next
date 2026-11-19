@@ -1,18 +1,20 @@
-import type { RunView } from '#engine/index.js';
+import type { ObservedRun } from '#surfaces/core/recovery-text/index.js';
+import type { RunProgressionDiagnostic } from '#engine/index.js';
+const diagnosticKey = (value: RunProgressionDiagnostic | undefined) => value ? JSON.stringify([value.state, value.reason, value.policyRevision, value.session, value.suspended, value.parkUnavailable, value.missing]) : '';
 import type { WorkLedgerRunEntry } from './work-ledger.js';
 import { runViewToLedgerEntry } from './work-ledger.js';
 import { WATCH_SEEN_LIMIT } from './worker-watch.js';
 
-export function runWatchFingerprint(run: RunView): string {
+export function runWatchFingerprint(run: ObservedRun): string {
   const phases = new Map<string, number>();
   for (const task of run.tasks) phases.set(task.phase, (phases.get(task.phase) ?? 0) + 1);
   const phaseKey = [...phases.entries()].map(([phase, count]) => `${phase}:${count}`).join(' ');
-  return `${run.revision}|${run.cancellationRequested}|${phaseKey}`;
+  return `${run.revision}|${run.cancellationRequested}|${phaseKey}|${diagnosticKey(run.progression)}`;
 }
 
 export function newRunLedgerEntries(
   seen: ReadonlyMap<string, string>,
-  runs: readonly RunView[],
+  runs: readonly ObservedRun[],
   idPrefix: string,
 ): { readonly seen: Map<string, string>; readonly fresh: readonly WorkLedgerRunEntry[] } {
   const next = new Map(seen);
@@ -37,7 +39,7 @@ export function freshRunCards(
   const next = new Map(seen);
   const fresh: WorkLedgerRunEntry[] = [];
   for (const card of cards) {
-    const fingerprint = `${card.revision}|${card.cancellationRequested}|${card.taskPhases}`;
+    const fingerprint = `${card.revision}|${card.cancellationRequested}|${card.taskPhases}|${diagnosticKey(card.progression)}`;
     if (next.get(card.runId) === fingerprint) continue;
     next.delete(card.runId);
     next.set(card.runId, fingerprint);

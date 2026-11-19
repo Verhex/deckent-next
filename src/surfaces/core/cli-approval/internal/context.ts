@@ -17,6 +17,8 @@ export interface ApprovalCommandContext extends CliBaseContext, Pick<TerminalLau
   revokeStandingGrant?: StandingRevokeHandler;
   inspectPolicyAdministration?: (root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions) => Promise<PolicyAdministrationStatus>;
   upgradePolicyTemplate?: PolicyUpgradeHandler;
+  /** Person-card preview with verified first-publication history. Plain and JSON previews retain their existing read. */
+  previewPersonPolicyUpgrade?: PolicyUpgradeHandler;
   /** alpha.56: the lost-worker recovery cards (`deckent policy recovery`, `deckent recovery [review]`). */
   recovery?: RecoveryHandlers;
 }

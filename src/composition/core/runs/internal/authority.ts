@@ -1,17 +1,18 @@
+import type { ApprovalRecord } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, resolveLocale, type IntegrityAuthority } from '#platform/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
-import { configuredProposalRegistry, createRunCreationAuthority, type AuditStore, type RunCreationAuthority } from '#engine/index.js';
+import { configuredProposalRegistry, createRunCreationAuthority, verifyApproval, type AuditStore, type RunCreationAuthority } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import type { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Connections live through the Run's last in-transaction authority check; no caller-supplied keys, clocks or policies. */
 /** `sealing` (S4B-5): the same audit store and integrity key, for the admission's own sealed `memory-context` events. */
 export async function withRunCreationAuthority<T>(context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>,
-  work: (authority: RunCreationAuthority, sealing: { readonly audit: AuditStore; readonly integrity: IntegrityAuthority }) => Promise<T>): Promise<T> {
+  work: (authority: RunCreationAuthority, sealing: { readonly audit: AuditStore; readonly integrity: IntegrityAuthority }) => Promise<T>, onRequest?: (record: ApprovalRecord) => void): Promise<T> {
   const { config, layout } = context, clock = new SystemTrustedClock();
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
   const path = await context.path(), audit = await openSqliteAuditStore(path, config.storage.sqlite, 'forbid');
   try {
-    const journal = openSqliteApprovalStore(path, config.storage.sqlite, 'forbid');
+    const journal = openSqliteApprovalStore(path, config.storage.sqlite, 'forbid', (record, kind) => { if (kind !== 'transition') onRequest?.(verifyApproval(record, integrity)); });
     try {
       return await work(createRunCreationAuthority(contextPolicySource({ layout, config }), audit, journal.store, integrity, clock, config.approvals.requestTtlMs, { locale: resolveLocale(undefined, {}, config.language), known: getConfigKnownSecrets(config), registry: configuredProposalRegistry(config.admission) }), { audit, integrity });
     } finally { journal.close(); }

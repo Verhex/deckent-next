@@ -2,7 +2,7 @@ import { optionalField, sha256 as digestOf } from '#platform/index.js';
 import { governedPolicyDigest, policyTemplateUpgradeKey, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
-import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
+import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_VERSION, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, proposalCoverageGrants, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
@@ -100,13 +100,14 @@ export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplate
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
+  /** Scopes used by the fresh-install producer, for the execution notice only. */ readonly executionScopes?: readonly string[];
   readonly template: { readonly id: string; readonly version: number };
   readonly planDigest: string; readonly transactionId: string;
   readonly paths: { readonly policy: string; readonly bindings: string };
   readonly policy: unknown; readonly bindings: unknown;
   readonly systemRows?: { readonly key: string; readonly packageDigest: string; readonly before: import('#domain/index.js').Policy; readonly after: import('#domain/index.js').Policy };
 }
-export interface PreparedPolicyTemplateInstallation { readonly preview: PolicyTemplatePreview; readonly targets: readonly PolicyTemplatePublishTarget[] }
+export interface PreparedPolicyTemplateInstallation { readonly resolvedPolicy: Policy; readonly preview: PolicyTemplatePreview; readonly targets: readonly PolicyTemplatePublishTarget[] }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface PolicyTemplateInstallationPorts {
   readonly journal: { observe(): Promise<BootstrapObservation>; write(expected: BootstrapObservation, next: BootstrapJournalPayload): Promise<BootstrapObservation> };
   inspectPreimage(target: PolicyTemplatePublishTarget): Promise<string | null>;
@@ -158,10 +159,10 @@ export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateIn
   const planDigest = digestOf(`deckent.policy-template-plan.v1\n${canonical({ id: template.id, version: template.version, scopeId, principal,
     targets: targets.map(target => ({ resource: target.resource, path: target.path, digest: target.digest })), ...(rows ? { systemRows: { key: rows.key, packageDigest: rows.packageDigest } } : {}) })}`);
   const transactionId = digestOf(`deckent.policy-template-transaction.v1\n${planDigest}`);
-  const preview: PolicyTemplatePreview = Object.freeze({ schemaVersion: 1, status: 'preview', scopeId, principal,
+  const preview: PolicyTemplatePreview = Object.freeze({ schemaVersion: 1, status: 'preview', scopeId, principal, executionScopes: Object.freeze([scopeId]),
     template: { id: template.id, version: template.version }, planDigest, transactionId, paths: { ...input.paths },
     policy: documents.policy, bindings: documents.bindings, ...(rows ? { systemRows: { key: rows.key, packageDigest: rows.packageDigest, before: resolvePolicyBindings(template.policy, template.bindings), after: resolvePolicyBindings(documents.policy, documents.bindings) } } : {}) });
-  return Object.freeze({ preview, targets });
+  return Object.freeze({ preview, targets, resolvedPolicy: resolvePolicyBindings(preview.policy, preview.bindings) });
 }
 
 /**
@@ -258,11 +259,17 @@ type Person = { readonly issuer: string; readonly subject: string };
   readonly revision: string | null;
   /** The current template rules this upgrade adds (nothing is replaced or removed). */
   readonly rules: readonly unknown[];
+  /** Effective grants for describing a partial execution upgrade, never additional changes. */
+  readonly executionContext?: readonly unknown[];
+  /** Validated scopes from the template planner, never copied from candidate rules. */ readonly executionScopes?: readonly string[];
   /** Rule ids the upgrade would add that already exist with other content: kept as they are, shown for the person to review. */
-  readonly conflicts: readonly string[];
+  readonly conflicts: readonly string[]; readonly covered?: readonly import('#domain/index.js').FirstRunProposalCover[];
   /** Hand-added `agent-tool` rules naming MCP wire names (`mcp__…`): kept, but since T3 an MCP call is decided on `mcp-server`, not on them. */
   readonly wireRules: readonly string[];
   readonly systemRows?: import('#engine/core/system-policy-rows/index.js').SystemPolicyRowsPlan;
+  /** Transient publication progress; never persisted as policy or provenance. */
+  readonly publications?: readonly number[]; readonly publicationsAtomic?: false; readonly baselineRevision?: string;
+  readonly executionStatus?: 'added' | 'not-added' | 'unknown'; readonly publicationStatus?: 'unknown'; readonly publicationKey?: string;
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
@@ -275,6 +282,7 @@ export async function inspectAnchoredFirstRunPolicy(source: PolicyTemplateSource
   try {
     const additions = firstRunTemplateAdditions(await source.load(), additionNames({ issuer: identitySchema.parse(input.person.issuer),
       subject: identitySchema.parse(input.person.subject) }, identitySchema.parse(input.scopeId), input.toolNames));
+    if (additions.status === 'plan' && additions.rules.every(rule => (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as readonly string[]).includes(rule.id))) return 'current';
     return additions.status === 'current' ? 'current' : additions.status === 'plan' ? 'upgradable' : null;
   } catch { return null; }
 }
@@ -292,10 +300,12 @@ export async function inspectAnchoredFirstRunPolicy(source: PolicyTemplateSource
  * (the archive holds the documents before and after: the backup and the way back) on exactly the revision read; a second run is `current`.
  * `apply: false` reads only.
  */
-export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter, input: { readonly scopeId: string;
+export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter & Pick<AuthorityDocumentStore, 'lookupAuthority'>, input: { readonly scopeId: string;
   readonly principal: Person; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string;
   /** v12: the runtime service id the exact template's shutdown rule names (the configured `service.identity` of this scope, else the default). */
   readonly serviceId?: string;
+  /** Setup's baseline update excludes the separate optional permission. Not a stored or CLI flag. */
+  readonly baselineOnly?: boolean;
   /** Whether the caller owns the installation's authority documents (the files' owner uid is the caller's): only the owner may write here. */
   readonly owner: boolean;
   /** The explicitly named person (`--person`): required for a hand-built policy; on a template policy it must be the person the template names. */
@@ -317,32 +327,33 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
     return { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
   };
-  const templatePlan = (current: unknown, bindings: unknown): Planned => {
+  const templatePlan = (current: unknown, bindings: unknown, execution = false): Planned => {
     const revision = revisionOf(current);
-    if (input.expect !== undefined && input.expect !== revision) return { result: result('conflict', { reason: 'revision-changed', revision }), next: null };
+    if (!execution && input.expect !== undefined && input.expect !== revision) return { result: result('conflict', { reason: 'revision-changed', revision }), next: null };
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
       .filter(grant => grant.resource?.kind === 'agent-tool' && Array.isArray(grant.resource.ids) && grant.resource.ids.some(id => typeof id === 'string' && id.startsWith('mcp__')))
       .map(grant => grant.id);
     // An untouched older template becomes exactly the current one (doctor names its version).
     const exact = upgradeFirstRunPolicy(current, template);
-    if (exact.status === 'upgrade') {
+    if (!execution && exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
-      return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, wireRules }), next: exact.policy };
+      return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, executionScopes: [scopeId], wireRules }), next: exact.policy };
     }
-    if (exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
-    const aiGrants = proposalCoverageGrants(current, bindings, principal), additions = firstRunTemplateAdditions(current, { ...names, aiGrants }); // alpha.64: role grants too
+    if (!execution && exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
+    const aiGrants = proposalCoverageGrants(current, bindings, principal), selected = (rules: readonly import('#domain/index.js').PolicyGrant[]) => execution ? rules : rules.filter(rule => !(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as readonly string[]).includes(rule.id));
+    const additions = firstRunTemplateAdditions(current, { ...names, aiGrants, ...(execution ? { only: 'ai-execution' as const } : {}) }); // alpha.64: role grants too
     if (additions.status === 'unavailable' && additions.reason === 'not-first-run') {
       // A hand-built policy: only for an explicitly named person (never the OS identity implicitly); refusals carry the people it names.
       const people = policyNamedPeople(current, scopeId, input.peopleLimit);
       if (person === null) return { result: result('unavailable', { reason: 'not-first-run', revision, people }), next: null };
-      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants });
+      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId, aiGrants, ...(execution ? { only: 'ai-execution' as const } : {}) });
       if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
-      if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, wireRules }), next: null };
-      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, wireRules }), next: nextWith(current, revision, mine.rules) };
+      if (mine.status === 'current' || selected(mine.rules).length === 0) return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: null };
+      return { result: result('preview', { basis: 'named-person', revision, rules: selected(mine.rules), executionContext: aiGrants, executionScopes: mine.executionScopes, conflicts: mine.conflicts, ...( mine.covered ? { covered: mine.covered } : {}), wireRules }), next: nextWith(current, revision, selected(mine.rules)) };
     }
     if (additions.status === 'unavailable') return { result: result('unavailable', { reason: additions.reason, revision }), next: null };
-    if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, wireRules }), next: null };
-    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
+    if (additions.status === 'current' || selected(additions.rules).length === 0) return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: null };
+    return { result: result('preview', { basis: 'first-run', revision, rules: selected(additions.rules), executionContext: aiGrants, executionScopes: additions.executionScopes, conflicts: additions.conflicts, ...( additions.covered ? { covered: additions.covered } : {}), wireRules }), next: nextWith(current, revision, selected(additions.rules)) };
   };
   const plan = (snapshot: { policy: unknown; bindings: unknown }) => {
     const base = templatePlan(snapshot.policy, snapshot.bindings), pack = input.systemRows;
@@ -364,25 +375,66 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   // An unusable named person (control characters, too long) is refused as such, before anything is read.
   if (person === undefined) return result('unavailable', { reason: 'invalid' });
   // Read first (no write), then write on exactly that revision under a key of this very change (a crash is looked up, never re-applied blindly).
-  const first = await writer.updateAuthority(snapshot => ({ write: null, result: { planned: plan(snapshot), revision: revisionOf(snapshot.policy) } }));
+  const first = await writer.updateAuthority(snapshot => ({ write: null, result: { snapshot, planned: plan(snapshot), revision: revisionOf(snapshot.policy) } }));
   if (input.systemRows && first.planned.dataKey) {
     const held = await input.systemRows.lookup(first.planned.dataKey);
     if (held === null || held.status === 'applied') return result('unavailable', { reason: 'invalid' });
   }
-  if (!input.apply || first.planned.result.status !== 'preview') return first.planned.result;
-  const key = first.planned.dataKey ?? policyTemplateUpgradeKey(FIRST_RUN_POLICY_TEMPLATE_VERSION, digestOf(`${first.revision ?? ''}\0${canonical(first.planned.next as object)}`));
-  return writer.updateAuthority(snapshot => {
-    if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
-    const again = plan(snapshot);
-    if (again.result.status !== 'preview' || again.next === null) return { write: null, result: again.result };
-    const beforePublish = () => { input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
-      template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
-      inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
-      grantsAdded: again.result.rules.length, atMs: input.now(), policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(again.next, again.bindings ?? snapshot.bindings) }));
-      if (again.dataKey && input.systemRows) input.audit(systemPolicyRowsPublicationEvent(input.systemRows.data, { scopeId, person: principal }, snapshot, { policy: again.next, bindings: again.bindings ?? snapshot.bindings }, input.principal, key, input.now()));
-    };
-    return { write: { policy: again.next, bindings: again.bindings, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
-  }, key);
+  if (!['preview', 'current'].includes(first.planned.result.status)) return first.planned.result;
+  const baseline = first.planned;
+  const afterBaseline = { policy: policyFileSchema.parse(baseline.next ?? first.snapshot.policy), bindings: baseline.bindings ?? first.snapshot.bindings };
+  const executionPlan = (snapshot: { policy: unknown; bindings: unknown }) => ({ ...templatePlan(snapshot.policy, snapshot.bindings, true), bindings: null, dataKey: null });
+  const execution = input.baselineOnly ? null : executionPlan(afterBaseline);
+  const publications = [...(baseline.next ? [FIRST_RUN_POLICY_TEMPLATE_VERSION] : []), ...(execution?.next ? [FIRST_RUN_CURRENT_UPGRADE_VERSION] : [])];
+  const combined = { ...baseline.result, status: publications.length ? 'preview' as const : 'current' as const,
+    rules: [...baseline.result.rules, ...(execution?.result.rules ?? [])], publications, publicationsAtomic: false as const,
+    ...optionalField('executionContext', execution?.result.executionContext), ...optionalField('executionScopes', execution?.result.executionScopes),
+    conflicts: [...new Set([...baseline.result.conflicts, ...(execution?.result.conflicts ?? [])])],
+    ...optionalField('covered', execution?.result.covered ?? baseline.result.covered) };
+  if (!input.apply || !publications.length) return combined;
+  const publish = async (planned: typeof baseline, before: typeof first.snapshot, version: number) => {
+    const revision = revisionOf(before.policy), nextBindings = planned.bindings ?? before.bindings;
+    const key = planned.dataKey ?? policyTemplateUpgradeKey(version, digestOf(`${revision ?? ''}\0${canonical(planned.next as object)}`));
+    const expected = resolvePolicyBindings(planned.next, nextBindings).revision;
+    const upgraded = { ...planned.result, status: 'upgraded' as const, revision: revisionOf(planned.next), publicationKey: key };
+    const unknown = { ...planned.result, status: 'unavailable' as const, reason: 'invalid' as const, publicationStatus: 'unknown' as const, publicationKey: key };
+    const lookup = () => writer.lookupAuthority(key).catch(() => null);
+    const reconcile = (held: Awaited<ReturnType<typeof lookup>>) => held?.status === 'applied' && held.version === expected ? upgraded : unknown;
+    // Reconcile this exact identity before any resend; an uncertain record never authorises another write.
+    const held = await lookup();
+    if (held?.status !== 'absent') return reconcile(held);
+    let outcome: PolicyTemplateUpgradeResult;
+    try {
+      outcome = await writer.updateAuthority(snapshot => {
+        // Bind both documents, including bindings-only foreign writes; never widen by replanning between publications.
+        if (canonical(snapshot) !== canonical(before)) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
+        const beforePublish = () => {
+          input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: planned.result.basis!,
+            template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version }, commandId: key, inputDigest: digestOf(canonical(planned.next as object)),
+            before: revision!, after: revisionOf(planned.next)!, grantsAdded: planned.result.rules.length, atMs: input.now(),
+            policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(planned.next, nextBindings) }));
+          if (planned.dataKey && input.systemRows) input.audit(systemPolicyRowsPublicationEvent(input.systemRows.data, { scopeId, person: principal }, snapshot,
+            { policy: planned.next, bindings: nextBindings }, input.principal, key, input.now()));
+        };
+        return { write: { policy: planned.next, bindings: planned.bindings, order: 'policy-first', beforePublish }, result: upgraded };
+      }, key);
+    } catch (error) {
+      const settled = await lookup();
+      if (settled?.status !== 'absent') return reconcile(settled);
+      if (version !== FIRST_RUN_CURRENT_UPGRADE_VERSION) throw error;
+      return { ...planned.result, status: 'unavailable' as const, reason: 'invalid' as const, publicationKey: key };
+    }
+    // A proven refusal returned before any write stands. Writer success still needs the keyed receipt.
+    return outcome.status === 'upgraded' ? reconcile(await lookup()) : outcome;
+  };
+  const updated = baseline.next ? await publish(baseline, first.snapshot, FIRST_RUN_POLICY_TEMPLATE_VERSION) : baseline.result;
+  if (!['upgraded', 'current'].includes(updated.status)) return updated;
+  if (!execution?.next) return { ...combined, status: 'upgraded', revision: updated.revision };
+  const progress = updated.status === 'upgraded' ? { baselineRevision: updated.revision! } : {};
+  const added = await publish(execution, afterBaseline, FIRST_RUN_CURRENT_UPGRADE_VERSION);
+  return added.status === 'upgraded' ? { ...combined, ...progress, status: 'upgraded', revision: added.revision, executionStatus: 'added', ...optionalField('publicationKey', added.publicationKey) }
+    : { ...added, ...progress, publications, publicationsAtomic: false, executionStatus: added.publicationStatus === 'unknown' ? 'unknown' : 'not-added' };
+
 }
 
 /** The `--expect` token the installer preview prints (POLICY-V12, Astra 2596): the policy revision and the runtime service identity the plan names,
@@ -396,7 +448,7 @@ const serviceToken = (identity: ServiceIdentity, rows?: import('#engine/core/sys
  * configuration layer's write lock from a last identity read to the policy publication (Astra 2598): the published stop rule names the identity
  * that is configured at publication, or nothing is published.
  */
-export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocumentWriter, port: FirstRunServiceIdentityPort, input: Omit<Parameters<typeof upgradePolicyTemplate>[1], 'serviceId' | 'audit'> & {
+export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocumentWriter & Pick<AuthorityDocumentStore, 'lookupAuthority'>, port: FirstRunServiceIdentityPort, input: Omit<Parameters<typeof upgradePolicyTemplate>[1], 'serviceId' | 'audit'> & {
   readonly openAudit: () => Promise<{ record(event: AuditEvent): void; close(): void }> }): Promise<InstalledPolicyTemplateUpgrade> {
   const seen = (await port.read()).identity, target = firstRunServiceIdentity(input.scopeId, seen);
   const split = input.expect === undefined ? null : /^(.*)~([a-f0-9]{12})$/u.exec(input.expect);

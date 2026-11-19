@@ -59,8 +59,8 @@ export const runExecutionSnapshotSchema = z.strictObject({ schemaVersion: z.lite
     assignment: workerAssignmentSchema.optional(),
     /** S8-1b: the agent the system selected for a work-input task (persona and pinned skills in its prompt); absent = no eligible agent, exact older bytes. */
     agent: taskAgentSealSchema.optional() }).readonly()).min(1).readonly(),
-  /** R9 (owner 2026-11-05): the mode shown on the plan card the person approved, a worker's ceiling (never full access); absent (an older,
-   * card-less or AI-created Run) = the person's current mode alone, as before. Bound in the admission basis the card's approval seals. */
+  /** R9/C3: the mode shown on the person's plan card, including an AI proposal's verified own-person ceiling (never full access).
+   * Absent on older or card-less Runs: current mode alone, as before. Bound in the admission basis the card's approval seals. */
   workerMode: z.strictObject({ mode: z.enum(['standart', 'full-auto']), askEdits: z.boolean() }).readonly().optional(),
   /** S6R-4: the recovery bounds frozen at admission; absent (a Run admitted before the switch, or recovery off) = no automatic continuation ever. */
   recovery: runRecoveryPolicySchema.optional(),

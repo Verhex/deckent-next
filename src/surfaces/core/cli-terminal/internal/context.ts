@@ -23,7 +23,7 @@ import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTu
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 /** Same handlers as `deckent run` and `deckent run cancel`; the terminal's run card and `/cancel` use them through the ledger ports. */
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
-  models?: readonly TaskWorkerModel[] }>>;
+  models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic }>>;
 /** Same handler as `deckent run hold|resume|close` (the CLI's in-process lifecycle application); the terminal's Runs window keys use it through the ledger ports. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   lifecycle: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }> | null>;

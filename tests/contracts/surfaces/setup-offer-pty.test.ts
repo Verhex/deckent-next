@@ -235,7 +235,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     await access(cli);
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b'],
       // The Git folder offers worker setup even without a host CLI. Follow each card by title: Later can change the remaining step count.
       // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
       ['Permission settings', '\u001b'], ['Your management rights', '\u001b'], ['Model connection', '\u001b'],

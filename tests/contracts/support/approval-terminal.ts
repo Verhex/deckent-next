@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { runtimeSocketLocation } from '#adapters/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { personEnv } from './person-env.js';
 
 // A PTY belongs to the child, not the test runner. Piped input/output variants retain the controlling TTY.
 const DRIVER = String.raw`
@@ -42,22 +43,25 @@ export async function terminalRequest(f: { project: string; data: string; env: N
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-peer.mjs'), endpoint, JSON.stringify(request), automatic ?? ''];
   return driveTerminal(argv, f.env, mode);
 }
-async function driveTerminal(argv: string[], env: NodeJS.ProcessEnv, mode = 'tty') {
-  const result = await terminalProgram(argv, env, undefined, mode);
+async function driveTerminal(argv: string[], env: NodeJS.ProcessEnv, mode = 'tty', person = false) {
+  const result = await terminalProgram(argv, env, undefined, mode, '', person);
   if (result.status !== 0) throw new Error(result.output);
   const line = result.output.split(/\r?\n/u).find(value => value.startsWith('{"response":'));
   if (!line) throw new Error(result.output);
   return JSON.parse(line) as { response: { ok: boolean; result?: unknown; error?: { code: string; params?: Record<string, unknown> } }; events: unknown[]; decisions: unknown[] };
 }
-export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty', answer = '') {
+/** `person`: the child gets the caller's environment without the AI-agent and CI markers (a person's own terminal); markers the test
+ * sets itself in `env` are removed too, so a negative passes `person = false` with its marker. */
+export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty', answer = '', person = false) {
+  const merged = { ...process.env, ...env };
   const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? '', answer],
-    { env: { ...process.env, ...env }, timeout: 30_000, maxBuffer: 1_000_000 });
+    { env: person ? personEnv(merged) : merged, timeout: 30_000, maxBuffer: 1_000_000 });
   const result = JSON.parse(stdout) as { status: number; output: string };
   return result;
 }
-export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'mcp-capability' | 'decide' | 'project-init', scopeId: string, input: unknown): Promise<T> {
+export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'mcp-capability' | 'decide' | 'project-init', scopeId: string, input: unknown, person = false): Promise<T> {
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-application.mjs'), f.project, JSON.stringify({ operation, scopeId, input })];
-  const value = await driveTerminal(argv, f.env);
+  const value = await driveTerminal(argv, f.env, 'tty', person);
   if (!value.response.ok) throw ErrorRegistry.createError(value.response.error!.code);
   return value.response.result as T;
 }

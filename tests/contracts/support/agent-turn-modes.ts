@@ -163,7 +163,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
    * service's settlement, e.g. `expect(result, f.evidence(result)).toMatchObject(...)`. */
   const evidence = (result: { readonly turnId: string; readonly events: readonly unknown[] }) =>
     JSON.stringify({ turnId: result.turnId, service: serviceState, events: result.events, decisions });
-  return { project, data, ledger, rows, exec, call, audit, policyTurns, counters, writeAuthority, sent: state.sent, client, env, evidence,
+  return { service, project, data, ledger, rows, exec, call, audit, policyTurns, counters, writeAuthority, sent: state.sent, client, env, evidence,
     /** Queues the next turn's one tool call (for a test that drives `client.chatTurn` itself). */
     script: (name: string, args: Record<string, unknown>) => { state.script.push({ name, arguments: JSON.stringify(args) }); } };
 }

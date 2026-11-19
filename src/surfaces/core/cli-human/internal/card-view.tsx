@@ -18,7 +18,7 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
   // record (a server, Run or approval name) can never carry a control sequence onto the person's terminal, whatever the caller did.
   const options = request.options.map(option => ({ ...option, label: terminalSafeText(option.label) }));
   return <Window title={[span(humanRecordText(request.title, known))]} body={(request.body ?? []).map(line => ({ spans: [span(humanRecordText(line, known))] }))}
-    hints={hints} position="{from}-{to}/{total}" decision priority={WINDOW_PRIORITY.approval} footerRows={request.options.length}
+    hints={request.hints === undefined ? hints : humanRecordText(hints, known)} position="{from}-{to}/{total}" decision priority={WINDOW_PRIORITY.approval} footerRows={request.options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={state} focused={owns} />} onClose={() => answer(null)}
     onInput={(input, key, meta) => {
       // A burst read (several key events at once) is never an answer, as on the terminal's decision cards.

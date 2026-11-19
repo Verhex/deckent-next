@@ -7,6 +7,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { observeConfiguredRunResults } from './result-view.js';
 import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspace-patch/index.js';
 import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
+import { inspectConfiguredRunProgression } from './progression.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['config'], path: ScopeContext['path'], principal: ScopeContext['principal'], authorization: DispatchIdentityAuthorization) {
   const db = openSqliteLedgerReadOnly(await path(), config.storage.sqlite), queue = new SqliteTargetQueue(db), limit = config.targetQueue.perTarget;
@@ -29,6 +30,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     let run = await observeConfiguredRunResults(config, options.env, inspected.run, principal, authorization, undefined, dismissed);
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
-    return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run });
+    const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options, principal);
+    return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) });
   } catch (error) { throw queryFailure(error); }
 }

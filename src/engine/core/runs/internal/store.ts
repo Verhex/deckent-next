@@ -33,7 +33,7 @@ export interface RunStore {
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   /** `workspace`, when given, is the Run's immutable workspace custody, written in the admission transaction and never part of the
    * receipt command (record shapes unchanged). A replay whose custody differs is RUN_COMMAND_CONFLICT. */
-  createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly RunCapacityBinding[]): Promise<RunReceipt>;
+  createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly RunCapacityBinding[], committed?: (receipt: RunReceipt, commit: 'fresh' | 'replay') => void): Promise<RunReceipt>;
   /** Atomically admits a nonempty ordered prefix fitting both limits. Command retains candidates;
    * snapshot contains only admitted attempts. Replay never expands the original admission. */
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;

@@ -146,16 +146,16 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
     // Version-delta rollback (alpha.35 P0) removes only rules an archived template upgrade added, never rules inferred from ids alone:
     // start from the pre-delta shape and take the current delta through the same governed upgrade, so the archive holds real provenance.
     const ids = new Set<string>(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), older = body.grants.filter(grant => !ids.has(grant.id));
-    expect(older).toHaveLength(body.grants.length - ids.size);
+    expect(older).toEqual(body.grants); // Fresh v20 has no optional v21 execution rules (owner 143).
     await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...body, revision: 'first-run-template-v10', grants: older }), { mode: 0o600 });
-    const upgraded = await terminalApplication<{ status: string; rules: { id: string }[] }>(f, 'policy-upgrade', 'scope', { mode: 'apply', reason: 'W5 rollback provenance' });
+    const upgraded = await terminalApplication<{ status: string; rules: { id: string }[] }>(f, 'policy-upgrade', 'scope', { mode: 'apply', reason: 'W5 rollback provenance' }, true);
     expect(upgraded).toMatchObject({ status: 'upgraded' }); expect(upgraded.rules.map(rule => rule.id)).toEqual([...ids]);
     const upgradedGrants = (await read()).grants;
     expect(upgradedGrants.slice(0, older.length)).toEqual(older);
     const plan = await preview(); await apply(plan);
     expect((await read()).grants).toEqual([...upgradedGrants, ...plan.rules]);
     const baseline = audits().length;
-    expect(await terminalApplication(f, 'policy-upgrade', 'scope', { mode: 'rollback', reason: 'W5 rollback regression' }))
+    expect(await terminalApplication(f, 'policy-upgrade', 'scope', { mode: 'rollback', reason: 'W5 rollback regression' }, true))
       .toMatchObject({ status: 'rolled-back', reason: [...ids].join(','), conflicts: [] });
     // Rollback removes this version's delivery rules; earlier authority and the named MCP rules survive.
     expect((await read()).grants).toEqual([...older, ...plan.rules]);

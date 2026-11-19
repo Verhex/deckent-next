@@ -54,8 +54,9 @@ it('publishes rows inside the original digest, refuses changed bytes on replay a
       roles: policy.roles.map(role => role.id === systemRole.id ? { ...role, permissions: role.permissions.slice(1) } : role) }, bindings: null, order: 'policy-first' }, result: null }), 'test-delete-permission');
     const path = join(root, '.deckent', 'policy.json'), deleted = await readFile(path, 'utf8');
     await expect(applyPolicyTemplateInstallation(root, 'scope')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
-    const preview = await upgradePolicyTemplateInstallation(root, 'scope', false);
-    expect(await upgradePolicyTemplateInstallation(root, 'scope', true, preview.expect ?? undefined, {}, userInfo().uid, undefined, { attest: async () => true })).toMatchObject({ status: 'current' });
+    // Same-data baseline replay, without opting into the separate v21 execution family.
+    const preview = await upgradePolicyTemplateInstallation(root, 'scope', false, undefined, {}, userInfo().uid, undefined, undefined, true);
+    expect(await upgradePolicyTemplateInstallation(root, 'scope', true, preview.expect ?? undefined, {}, userInfo().uid, undefined, { attest: async () => true }, true)).toMatchObject({ status: 'current' });
     expect(await readFile(path, 'utf8')).toBe(deleted);
     // A manual edit with the same revision has no archived edge and must never be adopted on replay.
     const foreign = JSON.parse(deleted); foreign.grants[0].resource.ids = ['foreign-target'];

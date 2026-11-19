@@ -2,7 +2,7 @@
 
 [English](policy-and-ai.md) · [Mimari](architecture-overview.tr.md) · [Uyum raporu](reports/ai-floor-compliance.md)
 
-Kaynakla son karşılaştırma: 2026-10-23. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
+Kaynakla son karşılaştırma: 2026-11-17. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
 hangi eylemi yapabileceğini belirler. İzin (yetki kuralı), uygulamanın eylemi değerlendirmesine
 izin verir; durum kontrolü, onay, yalıtım, kabul kriteri ve kalıcı etki kanıtını kaldırmaz.
 Yönetici yalnız kendisinde bulunan yetkiyi devreder. AI aktör yetki yönetimi yapamaz.
@@ -115,6 +115,90 @@ dış MCP istemcileri bu aktörü paylaşır. Varsayılanda AI karar adımı, ba
 yedek veya kaldırma yetkisi devredilmez. Mevcut özel kurulumlar kendi
 izinlerini korur; yükseltme önizlemesi sıfırlama veya yetki verme değildir.
 
+## İsteğe bağlı kalıcı yapay zekâ yürütme izinleri (aile 21)
+
+İlk kurulum şablonu, öneri kurallarını içeren baseline v20’dir; kalıcı yapay zekâ
+yürütme izni içermez. Düz politika kurulumu, sihirbaz ve bağlama aynı baseline’ı
+kullanır; tanıksız verilen profiller aynı yetki sınırında kalır. Terminaldeki kişi
+aile 21’i ayrıca ekleyebilir: kurulu kapsamda açık MCP kimliğine üç kural: `run/reserve`,
+`run/cancel` ve `attempt/execute,evaluate,read-output,recover-output`. Sahiplik koşulu
+yoktur: aynı yapay zekâ kimliği MCP araçlarıyla senin veya başka aktörün aynı kapsamdaki
+işlerinde de bu izinleri kullanabilir; eski takılmış işi başlatmayı deneyebilir, çıktı
+okuyabilir, yama hazırlayabilir, iptal isteyebilir ve işi beklemeye alabilir. Servis eski
+takılmış yapay zekâ işlerini kendiliğinden başlatmaz. Servis yeniden başlamadan önce
+onaylanmış ama başlamamış öneri yeniden önerilmelidir; iş kaydı varsa önce iptal edilir.
+Henüz cevaplanmamış eski kart, güncel kontroller geçerliyken yeni servis oturumunda
+taze bir cevapla onaylanabilir.
+
+Ajan işareti bulunmayan kişinin etkileşimli terminalinde `deckent init`, kurulu ilk
+politikayı okuduktan sonra ve başlangıç izinlerinden önce ayrı bir yürütme izni kartı
+sunar. Tam gövde yapay zekâ kimliğini, kapsamları, izin hücrelerini ve geri alma
+komutunu gösterir. Geçmişte hiç verilmediği doğrulanırsa **İzni ver ve devam et**;
+önceki geri alma doğrulanırsa veya geçmiş doğrulanamazsa **Şimdi değil** seçilidir ve
+nedeni söylenir. Yalnız **Şimdi değil** cevabı saklanmaz; sonraki kurulum yeniden
+sorabilir. Esc ve Ctrl+C izin vermeden devam eder. Betikler, yapay zekâ işaretli
+terminaller, `--yes` ve `--json` bu kartı onaylamaz. Kabul mevcut tanıklı yönetici
+yolunu ve önizlemenin tam sürümünü kullanır; değişmiş veya belirsiz sonuç yeniden
+denenmeden bildirilir.
+
+Önceki izin durumu doğrulanamadığında (eski veya profil tabanlı kurulum, taşınmış proje ya da hasarlı arşiv) kart "Şimdi değil" seçeneğini öne çıkarır.
+
+Başlangıç aile 21’i eklemez ve geri alınmış v20 öneri izinlerini yeniden açmaz. Mevcut kurulumlara başlangıçta v21 yürütme izni eklenmez. Kişi
+`deckent init policy --scope SCOPE_ID --upgrade --preview` ile yapay zekâ kimliğini,
+kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; kendi terminalinde
+çıktıdaki tam uygulama komutunu ve `--expect` değerini kullanır. Elle kurulmuş politika
+için kişi açıkça adlandırılır. Yetkili yöneticinin diğer yolu
+`deckent policy upgrade --template current --scope SCOPE_ID`, ardından `--apply
+--expect REVISION` adımıdır. Kart çizebilen etkileşimli kişi terminalinde aile 21
+ekleyen metin çıktılı uygulama, diğer aileler dahil tüm planı kartta gösterir.
+Aynı terminalde `--json` doğrudan uygulama yolunu izler. `TERM=dumb` düz çıktı kullanır.
+Kart, geçmişin planın izin eklediği kapsamların her birinde iznin hiç verilmediğini
+kanıtlaması halinde izin verme seçeneğini öne alır. Bu kapsamların herhangi birinde
+izin geri alınmışsa veya geçmiş doğrulanamıyorsa kart mevcut politikayı koruma
+seçeneğini öne alır ve nedeni gösterir. Normal önizleme arşivi okur. Kart ayrıca
+doğrulanmış ilk yayını kullanabilir. Kişi seçimi değiştirip Enter ile onaylayabilir.
+Ret veya iptalde politika ve arşiv korunur. Yayından önce plan veya revizyon
+değişirse komut yeni önizleme ister. Yapay zekâ uygulayamaz veya geri alamaz.
+Aynı kimlikli değiştirilmiş kurallar ve özel yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
+gereğini aşmaz.
+
+Yetkili yükseltmede `--only ai-execution` yalnız üç yürütme kuralını,
+`--only ai-proposals` yalnız v20 ailesini seçer. Installer yükseltmesi baseline veya
+system-row güncellemesini önce, aile 21’i kendi sürüm-21 arşiv anahtarıyla ayrıca
+yayımlar. Bu iki yayın birlikte atomik değildir: ikinci adım ancak ilk adımın sonucu
+doğrulandıktan sonra, doğrulanmış durum üzerinde başlar. Araya başka bir yazım girerse
+çakışma oluşur. İkinci adımın yazılmadığı veya yazım öncesinde reddedildiği kanıtlanırsa
+baseline kalır; eksik izni eklemeden önce yeniden önizle. Kesilen yazım aynı arşiv
+anahtarıyla uzlaştırılır: uygulandığı kanıtlanmışsa izin eklenmiştir; bilinmeyen sonuç
+iznin eklenmediği anlamına gelmez. Yeniden denemeden önce saklanan kanıtı incele;
+kendiliğinden tekrar yazım yapılmaz.
+Elle düzenleme, verilen profil veya eski adayın birleşik yayını, yönetilen aile-21
+kaynağını kanıtlamaz; geri alma soy zincirini kanıtlayamıyorsa yetkili politika
+düzenleme yolunu kullan.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback --preview`, hiçbir şey yazmadan güncel geri çekme kapsamlarını listeler.
+CLI ve `/policy` tam kimlikleri ayrı satırlarda, tırnak içinde gösterir; görünmez ve yön değiştiren karakterler kaçış dizileriyle görünür olur.
+Saklanan kısa kart yalnız kapsam sayısını ve güncel okuma komutunu belirtir; geçmiş bir listenin konumunu iddia etmez.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback`, kişinin
+mevcut onay yoluyla yalnız değiştirilmemiş ve yönetilen kaynağı kanıtlanmış v21
+yürütme kurallarını kaldırır. Birkaç kapsam için eklenmiş yönetilen kural, `SCOPE_ID`
+dışındakiler dahil bütün kapsamlarıyla kaldırılır; önizleme ve karar kartı bunları söyler.
+Kişinin güncel devir yetkisi etkilenen her kapsamı karşılamalıdır; herhangi birinde
+eksik izin, deny veya restriction varsa bütün kaldırma yazım yapılmadan reddedilir.
+Her kuralın yönetilen eklemesine ait kalıcı kanıt gerekir. Bugünkü kapsam ayarını
+değiştirmek, önceden eklenen kuralın etkileyeceği kapsamları daraltmaz.
+V20 önerilerini, havuz/hedef kullanımını ve önceki bütün
+kuralları korur. **Yapay zekâ önerileri** satırı v20'de kalır; komut satırında bu aile
+`--rollback --only ai-proposals` ile geri alınır. Kapatılan öneriler yeniden başlangıçta
+açılmaz. Özel veya rol izinleri aynı hücreleri hâlâ karşılayabilir; kalan yetkiyi
+inceleyin. Geri alma geçmiş etkileri geri almaz, çalışan işi öldürmez; eski program
+sürümüne dönmek politika iznini geri almaz. İki aile de deneme iptal/bırakma/uzlaştırma,
+entegrasyon/benimseme, politika yönetimi, sır veya ek karar adımı izni vermez. Doğrudan
+yama hazırlama ayrı kapasite bırakma adımında reddedilebilir; değerlendirme için yama
+hazırlama bu bırakmanın başarısını vaat etmez. Görev, hedef, havuz, model, araç, şirket,
+onay ve işçi modu kontrolleri sürer.
+
 ## Mevcut yüzeylerle inceleme, yetki verme ve geri alma
 
 Kurulu projeden çalıştırın. `SCOPE_ID`, `GROUP_ID`, `PREVIEW_DIGEST` ve izin kimlikleri yer
@@ -137,6 +221,15 @@ yönetici ihlali değişikliği reddeder. Terminal `/policy` paneli aynı kayıt
 örnekten değil `list` çıktısından alın. Geri alma yalnız grubun yönettiği izinleri kaldırır;
 özel/rol izinleri eyleme izin vermeyi sürdürebilir. Ardından **effective** (etkin) durumu
 inceleyin. Geri alma geçmiş etkileri silmez.
+
+Politika onay kartının 2048 karakter sınırı korunur. Yapay zekâ kimliğine izin veren
+veya iznini genişleten değişiklikler önce gösterilir; diğer satırlar gönderilen sırayı
+korur. Değişiklik yine gönderilen sırayla uygulanır. Satırları sayan veya kesen kart,
+kaç değişikliğin tam gösterilmediğini söyler ve cevaplamadan önce değişikliğin tamamını
+incelemenizi ister. Yalnız yapay zekâ satırları bile karta sığmayabilir; kart bütün
+izinleri gösterme garantisi değildir. Yukarıdaki iki yükseltme önizlemesi her değişiklik
+satırını gösterir; satır içinde değerler 48 karaktere, listeler altı öğe ve kalan sayısına
+kısaltılır. Genişlik açıklaması mühürlü kartta ancak değişiklikten sonra tamamı sığarsa eklenir.
 
 Kalıcı araç izinleri ve şablon bakımı ayrı komutlardır:
 
@@ -238,7 +331,7 @@ değildir. Mevcut CLI:
 
 **“MCP salt okunur gözlemci olsun.”** Şablon v19'dan beri ilk kurulum politikası MCP aktörüne model
 çağırma ve ajan araçlarını da açar; MCP aktörü için `model-invocation` ve `agent-tool` üzerindeki şirket
-deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
+deny'ı onu gözlemci tutar ama yerel ajanı da durdurur; kendi kartınızla `deckent policy upgrade --template current --rollback --only ai-proposals` tam olarak en yeni (v20 öneri) AI aktörü kurallarını kaldırır (yeni kurulumlarda da). `policy mcp list` çıktısını inceleyip
 yazma grubu vermeyin. Mevcut kurulumda istenmeyen her yönetilen grubu
 yukarıdaki önizleme/uygulama yoluyla kaldırın; özel/rol izinlerini de inceleyin. Başka
 izinler varsa “yönetilen grup yok” salt okunurluk kanıtı değildir. Araç keşfi yetki değildir;

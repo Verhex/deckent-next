@@ -64,6 +64,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async readServiceShutdown(key: import('#engine/index.js').ServiceShutdownKey) { return new SqliteServiceShutdownJournal(this.db).readServiceShutdown(key); }
   async retainServiceShutdownOutcome(outcome: import('#engine/index.js').ShutdownOutcome) { return new SqliteServiceShutdownJournal(this.db).retainServiceShutdownOutcome(outcome); }
   async resolveRunWorkspaceCustody(input: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunWorkspaceCustody(this.db).resolveRunWorkspaceCustody(input); }
+  readRunProgressionIntent(scopeId: string, runId: string, companyId: string) { return new SqliteRunProgression(this.db).intent(scopeId, runId, companyId); }
+  readRunSession(identity: import('#engine/index.js').RunSessionIdentity) { return new SqliteRunProgression(this.db).readSession(identity); }
   async listRunProgression(query: ProgressionQuery) { return new SqliteRunProgression(this.db).listRunProgression(query); }
   async listForeignProgressionScopes(query: Parameters<SqliteRunProgression['listForeignProgressionScopes']>[0]) { return new SqliteRunProgression(this.db).listForeignProgressionScopes(query); }
   async listRunLifecycleDue(query: ProgressionQuery & { readonly now: number }) { return new SqliteRunProgression(this.db).listRunLifecycleDue(query); }
@@ -96,7 +98,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }
   async loadRunResourceCapacity(run: import('#domain/index.js').RunSnapshot) { return readRunResourceCapacity(this.db, run); }
-  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly import('#engine/index.js').RunCapacityBinding[]) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace, assertAuthority, resources); }
+  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody, assertAuthority?: () => void, resources?: readonly import('#engine/index.js').RunCapacityBinding[], committed?: (receipt: import('#engine/index.js').RunReceipt, commit: 'fresh' | 'replay') => void) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace, assertAuthority, resources, committed); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.lifecycleTiming, this.poolCeiling).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }

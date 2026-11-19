@@ -70,6 +70,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
       return readRunSnapshot(this.db, scope, run);
     } catch (error) { throw readFailure(error); }
   }
+  readRunProgressionIntent(scopeId: string, runId: string, companyId: string) { return new SqliteRunProgression(this.db).intent(scopeId, runId, companyId); }
   async hasTaskEvaluation(identity: unknown, revision: number) {
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);

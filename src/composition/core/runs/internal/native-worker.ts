@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { immutableJsonObjectSchema, type RunExecutionSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationProfileDigest, configuredInvocationProfiles, pinCurrentModelUse, sameModelUseOwner, connectedModelProfile, ModelBindingApplication, RunStoreError, RunReservationApplication } from '#engine/index.js';
-import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal,
+import { isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, createNativeCliWorkerProfile, withMcpPrincipal, withLocalPrincipalChannel,
   headlessCapacityBinding, openSqliteInventoryReader, type SqliteAttemptStore, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { modelUseReadPorts } from '#composition/core/model-use/index.js';
@@ -45,6 +45,9 @@ export function nativeWorkerAdmission(root: string, scopeId: string, options: Co
   };
   return {
     modelUse: {
+      async person() {
+        return (await withLocalPrincipalChannel(undefined, () => loadConfiguredScopeContext(root, scopeId, options, 'read'))).principal;
+      },
       async pin(execution: RunExecutionSnapshot, principal: VerifiedPrincipal, workerMode?: RunExecutionSnapshot['workerMode']): Promise<RunExecutionSnapshot> {
         if (!execution.tasks.some(row => isNativeCliWorkerProfile(row.profile))) return execution;
         await owner(principal);
