@@ -64,8 +64,8 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
     ? channel.models.filter(model => model.activation?.state === 'active').map(model => `${channel.channelId}/${model.modelId}`) : []);
   const chat = scopeId && await context.describeTerminalChatPlan?.(root, options, scopeId).catch(() => null);
   const selection = chat ? chat.status === 'ready' && chat.reference ? `${chat.reference.providerId}/${chat.reference.modelId}` : null : undefined;
-  const externalConnection = chat && chat.governedUse ? chat.reference?.providerId : !selection
-    ? channels.find(channel => channel.models.some(model => model.governedUse))?.channelId : undefined;
+  const externalConnections = new Set(channels.filter(channel => channel.models.some(model => model.governedUse)).map(channel => channel.channelId));
+  if (chat && chat.governedUse && chat.reference) externalConnections.add(chat.reference.providerId);
   const observation: SetupObservation = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION,
     environment: { platform, node: assessNodeSupport(process.version, NODE_ENGINE_RANGE).status === 'supported' ? 'supported' : 'below-floor' },
     language: { configured: locale(await loadConfigLanguage(root, options).catch(() => undefined)),
@@ -79,7 +79,7 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
     sandbox: { realm: realm?.selected === 'bubblewrap' || realm?.selected === 'landlock' ? realm.selected : 'none', selfTest: realm?.selfTest?.status ?? 'not-run',
       usernsRestricted: realm?.rejected.some(row => row.restricted) ?? false },
     model: { connections: channels.flatMap(channel => channel.models.filter(entry => entry.activation?.state === 'active')).length,
-      ...optionalField('selection', selection), ...optionalField('externalConnection', externalConnection) },
+      ...optionalField('selection', selection), ...(externalConnections.size ? { externalConnections: [...externalConnections] } : {}) },
     check: { state: 'not-run' },
     families: { ...extra.facts, ...(instructions ? { instructions: projectInstructionFacts(instructions) } : {}), ...(config && !pending ? { work: firstJob } : {}) } };
   return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, WORK_SETUP_FAMILY, ...extra.packages]), firstJob,

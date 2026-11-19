@@ -1,6 +1,6 @@
 import { workerReadinessText, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
-import type { SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
+import type { SetupObservation, SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { SetupApplyResult } from './contract.js';
 
@@ -10,11 +10,11 @@ import type { SetupApplyResult } from './contract.js';
  * (what the first job still needs; the v1 `firstJob` list is gone); an apply result may be `declined`. */
 export const SETUP_DOCUMENT_SCHEMA_VERSION = 2 as const;
 export type SetupDocument = ReturnType<typeof setupDocument>;
-export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>) {
+export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>, externalConnections?: readonly string[]) {
   return { schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION, planSchemaVersion: plan.schemaVersion, planDigest: plan.planDigest, registryDigest: plan.registryDigest,
     stages: plan.stages.map(stage => ({ id: stage.id, namespace: stage.namespace, phase: stage.phase, state: stage.state, title: stage.title, reason: stage.reason,
       question: stage.question, default: stage.default, cli: stage.cli, operation: stage.operation, autoEligible: stage.autoEligible })),
-    authority: setupAuthority(plan),
+    authority: setupAuthority(plan), ...(externalConnections?.length ? { externalConnections } : {}),
     apply: { requested: apply.requested, results: apply.results } };
 }
 
@@ -66,7 +66,7 @@ export function applyLine(plan: SetupPlan, result: SetupApplyResult, locale: Loc
 
 /** Plain lines for a pipe or a dumb terminal (and the summary after the window closes): no colour, no cursor movement, one stage per block. */
 export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>,
-  readiness?: Readonly<{ firstJob?: FirstJobFacts; externalConnection?: string }>): string {
+  readiness?: Readonly<{ firstJob?: FirstJobFacts; model?: SetupObservation['model'] }>): string {
   const lines = [t('setup.render.header', { digest: plan.planDigest.slice(0, 12) }, locale)];
   plan.stages.forEach((stage, index) => {
     lines.push(`${index + 1}. ${stageTitle(stage, locale)} · ${stageStateLabel(stage, locale)} · ${stageText(plan, stage.reason.code, stage.reason.params, locale)}`);
@@ -84,9 +84,14 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
   if (plan.stages.some(stage => stage.id === 'core:final-check' && stage.state === 'done')) lines.push('', t('setup.install.done', {}, locale));
   if (readiness?.firstJob?.poolMissing && !plan.stages.some(stage => stage.id === 'work:pool'))
     lines.push(t('doctor.firstWorker.pool', {}, locale), t('doctor.firstWorker.poolNext', {}, locale));
-  if (readiness?.externalConnection && !plan.stages.some(stage => stage.id === 'core:model')) {
-    const limit = headlessGovernedUseText(locale, readiness.externalConnection);
-    lines.push(limit.text, limit.next);
+  const model = readiness?.model;
+  if (model?.externalConnections?.length) {
+    if (model.selection && !plan.stages.some(stage => stage.id === 'core:model'))
+      lines.push(t('setup.reason.modelSelected', { model: terminalSafeText(model.selection) }, locale));
+    for (const id of model.externalConnections) {
+      const connection = terminalSafeText(id), limit = headlessGovernedUseText(locale, connection);
+      lines.push(`${connection} · ${limit.text}`, limit.next);
+    }
   }
   return lines.join('\n');
 }

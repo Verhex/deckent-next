@@ -132,5 +132,5 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
   };
   return { model, step, runPending, offerExecution, interrupted: () => executionNotice?.interrupted, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results],
     ...(observed.firstJob ? { firstJob: observed.firstJob } : {}),
-    ...(observed.observation.model.externalConnection ? { externalConnection: observed.observation.model.externalConnection } : {}) }) };
+    model: observed.observation.model }) };
 }

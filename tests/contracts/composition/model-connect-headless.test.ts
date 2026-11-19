@@ -23,6 +23,7 @@ import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#
 import { inspectConfiguredWorkerReadiness } from '#composition/core/runs/index.js';
 import { setupMessage } from '#surfaces/core/setup/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
+import { inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { inspectPolicyTemplate } from '#composition/core/installation/index.js';
 import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { main } from '#surfaces/core/cli/index.js';
@@ -112,6 +113,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const codexTemplate = adapters.createNativeCodingTemplate(docker, { provider: 'codex', cliVersion: '9.1.0 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' });
     const template = { ...codexTemplate, parameters: { ...codexTemplate.parameters, invocation: { ...(codexTemplate.parameters['invocation'] as object), provider: 'claude' } } };
     config.terminal.scopeId = 'scope';
+    const git = { gitExecutable: 'git', timeoutMs: 5000 };
+    await writeFile(path, JSON.stringify({ ...config, execution: { git } })); platform.clearConfigCache();
+    const unconfigured = await configuredSetup({}).observeSetup(h.f.project, { env: h.f.env });
+    const waiting = planSetup(unconfigured.observation, undefined, unconfigured.registry, { phase: 'onboarding' });
+    expect(waiting.stages.find(stage => stage.id === 'execution:worker')).toMatchObject({ state: 'skipped', operation: null });
     config.execution = { docker: { ...docker, executable: 'docker' }, git: { gitExecutable: 'git', timeoutMs: 5000 } };
     config.admission = { poolId: 'k29-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'k29-before', profiles: [template],
       kinds: [{ kind: 'coding', profile: { id: template.id, version: template.version } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } };
@@ -137,7 +143,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
     expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
     // R8c: people see the connection as CLI · model (its id only in --json); R8b: `--connection` alone names the provider.
-    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate, readHeadlessLogins: readConfiguredHeadlessLogins };
+    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate,
+      readHeadlessLogins: readConfiguredHeadlessLogins, inspectModelActivation: inspectConfiguredModelActivation };
     output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
     expect(output).toContain('Governed chat and workers are not ready');
@@ -162,6 +169,38 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const unsupportedBefore = await readFile(path, 'utf8');
     await expect(configureNativeCodingTemplate(h.f.project, request, options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_CONNECTION_UNSUPPORTED' });
     expect(await readFile(path, 'utf8')).toBe(unsupportedBefore);
+  });
+
+  it('CARD-156: coding diagnoses a profile in its own authorized scope even without a terminal scope', async () => {
+    const h = await harness(null);
+    const connected = await h.connect('coding-scope');
+    expect(connected.status).toBe('connected');
+    const path = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
+    const profile = parseModelInvocationProfile(await h.profile());
+    const activation = vi.fn(inspectConfiguredModelActivation);
+    let output = '';
+    const stdout = new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } });
+    const context = { root: h.f.project, env: h.f.env, stdout, inspectModelActivation: activation, readHeadlessLogins: readConfiguredHeadlessLogins };
+    for (const terminalScope of ['other-scope', undefined]) {
+      await writeFile(path, JSON.stringify({ ...config, terminal: terminalScope ? { scopeId: terminalScope } : undefined }));
+      platform.clearConfigCache();
+      output = ''; expect(await main(['coding', '--json'], context)).toBe(0);
+      expect.soft(JSON.parse(output).connections).toContainEqual(expect.objectContaining({ id: profile.id, scopeId: 'scope', governedUse: 'outside-installation' }));
+      output = ''; expect(await main(['coding', '--lang', 'en'], context)).toBe(0);
+      expect.soft(output).toContain('Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.');
+      expect.soft(output).toContain('deckent models login --connection claude-cli-subscription without --config-dir');
+      output = ''; expect(await main(['coding', '--lang', 'tr'], context)).toBe(0);
+      expect.soft(output).toContain('Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.');
+      expect.soft(output).toContain('deckent models login --connection claude-cli-subscription komutunu çalıştırın.');
+    }
+    expect.soft(activation).toHaveBeenCalledWith(h.f.project, { schemaVersion: 1, scopeId: 'scope', reference: profile.reference }, expect.anything());
+    activation.mockRejectedValue(new Error('POLICY_DENIED'));
+    output = ''; expect(await main(['coding', '--json'], context)).toBe(0);
+    expect.soft(JSON.parse(output).connections).toContainEqual(expect.objectContaining({ id: profile.id, scopeId: 'scope', governedUse: 'unverified' }));
+    output = ''; expect(await main(['coding', '--lang', 'en'], context)).toBe(0);
+    expect.soft(output).toContain('Governed readiness could not be checked in scope scope.');
+    output = ''; expect(await main(['coding', '--lang', 'tr'], context)).toBe(0);
+    expect.soft(output).toContain('scope kapsamında yönetilen kullanımın hazır olup olmadığı doğrulanamadı.');
   });
 
   it('K29: Codex connection selects its registry capability and refuses a different provider without writing', async () => {

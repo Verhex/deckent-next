@@ -95,19 +95,29 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   const workerKinds = await context.inspectWorkerKinds?.(root, options);
   const all = configuredInvocationProfiles(config), profiles = codingProfiles(config, affectedToolchainProfiles(config), all), configured = config.execution?.docker?.imageId ?? null;
   const scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
-  const logins = scopeId ? await context.readHeadlessLogins?.({ profiles: all }, scopeId, options).catch(() => []) : [];
-  const blocked = new Map(logins?.flatMap(login => login.governedUse && login.profileId ? [[login.profileId, login.connection] as const] : []));
   const pool = await assessPoolReadiness(root, context, options, config.admission, scopeId);
   // The configured image runs none of the admitted CLIs: `coding template` without `--image` would find no toolchain there.
-  const connections = all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family,
-    ...(row.scopeId === scopeId && blocked.has(row.id) ? { governedUse: 'outside-installation' as const } : {}) }));
+  const subscriptions: { profile: Connection; governedUse: 'outside-installation' | 'unverified' | undefined }[] = [];
+  for (const profile of all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)) {
+    const { scopeId, reference } = profile;
+    const observed = await context.inspectModelActivation?.(root, { schemaVersion: 1, scopeId, reference }, options).catch(() => null);
+    subscriptions.push({ profile, governedUse: observed ? observed.governedUse : 'unverified' });
+  }
+  const connections = subscriptions.map(({ profile, governedUse }) => ({ id: profile.id, scopeId: profile.scopeId, protocolFamily: profile.protocol.family,
+    ...(governedUse ? { governedUse } : {}) }));
   const missingPool = pool.status === 'missing' || pool.status === 'unconfigured';
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
   emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured, workerKinds: workerKinds ?? null,
     ...(missingPool ? { poolStatus: pool.status } : {}) }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
     const label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
-    const available = t('coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
-    const limits = [...new Set(blocked.values())].flatMap(connection => { const limit = headlessGovernedUseText(locale, connection); return [limit.text, limit.next]; });
+    const available = t('coding.connections', { connections: subscriptions.map(({ profile }) => connectionLabel(cliOf(context), profile)).join(', ') || '-' }, locale);
+    const limits = subscriptions.flatMap(({ profile, governedUse }) => {
+      if (!governedUse) return [];
+      const connection = connectionLabel(cliOf(context), profile);
+      if (governedUse === 'unverified') return [`${connection} · ${t('coding.connections.unverified', { scope: profile.scopeId }, locale)}`];
+      const limit = headlessGovernedUseText(locale, profile.reference.providerId);
+      return [`${connection} (${profile.scopeId}) · ${limit.text}`, limit.next];
+    });
     if (missingPool) limits.push(t('doctor.firstWorker.pool', {}, locale), pool.status === 'missing' ? `deckent init pool --scope ${scopeId} --preview` : t('doctor.firstWorker.poolNext', {}, locale));
     if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available, ...limits].join('\n');
     const columns = t('coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));

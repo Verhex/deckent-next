@@ -18,7 +18,7 @@ import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } fr
 
 /** The host operations the administration commands use (pool, backup, secret, audit, runtime, toolchains, operation, coding);
  * the CLI's full command context satisfies it. */
-export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'runningImageBuild' | 'configChoiceSources' | 'prepareMainSecret'> {
+export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'runningImageBuild' | 'configChoiceSources' | 'prepareMainSecret' | 'inspectModelActivation'> {
   verifyAudit?: AuditVerifyHandler;
   /** BeUser S-04: one verified page of a scope's audit log (`deckent audit list`). */
   listAudit?: (root: string, query: AuditListQuery, options: ConfigLoadOptions) => Promise<AuditListView>;

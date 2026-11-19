@@ -8,6 +8,8 @@ import { main } from '#surfaces/index.js';
 import { codingCommand, operationCommand } from '#surfaces/core/cli-admin/index.js';
 import { inferenceCommand } from '#surfaces/core/cli-models/index.js';
 import { configCommand, terminalConfigWrite, type ConfigPanelOpener } from '#surfaces/core/config/index.js';
+import { setupInitCommand } from '#surfaces/core/setup/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { compileNativeCodingDockerProfile } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
@@ -53,6 +55,41 @@ const codingConfig = () => {
     admission: { registry: { schemaVersion: 1, revision: 'r1', profiles: [profile], kinds: [{ kind: 'claude-coding', profile: { id: profile.id, version: profile.version } }],
       evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] }, poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } };
 };
+
+it('CARD-156: setup keeps the selected chat and reports every outside connection in that scope', async () => {
+  const f = await project({ terminal: { scopeId: 'scope' } });
+  const channel = (channelId: string, outside: boolean, access = 'allowed') => ({ channelId, access, models: [{ modelId: 'model', activation: { state: 'active' },
+    ...(outside ? { governedUse: 'outside-installation' } : {}) }] });
+  for (const selected of ['inside', null]) {
+    const channels = [channel('first', true), channel('second', selected === null), channel('hidden', true, 'denied')];
+    const inspectModelCatalog = vi.fn(async () => ({ channels }));
+    const context = { env: { ...f.env, ...personMarkersUnset() }, inspectModelCatalog,
+      ...(selected ? { describeTerminalChatPlan: async () => ({ status: 'ready', reference: { providerId: 'second', modelId: selected } }) } : {}) };
+    const plain = await bare(setupInitCommand, f, ['init', '--lang', 'en'], context);
+    const tr = await bare(setupInitCommand, f, ['init', '--lang', 'tr'], context);
+    const json = JSON.parse(await bare(setupInitCommand, f, ['init', '--lang', 'en', '--json', '--phase', 'onboarding'], context));
+    const model = json.stages.find((stage: { id: string }) => stage.id === 'core:model');
+    expect(inspectModelCatalog).toHaveBeenCalledWith(f.projectRoot, { schemaVersion: 1, scopeId: 'scope' }, expect.anything());
+    expect.soft(plain).toContain('first · Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.');
+    expect.soft(plain).toContain('deckent models login --connection first without --config-dir');
+    expect.soft(tr).toContain('first · Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.');
+    expect.soft(tr).toContain('deckent models login --connection first komutunu çalıştırın.');
+    if (selected === null) {
+      expect.soft(plain).toContain('second · Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.');
+      expect.soft(plain).toContain('deckent models login --connection second without --config-dir');
+      expect.soft(tr).toContain('second · Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.');
+      expect.soft(tr).toContain('deckent models login --connection second komutunu çalıştırın.');
+      expect.soft(model.reason.code).toBe('setup.reason.modelMissing');
+    } else {
+      expect(model.reason).toEqual({ code: 'setup.reason.modelSelected', params: { model: 'second/inside' } });
+      expect.soft(plain).toContain('Chat model selected: second/inside.');
+      expect.soft(tr).toContain('Seçilen sohbet modeli: second/inside.');
+      expect(plain).not.toContain('deckent models login --connection second');
+    }
+    expect.soft(json.externalConnections).toEqual(selected === null ? ['first', 'second'] : ['first']);
+    expect(plain).not.toContain('deckent models login --connection hidden');
+  }
+});
 
 describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
   it('bare coding lists the profiles task kinds run on, and says the configured image runs none of them (EN/TR, JSON)', async () => {

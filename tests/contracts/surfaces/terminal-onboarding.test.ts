@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
-import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
+import { planSetup, SetupStageRegistry, WORK_SETUP_FAMILY, type SetupStage } from '#engine/index.js';
+import { personEnv } from '../support/person-env.js';
 import { until, settle } from '../support/workline-harness.js';
 /** Selection starts only after the visible card's registry-defined input guard. */
 async function waitForCard(frame: () => string, text: string) {
@@ -206,6 +207,45 @@ it('U4E G2 + B1-WORKERCARD: permission order, CLI setup guidance without admissi
         stdin.write('\r'); await settle(50); expect(answers).toEqual([]); // Absent CLI + found login still only explains setup.
         stdin.write('\u001b'); expect(await run).toBeNull(); expect(deferred).toEqual(['work:kind']);
       }
+    } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
+  }
+});
+
+it('CARD-156: the only subscription is outside the installation, in the choice and first work-kind plan (EN/TR)', async () => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { onboardingMessage } = await import('../../../src/surfaces/core/terminal-onboarding/internal/message.js');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  const connection = { id: 'outside-profile', provider: 'claude', governedUse: 'outside-installation' as const, channelId: 'claude-cli-subscription' };
+  const registry = new SetupStageRegistry([WORK_SETUP_FAMILY]);
+  const plan = (answers: Readonly<Record<string, unknown>>, execution: boolean) => planSetup({ ...observation,
+    families: { work: { execution, registry: false, pool: false, connections: [connection], ...(answers['work:kind'] ? { connection } : {}) } } },
+  { schemaVersion: 2, values: answers }, registry, { phase: 'onboarding' });
+  for (const [locale, reason, next, promise] of [
+    ['en', 'Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.', 'From the owning person’s terminal, run deckent models login --connection claude-cli-subscription without --config-dir. Then reconnect the same model with deckent models connect, also without --config-dir.', 'Coding work can run on your connected subscription'],
+    ['tr', 'Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.', 'Sahibin terminalinde, --config-dir vermeden deckent models login --connection claude-cli-subscription komutunu çalıştırın. Ardından aynı modeli deckent models connect ile yine --config-dir vermeden bağlayın.', 'Kodlama işleri bağlı aboneliğinle çalışabilir'],
+  ] as const) {
+    for (const execution of [false, true]) {
+      const stage = plan({ 'work:kind': { connection: connection.id } }, execution).stages.find(row => row.id === 'work:kind')!;
+      expect.soft(stage).toMatchObject({ state: 'blocked', operation: null });
+      expect.soft(onboardingMessage(stage.reason.code, stage.reason.params, locale)).toBe(`${reason} ${next}`);
+    }
+    let frame = ''; const answers: unknown[] = [], applied: string[] = [], controller = new AbortController();
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 220, rows: 40 });
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const port = { assertPerson: async () => {}, defer: async () => {}, apply: async (stage: SetupStage) => { applied.push(stage.id); },
+      observe: async (values: Readonly<Record<string, unknown>>) => {
+        if (values['work:kind']) answers.push(values['work:kind']);
+        return { ...snapshot, answers: values, hosts: [], connections: [connection], plan: plan(values, true), deferred: ['onboarding:first-task:done'],
+          modelUsable: false, budget: { ...snapshot.budget, needed: false }, folderFacts: { kind: 'coding', entries: [] } };
+      } } as unknown as OnboardingPort;
+    const run = runOnboardingSession(port, { locale } as never, { locale, env: personEnv({ TERM: 'xterm-256color' }), stdin: stdin as never, stdout: stdout as never, signal: controller.signal });
+    try {
+      await waitForCard(() => frame, reason);
+      expect.soft(frame).toContain(next);
+      expect.soft(frame).not.toContain(promise);
+      stdin.write('\r'); await settle(50);
+      expect.soft(answers).toEqual([]);
+      expect.soft(applied).toEqual([]);
     } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
   }
 });

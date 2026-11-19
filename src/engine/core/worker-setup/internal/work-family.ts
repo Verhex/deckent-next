@@ -47,6 +47,8 @@ function kind(context: SetupStageContext): SetupDecision {
   if (!scopeId) return { state: 'blocked', reason: reason('unavailable') };
   // R8b (owner D1): a chosen subscription connection runs the worker in the host sandbox: no image gate, once the Git settings are written.
   const connection = facts.connection;
+  if (!facts.registry && connection?.governedUse === 'outside-installation') return { state: 'blocked',
+    reason: reason('governedUseBlocked', { connection: connection.channelId ?? '<connection>' }) };
   if (connection && !facts.registry) return !executionReady(context, facts) ? { state: 'done', reason: reason('kindConnection', { provider: connection.provider }) }
     : { state: 'ready', reason: reason('kindConnection', { provider: connection.provider }), cli: registryCli(scopeId, connection.provider, connection.id),
       operation: { id: 'work.registry', version: 1, input: { scopeId, provider: connection.provider, connection: connection.id, ...WORK_DEFAULTS } } };
