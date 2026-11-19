@@ -1,6 +1,13 @@
 import { type ToolErrorClass } from '#capabilities/index.js';
 import { ApprovalError, EffectError } from '#domain/index.js';
-import { SessionAuthenticationError } from '#engine/index.js';
+import { EffectTargetError, SessionAuthenticationError } from '#engine/index.js';
+
+/** EffectApplication wraps these target failures only after saving the refusal or unknown state. */
+export function isRecordedTargetFailure(error: unknown): boolean {
+  return error instanceof EffectError && error.cause instanceof EffectTargetError
+    && ((error.code === 'EFFECT_REJECTED' && error.cause.code === 'EFFECT_TARGET_REJECTED')
+      || (error.code === 'EFFECT_OUTCOME_UNKNOWN' && error.cause.code === 'EFFECT_TARGET_UNKNOWN'));
+}
 
 export function effectToolError(error: unknown): ToolErrorClass {
   if (error instanceof SessionAuthenticationError) return 'session';

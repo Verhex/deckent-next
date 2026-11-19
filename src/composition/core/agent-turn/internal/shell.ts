@@ -208,10 +208,12 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
           ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(scope.root, input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
-        const settled = directory && writes ? describeSandboxWriteSetResult(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
-          context, ...(input.peer ? { peer: input.peer } : {}), ...(input.sessions ? { sessions: input.sessions } : {}), scopeId, shellCommandId: commandId, signal }), input.language) : '';
-        return agentToolResult({ status: ran.exitCode === 0 ? 'ok' as const : 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
-          cleanup: ran.cleanup }, ran.status === 'exited' && ran.exitCode !== null ? 'ordinary' : 'uncertain');
+        const report = directory && writes ? await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
+          context, ...(input.peer ? { peer: input.peer } : {}), ...(input.sessions ? { sessions: input.sessions } : {}), scopeId, shellCommandId: commandId, signal }) : null;
+        const settled = report ? describeSandboxWriteSetResult(report, input.language) : '';
+        const auditMissing = report?.notApplied.some(entry => entry.reason === 'audit-unavailable');
+        return agentToolResult({ status: ran.exitCode === 0 && !auditMissing ? 'ok' as const : 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
+          cleanup: ran.cleanup }, ran.status === 'exited' && ran.exitCode !== null && !auditMissing ? 'ordinary' : 'uncertain');
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();

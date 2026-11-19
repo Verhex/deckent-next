@@ -1,3 +1,4 @@
+import { observeToolOutcomes } from '../support/tool-producer.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
@@ -56,6 +57,15 @@ const runsOf = (f: { rows: (sql: string) => unknown[] }) => f.rows('SELECT snaps
 /** The requester each Run's create receipt recorded. */
 const requesters = (f: { rows: (sql: string) => unknown[] }) => f.rows("SELECT command FROM run_receipts").flatMap(row => { const command = JSON.parse(String((row as { command: string }).command)) as { action?: string; actor: { issuer: string; subject: string } };
   return command.action === 'create-run' ? [{ issuer: command.actor.issuer, subject: command.actor.subject }] : []; });
+
+it.skipIf(process.platform !== 'linux')('MCP proposal producer returns an ordinary endpoint refusal before a card or registry add', async () => {
+  const f = await modeRuntime({ grants: [PROPOSE], mode: null }), observed = observeToolOutcomes();
+  const result = await f.call('propose_mcp_server', { name: 'web', transport: 'http', url: 'ftp://docs.example/mcp', reason: 'Search' }, 'allow');
+  expect(result).toMatchObject({ status: 'error', card: false, text: expect.stringContaining('url-scheme-refused') });
+  expect(registered(f)).toBeNull();
+  expect(existsSync(join(f.project, '.deckent', 'mcp.json'))).toBe(false);
+  expect(observed).toEqual(['ordinary']);
+});
 
 describe('a proposal is checked before anything is shown (pure)', () => {
   it('no secret and no reference anywhere; setting names only; a valid name; every string through the ingress check', () => {

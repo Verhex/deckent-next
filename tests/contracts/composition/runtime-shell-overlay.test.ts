@@ -1,7 +1,13 @@
+import { toolErrorClass } from '#capabilities/index.js';
+import { createAgentShell } from '#composition/core/agent-turn/index.js';
+import * as adapters from '#adapters/index.js';
+import { createWorkspaceScope, readTerminalShellConfig, runHostShell } from '#adapters/index.js';
+import { refuseRequiredApproval } from '#engine/index.js';
+import { toolProducer } from '../support/tool-producer.js';
 import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { globalStateRoot } from '#platform/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -34,6 +40,28 @@ async function callReached(f: { readonly data: string }, rel: string) {
   }
   throw new Error(`no running call's write-set directory holds ${rel}`);
 }
+
+it.skipIf(process.platform !== 'linux')('shell producer keeps the exit and vetoes continuation on a missing required audit', async () => {
+  const f = await toolProducer([rule('shell-run', 'operation', ['host.shell.run'], 'allow')]), root = join(f.data, 'writes'); await mkdir(root);
+  const shell = createAgentShell({ ...f, scope: await createWorkspaceScope(f.project), config: readTerminalShellConfig({}), productState: [], scratch: null,
+    channel: { signal: f.signal, emit() {}, async drained() { return true; }, room: () => 65_536 }, writeSetRoot: async () => root,
+    sandboxes: [{ kind: 'bubblewrap', usable: () => ({ ok: true, containment: 'sandbox', marker: 'fixture', notice: null, posture: () => '', writeSets: true,
+      realm: { kind: 'bubblewrap', run: request => runHostShell({ cwd: request.cwd, command: request.command, signal: f.signal }) } }) }] });
+  const report = { applied: [], notApplied: [], conflicts: [], unknown: [], createdDirectories: [], emptyDirectories: [], stopped: false, refused: null, clock: null };
+  const settlement = vi.spyOn(adapters, 'applySandboxWriteSet').mockResolvedValueOnce(report)
+    .mockResolvedValue({ ...report, notApplied: [{ rel: 'protected.txt', reason: 'audit-unavailable' }] });
+  try {
+    const observed = [];
+    for (const [index, exit] of [7, 7, 0].entries()) {
+      const result = await shell.apply('run_shell', { command: `exit ${exit}` }, f.signal, `call-${index}`, { round: 1, index }, refuseRequiredApproval,
+        'owner-approved', { async decide() { throw new Error('unexpected write'); } });
+      expect(result).toMatchObject({ cleanup: 'clean', text: expect.stringContaining(`exit ${exit} after`) });
+      observed.push(result.status === 'ok' ? 'ok' : toolErrorClass(result));
+    }
+    expect(settlement).toHaveBeenCalledTimes(3);
+    expect(observed).toEqual(['ordinary', 'uncertain', 'uncertain']);
+  } finally { settlement.mockRestore(); }
+});
 
 describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () => {
   it('a new floor name is not written; ordinary changes, file copies/removals and a new directory are applied, each audited like an edit', async () => {

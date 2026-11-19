@@ -64,5 +64,5 @@ export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan 
   if (!entry.success || (proposal.transport === 'http' && (proposal.command || proposal.args || proposal.realm)) || (proposal.transport === 'stdio' && proposal.url))
     return withToolErrorClass({ ok: false as const, reason: 'invalid-entry' }, 'ordinary');
   const refused = isMcpHttpEntry(entry.data) ? mcpEndpointRefusal(entry.data.url) : null;
-  return refused ? { ok: false, reason: refused } : { ok: true, proposal, entry: entry.data };
+  return refused ? withToolErrorClass({ ok: false as const, reason: refused }, 'ordinary') : { ok: true, proposal, entry: entry.data };
 }

@@ -1,4 +1,4 @@
-import { effectToolError } from './effect-error.js';
+import { effectToolError, isRecordedTargetFailure } from './effect-error.js';
 import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
@@ -42,11 +42,14 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
       try {
         await new EffectApplication({ async resolve(ref) { return ref.id === NETWORK_FETCH_OPERATION.operation.id && ref.version === 1 ? NETWORK_FETCH_OPERATION : null; } },
           { resolve: kind => kind === NETWORK_FETCH_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
-        return ran ? describeFetchResult(ran) : describeFetchRefusal('no-result');
       } catch (error) {
-        // A request that ran (refused before sending, or unknown after) reports itself; otherwise nothing was sent.
-        return ran ? describeFetchResult(ran) : agentToolResult(describeFetchRefusal(error instanceof EffectError ? error.code : (error as { code?: unknown })?.code), effectToolError(error));
+        if (!ran) {
+          const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
+          return agentToolResult(describeFetchRefusal(code), effectToolError(error));
+        }
+        if (!isRecordedTargetFailure(error)) return agentToolResult(describeFetchRefusal(undefined), 'uncertain');
       } finally { store.close(); }
+      return ran ? describeFetchResult(ran) : describeFetchRefusal('no-result');
     },
   };
 }
