@@ -87,12 +87,23 @@ it('WER-A error completion needs prior unique reservation, durable evidence and 
       selectedText: () => gap === 'not-selected' ? undefined : (gap === 'bytes-changed' ? ' ' : '') + JSON.stringify(result) }));
     expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
     if (gap === 'ambiguous') expect(driver.line(JSON.stringify(start('another-item')))).toBeNull();
-    if (gap !== 'not-reserved') expect(driver.accepts(call)).toBe(true);
-    if (gap === 'rebound') expect(driver.accepts({ ...call, id: 'host-b' })).toBe(true);
+    if (gap !== 'not-reserved') expect(driver.accepts(call)).toBe(gap !== 'ambiguous');
+    if (gap === 'ambiguous' || gap === 'rebound') expect(driver.accepts({ ...call, id: 'host-b' })).toBe(false);
     const completed = finish('item_9', result);
     expect(driver.line(JSON.stringify({ ...completed, item: { ...completed.item, status: shape } })), shape + '/' + gap)
-      .toMatchObject({ body: { field: 'mcp-correlation' } });
+      .toMatchObject({ body: { refusal: 'guard', field: gap === 'ambiguous' || gap === 'rebound' ? 'mcp-item-reservation' : 'mcp-correlation' } });
   }
+});
+it('Card 168 admits an identical call after the prior item completes', () => {
+  const first = envelope('first-call'), second = envelope('second-call');
+  const call = (id: string) => ({ id, name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' });
+  const driver = create(id => ({ call: call(id), result: id === first.deckentCallId ? first : second }));
+  expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
+  expect(driver.accepts(call(first.deckentCallId))).toBe(true);
+  expect(feed(driver, [finish('item_9', first), start('next-item')])).toEqual([null, null]);
+  expect(driver.accepts(call(second.deckentCallId))).toBe(true);
+  expect(feed(driver, [finish('next-item', second), answer, done])).toEqual([null, null, null]);
+  expect(driver.end({ exited: true, exitCode: 0 }, egress)).toHaveProperty('response');
 });
 it('K3: native execution, file writes and unknown items fail closed, and refusal stays sticky', () => {
   for (const type of ['command_execution', 'file_change', 'web_search', 'unknown']) {

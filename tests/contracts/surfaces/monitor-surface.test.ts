@@ -10,6 +10,7 @@ vi.mock('../../../src/surfaces/core/monitor/internal/view.js', async original =>
   return { ...actual, buildMonitorView: vi.fn(actual.buildMonitorView) };
 });
 import { main } from '../../../src/surfaces/index.js';
+import { nativeAgentReasonText } from '#capabilities/index.js';
 import { summarizeWorkerEvents, type WorkerEvent } from '#domain/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
@@ -28,6 +29,17 @@ const surface = await loadMonitorSurface();
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const widest = (text: string) => Math.max(...text.split('\n').map(line => cells(line)));
+
+it('Card 168 tells chat and worker users the same stop reason and safe next step in English and Turkish', () => {
+  const expected = {
+    en: 'A repeated or ambiguous tool request was refused before approval or execution. This turn stopped. If the first request was already accepted, stopping the turn does not undo its effects. If its result is uncertain, check the operation record and the target system before retrying. You can continue with a new message or a new worker attempt.',
+    tr: 'Tekrarlanan veya hangi araç adımına ait olduğu ayırt edilemeyen istek, onaya sunulmadan ve çalıştırılmadan reddedildi. Bu tur durduruldu. İlk istek daha önce kabul edildiyse, turu durdurmak gerçekleşmiş etkilerini geri almaz. Sonucu belirsizse yeniden denemeden önce işlem kaydını ve hedef sistemi kontrol edin. Yeni bir mesajla veya yeni bir işçi denemesiyle devam edebilirsiniz.',
+  };
+  for (const locale of ['en', 'tr'] as const) {
+    expect(nativeAgentReasonText('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', locale, false, true, 'mcp-item-reservation')).toBe(expected[locale]);
+    expect(surface.describeDiagnostic('mcp-item-reservation', locale).text).toBe(expected[locale]);
+  }
+});
 
 describe('monitor text snapshot', () => {
   for (const [locale, label] of [['en', 'waiting for an execution slot'], ['tr', 'yürütme için yer bekliyor']] as const) {

@@ -1,6 +1,8 @@
 import { messageText, t, type Locale, type MessageKey } from '#platform/index.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 
+export const CODEX_TOOL_ITEM_RESERVATION = 'mcp-item-reservation';
+
 const REASON_KEYS: Readonly<Record<NativeAgentReadinessReason, { readonly known: MessageKey; readonly unknown: MessageKey }>> = {
   NATIVE_AGENT_CLI_UNAVAILABLE: { known: 'headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', unknown: 'headless.agent.unknown.cli' },
   NATIVE_AGENT_LOGIN_REQUIRED: { known: 'headless.agent.reason.NATIVE_AGENT_LOGIN_REQUIRED', unknown: 'headless.agent.unknown.login' },
@@ -15,6 +17,7 @@ const REASON_KEYS: Readonly<Record<NativeAgentReadinessReason, { readonly known:
 /** A stream refusal stops only its own turn (owner 2026-11-05); it does not replace a retained readiness observation. */
 export function nativeAgentReasonText(reason: NativeAgentReadinessReason, locale: Locale, unknown = false, stopped = false, check?: string | null): string {
   if (stopped && reason === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED') {
+    if (check === CODEX_TOOL_ITEM_RESERVATION) return t('headless.agent.toolItemStopped', {}, locale);
     if (check && !['item', 'mcp-tool', 'proposal-order'].includes(check)) return t('headless.agent.guardStopped', {}, locale);
     return t('headless.agent.surfaceStopped', {}, locale);
   }

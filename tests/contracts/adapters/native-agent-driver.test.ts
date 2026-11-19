@@ -30,7 +30,7 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
   const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host = port) => {
+  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host = port, user = 'Read the scoped fixture.') => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
     const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: host, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
     close.push(() => driver.close());
@@ -45,7 +45,7 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
     const binding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: profile.reference.providerId, version: 1 }, model: { id: profile.reference.modelId,
       version: 1, nativeId: model, protocols: [{ family, version: 'v1', capabilities: [] }] } });
     await driver.admit();
-    const prepared = await native.prepare(profile, binding, { model, messages: [{ role: 'system', content: 'Use governed tools.' }, { role: 'user', content: 'Read the scoped fixture.' }], stream: false });
+    const prepared = await native.prepare(profile, binding, { model, messages: [{ role: 'system', content: 'Use governed tools.' }, { role: 'user', content: user }], stream: false });
     const deltas: ModelInvocationDelta[] = [];
     return { ...sealed, driver, bridge, native, prepared, deltas, run: (signal?: AbortSignal) => native.send(prepared, signal, delta => deltas.push(delta)) };
   };
@@ -269,4 +269,29 @@ it('refuses a Codex MCP proposal before its guarded item instead of delegating i
   expect(f.propose).not.toHaveBeenCalled();
   expect(h.driver.refusal()).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
   await notPaused(f.profile);
+});
+
+it('Card 168 stops the Codex chat turn with the reservation reason and accepts the next message on the same target', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const family = families[1]!, name = 'read_file', args = { path: 'scoped.txt' }, entry = nativeCliAgent(family)!;
+  const f = await fixture(family, { calls: [{ name, arguments: args }], turns: [{ when: 'Read the scoped fixture.', hang: true,
+    events: [{ type: 'item.started', item: { id: 'open-item', type: 'mcp_tool_call', server: entry.bridge.serverName,
+      tool: name, arguments: args, status: 'in_progress', result: null, error: null } }] }] });
+  const h = await f.start(), stop = new AbortController(), pending = h.run(stop.signal);
+  const propose = (id: string) => h.driver.port.propose({ id, name, argumentsJson: JSON.stringify(args) },
+    { kind: 'codex-mcp', callId: id, itemId: `wire-${id}`, deckentCallId: id }, stop.signal);
+  try {
+    await vi.waitFor(() => expect(h.deltas.map(delta => delta.text).join('')).toContain('K16-WAITING'));
+    const first = await propose('first');
+    await expect(propose('second')).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID' });
+    expect(first).toMatchObject({ deckentCallId: 'first', outcome: { status: 'ok', text: 'scoped read result' } });
+    expect(f.propose).toHaveBeenCalledOnce();
+    const result = await pending;
+    expect(result.kind === 'rejected' && readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'guard', field: 'mcp-item-reservation' });
+    expect(h.driver.refusalCheck()).toBe('mcp-item-reservation');
+    await notPaused(f.profile);
+  } finally { stop.abort(); await pending.catch(() => undefined); }
+  const next = await f.start('continue', null, f.port, 'Read the fixture again.');
+  expect(await next.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+  expect(f.propose).toHaveBeenCalledTimes(2);
 });

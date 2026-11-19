@@ -7,7 +7,7 @@ import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-regi
 import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
-import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
 import { NativeCliWorkerError } from './profile.js';
 
@@ -77,6 +77,8 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       });
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
+      if (result && 'refusal' in result && 'field' in result.refusal.body && result.refusal.body.field === CODEX_TOOL_ITEM_RESERVATION)
+        return { termination: 'confirmed', status: 'failed', text: CODEX_TOOL_ITEM_RESERVATION, refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
       return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined, gate.terminalFailure());
     },
     async close() {

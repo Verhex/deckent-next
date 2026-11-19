@@ -109,7 +109,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
               return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
-            const stoppedTurn = stopped as Refusal | null; // The line callback owns this typed refusal.
+            // Proposal admission can stop the realm before the line callback sees another event.
+            const stoppedTurn = (stopped as Refusal | null) ?? turn?.refusal();
             if (stoppedTurn || refusal) {
               if (!stoppedTurn || stoppedTurn.body.refusal === 'guard') {
                 refusal ??= 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';

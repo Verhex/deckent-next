@@ -97,6 +97,7 @@
   "headless.agent.unknown.sealed": "Tools are not verified yet for this CLI version and profile. Your first message verifies them; text chat works meanwhile.",
   "headless.agent.unknown.earlier": "Tools were verified at {time}; your next message checks them again (text chat works meanwhile).",
   "headless.agent.surfaceStopped": "The CLI exposed an unexpected tool or event, so this turn stopped and no tool ran without permission. Your next message works as usual.",
+  "headless.agent.toolItemStopped": "A repeated or ambiguous tool request was refused before approval or execution. This turn stopped. If the first request was already accepted, stopping the turn does not undo its effects. If its result is uncertain, check the operation record and the target system before retrying. You can continue with a new message or a new worker attempt.",
   "headless.agent.cliNotices": "[deckent] The CLI sent an unrecognised notice ({events}); the turn went on and the notice is recorded with this turn.",
   "headless.agent.worker.NATIVE_PROJECTION_RETIRED": "The earlier worker execution path is closed for new work. Reconnect the subscription to use the governed native worker; existing admitted work keeps its recorded profile.",
   "headless.agent.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE": "Docker subscription workers are closed for this CLI: deckent does not read its local login or pass it into a container (the provider's terms). Nothing ran. Bind the template to the tokenless worker: deckent coding template --connection <profile>.",

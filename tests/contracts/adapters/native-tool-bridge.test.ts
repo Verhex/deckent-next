@@ -29,11 +29,12 @@ async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
-  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; signal?: AbortSignal } = {}) => new Promise<Answer>((resolve, reject) => {
+  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; signal?: AbortSignal; onData?: () => void } = {}) => new Promise<Answer>((resolve, reject) => {
     const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false, signal: options.signal,
       headers: { host: bridge.sentinelHost, accept: 'application/json, text/event-stream', 'content-type': 'application/json',
         [registry.bridge.tokenHeaderName]: bridge.tokenHeader, ...options.headers } }, response => {
-      let text = ''; response.on('data', chunk => { text += String(chunk); }); response.on('error', reject);
+    let text = ''; response.on('data', chunk => { text += String(chunk); }); response.on('error', reject);
+    if (options.onData) response.once('data', options.onData);
       response.on('end', () => resolve({ status: response.statusCode!, headers: response.headers, body: text }));
     });
     req.on('error', reject); req.end(options.raw ?? (body === undefined ? undefined : JSON.stringify(body)));
@@ -67,19 +68,23 @@ it('authenticates before parsing, rejects second initialize/foreign sessions and
   expect((await f.send({ ...rpc(2), id: 'x'.repeat(registry.bridge.frameMaxBytes / 2) }, { headers })).status).toBe(400);
 });
 
-it('replays a pending and completed call once, refuses changed arguments and never evicts to re-execute', async () => {
+it.each(['claude-tool-use', 'codex-mcp'] as const)('replays pending and completed %s calls once, refuses changed arguments and never evicts to re-execute', async correlationKind => {
   let release!: () => void; const wait = new Promise<void>(resolve => { release = resolve; });
-  const f = await fixture({ limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } }, async (call) => {
+  const call = (id: number, args = {}) => correlationKind === 'claude-tool-use' ? rpc(id, tool.name, args)
+    : rpc(id, tool.name, args, { callId: `call-${id}`, itemId: `item-${id}` });
+  const f = await fixture({ correlationKind, limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } }, async (call) => {
     await wait; return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'ok', text: 'once' } };
   });
-  const headers = await f.initialize(), first = f.send(rpc(2), { headers });
+  const headers = await f.initialize(), first = f.send(call(2), { headers });
   await vi.waitFor(() => expect(f.submit).toHaveBeenCalledOnce());
-  expect((await f.send(rpc(2), { headers })).status).toBe(409);
-  const duplicate = f.send({ ...rpc(2), id: 3 }, { headers }); release();
+  expect((await f.send(call(2), { headers })).status).toBe(409);
+  const acceptedReplay = vi.fn();
+  const duplicate = f.send({ ...call(2), id: 3 }, { headers, onData: acceptedReplay });
+  try { await vi.waitFor(() => expect(acceptedReplay).toHaveBeenCalledOnce()); } finally { release(); }
   const [a, b] = await Promise.all([first, duplicate]); expect(resultEnvelope(a)).toEqual(resultEnvelope(b));
-  expect(resultEnvelope(await f.send(rpc(2), { headers }))).toEqual(resultEnvelope(a));
-  expect(resultEnvelope(await f.send(rpc(2, tool.name, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
-  expect(resultEnvelope(await f.send(rpc(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
+  expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
+  expect(resultEnvelope(await f.send(call(2, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
+  expect(resultEnvelope(await f.send(call(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
 });
 
 it('serves the ninth call through the registry budget of 128 calls and refuses the next call without an effect', async () => {

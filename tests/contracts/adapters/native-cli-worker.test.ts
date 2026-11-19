@@ -1,6 +1,6 @@
 import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
@@ -17,7 +17,7 @@ import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
-import { modelInvocationProfileDigest } from '#engine/index.js';
+import { agentToolResult, modelInvocationProfileDigest, runAgentTurn, type AgentTurnPorts } from '#engine/index.js';
 import { initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 
 const entry = nativeCliAgent('claude-code-stream-json')!;
@@ -333,7 +333,7 @@ async function transportFixture(family: string) {
     runIsolated: isolated };
   const bridge = { turnToken: 'synthetic-turn-token', tokenEnvName: cli.bridge.tokenEnvName,
     url: `http://${cli.bridge.sentinelHost}${cli.bridge.path}` } as Parameters<NativeCliWorkerDriver['run']>[0];
-  return { stateDir, input, transport, bridge, isolated };
+  return { stateDir, input, transport, bridge, isolated, host: f };
 }
 const launchBounds = (outputBytes: number, family: string) => { const limits = nativeCliAgent(family)!.headless.limits;
   return { outputBytes: 2 * outputBytes + limits.responseFramingBytes, stderrBytes: limits.stderrMaxBytes, maxLineBytes: limits.maxLineBytes, interruptGraceMs: limits.killGraceMs }; };
@@ -400,6 +400,65 @@ it('WER-A worker processes a synthetic failed/null completion from the durable c
       });
     } finally { await rm(f.stateDir, { recursive: true, force: true }); }
   }
+});
+
+it('Card 168 stops only the conflicting Codex worker turn before a second position, approval or effect', async () => {
+  const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
+  const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
+  const f = await transportFixture('codex-jsonl'), { ports } = f.host, seal = f.input.execution, reference = f.transport.profile.reference;
+  const cli = nativeCliAgent(f.input.binding.protocolFamily)!;
+  const task = compileNativeCodingWorkInput(createNativeCodingTemplate(docker, { ...invocation, provider: cli.id }, f.input.binding), workInput);
+  const scoped = { ...request, workspace: join(f.stateDir, 'first', 'workspace'), argv: resolveNativeCliWorkerProfile(task).argv };
+  const next = { ...scoped, workspace: join(f.stateDir, 'second', 'workspace'), identity: { ...scoped.identity, attemptId: 'next' } };
+  const target = { scopeId: scoped.identity.scopeId, connectionId: f.input.binding.connectionId, reference, execution: seal };
+  const file = nativeWorkerEvidenceFile(f.stateDir, process.getuid!(), 8192, nativeWorkerEvidenceKey(target));
+  const prepare = (input: SandboxRequest) => prepareNativeCliWorker({ profile: task, request: input, ports, fence: f.host.fence, custody: nativeWorkerCustodyFile(input) });
+  ports.readiness = async () => ({ state: 'ready', execution: seal }); ports.f08 = () => readNativeWorkerEvidence(file, target);
+  ports.verification = { acquire: async input => claimNativeWorkerVerification(file, target, input.identity.attemptId) };
+  let driver: NativeCliWorkerDriver;
+  ports.driver = async (input, signal) => driver = createNativeCliWorkerDriver(input, f.transport, signal);
+  const tool = { ...session.tools[0]!, toolClass: 'edit' as const,
+    inputSchema: { type: 'object' as const, properties: { path: { type: 'string' as const } } } };
+  const tools = [tool], nativeSession = { ...session, tools };
+  const approvals = vi.fn<NonNullable<AgentTurnPorts['requestApproval']>>(async () => 'allow');
+  const effects = vi.fn<AgentTurnPorts['execute']>(async () => agentToolResult({ status: 'ok', text: 'first result' }, 'ordinary'));
+  const positions = vi.fn<NonNullable<AgentTurnPorts['settled']>>(async () => {});
+  try {
+    await mkdir(join(f.stateDir, 'first'), { mode: 0o700 }); await mkdir(join(f.stateDir, 'second'), { mode: 0o700 });
+    f.isolated.mockImplementationOnce(async (_entry, _spawn, _bounds, signal, line) => {
+      const args = { path: 'scoped.txt' }, propose = (id: string) => driver.tools.propose({ id, name: tool.name, argumentsJson: JSON.stringify(args) },
+        { kind: 'codex-mcp', callId: id, itemId: `wire-${id}`, deckentCallId: id }, signal);
+      await line(JSON.stringify({ type: 'thread.started', thread_id: 'thread' })); await line(JSON.stringify({ type: 'turn.started' }));
+      await line(JSON.stringify({ type: 'item.started', item: { id: 'open-item', type: 'mcp_tool_call', server: cli.bridge.serverName,
+        tool: tool.name, arguments: args, status: 'in_progress', result: null, error: null } }));
+      const first = await propose('first');
+      await expect(propose('second')).rejects.toMatchObject({ code: 'NATIVE_CLI_WORKER_UNAVAILABLE' });
+      expect(signal.aborted).toBe(true);
+      expect(first).toMatchObject({ deckentCallId: 'first', outcome: { status: 'ok', text: 'first result' } });
+      return { schemaVersion: 1, requestId: '12345678-1234-4234-8234-123456789abc', started: true, reason: 'cancelled', exitCode: null, signal: 'SIGTERM',
+        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
+    });
+    await runAgentTurn({ messages: [], tools, nativeSession, signal: new AbortController().signal, emit() {} }, {
+      now: Date.now, invokeRound: async () => { throw new Error('unexpected pull round'); }, describe: () => 'scoped.txt',
+      authorize: async () => 'require-approval', requestApproval: approvals, execute: effects, settled: positions,
+      async invokeAgent({ session: host }) {
+        ports.openTools = async () => host;
+        const first = await prepare(scoped); if (first.state !== 'ready') throw new Error(JSON.stringify(first));
+        expect(await first.supervisor.execute(scoped)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, stderr: 'mcp-item-reservation' });
+        await first.supervisor.release(scoped);
+        const recorded = recordedNativeCliWorkerSupervisor(await first.supervisor.captureProfile());
+        expect(await recorded.inspectActivity(scoped)).toMatchObject({ state: 'exited', diagnostic: 'mcp-item-reservation' });
+        return { status: 'failed', state: 'fixture turn stopped' };
+      },
+    });
+    expect(positions.mock.calls.map(([row]) => [row.index, row.call.id, row.status, row.content])).toEqual([[0, 'first', 'ok', 'first result']]);
+    expect(approvals.mock.calls.map(([row]) => row.call.id)).toEqual(['first']); expect(effects).toHaveBeenCalledOnce();
+    expect(await file.read()).toBeNull();
+    ports.openTools = async () => f.host.tools;
+    const second = await prepare(next); if (second.state !== 'ready') throw new Error(JSON.stringify(second));
+    expect(await second.supervisor.execute(next)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } }); await second.supervisor.release(next);
+    expect(await file.read()).toMatchObject({ attemptId: next.identity.attemptId, verdict: { state: 'verified' } });
+  } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
 
 it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {

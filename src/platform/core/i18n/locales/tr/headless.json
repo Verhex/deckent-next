@@ -97,6 +97,7 @@
   "headless.agent.unknown.sealed": "Araçlar bu CLI sürümü ve profil için henüz doğrulanmadı. İlk mesajın onları doğrular; bu arada metin sohbeti çalışır.",
   "headless.agent.unknown.earlier": "Araçlar {time} zamanında doğrulandı; sonraki mesajın onları yeniden denetler (bu arada metin sohbeti çalışır).",
   "headless.agent.surfaceStopped": "CLI beklenmedik bir araç veya olay sundu; bu tur durduruldu ve hiçbir araç izinsiz çalışmadı. Sonraki mesajınız normal çalışır.",
+  "headless.agent.toolItemStopped": "Tekrarlanan veya hangi araç adımına ait olduğu ayırt edilemeyen istek, onaya sunulmadan ve çalıştırılmadan reddedildi. Bu tur durduruldu. İlk istek daha önce kabul edildiyse, turu durdurmak gerçekleşmiş etkilerini geri almaz. Sonucu belirsizse yeniden denemeden önce işlem kaydını ve hedef sistemi kontrol edin. Yeni bir mesajla veya yeni bir işçi denemesiyle devam edebilirsiniz.",
   "headless.agent.cliNotices": "[deckent] CLI tanınmayan bildirim gönderdi ({events}); tur sürdü, bildirim bu turun kaydına eklendi.",
   "headless.agent.worker.NATIVE_PROJECTION_RETIRED": "Önceki işçi yürütme yolu yeni işler için kapalı. Denetimli native işçiyi kullanmak için aboneliği yeniden bağlayın; kabul edilmiş işler kayıtlı profili korur.",
   "headless.agent.worker.NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE": "Bu CLI için Docker abonelik işçisi kapalı: deckent sağlayıcının koşulları gereği yerel oturumunu okumaz ve konteynere aktarmaz. Hiçbir şey çalışmadı. Şablonu token'sız işçiye bağlayın: deckent coding template --connection <profil>.",
