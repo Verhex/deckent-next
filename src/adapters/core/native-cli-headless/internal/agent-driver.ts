@@ -60,6 +60,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
   const port: ToolSessionPort = { session: input.session.session,
+    checkResultDelivery: call => input.session.checkResultDelivery?.(call) ?? true,
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
       if (entry.agent.transport.kind === 'claude-mcp') {

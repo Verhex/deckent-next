@@ -7,7 +7,8 @@ import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeEgressLimits, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
 import { EMPTY_RECORD_STREAM, feedRecordStream, finishRecordStream, snapshotKnownSecrets } from '#platform/index.js';
-import type { NativeAgentToolResult, ToolSessionPort } from '#capabilities/index.js';
+import { runAgentTurn } from '#engine/core/agent-turn/index.js';
+import type { NativeAgentToolResult, SameTurnPlanningPort, ToolSessionPort } from '#capabilities/index.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { await Promise.all(cleanup.splice(0).reverse().map(close => close())); });
@@ -29,11 +30,11 @@ async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
-  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string } = {}) => new Promise<Answer>((resolve, reject) => {
+  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; onData?: () => void } = {}) => new Promise<Answer>((resolve, reject) => {
     const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false,
       headers: { host: bridge.sentinelHost, accept: 'application/json, text/event-stream', 'content-type': 'application/json',
         [registry.bridge.tokenHeaderName]: bridge.tokenHeader, ...options.headers } }, response => {
-      let text = ''; response.on('data', chunk => { text += String(chunk); }); response.on('error', reject);
+      let text = ''; response.on('data', chunk => { text += String(chunk); options.onData?.(); }); response.on('error', reject);
       response.on('end', () => resolve({ status: response.statusCode!, headers: response.headers, body: text }));
     });
     req.on('error', reject); req.end(options.raw ?? (body === undefined ? undefined : JSON.stringify(body)));
@@ -80,6 +81,61 @@ it('replays a pending and completed call once, refuses changed arguments and nev
   expect(resultEnvelope(await f.send(rpc(2), { headers }))).toEqual(resultEnvelope(a));
   expect(resultEnvelope(await f.send(rpc(2, tool.name, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
   expect(resultEnvelope(await f.send(rpc(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
+});
+
+it('selects pending results against the live K1 session and preserves ordinary chat replay', async () => {
+  for (const prepare of [false, true]) {
+    const waiting = Promise.withResolvers<void>(), release = Promise.withResolvers<void>(), duplicateStream = Promise.withResolvers<void>();
+    const executions: string[] = [], deliveries: string[] = [];
+    let candidate: string | undefined;
+    const planning: SameTurnPlanningPort = {
+      get active() { return candidate !== undefined; }, pin: null, normalClosed: true,
+      beforeTool(id) { if (candidate && candidate !== id) throw new Error('stale call'); },
+      privateResult: () => null, bindNativeSession: vi.fn(), bindDeliveryProjection: vi.fn(),
+      preparationSettled: vi.fn(), preparationDelivered: vi.fn(), terminalEnvelope: vi.fn(), nativeClosed: vi.fn(), responseBody: vi.fn(), abandon: vi.fn(),
+    };
+    const tools = [tool, { ...tool, name: 'propose_work' }], finishPlanning = vi.fn(async () => 'proposed');
+    const result = await runAgentTurn({ nativeSession: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, approvalTtlMs: 5000, tools },
+      messages: [{ role: 'user', content: 'fixture' }], tools, emit: vi.fn(), signal: new AbortController().signal, language: 'en' }, {
+      planning, finishPlanning, now: Date.now, authorize: async () => 'allow', describe: () => null,
+      invokeRound: async () => { throw new Error('unexpected model round'); },
+      execute: async (spec, _args, _signal, id) => {
+        executions.push(spec.name);
+        if (spec.name === 'propose_work') candidate = id;
+        return { status: 'ok', text: spec.name };
+      },
+      invokeAgent: async ({ session }) => {
+        const f = await fixture({ port: { ...session, async propose(call, correlation, signal) {
+          const result = await session.propose(call, correlation, signal);
+          if (call.name === tool.name) { waiting.resolve(); await release.promise; }
+          return result;
+        } } });
+        const headers = await f.initialize();
+        const first = f.send(rpc(2), { headers });
+        await waiting.promise;
+        const repeat = f.send({ ...rpc(2), id: 3 }, { headers, onData: duplicateStream.resolve });
+        // The pending duplicate's own SSE emits a keepalive before preparation can begin.
+        try {
+          await duplicateStream.promise;
+          if (prepare) {
+            const prepared = resultEnvelope(await f.send(rpc(4, 'propose_work'), { headers }));
+            expect(prepared.outcome).toEqual({ status: 'ok', text: 'propose_work' });
+            deliveries.push(prepared.outcome.text);
+          }
+        } finally { release.resolve(); }
+        for (const answer of await Promise.all([first, repeat])) {
+          const outcome = resultEnvelope(answer).outcome;
+          if (outcome.status === 'ok') deliveries.push(outcome.text);
+          expect.soft(outcome).toEqual(prepare ? { status: 'error', text: 'BRAIN_SAME_TURN_REFUSED' } : { status: 'ok', text: tool.name });
+        }
+        return { status: 'responded', content: 'done', reasoning: '', finish: 'stop', toolCalls: [], usage: null };
+      },
+    });
+    expect.soft(deliveries).toEqual(prepare ? ['propose_work'] : [tool.name, tool.name]);
+    expect.soft(executions).toEqual(prepare ? [tool.name, 'propose_work'] : [tool.name]);
+    expect.soft(result.finish).toBe(prepare ? 'error' : 'stop');
+    expect.soft(finishPlanning).not.toHaveBeenCalled();
+  }
 });
 
 it('serves the ninth call through the registry budget of 128 calls and refuses the next call without an effect', async () => {

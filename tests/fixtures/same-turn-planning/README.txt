@@ -3,12 +3,16 @@
 Source: clean base `568e0527f6a273f258d04759e2999ecbd6c25bc4`, DESIGN Rev3
 R3.1–R3.7 and design-only review 3253. Rev3 replaces the old literal START requirement.
 
-Both `codex/positive` and `claude/positive` still require a **real challenge recording**
-with the selected exact binary/version/model and registry-produced argv before K1/K2
-may open. No file here is a real recording. A0 is unchanged. The old A0 normal-close
-sub-evidence does not demonstrate the challenge protocol or a person card.
+Each CLI's `recorded/` directory contains its masked real recording and provenance
+manifest. The native wire reader accepts the literal recording against the kit's
+custody. Its 199-byte preparation text (P) was produced by the recording kit.
+The current engine correctly refuses the literal recorded delivery because it
+requires its own preparation. In the positive engine replay, the adapter receives
+the current preparation and selects the exact recorded draft (D). The requirement
+to run “the same recording through the real engine” is therefore only partially met.
+The installed person-card and Run evidence belongs to K3.
 
-Each CLI has six fixture directories, each with its own manifest:
+Each CLI also has six synthetic fixture directories, each with its own manifest:
 
 - `positive`: hand-built native stdout JSONL and a separate synthetic host custody trace.
 - `group-1`: stale output, wrong challenge/pin/identities/correlation and old message id.

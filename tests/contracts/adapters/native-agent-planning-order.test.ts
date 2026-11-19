@@ -24,7 +24,7 @@ vi.mock('#adapters/core/native-cli-headless/internal/agent-observation.js', asyn
 afterEach(async () => { vi.clearAllMocks(); await cleanupConnections(); });
 
 type Cli = 'codex' | 'claude';
-// Send only the preparation's own retransmission through the real gateway, SDK transport and cache.
+// Use distinct RPC ids for retransmissions of the same correlated call.
 async function bridgeClient(port: SameTurnToolSessionPort, entry: NonNullable<ReturnType<typeof nativeCliAgent>>, directory: string) {
   const b = entry.bridge;
   const bridge = await createNativeToolBridge({ port, bridge: b, correlationKind: entry.agent.transport.kind === 'codex-mcp' ? 'codex-mcp' : 'claude-tool-use',
@@ -42,18 +42,20 @@ async function bridgeClient(port: SameTurnToolSessionPort, entry: NonNullable<Re
     });
     req.on('error', reject); req.end(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
   });
-  let params: unknown;
-  const answer = async (id: number) => {
-    const body = await send(id, 'tools/call', params);
-    const rpc = JSON.parse(body.split('\n').find(line => line.startsWith('data: '))!.slice(6));
-    expect(rpc.result.isError).toBe(false);
-    return rpc.result.content[0].text as string;
+  let id = 1;
+  const request = async (params: unknown) => {
+    if (!session) await send(id++, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'fixture', version: '1' } });
+    const body = await send(id++, 'tools/call', params);
+    return JSON.parse(body.split('\n').find(line => line.startsWith('data: '))!.slice(6)).result;
   };
-  return { bridge, repeat: () => answer(3), async call(input: unknown) {
-    params = input;
-    await send(1, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'fixture', version: '1' } });
-    return answer(2);
-  }, async close() { await gateway.close(); await bridge.close(); } };
+  const answer = async (params: unknown) => {
+    const result = await request(params);
+    expect(result.isError).toBe(false);
+    return result.content[0].text as string;
+  };
+  let last: unknown;
+  return { bridge, request, repeat: () => answer(last), call(params: unknown) { last = params; return answer(params); },
+    async close() { await gateway.close(); await bridge.close(); } };
 }
 
 async function recording(cli: Cli, mode: string) {
@@ -90,6 +92,10 @@ async function recording(cli: Cli, mode: string) {
   if (mode === 'unknown-start') {
     if (cli === 'codex') wire.splice(2, 1);
     else delete wire[1].message.id;
+  }
+  if (mode === 'late-turn-conflict' || mode === 'late-turn-match') {
+    wire[terminalIndex].turn_id = 'local-turn';
+    finish.turn_id = mode === 'late-turn-conflict' ? 'other-turn' : 'local-turn';
   }
   if (mode === 'conflicting-thread') finish.thread_id = 'foreign-thread';
   if (mode === 'stderr-truncated') meta.process.stderrTruncated = true;
@@ -150,13 +156,23 @@ async function replay(cli: Cli, mode: string) {
     inspect: async () => null, prepare: unreachable, invoke: unreachable, stoppedAtLength: () => false, text: extract,
     propose: async proposal => { proposals.push(proposal.runId); return { proposal: { proposal } } as never; },
   });
-  const entropy = mode === 'bridge-replay' ? createNativeAgentDriver.planningEntropy : { randomBytes: () => Buffer.from(framed.split('\n')[0]!.split(' ')[1]!, 'hex') };
-  let preparations = 0, responses = 0;
+  const useBridge = mode === 'bridge-replay' || mode === 'bridge-earlier';
+  const entropy = useBridge ? createNativeAgentDriver.planningEntropy : { randomBytes: () => Buffer.from(framed.split('\n')[0]!.split(' ')[1]!, 'hex') };
+  let preparations = 0, responses = 0, reads = 0;
   const planning = brain.createSameTurnPlanning({ ...entropy,
     publicText: 'Preparing', toolResultDigest: agentTurnResultDigest, revalidate: async input => input, readResult: async () => retained, text: extract });
+  const prepareTool = { name: 'propose_work', toolClass: 'read' as const, version: 1, description: 'Prepare', inputSchema: { type: 'object' as const, properties: {} } };
   const session: SameTurnToolSessionPort = { planning, session: { schemaVersion: 1, turnId: custody.turnId, generation: custody.generation, approvalTtlMs: 5000,
-    tools: [{ name: 'propose_work', toolClass: 'read', version: 1, description: 'Prepare', inputSchema: { type: 'object', properties: {} } }] },
+    tools: mode === 'bridge-earlier' ? [prepareTool, { ...prepareTool, name: 'read_item', description: 'Read item' }] : [prepareTool] },
+    checkResultDelivery(call) {
+      try { planning.beforeTool(call.id, agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson))); return true; }
+      catch { return false; }
+    },
     cancel: unreachable, revoke: unreachable, async propose(call) {
+      if (call.name === 'read_item') {
+        reads++;
+        return { schemaVersion: 1, turnId: custody.turnId, generation: custody.generation, deckentCallId: call.id, outcome: { status: 'ok', text: 'earlier-item' } };
+      }
       preparations++;
       const identity = { turnId: custody.turnId, generation: custody.generation, callId: call.id, argsDigest: agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson)) };
       const result = await planning.prepare(planning.pin!, { command, prepared: { invocation, prompt: prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {}), kinds: ['purchase'] },
@@ -172,7 +188,7 @@ async function replay(cli: Cli, mode: string) {
   await mkdir(definition['stateDir'] as string);
   const notices: unknown[] = [];
   const driver = createNativeAgentDriver({ profile, execution, session, isolation: unreachable, now: Date.now, onPaidUsage: async notice => { notices.push(notice); } });
-  const client = mode === 'bridge-replay' ? await bridgeClient(driver.port, entry, c.root) : undefined;
+  const client = useBridge ? await bridgeClient(driver.port, entry, c.root) : undefined;
   const native = driver.native(client?.bridge ?? ({ ...entry.bridge, turnToken: '~fixture-only', url: 'http://' + entry.bridge.sentinelHost + entry.bridge.path } as Parameters<typeof driver.native>[0]),
     { configured: mode === 'redacted-D' ? knownSecretValues(['Durable business readback'])
       : mode === 'stream-redaction' ? knownSecretValues(['}private-fixture-suffix']) : EMPTY_KNOWN_SECRETS, turn: client?.bridge.known ?? EMPTY_KNOWN_SECRETS });
@@ -183,6 +199,7 @@ async function replay(cli: Cli, mode: string) {
   const deltas: string[] = [];
   vi.mocked(runHeadlessIsolated).mockImplementationOnce(async (_entry, _isolation, spawn, _bounds, signal, line) => {
     let actual = '', challengeLine = '', stopped = false, called = false;
+    const earlier = { name: 'read_item', arguments: {}, _meta: { callId: 'read-call', itemId: 'read-item' } };
     for (const event of wire) {
       if (event.subtype === 'init') event.cwd = spawn.runDir;
       if (challengeLine) {
@@ -195,10 +212,23 @@ async function replay(cli: Cli, mode: string) {
       // Rebind W to current custody. The host-entropy variation also echoes its new challenge, always with the recorded D.
       if (actual && mode !== 'original') raw = raw.replaceAll(JSON.stringify(JSON.stringify(custody.result)), () => JSON.stringify(actual));
       if (await line!(raw, signal!) === 'stop') { stopped = true; break; }
+      if (client && mode === 'bridge-earlier' && event.type === 'turn.started') {
+        const item = { id: 'read-item', type: 'mcp_tool_call', server: entry.bridge.serverName, tool: earlier.name, arguments: earlier.arguments };
+        expect(await line!(JSON.stringify({ type: 'item.started', item: { ...item, status: 'in_progress' } }), signal!)).toBeUndefined();
+        const result = await client.request(earlier);
+        expect(JSON.parse(result.content[0].text).outcome).toEqual({ status: 'ok', text: 'earlier-item' });
+        expect(await line!(JSON.stringify({ type: 'item.completed', item: { ...item, status: 'completed', result } }), signal!)).toBeUndefined();
+      }
       if (client && (event.type === 'user' || event.item?.result)) {
-        expect(delivery).toHaveBeenCalledTimes(1);
-        expect(await client.repeat()).toBe(actual);
-        expect(delivery).toHaveBeenCalledTimes(1);
+        if (mode === 'bridge-earlier') {
+          const repeated = await client.request(earlier);
+          expect.soft(repeated.isError).toBe(true);
+          expect.soft(JSON.parse(repeated.content[0].text).outcome).toEqual({ status: 'error', text: 'BRAIN_SAME_TURN_REFUSED' });
+        } else {
+          expect(delivery).toHaveBeenCalledTimes(1);
+          expect(await client.repeat()).toBe(actual);
+          expect(delivery).toHaveBeenCalledTimes(1);
+        }
       }
       const tool = cli === 'codex' ? event.type === 'item.started' && event.item.type === 'mcp_tool_call' && event.item : event.message?.content?.find((b: { type: string }) => b.type === 'tool_use');
       if (tool && !called) {
@@ -230,10 +260,10 @@ async function replay(cli: Cli, mode: string) {
       retained = { replayed: false, receipt: record.receipt, response: result, contentStatus: 'retained', purge: null };
       await planning.finalize(pin, retained);
     }
-    return { proposals, deltas, responses, preparations, selected: retained! && extract(retained), draft };
+    return { proposals, deltas, responses, preparations, reads, deliveries: delivery.mock.calls.length, selected: retained! && extract(retained), draft };
   } catch (error) {
     if (!['BRAIN_SAME_TURN_REFUSED', 'HEADLESS_OUTCOME_UNKNOWN'].includes((error as { code?: string }).code ?? (error as Error).message)) throw error;
-    return { proposals, deltas, responses, preparations, selected: null, draft, failure: (error as Error).message };
+    return { proposals, deltas, responses, preparations, reads, deliveries: delivery.mock.calls.length, selected: null, draft, failure: (error as Error).message };
   } finally {
     if (mode === 'stream-redaction') {
       expect(body).toHaveBeenCalledTimes(1);
@@ -254,6 +284,22 @@ it('binds K1 preparation to the recorded terminal message and finalizes the exac
       expect(result.selected).toBe(result.draft);
       expect(result.deltas).toEqual([]);
     }
+  }
+});
+
+it('refuses an earlier cached tool result at the bridge before it can reach the active planning turn', async () => {
+  const result = await replay('codex', 'bridge-earlier');
+  expect(result).toMatchObject({ reads: 1, preparations: 1, deliveries: 1, responses: 0, proposals: [] });
+});
+
+it('binds the first local Codex turn id even when it arrives after turn.started', async () => {
+  const conflict = await replay('codex', 'late-turn-conflict');
+  expect.soft(conflict.responses).toBe(0);
+  expect.soft(conflict.proposals).toHaveLength(0);
+  for (const mode of ['late-turn-match', 'current-custody']) {
+    const accepted = await replay('codex', mode);
+    expect(accepted.proposals).toHaveLength(1);
+    expect(accepted.selected).toBe(accepted.draft);
   }
 });
 

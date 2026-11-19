@@ -354,7 +354,7 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
       return false;
     }
   };
-  const port: SameTurnToolSessionPort = { session, ...(coordinator.planning ? { planning: coordinator.planning } : {}),
+  const port: SameTurnToolSessionPort = { session, ...(coordinator.planning ? { planning: coordinator.planning, checkResultDelivery: checkPlanning } : {}),
     async propose(rawCall, rawCorrelation, signal) {
       const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
       const callId = parsed.success ? parsed.data.deckentCallId : checked.success ? checked.data.id : 'invalid-call';

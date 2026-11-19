@@ -63,7 +63,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN');
     const key = correlation.data.kind === 'claude-tool-use' ? correlation.data.toolUseId : correlation.data.callId;
     const fingerprint = digest(JSON.stringify(request.params)).toString('hex'), previous = replay.get(key);
-    if (previous) return previous.digest === fingerprint ? serve(previous.result, previous.deckentCallId, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
+    if (previous) return previous.digest === fingerprint ? serve(previous.result, { ...call.data, id: previous.deckentCallId }, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
     if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED');
     if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT');
     // Reserve before awaiting K1; duplicates share this promise even during approval. No eviction permits a second effect.
@@ -71,13 +71,16 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     const pending = Promise.resolve().then(() => propose(call.data, correlation.data, context.mcpReq.signal));
     replay.set(key, { digest: fingerprint, deckentCallId: call.data.id, result: pending });
     // The SDK suppresses a cancelled request's response; explicitly end its SSE instead of keeping it alive forever.
-    return serve(pending, call.data.id, context.mcpReq.id, context.mcpReq.signal);
+    return serve(pending, call.data, context.mcpReq.id, context.mcpReq.signal);
   });
-  async function serve(pending: Promise<CallToolResult>, callId: string, id: RequestId, signal: AbortSignal) {
+  async function serve(pending: Promise<CallToolResult>, call: AgentToolCall, id: RequestId, signal: AbortSignal) {
     const cancelled = () => transport.closeSSEStream(id);
     signal.addEventListener('abort', cancelled, { once: true });
-    try { const value = await pending; return fits(id, value) ? value : failure(callId, 'NATIVE_BRIDGE_FRAME_LIMIT'); }
-    finally { signal.removeEventListener('abort', cancelled); }
+    try {
+      const value = await pending;
+      if (input.port.checkResultDelivery?.(call) === false) return failure(call.id, 'BRAIN_SAME_TURN_REFUSED');
+      return fits(id, value) ? value : failure(call.id, 'NATIVE_BRIDGE_FRAME_LIMIT');
+    } finally { signal.removeEventListener('abort', cancelled); }
   }
   async function propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<CallToolResult> {
     const deadline = AbortSignal.timeout(session.approvalTtlMs), combined = AbortSignal.any([lifetime.signal, signal, deadline]);

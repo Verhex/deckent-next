@@ -30,7 +30,7 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const beforeDelivery = new Set<string>();
   const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
-  let threadId: string | undefined, turnId: unknown, conflictingIdentity = false;
+  let threadId: string | undefined, turnId: string | undefined, conflictingIdentity = false;
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
   return { accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
@@ -45,7 +45,7 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
         conflictingIdentity ||= data.thread_id !== undefined && threadId !== undefined && data.thread_id !== threadId
           || data.turn_id !== undefined && turnId !== undefined && data.turn_id !== turnId;
         if (wire.active && conflictingIdentity) return fail('planning-identity');
-        if (type === 'turn.started') turnId = data.turn_id;
+        if (typeof data.turn_id === 'string' && data.turn_id) turnId ??= data.turn_id;
       }
       if (type === 'thread.started') {
         if (thread || typeof data.thread_id !== 'string' || !data.thread_id) return fail('thread');
