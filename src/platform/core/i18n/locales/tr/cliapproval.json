@@ -31,6 +31,7 @@
   "cli.policy.upgrade.missing.delegation": "  - bu kuralların verdiği yetki (yalnız sahip olduğunuzu verebilirsiniz)",
   "cli.policy.upgrade.missing.lockout": "  - geri dönüş yolu: bu kurallar olmadan politika değiştiremez ya da onaylara karar veremezdiniz (geri alma reddedildi)",
   "cli.policy.upgrade.unavailable": "Bu politika bir ilk kurulum politikası değil ({reason}); güncel ilk kurulum kurallarını kendi politika yetkinizle ekleyin.",
+  "cli.policy.upgrade.planConflict": "Plan {revision} revizyonunda değişti. Güncel değişiklikleri görmek için yeniden önizleyin.",
   "cli.policy.upgrade.conflict": "Önizlemeden sonra politika değişti (şimdi revizyon {revision}); yeniden önizleyin.",
   "cli.policy.upgrade.rolledBack": "Güncel ilk kurulum kuralları kaldırıldı ({ids}); önceki belgeler arşivde duruyor.",
   "cli.policy.upgrade.nothing": "Kaldırılacak ilk kurulum kuralı yok; hiçbir şey yazılmadı.",

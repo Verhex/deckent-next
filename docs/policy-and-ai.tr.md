@@ -149,12 +149,17 @@ kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; ken
 çıktıdaki tam uygulama komutunu ve `--expect` değerini kullanır. Elle kurulmuş politika
 için kişi açıkça adlandırılır. Yetkili yöneticinin diğer yolu
 `deckent policy upgrade --template current --scope SCOPE_ID`, ardından `--apply
---expect REVISION` adımıdır. Etkileşimli terminalde aile 21 ekleniyorsa kart,
-diğer aileler dahil tüm planı gösterir. Enter ancak kurulum geçmişi iznin hiç
-verilmediğini kanıtlıyorsa izin verme seçeneğini onaylar. Ret halinde politika
-ve arşiv korunur. Onaydan önce revizyon değişirse yeni önizleme gerekir. Önizleme ve reddedilmiş kart hiçbir şeyi değiştirmez;
-yapay zekâ uygulayamaz veya geri alamaz. Aynı kimlikli değiştirilmiş kurallar ve özel
-yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
+--expect REVISION` adımıdır. Kart çizebilen etkileşimli kişi terminalinde aile 21
+ekleyen metin çıktılı uygulama, diğer aileler dahil tüm planı kartta gösterir.
+Aynı terminalde `--json` doğrudan uygulama yolunu izler. `TERM=dumb` düz çıktı kullanır.
+Kart, geçmişin planın izin eklediği kapsamların her birinde iznin hiç verilmediğini
+kanıtlaması halinde izin verme seçeneğini öne alır. Bu kapsamların herhangi birinde
+izin geri alınmışsa veya geçmiş doğrulanamıyorsa kart mevcut politikayı koruma
+seçeneğini öne alır ve nedeni gösterir. Normal önizleme arşivi okur. Kart ayrıca
+doğrulanmış ilk yayını kullanabilir. Kişi seçimi değiştirip Enter ile onaylayabilir.
+Ret veya iptalde politika ve arşiv korunur. Yayından önce plan veya revizyon
+değişirse komut yeni önizleme ister. Yapay zekâ uygulayamaz veya geri alamaz.
+Aynı kimlikli değiştirilmiş kurallar ve özel yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
 gereğini aşmaz.
 
 Yetkili yükseltmede `--only ai-execution` yalnız üç yürütme kuralını,

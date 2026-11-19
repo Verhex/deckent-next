@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, firstRunExecutionRules, upgradeFirstRunPolicy, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
@@ -10,10 +10,12 @@ import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationAp
   upgradePolicyTemplate, upgradeFirstRunProposalRules } from '#engine/index.js';
 import { createHmacIntegrity, sha256, t } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, describePolicyChange, evaluatePolicy, mcpPrincipalRef, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, auditEventSchema, describePolicyChange, evaluatePolicy, firstRunTemplateAdditions, mcpPrincipalRef, POLICY_CHANGE_MAX, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
 import { policyExecutionLines, policyExecutionScopeList } from '#engine/index.js';
 import { ModelInvocationPolicyAuthorization, type AuthorityRevision } from '#engine/core/policy/index.js';
 import { main } from '#surfaces/index.js';
+import * as cards from '#surfaces/core/cli-human/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { policyPanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { homeEnv } from '../support/host-platform.js';
 import { answerOnCard } from '#surfaces/core/cli-approval/index.js';
@@ -745,7 +747,89 @@ it.skipIf(process.platform !== 'linux')('119-C2-R: canonical widened after scope
 });
 
 
+it.skipIf(process.platform !== 'linux').each(['card', 'cardless batch'] as const)('3349 plan drift rejects a same-revision service change (%s)', async scenario => {
+  const f = await fixture(undefined, false, 'ai-execution');
+  const original = JSON.parse(await f.bytes()) as { revision: string; grants: PolicyGrant[] };
+  const shutdown = FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown;
+  const cover = { ...original.grants.find(rule => rule.id === shutdown)!, id: 'custom-stop', resource: { kind: 'service', ids: ['new-service'] } };
+  const executionIds: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+  const scopeId = 's', namesFor = (serviceId: string) => ({ ...names, serviceId });
+  let grants = original.grants.filter(rule => rule.id !== shutdown);
+  if (scenario === 'cardless batch') {
+    const anchors = ['first-run-read-tools', 'first-run-policy-administer', 'first-run-approvals'];
+    grants = [...grants.filter(rule => anchors.includes(rule.id)), cover];
+    const additions: PolicyGrant[] = [];
+    while (true) {
+      const next = firstRunTemplateAdditions({ ...original, grants: [...grants, ...additions] }, { ...namesFor('new-service'), person: f.principal, scopeId });
+      if (next.status !== 'plan') break;
+      additions.push(...next.rules);
+      if (!next.remaining) break;
+    }
+    const older = additions.filter(rule => !executionIds.includes(rule.id));
+    expect(older.length).toBeGreaterThanOrEqual(POLICY_CHANGE_MAX - 1);
+    grants.push(...older.slice(POLICY_CHANGE_MAX - 1));
+  }
+  const roles = [{ id: 'admin', permissions: installationOwnerPermissions(getPolicyVocabulary().resources.map(resource => resource.kind)) }];
+  await f.source.updateAuthority(state => ({ write: {
+    policy: { ...original, revision: 'a-plan-drift', grants, roles },
+    bindings: { ...(state.bindings as object), revision: 'plan-drift', bindings: [{ id: 'admin', roles: ['admin'], scopes: 'all',
+      principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }] }] }, order: 'policy-first' }, result: null }), 'fixture-plan-drift');
+  const app = (serviceId: string, reviewedRules?: readonly unknown[]) =>
+    new PolicyTemplateUpgrade({ administration: f.administration, approve: f.approve, policy: f.source }, namesFor(serviceId), reviewedRules);
+  const preview = { mode: 'preview' as const, scopeId, principal: f.principal, reason: 'test' };
+  const shown = await app('old-service').run(preview), rebuilt = await app('new-service').run(preview);
+  expect(shown).toMatchObject({ status: 'preview', revision: rebuilt.revision, missing: [] });
+  expect(rebuilt).toMatchObject({ status: 'preview', missing: [] });
+  expect(shown.rules.find(rule => rule.id === shutdown)?.resource.ids).toEqual(['old-service']);
+  if (scenario === 'card') {
+    expect(rebuilt.rules.find(rule => rule.id === shutdown)?.resource.ids).toEqual(['new-service']);
+  } else {
+    expect(shown.rules).toHaveLength(POLICY_CHANGE_MAX);
+    expect(shown.rules.some(rule => executionIds.includes(rule.id))).toBe(false);
+    expect(rebuilt.rules).toHaveLength(POLICY_CHANGE_MAX);
+    expect(rebuilt.rules.some(rule => rule.id === shutdown)).toBe(false);
+    expect(rebuilt.rules.filter(rule => executionIds.includes(rule.id)).map(rule => rule.id)).toEqual([FIRST_RUN_CURRENT_UPGRADE_RULE_IDS[0]]);
+  }
+  const output: string[] = [], card = vi.spyOn(cards, 'askCliCard').mockResolvedValue('grant');
+  const before = await f.bytes(), archive = await f.source.authorityHistory();
+  try {
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', scopeId, '--apply', '--expect', shown.revision, '--lang', 'en'], {
+      root: f.root, env: { ...homeEnv(f.root), ...personMarkersUnset(), TERM: 'xterm' }, stdin: { isTTY: true },
+      stdout: { isTTY: true, write: (value: string) => output.push(value) },
+      upgradePolicyTemplate: (_root: string, _scope: string, input: { mode: 'preview' | 'apply'; reason: string; expect?: string },
+        _options: unknown, reviewedRules?: readonly unknown[]) => app(input.mode === 'preview' ? 'old-service' : 'new-service', reviewedRules)
+        .run({ ...input, principal: f.principal, scopeId }),
+    } as never)).toBe(0);
+    expect(card).toHaveBeenCalledTimes(scenario === 'card' ? 1 : 0);
+    expect(output.join('')).toContain('preview again');
+    expect((await f.source.load()).revision).toBe(shown.revision);
+    expect(await f.bytes()).toBe(before);
+    expect(await f.source.authorityHistory()).toEqual(archive);
+    expect(f.cards).toBe(0); expect(f.records()).toEqual([]); expect(f.events).toEqual([]);
+  } finally { card.mockRestore(); }
+});
+
 describe.skipIf(process.platform !== 'linux')('read-only execution history observation', () => {
+  it.each([['s', 'other'], ['other', 's']] as const)('3349 all-scope history finds withdrawal in %s when applying from %s', async (withdrawnScope, callScope) => {
+    const f = await fixture(undefined, false, 'ai-execution', 'en', 1_048_576, withdrawnScope);
+    expect(await f.apply()).toMatchObject({ status: 'upgraded' });
+    expect(await f.rollback()).toMatchObject({ status: 'rolled-back' });
+    const afterRollback = JSON.parse(await f.bytes()) as { grants: PolicyGrant[] };
+    await f.source.updateAuthority(() => ({
+      write: { policy: { ...afterRollback, revision: 'a-extended-anchor', grants: afterRollback.grants.map(rule =>
+        rule.scopes === 'all' ? rule : { ...rule, scopes: ['s', 'other'] }) },
+      bindings: null, order: 'policy-first' }, result: null,
+    }), 'fixture-extended-anchor');
+    const before = await f.bytes(), archive = await f.source.authorityHistory();
+    const principal = { ...f.principal, scopeIds: ['s', 'other'] };
+    const preview = await f.request({ scopeId: callScope, principal, mode: 'preview', only: 'ai-execution', reason: 'observe both scopes' });
+    expect(preview).toMatchObject({ status: 'preview', missing: [] });
+    expect(preview.rules.map(rule => rule.scopes)).toEqual([['s', 'other'], ['s', 'other'], ['s', 'other']]);
+    expect(preview.executionHistory).toBe('withdrawn');
+    expect(cards.executionGrantDecision(preview.executionHistory, 'en')).toEqual({ initial: 'not-now', reason: 'This permission was withdrawn on this installation earlier.' });
+    expect(await f.bytes()).toBe(before); expect(await f.source.authorityHistory()).toEqual(archive); expect(f.cards).toBe(2);
+  });
+
   it('requires revision and full canonical terminal content for a verified root, including bindings and connected edges', async () => {
     const f = await fixture(grants => grants, false, 'ai-execution');
     await writeFile(join(f.root, 'policy.json'), JSON.stringify({ ...JSON.parse(await f.bytes()), revision: 'a-first-publication' }), { mode: 0o600 });

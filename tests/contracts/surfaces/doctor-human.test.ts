@@ -8,13 +8,13 @@ import * as surface from '#surfaces/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { ErrorRegistry, t, clearConfigCache, productResourcePath, serializeJsonDocument } from '#platform/index.js';
 import { registerProviderConfig, captureAttachmentLocation } from '#adapters/index.js';
-import { readableInstallationRegistrationSchema } from '#domain/index.js';
+import { evaluatePolicy, firstRunExecutionRules, mcpPrincipalRef, readableInstallationRegistrationSchema, resolvePolicyBindings } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
 import { main as cliMain } from '#composition/core/cli/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
-import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
+import { executionPermissionCoverage, planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
 import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
@@ -245,16 +245,27 @@ describe('doctor subscription rows (pure)', () => {
 });
 
 const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
+const doctorRegistry = fixtureDockerRegistry(['coding']);
+const doctorDocker = {
+  docker: Object.fromEntries(Object.entries({ ...doctorRegistry.profiles[0]!.parameters, executable: 'docker' }).filter(([key]) => key !== 'argv')),
+  git: { gitExecutable: 'git', timeoutMs: 5000 },
+};
+const doctorDockerReady = async () => ({ state: 'done', reason: { code: 'setup.execution.ready', params: { runtime: 'Docker', version: '1' } } });
+const monitorPool = (held = false) => async () => ({ installs: [
+  { id: 'current', status: 'available', runs: [], pools: [{ poolId: 'fixture-pool', held }] },
+] }) as never;
+
 describe('first-worker health verdict', () => {
   async function check(workerReadiness: DoctorCheckFacts['workerReadiness'], status: 'ready' | 'degraded', pending: number) {
     registerProviderConfig();
     const capacity = { executionSlots: 1, inFlightSlots: 1 };
     const root = await project({ terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity,
-      ordering: 'input-order', registry: fixtureDockerRegistry(['coding']) } });
+      ordering: 'input-order', registry: doctorRegistry }, execution: doctorDocker });
     const env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
     await mkdir(join(env.HOME, '.deckent'), { recursive: true });
     await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
-    const context = { root, env, inspectExecutionPermission: async () => ({ actor: 'fixture/mcp/person', total: 6, allowed: workerReadiness?.ready ? 0 : 6, restricted: false }), inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
+    const context = { root, env, inspectMonitor: monitorPool(), inspectExecutionEnvironment: doctorDockerReady, inspectWorkerImage: async () => 'present' as const,
+      inspectExecutionPermission: async () => ({ actor: 'fixture/mcp/person', total: 6, allowed: workerReadiness?.ready ? 0 : 6, restricted: false }), inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
       occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
       inspectWorkerReadiness: async (_root: string, scope: string, _options: unknown, kind?: string) => {
         expect(scope).toBe('fixture'); expect(kind).toBe('coding'); return workerReadiness ?? null;
@@ -305,6 +316,53 @@ describe('first-worker health verdict', () => {
     await check(null, 'degraded', 1);
   });
 });
+it.each(['held pool', 'missing image', 'narrow grant'] as const)('3349 doctor reports the observed %s in text and JSON', async scenario => {
+  registerProviderConfig();
+  const capacity = { executionSlots: 1, inFlightSlots: 1 };
+  const person = { id: 'fixture-person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['fixture'] };
+  const [reserve] = firstRunExecutionRules([], person, ['fixture']).wanted;
+  const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], restrictions: [], separationOfDuties: [],
+    grants: [{ ...reserve, resource: { kind: 'run', ids: ['one-run'] }, principals: [mcpPrincipalRef(person)] }] },
+  { schemaVersion: 1, revision: 'b', bindings: [] });
+  expect(evaluatePolicy(policy, { principal: { ...person, ...mcpPrincipalRef(person), assurance: 'workload-verified' }, scopeId: 'fixture', action: 'reserve', resource: { kind: 'run', id: 'one-run' } }).decision).toBe('allow');
+  const coverage = executionPermissionCoverage(policy, person, 'fixture');
+  expect(coverage).toMatchObject({ allowed: 0, total: 6, restricted: false });
+  const root = await project({ terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity, ordering: 'input-order', registry: doctorRegistry },
+    execution: doctorDocker });
+  const context = { root, env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') },
+    inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, poolId: 'fixture-pool', capacity, occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
+    inspectMonitor: scenario === 'narrow grant' ? async () => { throw new Error('monitor unavailable'); } : monitorPool(scenario === 'held pool'),
+    inspectWorkerReadiness: async () => ({ ready: true, code: 'WORKER_READY', cli: [] }),
+    inspectExecutionPermission: async () => coverage,
+    inspectExecutionEnvironment: doctorDockerReady,
+    inspectWorkerImage: async () => scenario === 'missing image' ? 'missing' as const : 'present' as const };
+  for (const locale of ['en', 'tr'] as const) {
+    const run = async (args: string[]) => {
+      let output = '';
+      await runKernelCommand(['doctor', '--lang', locale, ...args], { ...context, stdout: { write: chunk => { output += chunk; } } });
+      return output;
+    };
+    const data = JSON.parse(await run(['--json'])), human = await run([]);
+    const [first, permission] = data.summary.checks;
+    const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+    if (directory) await writeFile(join(directory, `3349-doctor-${scenario.replace(' ', '-')}-${locale}.json`),
+      JSON.stringify({ text: human.split('\n').slice(1, 3), checks: data.summary.checks }, null, 2));
+    expect(data.poolReadiness.status).toBe('ready');
+    if (scenario === 'narrow grant') {
+      expect(permission).toMatchObject({ id: 'work.aiExecution', state: 'warning',
+        text: locale === 'en' ? 'No scope-wide standing AI execution permission for fixture/mcp/person in fixture.' : 'fixture/mcp/person için fixture kapsamının tamamında geçerli kalıcı yapay zekâ yürütme izni yok.' });
+      expect(human).toContain(permission.text);
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: 'untested' });
+    } else {
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: 'warning', next: expect.any(String) });
+      expect(first.text).toContain(scenario === 'held pool'
+        ? locale === 'en' ? 'pool on hold' : 'havuz bekletiliyor'
+        : locale === 'en' ? 'not on this Docker' : "bu Docker'da yok");
+      expect(human.split('\n')[1]).toContain(first.text);
+    }
+  }
+});
+
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     registerProviderConfig();

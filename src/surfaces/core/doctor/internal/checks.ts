@@ -5,7 +5,7 @@ import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
-import { workerReadinessText, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
+import { workerReadinessText, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
@@ -56,6 +56,9 @@ export interface DoctorCheckFacts {
     egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
+  readonly poolHeld?: boolean | undefined;
+  readonly poolHasRoom?: boolean | undefined;
+  readonly firstWorkerImage?: 'configured' | 'kind' | 'unmeasured' | null;
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
   /** `connection` (R8b): execution is configured without Docker, so work runs on a connected subscription. */
   readonly firstJob?: Readonly<{ execution: boolean; registry: boolean; connection?: boolean }> | null;
@@ -179,10 +182,15 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   return rows;
 }
 
+function workerKindCheck(kind: import('#engine/index.js').WorkerKindAvailability, l: Locale): DoctorCheck {
+  return row('work', 'work.kind', 'warning', kind.reason === 'image-missing'
+    ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l),
+  kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l));
+}
+
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(row('work', 'work.kind', 'warning',
-    kind.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l), kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l)));
+  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(workerKindCheck(kind, l));
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
@@ -344,15 +352,32 @@ const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doct
 /** Two first-page observations, independent of the installation health verdict and its counts. */
 export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly DoctorCheck[], locale: Locale): readonly DoctorCheck[] {
   const pool = checks.find(check => check.id === 'work.pool');
-  const worker = f.workerReadiness;
+  const worker = f.workerReadiness, kind = f.workerKinds?.find(value => value.kind === firstJobKind);
+  const kindCheck = kind?.reason ? workerKindCheck(kind, locale) : undefined;
+  const startupBlock = checks.find(check => check.id === 'setup.startability' && check.state === 'error');
+  const docker = f.firstWorkerImage ? checks.find(check => check.id === 'work.docker') : undefined;
+  const image = f.firstWorkerImage === 'configured' ? checks.find(check => check.id === 'work.workerImage') : undefined;
+  const firstRow = (state: DoctorCheckState, text: string, next?: string) => row('work', 'work.firstWorker', state, text, next);
+  const blocked = (reason: string, next?: string) => firstRow('warning', t('doctor.firstWorker.blocked', { reason }, locale), next);
+  const unknown = (next?: string) => firstRow('untested', t('doctor.firstWorker.unmeasured', {}, locale), next ?? scoped('deckent doctor', f));
+  const poolStatus = scoped('deckent pool status', f);
   const poolMissing = f.poolStatus === 'unconfigured' || f.poolStatus === 'missing';
-  const first = poolMissing ? row('work', 'work.firstWorker', 'warning',
+  const first = poolMissing ? firstRow('warning',
     t('doctor.firstWorker.pool', { state: f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, locale) : t('doctor.check.pool.unconfigured', {}, locale) }, locale),
     pool?.next ?? onboardingNext(t('doctor.firstJob.pool', {}, locale), locale))
-    : f.poolStatus !== 'ready' ? row('work', 'work.firstWorker', 'untested', t('setup.work.workerUnknown', {}, locale), pool?.next)
-    : worker?.ready ? row('work', 'work.firstWorker', 'ok', t('doctor.firstWorker.ready', {}, locale))
-    : worker ? row('work', 'work.firstWorker', 'warning', workerReadinessText(worker.code, locale), worker.cli.join(' '))
-    : row('work', 'work.firstWorker', 'untested', t('setup.work.workerUnknown', {}, locale), 'deckent doctor');
+    : f.poolHeld ? blocked(t('monitor.blocker.poolHeld', {}, locale), poolStatus)
+    : f.poolStatus === 'drift' && pool ? blocked(pool.text, pool.next)
+    : f.poolHasRoom === false ? blocked(t('monitor.blocker.waitingPoolSlot', {}, locale), poolStatus)
+    : image?.state === 'error' ? blocked(image.text, image.next)
+    : kind?.reason === 'image-missing' && kindCheck ? blocked(kindCheck.text, kindCheck.next)
+    : docker && (docker.state === 'error' || docker.state === 'warning') ? blocked(docker.text, docker.next)
+    : startupBlock ? blocked(startupBlock.text, startupBlock.next)
+    : worker?.ready === false ? firstRow('warning', workerReadinessText(worker.code, locale), worker.cli.join(' '))
+    : f.poolStatus !== 'ready' || f.poolHeld !== false || f.poolHasRoom !== true ? unknown(poolStatus)
+    : kindCheck ? firstRow('untested', kindCheck.text, kindCheck.next)
+    : f.firstWorkerImage && (docker?.state !== 'ok' || (f.firstWorkerImage === 'configured' ? image?.state !== 'ok' : f.firstWorkerImage !== 'kind' || !kind))
+      ? unknown(docker?.next ?? image?.next)
+    : worker?.ready ? firstRow('ok', t('doctor.firstWorker.ready', {}, locale)) : unknown();
   const permission = f.executionPermission, scope = terminalSafeText(f.scopeId ?? '-');
   const complete = !!permission && permission.allowed === permission.total && !permission.restricted;
   const params = { scope, actor: terminalSafeText(permission?.actor ?? '-'), allowed: permission?.allowed ?? 0, total: permission?.total ?? 0 };

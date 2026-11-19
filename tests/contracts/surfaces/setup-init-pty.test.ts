@@ -210,6 +210,17 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       const denied = JSON.parse(marked.stdout);
       expect(denied.output).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(denied.output).not.toContain(title);
       expect(await readFile(policyFile)).toEqual(before); expect(await readdir(archive)).toEqual(historyFiles);
+      if (locale === 'en') {
+        const pipedText = await execute(process.execPath, [cli, ...governed], { cwd: root, env }).then(result => result,
+          error => ({ stdout: String(error.stdout), stderr: String(error.stderr) }));
+        const markedText = await execute('python3', ['-c', DRIVER, '[]', JSON.stringify([process.execPath, cli, ...governed]), root],
+          { env: { ...env, [AGENT_ENVIRONMENT[0]!]: '1' }, timeout: 40_000 });
+        for (const text of [pipedText.stdout + pipedText.stderr, JSON.parse(markedText.stdout).output]) {
+          expect(text).toMatch(/needs a person at an interactive terminal/u);
+          expect(text).not.toContain(title);
+        }
+        expect(await readFile(policyFile)).toEqual(before); expect(await readdir(archive)).toEqual(historyFiles);
+      }
       const interruptible = `process.once('SIGUSR1', () => process.stdin.push(null)); const { main } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/cli-main.js'))}); process.exitCode = await main(${JSON.stringify(governed)});`;
       for (const key of ['n', '\u001b', '\u0003', 'SIGNAL:10']) {
         const cancelled = await run(governed, [[keys, key]], [24, 60], key === 'SIGNAL:10' ? [process.execPath, '--input-type=module', '-e', interruptible] : undefined);

@@ -16,7 +16,7 @@ export function policyExecutionScopeList(scopes: readonly string[], allScopes: b
 }
 
 /** The notice checks actual cells against the trusted planner's scopes; an arbitrary card defaults to its one scope. */
-export function policyExecutionLines(rules: readonly unknown[], scope: string, locale: Locale, heldRules: readonly unknown[] = [], form: 'full' | 'short' = 'full', plannedScopes: readonly string[] = [scope]): string[] {
+export function policyExecutionLines(rules: readonly unknown[], scope: string, locale: Locale, heldRules: readonly unknown[] = [], form: 'full' | 'short' | 'card' = 'full', plannedScopes: readonly string[] = [scope]): string[] {
   const ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
   const parse = (values: readonly unknown[]) => values.flatMap(value => { const parsed = policyGrantSchema.safeParse(value); return parsed.success ? [parsed.data] : []; });
   const grants = parse(rules).filter(rule => ids.includes(rule.id)), held = parse(heldRules);
@@ -26,12 +26,16 @@ export function policyExecutionLines(rules: readonly unknown[], scope: string, l
     const person = { issuer: actor.issuer.slice(0, -'/mcp'.length), subject: actor.subject };
     const expected = firstRunExecutionRules([], person, plannedScopes).wanted;
     const named = grants.filter(rule => rule.principals !== 'all' && rule.principals.some(value => value.issuer === actor.issuer && value.subject === actor.subject));
-    // A genuine partial upgrade keeps its notice only when existing effective grants cover every omitted cell.
-    const uncovered = firstRunExecutionRules(held, person, plannedScopes).wanted;
-    if (!expected.length || named.some(rule => !expected.some(want => same(rule, want)))
-      || !expected.every(want => named.some(rule => same(rule, want)) || held.some(rule => same(rule, want)) || !uncovered.some(rule => rule.id === want.id))) return [];
+    if (!expected.length || named.some(rule => !expected.some(want => same(rule, want)))) return [];
     const params = { actor: terminalSafeText(`${actor.issuer}/${actor.subject}`), scope: terminalSafeText(scope), scopes: terminalSafeText(plannedScopes.join(', ')) };
-    return [form === 'full' ? t('policy.aiExecution.preview', params, locale) : t('policy.aiExecution.previewShort', params, locale)];
+    const uncovered = firstRunExecutionRules(held, person, plannedScopes).wanted;
+    const complete = form === 'card' ? expected.every(want => named.some(rule => same(rule, want)))
+      : uncovered.every(want => named.some(rule => same(rule, want)) || held.some(rule => same(rule, want)));
+    if (complete) return [form === 'short' ? t('policy.aiExecution.previewShort', params, locale) : t('policy.aiExecution.preview', params, locale)];
+    if (form !== 'card') return [];
+    return [t('policy.aiExecution.previewPartial', params, locale), ...named.map(rule => rule.resource.kind === 'attempt'
+      ? t('policy.aiExecution.addAttempts', {}, locale) : rule.actions.includes('reserve')
+        ? t('policy.aiExecution.addReserve', {}, locale) : t('policy.aiExecution.addCancel', {}, locale))];
   });
 }
 

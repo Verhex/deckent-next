@@ -19,7 +19,7 @@ export type StandingRevokeHandler = (root: string, input: { readonly scopeId: st
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<{ readonly revoked: boolean; readonly grant: StandingGrantRow | null }>;
 
 /** The governed current first-run upgrade: the engine's result, which the surface only words (one shape with `/policy`'s AI proposals row). */
-export type PolicyUpgradeHandler = PolicyTemplateUpgradePort;
+export type PolicyUpgradeHandler = (...args: [...Parameters<PolicyTemplateUpgradePort>, reviewedRules?: readonly unknown[]]) => ReturnType<PolicyTemplateUpgradePort>;
 
 /**
  * `deckent policy grants [--mine] [--scope <id>] [--json]` lists the caller's own persisted standing approvals (read-only); `--all [--after <mark>]` everyone's (CA-1);
@@ -127,19 +127,19 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
         const answer = await askCliCard({
           title: mixed ? t('policy.aiExecution.applyTitle', {}, locale) : t('setup.aiExecution.title', {}, locale), initial: decision.initial,
           body: [...(decision.reason ? [decision.reason] : []),
-            ...policyExecutionLines(rules, scopeId, locale, preview.executionContext, 'full', preview.executionScopes),
+            ...policyExecutionLines(rules, scopeId, locale, preview.executionContext, 'card', preview.executionScopes),
             ...(preview.summary ?? '').split('\n'), ...policyExecutionScopeList(selections.length ? scopes : preview.executionScopes ?? [scopeId], selections.includes('all'), locale).split('\n'),
             ...(held.length ? [t('policy.aiExecution.covered', { grants: held.join(', ') }, locale)] : []),
             ...(preview.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: preview.conflicts.join(', ') }, locale)] : []),
             preview.revision, `deckent policy upgrade --template current --scope ${scopeId}${only ? ` --only ${only}` : ''} --preview`],
-          hints: t('setup.aiExecution.hints', {}, locale), options: [
+          hints: t('policy.aiExecution.applyHints', {}, locale), options: [
             { id: 'grant', label: mixed ? t('policy.aiExecution.applyYes', {}, locale) : t('setup.aiExecution.grant', {}, locale), role: 'yes' },
             { id: 'not-now', label: mixed ? t('policy.aiExecution.applyNo', {}, locale) : t('setup.aiExecution.notNow', {}, locale), role: 'no' }] },
         { ...context, locale, env });
         if (answer !== 'grant') return { ...preview, status: 'cancelled', rules: [], summary: null, covered: [], conflicts: [] };
       }
-      // Even a non-execution plan can widen between read and write. Never publish that unseen replacement.
-      return context.upgradePolicyTemplate!(root, scopeId, { ...request, mode, expect: preview.revision }, { env });
+      // Bind the write to the ordered additions even when the preview did not need a card.
+      return context.upgradePolicyTemplate!(root, scopeId, { ...request, mode, expect: preview.revision }, { env }, rules);
     }
     if (mode === 'rollback' && !json && cliMode(context).mode === 'interactive') {
       const preview = await context.upgradePolicyTemplate!(root, scopeId, { ...request, mode: 'preview', previewRollback: true }, { env });
@@ -163,7 +163,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
   emit(result, { ...sinks, json, render: view => {
     const head = view.status === 'cancelled' ? (mode === 'apply' ? t('cli.init.policyModes.cancelled', {}, locale) : t('policy.aiExecution.rollbackKept', {}, locale)) : view.status === 'preview' && previewRollback ? t('policy.aiExecution.rollbackPreview', { revision: view.revision }, locale) : view.status === 'preview' ? t('policy.aiExecution.upgradePreview', { revision: view.revision, scope: scopeId, selector: only ? ` --only ${only}` : '' }, locale)
       : view.status === 'upgraded' ? t('cli.policy.upgrade.upgraded', { scope: scopeId }, locale) : view.status === 'current' ? t('cli.policy.upgrade.current', {}, locale)
-      : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? t('cli.policy.upgrade.conflict', { revision: view.revision }, locale)
+      : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? (view.reason === 'plan-changed' ? t('cli.policy.upgrade.planConflict', { revision: view.revision }, locale) : t('cli.policy.upgrade.conflict', { revision: view.revision }, locale))
       : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale)
       // J3: a fresh first-run install has no upgrade to undo; a rollback without archived history is refused — neither is "not a first-run policy".
       : view.status === 'nothing-to-roll-back' ? view.reason === 'no-upgrade-recorded' ? t('cli.policy.upgrade.noUpgradeRecorded', { scope: scopeId }, locale) : t('cli.policy.upgrade.nothing', {}, locale)

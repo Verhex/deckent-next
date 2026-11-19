@@ -203,3 +203,35 @@ it('binds a person decision to the reviewed mixed plan and leaves automation on 
     }
   } finally { card.mockRestore(); }
 });
+
+it('3349 partial apply shows only the added execution authority and the whole-plan cancel hint in EN/TR', async () => {
+  const person = { issuer: 'person', subject: 'one' };
+  const [reserve, ...added] = firstRunExecutionRules([], person, ['scope']).wanted;
+  const narrowed = { ...reserve!, resource: { ...reserve!.resource, ids: ['one-run'] } };
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: person, ...FIRST_RUN_TOOL_NAMES });
+  const human = template.policy.grants.find(rule => rule.id === 'first-run-installation-repair')!;
+  const rules = [...added, human];
+  const summary = describePolicyChange(template, { schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) });
+  const card = vi.spyOn(cards, 'askCliCard').mockResolvedValue('not-now');
+  try {
+    for (const locale of ['en', 'tr'] as const) {
+      const calls: unknown[] = [], { ctx, out } = context({ ...PREVIEW, rules, summary, executionScopes: ['scope'], executionHistory: 'unknown',
+        executionContext: [narrowed], conflicts: [narrowed.id] }, calls);
+      expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--lang', locale], {
+        ...ctx, stdin: { isTTY: true }, stdout: { isTTY: true, write: (value: string) => out.push(value) },
+        env: { ...ctx.env, ...personMarkersUnset(), TERM: 'xterm' },
+      } as never)).toBe(0);
+      const request = card.mock.lastCall![0], body = request.body!.join('\n');
+      const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (directory) writeFileSync(join(directory, `3349-partial-${locale}.json`), JSON.stringify(request, null, 2));
+      expect(body).toContain(locale === 'en' ? 'your work or another actor' : 'sizin veya başka aktörlerin işlerinde');
+      expect(body).toContain(locale === 'en' ? 'Request cancellation or hold' : 'iptal isteme veya beklemeye alma');
+      expect(body).toContain(locale === 'en' ? 'trigger evaluation' : 'değerlendirmeyi tetikleme');
+      expect(body).not.toMatch(/reserve and start work|iş ayırma ve başlatma/u);
+      expect(body).toContain(narrowed.id);
+      expect(request.hints).toContain(locale === 'en' ? 'Esc/Ctrl+C cancel the whole plan without writing changes' : 'Esc/Ctrl+C hiçbir değişiklik yazmadan tüm planı iptal et');
+      expect(out.join('')).toMatch(/Cancelled; nothing was written|İptal edildi; hiçbir şey yazılmadı/u);
+      expect(calls).toHaveLength(1);
+    }
+  } finally { card.mockRestore(); }
+});

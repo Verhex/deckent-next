@@ -91,15 +91,24 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * `deckent policy upgrade --template current`: current first-run additions for this local person through the governed chain. Preview reads
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
-export async function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly previewRollback?: boolean;
+export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly previewRollback?: boolean;
   readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, agents?: readonly string[], verifiedRoot?: import('#domain/index.js').Policy | null): Promise<TemplateUpgradeResult> {
+  return runConfiguredPolicyTemplateUpgrade(root, scopeId, options, input, agents, verifiedRoot);
+}
+/** The interactive command binds its in-process preview to the same witnessed writer. */
+export function applyReviewedPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3],
+  reviewedRules: readonly unknown[], agents?: readonly string[]): Promise<TemplateUpgradeResult> {
+  return runConfiguredPolicyTemplateUpgrade(root, scopeId, options, input, agents, undefined, reviewedRules);
+}
+async function runConfiguredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3],
+  agents: readonly string[] | undefined, verifiedRoot?: import('#domain/index.js').Policy | null, reviewedRules?: readonly unknown[]): Promise<TemplateUpgradeResult> {
   if (input.mode !== 'preview' && input.only !== 'ai-proposals') {
     const config = await loadComposedConfig(root, { ...options, heal: false });
     await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), { attest: async () =>
       automationMarker(options.env ?? process.env, agents ?? config.cli.agentEnvironment) === null && await attestLocalInteractiveTerminal() });
   }
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
-    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
+    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId }, reviewedRules)
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.previewRollback ? { previewRollback: true } : {}), ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }, input.mode === 'preview' ? verifiedRoot : null));
 }
 /** Standing coverage across resource ids in this scope. A concrete Run may have narrower permissions. */

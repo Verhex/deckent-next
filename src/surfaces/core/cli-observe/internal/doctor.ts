@@ -3,7 +3,8 @@ import {
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
-import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
+import { executionRegistrySchema, NATIVE_CODING_TEMPLATE_ADAPTER_ID } from '#domain/index.js';
+import { configuredInvocationProfiles, configServiceState, hasCapacityRoom } from '#engine/index.js';
 import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
@@ -15,7 +16,7 @@ type DoctorConfig = Awaited<ReturnType<typeof loadConfig>>;
 
 /** Facts only the grouped view needs: each is read-soft (a failed read is "not tested"), secret names only, never a value. */
 async function checkFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions, toolchainsRequested: boolean,
-  poolStatus: DoctorCheckFacts['poolStatus'], locale: import('#platform/index.js').Locale): Promise<DoctorCheckFacts> {
+  poolReadiness: Awaited<ReturnType<typeof assessPoolReadiness>>, locale: import('#platform/index.js').Locale): Promise<DoctorCheckFacts> {
   const scopeId = (config.terminal as { scopeId?: string } | undefined)?.scopeId ?? null;
   const providerSpending = context.inspectProviderSpendAccount && scopeId ? await context.inspectProviderSpendAccount(root,
     { schemaVersion: 1, scopeId, current: true }, options).catch(() => null) : null;
@@ -50,8 +51,22 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
       }
     }
   }
+  const monitor = await context.inspectMonitor?.(root, options, { schemaVersion: 1, install: 'current' }).catch(() => null);
+  const pool = 'pool' in poolReadiness ? poolReadiness.pool : undefined;
+  const hold = monitor?.installs.find(install => install.id === 'current' && install.status === 'available')?.pools.find(row => row.poolId === pool?.poolId);
+  const registry = executionRegistrySchema.safeParse(config.admission?.registry).data;
+  const selected = registry?.kinds.find(row => row.kind === firstJobKind)?.profile;
+  const profile = registry?.profiles.find(row => row.id === selected?.id && row.version === selected.version);
+  const templateDocker = profile?.adapter.id === NATIVE_CODING_TEMPLATE_ADAPTER_ID && !profile.parameters['worker'];
+  const parameters = profile?.parameters as { imageId?: unknown; docker?: { imageId?: unknown } } | undefined;
+  const selectedImage = templateDocker ? parameters?.docker?.imageId : parameters?.imageId;
+  const firstWorkerImage = typeof selectedImage !== 'string' ? templateDocker ? 'unmeasured' : null
+    : selectedImage === docker?.imageId ? 'configured' : templateDocker ? 'kind' : 'unmeasured';
   return {
     progressionRuns,
+    poolHeld: hold?.held,
+    poolHasRoom: pool && hasCapacityRoom(pool.capacity, pool.occupancy),
+    firstWorkerImage,
     executionPermission: scopeId ? await context.inspectExecutionPermission?.(root, scopeId, options).catch(() => null) ?? null : null,
     workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
@@ -66,7 +81,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
           stale: binding != null && (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) };
       })),
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
-    scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
+    scopeId, toolchainsRequested, poolStatus: poolReadiness.status, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry, connection: !!config.execution && !docker }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
@@ -78,8 +93,8 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
     // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
-    stuckRuns: context.inspectMonitor ? await context.inspectMonitor(root, options, { schemaVersion: 1, install: 'current' }).then(snapshot => snapshot.installs.flatMap(install => install.runs)
-      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
+    stuckRuns: monitor?.installs.flatMap(install => install.runs)
+      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []) ?? null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins({ profiles: configuredInvocationProfiles(config) }, scopeId, options).catch(() => null) : null,
   };
 }
@@ -152,7 +167,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
-  const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
+  const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness, locale);
   const checks = [...doctorChecks(data, facts, locale)];
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, next: permission.command });

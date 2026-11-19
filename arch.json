@@ -4114,6 +4114,9 @@
     },
     "src/surfaces/core/cli-observe": {
       "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/engine/core/scheduling",
         "src/platform/core/config",
         "src/engine/core/model-invocation",
         "src/surfaces/core/cli-kit",
