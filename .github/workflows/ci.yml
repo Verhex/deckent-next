@@ -105,7 +105,8 @@ jobs:
     needs: prepare
     name: tests (node ${{ matrix.node }}, shard ${{ matrix.shard }}/${{ needs.prepare.outputs.shard-count }})
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    # The same heavy file ran 134 s to 234 s on different hosted runners at one commit; 6 minutes cancelled balanced shards on a slow runner.
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
