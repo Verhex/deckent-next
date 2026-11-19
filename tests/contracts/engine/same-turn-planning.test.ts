@@ -8,7 +8,9 @@ import { assertRunProposalSource } from '#engine/core/run-proposal/index.js';
 import { sha256, knownSecretValues, ErrorRegistry } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 
-function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: unknown, config = {}) {
+function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: unknown, config = {},
+  { beforeVerify, beforeBudget, beforeProposalSettles }: { beforeVerify?: () => Promise<void>; beforeBudget?: () => Promise<void>;
+    beforeProposalSettles?: () => Promise<void> } = {}) {
   const proposal = proposalFixture(), principal = { ...proposal.proposer, assurance: 'os-user' as const, scopeIds: ['s'] };
   const reference = { providerId: 'test', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'test', version: 1,
@@ -32,10 +34,13 @@ function fixture(overrides: Partial<SameTurnPlanningPorts> = {}, proposeError?: 
   let proposals = 0, randomCalls = 0;
   const readResult = vi.fn<SameTurnPlanningPorts['readResult']>(overrides.readResult ?? (async () => ({ ...retained, replayed: true })));
   const revalidate = vi.fn<SameTurnPlanningPorts['revalidate']>(overrides.revalidate ?? (async input => input));
-  const brain = new BrainPlanApplication({ verify: async () => principal }, { inspect: async () => null, prepare: async () => { throw new Error('SECOND_PREPARE'); },
+  const brain = new BrainPlanApplication({ verify: async () => { if (beforeVerify) await beforeVerify(); return principal; } }, {
+    inspect: async () => null, prepare: async () => { throw new Error('SECOND_PREPARE'); },
     invoke: async () => { throw new Error('SECOND_CALL'); }, stoppedAtLength: () => false, text: result => result.response?.native['text'] as string ?? null,
+    ...(beforeBudget && { remainingBudget: async () => { await beforeBudget(); return null; } }),
     propose: async value => { assertRunProposalSource(value, retained.receipt, draft); proposals++;
       expect(value.source.kind).toBe('model'); expect(value.runId).toBe(brainRunId(command));
+      if (beforeProposalSettles) await beforeProposalSettles();
       if (proposeError) throw proposeError; return { proposal: { proposal: value } } as never; } });
   const planning = brain.createSameTurnPlanning({ randomBytes: size => { randomCalls++; return new Uint8Array(size).fill(0xaa); },
     projectDelivery: value => value, toolResultDigest: agentTurnResultDigest, text: result => result.response?.native['text'] as string ?? null,
@@ -417,6 +422,54 @@ it('discards durable readback if the person cancels or the pin is abandoned duri
     expect(f.revalidate, interruption).toHaveBeenCalledTimes(1);
     expect(f.counts(), interruption).toEqual({ proposals: 0, randomCalls: 1, reads: 1 });
   }
+});
+
+it.each(['identity verification', 'budget read'] as const)('stops the unsent proposal when the pin is abandoned during %s', async stage => {
+  const parent = new AbortController();
+  const abandonWhileWaiting = async () => {
+    await Promise.resolve();
+    f.planning.abandon(f.pin, 'completion-unknown');
+  };
+  const f = fixture({}, undefined, {}, stage === 'identity verification' ? { beforeVerify: abandonWhileWaiting } : { beforeBudget: abandonWhileWaiting });
+  await f.settle(); f.terminal(); f.close();
+  const first = f.planning.finalize(f.pin, f.retained, parent.signal);
+  await expect.soft(first).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED', params: { reason: 'completion-unknown' } });
+  expect(parent.signal.aborted).toBe(false);
+  expect(f.planning.finalize(f.pin, f.retained, parent.signal)).toBe(first);
+  expect(f.counts()).toEqual({ proposals: 0, randomCalls: 1, reads: 1 });
+});
+
+it('settles a proposal already sent when the pin is abandoned using the same promise', async () => {
+  const parent = new AbortController();
+  let started!: () => void, release!: () => void;
+  const sending = new Promise<void>(resolve => { started = resolve; });
+  const writing = new Promise<void>(resolve => { release = resolve; });
+  const f = fixture({}, undefined, {}, { beforeProposalSettles: () => { started(); return writing; } });
+  await f.settle(); f.terminal(); f.close();
+  const first = f.planning.finalize(f.pin, f.retained, parent.signal);
+  await sending;
+  f.planning.abandon(f.pin, 'completion-unknown');
+  const again = f.planning.finalize(f.pin, f.retained, parent.signal);
+  release();
+  expect(again).toBe(first);
+  await expect(again).resolves.toMatchObject({ proposal: { proposal: { runId: brainRunId(f.input.command) } } });
+  expect(parent.signal.aborted).toBe(false);
+  expect(f.counts()).toEqual({ proposals: 1, randomCalls: 1, reads: 1 });
+});
+
+it('finalizes the verified answer after the reader mutates its shared response', async () => {
+  const changed = 'changed after comparison';
+  const f = fixture({ readResult: async (): ReturnType<SameTurnPlanningPorts['readResult']> => ({
+    ...f.retained, response: sharedResponse, replayed: true,
+  }) }, undefined, {}, { beforeVerify: async () => {
+    await Promise.resolve();
+    Object.assign(sharedResponse.native, { text: changed });
+  } });
+  const sharedResponse = { ...f.retained.response!, native: { ...f.retained.response!.native } };
+  await f.settle(); f.terminal(); f.close();
+  await expect.soft(f.planning.finalize(f.pin, f.retained)).resolves.toMatchObject({ proposal: { proposal: { runId: brainRunId(f.input.command) } } });
+  expect(sharedResponse.native['text']).toBe(changed);
+  expect(f.counts()).toEqual({ proposals: 1, randomCalls: 1, reads: 1 });
 });
 
 it('refuses actor/scope/call/request/model/binding/activation/profile substitution in the retained source', async () => {

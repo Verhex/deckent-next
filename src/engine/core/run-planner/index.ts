@@ -271,7 +271,8 @@ export class BrainPlanApplication {
     return this.complete(command, proposer, prepared, invocation, result, draft, signal);
   }
   /** Same-turn custody has already proved completion/drain and retained-body equality. No invoke, correction or quota loop. */
-  async #completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
+  async #completeSameTurn(command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand, result: ModelInvocationResult,
+    assertPin: () => void, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
     assertActive(signal);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const proposer = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
@@ -279,10 +280,10 @@ export class BrainPlanApplication {
     if (prepared.prompt.inputDigest !== brainInputDigest(command, this.ports.knownSecrets)) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
     if (this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED', { params: { reason: 'output-truncated' } });
     const draft = this.validated(prepared, result, invocation, true);
-    return this.complete(command, proposer, prepared, invocation, result, draft, signal);
+    return this.complete(command, proposer, prepared, invocation, result, draft, signal, assertPin);
   }
   private async complete(command: BrainPlanCommand, proposer: RunProposal['proposer'], prepared: BrainPreparation, invocation: ModelInvocationCommand,
-    result: ModelInvocationResult, draft: ReturnType<typeof parseBrainDraft>, signal?: AbortSignal): Promise<RunProposalResult> {
+    result: ModelInvocationResult, draft: ReturnType<typeof parseBrainDraft>, signal?: AbortSignal, assertPin?: () => void): Promise<RunProposalResult> {
     const runId = brainRunId(command);
     const receipt = result.receipt;
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN'); // narrowed; validated() already refused otherwise
@@ -302,6 +303,7 @@ export class BrainPlanApplication {
         inputSummary: prompt.intent.slice(0, limit), outputSummary: redactForRecord(JSON.stringify(draft), this.ports.knownSecrets).slice(0, limit),
         usage: usage.success ? { inputTokens: usage.data.prompt_tokens, outputTokens: usage.data.completion_tokens, totalTokens: usage.data.total_tokens } : null } } };
     assertActive(signal);
+    assertPin?.();
     const recorded = await this.ports.propose(proposal);
     return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;

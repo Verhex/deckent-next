@@ -16,7 +16,7 @@ import type { BrainQuotaWaitPolicy } from './quota-wait.js';
   /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number;
   /** Owner 2026-11-06: the Brain model is below the recommended class (response-only note for the card). */ readonly brainBelowRecommended?: boolean }
 type SameTurnBrainFinalizer = (command: BrainPlanCommand, prepared: BrainPreparation, invocation: ModelInvocationCommand,
-  result: ModelInvocationResult, credential?: unknown, signal?: AbortSignal) => Promise<RunProposalResult>;
+  result: ModelInvocationResult, assertPin: () => void, credential?: unknown, signal?: AbortSignal) => Promise<RunProposalResult>;
 
 /** Authored origin is separate from the resolved Brain requirement. Terminal request policy is never cap application evidence. */
 type Origin = 'person' | 'project' | 'company' | 'brain-default' | 'unknown';
@@ -247,7 +247,8 @@ export class SameTurnPlanningApplication implements SameTurnPlanningPort {
       this.check(pin);
       if (!isDeepStrictEqual(refreshed, input)) this.refuse('settings-mismatch');
       if (parentSignal?.aborted) this.refuse('cancelled');
-      return this.#complete(input.command, input.prepared, this.invocation!, readback, this.ports.credential, parentSignal);
+      // The matching frozen snapshot stays stable across the finalizer's remaining awaits.
+      return this.#complete(input.command, input.prepared, this.invocation!, completed, () => this.check(pin), this.ports.credential, parentSignal);
     }).finally(() => { this.challenge = null; this.privateKnown = undefined; this.result = null; this.custody = null; this.terminal = null; this.preparing = null; });
     return this.finalizing;
   }
