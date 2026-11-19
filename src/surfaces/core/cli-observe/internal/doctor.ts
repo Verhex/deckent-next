@@ -53,7 +53,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   }
   const monitor = await context.inspectMonitor?.(root, options, { schemaVersion: 1, install: 'current' }).catch(() => null);
   const pool = 'pool' in poolReadiness ? poolReadiness.pool : undefined;
-  const hold = monitor?.installs.find(install => install.id === 'current' && install.status === 'available')?.pools.find(row => row.poolId === pool?.poolId);
+  const observedPool = monitor?.installs.find(install => install.id === 'current' && install.status === 'available')?.pools.find(row => row.poolId === pool?.poolId);
   const registry = executionRegistrySchema.safeParse(config.admission?.registry).data;
   const selected = registry?.kinds.find(row => row.kind === firstJobKind)?.profile;
   const profile = registry?.profiles.find(row => row.id === selected?.id && row.version === selected.version);
@@ -64,8 +64,11 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     : selectedImage === docker?.imageId ? 'configured' : templateDocker ? 'kind' : 'unmeasured';
   return {
     progressionRuns,
-    poolHeld: hold?.held,
-    poolHasRoom: pool && hasCapacityRoom(pool.capacity, pool.occupancy),
+    poolHeld: observedPool?.held,
+    poolHasRoom: observedPool?.capacity != null && observedPool.executionCapacity != null && observedPool.executing !== undefined
+      ? hasCapacityRoom({ executionSlots: observedPool.executionCapacity, inFlightSlots: observedPool.capacity },
+        { execution: observedPool.executing, inFlight: observedPool.inFlight })
+      : undefined,
     firstWorkerImage,
     executionPermission: scopeId ? await context.inspectExecutionPermission?.(root, scopeId, options).catch(() => null) ?? null : null,
     workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,

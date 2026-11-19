@@ -252,7 +252,7 @@ const doctorDocker = {
 };
 const doctorDockerReady = async () => ({ state: 'done', reason: { code: 'setup.execution.ready', params: { runtime: 'Docker', version: '1' } } });
 const monitorPool = (held = false) => async () => ({ installs: [
-  { id: 'current', status: 'available', runs: [], pools: [{ poolId: 'fixture-pool', held }] },
+  { id: 'current', status: 'available', runs: [], pools: [{ poolId: 'fixture-pool', held, capacity: 1, inFlight: 0, executionCapacity: 1, executing: 0 }] },
 ] }) as never;
 
 describe('first-worker health verdict', () => {
@@ -359,6 +359,50 @@ it.each(['held pool', 'missing image', 'narrow grant'] as const)('3349 doctor re
         ? locale === 'en' ? 'pool on hold' : 'havuz bekletiliyor'
         : locale === 'en' ? 'not on this Docker' : "bu Docker'da yok");
       expect(human.split('\n')[1]).toContain(first.text);
+    }
+  }
+});
+
+it('3358 doctor reports full, available and unknown effective pool capacity in text and JSON (EN/TR)', async () => {
+  registerProviderConfig();
+  const capacity = { executionSlots: 2, inFlightSlots: 2 };
+  const root = await project({ max_workers: 1, terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity,
+    ordering: 'input-order', registry: doctorRegistry }, execution: doctorDocker });
+  const home = join(root, 'h'), env = { HOME: home, USERPROFILE: home };
+  await mkdir(join(home, '.deckent'), { recursive: true });
+  await writeFile(join(home, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+  const next = 'deckent pool status --scope fixture';
+  const scenarios = [
+    { state: 'warning', executionCapacity: 1, used: 1, next,
+      en: 'First worker is not ready (waiting for a pool slot).', tr: 'İlk işçi hazır değil (havuzda yer bekliyor).' },
+    { state: 'ok', executionCapacity: 1, used: 0,
+      en: 'First worker is ready.', tr: 'İlk işçi hazır.' },
+    { state: 'untested', executionCapacity: null, used: 0, next,
+      en: 'First worker readiness was not measured.', tr: 'İlk işçinin hazır olup olmadığı ölçülemedi.' },
+  ];
+  for (const locale of ['en', 'tr'] as const) {
+    let health;
+    for (const scenario of scenarios) {
+      const context = { root, env, inspectExecutionEnvironment: doctorDockerReady, inspectWorkerImage: async () => 'present' as const,
+        inspectWorkerReadiness: async () => ({ ready: true, code: 'WORKER_READY', cli: [] }),
+        inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, poolId: 'fixture-pool', capacity,
+          occupancy: { execution: scenario.used, inFlight: scenario.used }, receipt: null }),
+        inspectMonitor: async () => ({ installs: [{ id: 'current', status: 'available', runs: [], pools: [
+          { poolId: 'fixture-pool', held: false, capacity: 1, inFlight: scenario.used, executionCapacity: scenario.executionCapacity, executing: scenario.used },
+        ] }] }) as never };
+      const run = async (...args: string[]) => {
+        let output = '';
+        await runKernelCommand(['doctor', '--lang', locale, ...args], { ...context, stdout: { write: chunk => { output += chunk; } } });
+        return output;
+      };
+      const data = JSON.parse(await run('--json')), human = await run();
+      const { checks, ...counts } = data.summary;
+      health ??= { status: data.status, counts };
+      expect(data.poolReadiness.status).toBe('ready');
+      expect({ status: data.status, counts }).toEqual(health);
+      expect.soft(checks[0], `${locale} ${scenario.state}`).toEqual({ group: 'work', id: 'work.firstWorker', state: scenario.state,
+        text: scenario[locale], ...(scenario.next ? { next: scenario.next } : {}) });
+      expect.soft(human.split('\n')[1], `${locale} ${scenario.state}`).toBe([scenario[locale], scenario.next].filter(Boolean).join(' · '));
     }
   }
 });
