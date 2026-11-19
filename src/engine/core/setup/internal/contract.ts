@@ -28,7 +28,8 @@ export const setupObservationSchema = z.strictObject({
   get profile() { return z.strictObject({ available: z.array(setupProfileRefSchema).max(256), selected: setupProfileRefSchema.nullable().prefault(null) }); },
   get policy() { return z.strictObject({ state: z.enum(['absent', 'current', 'upgradable', 'hand-built', 'conflict', 'pending']) }); },
   get sandbox() { return z.strictObject({ realm: z.enum(['bubblewrap', 'landlock', 'none']), selfTest: z.enum(['ok', 'failed', 'not-run']), usernsRestricted: z.boolean() }); },
-  get model() { return z.strictObject({ connections: counterSchema }); },
+  get model() { return z.strictObject({ connections: counterSchema, selection: z.string().nullable().optional(),
+    externalConnection: z.string().optional() }); },
   get check() { return z.strictObject({ state: z.enum(['ok', 'warnings', 'errors', 'not-run']), pending: counterSchema.optional() }); },
   get families() { return z.record(z.string(), z.unknown().optional()).prefault({}); },
 });
@@ -41,7 +42,9 @@ export const setupAnswersSchema = z.strictObject({ get schemaVersion() { return 
 export type SetupAnswers = z.input<typeof setupAnswersSchema>;
 
 const key = z.string().regex(/^[a-z][A-Za-z0-9_.-]{0,159}$/);
-const params = z.record(z.string(), z.union([persistedString(z.string().max(512)), z.number().finite()])).prefault({});
+const messageParameter = persistedString(z.string().max(512));
+export const SETUP_MESSAGE_PARAMETER_MAX_LENGTH = messageParameter.maxLength!;
+const params = z.record(z.string(), z.union([messageParameter, z.number().finite()])).prefault({});
 const json: z.ZodType<JsonValue> = z.lazy(() => z.union([z.null(), z.boolean(), z.number().finite(), persistedString(z.string().max(4096)),
   z.array(json).max(64), z.record(z.string(), json)]));
 /** One existing owner's operation and its typed input; the setup sequences owners and never applies a state change itself. */

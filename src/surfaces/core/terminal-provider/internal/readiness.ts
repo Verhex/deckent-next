@@ -1,12 +1,13 @@
 import { nativeAgentReadinessSchema, nativeAgentReasonText, type NativeAgentReadiness } from '#capabilities/index.js';
-import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { headlessGovernedUseText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelPanelView, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderPanelHost, ProviderWindowPort, SubscriptionReadinessPort } from './context.js';
 import presentation from './presentation.json' with { type: 'json' };
 
 const unknown = (): NativeAgentReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
-export function subscriptionReadinessText(value: NativeAgentReadiness, locale: Locale): string {
+export function subscriptionReadinessText(value: NativeAgentReadiness, locale: Locale, connection?: string): string {
   if (value.state === 'ready') return t('headless.agent.readiness.ready', {}, locale);
+  if (value.governedUse) { const { text, next } = headlessGovernedUseText(locale, connection); return `${text} ${next}`; }
   const reason = nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
   return value.state === 'unknown' ? t('headless.agent.readiness.unknown', { reason }, locale) : t('headless.agent.readiness.unavailable', { reason }, locale);
 }
@@ -37,7 +38,7 @@ export async function subscriptionModelView(view: ModelPanelView, provider: Prov
   const logins = view.choices.filter(choice => port.recognizes(choice.reference)), readiness = await port.inspectMany('chat', logins.map(choice => choice.reference));
   return { ...view, choices: view.choices.map(choice => {
     const at = logins.indexOf(choice); if (at < 0) return choice;
-    const text = subscriptionReadinessText(readiness[at]!, locale);
+    const text = subscriptionReadinessText(readiness[at]!, locale, choice.reference.providerId);
     return { ...choice, detail: text, blocked: choice.blocked ?? (readiness[at]!.state === 'unavailable' ? text : null) }; // unknown stays selectable: the guarded first turn verifies it
   }) };
 }

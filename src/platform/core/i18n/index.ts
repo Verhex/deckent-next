@@ -1,4 +1,5 @@
 export { t } from './internal/t.js';
+export { headlessGovernedUseText } from './internal/headless.js';
 export { resolveLocale } from './internal/resolve-locale.js';
 export { LOCALES, SUPPORTED_LANGUAGES } from './internal/types.js';
 export type { Locale, Params, MessageFamily, MessageRegistry } from './internal/types.js';

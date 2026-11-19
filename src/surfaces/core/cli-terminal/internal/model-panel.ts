@@ -63,7 +63,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
   const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
   /** BeUser AYSE-16: the exact model's declared protocol family and all its capabilities, or null when it is not declared. */
   const protocolOf = async (reference: ModelReference | null) => {
-    const declared = await host.inspectDeclaredModels?.(root, options), exact = reference ?? (await host.describeTerminalChatPlan?.(root, options))?.reference;
+    const declared = await host.inspectDeclaredModels?.(root, options), exact = reference ?? (await host.describeTerminalChatPlan?.(root, options, scopeId))?.reference;
     const model = declared?.status === 'declared' && exact ? declared.catalog.providers.find(row => row.id === exact.providerId && row.version === exact.providerVersion)?.models.find(row => row.id === exact.modelId && row.version === exact.modelVersion) : undefined;
     return model?.protocols.length ? { family: model.protocols[0]!.family, capabilities: model.protocols.flatMap(protocol => protocol.capabilities) } : null;
   };
@@ -111,7 +111,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const subscription = { subscriptionReadiness: subscriptionReadinessPort(root, scopeId, reads, options) };
         const reading = await reads.inspectInvocableModels?.(root, scopeId, options);
         if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-        const plan = reads.describeTerminalChatPlan ? await reads.describeTerminalChatPlan(root, options).catch(() => null) : null;
+        const plan = reads.describeTerminalChatPlan ? await reads.describeTerminalChatPlan(root, options, scopeId).catch(() => null) : null;
         // Display names from the ledger catalog when it knows the model (best effort; the exact reference is always shown).
         const display = new Map<string, string>(), priority = new Map<string, number>(), workers = new Map<string, boolean>(), workerTokens = new Map<string, readonly unknown[]>();
         if (reads.inspectModelCatalog) {
@@ -200,7 +200,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
     // layer — policy-checked, approval-aware, audited; the file is created when the person has none yet. Never the project file.
     ...(host.configApplication && host.resolveConfigPrincipal ? { async makeDefault(choice: { reference: ModelReference }) {
       const outcome = await terminalConfigWrite(root, { action: 'set', keyPath: 'terminal.defaultModel', value: { ...choice.reference }, layer: 'global' }, host, options, locale);
-      const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
+      const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options, scopeId).catch(() => null) : null;
       // A project that names its own model keeps winning: the window then offers the two governed answers (owner 2026-10-08, Jev 77898686).
       const shadowed = outcome.status === 'applied' && plan?.source === 'project' && plan.reference;
       return { ...outcome, lines: [...outcome.lines, ...(shadowed ? [t('tui.model.defaultShadowed', {}, locale)] : [])],

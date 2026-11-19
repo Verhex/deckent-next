@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { inspectConfiguredModelUse } from '#composition/core/model-use/index.js';
+import { readHeadlessGovernedUse } from '#composition/core/model-invocation/index.js';
 import { modelActivationQuerySchema, type ModelActivationQuery } from '#domain/index.js';
 import { configuredInvocationProfiles, verifiedPrincipal, ModelActivationInspectionApplication, ModelActivationPolicyAuthorization } from '#engine/index.js';
 import { openSqliteModelActivationReader } from '#adapters/index.js';
@@ -19,6 +20,8 @@ export async function inspectConfiguredModelActivation(projectRoot: string, inpu
     const app = new ModelActivationInspectionApplication(verifiedPrincipal(principal),
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       async () => openSqliteModelActivationReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }));
-    return await app.inspect(query);
+    const result = await app.inspect(query);
+    const governedUse = use.modelUse !== false && profile ? await readHeadlessGovernedUse(profile, options) : null;
+    return governedUse ? { ...result, governedUse } : result;
   } catch (error) { throw queryFailure(error); }
 }

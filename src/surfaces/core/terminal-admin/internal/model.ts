@@ -1,4 +1,4 @@
-import { t } from '#platform/index.js';
+import { headlessGovernedUseText, t } from '#platform/index.js';
 import { part } from './failure.js';
 import { channelKindText, lifecycleText, readCurrentModel } from './current-model.js';
 import type { TerminalAdminCall } from './context.js';
@@ -14,13 +14,15 @@ export async function modelLines(call: TerminalAdminCall, args: string): Promise
   let current: CurrentReference | null = null;
   let reference = '';
   const identity = await part(t('terminal.admin.model.partIdentity', {}, locale), locale, context.describeTerminalChatPlan ? async () => {
-    const plan = await context.describeTerminalChatPlan!(root, options);
+    const plan = await context.describeTerminalChatPlan!(root, options, scopeId);
     if (!plan.reference) return [t('terminal.admin.model.notConfigured', {}, locale)];
     current = plan.reference;
     const model = await readCurrentModel(call);
     reference = model?.reference ?? '';
     const text = model?.text ?? plan.reference.modelId;
-    return [plan.status === 'ready' ? t('terminal.admin.model.current', { model: text }, locale) : t('terminal.admin.model.currentNotDeclared', { model: text }, locale)];
+    const limit = plan.governedUse ? headlessGovernedUseText(locale, plan.reference.providerId) : null;
+    return [plan.status === 'ready' ? t('terminal.admin.model.current', { model: limit ? model?.short ?? plan.reference.modelId : text }, locale)
+      : t('terminal.admin.model.currentNotDeclared', { model: text }, locale), ...(limit ? [limit.text, limit.next] : [])];
   } : null);
   const catalog = await part(t('terminal.admin.model.partCatalog', {}, locale), locale, context.inspectModelCatalog ? async () => {
     const view = await context.inspectModelCatalog!(root, { schemaVersion: 1, scopeId }, options);
@@ -38,6 +40,10 @@ export async function modelLines(call: TerminalAdminCall, args: string): Promise
         lines.push(t('terminal.admin.model.entry', { model: displayName && displayName !== entry.modelId ? t('terminal.admin.model.named', { name: displayName, where: entry.modelId }, locale) : entry.modelId,
           lifecycle: lifecycleText(entry.model.lifecycle.state, locale), state: state(entry.activation),
           mark: isCurrent ? t('terminal.admin.model.currentMark', {}, locale) : '' }, locale));
+        if (entry.governedUse) {
+          const limit = headlessGovernedUseText(locale, channel.channelId);
+          lines.push(limit.text, limit.next);
+        }
       }
     }
     return [...lines, t('terminal.admin.model.notice', {}, locale)];

@@ -1,7 +1,7 @@
 import { workerImageQuestion, workerImageProgress } from './worker-image.js';
 import type { WorkerImageState } from '#engine/index.js';
 import { onboardingMessage } from './message.js';
-import { t, ErrorRegistry } from '#platform/index.js';
+import { headlessGovernedUseText, t, ErrorRegistry } from '#platform/index.js';
 import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingFocus, OnboardingPort, OnboardingUi } from './contract.js';
 import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
@@ -57,11 +57,21 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     const stage = step.stages[0], pending = step.pending;
     const title = pending ? t('onboarding.parked.title', {}, locale) : stage ? onboardingMessage(stage.title, {}, locale) : '';
     const body = stage ? [onboardingMessage(stage.reason.code, stage.reason.params, locale)] : pending ? [pending.status === 'starting' ? t('onboarding.parked.unknown', {}, locale) : pending.status === 'released' ? t('onboarding.parked.released', {}, locale) : ErrorRegistry.createError(pending.fact.reason, { locale, params: pending.fact.params }).message] : [];
+    const pool = model.snapshot.plan.stages.find(row => row.id === 'work:pool');
+    if (stage?.id === 'core:model' || step.kind === 'work' || step.kind === 'ready') {
+      if (pool?.reason.code === 'setup.work.poolNeedsKind') body.push(t('setup.work.poolNeedsKind', {}, locale));
+      if (pool?.reason.code === 'setup.work.firstWorkerPool') body.push(t('doctor.firstWorker.pool', {}, locale), ...(pool.cli ? [pool.cli.join(' ')] : []));
+    }
     if (step.kind === 'ready' && model.snapshot.ready) {
       const ready = model.snapshot.ready;
       body.push(...ready.connection ? [t('onboarding.ready.connectionBody', {}, locale), t('onboarding.ready.connection', { provider: ready.provider ?? '-' }, locale)]
         : [t('onboarding.ready.body', {}, locale), t('onboarding.ready.image', { provider: ready.provider ?? '-', image: ready.imageId ?? '-' }, locale),
           t('onboarding.ready.fallback', { before: ready.fallbackBefore ?? '-', after: ready.fallbackAfter ?? '-' }, locale)]);
+      const connection = model.snapshot.connections?.find(row => row.id === ready.connection && row.governedUse);
+      if (connection) {
+        const limit = headlessGovernedUseText(locale, connection.channelId);
+        body.push(limit.text, limit.next);
+      }
     }
     const question = { title, body, step: model.completed + 1, total: model.total,
       choices: pending ? [...(pending.status === 'released' ? [{ id: 'start', label: t('onboarding.parked.start', {}, locale) }] : []),
@@ -83,7 +93,12 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
               t('onboarding.work.signIn', { command: guidance.signIn }, locale), t('onboarding.work.return', {}, locale)] : [] };
         }) };
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
-      const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
+      const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => {
+        const label = t('onboarding.work.useSubscription', { cli: row.provider }, locale);
+        if (!row.governedUse) return { id: `connection:${row.id}`, label };
+        const limit = headlessGovernedUseText(locale, row.channelId);
+        return { id: `connection:${row.id}`, label: `${label} · ${t('headless.governedUse.notReady', {}, locale)}`, detail: [limit.text, limit.next] };
+      }) }
         : provider ? { title: t('onboarding.work.selected', { cli: provider }, locale), body, choices: [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] } : picker;
       // BeUser M-28: a kind already set up (revisit) is kept by default; adding another CLI is the explicit second choice.
       choice = admitted.length && step.stages[0]?.state === 'done' ? await askOnboardingQuestion({ ...question, title: t('onboarding.work.configured', { cli: admitted.join(', ') }, locale),

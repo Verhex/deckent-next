@@ -398,6 +398,10 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   giriş satırını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Alpha.62 metin sohbetini
   ekledi; alpha.63'ten beri abonelik sohbeti politika ve onayla deckent araçlarını kullanır. CLI'ın yerleşik araçları kapalı
   kalır; deckent MCP köprüsü doğrulama sonrasında kullanılabilir. *Korumalı alan yoksa yol:* Anthropic API anahtarı kullanın.
+- **Deckent durum dizini dışındaki abonelik giriş klasörü yalıtılmış tek seferlik model çağrılarına açıktır.** `deckent models connect --config-dir`
+  olağan ön denetimden geçen klasörü kabul eder. Yönetilen araçlı sohbet ve işçiler deckent durum dizini içinde bir giriş ister.
+  Sahibin terminalinde `deckent models login --connection <bağlantı>` komutunu `--config-dir` vermeden çalıştırın. Ardından aynı modeli
+  `deckent models connect` ile yine `--config-dir` vermeden bağlayın.
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Claude ve ChatGPT (Codex CLI) abonelikleri deckent araçlı sohbetini sağlar;
   kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde Claude veya ChatGPT ile giriş
   yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
@@ -1247,6 +1251,9 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   içinde yanıt gelmezse "sınanmadı" der. `deckent init`'in kendi son denetimi bu sınamayı yinelemez. Etkileşimli doctor yalnız mevcut
   bir ürün komutunun uyguladığı düzeltmeleri önerir (bugün: işçi araç güncellemesi); kurulum klasörünü özel yapmak kendi politika
   eylemini bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+  Metin, JSON ve `/doctor` açılış özetinde kurulum sağlığı ile ilk işçinin hazır olup olmadığı ayrı gösterilir. İşçi havuzu
+  yoksa `deckent` komutunu çalıştırıp `/setup` açın. Kayıt defteri yapılandırması zaten bir havuz adı veriyorsa
+  `deckent init pool --scope <kapsam> --preview` ile kurulumu önizleyin, ardından gösterilen uygulama adımını izleyin.
 - **Kurulumu okuyan komutlar yaklaşık 0,45–0,6 s'de açılır** (`doctor`, `config`, `operation`, `approval`, `run`, terminal); 16
   çekirdekli bir makinede Node ~1400 modül yükler. `--version` ve yardım yaklaşık 0,12 s'de açılır. Diğer komutların daha hızlı
   açılması beta sonrası açık bir owner kararıdır (paketleme ya da modül sınırı değişikliği).

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, headlessGovernedUseText, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { modelActivationCommandSchema, modelActivationQuerySchema, parseModelReference,
@@ -94,7 +94,8 @@ function replayLabel(replayed: boolean, locale: Locale): string {
 }
 function renderInspection(value: ModelActivationInspection, locale: Locale): string {
   const ref = label(value.reference);
-  const notice = t('models.activation.notice', {}, locale);
+  const limit = value.governedUse ? headlessGovernedUseText(locale, value.reference.providerId) : null;
+  const notice = limit ? [limit.text, limit.next].join('\n') : t('models.activation.notice', {}, locale);
   if (value.activation === null) return [t('models.activation.absent', { reference: ref, scope: value.scopeId }, locale), notice].join('\n');
   return [t('models.activation.persisted', { reference: ref, scope: value.scopeId, revision: value.activation.revision,
     state: stateLabel(value.activation.state, locale) }, locale), notice].join('\n');

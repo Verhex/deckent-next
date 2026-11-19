@@ -24,7 +24,8 @@ export type { /** @deprecated No importer in Core; barrel name kept for one rele
 export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment, inheritedEnvironment, CHILD_BASE_ENVIRONMENT, MCP_STDIO_BASE_ENVIRONMENT, mcpStdioEnvironment, serviceEnvironment, personProcessEnvironment, FIXED_TOOL_PATH, userBusEnvironment } from '#platform/core/host/index.js';
 export { isMainModule, packageRemovalCommand, handMadeLaunchers } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
-export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
+export { agentGlobalStateRoots, globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
+export { inspectNativeStateCustody } from '#platform/core/config/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GlobalScopePlatform, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type NodeSupport } from '#platform/core/host/index.js';
@@ -67,7 +68,7 @@ export { colorCapability, colorTier, /** @deprecated No importer in Core; barrel
 export { terminalRecordText, formatValue, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';
 export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ EmitOptions } from '#platform/core/output/index.js';
-export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
+export { headlessGovernedUseText, LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
 export { messageText } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
 export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS, CONFIG_ENVIRONMENT_KEYS, MEMORY_AUTOMATION_MODES, configApplyPresentation } from '#platform/core/config-fields/index.js';

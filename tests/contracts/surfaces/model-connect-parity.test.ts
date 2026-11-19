@@ -113,6 +113,23 @@ describe('models.connect surface parity', () => {
     } finally { await client.close(); await server.close(); }
   });
 
+  it('156 connects outside state and names the governed-use limit and recovery in EN/TR', async () => {
+    const folder = '/tmp/fixture-outside-sign-in';
+    for (const locale of ['en', 'tr'] as const) {
+      let out = '';
+      await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', 'fixture-model',
+        '--config-dir', folder, '--lang', locale], { root: '/project', env: { HOME: '/tmp/fixture-home' }, stdout: { write: text => { out += text; return true; } },
+        connectModel: async () => ({ ...result, connection: 'claude-cli-subscription', credentialRef: null, keyStored: null,
+          cli: { configDir: folder, delegate: [], governedUse: 'outside-installation' } }) });
+      expect(out).toContain(locale === 'en' ? 'Connected' : 'bağlandı');
+      expect(out).toContain(locale === 'en' ? 'Isolated one-shot model calls can use this connection.' : 'Yalıtılmış tek seferlik model çağrıları bu bağlantıyı kullanabilir.');
+      expect(out).toContain(locale === 'en' ? 'Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.'
+        : 'Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.');
+      expect(out).toContain('deckent models login --connection claude-cli-subscription');
+      expect(out).toContain('--config-dir');
+    }
+  });
+
   it('the SDK exports the same application function', () => {
     expect(sdk.connectModel).toBe(connectConfiguredModel);
   });

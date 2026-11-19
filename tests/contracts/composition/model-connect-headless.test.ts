@@ -16,7 +16,7 @@ import { connectModel } from '../../../src/index.js';
 import * as platform from '#platform/index.js';
 import * as catalog from '#composition/core/provider-catalog/index.js';
 import * as configComposition from '#composition/core/config/index.js';
-import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
+import { providerPanelPort, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
@@ -29,6 +29,7 @@ import { main } from '#surfaces/core/cli/index.js';
 import { Writable } from 'node:stream';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { resolveConfiguredModelUse } from '#composition/core/model-use/index.js';
+import { configuredNativeChatReadiness, inspectSubscriptionReadiness, nativeReadinessQuery } from '#composition/core/subscription-readiness/index.js';
 import { parseModelInvocationProfile, CORE_MODEL_ROLES, WORK_CLASS_WORKER_ROLE } from '#domain/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
@@ -42,6 +43,7 @@ import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
+import { personEnv } from '../support/person-env.js';
 
 // The MCP actor holds the same grants, so the refusal below is the person-only rule itself, not a missing grant.
 const both = [...me, { issuer: `${me[0]!.issuer}/mcp`, subject: me[0]!.subject }];
@@ -135,9 +137,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await main(['coding', '--json'], { root: h.f.project, env: h.f.env, stdout })).toBe(0);
     expect(JSON.parse(output).profiles[0]).toMatchObject({ runtime: 'subscription', connection: profile.id });
     // R8c: people see the connection as CLI · model (its id only in --json); R8b: `--connection` alone names the provider.
-    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate };
+    const host = { workerCliOf: (family: string) => adapters.nativeCliAgent(family)?.id ?? null, configureCodingTemplate: configureNativeCodingTemplate, readHeadlessLogins: readConfiguredHeadlessLogins };
     output = ''; expect(await main(['coding'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(output).toContain(`claude · ${profile.reference.modelId}`); expect(output).not.toContain(profile.id);
+    expect(output).toContain('Governed chat and workers are not ready');
+    expect(output).toContain('deckent models login --connection claude-cli-subscription');
     output = ''; expect(await main(['coding', 'template', '--connection', profile.id, '--kind', 'coding', '--preview', '--json'], { root: h.f.project, env: h.f.env, stdout, ...host })).toBe(0);
     expect(JSON.parse(output)).toMatchObject({ status: 'unchanged', connection: profile.id });
     // KG7 F3: `coding template` names the connection from the same worker binding `coding` lists.
@@ -161,8 +165,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   });
 
   it('K29: Codex connection selects its registry capability and refuses a different provider without writing', async () => {
-    const h = await harness(null), configDir = join(h.f.data, 'codex-k29'), path = join(h.f.project, '.deckent/config.json');
-    await mkdir(configDir, { mode: 0o700 });
+    const h = await harness(null), configDir = join(platform.globalStateRoot(h.f.env)!, 'codex-k29'), path = join(h.f.project, '.deckent/config.json');
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
     const executable = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(configDir, 'config.toml') });
     await connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId: 'codex-k29', scopeId: 'scope', connection: 'codex-cli-subscription',
       model: { nativeId: codexSeed.recommendedActivations[0]!.modelIds[0]! }, cli: { executable, configDir }, delegate: ['ai', 'system'] }, { env: h.f.env });
@@ -260,14 +264,24 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       await settleOnboarding(platform.resolveProductLayout({ projectRoot: h.f.project, root: h.f.data }));
       await h.f.start();
       const cli = resolve('dist/composition/core/cli/internal/entry.js');
+      const env = personEnv({ ...h.f.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' });
+      for (const locale of ['en', 'tr'] as const) {
+        const reason = locale === 'en' ? 'Governed chat and workers are not ready' : 'yönetilen sohbet ve işçiler hazır değil';
+        for (const action of ['status', 'chat-plan']) {
+          const view = await promisify(execFile)(process.execPath, [cli, 'terminal', action, '--scope', 'scope', '--lang', locale], { cwd: h.f.project, env });
+          expect(view.stdout).toContain(reason);
+          expect(view.stdout).toContain('deckent models login --connection claude-cli-subscription');
+        }
+      }
       // The PTY wraps long notices; wait for the catalog's first sentence, including the fixture's window.
       const quota = platform.t('headless.chat.quota', { window: platform.t('headless.chat.quotaWindow.five_hour', {}, 'en') }, 'en').split('. ')[0]!;
-      const steps = [['deckent workline', '/model\r'], ['Models · scope', '\r'], ['Agent readiness unknown:', '\u001b'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
+      const outside = 'Governed chat and workers are not ready';
+      const steps = [[outside, '/model\r'], ['Models · scope', '\r'], [outside, '\u001b', 'fresh'], ['claude-cli-subscription ›', '\u001b', 'fresh'],
         ['Ready', '/provider\r', 'fresh'], ['deckent never reads, copies or shares it.', '\u001b'], ['Ready', 'first hello\r', 'fresh'], ['CLAUDE-CHAT-FIRST', 'wait please\r'],
         ['CLAUDE-CHAT-WAIT', '\u001b'], ['cancelled (model response)', 'remember first hello\r'],
         ['CLAUDE-CHAT-SECOND', 'quota please\r'], [quota, '/exit\r', 'fresh']];
       const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'terminal', 'workline', '--scope', 'scope']),
-        JSON.stringify(steps), 'tty', 'until-exit'], { cwd: h.f.project, env: { ...h.f.env, TERM: 'xterm-256color', NO_COLOR: '1', DECKENT_LANGUAGE: 'en' },
+        JSON.stringify(steps), 'tty', 'until-exit'], { cwd: h.f.project, env,
         timeout: 120_000, maxBuffer: 8 * 1024 * 1024 });
       const result = JSON.parse(stdout) as { status?: number; timeout?: string; output: string };
       console.info('A62 Claude text chat PTY:', JSON.stringify(result));
@@ -419,11 +433,48 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect((await h.profile())!.adapter.definition).toMatchObject({ executable: join(bin, 'claude'), configDir: owned });
     expect((await lstat(owned)).mode & 0o777).toBe(0o700);
     // An explicit dir is the person's override, never the default; the doctor tells the two apart (no spawn, nothing created).
-    expect(await h.connect('c-2')).toMatchObject({ cli: { configDir: h.configDir, owned: false } });
+    expect(await h.connect('c-2')).toMatchObject({ cli: { configDir: h.configDir, owned: false, governedUse: 'outside-installation' } });
     const section = () => readFile(join(h.f.project, '.deckent/config.json'), 'utf8').then(text => (JSON.parse(text) as Record<string, unknown>)['provider_invocation_profiles']);
     expect((await readConfiguredHeadlessLogins(await section(), 'scope', { env: h.f.env })).map(login => [login.configDir, login.owned])).toEqual([[h.configDir, false]]);
+    const custody = async () => {
+      const profile = parseModelInvocationProfile(await h.profile());
+      const query = nativeReadinessQuery(profile, 'worker')!;
+      const gate = configuredNativeChatReadiness(h.f.project, { env: h.f.env }, false, [profile]);
+      return Promise.all([inspectSubscriptionReadiness(query, gate), readConfiguredHeadlessLogins(await section(), 'scope', { env: h.f.env })]);
+    };
+    const [worker, displayed] = await custody();
+    expect(worker).toMatchObject({ governedUse: 'outside-installation' });
+    expect(displayed).toMatchObject([{ governedUse: 'outside-installation' }]);
+    const options = { env: h.f.env }, inspectCatalog = () => inspectConfiguredModelCatalog(h.f.project, { schemaVersion: 1, scopeId: 'scope' }, options);
+    const catalogView = await inspectCatalog();
+    const connection = catalogView.channels.find(channel => channel.channelId === 'claude-cli-subscription');
+    expect(connection).toMatchObject({ access: 'allowed', models: expect.arrayContaining([expect.objectContaining({ governedUse: 'outside-installation' })]) });
+    for (const locale of ['en', 'tr'] as const) {
+      const reason = locale === 'en' ? 'Governed chat and workers are not ready' : 'yönetilen sohbet ve işçiler hazır değil';
+      const next = 'deckent models login --connection claude-cli-subscription';
+      const readinessText = subscriptionReadinessText(worker, locale, 'claude-cli-subscription');
+      expect(readinessText).toContain(reason); expect(readinessText).toContain(next);
+      let text = '';
+      const stdout = new Writable({ write(chunk, _encoding, done) { text += String(chunk); done(); } });
+      expect(await main(['models', 'catalog', 'list', '--scope', 'scope', '--lang', locale],
+        { root: h.f.project, env: h.f.env, stdout, inspectModelCatalog: inspectCatalog })).toBe(0);
+      expect(text).toContain(reason); expect(text).toContain(next);
+      const server = createMcpServer({ inspectModelCatalog: inspectCatalog } as McpApplications, { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, locale);
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connect(serverTransport);
+      const client = new Client({ name: 'readiness-fixture', version: '1' });
+      await client.connect(clientTransport);
+      try {
+        const read = await client.callTool({ name: 'inspect_model_catalog', arguments: { schemaVersion: 1, scopeId: 'scope' } });
+        expect(read.isError ?? false).toBe(false);
+        expect(JSON.stringify(read)).toContain(reason); expect(JSON.stringify(read)).toContain(next);
+      } finally { await client.close(); await server.close(); }
+    }
     await run({ PATH: bin }, 'c-3');
     expect((await readConfiguredHeadlessLogins(await section(), 'scope', { env: h.f.env })).map(login => [login.configDir, login.owned])).toEqual([[owned, true]]);
+    const [insideWorker, [insideLogin]] = await custody();
+    expect(insideWorker ?? {}).not.toHaveProperty('governedUse');
+    expect(insideLogin).not.toHaveProperty('governedUse');
   });
   it('s3c models login: an MCP actor or a caller without the terminal witness is refused before anything is created or started; the person signs the own dir in', async () => {
     const h = await harness(null), owned = join(await realpath(h.f.env.HOME), '.deckent', 'headless', 'logins');

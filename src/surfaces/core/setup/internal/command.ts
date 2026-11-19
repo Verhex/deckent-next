@@ -99,7 +99,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
       } while (await controller.runPending());
     } finally { release(); stdin.pause(); }
     const outcome = controller.outcome();
-    emit(renderSetupLines(outcome.plan, controller.locale(), { requested: false, results: outcome.results }), sinks);
+    emit(renderSetupLines(outcome.plan, controller.locale(), { requested: false, results: outcome.results }, outcome), sinks);
     return;
   }
   let plan = planFor(observed, unattendedAnswers(observed.observation, flags, false, observed.registry), flags.phase);
@@ -119,7 +119,9 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   const executionPermission = executionScope && context.upgradePolicyTemplate && plan.stages.some(stage => stage.id === 'core:policy' && ['done', 'skipped'].includes(stage.state))
     ? await offerExecutionPermission(context, root, executionScope, locale, false) : undefined;
   if (format === 'json') emit({ ...setupDocument(plan, outcome), ...(executionPermission ? { executionPermission } : {}) }, { ...sinks, json: true });
-  else emit([renderSetupLines(plan, locale, outcome), ...(executionPermission ? [setupMessage(executionPermission.key, executionPermission.params, locale)] : [])].join('\n'), sinks);
+  else emit([renderSetupLines(plan, locale, outcome, { ...(observed.firstJob ? { firstJob: observed.firstJob } : {}),
+    ...(observed.observation.model.externalConnection ? { externalConnection: observed.observation.model.externalConnection } : {}) }),
+    ...(executionPermission ? [setupMessage(executionPermission.key, executionPermission.params, locale)] : [])].join('\n'), sinks);
   if (results.some(result => result.status === 'not-wired')) throw ErrorRegistry.createError('SETUP_APPLY_UNAVAILABLE');
   // A refused stage (no terminal, no witness, no grant): typed, naming the stage; nothing after it was attempted.
   const refused = results.find(result => result.status === 'refused');

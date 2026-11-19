@@ -5504,7 +5504,6 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-cli-registry",
-        "src/adapters/core/agent-workspace-floor",
         "src/composition/core/root",
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation",

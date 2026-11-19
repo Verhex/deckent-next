@@ -22,6 +22,8 @@ export type SubscriptionReadinessObservations = Readonly<{
   bridge?: boolean | null;
   /** NF-7: a display read's verification time (host clock, ms); presentation only, never part of readiness. */
   checkedAtMs?: number;
+  /** Display-only custody diagnosis. The existing gate still uses the environment observation. */
+  governedUse?: 'outside-installation';
 }>;
 export interface SubscriptionReadinessReader {
   /** Read only existing observations for this exact surface/scope/reference. The caller owns inspection authorization.
@@ -30,8 +32,8 @@ export interface SubscriptionReadinessReader {
   read(query: SubscriptionReadinessQuery): Promise<SubscriptionReadinessObservations | null | undefined>;
 }
 type Check = readonly [boolean | null | undefined, NativeAgentReadinessReason];
-const incomplete = (state: 'unknown' | 'unavailable', reason: NativeAgentReadinessReason): NativeAgentReadiness =>
-  nativeAgentReadinessSchema.parse({ state, reason });
+const incomplete = (state: 'unknown' | 'unavailable', reason: NativeAgentReadinessReason, governedUse?: 'outside-installation'): NativeAgentReadiness =>
+  nativeAgentReadinessSchema.parse({ state, reason, ...(governedUse ? { governedUse } : {}) });
 
 /** Prerequisite projection only: a ready seal is neither consent, a policy grant, a capacity reservation nor admission.
  * Brain uses its tool-less profile's observations; tool/plugin/bridge failures only block tool-bearing surfaces.
@@ -53,8 +55,8 @@ export async function inspectSubscriptionReadiness(input: SubscriptionReadinessQ
     'NATIVE_AGENT_CAPABILITY_UNSEALED']);
   // A known blocker is more informative than an earlier missing observation; neither can produce ready.
   const refused = checks.find(([value]) => value === false);
-  if (refused) return incomplete('unavailable', refused[1]);
+  if (refused) return incomplete('unavailable', refused[1], observed?.governedUse);
   const missing = checks.find(([value]) => value !== true);
-  if (missing) return incomplete('unknown', missing[1]);
+  if (missing) return incomplete('unknown', missing[1], observed?.governedUse);
   return nativeAgentReadinessSchema.parse({ state: 'ready', execution: seal.data });
 }

@@ -68,7 +68,8 @@ Ask the person to open `deckent` in that folder and complete the setup screens. 
 - Confirm uninstall, its tier, `--force`, `--disable-unit` and the backup passphrase themselves. Knowing the installation name
   grants no authority, and `--yes` does not replace the person at their terminal.
 
-After their steps, run `deckent doctor --json` again and report the exact remaining failures and warnings. Report the scope,
+After their steps, run `deckent doctor --json` again and report the exact remaining failures and warnings. Read the installation
+verdict and the first-worker check in `summary.checks` separately. Report the scope,
 package version supplied by the artifact, completed steps, person-only steps still pending and the next action. Doctor green
 is installation evidence; it is not acceptance of a later ERP/CRM operation or a worker's output.
 

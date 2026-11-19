@@ -84,7 +84,7 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
 export type ModelInspectionReads = Pick<ModelCommandContext, 'inspectDeclaredModels' | 'inspectModelBinding' | 'inspectModelActivation' | 'inspectModelCatalog'>
   & Pick<ProviderPanelHost, 'inspectInvocableModels' | 'inspectSubscriptionReadiness'> & {
     inspectBrainModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<Readonly<{ models: readonly import('#domain/index.js').RoleModelRow[] }>>;
-    describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<{ reference: ModelReference | null; source: string | null }>;
+    describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions, scopeId?: string) => Promise<{ reference: ModelReference | null; source: string | null }>;
   };
 /** PV: who besides the person may use a CLI subscription login (S10: never MCP). */
 export type ProviderDelegateClass = 'ai' | 'system';

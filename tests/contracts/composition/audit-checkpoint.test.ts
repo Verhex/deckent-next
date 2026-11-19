@@ -91,7 +91,7 @@ it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share rea
     expect(JSON.parse(json)).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'policy-changed' } });
     for (const locale of ['en', 'tr'] as const) {
       let human = ''; await runKernelCommand(['doctor', '--lang', locale], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { human += value; } } });
-      expect(human.split('\n')[0]).toContain(locale === 'en' ? 'Status: needs attention' : 'Durum: ilgi bekliyor');
+      expect(human.split('\n')[0]).toContain(locale === 'en' ? 'Installation health: needs attention' : 'Kurulum sağlığı: ilgi bekliyor');
       expect(human).toContain(locale === 'en' ? 'policy changed' : 'politika değişmiş');
     }
     expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('policy-changed');
@@ -170,7 +170,7 @@ it('a throwing verifier, an unverified scope and an unavailable result are never
     expect(JSON.parse(json), name).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: name === 'unverified' ? 'no-checkpoint-yet' : 'unavailable' } });
     for (const locale of ['en', 'tr'] as const) {
       let human = ''; await runKernelCommand(['doctor', '--lang', locale], { root, env, verifyAudit, stdout: { write: value => { human += value; } }, stderr: quiet });
-      expect(human.split('\n')[0], `${name}/${locale}`).toContain(locale === 'en' ? 'Status: needs attention' : 'Durum: ilgi bekliyor');
+      expect(human.split('\n')[0], `${name}/${locale}`).toContain(locale === 'en' ? 'Installation health: needs attention' : 'Kurulum sağlığı: ilgi bekliyor');
       expect(human, `${name}/${locale}`).toContain(t(name === 'unverified' ? 'doctor.check.audit.noCheckpoint' : 'cli.audit.reason.unavailable', {}, locale));
     }
   }

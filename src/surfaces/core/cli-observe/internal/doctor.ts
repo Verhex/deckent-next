@@ -204,7 +204,8 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
   const [command] = args.positionals;
   if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
   const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
-    const grouped = renderDoctorChecks(measured.checks, call.locale, measured.data.summary.checks);
+    const pool = measured.data.poolReadiness.status;
+    const grouped = renderDoctorChecks(measured.checks, call.locale, measured.data.summary.checks, pool === 'unconfigured' || pool === 'missing');
     return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
       renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale,
         { status: false, imageId: measured.config.execution?.docker?.imageId ?? null })].join('\n') : grouped;

@@ -1,4 +1,4 @@
-import { persistedString, toInputJsonSchema, persistedInteger, INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit, PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
+import { persistedString, toInputJsonSchema, persistedInteger, INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit, PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, headlessGovernedUseText, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { hubToolDefinitions } from './hub-tools.js';
 import type { HubOperationHandler } from '#engine/index.js';
 import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList, runProposalQuerySchema, type RunProposalQuery, approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection, quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView, decisionQuerySchema, type DecisionQuery, type DecisionInspection, memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus, modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
@@ -240,7 +240,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const inspectActivation = applications.inspectModelActivation;
   if (inspectActivation) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_activation',
     description: t('mcp.tool.inspectModelActivation', {}, locale), schema: modelActivationQuerySchema,
-    invoke: input => inspectActivation.call(applications, modelActivationQuerySchema.parse(input)) });
+    invoke: async input => {
+      const view = await inspectActivation.call(applications, modelActivationQuerySchema.parse(input));
+      return view.governedUse ? { ...view, readiness: headlessGovernedUseText(locale, view.reference.providerId) } : view;
+    } });
   const admitActivation = applications.admitModelActivation;
   // Destructive but idempotent: engine/core/model-activation/internal/application.ts:28-32 returns the commandId-keyed receipt before the catalog/binding admission effect runs again.
   if (admitActivation) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'admit_model_activation',
@@ -250,7 +253,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const inspectCatalog = applications.inspectModelCatalog;
   if (inspectCatalog) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_catalog',
     description: t('mcp.tool.inspectModelCatalog', {}, locale), schema: modelCatalogQuerySchema,
-    invoke: input => inspectCatalog.call(applications, modelCatalogQuerySchema.parse(input)) });
+    invoke: async input => {
+      const view = await inspectCatalog.call(applications, modelCatalogQuerySchema.parse(input));
+      const readiness = view.channels.flatMap(channel => channel.access === 'allowed' && channel.models.some(model => model.governedUse)
+        ? [{ channel: channel.channelId, ...headlessGovernedUseText(locale, channel.channelId) }] : []);
+      return readiness.length ? { ...view, readiness } : view;
+    } });
   // M2 parity: the same read view as CLI `models roles` and doctor; there is no MCP write (a tier/role change needs the person's terminal).
   const inspectRoles = applications.inspectModelRoles;
   if (inspectRoles) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_roles',

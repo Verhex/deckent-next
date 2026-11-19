@@ -190,7 +190,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,
-    describeTerminalChatPlan: describeTerminalChat,
+    describeTerminalChatPlan: (root, options, scopeId) => describeTerminalChat(root, options, undefined, undefined, scopeId),
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).

@@ -10,7 +10,7 @@ import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { optionalField, DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, headlessGovernedUseText, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
@@ -66,11 +66,12 @@ function yesNo(value: boolean, locale: Locale): string { return value ? t('termi
 function chatTarget(plan: TerminalChatPlanView | null, locale: Locale): string {
   if (!plan || !plan.reference) return t('terminal.chat.notConfigured', {}, locale);
   const model = `${plan.reference.providerId}/${plan.reference.modelId}@${plan.reference.modelVersion}`;
-  return plan.status === 'ready' ? model : `${model} · ${t('terminal.chat.modelNotDeclared', {}, locale)}`;
+  return plan.governedUse ? `${model} · ${t('headless.governedUse.notReady', {}, locale)}` : plan.status === 'ready' ? model : `${model} · ${t('terminal.chat.modelNotDeclared', {}, locale)}`;
 }
 
 function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale): string {
   const { tty, inference, chat, projectId, installationId, identity } = payload;
+  const limit = chat?.governedUse ? headlessGovernedUseText(locale, chat.reference?.providerId) : null;
   const unavailable = (reason: 'not-created' | 'unsupported') => reason === 'not-created'
     ? t('terminal.identity.notCreated', {}, locale) : t('terminal.identity.unsupported', {}, locale);
   return [
@@ -83,7 +84,7 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
         endpoint: inference.endpoint ?? t('terminal.value.none', {}, locale) }, locale)
       : t('terminal.status.inferenceAbsent', {}, locale),
     t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale),
-    chat?.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : chat?.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale),
+    ...(limit ? [limit.text, limit.next] : [chat?.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : chat?.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale)]),
     t('terminal.status.hint', {}, locale),
   ].join('\n');
 }
@@ -207,7 +208,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
+  const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
+  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options, scopeId) : null;
   if (parsed.action === 'chat-plan') {
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
@@ -230,14 +233,16 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   const completeTerminalChat = context.completeTerminalChat;
   if (!completeTerminalChat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
-  const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   const hereModel = async (pinned?: ModelReference) => pinned ?? await context.describeTerminalChatPlan?.(root, options).then(plan => plan.source === 'connected' || plan.skippedDefault ? plan.reference ?? undefined : undefined, () => undefined); // M-08/AYSE-13: the model this terminal shows is the person's choice; /do passes it
   if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
   const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
+  if (chat?.governedUse) {
+    const limit = headlessGovernedUseText(locale, chat.reference?.providerId);
+    accessNotices.push({ level: 'warning', text: limit.text }, { level: 'info', text: limit.next });
+  }
   // Astra 2860 R1: a launch shell the person closed ends the launch before each effect (identity admission, service start, setup, sessions).
   const left = () => context.terminalShell !== undefined && !context.terminalShell.host.open();
   if (left()) return;
@@ -324,7 +329,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     const channel = read.channels.find(row => row.channelId === chat.reference!.providerId), entry = channel && channel.access !== 'denied' && channel.providerVersion === chat.reference!.providerVersion
       ? channel.models.find(row => row.model.id === chat.reference!.modelId && row.model.version === chat.reference!.modelVersion) : undefined;
     return (entry?.model as { displayName?: string } | undefined)?.displayName ?? modelName; }, () => modelName) : modelName;
-  const chatName = shownName && chat?.reference ? `${shownName} · ${providerDisplayName(chat.reference.providerId, context.providerConnect, locale)}` : chatTarget(chat, locale); // FIX9: names as `deckent models` shows them; the exact reference stays in /model details
+  const chatName = shownName && chat?.reference ? [shownName, providerDisplayName(chat.reference.providerId, context.providerConnect, locale),
+    ...(chat.governedUse ? [t('headless.governedUse.notReady', {}, locale)] : [])].join(' · ') : chatTarget(chat, locale);
   const instructions = context.openProjectInstructions ? lazy(() => context.openProjectInstructions!(root, options)) : null;
   const instructionPort: ProjectInstructionPort | undefined = instructions ? { inspect: async () => (await instructions()).inspect(), trust: async digest => (await instructions()).trust(digest), decline: async digest => (await instructions()).decline?.(digest),
     declined: async digest => await (await instructions()).declined?.(digest) ?? false, preview: async (bridges, skeleton) => (await instructions()).preview(bridges, skeleton), initialize: async preview => (await instructions()).initialize(preview) } : undefined;
@@ -427,7 +433,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     target, model: shownName ?? chat?.reference?.modelId ?? (onboarding && !await connected() ? t('onboarding.model.status', {}, locale) : chatTarget(chat, locale)),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
     // QW 16b: the plan's tool state (available | none | unknown) reaches the workline once, beside the model name.
-    ...(chat?.tools ? { modelTools: chat.tools } : {}),
+    ...(chat?.tools && !chat.governedUse ? { modelTools: chat.tools } : {}),
     systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, maxTrackedRuns: ((config['terminal'] ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.
@@ -471,7 +477,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
     ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context, principalName: hostUserName(), columns: Math.max(40, (tty.columns ?? 100) - 4),
-      status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
+      status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options, scopeId) : null, await readIdentity()), locale),
       doctor: sink => ports.runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }),
       // SW-1: the `/doctor` window groups the same command's structured report by area.
       doctorReport: sink => ports.runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),

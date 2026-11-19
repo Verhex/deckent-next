@@ -107,13 +107,15 @@ function sandbox({ facts }: CoreStageInput): CoreStageResult {
 }
 const connection = z.strictObject({ connection: identitySchema, model: identitySchema });
 function model(input: CoreStageInput): CoreStageResult {
-  const connections = input.facts.model.connections;
-  if (connections > 0) return result({ state: 'done', reason: reason('setup.reason.modelConnected', { count: connections }) });
+  const { connections, selection, externalConnection } = input.facts.model;
+  const unavailable = externalConnection ? { code: 'headless.governedUse.blocked', params: { connection: externalConnection } } : null;
+  if (selection || connections > 0) return result({ state: 'done', reason: unavailable ?? (selection ? reason('setup.reason.modelSelected', { model: selection })
+    : selection === null ? reason('setup.reason.modelMissing') : reason('setup.reason.modelConnected', { count: connections })) });
   if (!input.scopeId || !installed(input.facts)) return waits(input.scopeId ? 'core:policy' : 'core:folder');
   const chosen = answer(input, 'core:model', connection), scopeId = input.scopeId;
   const cli = ['deckent', 'models', 'connect', '--scope', scopeId, '--connection', chosen?.connection ?? '<connection>', '--model', chosen?.model ?? '<model>', '--command-id', '<command-id>'];
   // The key itself never enters the plan: the connection names a secret that is set through the hidden prompt or stdin.
-  if (!chosen) return result({ state: 'needs-answer', reason: reason('setup.reason.modelMissing'), question: question('setup.question.model'), cli });
+  if (!chosen) return result({ state: 'needs-answer', reason: unavailable ?? reason('setup.reason.modelMissing'), question: question('setup.question.model'), cli });
   return result({ state: 'ready', reason: reason('setup.reason.modelChosen', { model: chosen.model }), default: chosen, cli,
     operation: { id: 'model.connect', version: 1, input: { scopeId, connection: chosen.connection, model: chosen.model } } });
 }

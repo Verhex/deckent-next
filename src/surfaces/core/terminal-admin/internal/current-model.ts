@@ -2,7 +2,7 @@ import { t } from '#platform/index.js';
 import type { TerminalAdminCall } from './context.js';
 
 /** What `/status` and `/model` show about the model this terminal chats with: a human name when the catalog knows it, the exact reference always. */
-type CurrentModel = Readonly<{ status: 'ready' | 'not-declared'; reference: string; text: string; short: string }> | null;
+type CurrentModel = Readonly<{ status: 'ready' | 'not-declared' | 'outside-installation'; reference: string; text: string; short: string }> | null;
 
 type Reference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
 type CatalogChannel = Readonly<{ channelId: string; access: string; providerVersion?: number; channel?: Readonly<{ kind: string; cli?: string | null }>;
@@ -41,7 +41,7 @@ function modelEntryText(channel: CatalogChannel, entry: Readonly<{ modelId: stri
 export async function readCurrentModel(call: TerminalAdminCall): Promise<CurrentModel> {
   const { root, scopeId, options, locale, context } = call;
   if (!context.describeTerminalChatPlan) return null;
-  const plan = await context.describeTerminalChatPlan(root, options);
+  const plan = await context.describeTerminalChatPlan(root, options, scopeId);
   const reference = plan.reference as Reference | null;
   if (!reference) return null;
   const name = `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -57,5 +57,5 @@ export async function readCurrentModel(call: TerminalAdminCall): Promise<Current
     } catch { /* the catalog part of /model names its own failure; here the reference stays the text */ }
   }
   if (plan.tools) found = { ...found, text: `${found.short} · ${toolSupportText(plan.tools === 'available' ? 'supported' : plan.tools === 'none' ? 'unsupported' : 'unknown', locale)}` };
-  return { status: plan.status === 'ready' ? 'ready' : 'not-declared', reference: name, ...found };
+  return { status: plan.governedUse ?? (plan.status === 'ready' ? 'ready' : 'not-declared'), reference: name, ...found };
 }

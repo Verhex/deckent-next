@@ -1,19 +1,31 @@
 import { z } from 'zod';
 import { nativeCliIds, workerReadinessSchema } from '#domain/index.js';
-import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/core/setup/index.js';
+import { SETUP_MESSAGE_PARAMETER_MAX_LENGTH, type SetupDecision, type SetupFamilyPackage, type SetupStageContext } from '#engine/core/setup/index.js';
 import defaults from './work.json' with { type: 'json' };
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
-export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), workerReadiness: workerReadinessSchema.nullable().optional(), pendingProvider: z.string().optional(),
+export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), poolMissing: z.boolean().optional(),
+  workerTemplate: z.string().optional(), activeWorkerModels: z.array(z.string()).optional(),
+  workerReadiness: workerReadinessSchema.nullable().optional(), pendingProvider: z.string().optional(),
   providers: z.array(z.string()).max(16).optional(), kinds: z.array(z.string()).max(256).optional(),
   images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional(),
   /** R8b/R3a: the scope's connected subscription CLIs (a worker without Docker) and the one the person chose for the first work kind. */
-  connections: z.array(z.strictObject({ id: z.string(), provider: z.string() })).max(16).optional(), connection: z.strictObject({ id: z.string(), provider: z.string() }).optional() });
+  connections: z.array(z.strictObject({ id: z.string(), provider: z.string(), governedUse: z.literal('outside-installation').optional(), channelId: z.string().optional() })).max(16).optional(),
+  connection: z.strictObject({ id: z.string(), provider: z.string(), governedUse: z.literal('outside-installation').optional(), channelId: z.string().optional() }).optional() });
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORK_KIND_STAGE_ID = 'work:kind', WORK_POOL_STAGE_ID = 'work:pool';
 /** The coding CLIs a first work kind may run on: the native CLI registry, in its order (the window's choices). */
 export const WORK_PROVIDERS: readonly string[] = nativeCliIds;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export const WORK_DEFAULTS = Object.freeze({ kind: defaults.kind, poolId: defaults.pool, executionSlots: defaults.executionSlots, inFlightSlots: defaults.inFlightSlots });
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.work.${code}`, params });
+function activeModelNames(models: readonly string[] = []): string {
+  const names = models.join(', '), suffix = ', …';
+  if (names.length <= SETUP_MESSAGE_PARAMETER_MAX_LENGTH) return names || '—';
+  return `${names.slice(0, SETUP_MESSAGE_PARAMETER_MAX_LENGTH - suffix.length).replace(/, [^,]*$/u, '')}${suffix}`;
+}
+const workerMissing = (worker: z.infer<typeof workerReadinessSchema>): SetupDecision => ({ state: 'blocked',
+  reason: worker.code === 'HEADLESS_STATE_OUTSIDE_INSTALLATION'
+    ? reason('governedUseBlocked', { connection: worker.cli.at(-1) ?? '<connection>' }) : reason('workerMissing', { code: worker.code }),
+  cli: [...worker.cli] });
 const registryCli = (scopeId: string, provider: string, connection?: string) => ['deckent', 'init', 'registry', '--scope', scopeId, '--provider', provider, '--kind', WORK_DEFAULTS.kind,
   '--pool', WORK_DEFAULTS.poolId, '--execution-slots', String(WORK_DEFAULTS.executionSlots), '--in-flight-slots', String(WORK_DEFAULTS.inFlightSlots), ...(connection ? ['--connection', connection] : []), '--preview'];
 
@@ -29,7 +41,8 @@ function kind(context: SetupStageContext): SetupDecision {
   const selected = context.answer ?? facts.pendingProvider;
   if (facts.registry && facts.workerReadiness === null) return { state: 'blocked', reason: reason('workerUnknown') };
   if (facts.registry && (typeof selected !== 'string' || facts.providers === undefined || facts.providers.includes(selected))) return facts.workerReadiness && !facts.workerReadiness.ready
-    ? { state: 'blocked', reason: reason('workerMissing', { code: facts.workerReadiness.code }), cli: [...facts.workerReadiness.cli] } : { state: 'done', reason: reason('kindDone') };
+    ? workerMissing(facts.workerReadiness)
+    : { state: 'done', reason: facts.workerTemplate ? reason('kindSubscription', { template: facts.workerTemplate, active: activeModelNames(facts.activeWorkerModels) }) : reason('kindDone') };
   if (context.answer === false) return { state: 'skipped', reason: reason('kindMissing', { kind: WORK_DEFAULTS.kind, pool: WORK_DEFAULTS.poolId }) };
   if (!scopeId) return { state: 'blocked', reason: reason('unavailable') };
   // R8b (owner D1): a chosen subscription connection runs the worker in the host sandbox: no image gate, once the Git settings are written.
@@ -50,10 +63,11 @@ function pool(context: SetupStageContext): SetupDecision {
   const facts = context.facts as z.infer<typeof workFactsSchema> | undefined, scopeId = context.scopeId;
   if (!facts) return { state: 'blocked', reason: reason('unavailable') };
   if (facts.pool && facts.workerReadiness === null) return { state: 'blocked', reason: reason('workerUnknown') };
-  if (facts.pool && facts.workerReadiness && !facts.workerReadiness.ready) return { state: 'blocked', reason: reason('workerMissing', { code: facts.workerReadiness.code }), cli: [...facts.workerReadiness.cli] };
+  if (facts.pool && facts.workerReadiness && !facts.workerReadiness.ready) return workerMissing(facts.workerReadiness);
   if (facts.pool) return { state: 'done', reason: reason('poolDone') };
-  if (!scopeId || !facts.registry) return { state: 'blocked', reason: reason('waits', { stage: WORK_KIND_STAGE_ID }) };
-  return { state: 'ready', reason: reason('poolMissing'), operation: { id: 'work.pool', version: 1, input: { scopeId } }, cli: ['deckent', 'init', 'pool', '--scope', scopeId, '--preview'] };
+  if (!scopeId || !facts.registry) return facts.poolMissing ? { state: 'blocked', reason: reason('poolNeedsKind'), cli: ['deckent'] } : { state: 'blocked', reason: reason('waits', { stage: WORK_KIND_STAGE_ID }) };
+  return { state: 'ready', reason: reason(facts.poolMissing !== false ? 'firstWorkerPool' : 'poolMissing'),
+    operation: { id: 'work.pool', version: 1, input: { scopeId } }, cli: ['deckent', 'init', 'pool', '--scope', scopeId, '--preview'] };
 }
 /** BR1 1b: the first work kind, then its pool, after the model and the project instructions; family stages are never `--yes`-eligible. */
 export const WORK_SETUP_FAMILY: SetupFamilyPackage = Object.freeze({ namespace: 'work', source: 'deckent-core', facts: workFactsSchema.optional(),

@@ -43,6 +43,13 @@ export function globalStateRoot(env: Environment = process.env, platform: string
   const found = resolveGlobalStateRoot(env, platform);
   return found.ok ? found.root : null;
 }
+/** P5a: the configured and conventional installation roots of each environment, including roots that do not exist yet. */
+export function agentGlobalStateRoots(environments: readonly Environment[]): string[] {
+  return [...new Set(environments.flatMap(environment => {
+    const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
+    return [...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []];
+  }))];
+}
 export function resolveGlobalConfigPaths(env: Environment = process.env, platform: string = process.platform) {
   const scope = resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env);
   const api = pathApi(platform);

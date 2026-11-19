@@ -1,5 +1,5 @@
 import type { ModelCatalogChannelView, ModelCatalogInspection } from '#engine/index.js';
-import { t, terminalSafeText, type Locale } from '#platform/index.js';
+import { headlessGovernedUseText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 
 const DAY_MS = 86_400_000;
@@ -46,7 +46,7 @@ export function renderRetirementWarning(warning: ModelRetirementWarning, locale:
  */
 export function renderModelsTable(inspection: ModelCatalogInspection, input: Readonly<{ locale: Locale; nowMs: number; warnDays: number; verbose: boolean; style: CliTableStyle }>): string {
   const { locale } = input, today = catalogToday(input.nowMs);
-  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.activationConflict ? t('tui.model.reconcile.title', {}, locale)
+  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.governedUse ? t('headless.governedUse.notReady', {}, locale) : entry.activationConflict ? t('tui.model.reconcile.title', {}, locale)
     : entry.chatState === 'active' && (!channel.activation || !entry.activation) ? t('tui.model.workers.notSetUp', {}, locale) : modelRetired(entry.model, today) ? t('climodels.models.state.retired', { day: retireDay(entry.model) ?? '?' }, locale)
     : usable(channel, entry) ? t('climodels.models.state.active', {}, locale)
       : entry.activation?.state === 'active' ? t('climodels.models.state.channelOff', {}, locale) : t('climodels.models.state.inactive', {}, locale);
@@ -64,6 +64,10 @@ export function renderModelsTable(inspection: ModelCatalogInspection, input: Rea
     { header: t('climodels.models.table.state', {}, locale) }, { header: t('climodels.models.table.effort', {}, locale) },
     ...(input.verbose ? [{ header: t('climodels.models.table.details', {}, locale) }] : [])];
   const warnings = modelRetirementWarnings(inspection, input.nowMs, input.warnDays).map(warning => `! ${renderRetirementWarning(warning, locale)}`);
+  for (const channel of inspection.channels) if (channel.access === 'allowed' && channel.models.some(model => model.governedUse)) {
+    const limit = headlessGovernedUseText(locale, channel.channelId);
+    warnings.push(`! ${channelLabel(channel, locale)} · ${limit.text}`, limit.next);
+  }
   return [t('climodels.models.heading', { scope: terminalSafeText(inspection.scopeId) }, locale),
     rows.length ? renderCliTable(columns, rows, input.style) : t('climodels.models.empty', {}, locale),
     ...(warnings.length ? ['', ...warnings] : []), '', t('climodels.models.footer', {}, locale)].join('\n');
