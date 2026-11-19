@@ -17,6 +17,9 @@ import { doctorVerdict } from '#surfaces/core/cli-observe/index.js';
 import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/index.js';
 import { renderSetupLines } from '#surfaces/core/setup/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
+import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
+import { EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-kit/index.js';
+import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
@@ -242,6 +245,54 @@ describe('doctor subscription rows (pure)', () => {
 });
 
 const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
+describe('first-worker health verdict', () => {
+  async function check(workerReadiness: DoctorCheckFacts['workerReadiness'], status: 'ready' | 'degraded', pending: number) {
+    registerProviderConfig();
+    const capacity = { executionSlots: 1, inFlightSlots: 1 };
+    const root = await project({ terminal: { scopeId: 'fixture' }, admission: { poolId: 'fixture-pool', ...capacity,
+      ordering: 'input-order', registry: fixtureDockerRegistry(['coding']) } });
+    const env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
+    await mkdir(join(env.HOME, '.deckent'), { recursive: true });
+    await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
+    const context = { root, env, inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
+      occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
+      inspectWorkerReadiness: async (_root: string, scope: string, _options: unknown, kind?: string) => {
+        expect(scope).toBe('fixture'); expect(kind).toBe('coding'); return workerReadiness ?? null;
+      } };
+    for (const locale of ['en', 'tr'] as const) {
+      let json = '', human = '';
+      await runKernelCommand(['doctor', '--json', '--lang', locale], { ...context, stdout: { write: chunk => { json += chunk; } } });
+      const result = JSON.parse(json.trim().split('\n').at(-1)!);
+      expect(result).toMatchObject({ schemaVersion: 2, status, poolReadiness: { status: 'ready' }, summary: { check: workerReadiness?.ready === false ? 1 : 0, failed: 0 } });
+      expect(result).not.toHaveProperty('workerReadiness'); expect(result).not.toHaveProperty('checks');
+      const verdict = t(status === 'ready' ? 'doctor.summary.ready' : 'doctor.summary.attention', {}, locale);
+      await runKernelCommand(['doctor', '--lang', locale], { ...context, stdout: { write: chunk => { human += chunk; } } });
+      expect(human.split('\n')[0]).toContain(verdict);
+      expect(human.split('\n')[0]).toContain(t('doctor.summary.untested', { n: result.summary.untested }, locale));
+      const pool = doctorChecks(report, facts({ workerReadiness }), locale).find(row => row.id === 'work.pool')!;
+      expect(pool).toMatchObject({ state: workerReadiness === null ? 'untested' : workerReadiness?.ready ? 'ok' : 'warning' });
+      expect(pool.needsAttention).toBe(status === 'degraded' ? true : undefined);
+      expect(human).toContain(pool.text);
+      if (workerReadiness?.ready === false) {
+        expect(human.split('\n')[0]).toContain(t('doctor.summary.warnings', { n: 1 }, locale));
+        expect(human).toContain(workerReadiness.cli.join(' '));
+      }
+      const model = (await terminalAdminPorts({ root, scopeId: 'fixture', installationId: 'fixture-install', projectId: 'fixture-project', locale, options: { env }, context: {}, status: async () => '',
+        doctor: async sink => { sink.write(human); }, doctorReport: async sink => { sink.write(json); } }).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+      expect(model.summary).toBe(`${verdict} · ${t('terminal.info.doctor.summary', result.summary, locale)} · ${t('doctor.summary.untested', { n: result.summary.untested }, locale)}`);
+    }
+    expect(await doctorVerdict(root, context, { env })).toEqual({ state: pending ? 'warnings' : 'ok', pending });
+  }
+  it('reports a measured not-ready first worker as degraded in JSON, human and terminal summaries and pending in init', async () => {
+    await check({ ready: false, code: 'WORKER_MODEL_NOT_ACTIVE', cli: ['deckent', 'models', 'connect', '--scope', 'fixture'] }, 'degraded', 1);
+  });
+  it('keeps a measured ready first worker ready in JSON, human and terminal summaries and clear in init', async () => {
+    await check({ ready: true, code: 'WORKER_READY', cli: [] }, 'ready', 0);
+  });
+  it('reports an unknown first worker as degraded in JSON, human and terminal summaries and pending in init', async () => {
+    await check(null, 'degraded', 1);
+  });
+});
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     registerProviderConfig();
