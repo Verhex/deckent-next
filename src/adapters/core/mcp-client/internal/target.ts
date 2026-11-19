@@ -22,8 +22,8 @@ const inputSchema = z.strictObject({ server: persistedString(z.string().min(1)),
  * One MCP tool call as a C11 effect target. Each call is its own record and is never repeated (`lookup` is always unknown). Nothing sent
  * (not connected, the pin no longer matches, its pinned outputSchema cannot be compiled, cancelled first, or — MCP-REVOKE — the current
  * registry and trust no longer hold the server's definition and the tool's pin: `admit`, asked after the approval wait) → refused; the server answered (a
- * result, `isError`, a JSON-RPC error, HEADER_MISMATCH, a structured result that does not conform to the pinned outputSchema) → the effect
- * happened; sent then timed out, cancelled or the process died → unknown.
+ * result, `isError`, a JSON-RPC error, HEADER_MISMATCH, or a failure checking its structured result) → the send is settled.
+ * Sent then timed out, cancelled or the process died → unknown.
  */
 export class McpToolTarget implements EffectTarget {
   readonly kind = MCP_TOOL_TARGET_KIND;
@@ -77,7 +77,8 @@ const MCP_PROJECT_READ_ONLY_NOTE = `[deckent] this server runs in a sandbox wher
 export function describeMcpResult(outcome: McpCallOutcome, display: string, maxBytes: number, server?: { readonly projectReadOnly: boolean; readonly secrets?: readonly string[] }): AgentToolOutcome {
   const described = describeMcpAnswer(outcome, display, maxBytes, server?.secrets ?? []);
   const answeredError = outcome.outcome === 'answered' && ('error' in outcome ? outcome.error.kind === 'server' : outcome.result.isError === true);
-  const kind = outcome.outcome === 'answered' ? answeredError ? 'ordinary' : 'error' in outcome && outcome.error.kind === 'unclassified' ? 'uncertain' : 'session'
+  const kind = outcome.outcome === 'answered' ? answeredError ? 'ordinary'
+    : 'error' in outcome && (outcome.error.kind === 'unclassified' || outcome.error.kind === 'output-validation-failed') ? 'uncertain' : 'session'
     : outcome.reason === 'cancelled' ? 'cancelled' : outcome.reason === 'timed-out' ? 'limit'
     : outcome.outcome === 'unknown' ? outcome.protocolViolation ? 'session' : outcome.reason === 'connection-closed' ? 'ordinary' : 'uncertain'
     : outcome.reason === 'trust-unavailable' ? 'uncertain' : 'session';
@@ -89,6 +90,7 @@ function describeMcpAnswer(outcome: McpCallOutcome, display: string, maxBytes: n
   if (outcome.outcome === 'refused') return { status: 'error', text: `${tag} error=${outcome.reason}; nothing was sent` };
   if (outcome.outcome === 'unknown') return { status: 'error', text: `${tag} error=${outcome.reason}; the call was sent and its outcome is unknown; it is not sent again` };
   if ('error' in outcome) {
+    if (outcome.error.kind === 'output-validation-failed') return { status: 'error', text: `${tag} error=failed` };
     const { code, kind } = outcome.error, message = redactBounded(outcome.error.message, known, 1_000);
     if (kind === 'header-mismatch') return { status: 'error', text: `${tag} error=header-mismatch ${code}: ${message}; the call was sent once and the server rejected it; it is not sent again` };
     if (kind === 'output-schema') return { status: 'error', text: `${tag} error=invalid-structured-result ${code}: ${message}; the server answered (its effect may have happened) `

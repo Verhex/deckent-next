@@ -159,10 +159,9 @@ export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legac
   readonly serverInfo: { readonly name: string; readonly version: string } | null; readonly sandboxed: boolean; readonly projectReadOnly: boolean; readonly posture: string;
   readonly tools: readonly McpToolVerdict[] } | { readonly ok: false; readonly reason: 'sandbox-unavailable' | 'start-failed' | 'list-failed' | 'restart-limit' | 'too-many-tools';
   readonly detail?: string } | { readonly ok: false; readonly reason: 'sandbox-unreachable'; readonly detail: string; readonly diagnosis: McpSandboxDiagnosis };
-/** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
- * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
- * server answered, so its effect may have happened). */
-interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' | 'protocol' | 'unclassified' }
+/** A server error, a pinned schema mismatch, or a local validator failure after the answer. The local exception has no RPC code. */
+type McpAnsweredError = { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' | 'protocol' | 'unclassified' }
+  | { readonly kind: 'output-validation-failed' };
 /** Why the current registry and trust no longer admit a call (MCP-REVOKE): the trust was reset or the server removed or declined
  * (`trust-revoked`), its definition or scope is not the one the call was offered under (`definition-changed`), the tool's pin is gone or
  * different (`pin-revoked`), or the trust record cannot be read or locked (`trust-unavailable`, fail closed). */
@@ -426,7 +425,7 @@ export class McpClientPool implements McpPoolView {
       else try {
         const validation = pinned.validateOutput(result.structuredContent);
         if (!validation.valid) message = `Structured content does not match the tool's output schema: ${validation.errorMessage}`;
-      } catch { return { outcome: 'unknown', reason: 'failed' }; }
+      } catch { return { outcome: 'answered', error: { kind: 'output-validation-failed' } }; }
       if (message !== undefined) {
         return { outcome: 'answered', error: { code: ProtocolErrorCode.InvalidParams, message, kind: 'output-schema' } };
       }

@@ -213,6 +213,7 @@ async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurn
 
 type IngressPause = { readonly call: AgentToolCall; readonly tool: AgentToolSpec; readonly index: number;
   readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null;
+  readonly matchesDenial: (proof: PersonDenial) => boolean;
   readonly blocked: (kind: 'uncertain' | 'cancelled') => void };
 /** The model and the approval card share this text. Decode stays on the projection and is not returned here. */
 async function presentModelIngress(content: string, pause: IngressPause | null, input: AgentTurnInput, ports: AgentTurnPorts, round: number): Promise<string> {
@@ -220,13 +221,15 @@ async function presentModelIngress(content: string, pause: IngressPause | null, 
   if (projected.disposition === 'unchanged') return content;
   try { await ports.recordIngress?.(projected); } catch { return projected.withheld; }
   if (projected.disposition === 'note') return projected.modelText;
-  if (!pause || input.fullAccess || !ports.requestApproval) return projected.withheld;
+  if (!pause || input.fullAccess) return projected.withheld;
+  if (!ports.requestApproval) { pause.blocked('uncertain'); return projected.withheld; }
   let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
+  let personDenied = false;
   try { answer = ownerOutcome(await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
-    argsDigest: pause.argsDigest, target: pause.target }, input.signal)).outcome; }
+    argsDigest: pause.argsDigest, target: pause.target, personDenied: proof => { personDenied = pause.matchesDenial(proof); } }, input.signal)).outcome; }
   catch { answer = null; }
   if (answer === 'allow') return projected.modelText;
-  if (answer !== 'deny') pause.blocked(answer === 'cancelled' ? 'cancelled' : 'uncertain');
+  if (answer !== 'deny' || !personDenied) pause.blocked(answer === 'cancelled' ? 'cancelled' : 'uncertain');
   return projected.withheld;
 }
 
@@ -255,16 +258,22 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
     // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
     let personDecision: PersonDenial | undefined;
+    const matchesDenial = ({ subject }: PersonDenial) => subject.kind === 'agent-tool-call'
+      && (!input.nativeSession || subject.turnId === input.nativeSession.turnId)
+      && subject.round === round && subject.index === index && subject.argsDigest === digestOf && subject.tool === call.name
+      && subject.toolVersion === tool?.version && subject.resource === (targetOf ?? '(no target)');
     let auditMissing = false, approvalBlock: 'uncertain' | 'cancelled' | undefined;
     const presentationPorts: AgentTurnPorts = { ...ports, recordIngress: async notice => {
-      if (!ports.recordIngress) { auditMissing = true; return; }
-      try { await ports.recordIngress(notice); } catch (error) { auditMissing = true; throw error; }
+      try {
+        if (!ports.recordIngress) throw new Error('AUDIT_UNAVAILABLE');
+        await ports.recordIngress(notice);
+      } catch (error) { auditMissing = true; throw error; }
     } };
     const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic, kind: ToolErrorClass = 'uncertain') => {
-      if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
       const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf,
-        target: targetOf, blocked: kind => { approvalBlock = kind; } }, { ...input, signal }, presentationPorts, round) : content;
-      if (approvalBlock && status === 'ok') status = 'error';
+        target: targetOf, matchesDenial, blocked: kind => { approvalBlock = kind; } }, { ...input, signal }, presentationPorts, round) : content;
+      if ((auditMissing || approvalBlock) && (status === 'ok' || status === 'duplicate')) status = 'error';
+      if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
       const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
@@ -301,9 +310,7 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
       if (!ports.requestApproval) { return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`, undefined, undefined, 'ordinary'); }
       let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
       try { const owner = ownerOutcome(await ports.requestApproval({ round, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf,
-          personDenied: proof => { const { subject } = proof; if (subject.kind === 'agent-tool-call' && subject.turnId === input.nativeSession?.turnId
-            && subject.round === round && subject.index === index && subject.argsDigest === digest && subject.tool === call.name
-            && subject.toolVersion === tool.version && subject.resource === (targetOf ?? '(no target)')) personDecision = proof; } }, signal));
+          personDenied: proof => { if (matchesDenial(proof)) personDecision = proof; } }, signal));
         answer = owner.outcome; noteOf = owner.note; }
       catch { answer = null; }
       if (answer === null && !signal.aborted) { return result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); }
@@ -324,8 +331,8 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     const completed = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, presentationPorts)}`,
       tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic, signal.aborted ? 'cancelled' : toolErrorClass(outcomeText));
     if (tool.toolClass === 'read' && completed.outcome.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
-    // Cancellation is a transport fact; preserve the handler's completed effect in the native envelope.
-    return signal.aborted ? { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } } : completed;
+    // Preserve the completed handler outcome on cancellation once its presentation has cleared the evidence checks.
+    return signal.aborted && !auditMissing && !approvalBlock ? { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } } : completed;
   };
   return { run, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
     retain(visible: ReadonlySet<AgentTurnMessage>) { for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest); } };

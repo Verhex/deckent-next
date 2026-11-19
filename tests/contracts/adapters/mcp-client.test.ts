@@ -10,6 +10,7 @@ import { toolErrorClass } from '#capabilities/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 import { MCP_STDIO_BASE_ENVIRONMENT } from '#platform/core/host/index.js';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
+import { MCP_TOOL_CALL_OPERATION, McpToolTarget, type McpCallOutcome } from '#adapters/core/mcp-client/index.js';
 import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, inspectShellRealmSelection, isWriteApprovalFloored, McpClientPool,
   mcpDefinitionDigest, mcpToolPinDigest, mcpToolWireName, readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, shippedShellSandboxes, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX,
   type McpClientSettings, type McpLiveTool, type McpTrustCard, type ShellSandbox } from '#adapters/index.js';
@@ -428,6 +429,27 @@ describe('MCP client: every call carries the pinned tool definition', () => {
     expect(text).toMatchObject({ status: 'error' });
     expect(toolErrorClass(text)).toBe('session');
     expect(text.text).toContain('error=invalid-structured-result -32602'); expect(text.text).toContain('its effect may have happened');
+  }, 30_000);
+
+  it('WER-A a local validator exception preserves the answer and never sends twice', async () => {
+    const live = tool('st', 'structured', { outputSchema: idSchema, structured: { id: 'a-1' } } as Partial<McpLiveTool>);
+    const f = fixture('dual', [live]), pin = pinOf(live), server = f.server([pin]), p = pool();
+    expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true });
+    const validate = vi.fn(() => { throw new Error('fixture local validator failure'); });
+    const spy = vi.spyOn(DeckentJsonSchemaValidator.prototype, 'getValidator').mockReturnValueOnce(validate);
+    const answers: McpCallOutcome[] = [];
+    const target = new McpToolTarget({ pool: p, timeoutMs: 5_000, signal: signal(), onResult: answer => answers.push(answer), admit: async () => null });
+    try {
+      const applied = await target.apply({ target: { kind: target.kind, id: 'fx/st' }, operation: MCP_TOOL_CALL_OPERATION.operation,
+        idempotencyKey: 'local-validator-exception', expectedVersion: null, input: { server: 'fx', tool: 'st', digest: pin.digest, arguments: {} } })
+        .catch((error: { code: string }) => error.code);
+      const described = describeMcpResult(answers[0]!, 'mcp:fx/st', 4_096);
+      expect(validate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
+      expect(callsOf(f)).toHaveLength(1);
+      expect({ target: applied, answers: answers.map(answer => answer.outcome), status: described.status, kind: toolErrorClass(described) })
+        .toEqual({ target: { version: null }, answers: ['answered'], status: 'error', kind: 'uncertain' });
+      expect(described.text).not.toMatch(/fixture local validator failure|a-1/);
+    } finally { spy.mockRestore(); }
   }, 30_000);
 
   it('a live list that differs from the pin never lends its definition to a call (validated against the pin; the drift is refused on the next open)', async () => {

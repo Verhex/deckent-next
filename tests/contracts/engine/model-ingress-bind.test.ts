@@ -20,6 +20,7 @@ function harness(rounds: AgentRoundOutcome[], options: { fullAccess?: boolean; a
     describe() { return 'note.txt'; },
     async execute() { return { status: 'ok', text: `file ${payload}` }; },
     now: () => 1,
+    async recordIngress() {},
     async requestApproval() { approvals.push('asked'); return options.approval ?? 'deny'; },
   };
   return { ports, seen, approvals, fullAccess: options.fullAccess === true };

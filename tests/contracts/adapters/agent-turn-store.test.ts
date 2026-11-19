@@ -1,12 +1,15 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { withToolErrorClass } from '#capabilities/index.js';
 import { afterEach, expect, it } from 'vitest';
-import { openSqliteAgentTurnStore } from '#adapters/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnInterruptedNote, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { createWorkspaceReadTools, openSqliteAgentTurnStore, openSqliteAuditStore } from '#adapters/index.js';
+import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, AuditApplication, agentToolCallActionDigest, agentTurnInterruptedNote, agentTurnResultDigest,
+  runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import { ApprovalError, type AgentToolSpec, type AgentTurnEvent } from '#domain/index.js';
+import { createHmacIntegrity } from '#platform/index.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -271,7 +274,59 @@ it('WER-A null-digest schema refusal retains its exact frozen call; ingress and 
     } finally { db.close(); }
   } finally { store.close(); }
 });
-it('WER-A a missing quarantine approval withholds the content and vetoes an ordinary error', async () => {
+it('WER-A an unwritten presentation audit makes a successful workspace read uncertain and prevents reuse', async () => {
+  const path = await file(), root = dirname(path);
+  const payload = 'visible-fixture' + String.fromCodePoint(0xe0061);
+  await writeFile(join(root, 'marked.txt'), payload);
+  const workspace = await createWorkspaceReadTools(root);
+  using db = new DatabaseSync(path);
+  const store = await openSqliteAgentTurnStore(path, options);
+  const journal = await openSqliteAuditStore(path, options);
+  const audit = new AuditApplication(journal, createHmacIntegrity('fixture', randomBytes(32)));
+  const p = ports([]), nativeSession = { schemaVersion: 1 as const, turnId: 't1', generation: 3, tools: workspace.specs, approvalTtlMs: 60_000 };
+  const events: AgentTurnEvent[] = [], observations: [string, string | undefined, string][] = [], reads: string[] = [];
+  let attempts = 0, approvals = 0;
+  try {
+    db.exec("CREATE TRIGGER fail_ingress BEFORE INSERT ON audit_events WHEN NEW.kind = 'model-ingress' BEGIN SELECT RAISE(ABORT, 'unavailable'); END;");
+    p.value.execute = async (tool, args, signal) => {
+      const result = await workspace.execute(tool.name, args, signal);
+      expect(result).toMatchObject({ status: 'ok', text: expect.stringContaining(payload) });
+      reads.push(result.status);
+      return result;
+    };
+    p.value.recordIngress = async notice => {
+      if (notice.disposition === 'unchanged') return;
+      audit.record({ schemaVersion: 1, eventId: `audit-${++attempts}`, scopeId: 'scope', principal: { issuer: 'fixture', subject: 'agent' },
+        policyRevision: 'fixture', atMs: 50, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest,
+          decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } });
+    };
+    p.value.requestApproval = async () => { approvals++; return 'allow'; };
+    p.value.invokeAgent = async ({ session }, _delta, signal) => {
+      for (const index of [0, 1]) {
+        const call = { id: `read-${index}`, name: 'read_file', argumentsJson: '{"path":"marked.txt"}' };
+        const result = await session.propose(call, { kind: 'codex-mcp', callId: `wire-${index}`, itemId: `fc-${index}`, deckentCallId: call.id }, signal);
+        observations.push([result.outcome.status, session.recordedError?.(call, result), result.outcome.text]);
+      }
+      return rounds[1]!;
+    };
+    const turn = await runDurableAgentTurn({ claim: claim(), nativeSession, messages: [], tools: nativeSession.tools,
+      signal: new AbortController().signal, emit: event => events.push(event) }, store, p.value);
+    const rows = db.prepare('SELECT record FROM agent_turn_tool_calls ORDER BY call_index').all() as { record: string }[];
+    expect({
+      observations, reads, attempts, approvals, toolCalls: turn.toolCalls,
+      finished: events.flatMap(event => event.kind === 'tool.finished' ? [event.status] : []),
+      records: rows.map(({ record }) => { const { status, resultDigest } = JSON.parse(record); return [status, resultDigest]; }),
+    }).toEqual({
+      observations: [0, 1].map(() => ['error', 'uncertain', expect.stringContaining('result withheld')]),
+      reads: ['ok', 'ok'], attempts: 2, approvals: 0, toolCalls: 2, finished: ['error', 'error'],
+      records: observations.map(([, , text]) => ['error', agentTurnResultDigest(text)]),
+    });
+    expect(JSON.stringify(observations)).not.toContain('visible-fixture');
+    expect(db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE kind = 'model-ingress'").get()?.['n']).toBe(0);
+  } finally { journal.close(); store.close(); }
+});
+
+it('WER-A quarantine preserves an ordinary error only for a verified denial of this call', async () => {
   const store = await openSqliteAgentTurnStore(await file(), options);
   const p = ports([]), nativeSession = { schemaVersion: 1 as const, turnId: 't1', generation: 3, tools: [readFile], approvalTtlMs: 60_000 };
   const payload = 'visible-fixture' + String.fromCodePoint(0xe0061);
@@ -279,14 +334,19 @@ it('WER-A a missing quarantine approval withholds the content and vetoes an ordi
   const observed: unknown[] = [];
   p.value.execute = async () => withToolErrorClass({ status: 'error' as const, text: payload }, 'ordinary');
   p.value.recordIngress = async () => { audited++; };
-  p.value.requestApproval = async () => {
+  p.value.requestApproval = async ({ round, index, call, tool, target, argsDigest, personDenied }) => {
     approvals++;
-    if (approvals === 1) return 'deny';
+    if (approvals === 1 || approvals === 5) {
+      const subject = { kind: 'agent-tool-call' as const, turnId: nativeSession.turnId, round, index, tool: call.name, toolVersion: tool.version,
+        resource: target ?? '(no target)', argsDigest: approvals === 1 ? argsDigest : 'b'.repeat(64) };
+      personDenied?.({ approvalId: `approval-${index}`, actionDigest: agentToolCallActionDigest('scope', subject), subject });
+    }
+    if (approvals === 1 || approvals >= 4) return 'deny';
     if (approvals === 2) throw new Error('approval store unavailable');
     throw new ApprovalError('APPROVAL_UNSETTLED');
   };
   p.value.invokeAgent = async ({ session }, _delta, signal) => {
-    for (const index of [0, 1, 2]) {
+    for (const index of [0, 1, 2, 3, 4]) {
       const call = { id: `quarantine-${index}`, name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
       const result = await session.propose(call, { kind: 'codex-mcp', callId: `wire-${index}`, itemId: `fc-${index}`, deckentCallId: call.id }, signal);
       expect(result.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('result withheld') });
@@ -297,7 +357,31 @@ it('WER-A a missing quarantine approval withholds the content and vetoes an ordi
   };
   try {
     await runDurableAgentTurn({ claim: claim(), nativeSession, messages: [], tools: nativeSession.tools, signal: new AbortController().signal, emit() {} }, store, p.value);
-    expect([approvals, audited]).toEqual([3, 3]);
-    expect(observed).toEqual(['ordinary', 'uncertain', 'uncertain']);
+    expect([approvals, audited]).toEqual([5, 5]);
+    expect(observed).toEqual(['ordinary', 'uncertain', 'uncertain', 'uncertain', 'uncertain']);
+  } finally { store.close(); }
+});
+
+it('WER-A quarantine distinguishes a missing approval port from presentation allowed without approval', async () => {
+  const store = await openSqliteAgentTurnStore(await file(), options);
+  const observed: unknown[] = [];
+  try {
+    for (const fullAccess of [false, true]) {
+      const turnId = fullAccess ? 'full' : 'limited', p = ports([]);
+      const nativeSession = { schemaVersion: 1 as const, turnId, generation: 3, tools: [readFile], approvalTtlMs: 60_000 };
+      p.value.execute = async () => withToolErrorClass({ status: 'error' as const, text: 'visible-fixture' + String.fromCodePoint(0xe0061) }, 'ordinary');
+      p.value.recordIngress = async () => {};
+      p.value.invokeAgent = async ({ session }, _delta, signal) => {
+        const call = { id: 'read-1', name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
+        const result = await session.propose(call, { kind: 'codex-mcp', callId: 'wire-1', itemId: 'fc-1', deckentCallId: call.id }, signal);
+        expect(result.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('result withheld') });
+        expect(result.outcome.text).not.toContain('visible-fixture');
+        observed.push(session.recordedError?.(call, result));
+        return rounds[1]!;
+      };
+      await runDurableAgentTurn({ claim: claim(turnId), nativeSession, messages: [], tools: nativeSession.tools, fullAccess,
+        signal: new AbortController().signal, emit() {} }, store, p.value);
+    }
+    expect(observed).toEqual(['uncertain', 'ordinary']);
   } finally { store.close(); }
 });
