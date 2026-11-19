@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { AGENT_ENVIRONMENT } from '#surfaces/core/cli-human/index.js';
+import { personEnv } from '../support/person-env.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
@@ -156,7 +158,7 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
     for (const locale of ['en', 'tr'] as const) {
       const home = await mkdtemp(join(tmpdir(), 'deckent-init-execution-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-execution-root-'));
       roots.push(home, root);
-      const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
+      const env = personEnv({ PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
       const run = async (args: string[], steps: unknown[], size = [24, 60], argv = [process.execPath, cli, ...args]) => {
         const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify(argv), root, JSON.stringify(size)],
           { env, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
@@ -198,6 +200,24 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       expect(JSON.parse(wizardPreview.stdout)).toMatchObject({ executionHistory: 'never' });
       const title = locale === 'en' ? 'Let AI carry out work?' : 'Yapay zekâya işleri yürütme izni verilsin mi?';
       const keys = locale === 'en' ? 'Enter confirm' : 'Enter onayla', profile = locale === 'en' ? '> 5. Who uses' : '> 5. Kurulumu kim';
+      const governed = ['policy', 'upgrade', '--template', 'current', '--only', 'ai-execution', '--scope', 'erp', '--apply', '--lang', locale, '--expect', JSON.parse(wizardPreview.stdout).revision];
+      const policyFile = join(root, '.deckent/policy.json'), archive = join(root, '.deckent/audit/authority-revisions');
+      const before = await readFile(policyFile), historyFiles = await readdir(archive);
+      const pipe = await execute(process.execPath, [cli, ...governed, '--json'], { cwd: root, env }).then(result => result, error => ({ stdout: String(error.stdout), stderr: String(error.stderr) }));
+      expect(pipe.stdout + pipe.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
+      const marked = await execute('python3', ['-c', DRIVER, '[]', JSON.stringify([process.execPath, cli, ...governed, '--json']), root],
+        { env: { ...env, [AGENT_ENVIRONMENT[0]!]: '1' }, timeout: 40_000 });
+      const denied = JSON.parse(marked.stdout);
+      expect(denied.output).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(denied.output).not.toContain(title);
+      expect(await readFile(policyFile)).toEqual(before); expect(await readdir(archive)).toEqual(historyFiles);
+      const interruptible = `process.once('SIGUSR1', () => process.stdin.push(null)); const { main } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/cli-main.js'))}); process.exitCode = await main(${JSON.stringify(governed)});`;
+      for (const key of ['n', '\u001b', '\u0003', 'SIGNAL:10']) {
+        const cancelled = await run(governed, [[keys, key]], [24, 60], key === 'SIGNAL:10' ? [process.execPath, '--input-type=module', '-e', interruptible] : undefined);
+        const frame = terminalBuffers(cancelled.output.slice(0, cancelled.marks[0]!), 60, 24).text;
+        expect(frame).toContain(title); expect(frame.match(/[›>] 1\./gu)).toHaveLength(1);
+        expect(cancelled.output).toContain(locale === 'en' ? 'Cancelled; nothing was written.' : 'İptal edildi; hiçbir şey yazılmadı.');
+        expect(await readFile(policyFile)).toEqual(before); expect(await readdir(archive)).toEqual(historyFiles);
+      }
       const typed = locale === 'en' ? 'Text typed here is not an answer.' : 'Buraya yazılan metin bir cevap değildir.';
       const unchosen = locale === 'en' ? 'Nothing was chosen.' : 'Hiçbir şey seçilmedi.';
       const grant = locale === 'en' ? 'Grant permission and continue' : 'İzni ver ve devam et';
@@ -277,13 +297,30 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
   }, 240_000);
 });
 
+it.skipIf(process.platform !== 'linux')('walk 119: the inline wizard yields its selection marker to the permission card at 60 columns', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'deckent-walk-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-walk-root-'));
+  roots.push(home, root);
+  const env = personEnv({ HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PATH: process.env['PATH'], TERM: 'xterm-256color', NO_COLOR: '1' });
+  const steps = [['Enter confirm', '\r'], ['> 3. Folder', '\r'], ['> 5. Who uses', '\r'], ['> 6. Permissions', '\r'],
+    ['Apply now', '\r'], ['Let AI carry out work?', 'SNAPSHOT'], ['', '\u001b'], ['Enter confirm', '\u001b']];
+  const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--here', '--lang', 'en']), root, '[24,60]'],
+    { env, timeout: 100_000, maxBuffer: 8 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '{}') }));
+  const result = JSON.parse(stdout);
+  expect(result.timeout, result.output?.slice(-2500)).toBeUndefined(); expect(result.status).toBe(0);
+  const frame = terminalBuffers(result.output.slice(0, result.marks[5]), 60, 24).text;
+  expect(frame).toContain('Grant permission and continue'); expect(frame.match(/[›>] [12]\./gu)).toHaveLength(1);
+  expect(frame).not.toContain('Apply now');
+  const transcripts = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+  if (transcripts) await writeFile(join(transcripts, '119-handoff-frame.txt'), frame);
+}, 110_000);
+
 it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long affected scope before the EN/TR rollback card; decline writes nothing; JSON retains scopes', async () => {
   for (const locale of ['en', 'tr'] as const) for (const scopes of [
     ['erp', 'other'], ['erp', 'team,west', 'team\u202eabc', 'team\u200babc', 'team\\u202eabc'], ['erp', ...Array.from({ length: 7 }, (_, i) => `department-${i}-${'x'.repeat(70)}`)],
   ]) {
     const home = await mkdtemp(join(tmpdir(), 'deckent-rollback-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-rollback-root-'));
     roots.push(home, root);
-    const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
+    const env = personEnv({ PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp', '--lang', locale, '--json'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000 });
     const policyPath = join(root, '.deckent/policy.json'), baseline = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { scopes: 'all' | string[] }[] };
     await writeFile(policyPath, JSON.stringify({ ...baseline, revision: 'a-long-baseline', grants: baseline.grants.map(rule => rule.scopes === 'all' ? rule : { ...rule, scopes }) }));
@@ -294,7 +331,7 @@ it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long aff
       expect(result.timeout, result.output).toBeUndefined(); expect(result.status, result.output).toBe(0);
       return result;
     };
-    expect((await drive(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--apply', '--lang', locale], [])).output)
+    expect((await drive(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--apply', '--lang', locale], [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']])).output)
       .toContain(locale === 'en' ? 'added' : 'eklendi');
     await execute(process.execPath, ['--input-type=module', '-e', `
       const { FilePolicySource } = await import(${JSON.stringify(resolve('dist/adapters/index.js'))});

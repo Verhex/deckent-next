@@ -31,6 +31,14 @@ export function cliCardGate(request: CliCardRequest, io: CliCardIo): Readonly<{ 
   return { stdin, stdout, env };
 }
 
+/** Setup and the governed CLI preselect from the same verified installation history. */
+export function executionGrantDecision(history: 'never' | 'withdrawn' | 'unknown' | undefined, locale: Locale, mixed = false) {
+  const initial = history === 'never' ? 'grant' : 'not-now';
+  const reason = history === 'withdrawn' ? t('setup.aiExecution.withdrawn', {}, locale) : history === 'never' ? null
+    : mixed ? t('policy.aiExecution.mixedHistoryUnknown', {}, locale) : t('setup.aiExecution.historyUnknown', {}, locale);
+  return { initial, reason };
+}
+
 /** The words of a card's Ctrl+Y copy (`tuicopy.card.*`) for a card drawn on its own stream (a CLI card, an onboarding step). */
 export function cardCopyLabels(locale: Locale): CardCopyLabels {
   return { hint: t('tuicopy.card.hint', {}, locale), sent: t('tuicopy.card.sent', {}, locale), tooLarge: t('tuicopy.card.tooLarge', {}, locale), unavailable: t('tuicopy.card.unavailable', {}, locale) };

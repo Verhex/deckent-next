@@ -4,7 +4,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -52,6 +52,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   }
   return {
     progressionRuns,
+    executionPermission: scopeId ? await context.inspectExecutionPermission?.(root, scopeId, options).catch(() => null) ?? null : null,
     workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
     codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
@@ -162,7 +163,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
   return { data: { ...data, status: doctorNeedsAttention(checks) ? 'degraded' as const : 'ready' as const,
-    summary: doctorCounts(checks), providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
+    summary: { ...doctorCounts(checks), checks: doctorReadinessChecks(facts, checks, locale) }, providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
@@ -185,7 +186,7 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
   const [command] = args.positionals;
   if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
   const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
-    const grouped = renderDoctorChecks(measured.checks, call.locale);
+    const grouped = renderDoctorChecks(measured.checks, call.locale, measured.data.summary.checks);
     return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
       renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale,
         { status: false, imageId: measured.config.execution?.docker?.imageId ?? null })].join('\n') : grouped;

@@ -1,3 +1,4 @@
+import { personMarkersUnset } from '../support/person-env.js';
 import { decisionArmLabels } from '#surfaces/core/cli-human/index.js';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -338,14 +339,14 @@ it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being appli
 });
 /** Mounts the real guided window on a fake TTY with one controller model; returns the drawn text and the answers the window sent. */
 async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel,
-  options: { early?: boolean; step?: import('#surfaces/core/project-instructions/index.js').SetupWindowStep } = {}) {
+  options: { columns?: number; rows?: number; early?: boolean; step?: import('#surfaces/core/project-instructions/index.js').SetupWindowStep } = {}) {
   const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
   let frame = '', finished = false;
   const sent: string[] = [];
-  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 40 });
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: options.columns ?? 100, rows: options.rows ?? 40 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const closed = mountSetupWindow(model, async id => { sent.push(id); const next = options.step ? await options.step(id) : null; finished = next === null; return next; }, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
-  const text = () => terminalBuffers(frame, 100, 40).text.replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' ');
+  const text = () => terminalBuffers(frame, stdout.columns, stdout.rows).text.replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' ');
   const wait = async (predicate: () => boolean) => {
     const deadline = Date.now() + 5_000;
     while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
@@ -354,7 +355,7 @@ async function setupWindowAt(model: import('#surfaces/core/project-instructions/
   await wait(() => text().includes(model.title));
   const armed = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await wait(() => text().includes(model.hints) || text().includes(model.decisionArm.typedText) || text().includes(model.decisionArm.ignored)); };
   if (!options.early) await wait(() => text().includes(model.hints));
-  return { text, sent, armed, wait, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
+  return { text, screen: () => terminalBuffers(frame, stdout.columns, stdout.rows).text, sent, armed, wait, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 100)); },
     close: async () => { if (!finished) { await armed(); stdin.write('\u001b'); } await closed; } };
 }
 it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "Not now" beside a real No stays letterless; language has no letters, Enter still sends', async () => {
@@ -500,7 +501,7 @@ it('B27a: the foreground final check passes the invocation language explicitly t
 it('119-F1b: one fresh execution preview feeds the witnessed apply and safe history defaults; cancellation and refusals never apply', async () => {
   const saved: SetupObservation = { ...base, language: { configured: 'en', requested: null, system: null },
     folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' }, policy: { state: 'current' } };
-  const run = harness({ stdin: tty, stdout: tty, env: { TERM: 'xterm-256color' }, observation: () => saved });
+  const run = harness({ stdin: tty, stdout: tty, env: { TERM: 'xterm-256color', ...personMarkersUnset() }, observation: () => saved });
   const requests: unknown[] = [];
   let history: 'never' | 'withdrawn' | 'unknown' = 'never', status = 'preview', conflicts: string[] = [], missing: string[] = [], applyStatus = 'upgraded';
   const preview = () => ({ status, revision: 'a-preview', summary: '+ run/reserve,cancel; attempt/execute,evaluate,read-output,recover-output', missing, reason: null, conflicts,
@@ -528,6 +529,18 @@ it('119-F1b: one fresh execution preview feeds the witnessed apply and safe hist
     conflicts = ['custom-deny']; requests.length = 0; card.mockClear(); await controller().offerExecution(); expect(card).not.toHaveBeenCalled(); expect(requests).toHaveLength(1);
     conflicts = []; missing = ['delegation']; await controller().offerExecution(); expect(card).not.toHaveBeenCalled();
     missing = []; status = 'current'; await controller().offerExecution(); expect(card).not.toHaveBeenCalled();
+    const sources = ['mcp-cap-ab053653ee0e8f24a74b-run', 'mcp-cap-ab053653ee0e8f24a74b-attempt'];
+    run.context.previewSetupExecutionPermission = async () => ({ ...preview(), covered: [sources[0]!, ...sources].map((heldBy, i) => ({ ruleId: String(i), heldBy })) });
+    const covered = controller(); await covered.offerExecution();
+    const frame = await setupWindowAt(covered.model(), { columns: 60, rows: 24 });
+    try {
+      await frame.press('\u001b[F');
+      const transcripts = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (transcripts) await writeFile(join(transcripts, '119-coverage-frame.txt'), frame.screen());
+      for (const id of sources) expect(frame.text().split(id)).toHaveLength(2);
+      await frame.close(); expect(frame.text()).not.toMatch(/[›>] [12]\./u);
+    } finally { await frame.close(); }
+    delete run.context.previewSetupExecutionPermission;
     status = 'preview'; history = 'never'; requests.length = 0; applyStatus = 'conflict'; card.mockResolvedValue('grant'); await controller().offerExecution(); expect(run.out()).toContain('Policy changed; preview again'); expect(requests).toHaveLength(2);
     requests.length = 0; applyStatus = 'unavailable'; await controller().offerExecution(); expect(run.out()).toContain('Outcome could not be verified'); expect(requests).toHaveLength(2);
     requests.length = 0; run.context.env = { TERM: 'xterm', CODEX_THREAD_ID: 'synthetic-marker' }; card.mockClear(); await controller().offerExecution(); expect(card).not.toHaveBeenCalled(); expect(requests).toHaveLength(1);

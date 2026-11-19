@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, useApp, useWindowSize } from 'ink';
 import { colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
 import { DecisionArmLabelsContext, QuestionRows, Window, WindowStackProvider, questionStep, type DecisionArmLabels, type QuestionOption, type QuestionState } from '#surfaces/core/terminal-window/index.js';
@@ -13,7 +13,7 @@ import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
  * An option's yes/no `role` makes the shared question contract show and take (y)/(n) on it. While an answer is applied the hint row says
  * `applying` (with `busyKey` once a key was pressed then): keys are visibly not used, and the next step's window re-arms (walk19R). */
 export type SetupWindowModel = Readonly<{ title: string; rows: readonly string[]; heights?: readonly number[]; options: readonly QuestionOption[];
-  optionRows: number; initial: number; hints: string; decisionArm: DecisionArmLabels; applying: string; busyKey: string; position: string; reveal: number }>;
+  wrapNotice?: boolean; optionRows: number; initial: number; hints: string; decisionArm: DecisionArmLabels; applying: string; busyKey: string; position: string; reveal: number }>;
 /** A text row in at least `rows` display rows: wrapped by words and never cut (FIX9: a narrower terminal shows the whole reason, the window scrolls),
  * blank rows after a short one; a one-row line (a stage, the command) is cut with "…". */
 const fitRows = (text: string, rows: number, width: number): readonly string[] => {
@@ -27,17 +27,20 @@ export type SetupWindowStep = (id: string) => Promise<SetupWindowModel | null>;
 function SetupWindow({ initial, step, failed }: Readonly<{ initial: SetupWindowModel; step: SetupWindowStep; failed: (error: unknown) => void }>) {
   const { exit } = useApp(), [model, setModel] = useState(initial), [choice, setChoice] = useState<QuestionState>({ at: initial.initial, ticked: [] }), busy = useRef(false);
   const [turn, setTurn] = useState(0), [applying, setApplying] = useState(false), [refused, setRefused] = useState(false), spinner = useSpinnerGlyph(applying);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => { if (closing) exit(); }, [closing, exit]);
   const answer = (id: string) => {
     busy.current = true; setApplying(true);
     step(id).then(next => {
       busy.current = false; setApplying(false); setRefused(false);
-      if (next === null) exit(); else { setModel(next); setChoice({ at: next.initial, ticked: [] }); setTurn(value => value + 1); }
+      if (next === null) setClosing(true); else { setModel(next); setChoice({ at: next.initial, ticked: [] }); setTurn(value => value + 1); }
     }, error => { failed(error); exit(); });
   };
   const padding = Math.max(0, model.optionRows - model.options.length), width = Math.max(8, (useWindowSize().columns || 80) - 4);
   // A plain row is cut to the width; a text row fills its rows and wraps further only when the terminal is too narrow for the whole text.
-  const lines = model.rows.flatMap((row, index) => fitRows(row, model.heights?.[index] ?? 1, width));
+  const lines = model.rows.flatMap((row, index) => model.wrapNotice && index === model.rows.length - 1 ? wrapCells(row, width) : fitRows(row, model.heights?.[index] ?? 1, width));
   // Re-arm each question without discarding text typed while its predecessor was being applied (owner 107/108).
+  if (closing) return null;
   return <DecisionArmLabelsContext.Provider value={model.decisionArm}><Window inputRevision={turn} title={[span(model.title)]} body={lines.map(text => ({ spans: [span(text)], exact: true }))} reveal={model.reveal}
     hints={applying ? `${spinner} ${model.applying}${refused ? ` · ${model.busyKey}` : ''}` : model.hints} position={model.position} footerRows={model.options.length + padding} decision
     footer={owns => <><QuestionRows kind="single" options={model.options} state={choice} focused={owns} />{Array.from({ length: padding }, (_, index) => <Text key={index}> </Text>)}</>}

@@ -27,6 +27,7 @@ export interface DoctorCheckFacts {
   readonly attachmentFolders?: Readonly<{ record: Parameters<typeof countMismatchedAttachments>[0]; projectRoot: string;
     observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
+  readonly executionPermission?: Readonly<{ actor: string; total: number; allowed: number; restricted: boolean }> | null;
   readonly workerReadiness?: import('#domain/index.js').WorkerReadiness | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
@@ -340,6 +341,28 @@ const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doc
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
   : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
+/** Two first-page observations, independent of the installation health verdict and its counts. */
+export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly DoctorCheck[], locale: Locale): readonly DoctorCheck[] {
+  const pool = checks.find(check => check.id === 'work.pool');
+  const worker = f.workerReadiness;
+  const poolMissing = f.poolStatus === 'unconfigured' || f.poolStatus === 'missing';
+  const first = poolMissing ? row('work', 'work.firstWorker', 'warning',
+    t('doctor.firstWorker.pool', { state: f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, locale) : t('doctor.check.pool.unconfigured', {}, locale) }, locale),
+    pool?.next ?? onboardingNext(t('doctor.firstJob.pool', {}, locale), locale))
+    : f.poolStatus !== 'ready' ? row('work', 'work.firstWorker', 'untested', t('setup.work.workerUnknown', {}, locale), pool?.next)
+    : worker?.ready ? row('work', 'work.firstWorker', 'ok', t('doctor.firstWorker.ready', {}, locale))
+    : worker ? row('work', 'work.firstWorker', 'warning', workerReadinessText(worker.code, locale), worker.cli.join(' '))
+    : row('work', 'work.firstWorker', 'untested', t('setup.work.workerUnknown', {}, locale), 'deckent doctor');
+  const permission = f.executionPermission, scope = terminalSafeText(f.scopeId ?? '-');
+  const complete = !!permission && permission.allowed === permission.total && !permission.restricted;
+  const params = { scope, actor: terminalSafeText(permission?.actor ?? '-'), allowed: permission?.allowed ?? 0, total: permission?.total ?? 0 };
+  const text = !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
+    : permission.restricted ? t('doctor.aiExecution.restricted', params, locale) : permission.allowed ? t('doctor.aiExecution.partial', params, locale)
+    : t('doctor.aiExecution.absent', params, locale);
+  return [first, row('work', 'work.aiExecution', complete ? 'ok' : permission ? 'warning' : 'untested', text,
+    complete || !f.scopeId ? undefined : `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview`)];
+}
+
 /** One health verdict for JSON and the human summary; unverified health is never ready. */
 export function doctorNeedsAttention(checks: readonly DoctorCheck[]): boolean {
   return checks.some(check => check.state === 'error' || check.needsAttention === true);
@@ -359,10 +382,10 @@ export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): s
 }
 
 /** The grouped human view: summary, then each group with a word marker per row and its next step on the line below. */
-export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale): string {
+export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale, readiness: readonly DoctorCheck[] = []): string {
   const marks = { ok: markWord('ok', locale), warning: markWord('warning', locale), error: markWord('error', locale), untested: markWord('untested', locale) };
   const width = Math.max(...Object.values(marks).map(mark => mark.length));
-  const lines = [doctorSummary(checks, locale)];
+  const lines = [doctorSummary(checks, locale), ...readiness.map(check => [check.text, check.next].filter(Boolean).join(' · '))];
   for (const group of registry.groups as DoctorGroup[]) {
     const rows = checks.filter(check => check.group === group);
     if (!rows.length) continue;

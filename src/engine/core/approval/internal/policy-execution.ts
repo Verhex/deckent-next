@@ -1,4 +1,4 @@
-import { describePolicyGrants, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, firstRunExecutionRules, policyGrantSchema, type PolicyGrant } from '#domain/index.js';
+import { delegationWithin, mcpPrincipalRef, type Policy, type VerifiedPrincipal, describePolicyGrants, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, firstRunExecutionRules, policyGrantSchema, type PolicyGrant } from '#domain/index.js';
 import { t, terminalRecordText, terminalSafeText, type Locale } from '#platform/index.js';
 
 /** Describe the actual old rules removed by the change, without claiming that every other grant is revoked. */
@@ -33,6 +33,16 @@ export function policyExecutionLines(rules: readonly unknown[], scope: string, l
     const params = { actor: terminalSafeText(`${actor.issuer}/${actor.subject}`), scope: terminalSafeText(scope), scopes: terminalSafeText(plannedScopes.join(', ')) };
     return [form === 'full' ? t('policy.aiExecution.preview', params, locale) : t('policy.aiExecution.previewShort', params, locale)];
   });
+}
+
+/** Read-only coverage of the six standing actions. A restriction on even one id prevents scope-wide coverage. */
+export function executionPermissionCoverage(document: Policy, principal: VerifiedPrincipal, scopeId: string) {
+  const actor = mcpPrincipalRef(principal), rules = firstRunExecutionRules([], principal, [scopeId]).wanted;
+  const cells = rules.flatMap(rule => rule.actions === 'all' ? [] : rule.actions.map(action =>
+    delegationWithin(document, actor, [{ ...rule, actions: [action] }])));
+  if (!cells.length) return null;
+  return { actor: `${actor.issuer}/${actor.subject}`, total: cells.length, allowed: cells.filter(cell => cell.ok).length,
+    restricted: cells.some(cell => !cell.ok && cell.reason !== 'no-grant') };
 }
 
 /** Installer previews share the domain description producer through the existing approval presentation seam. */

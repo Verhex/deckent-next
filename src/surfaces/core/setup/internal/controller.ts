@@ -89,7 +89,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     // R05: the reason and the question wrap (not cut) inside a fixed row count each; the stage rows and the command keep one row.
     const heights = rows.map((_row, index) => index === rows.length - 3 ? registry.windowTextRows.reason : index === rows.length - 2 ? registry.windowTextRows.question : 1);
     const offered = choices(stage);
-    return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
+    return { title: t('setup.window.title', {}, locale), rows, heights, wrapNotice: executionNotice?.key === 'setup.aiExecution.covered' && !!note, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
       initial: initialChoice(stage, offered),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), decisionArm: decisionArmLabels(locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };

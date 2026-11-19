@@ -254,7 +254,7 @@ describe('first-worker health verdict', () => {
     const env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
     await mkdir(join(env.HOME, '.deckent'), { recursive: true });
     await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
-    const context = { root, env, inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
+    const context = { root, env, inspectExecutionPermission: async () => ({ actor: 'fixture/mcp/person', total: 6, allowed: workerReadiness?.ready ? 0 : 6, restricted: false }), inspectPoolCapacity: async () => ({ schemaVersion: 1 as const, scopeId: 'fixture', poolId: 'fixture-pool', capacity,
       occupancy: { execution: 0, inFlight: 0 }, receipt: null }),
       inspectWorkerReadiness: async (_root: string, scope: string, _options: unknown, kind?: string) => {
         expect(scope).toBe('fixture'); expect(kind).toBe('coding'); return workerReadiness ?? null;
@@ -279,6 +279,18 @@ describe('first-worker health verdict', () => {
       }
       const model = (await terminalAdminPorts({ root, scopeId: 'fixture', installationId: 'fixture-install', projectId: 'fixture-project', locale, options: { env }, context: {}, status: async () => '',
         doctor: async sink => { sink.write(human); }, doctorReport: async sink => { sink.write(json); } }).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+      const [first, permission] = result.summary.checks;
+      const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (directory && workerReadiness) await writeFile(join(directory, `119-doctor-${locale}-${workerReadiness.ready ? 'absent' : 'present'}.json`),
+        JSON.stringify({ text: human.split('\n').slice(1, 3), checks: result.summary.checks }, null, 2));
+      expect(first).toMatchObject({ id: 'work.firstWorker', state: workerReadiness === null ? 'untested' : workerReadiness?.ready ? 'ok' : 'warning' });
+      expect(permission).toMatchObject({ id: 'work.aiExecution', state: workerReadiness?.ready ? 'warning' : 'ok' });
+      expect(permission.text).toContain('fixture/mcp/person');
+      if (workerReadiness?.ready) expect(permission.next).toBe('deckent policy upgrade --template current --only ai-execution --scope fixture --preview');
+      for (const row of [first, permission]) {
+        expect(human.split('\n').slice(1, 3).join('\n')).toContain(row.text);
+        expect(model.sections[0]?.notes?.join('\n')).toContain(row.text);
+      }
       expect(model.summary).toBe(`${verdict} · ${t('terminal.info.doctor.summary', result.summary, locale)} · ${t('doctor.summary.untested', { n: result.summary.untested }, locale)}`);
     }
     expect(await doctorVerdict(root, context, { env })).toEqual({ state: pending ? 'warnings' : 'ok', pending });

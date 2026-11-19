@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { attestLocalInteractiveTerminal, withLocalPrincipalChannel } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
+import { readLocalOsIdentity, attestLocalInteractiveTerminal, withLocalPrincipalChannel } from '#adapters/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunExecutionRules } from '#domain/index.js';
 import * as adapters from '#adapters/index.js';
-import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
+import { configuredPolicyTemplateUpgrade, inspectConfiguredExecutionPermission } from '#composition/core/approvals/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 import { terminalApplication } from '../support/approval-terminal.js';
 import { personMarkersUnset } from '../support/person-env.js';
@@ -109,4 +109,22 @@ it.skipIf(process.platform !== 'linux')('119-F1a-3: a fresh installed system-row
   expect(await terminalApplication({ project: root, env }, 'policy-upgrade', 'installation', { mode: 'rollback', reason: 'person withdraws on fresh install' }))
     .toMatchObject({ status: 'rolled-back', reason: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.join(','), conflicts: [] });
   expect(JSON.parse(await readFile(path, 'utf8')).grants).toEqual(baseline.grants);
+});
+
+it.skipIf(process.platform !== 'linux')('reads scoped standing permission without a Run, including custom coverage and restrictions', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-execution-')); roots.push(root);
+  const scope = 'installation', options = { env: homeEnv(join(root, 'home')) };
+  await applyPolicyTemplateInstallation(root, scope, options);
+  const path = join(root, '.deckent/policy.json'), baseline = JSON.parse(await readFile(path, 'utf8'));
+  const [reserve, cancel, attempts] = firstRunExecutionRules([], readLocalOsIdentity(), [scope]).wanted;
+  const read = () => inspectConfiguredExecutionPermission(root, scope, options);
+  expect(await read()).toMatchObject({ allowed: 0, total: 6, restricted: false });
+  const custom = { ...reserve, id: 'custom-run', actions: [...reserve!.actions, ...cancel!.actions] };
+  await writeFile(path, JSON.stringify({ ...baseline, grants: [...baseline.grants, custom] }));
+  expect(await read()).toMatchObject({ allowed: 2, total: 6, restricted: false });
+  const grants = [...baseline.grants, custom, { ...attempts, id: 'custom-attempt' }];
+  await writeFile(path, JSON.stringify({ ...baseline, grants }));
+  expect(await read()).toMatchObject({ allowed: 6, total: 6, restricted: false });
+  await writeFile(path, JSON.stringify({ ...baseline, grants: [...grants, { ...reserve, id: 'denied-project', effect: 'deny', resource: { kind: 'run', ids: ['one-run'] } }] }));
+  expect(await read()).toMatchObject({ allowed: 5, total: 6, restricted: true });
 });

@@ -1,5 +1,5 @@
 import { automationMarker, ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
-import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+import { executionPermissionCoverage, verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, assertAuthorityWitness, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
@@ -102,6 +102,12 @@ export async function configuredPolicyTemplateUpgrade(root: string, scopeId: str
     new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.previewRollback ? { previewRollback: true } : {}), ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }, input.mode === 'preview' ? verifiedRoot : null));
 }
+/** Standing coverage across resource ids in this scope. A concrete Run may have narrower permissions. */
+export async function inspectConfiguredExecutionPermission(root: string, scopeId: string, options: ConfigLoadOptions) {
+  const { document, principal } = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+  return executionPermissionCoverage(document, principal, scopeId);
+}
+
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {
   return withPolicyAdministration(root, query.scopeId, options, 'read', (deps, person) => new PolicyAdministrationInspection(deps.policy).inspect(person, query));

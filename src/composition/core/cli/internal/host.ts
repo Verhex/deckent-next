@@ -32,7 +32,7 @@ import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecis
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, inspectConfiguredWorkerKinds, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredExecutionPermission, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { changeConfiguredDeliveryDismissal, checkConfiguredWorkTarget, interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
@@ -91,6 +91,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
   const person = (options: { env?: NodeJS.ProcessEnv }) => headlessPersonWitness(options.env ?? process.env, base.agentEnvironment ?? getConfigFieldDefault('cli').agentEnvironment);
+  const previewPersonPolicyUpgrade = async (root: string, scopeId: string, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3], options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) =>
+    typed(configuredPolicyTemplateUpgrade(root, scopeId, options, { ...input, mode: 'preview' }, base.agentEnvironment, await verifiedFirstPublicationPolicy(root, scopeId, options)));
   const host: Parameters<typeof runCli>[1] & object = { ...base, gitDeliveryPermission: (...args) => typed(configuredGitDeliveryPermission(...args)), initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
     walkBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args)),
     readBeuserReport: async (...args) => typed((await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args)),
@@ -266,7 +268,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options), inspectAnchoredPolicyTemplate,
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
-    inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
+    inspectExecutionPermission: inspectConfiguredExecutionPermission, inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
+    previewPersonPolicyUpgrade,
     upgradePolicyTemplate: (root, scopeId, input, options) => typed(configuredPolicyTemplateUpgrade(root, scopeId, options, input, base.agentEnvironment)),
     delegations: { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation },
     // alpha.56: lost-worker recovery cards, in this process at the person's witnessed terminal (no protocol op); the rollout read for doctor too.
@@ -283,7 +286,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   };
-  const previewSetupExecutionPermission = async (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => typed(configuredPolicyTemplateUpgrade(root, scopeId, options,
-    { mode: 'preview', only: 'ai-execution', reason: t('cli.policy.upgrade.reason', {}, locale) }, base.agentEnvironment, await verifiedFirstPublicationPolicy(root, scopeId, options)));
+  const previewSetupExecutionPermission = async (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => previewPersonPolicyUpgrade(root, scopeId,
+    { mode: 'preview', only: 'ai-execution', reason: t('cli.policy.upgrade.reason', {}, locale) }, options);
   return { ...host, previewSetupExecutionPermission, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
 }

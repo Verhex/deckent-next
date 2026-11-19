@@ -149,7 +149,10 @@ kapsamları, hücreleri, çakışmaları ve mevcut izin kapsamını inceler; ken
 çıktıdaki tam uygulama komutunu ve `--expect` değerini kullanır. Elle kurulmuş politika
 için kişi açıkça adlandırılır. Yetkili yöneticinin diğer yolu
 `deckent policy upgrade --template current --scope SCOPE_ID`, ardından `--apply
---expect REVISION` adımıdır. Önizleme ve reddedilmiş kart hiçbir şeyi değiştirmez;
+--expect REVISION` adımıdır. Etkileşimli terminalde aile 21 ekleniyorsa kart,
+diğer aileler dahil tüm planı gösterir. Enter ancak kurulum geçmişi iznin hiç
+verilmediğini kanıtlıyorsa izin verme seçeneğini onaylar. Ret halinde politika
+ve arşiv korunur. Onaydan önce revizyon değişirse yeni önizleme gerekir. Önizleme ve reddedilmiş kart hiçbir şeyi değiştirmez;
 yapay zekâ uygulayamaz veya geri alamaz. Aynı kimlikli değiştirilmiş kurallar ve özel
 yasaklar gösterilir, üzerlerine yazılmaz. İzin veya rol kapsamı bir yasağı ya da onay
 gereğini aşmaz.

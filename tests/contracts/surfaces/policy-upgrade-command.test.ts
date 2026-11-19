@@ -1,7 +1,9 @@
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import * as cards from '#surfaces/core/cli-human/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { main } from '#surfaces/index.js';
 import { homeEnv } from '../support/host-platform.js';
 import { describePolicyChange, firstRunPolicyTemplate, firstRunExecutionRules } from '#domain/index.js';
@@ -138,4 +140,66 @@ it('3286 F4: rollback preview is an explicit read in either flag order, with ful
     expect(JSON.parse(out.join(''))).toEqual(result);
     expect(calls).toHaveLength(2);
   }
+});
+
+it('binds a person decision to the reviewed mixed plan and leaves automation on its original port', async () => {
+  const person = { issuer: 'person', subject: 'one' }, execution = firstRunExecutionRules([], person, ['scope']).wanted;
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: person, ...FIRST_RUN_TOOL_NAMES });
+  const human = template.policy.grants.find(rule => rule.id === 'first-run-installation-repair')!;
+  const summary = describePolicyChange({ policy: { schemaVersion: 2, revision: 'p', roles: [], grants: [], restrictions: [], separationOfDuties: [] },
+    bindings: { schemaVersion: 2, revision: 'b', bindings: [], modes: [] } }, { schemaVersion: 1, changes: [human, ...execution].map(grant => ({ kind: 'grant.add', grant })) })!;
+  const card = vi.spyOn(cards, 'askCliCard');
+  try {
+    for (const locale of ['en', 'tr'] as const) for (const history of ['never', 'withdrawn', 'unknown'] as const) {
+      const { ctx, out } = context(PREVIEW), calls: string[] = [];
+      let review = { ...PREVIEW, revision: 'r1', summary, rules: [human, ...execution], executionHistory: history };
+      let revision = 'r1', status = 'preview';
+      const host = { ...ctx, stdin: { isTTY: true }, stdout: { isTTY: true, write: (v: string) => out.push(v) },
+        env: { ...ctx.env, ...personMarkersUnset(), TERM: 'xterm' },
+        async upgradePolicyTemplate(_root: string, _scope: string, input: { mode: string; expect?: string }) {
+          calls.push(input.mode);
+          if (input.expect && input.expect !== revision) return { ...PREVIEW, status: 'conflict', revision };
+          if (input.mode === 'preview') return { ...review, status, revision };
+          revision = 'written'; return { ...review, status: 'upgraded' };
+        } };
+      const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--expect', 'r1', '--lang', locale];
+      const invoke = () => main(args, host as never);
+      card.mockResolvedValue('not-now');
+      expect(await invoke()).toBe(0); expect(calls.splice(0)).toEqual(['preview']); expect(revision).toBe('r1');
+      const request = card.mock.lastCall![0], body = request.body!.join('\n');
+      expect(request.initial).toBe(history === 'never' ? 'grant' : 'not-now');
+      expect(request.title).toBe(locale === 'en' ? 'Apply these policy changes?' : 'Bu politika değişiklikleri uygulansın mı?');
+      expect(body).toContain(locale === 'en' ? 'All scopes' : 'Tüm kapsamlar'); expect(body).toContain(summary); expect(body.indexOf(execution[0]!.id)).toBeLessThan(body.indexOf(human.id));
+      expect(out.join('')).not.toMatch(/Permission kept|İzin korundu/u);
+      const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
+      if (directory && history === 'never') writeFileSync(join(directory, `119-mixed-${locale}.json`), JSON.stringify(request, null, 2));
+      const mixedReview = review;
+      review = { ...review, rules: [...execution], summary: describePolicyChange(template, { schemaVersion: 1, changes: execution.map(grant => ({ kind: 'grant.add', grant })) })! };
+      expect(await invoke()).toBe(0); expect(calls.splice(0)).toEqual(['preview']);
+      const fresh = card.mock.lastCall![0];
+      expect(fresh.title).toBe(locale === 'en' ? 'Let AI carry out work?' : 'Yapay zekâya işleri yürütme izni verilsin mi?');
+      expect(fresh.initial).toBe(request.initial);
+      if (directory && history === 'never') writeFileSync(join(directory, `119-fresh-${locale}.json`), JSON.stringify(fresh, null, 2));
+      review = mixedReview;
+      card.mockClear(); status = 'current';
+      expect(await invoke()).toBe(0); expect(card).not.toHaveBeenCalled(); expect(revision).toBe('r1');
+      status = 'preview'; revision = 'other'; calls.length = 0;
+      expect(await invoke()).toBe(0); expect(card).not.toHaveBeenCalled(); expect(calls.splice(0)).toEqual(['preview']);
+      revision = 'r1'; card.mockImplementationOnce(async () => { revision = 'other'; return 'grant'; });
+      expect(await invoke()).toBe(0); expect(revision).toBe('other'); expect(calls.splice(0)).toEqual(['preview', 'apply']);
+      revision = 'r1'; card.mockResolvedValue('grant');
+      expect(await invoke()).toBe(0); expect(revision).toBe('written'); expect(calls.splice(0)).toEqual(['preview', 'apply']);
+      out.length = 0; revision = 'r1'; card.mockClear();
+      if (history === 'never') {
+        review = { ...review, rules: [human] };
+        expect(await invoke()).toBe(0); expect(calls.splice(0)).toEqual(['preview', 'apply']); expect(card).not.toHaveBeenCalled();
+        revision = 'r1';
+        expect(await main([...args, '--only', 'ai-proposals'], host as never)).toBe(0);
+        expect(calls.splice(0)).toEqual(['apply']); expect(card).not.toHaveBeenCalled();
+        revision = 'r1'; review = mixedReview; out.length = 0;
+      }
+      expect(await main([...args, '--json'], host as never)).toBe(0);
+      expect(JSON.parse(out.join('')).status).toBe('upgraded'); expect(calls).toEqual(['apply']); expect(card).not.toHaveBeenCalled();
+    }
+  } finally { card.mockRestore(); }
 });

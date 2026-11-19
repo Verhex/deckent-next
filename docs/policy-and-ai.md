@@ -149,7 +149,11 @@ AI identity, scopes, cells, conflicts and existing coverage, then repeats the ex
 printed apply command and `--expect` token at their own terminal. Hand-built policies
 require the explicitly named person. The governed administrator alternative is
 `deckent policy upgrade --template current --scope SCOPE_ID`, followed by `--apply
---expect REVISION`. Preview and a declined card change nothing; AI cannot apply or
+--expect REVISION`. On an interactive terminal, an apply that adds family 21 shows
+the whole plan, including other families, before asking for a decision. Enter selects
+the granting choice only when installation history proves the permission was never
+given. Declining leaves the policy and archive untouched. A revision change before
+confirmation requires a new preview. Preview and a declined card change nothing; AI cannot apply or
 roll back. Same-id changes and custom denials remain visible and are never overridden.
 An allow or role coverage does not override a deny or an approval requirement.
 
