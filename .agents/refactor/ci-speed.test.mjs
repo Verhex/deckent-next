@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { partitionTests, inventoryDigest, validateShards, SHARDS, durationDrift, observedDurations } from '../../scripts/ci-test-plan.mjs';
-import { refreshedWeights } from '../../scripts/ci-test-weights.mjs';
+import { refreshedWeights, selectWeights, weightCoverage } from '../../scripts/ci-test-weights.mjs';
 import { validateHostedChecks, REQUIRED_CHECKS } from '../../scripts/land-hosted-check.mjs';
 import { sealBuild, validateBuild } from '../../scripts/ci-build-artifact.mjs';
 import { writeBuildIdentity } from '../../scripts/build-identity.mjs';
@@ -49,6 +49,20 @@ test('drift guard flags a file over the ratio and unweighted files over the allo
   assert.equal(durationDrift(files, observed, refreshed.durationMs, limits).drifted, false);
   assert.throws(() => refreshedWeights(receipts.slice(0, 1)), /complete inventory/);
 });
+test('prepare schedules with the per-file maximum of the restored main weights and the committed seed', () => {
+  const files = ['tests/a.test.ts', 'tests/b.test.ts', 'tests/c.test.ts', 'tests/d.test.ts'];
+  const main = { schemaVersion: 1, source: { runs: [9] }, durationMs: { [files[0]]: 5062, [files[1]]: 211000, [files[2]]: 800 } };
+  // Equal coverage (3 of 4 each): the old rule kept main and planned the 299 s file as 5 s beside the 211 s file.
+  const seed = { schemaVersion: 1, source: { runs: [7] }, durationMs: { [files[0]]: 299028, [files[1]]: 134000, [files[3]]: 40 } };
+  const { weights, raised } = selectWeights(main, seed);
+  assert.deepEqual(weights.durationMs, { [files[0]]: 299028, [files[1]]: 211000, [files[2]]: 800, [files[3]]: 40 });
+  assert.equal(raised, 2); assert.deepEqual(weights.source, main.source); assert.equal(weightCoverage(weights, files), 4);
+  const bins = partitionTests(files.slice(0, 2), weights.durationMs, 2, 0);
+  assert.notEqual(bins.findIndex(bin => bin.files.includes(files[0])), bins.findIndex(bin => bin.files.includes(files[1])));
+  // A seed that knows nothing larger changes nothing; a malformed figure is ignored.
+  assert.deepEqual(selectWeights(main, { durationMs: { [files[0]]: 10, [files[1]]: Number.NaN } }), { weights: main, raised: 0 });
+});
+
 test('aggregate accepts exact coverage and preserves actual skip counts', () => {
   const r = receipts(); r[0].files[0].counts.skipped = 1;
   assert.deepEqual(validateShards(inventory, r, identity).counts, { passed: inventory.length * 2, failed: 0, skipped: 1, pending: 0 });
