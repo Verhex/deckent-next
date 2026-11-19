@@ -1,3 +1,4 @@
+import { withToolErrorClass } from '#capabilities/index.js';
 import type { AgentToolSpec, EffectCommand, JsonObject, McpToolChangeHints } from '#domain/index.js';
 import { shippedShellSandboxes } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import type { ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
@@ -53,6 +54,12 @@ export async function openMcpAgentTools(pool: McpPoolView, settings: McpClientSe
  */
 export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
   const of = (name: string) => offered.get(name);
+  const prepare = (name: string, args: Record<string, unknown>) => {
+    if (!of(name)) return withToolErrorClass({ ok: false as const, text: `[deckent] ${name}: error=unknown-tool` }, 'session');
+    if (Buffer.byteLength(JSON.stringify(args), 'utf8') > MCP_TOOL_CALL_OPERATION.inputMaxBytes / 2)
+      return withToolErrorClass({ ok: false as const, text: `[deckent] ${name}: error=arguments-too-large` }, 'limit');
+    return null;
+  };
   return {
     specs: [...offered.values()].map(entry => entry.spec),
     prompt: [...offered.values()].map(entry => ({ name: entry.spec.name, display: entry.display })),
@@ -63,8 +70,7 @@ export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
     server: (name: string) => of(name)?.server ?? null,
     cell: (name: string): McpToolCell | null => of(name)?.cell ?? null,
     hints: (name: string): McpToolChangeHints | null => of(name)?.hints ?? null,
-    plan: (name: string, args: Record<string, unknown>): string | null => !of(name) ? `[deckent] ${name}: error=unknown-tool`
-      : Buffer.byteLength(JSON.stringify(args), 'utf8') > MCP_TOOL_CALL_OPERATION.inputMaxBytes / 2 ? `[deckent] ${name}: error=arguments-too-large` : null,
+    prepare, plan: (name: string, args: Record<string, unknown>): string | null => prepare(name, args)?.text ?? null,
     preview: (name: string, args: Record<string, unknown>) => { const entry = of(name); return entry ? describeMcpApproval({ ...entry, args }) : undefined; },
     command(entry: McpOfferedTool, args: Record<string, unknown>, call: { readonly scopeId: string; readonly turnId: string; readonly round: number; readonly index: number;
       readonly argsDigest: string }): EffectCommand {

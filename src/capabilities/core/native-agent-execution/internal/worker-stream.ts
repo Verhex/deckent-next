@@ -12,7 +12,8 @@ export async function nativeWorkerPreflight<T>(run: () => Promise<T>, signal: Ab
   catch (error) { if (signal.aborted) return null; throw error; }
 }
 export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal) {
-  const calls = new Map<string, { call: Call; result: Result }>(), controller = new AbortController();
+  const deliveries = new WeakMap<Result, () => string | undefined>();
+  const calls = new Map<string, { call: Call; result: Result; active(): boolean; selectedText(): string | undefined; recordedError(): ReturnType<NonNullable<ToolSessionPort['recordedError']>> }>(), controller = new AbortController();
   let refused = false;
   let guard: { propose: ToolSessionPort['propose'] } | undefined;
   return {
@@ -23,9 +24,10 @@ export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal)
     terminalFailure: () => port.terminalFailure?.() ?? null,
     stop() { controller.abort(); },
     clear() { calls.clear(); },
-    tools: { session: port.session, async propose(call, correlation, callSignal) {
+    tools: { session: port.session, selected(host, text, live) { deliveries.set(host, () => live() ? text : undefined); }, async propose(call, correlation, callSignal) {
       if (!guard || signal.aborted || controller.signal.aborted || callSignal.aborted) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
-      try { const result = await guard.propose(call, correlation, callSignal); calls.set(call.id, { call, result }); if (port.terminalFailure?.()) controller.abort(); return result; }
+      try { const result = await guard.propose(call, correlation, callSignal); const frozen = Object.freeze({ ...call });
+        calls.set(call.id, { call: frozen, result, active: () => !callSignal.aborted && !signal.aborted && !controller.signal.aborted, selectedText: () => deliveries.get(result)?.(), recordedError: () => port.recordedError?.(frozen, result) }); if (port.terminalFailure?.()) controller.abort(); return result; }
       catch (error) { refused ||= !signal.aborted && !callSignal.aborted && (error instanceof NativeCliWorkerError || error instanceof ClaudeAgentError); controller.abort(); throw error; }
     }, cancel: () => port.cancel(), revoke: () => port.revoke() } satisfies ToolSessionPort,
   };

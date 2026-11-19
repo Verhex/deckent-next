@@ -22,10 +22,10 @@ const resultEnvelope = (answer: Answer) => JSON.parse(jsonMessages(answer).find(
 async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0]> = {}, propose?: ToolSessionPort['propose']) {
   const directory = await mkdtemp(join(tmpdir(), 'native-bridge-')); cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const session = { schemaVersion: 1 as const, turnId: 'fixture-turn', generation: 1, tools: [tool], approvalTtlMs: 5000 };
-  const submit = vi.fn(propose ?? (async (call) => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
+  const submit = vi.fn<ToolSessionPort['propose']>(propose ?? (async (call) => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped-result' } })));
   const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'unknown' as const };
-  const port: ToolSessionPort = { session, propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' })) };
+  const port: ToolSessionPort = { session, selected: vi.fn(), propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' as const })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' as const })) };
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
@@ -138,6 +138,33 @@ it('bounds declared/chunked bodies and output frames, without invoking unknown e
   expect(JSON.stringify(f.gateway.statistics())).not.toContain(canary);
 });
 
+it('WER-A publishes the selected redacted text only after the actual request id fits and invalidates it on closure', async () => {
+  const canary = 'synthetic-selected-secret', selected = vi.fn<NonNullable<ToolSessionPort['selected']>>();
+  let release!: () => void;
+  const late = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture({ correlationKind: 'codex-mcp', bridge: { ...registry.bridge, frameMaxBytes: 2048 },
+    knownSecrets: snapshotKnownSecrets([{ name: null, value: canary }]) }, async (call, correlation) => {
+    if (correlation.kind === 'codex-mcp' && correlation.callId === 'late') await late;
+    return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'error', text: canary + 'x'.repeat(900) } };
+  });
+  f.port.selected = selected;
+  const headers = await f.initialize(), request = rpc(2, tool.name, {}, { callId: 'a', itemId: 'b' });
+  const tooLarge = await f.send({ ...request, id: 'r'.repeat(1000) }, { headers });
+  expect(resultEnvelope(tooLarge).outcome.text).toBe('NATIVE_BRIDGE_FRAME_LIMIT'); expect(selected).not.toHaveBeenCalled();
+  const sent = await f.send(rpc(3, tool.name, {}, { callId: 'c', itemId: 'd' }), { headers });
+  const [[host, text, live]] = selected.mock.calls as [Parameters<NonNullable<ToolSessionPort['selected']>>];
+  expect(host.outcome.text).toContain(canary); expect(text).not.toContain(canary);
+  expect(jsonMessages(sent)[0].result.content[0].text).toBe(text); expect(live()).toBe(true);
+  const lateRequest = rpc(4, tool.name, {}, { callId: 'late', itemId: 'other' });
+  const waiting = f.send(lateRequest, { headers });
+  await vi.waitFor(() => expect(f.submit).toHaveBeenCalledTimes(3));
+  await f.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 4 } }, { headers });
+  await waiting; release();
+  const replay = await f.send({ ...lateRequest, id: 5 }, { headers });
+  expect(resultEnvelope(replay).outcome.text).toBe('NATIVE_BRIDGE_CANCELLED');
+  expect(selected).toHaveBeenCalledOnce();
+  await f.bridge.close(); expect(live()).toBe(false);
+});
 it('preserves unknown outcomes, validates result identity, and redacts the Deckent token from tool output', async () => {
   let text = '', kind = 'ok';
   const f = await fixture({}, async call => { if (kind === 'throw') throw new Error('private-canary'); return {

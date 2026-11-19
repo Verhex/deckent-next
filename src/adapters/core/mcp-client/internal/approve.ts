@@ -231,7 +231,7 @@ export interface McpCardAskerInput { readonly ledgerPath: () => Promise<string>;
  */
 export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number) {
   let asked = 0;
-  return async (card: { readonly tool: string; readonly name: string; readonly phase: string; readonly text: string; readonly preview?: string }): Promise<boolean | null> => {
+  return async (card: { readonly tool: string; readonly name: string; readonly phase: string; readonly text: string; readonly preview?: string; readonly personDenied?: () => void }): Promise<boolean | null> => {
     const journal = openSqliteApprovalStore(await input.ledgerPath(), input.sqlite);
     // `mcp_trust` keeps its digest and call id scheme (`mcp-trust-card:1`, `mcp-trust-<server>-<phase>`); another card tool gets its own.
     const kind = card.tool.replace(/_/gu, '-'), argsDigest = createHash('sha256').update(`${kind}-card:1\0${card.text}`).digest('hex'), callId = `${kind}-${card.name}-${card.phase}`;
@@ -248,7 +248,7 @@ export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number
           requiredAssurance: sealed.requiredAssurance } : {}) });
       // The card's answer is the decision itself: no policy recheck and no effect pointer (KG4 F1).
       const answer = await settleAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, started, {
-        settled: outcome => input.emit({ kind: 'approval.settled', callId, approvalId, outcome }) });
+        ...(card.personDenied ? { personDenied: card.personDenied } : {}), settled: outcome => input.emit({ kind: 'approval.settled', callId, approvalId, outcome }) });
       const outcome = typeof answer === 'string' ? answer : answer.outcome;
       return outcome === 'allow' ? true : outcome === 'deny' ? false : null;
     } finally { journal.close(); }

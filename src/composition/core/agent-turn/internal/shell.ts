@@ -1,3 +1,5 @@
+import { effectToolError } from './effect-error.js';
+import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { relative, resolve, sep } from 'node:path';
 import { PRINCIPAL_EFFECT_PRODUCER, type ModelInvocationProfile, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
@@ -67,18 +69,18 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
-    if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
-    if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
+    if (command.trim() === '') return agentToolResult({ ok: false as const, text: '[deckent] run_shell: error=empty-command' }, 'ordinary');
+    if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` }, 'limit');
     const scan = scanShellCommand(command);
     const globalName = await globalState;
     for (const name of shellNamedPaths(command, () => true, scan).flatMap(word => word.split(/[<>]/u))) {
-      if (await globalName(name)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` };
+      if (await globalName(name)) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` }, 'ordinary');
     }
     const realm = await resolveRealm();
-    if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
-    if (subscription && realm.containment === 'host') return { ok: false, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` };
+    if (!realm.ok) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` }, 'ordinary');
+    if (subscription && realm.containment === 'host') return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` }, 'ordinary');
     const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots, scan) ? t('headless.agent.host.chatWarning', {}, input.language) : null;
-    if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
+    if (input.fullAccess === true && !callRealm(realm, true).ok) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` }, 'ordinary');
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths, 'posix', scan);
     const risk = classifyShellRisk(command, readOnly, input.worker === true, scan);
@@ -87,7 +89,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor), 'posix', scan);
     // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
     for (const verdict of [readOnly, mutation]) {
-      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); deckent's own state is not opened by any approval; nothing was run` };
+      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); deckent's own state is not opened by any approval; nothing was run` }, 'ordinary');
     }
     const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command, scan));
     const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined, scan).contained };
@@ -133,7 +135,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       writes?: SandboxWriteDecider, track?: (change: TrackedFilesChange) => Promise<boolean>): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
-      if (!planned.ok) return { status: 'error', text: planned.text };
+      if (!planned.ok) return agentToolResult({ status: 'error' as const, text: planned.text }, planned);
       const commandId = agentShellEffectCommandId(scopeId, turnId, execution, callKey);
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: HOST_SHELL_RUN_OPERATION.operation,
         // Each run is its own record, so an uncertain run never makes the shell busy for the next one.
@@ -162,7 +164,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const posture = shellWritePosture(authority, planned.tier, input.fullAccess === true, planned.realm.writeSets === true && writes !== undefined);
       // Full access requires an enforcing open sandbox, before any effect target or write-set directory exists.
       const realm = callRealm(planned.realm, posture.open);
-      if (!realm.ok) return { status: 'error' as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
+      if (!realm.ok) return agentToolResult({ status: 'error' as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` }, 'ordinary');
       // SHELL-OVERLAY: the write set's private directory (none → read-only posture, said in the result); every exit after it removes it (Astra 2557).
       const root = posture.writeSet ? await input.writeSetRoot?.() ?? null : null;
       const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32), input.config.clockStepToleranceMs) : null;
@@ -194,7 +196,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         // The streamed display must be delivered before the result joins it on the channel.
         await channel.drained();
         const ran = result as HostShellResult | null;
-        if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
+        if (!ran) return agentToolResult({ status: 'error' as const, text: '[deckent] run_shell: error=no-result' }, 'uncertain');
         await showCleanup(ran);
         const { text: trackedLine, counts } = await tracked(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
@@ -208,8 +210,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSetResult(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
           context, ...(input.peer ? { peer: input.peer } : {}), ...(input.sessions ? { sessions: input.sessions } : {}), scopeId, shellCommandId: commandId, signal }), input.language) : '';
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
-          cleanup: ran.cleanup };
+        return agentToolResult({ status: ran.exitCode === 0 ? 'ok' as const : 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
+          cleanup: ran.cleanup }, ran.status === 'exited' && ran.exitCode !== null ? 'ordinary' : 'uncertain');
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
@@ -223,10 +225,11 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';
         if (ran && ran.status !== 'exited') {
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${ran.status === 'spawn-failed' ? ''
-            : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}${trackedLine}`, cleanup: ran.cleanup };
+          return agentToolResult({ status: 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${ran.status === 'spawn-failed' ? ''
+            : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}${trackedLine}`, cleanup: ran.cleanup },
+            ran.status === 'cancelled' ? 'cancelled' : ran.status === 'timed-out' ? 'limit' : ran.status === 'spawn-failed' ? 'ordinary' : 'uncertain');
         }
-        return { status: 'error', text: `${describeShellEffectRefusal(code)}${trackedLine}` };
+        return agentToolResult({ status: 'error' as const, text: `${describeShellEffectRefusal(code)}${trackedLine}` }, effectToolError(error));
       } finally {
         store.close();
         if (directory) await removeSandboxWriteSetDirectory(directory.dir);

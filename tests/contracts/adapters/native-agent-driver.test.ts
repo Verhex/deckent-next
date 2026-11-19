@@ -1,3 +1,4 @@
+import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { mkdir, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -29,9 +30,9 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
   const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined) => {
+  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host = port) => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
-    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: port, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
+    const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: host, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
     close.push(() => driver.close());
     const configured = snapshotKnownSecrets(scenario.loginCanary ? [{ name: 'FIXTURE_LOGIN', value: scenario.loginCanary }] : []);
     const bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, knownSecrets: configured,
@@ -97,6 +98,17 @@ it('runs both real isolated CLI drivers through R with exact correlation, readon
   }
 });
 
+it('WER-A chat continues after synthetic nonzero and sealed NO, and stops session and uncertain records', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  for (const variant of ['nonzero', 'person-no', 'session', 'uncertain'] as const) {
+    const f = await fixture(families[1]!, { failedTool: true, calls: [{ name: 'run_shell', arguments: errorCallArgs }] });
+    await withRecordedToolError(f.c.root, variant, async port => {
+      const h = await f.start('continue', null, port), response = await h.run();
+      expect(response, variant).toMatchObject(variant === 'nonzero' || variant === 'person-no' ?
+        { native: { choices: [{ message: { content: 'agent completed' } }] } } : { kind: 'rejected' });
+    });
+  }
+});
 it('stops unexpected Claude plugins and Codex native items before accepting tools; the refusal stops only that turn', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {

@@ -91,7 +91,8 @@
         "src/domain/core/approval",
         "src/domain/core/principal",
         "src/platform/core/integrity",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "PROVIDERS"
     },
@@ -2125,6 +2126,7 @@
         "src/composition/core/model-invocation",
         "src/composition/core/provider-catalog",
         "src/domain/core/agent-tool",
+        "src/domain/core/approval",
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/platform/core/clock",
@@ -2176,7 +2178,8 @@
         "src/composition/core/config",
         "src/engine/core/provider-spend",
         "src/engine/core/provider-catalog",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -2597,7 +2600,8 @@
         "src/platform/core/common",
         "src/platform/core/validate",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -2607,7 +2611,8 @@
         "src/domain/core/agent-tool",
         "src/platform/core/common",
         "src/engine/core/workspaces",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -2889,6 +2894,7 @@
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
         "src/domain/core/agent-tool",
+        "src/domain/core/approval",
         "src/domain/core/agent-turn",
         "src/domain/core/policy",
         "src/domain/core/principal",
@@ -2898,7 +2904,8 @@
         "src/platform/core/common",
         "src/platform/core/validate",
         "src/platform/core/errors",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -3034,7 +3041,8 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/domain/core/agent-turn",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -3045,7 +3053,8 @@
         "src/engine/core/effect",
         "src/platform/core/validate",
         "src/platform/core/redaction",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -3090,7 +3099,8 @@
         "src/adapters/core/mcp-trust",
         "src/platform/core/redaction",
         "src/adapters/core/mcp-start-diagnosis",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "SURFACES"
     },
@@ -5462,7 +5472,8 @@
         "src/platform/core/common",
         "src/platform/core/redaction",
         "src/platform/core/validate",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/capabilities/core/agent-tool-result"
       ],
       "plan": "PROVIDERS"
     },
@@ -5692,6 +5703,10 @@
         "src/adapters/core/project-attachment",
         "src/engine/core/policy"
       ],
+      "plan": "PROVIDERS"
+    },
+    "src/capabilities/core/agent-tool-result": {
+      "dependencies": [],
       "plan": "PROVIDERS"
     }
   },

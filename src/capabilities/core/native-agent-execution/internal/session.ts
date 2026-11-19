@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type ToolErrorClass } from '#capabilities/core/agent-tool-result/index.js';
 import { agentToolSpecSchema, agentToolOutcomeSchema, identitySchema, persistedString, type AgentToolCall } from '#domain/index.js';
 
 import { positive } from './schema-parts.js';
@@ -34,6 +35,10 @@ export interface ToolSessionPort {
   readonly session: ToolSession;
   /** Producer-owned terminal cause, independent of the model's final answer. Not accepted from wire input. */
   terminalFailure?(): 'approval-expired' | null;
+  /** Generation-local proof from the call recorder. Never inferred from a returned envelope. */
+  recordedError?(call: AgentToolCall, result: NativeAgentToolResult): ToolErrorClass | undefined;
+  /** The bridge selected this host result after the final response-size and abort checks. */
+  selected?(host: NativeAgentToolResult, text: string, live: () => boolean): void;
   propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<NativeAgentToolResult>;
   cancel(): Promise<ToolSessionCancellation>;
   revoke(): Promise<ToolSessionRevocation>;

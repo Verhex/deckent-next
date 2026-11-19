@@ -1,3 +1,4 @@
+import { withToolErrorClass, type ToolErrorClass } from '#capabilities/index.js';
 import { asPolicy, AI_PROPOSAL_REGISTRY, aiSettingResourceIds, evaluatePolicy, isAiPrincipal, isAiSettingKey, mcpPrincipalRef, type AgentToolSpec, type AiSettingKey, type VerifiedPrincipal } from '#domain/index.js';
 import { projectModelIngressField } from './model-ingress-project.js';
 
@@ -36,11 +37,12 @@ const windowOf = (keyPath: string) => /(^|\.)(reference|defaultModel|models?)(\.
   | { readonly ok: false; readonly text: string };
 /** Checks one proposal call's arguments (the key list is the registry's; a fourth key is refused naming the person's window). Pure. */
 export function planAiProposal(name: string, args: Record<string, unknown>): AiProposalArgs {
-  const refuse = (detail: string): AiProposalArgs => ({ ok: false, text: `[deckent] ${name}: ${detail}; nothing was proposed` });
+  const refuse = (detail: string, kind: ToolErrorClass = 'ordinary'): AiProposalArgs => withToolErrorClass({ ok: false as const, text: `[deckent] ${name}: ${detail}; nothing was proposed` }, kind);
   if (name === tools.work) {
     const request = args['request'];
-    if (typeof request !== 'string' || !request.trim() || request.length > 4_096 || Object.keys(args).some(key => key !== 'request')) return refuse('error=invalid-request');
-    return projectModelIngressField(request).disposition === 'unchanged' ? { ok: true, tool: 'work', request: request.trim() } : refuse('error=ingress-refused:request');
+    if (typeof request !== 'string' || !request.trim() || Object.keys(args).some(key => key !== 'request')) return refuse('error=invalid-request');
+    if (request.length > 4_096) return refuse('error=invalid-request', 'limit');
+    return projectModelIngressField(request).disposition === 'unchanged' ? { ok: true, tool: 'work', request: request.trim() } : refuse('error=ingress-refused:request', 'session');
   }
   const keyPath = args['keyPath'];
   if (typeof keyPath !== 'string') return refuse('error=invalid-key');

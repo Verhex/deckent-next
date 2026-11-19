@@ -1,3 +1,4 @@
+import { storedToolCalls } from './tool-error.js';
 import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
 import { t } from '#platform/index.js';
@@ -29,10 +30,12 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   try {
     result = await runAgentTurn(input, { ...ports, settled: async settled => {
       await ports.settled?.(settled);
-      await store.recordToolCall({ scopeId: claim.scopeId, turnId: claim.turnId, round: settled.round, index: settled.index, callId: settled.call.id,
+      const record = { scopeId: claim.scopeId, turnId: claim.turnId, round: settled.round, index: settled.index, callId: settled.call.id,
         tool: settled.call.name, toolVersion: settled.tool?.version ?? 0, argsDigest: settled.argsDigest, target: settled.target, status: settled.status,
         bytes: Buffer.byteLength(settled.content, 'utf8'), resultDigest: agentTurnResultDigest(settled.content), atMs: ports.now(),
-        ...(settled.diagnostic ? { diagnostic: settled.diagnostic } : {}) });
+        ...(settled.diagnostic ? { diagnostic: settled.diagnostic } : {}) };
+      await store.recordToolCall(record);
+      if (input.nativeSession) storedToolCalls.set(settled, Object.freeze(record));
     } });
   } catch (error) {
     const steer = ports.steer?.close();

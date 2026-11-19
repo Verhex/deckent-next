@@ -1,3 +1,4 @@
+import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -366,6 +367,39 @@ it('K17: Codex worker uses the real K3 stream guard, token env and no invented t
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     expect(() => createNativeCliWorkerDriver({ ...f.input, maxTurns: 3 }, f.transport, new AbortController().signal)).toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+});
+
+it('WER-A worker processes a synthetic failed/null completion from the durable coordinator', async () => {
+  for (const variant of ['nonzero', 'person-no', 'session', 'uncertain'] as const) {
+    const f = await transportFixture('codex-jsonl');
+    try {
+      await withRecordedToolError(f.stateDir, variant, async host => {
+        const driver = createNativeCliWorkerDriver({ ...f.input, tools: host }, f.transport, new AbortController().signal);
+        f.isolated.mockImplementationOnce(async (_entry, _spawn, _bounds, signal, line) => {
+          const send = (value: unknown) => line(JSON.stringify(value));
+          const call = { id: 'host-id', name: 'run_shell', argumentsJson: JSON.stringify(errorCallArgs) };
+          const item = { id: 'stream-id', type: 'mcp_tool_call', server: nativeCliAgent('codex-jsonl')!.bridge.serverName, tool: call.name, arguments: errorCallArgs };
+          await send({ type: 'thread.started', thread_id: 'fixture' }); await send({ type: 'turn.started' });
+          await send({ type: 'item.started', item: { ...item, status: 'in_progress', result: null, error: null } });
+          const result = await driver.tools.propose(call, { kind: 'codex-mcp', callId: 'wire', itemId: 'fc', deckentCallId: call.id }, signal);
+          const text = JSON.stringify(result);
+          driver.tools.selected!(result, text, () => !signal.aborted);
+          const stop = await send({ type: 'item.completed', item: { ...item, status: 'failed', error: null, result: { content: [{ type: 'text', text }] } } });
+          if (!stop) {
+            await send({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text: 'after error' } });
+            await send({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } });
+          }
+          return { schemaVersion: 1, requestId: '12345678-1234-4234-8234-123456789abc', started: true, reason: 'exit', exitCode: 0, signal: null,
+            stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
+        });
+        try {
+          const outcome = await driver.run({ ...f.bridge, project: value => value }, new AbortController().signal);
+          expect(outcome, variant).toMatchObject(variant === 'nonzero' || variant === 'person-no' ? { status: 'completed', text: 'after error' }
+            : { status: 'failed', refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' });
+        } finally { await driver.close(); }
+      });
+    } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+  }
 });
 
 it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {

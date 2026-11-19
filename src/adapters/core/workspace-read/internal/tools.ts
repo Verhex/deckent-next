@@ -1,3 +1,4 @@
+import { withToolErrorClass, type ToolErrorClass } from '#capabilities/index.js';
 import { readdir } from 'node:fs/promises';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { boundLine, readBoundedTextFile, sliceUtf8, splitLines } from './bounded.js';
@@ -49,7 +50,7 @@ export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze
 ] as const satisfies readonly AgentToolSpec[]);
 
 const quote = (value: unknown) => metaPattern(String(value ?? ''));
-const fail = (tool: string, detail: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${tool}: error=${detail}` });
+const fail = (tool: string, detail: string, kind: ToolErrorClass = 'ordinary'): AgentToolOutcome => withToolErrorClass({ status: 'error', text: `[deckent] ${tool}: error=${detail}` }, kind);
 /**
  * A refused workspace path (B4 diagnosis, owner terminal test 2026-10-07): `not-found` and `path-changed` also say at which step they fell
  * (`realpath`, `open:<segment>`, `verify:<segment>`, `stat`) and the errno, in the text (`error=not-found step=open:2 errno=ENOENT path=…`)
@@ -58,14 +59,14 @@ const fail = (tool: string, detail: string): AgentToolOutcome => ({ status: 'err
 function pathFail(tool: string, refused: { readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic }, path: string): AgentToolOutcome {
   const diagnostic = refused.error === 'not-found' || refused.error === 'path-changed' ? refused.diagnostic : undefined;
   const detail = diagnostic ? ` step=${diagnostic.step}${diagnostic.errno ? ` errno=${diagnostic.errno}` : ''}` : '';
-  return { status: 'error', text: `[deckent] ${tool}: error=${refused.error}${detail} path=${path}`, ...(diagnostic ? { diagnostic } : {}) };
+  return withToolErrorClass({ status: 'error' as const, text: `[deckent] ${tool}: error=${refused.error}${detail} path=${path}`, ...(diagnostic ? { diagnostic } : {}) }, 'ordinary');
 }
 /** The last line of defence for every branch: a result never exceeds the cap, and a cut always says so (Astra 2072 R3). */
 function capped(outcome: AgentToolOutcome, maxBytes: number): AgentToolOutcome {
   const bytes = Buffer.byteLength(outcome.text, 'utf8');
   if (bytes <= maxBytes) return outcome;
   const marker = `\n[deckent] result cut at the ${maxBytes}-byte cap (${bytes} bytes); narrow the request`;
-  return { status: outcome.status, text: sliceUtf8(Buffer.from(outcome.text, 'utf8'), maxBytes - Buffer.byteLength(marker, 'utf8')) + marker };
+  return withToolErrorClass({ status: outcome.status, text: sliceUtf8(Buffer.from(outcome.text, 'utf8'), maxBytes - Buffer.byteLength(marker, 'utf8')) + marker }, 'limit');
 }
 /** Rows that fit the byte budget before the trailer; a cut is always stated with how to narrow. `kept` counts the rows returned. */
 function fitRows(rows: readonly string[], trailer: readonly string[], maxBytes: number, narrow: string, extraReserve = 0) {
@@ -139,7 +140,7 @@ async function literalGlobNote(scope: WorkspaceScope, prefix: string, pattern: s
 export async function createWorkspaceReadTools(root: string, options: { deny?: readonly string[]; limits?: Partial<WorkspaceReadLimits> } = {}): Promise<WorkspaceReadTools> {
   const limits = validLimits({ ...DEFAULT_WORKSPACE_READ_LIMITS, ...options.limits });
   const scope = await createWorkspaceScope(root, options.deny ?? DEFAULT_WORKSPACE_READ_DENY);
-  const cancelled = (tool: string) => fail(tool, 'cancelled');
+  const cancelled = (tool: string) => fail(tool, 'cancelled', 'cancelled');
 
   const readFileTool = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
     const target = await scope.resolve(args['path']);
@@ -147,7 +148,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     const opened = await scope.open(target.rel, 'file');
     if (!opened.ok) return pathFail('read_file', opened, quote(target.rel));
     const read = await readBoundedTextFile(opened.handle, limits.maxFileBytes, signal);
-    if (!read.ok) return read.kind === 'cancelled' ? cancelled('read_file') : fail('read_file', `${read.kind} (${read.detail}) path=${quote(target.rel)}`);
+    if (!read.ok) return read.kind === 'cancelled' ? cancelled('read_file') : fail('read_file', `${read.kind} (${read.detail}) path=${quote(target.rel)}`, read.kind === 'too-large' ? 'limit' : 'ordinary');
     const request = resolveReadFileViewRequest(args);
     let matching: ReadonlySet<number> | null = null;
     if (request.mode === 'search' && request.pattern !== null && compileSearchPattern(request.pattern, request.literal, request.ignoreCase)) {
@@ -262,7 +263,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
   const glob = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
     const pattern = typeof args['pattern'] === 'string' ? args['pattern'] : '';
     if (!pattern) return fail('glob', 'empty-pattern');
-    if (Buffer.byteLength(pattern, 'utf8') > MAX_GLOB_ARG_BYTES) return fail('glob', `argument-too-long name=pattern limit=${MAX_GLOB_ARG_BYTES}`);
+    if (Buffer.byteLength(pattern, 'utf8') > MAX_GLOB_ARG_BYTES) return fail('glob', `argument-too-long name=pattern limit=${MAX_GLOB_ARG_BYTES}`, 'limit');
     const target = await scope.resolve(args['path'], true);
     if (!target.ok) return pathFail('glob', target, quote(args['path'] ?? '.'));
     const matches = createGlobMatcher(pattern), matched: string[] = [];
@@ -289,13 +290,13 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     async execute(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
       const label = sliceUtf8(Buffer.from(String(name), 'utf8'), 64);
       const tool = Object.hasOwn(run, name) ? run[name] : undefined;
-      if (!tool) return fail(label, 'unknown-tool');
+      if (!tool) return fail(label, 'unknown-tool', 'session');
       if (!args || typeof args !== 'object' || Array.isArray(args)) return fail(label, 'arguments-not-an-object');
       if (signal?.aborted) return cancelled(label);
       const problem = argumentProblem(args);
-      if (problem) return fail(label, problem);
+      if (problem) return fail(label, problem, 'limit');
       let outcome: AgentToolOutcome;
-      try { outcome = await tool(args, signal); } catch { outcome = fail(label, 'failed'); }
+      try { outcome = await tool(args, signal); } catch { outcome = fail(label, 'failed', 'uncertain'); }
       return capped(signal?.aborted && outcome.status === 'ok' ? cancelled(label) : outcome, limits.maxResultBytes);
     },
   });

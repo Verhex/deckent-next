@@ -1,3 +1,4 @@
+import { withToolErrorClass } from '#capabilities/index.js';
 import { sha256, knownSecretValues, persistedString, redactBounded } from '#platform/index.js';
 import { z } from 'zod';
 import type { AgentToolOutcome } from '#domain/index.js';
@@ -76,7 +77,10 @@ const MCP_PROJECT_READ_ONLY_NOTE = `[deckent] this server runs in a sandbox wher
 export function describeMcpResult(outcome: McpCallOutcome, display: string, maxBytes: number, server?: { readonly projectReadOnly: boolean; readonly secrets?: readonly string[] }): AgentToolOutcome {
   const described = describeMcpAnswer(outcome, display, maxBytes, server?.secrets ?? []);
   const answeredError = outcome.outcome === 'answered' && ('error' in outcome ? outcome.error.kind === 'server' : outcome.result.isError === true);
-  return server?.projectReadOnly === true && answeredError ? { ...described, text: `${described.text}\n${MCP_PROJECT_READ_ONLY_NOTE}` } : described;
+  const kind = outcome.outcome === 'answered' ? answeredError ? 'ordinary' : 'session'
+    : outcome.reason === 'cancelled' ? 'cancelled' : outcome.reason === 'timed-out' ? 'limit'
+    : outcome.outcome === 'unknown' ? 'ordinary' : outcome.reason === 'trust-unavailable' ? 'uncertain' : 'session';
+  return withToolErrorClass(server?.projectReadOnly === true && answeredError ? { ...described, text: `${described.text}\n${MCP_PROJECT_READ_ONLY_NOTE}` } : described, kind);
 }
 /** `secrets`: the server's known values (KG8 P16) — a server that echoes its credential back never hands it to the model. */
 function describeMcpAnswer(outcome: McpCallOutcome, display: string, maxBytes: number, secrets: readonly string[]): AgentToolOutcome {

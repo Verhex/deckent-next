@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CallToolResult, Tool, RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { withToolErrorClass, type ToolErrorClass } from '#capabilities/index.js';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
@@ -37,7 +38,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const { Server, WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
   const turnToken = `~${randomBytes(32).toString('base64url')}`, tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken); // '~' head (RFC 6750 b64token): a field ending in a known-secret prefix is masked, and ordinary text practically never ends in '~'
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
-  const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();
+  const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Map<RequestId, { sent?: (frame: string) => void }>();
   let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
   const url = `http://${bridge.sentinelHost}${bridge.path}`, progressIntervalMs = Math.floor(limits.idleMs / 2);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
@@ -48,24 +49,24 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const envelope = (deckentCallId: string, code: string) => ({ schemaVersion: 1 as const, turnId: session.turnId, generation: session.generation,
     deckentCallId, outcome: { status: 'error' as const, text: code } });
   const result = (value: unknown, isError: boolean): CallToolResult => ({ content: [{ type: 'text', text: safe(JSON.stringify(value)) }], isError });
-  const failure = (id: string, code: string) => result(envelope(id, code), true);
+  const failure = (id: string, code: string, kind: ToolErrorClass) => withToolErrorClass(result(envelope(id, code), true), kind);
   const tools = session.tools.map(({ name, description, inputSchema }) => ({ name,
     description: safe(description), inputSchema: JSON.parse(safe(JSON.stringify(inputSchema))) as Tool['inputSchema'] }));
   const frameBytes = (id: RequestId, value: unknown) => Buffer.byteLength(`event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result: value })}\n\n`);
   const fits = (id: RequestId, value: unknown) => frameBytes(id, value) <= bridge.frameMaxBytes;
-  if (!fits('', { tools }) || frameBytes('', failure(randomUUID(), 'NATIVE_BRIDGE_CORRELATION_INVALID')) > bridge.frameMaxBytes / 2) throw new Error('NATIVE_BRIDGE_LIMITS_INVALID');
+  if (!fits('', { tools }) || frameBytes('', failure(randomUUID(), 'NATIVE_BRIDGE_CORRELATION_INVALID', 'session')) > bridge.frameMaxBytes / 2) throw new Error('NATIVE_BRIDGE_LIMITS_INVALID');
   server.setRequestHandler('tools/list', async () => ({ tools }));
   server.setRequestHandler('tools/call', async (request, context) => {
     const meta = request.params._meta ?? {}, deckentCallId = randomUUID();
     const correlation = nativeAgentCorrelationSchema.safeParse(nativeAgentCorrelationMeta(input.correlationKind, meta, deckentCallId));
-    if (!correlation.success) return failure(deckentCallId, 'NATIVE_BRIDGE_CORRELATION_INVALID');
+    if (!correlation.success) return failure(deckentCallId, 'NATIVE_BRIDGE_CORRELATION_INVALID', 'session');
     const call = agentToolCallSchema.safeParse({ id: deckentCallId, name: request.params.name, argumentsJson: JSON.stringify(request.params.arguments ?? {}) });
-    if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN');
+    if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN', 'session');
     const key = correlation.data.kind === 'claude-tool-use' ? correlation.data.toolUseId : correlation.data.callId;
     const fingerprint = digest(JSON.stringify(request.params)).toString('hex'), previous = replay.get(key);
-    if (previous) return previous.digest === fingerprint ? serve(previous.result, previous.deckentCallId, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
-    if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED');
-    if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT');
+    if (previous) return previous.digest === fingerprint ? serve(previous.result, previous.deckentCallId, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT', 'session');
+    if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED', 'session');
+    if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT', 'limit');
     // Reserve before awaiting K1; duplicates share this promise even during approval. No eviction permits a second effect.
     replayBytes += bridge.frameMaxBytes;
     const pending = Promise.resolve().then(() => propose(call.data, correlation.data, context.mcpReq.signal));
@@ -73,23 +74,44 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     // The SDK suppresses a cancelled request's response; explicitly end its SSE instead of keeping it alive forever.
     return serve(pending, call.data.id, context.mcpReq.id, context.mcpReq.signal);
   });
+  const candidates = new WeakMap<CallToolResult, { host: Awaited<ReturnType<ToolSessionPort['propose']>>; signal: AbortSignal; suppressed: boolean }>();
   async function serve(pending: Promise<CallToolResult>, callId: string, id: RequestId, signal: AbortSignal) {
-    const cancelled = () => transport.closeSSEStream(id);
+    const delivery = inFlight.get(id), cancelled = () => transport.closeSSEStream(id);
     signal.addEventListener('abort', cancelled, { once: true });
-    try { const value = await pending; return fits(id, value) ? value : failure(callId, 'NATIVE_BRIDGE_FRAME_LIMIT'); }
+    try {
+      const value = await pending, proof = candidates.get(value);
+      if (!fits(id, value)) { if (proof) proof.suppressed = true; return failure(callId, 'NATIVE_BRIDGE_FRAME_LIMIT', 'limit'); }
+      const block = value.content[0];
+      if (proof && delivery && block?.type === 'text') {
+        const live = () => !closed && !proof.suppressed && !proof.signal.aborted && !signal.aborted;
+        // The SDK or HTTP traffic budget may still suppress the selected response. Only a forwarded result can publish it.
+        delivery.sent = frame => {
+          const data = frame.split('\n').find(line => line.startsWith('data: '));
+          if (!data || !live()) return;
+          const message = object(JSON.parse(data.slice(6))), content = object(message['result'])['content'];
+          if (message['id'] === id && Array.isArray(content) && content.length === 1 && object(content[0])['text'] === block.text) {
+            input.port.selected?.(proof.host, block.text, live);
+            delete delivery.sent;
+          }
+        };
+      }
+      return value;
+    }
     finally { signal.removeEventListener('abort', cancelled); }
   }
   async function propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<CallToolResult> {
     const deadline = AbortSignal.timeout(session.approvalTtlMs), combined = AbortSignal.any([lifetime.signal, signal, deadline]);
-    if (combined.aborted) return failure(call.id, 'NATIVE_BRIDGE_CANCELLED');
+    if (combined.aborted) return failure(call.id, 'NATIVE_BRIDGE_CANCELLED', 'cancelled');
     let onAbort = () => {};
-    const aborted = new Promise<CallToolResult>(resolve => { onAbort = () => resolve(failure(call.id, 'NATIVE_BRIDGE_CANCELLED')); combined.addEventListener('abort', onAbort, { once: true }); });
+    const aborted = new Promise<CallToolResult>(resolve => { onAbort = () => resolve(failure(call.id, 'NATIVE_BRIDGE_CANCELLED', 'cancelled')); combined.addEventListener('abort', onAbort, { once: true }); });
     const executed = Promise.resolve().then(() => input.port.propose(call, correlation, combined)).then(value => {
       const parsed = nativeAgentToolResultSchema.safeParse(value);
-      if (!parsed.success || parsed.data.turnId !== session.turnId || parsed.data.generation !== session.generation || parsed.data.deckentCallId !== call.id) return failure(call.id, 'NATIVE_BRIDGE_RESULT_INVALID');
+      if (!parsed.success || parsed.data.turnId !== session.turnId || parsed.data.generation !== session.generation || parsed.data.deckentCallId !== call.id) return failure(call.id, 'NATIVE_BRIDGE_RESULT_INVALID', 'session');
       const answer = result(parsed.data, parsed.data.outcome.status === 'error');
-      return fits('', answer) ? answer : failure(call.id, 'NATIVE_BRIDGE_FRAME_LIMIT');
-    }, () => failure(call.id, 'NATIVE_BRIDGE_RESULT_UNKNOWN'));
+      if (!fits('', answer)) return failure(call.id, 'NATIVE_BRIDGE_FRAME_LIMIT', 'limit');
+      if ('callId' in correlation && input.port.selected && parsed.data.outcome.status === 'error') candidates.set(answer, { host: value, signal: combined, suppressed: false });
+      return answer;
+    }, () => failure(call.id, 'NATIVE_BRIDGE_RESULT_UNKNOWN', 'uncertain'));
     try { return await Promise.race([executed, aborted]); }
     finally { combined.removeEventListener('abort', onAbort); }
   }
@@ -108,7 +130,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     if (closed || typeof token !== 'string' || !timingSafeEqual(tokenDigest, digest(token))) { refuseBridge(response, 403, 'NATIVE_BRIDGE_TOKEN_INVALID'); return; }
     if (request.headers.origin !== undefined && request.headers.origin !== `http://${bridge.sentinelHost}`) { refuseBridge(response, 403, 'NATIVE_BRIDGE_ORIGIN_INVALID'); return; }
     if (active >= limits.maxConnections) { refuseBridge(response, 429, 'NATIVE_BRIDGE_CONNECTION_LIMIT'); return; }
-    active++; responses.add(response); let rpcKey: string | undefined;
+    active++; responses.add(response); let rpcKey: RequestId | undefined;
+    const delivery: { sent?: (frame: string) => void } = {};
     try {
       const headers = new Headers(); for (const [name, value] of Object.entries(request.headers)) if (typeof value === 'string') headers.set(name, value);
       let body: unknown;
@@ -122,13 +145,13 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
         refuseBridge(response, 409, 'NATIVE_BRIDGE_SESSION_INVALID'); return;
       }
       if (rpcId !== undefined) {
-        const key = `${typeof rpcId}:${String(rpcId)}`;
+        const key = rpcId as RequestId;
         if (inFlight.has(key)) { refuseBridge(response, 409, 'NATIVE_BRIDGE_REPLAY_CONFLICT'); return; }
-        inFlight.add(key); rpcKey = key;
+        inFlight.set(key, delivery); rpcKey = key;
       }
       if (initialize) initializing = true;
       const source = await transport.handleRequest(new Request(url, { method: request.method ?? 'GET', headers }), body === undefined ? {} : { parsedBody: body });
-      await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe);
+      await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe, delivery);
       if (request.method === 'DELETE' && source.ok) await close();
     } catch (error) {
       if (!response.destroyed) refuseBridge(response, isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 413 : 400,

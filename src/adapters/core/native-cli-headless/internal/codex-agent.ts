@@ -9,7 +9,7 @@ import { headlessArgv } from './env.js';
 import { codexTurn } from './codex.js';
 import type { HeadlessPreflight } from './preflight.js';
 import { reject, type HeadlessTurn, type Prepared, type Refusal } from './turn.js';
-export type CodexAgentResultLookup = (deckentCallId: string) => Readonly<{ call: Parameters<ToolSessionPort['propose']>[0]; result: NativeAgentToolResult }> | undefined;
+export type CodexAgentResultLookup = (deckentCallId: string) => Readonly<{ call: Parameters<ToolSessionPort['propose']>[0]; result: NativeAgentToolResult; active?: () => boolean; recordedError?: () => ReturnType<NonNullable<ToolSessionPort['recordedError']>>; selectedText?: () => string | undefined }> | undefined;
 const MILLISECONDS_PER_SECOND = 1000; // Unit conversion, never a timeout policy.
 export function codexAgentArgv(entry: NonNullable<ReturnType<typeof nativeCliAgent>>, session: ToolSession, runDir: string, model: string, effortArgs: readonly string[], bridgeUrl: string): readonly string[] {
   const { agent, bridge } = entry, transport = agent.transport;
@@ -25,16 +25,23 @@ function toolResult(value: unknown): NativeAgentToolResult | null { const result
   let decoded: unknown; try { decoded = JSON.parse(block['text']); } catch { return null; }
   const parsed = nativeAgentToolResultSchema.safeParse(decoded); if (!parsed.success || result?.['structured_content'] != null && !isDeepStrictEqual(result['structured_content'], parsed.data)) return null; return parsed.data; }
 /** Observes K4 results, never executes: item.id is stream lifecycle; deckentCallId is facade custody. Caller owns bounds and stop-on-refusal. */
-export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS) {
+export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS, signal?: AbortSignal) {
   const entry = prepared.entry.headless.protocolFamily ? nativeCliAgent(prepared.entry.headless.protocolFamily) : null;
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
+  // A reservation belongs to the active stream item. A conflicting proposal permanently disqualifies that item.
+  const reserved = new WeakMap<object, string | null>();
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
   return { accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
       if (refusal || !started || completed) return false;
       let args: unknown; try { args = JSON.parse(call.argumentsJson); } catch { return false; }
-      return [...active.values()].some(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
+      const matches = [...active.values()].filter(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
+      for (const item of matches) {
+        const previous = reserved.get(item);
+        reserved.set(item, matches.length === 1 && (previous === undefined || previous === call.id) ? call.id : null);
+      }
+      return matches.length > 0;
     }, line(raw: string) {
       if (refusal) return refusal; const line = parseCodexExecLine(raw);
       if (line.kind === 'invalid') return line.reason === 'blank' ? null : fail('json'); if (completed) return fail('after-turn');
@@ -53,10 +60,21 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
           if (!prior || !isDeepStrictEqual(prior, identity)) return fail('mcp-order');
           if (type === 'item.updated') return item.status === 'in_progress' && item.result == null && item.error == null ? null : fail('mcp-update');
           const envelope = toolResult(item.result);
-          if (item.status !== 'completed' || item.error != null || !envelope || envelope.turnId !== session.turnId || envelope.generation !== session.generation || calls.has(envelope.deckentCallId)) return fail('mcp-result');
+          if (signal?.aborted || item.error != null || !envelope || envelope.turnId !== session.turnId || envelope.generation !== session.generation || calls.has(envelope.deckentCallId)) return fail('mcp-result');
           const recorded = lookup(envelope.deckentCallId); let argumentsValue: unknown;
           try { argumentsValue = recorded ? JSON.parse(recorded.call.argumentsJson) : undefined; } catch { return fail('mcp-correlation'); }
-          if (!recorded || recorded.call.name !== item.tool || !isDeepStrictEqual(argumentsValue, item.arguments) || !isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          if (!recorded || recorded.active?.() === false || recorded.call.name !== item.tool || !isDeepStrictEqual(argumentsValue, item.arguments)) return fail('mcp-correlation');
+          if (recorded.result.outcome.status === 'ok') {
+            if (item.status !== 'completed') return fail('mcp-result');
+            if (!isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          } else {
+            // Completed keeps today's error-field rule (absent or null, checked above); a failed completion needs the explicit null the wire evidence shows.
+            if (item.status === 'failed' ? item.error !== null : item.status !== 'completed') return fail('mcp-result');
+            const content = record(item.result)?.['content'] as readonly unknown[];
+            if (envelope.outcome.status !== 'error' || recorded.call.id !== envelope.deckentCallId || reserved.get(prior) !== recorded.call.id
+              || recorded.recordedError?.() !== 'ordinary' || recorded.selectedText?.() !== record(content[0])?.['text']
+              || !isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          }
           calls.add(envelope.deckentCallId); seen.add(item.id); active.delete(item.id); return null;
         }
         if (type === 'item.started') { if (pendingText.has(item.id)) return fail('item-order'); pendingText.set(item.id, item.type as string); }

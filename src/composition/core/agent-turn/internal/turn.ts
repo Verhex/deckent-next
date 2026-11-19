@@ -1,3 +1,4 @@
+import { agentToolResult } from '#engine/index.js';
 import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -378,7 +379,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
       },
-      async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
+      async requestApproval({ round, index, call, tool, args, argsDigest, target, personDenied }, approvalSignal) {
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
         // Once a card was requested it is always settled: `unsettled` when the wait failed (the request may stay pending, it permits nothing).
         let answer: { wait(): Promise<void>; close(): void } | null = null;
@@ -407,7 +408,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           requested = { approvalId: record.request.approvalId };
           // DENY-WORDING (lead 2026-10-07): policy may refuse an allow; the owner's settlement stays allow.
           // APPROVER-NOTE: the helper carries the owner's note only while that decision still holds.
-          return await settleAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, started, {
+          return await settleAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, started, { ...(personDenied ? { personDenied } : {}),
             recheck: async () => { await answer?.wait(); return await toolAuthority.decide(tool, command.scopeId, context.principal, mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined) !== 'deny'; },
             refused: () => decisions.refusedAfterApproval(tool, args, { round, index, callId: call.id }, policy.revision),
             allowed: approval => approvals.allowed({ round, index }, approval), settled: outcome => { settlement = outcome; },
@@ -445,7 +446,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         await recheckNative();
-        if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
+        if (!workspace) return agentToolResult({ status: 'error' as const, text: `[deckent] ${tool.name}: error=unknown-tool` }, 'session');
         if (tool.name === SESSION_STATE_TOOL_SPEC.name) return { status: 'ok', text: agentSessionStateText(await sessionOf()) };
         if ((tool.toolClass === 'edit' && editsOf(tool.name)) || (tool.toolClass === 'shell' && shell)) {
           return decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'

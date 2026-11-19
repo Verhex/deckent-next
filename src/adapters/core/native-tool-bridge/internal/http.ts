@@ -30,7 +30,7 @@ export async function bridgeBody(request: IncomingMessage, maxBytes: number, cou
 }
 
 /** Hold a complete SSE frame before forwarding it. Backpressure never grows an unbounded queue. */
-export async function bridgeResponse(source: Response, target: ServerResponse, maxBytes: number, count: (bytes: number) => boolean, project: (text: string) => string): Promise<void> {
+export async function bridgeResponse(source: Response, target: ServerResponse, maxBytes: number, count: (bytes: number) => boolean, project: (text: string) => string, delivery: { sent?: (frame: string) => void }): Promise<void> {
   for (const [name, value] of source.headers) target.setHeader(name, value);
   target.writeHead(source.status); target.flushHeaders();
   if (!source.body) { target.end(); return; }
@@ -46,6 +46,7 @@ export async function bridgeResponse(source: Response, target: ServerResponse, m
       try { await once(target, 'drain', { signal: controller.signal }); }
       finally { target.off('close', closed); }
     }
+    if (!target.destroyed) delivery.sent?.(projected.toString('utf8'));
   };
   try {
     while (!target.destroyed) {

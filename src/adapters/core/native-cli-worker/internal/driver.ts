@@ -54,7 +54,11 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         system: input.system, user: input.user, effortArgs };
       claude = entry.agent.transport.kind === 'claude-mcp' ? transport.claudeDriver({ entry, port: input.tools, model: input.model,
         cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes }) : undefined;
-      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, gate.lookup);
+      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, id => {
+        const host = gate.lookup(id);
+        if (!host || host.result.outcome.status === 'ok') return host;
+        return { ...host, result: JSON.parse(bridge.project(JSON.stringify(host.result))) as typeof host.result };
+      }, undefined, undefined, AbortSignal.any([combined, gate.signal]));
       gate.bind(claude ?? { async propose(call, correlation, callSignal) {
         if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
         return input.tools.propose(call, correlation, callSignal);

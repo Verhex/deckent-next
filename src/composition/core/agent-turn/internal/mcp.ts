@@ -1,3 +1,5 @@
+import { effectToolError } from './effect-error.js';
+import { agentToolResult } from '#engine/index.js';
 import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
@@ -63,7 +65,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   return { ...tools, async apply(name: string, args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number },
     gate: EffectApprovalGate): Promise<AgentToolOutcome> {
     const entry = tools.entry(name);
-    if (!entry) return { status: 'error', text: `[deckent] ${name}: error=unknown-tool` };
+    if (!entry) return agentToolResult({ status: 'error' as const, text: `[deckent] ${name}: error=unknown-tool` }, 'session');
     const command = tools.command(entry, args, { scopeId, turnId, ...execution, argsDigest: agentToolArgumentsDigest(name, args) }), clock = new SystemTrustedClock();
     let ran: McpCallOutcome | null = null;
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
@@ -76,7 +78,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
       return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry) : describeMcpRefusal(entry.display, 'no-result');
     } catch (error) {
       return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry)
-        : describeMcpRefusal(entry.display, error instanceof EffectError ? error.code : (error as { code?: unknown })?.code);
+        : agentToolResult(describeMcpRefusal(entry.display, error instanceof EffectError ? error.code : (error as { code?: unknown })?.code), effectToolError(error));
     } finally { store.close(); }
   } };
 }

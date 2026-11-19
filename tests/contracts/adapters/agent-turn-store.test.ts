@@ -241,3 +241,32 @@ it('native push settles into the same durable turn and finished replay never ope
     expect(invoked).toBe(1); expect(executions).toBe(1); expect(p.invoked).toEqual([]);
   } finally { store.close(); }
 });
+
+it('WER-A null-digest schema refusal retains its exact frozen call; ingress and audit failure keep separate dispositions', async () => {
+  const path = await file(), store = await openSqliteAgentTurnStore(path, options), observations: unknown[] = [];
+  const p = ports([]), nativeSession = { schemaVersion: 1 as const, turnId: 't1', generation: 3, tools: [readFile], approvalTtlMs: 60000 };
+  let auditDown = false;
+  p.value.recordIngress = async () => { if (auditDown) throw Error('record failed'); };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    for (const [index, args] of [{}, { path: 'x\u202Ey' }, { path: 'x\u200By' }].entries()) {
+      const call = { id: 'call-' + index, name: 'read_file', argumentsJson: JSON.stringify(args) };
+      auditDown = index === 2;
+      const correlation = { kind: 'codex-mcp' as const, callId: 'wire-' + index, itemId: 'fc-' + index, deckentCallId: call.id };
+      const result = await session.propose(call, correlation, signal);
+      observations.push([result.outcome.status, session.recordedError?.(call, result),
+        session.recordedError?.({ ...call, argumentsJson: '{"path":"other"}' }, result), session.recordedError?.(call, { ...result })]);
+    }
+    return rounds[1]!;
+  };
+  try {
+    const result = await runDurableAgentTurn({ claim: claim(), nativeSession, messages: [], tools: nativeSession.tools,
+      signal: new AbortController().signal, emit() {} }, store, p.value);
+    expect(result).toMatchObject({ recorded: true, toolCalls: 0, finish: 'stop' });
+    expect(observations).toEqual(['ordinary', 'session', 'uncertain'].map(kind => ['error', kind, undefined, undefined]));
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      const rows = db.prepare('SELECT record FROM agent_turn_tool_calls ORDER BY call_index').all() as { record: string }[];
+      expect(rows.map(row => JSON.parse(row.record).argsDigest)).toEqual([null, null, null]);
+    } finally { db.close(); }
+  } finally { store.close(); }
+});

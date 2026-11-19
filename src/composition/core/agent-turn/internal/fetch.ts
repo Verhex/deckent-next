@@ -1,3 +1,5 @@
+import { effectToolError } from './effect-error.js';
+import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentToolCallCell, type EffectApprovalGate } from '#engine/index.js';
@@ -26,7 +28,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
     },
     async apply(args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
       const planned = plans.get(key(args)) ?? plan(args);
-      if (!planned.ok) return { status: 'error', text: `[deckent] fetch_url: error=${planned.error}` };
+      if (!planned.ok) return agentToolResult({ status: 'error' as const, text: `[deckent] fetch_url: error=${planned.error}` }, planned);
       const commandId = agentFetchEffectCommandId(scopeId, turnId, execution, key(args)), clock = new SystemTrustedClock();
       // Each fetch is its own record, so an uncertain one never makes the next busy.
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: NETWORK_FETCH_OPERATION.operation, idempotencyKey: commandId,
@@ -43,7 +45,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
         return ran ? describeFetchResult(ran) : describeFetchRefusal('no-result');
       } catch (error) {
         // A request that ran (refused before sending, or unknown after) reports itself; otherwise nothing was sent.
-        return ran ? describeFetchResult(ran) : describeFetchRefusal(error instanceof EffectError ? error.code : (error as { code?: unknown })?.code);
+        return ran ? describeFetchResult(ran) : agentToolResult(describeFetchRefusal(error instanceof EffectError ? error.code : (error as { code?: unknown })?.code), effectToolError(error));
       } finally { store.close(); }
     },
   };

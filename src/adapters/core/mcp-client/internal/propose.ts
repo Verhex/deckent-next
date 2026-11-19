@@ -1,3 +1,4 @@
+import { withToolErrorClass } from '#capabilities/index.js';
 import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import { AI_PROPOSAL_REGISTRY, type AgentToolSpec } from '#domain/index.js';
@@ -46,22 +47,22 @@ const REFERENCE = /\$(?:DECK:|\{|[A-Za-z_])/u;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type McpProposalPlan = { readonly ok: true; readonly proposal: McpProposal; readonly entry: McpServerEntry } | { readonly ok: false; readonly reason: string };
 export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan {
   // Values a person binds are refused by name, before anything else (the model is told where they belong).
-  if ('env' in args || 'headers' in args) return { ok: false, reason: MCP_PROPOSAL_SECRETS_REFUSED };
+  if ('env' in args || 'headers' in args) return withToolErrorClass({ ok: false as const, reason: MCP_PROPOSAL_SECRETS_REFUSED }, 'ordinary');
   const parsed = proposalSchema.safeParse(args);
-  if (!parsed.success) return { ok: false, reason: 'invalid-proposal' };
+  if (!parsed.success) return withToolErrorClass({ ok: false as const, reason: 'invalid-proposal' }, 'ordinary');
   const proposal = parsed.data, strings: [string, string][] = [['name', proposal.name], ['reason', proposal.reason], ['command', proposal.command ?? ''], ['url', proposal.url ?? ''],
     ...(proposal.args ?? []).map((value, index): [string, string] => [`args.${index}`, value]),
     ...(proposal.requiredSettings ?? []).map((value, index): [string, string] => [`requiredSettings.${index}`, value])];
-  if ([proposal.command ?? '', proposal.url ?? '', ...(proposal.args ?? [])].some(value => REFERENCE.test(value))) return { ok: false, reason: MCP_PROPOSAL_SECRETS_REFUSED };
-  for (const [field, value] of strings) if (projectModelIngressField(value).disposition !== 'unchanged') return { ok: false, reason: `ingress-refused:${field}` };
-  if (!MCP_SERVER_NAME.test(proposal.name)) return { ok: false, reason: 'invalid-name' };
+  if ([proposal.command ?? '', proposal.url ?? '', ...(proposal.args ?? [])].some(value => REFERENCE.test(value))) return withToolErrorClass({ ok: false as const, reason: MCP_PROPOSAL_SECRETS_REFUSED }, 'ordinary');
+  for (const [field, value] of strings) if (projectModelIngressField(value).disposition !== 'unchanged') return withToolErrorClass({ ok: false as const, reason: `ingress-refused:${field}` }, 'session');
+  if (!MCP_SERVER_NAME.test(proposal.name)) return withToolErrorClass({ ok: false as const, reason: 'invalid-name' }, 'ordinary');
   const nameRule = proposal.transport === 'http' ? MCP_HEADER_NAME : MCP_ENV_NAME;
-  if ((proposal.requiredSettings ?? []).some(name => !nameRule.test(name))) return { ok: false, reason: 'invalid-setting-name' };
+  if ((proposal.requiredSettings ?? []).some(name => !nameRule.test(name))) return withToolErrorClass({ ok: false as const, reason: 'invalid-setting-name' }, 'ordinary');
   const raw = proposal.transport === 'http' ? { type: 'http', url: proposal.url }
     : { command: proposal.command, ...(proposal.args ? { args: proposal.args } : {}), realm: proposal.realm ?? MCP_DEFAULT_REALM };
   const entry = mcpServerEntrySchema.safeParse(raw);
   if (!entry.success || (proposal.transport === 'http' && (proposal.command || proposal.args || proposal.realm)) || (proposal.transport === 'stdio' && proposal.url))
-    return { ok: false, reason: 'invalid-entry' };
+    return withToolErrorClass({ ok: false as const, reason: 'invalid-entry' }, 'ordinary');
   const refused = isMcpHttpEntry(entry.data) ? mcpEndpointRefusal(entry.data.url) : null;
   return refused ? { ok: false, reason: refused } : { ok: true, proposal, entry: entry.data };
 }

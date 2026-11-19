@@ -1,3 +1,5 @@
+import { type ToolErrorClass } from '#capabilities/index.js';
+import { agentToolResult } from '#engine/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { AI_PROPOSAL_REGISTRY, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand, type BrainPlanObserver, type BrainPlanProgress } from '#domain/index.js';
 import { AI_PROPOSAL_TOOL_SPECS, aiProposalToolDecision, awaitAgentToolApproval, isRunIntentResult, planAiProposal, verifyApproval, type RunPlanningResult } from '#engine/index.js';
@@ -24,20 +26,25 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
   readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
   const { projectRoot, options, peer, scopeId, signal } = input;
   const ai = () => withMcpPrincipal(() => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'));
-  const tag = (tool: string, text: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${tool}: ${text}` });
+  const tag = (tool: string, text: string, kind: ToolErrorClass = 'ordinary'): AgentToolOutcome => agentToolResult({ status: 'error' as const, text: `[deckent] ${tool}: ${text}` }, kind);
   const origin = t('agent.proposal.origin', {}, input.locale);
   /** One pending approval the AI's request opened: on this turn's stream, awaited, always settled once requested. */
-  async function card(callId: string, approvalId: string, preview: string): Promise<'allow' | 'deny' | 'expired' | 'cancelled'> {
+  async function card(callId: string, approvalId: string, preview: string) {
     const context = await ai(), integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
     const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
     let outcome: 'allow' | 'deny' | 'expired' | 'cancelled' | 'unsettled' = 'unsettled', requested = false;
     try {
       const loaded = journal.store.load(scopeId, approvalId);
-      if (!loaded) return 'expired';
+      if (!loaded) return { answer: 'expired' as const, kind: 'uncertain' as const };
       const record = verifyApproval(loaded, integrity);
       input.emit({ kind: 'approval.requested', callId, approvalId, revision: record.revision, summary: record.request.summary, preview, expiresAt: record.request.expiresAt });
       requested = true;
-      return outcome = await awaitAgentToolApproval(journal.store, integrity, record, new SystemTrustedClock(), signal, 250);
+      let kind: ToolErrorClass = 'uncertain';
+      outcome = await awaitAgentToolApproval(journal.store, integrity, record, new SystemTrustedClock(), signal, 250, undefined, terminal => {
+        if (terminal.request.approvalId === approvalId && terminal.request.actionDigest === record.request.actionDigest
+          && terminal.request.scopeId === scopeId) kind = 'ordinary';
+      });
+      return { answer: outcome, kind: outcome === 'cancelled' ? 'cancelled' as const : kind };
     } finally { journal.close(); if (requested) input.emit({ kind: 'approval.settled', callId, approvalId, outcome }); }
   }
   async function choices(keyPath: string, layer: 'project' | 'global') {
@@ -56,15 +63,25 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     let result = await plan();
     for (let round = 0; round < AI_PROPOSAL_REGISTRY.maxCardRounds && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
       const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...views.cardLines(result, input.locale)].join('\n'));
-      if (settled !== 'allow') return tag(name, said[settled]);
+      if (settled.answer !== 'allow') return tag(name, said[settled.answer], settled.kind);
       result = await plan();
     }
     if (result.run) {
       input.emit({ kind: 'work', callId, phase: 'admitted', runId: result.run.runId });
       return { status: 'ok', text: `[deckent] ${name}: Run ${result.run.runId} was admitted and is listed in /tasks.` };
     }
+    // The durable proposal can contain any registered failure. Only known business refusal codes are ordinary.
     const reason = isRunIntentResult(result) ? 'work-parked' : result.proposal.reason ?? result.proposal.status;
-    return tag(name, `error=${reason}; no Run was admitted (the person can start the work with /do)`);
+    let kind: ToolErrorClass = 'uncertain';
+    switch (reason) {
+      case 'RUN_PROPOSAL_BUDGET_EXCEEDED': kind = 'limit'; break;
+      case 'RUN_PROPOSAL_SOURCE_INVALID': case 'RUN_PROPOSAL_ACTOR_MISMATCH': case 'RUN_PROPOSAL_BUDGET_SCOPE':
+      case 'APPROVAL_CONFLICT': case 'APPROVAL_STALE': kind = 'session'; break;
+      case 'work-parked': case 'RUN_PROPOSAL_GRAPH_INVALID': case 'RUN_PROPOSAL_WORK_CLASS_REQUIRED':
+      case 'RUN_PROPOSAL_BASIS_STALE': case 'RUN_PROPOSAL_BUDGET_MISSING': case 'RUN_PROPOSAL_BUDGET_CURRENCY':
+      case 'RUN_PROPOSAL_PERMISSION_UNKNOWN': case 'RUN_APPROVAL_REQUIRED': kind = 'ordinary'; break;
+    }
+    return tag(name, `error=${reason}; no Run was admitted (the person can start the work with /do)`, kind);
   }
   async function setting(name: string, keyPath: string, choice: unknown, layer: 'project' | 'global', callId: string): Promise<AgentToolOutcome> {
     const listed = await choices(keyPath, layer);
@@ -74,7 +91,7 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     let outcome = await withMcpPrincipal(() => app.propose(write));
     if (outcome.status === 'approval-pending') {
       const settled = await card(callId, outcome.approval.approvalId, origin);
-      if (settled !== 'allow') return tag(name, said[settled]);
+      if (settled.answer !== 'allow') return tag(name, said[settled.answer], settled.kind);
       const expect = outcome.expect;
       outcome = await withMcpPrincipal(() => app.propose({ ...write, ...(expect === null ? {} : { expect }) }));
     }
@@ -95,11 +112,11 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     },
     async apply(name: string, args: Record<string, unknown>, callId: string): Promise<AgentToolOutcome> {
       const planned = planAiProposal(name, args);
-      if (!planned.ok) return { status: 'error', text: planned.text };
+      if (!planned.ok) return agentToolResult({ status: 'error' as const, text: planned.text }, planned);
       try {
         if (planned.tool === 'choices') return { status: 'ok', text: JSON.stringify(await choices(planned.keyPath, 'project')) };
         return planned.tool === 'work' ? await work(name, planned.request, callId) : await setting(name, planned.keyPath, planned.choice, planned.layer, callId);
-      } catch (error) { return tag(name, `error=${codeOf(error)}; nothing was changed`); }
+      } catch (error) { return tag(name, `error=${codeOf(error)}; nothing was changed`, 'uncertain'); }
     },
   };
 }

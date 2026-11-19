@@ -41,7 +41,8 @@ async function fixture(family: string) {
   const executable = await writeFakeAgentCli(bin, family, { traceFile, turns: [
     { when: 'K16-READ', answer: 'K16-READ-OK', calls: [{ name: 'read_file', arguments: { path: 'input.txt' } }] },
     { when: 'K16-WRITE', answer: 'K16-WRITE-OK', calls: [{ name: 'write_file', arguments: { path: 'result.txt', content: 'business result\n' } }] },
-    { when: 'K16-DENY', answer: 'K16-DENY-OK', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' must-not-happen > denied.txt" } }] },
+    { when: 'WER-A-EXIT', failedTool: true, answer: 'after exit seven', calls: [{ name: 'run_shell', arguments: { command: 'exit 7' } }] },
+    { when: 'K16-DENY', failedTool: true, answer: 'K16-DENY-OK', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' must-not-happen > denied.txt" } }] },
     { when: 'K16-SHELL', answer: 'K16-SHELL-OK', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' sandbox-ok > shell-result.txt; cat shell-result.txt" } }] },
     { when: 'K16-PROTECTED', answer: 'K16-PROTECTED-DONE', calls: [{ name: 'run_shell', arguments: { command: `cat '${credential}'` } }] },
     { when: 'K16-ATTACK', answer: 'K16-ATTACK-DONE', calls: [{ name: 'run_shell', arguments: { command: `cd /; cat '${credential.slice(1)}'` } }] },
@@ -133,7 +134,7 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     expect(cards()).toBe(beforeWrite);
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('business result\n');
     // A mutating shell call asks the person's card in standart; a denied card leaves no effect.
-    expect(await call('K16-DENY', 'deny')).toMatchObject({ toolCalls: 0 });
+    expect(await call('K16-DENY', 'deny')).toMatchObject({ finish: 'stop', toolCalls: 0, answer: expect.stringContaining('K16-DENY-OK') });
     expect(await readFile(join(h.f.project, 'denied.txt'), 'utf8').catch(() => null)).toBeNull();
     expect(await call('K16-SHELL', 'allow', async () => {
       expect(await readFile(join(h.f.project, 'shell-result.txt'), 'utf8').catch(() => null)).toBeNull();
@@ -190,3 +191,22 @@ it('compiled Workline in a real PTY cancels with Esc, stops a plugin/native-surf
     }
   }
 }, 150_000);
+
+
+it('WER-A compiled Codex chat delivers a nonzero sandbox shell exit and continues', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const h = await fixture(families[1]!), client = createTerminalRuntimeClient(h.f.project, h.options);
+  await terminalRuntimePeer(client);
+  const id = 'WER-A-EXIT', events: AgentTurnStreamEvent[] = [], decisions: Promise<unknown>[] = [];
+  const result = await client.chatTurn({ schemaVersion: 1, scopeId: 's', turnId: id, messages: [{ role: 'user', content: id }] }, event => {
+    events.push(event);
+    if (event.kind === 'approval.requested') decisions.push(client.decideApproval({ schemaVersion: 1, commandId: 'allow-exit-seven',
+      scopeId: 's', approvalId: event.approvalId, expectedRevision: event.revision, decisionCapability: event.decisionCapability,
+      decision: 'allow', reason: 'Synthetic person approved the shell exit test' }));
+  });
+  await Promise.all(decisions);
+  expect(result).toMatchObject({ finish: 'stop', toolCalls: 1, answer: expect.stringContaining('after exit seven') });
+  expect(events).toContainEqual(expect.objectContaining({ kind: 'tool.finished', name: 'run_shell', status: 'error' }));
+  const toolMessages = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+  expect(toolMessages).toContainEqual(expect.stringMatching(/; exit 7 after [\d.]+s \(exit 7\)/u));
+});
