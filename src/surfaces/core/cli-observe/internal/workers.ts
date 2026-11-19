@@ -45,6 +45,7 @@ export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale, n
   t('cli.workers.source', { source: s.id, path: s.path, status: sourceStatusText(s.status, locale) }, locale)
     + (s.truncated ? t('cli.workers.sourceMore', { command: nextPage && s.nextAfter ? nextPage(s.id, s.nextAfter) : '-' }, locale) : ''),
   ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale),
+    ...(w.diagnostics.includes('APPROVAL_EXPIRED') ? [t('error.APPROVAL_EXPIRED', {}, locale)] : []),
     ...(w.diagnostics.includes('mcp-item-reservation') ? [t('headless.agent.toolItemStopped', {}, locale)] : []),
     ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)])
     : [t('cli.workers.empty', {}, locale)])];

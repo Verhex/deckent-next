@@ -1,8 +1,13 @@
 import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readdir, readFile, lstat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { GitRunWorkspaceProvider, sealAttemptWorkerEvents } from '#adapters/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
@@ -17,8 +22,9 @@ import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
-import { agentToolResult, modelInvocationProfileDigest, runAgentTurn, type AgentTurnPorts } from '#engine/index.js';
+import { agentToolResult, DispatchApplication, modelInvocationProfileDigest, RunWorkspaceAcquisitionApplication, runAgentTurn, verifiedPrincipal, type AgentTurnPorts } from '#engine/index.js';
 import { initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
+import { workspacePatchFixture } from '../support/workspace-patch-fixture.js';
 
 const entry = nativeCliAgent('claude-code-stream-json')!;
 const binding: NativeCliWorkerBinding = { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: entry.headless.protocolFamily ?? entry.command.capabilities.eventStream,
@@ -402,63 +408,140 @@ it('WER-A worker processes a synthetic failed/null completion from the durable c
   }
 });
 
-it('Card 168 stops only the conflicting Codex worker turn before a second position, approval or effect', async () => {
+async function checkWorkerReservation(scenario: 'settled' | 'cleanup' | 'expiry') {
   const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
   const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
   const f = await transportFixture('codex-jsonl'), { ports } = f.host, seal = f.input.execution, reference = f.transport.profile.reference;
   const cli = nativeCliAgent(f.input.binding.protocolFamily)!;
   const task = compileNativeCodingWorkInput(createNativeCodingTemplate(docker, { ...invocation, provider: cli.id }, f.input.binding), workInput);
-  const scoped = { ...request, workspace: join(f.stateDir, 'first', 'workspace'), argv: resolveNativeCliWorkerProfile(task).argv };
-  const next = { ...scoped, workspace: join(f.stateDir, 'second', 'workspace'), identity: { ...scoped.identity, attemptId: 'next' } };
-  const target = { scopeId: scoped.identity.scopeId, connectionId: f.input.binding.connectionId, reference, execution: seal };
-  const file = nativeWorkerEvidenceFile(f.stateDir, process.getuid!(), 8192, nativeWorkerEvidenceKey(target));
-  const prepare = (input: SandboxRequest) => prepareNativeCliWorker({ profile: task, request: input, ports, fence: f.host.fence, custody: nativeWorkerCustodyFile(input) });
-  ports.readiness = async () => ({ state: 'ready', execution: seal }); ports.f08 = () => readNativeWorkerEvidence(file, target);
-  ports.verification = { acquire: async input => claimNativeWorkerVerification(file, target, input.identity.attemptId) };
-  let driver: NativeCliWorkerDriver;
-  ports.driver = async (input, signal) => driver = createNativeCliWorkerDriver(input, f.transport, signal);
-  const tool = { ...session.tools[0]!, toolClass: 'edit' as const,
-    inputSchema: { type: 'object' as const, properties: { path: { type: 'string' as const } } } };
-  const tools = [tool], nativeSession = { ...session, tools };
-  const approvals = vi.fn<NonNullable<AgentTurnPorts['requestApproval']>>(async () => 'allow');
-  const effects = vi.fn<AgentTurnPorts['execute']>(async () => agentToolResult({ status: 'ok', text: 'first result' }, 'ordinary'));
-  const positions = vi.fn<NonNullable<AgentTurnPorts['settled']>>(async () => {});
+  const roots: string[] = [], expireApproval = scenario === 'expiry';
+  let project: Awaited<ReturnType<typeof workspacePatchFixture>> | undefined;
   try {
+    project = scenario === 'cleanup' ? await workspacePatchFixture({ roots, cleanup: [] }) : undefined;
+    const lease = project && await new RunWorkspaceAcquisitionApplication(project.runtime.store, new GitRunWorkspaceProvider(project.runtime.workspaces)).acquire(project.identity);
+    const scoped = { ...request, identity: lease?.identity ?? request.identity, workspace: lease?.workspace ?? join(f.stateDir, 'first', 'workspace'),
+      argv: resolveNativeCliWorkerProfile(task).argv };
+    const next = { ...scoped, workspace: join(f.stateDir, 'second', 'workspace'), identity: { ...scoped.identity, attemptId: 'next' } };
+    const target = { scopeId: scoped.identity.scopeId, connectionId: f.input.binding.connectionId, reference, execution: seal };
+    const file = nativeWorkerEvidenceFile(f.stateDir, process.getuid!(), 8192, nativeWorkerEvidenceKey(target));
+    const prepare = (input: SandboxRequest) => prepareNativeCliWorker({ profile: task, request: input, ports, fence: f.host.fence, custody: nativeWorkerCustodyFile(input) });
+    ports.readiness = async () => ({ state: 'ready', execution: seal }); ports.f08 = () => readNativeWorkerEvidence(file, target);
+    ports.verification = { acquire: async input => claimNativeWorkerVerification(file, target, input.identity.attemptId) };
+    let driver: NativeCliWorkerDriver;
+    ports.driver = async (input, signal) => driver = createNativeCliWorkerDriver(input, f.transport, signal);
+    const tool = { ...session.tools[0]!, toolClass: 'edit' as const,
+      inputSchema: { type: 'object' as const, properties: { path: { type: 'string' as const } } } };
+    const tools = [tool], nativeSession = { ...session, tools };
+    const approvalPending = Promise.withResolvers<void>(), expire = Promise.withResolvers<void>();
+    let approvalFailure: 'approval-expired' | null = null;
+    const approvals = vi.fn<NonNullable<AgentTurnPorts['requestApproval']>>(async () => {
+      if (!expireApproval) return 'allow';
+      approvalPending.resolve(); await expire.promise; approvalFailure = 'approval-expired'; return 'expired';
+    });
+    const effects = vi.fn<AgentTurnPorts['execute']>(async () => agentToolResult({ status: 'ok', text: 'first result' }, 'ordinary'));
+    const positions = vi.fn<NonNullable<AgentTurnPorts['settled']>>(async () => {});
     await mkdir(join(f.stateDir, 'first'), { mode: 0o700 }); await mkdir(join(f.stateDir, 'second'), { mode: 0o700 });
+    const events: WorkerEvent[] = [];
+    if (project) {
+      await project.policy(['execute', 'read-output', 'recover-output', 'release'], [
+        { id: 'scope', effect: 'allow', scopes: ['s'], principals: project.principals, actions: ['inspect'], resource: { kind: 'scope', ids: ['s'] } },
+      ]);
+      ports.driver = async (input, signal) => driver = createNativeCliWorkerDriver({ ...input, onEvents: batch => events.push(...batch) }, f.transport, signal);
+    }
     f.isolated.mockImplementationOnce(async (_entry, _spawn, _bounds, signal, line) => {
-      const args = { path: 'scoped.txt' }, propose = (id: string) => driver.tools.propose({ id, name: tool.name, argumentsJson: JSON.stringify(args) },
-        { kind: 'codex-mcp', callId: id, itemId: `wire-${id}`, deckentCallId: id }, signal);
+      const args = { path: 'scoped.txt' }, propose = (id: string, callSignal = signal) => driver.tools.propose({ id, name: tool.name, argumentsJson: JSON.stringify(args) },
+        { kind: 'codex-mcp', callId: id, itemId: `wire-${id}`, deckentCallId: id }, callSignal);
       await line(JSON.stringify({ type: 'thread.started', thread_id: 'thread' })); await line(JSON.stringify({ type: 'turn.started' }));
       await line(JSON.stringify({ type: 'item.started', item: { id: 'open-item', type: 'mcp_tool_call', server: cli.bridge.serverName,
         tool: tool.name, arguments: args, status: 'in_progress', result: null, error: null } }));
-      const first = await propose('first');
-      await expect(propose('second')).rejects.toMatchObject({ code: 'NATIVE_CLI_WORKER_UNAVAILABLE' });
+      const pendingFirst = propose('first', expireApproval ? new AbortController().signal : signal);
+      if (expireApproval) await Promise.race([approvalPending.promise, pendingFirst.then(() => { throw new Error('First request completed without waiting for approval'); })]);
+      else expect(await pendingFirst).toMatchObject({ deckentCallId: 'first', outcome: { status: 'ok', text: 'first result' } });
+      try { await expect(propose('second')).rejects.toMatchObject({ code: 'NATIVE_CLI_WORKER_UNAVAILABLE' }); }
+      finally { expire.resolve(); }
       expect(signal.aborted).toBe(true);
-      expect(first).toMatchObject({ deckentCallId: 'first', outcome: { status: 'ok', text: 'first result' } });
+      if (expireApproval) {
+        expect(await pendingFirst).toMatchObject({ deckentCallId: 'first', outcome: { status: 'error', text: expect.stringContaining('approval-expired') } });
+      }
       return { schemaVersion: 1, requestId: '12345678-1234-4234-8234-123456789abc', started: true, reason: 'cancelled', exitCode: null, signal: 'SIGTERM',
         stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
     });
+    const invokeAgent = vi.fn<NonNullable<AgentTurnPorts['invokeAgent']>>(async ({ session: host }) => {
+      ports.openTools = async () => ({ ...host, terminalFailure: () => approvalFailure });
+      const first = await prepare(scoped); if (first.state !== 'ready') throw new Error(JSON.stringify(first));
+      if (project) {
+        const c = await loadConfiguredScopeContext(project.project, scoped.identity.scopeId, project.options, 'read');
+        const dispatch = new DispatchApplication(project.runtime.store, first.supervisor, verifiedPrincipal(c.principal),
+          contextDispatchAuthorization(c, c.document), c.principal.id, project.runtime.artifacts);
+        expect(await dispatch.execute(scoped)).toMatchObject({ kind: 'terminal', record: { terminal: { exitCode: 1 }, output: { scopeId: scoped.identity.scopeId } } });
+      }
+      const stopped = await first.supervisor.execute(scoped);
+      expect(stopped).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, stderr: 'mcp-item-reservation' });
+      if (expireApproval) expect(stopped.stdout).toBe('APPROVAL_EXPIRED');
+      if (!project) await first.supervisor.release(scoped);
+      const recorded = recordedNativeCliWorkerSupervisor(await first.supervisor.captureProfile());
+      expect(await recorded.inspectActivity(scoped)).toMatchObject({ state: 'exited', diagnostic: 'mcp-item-reservation' });
+      if (expireApproval) expect(await recorded.recoverOutput(scoped)).toMatchObject({ stdout: 'APPROVAL_EXPIRED', stderr: 'mcp-item-reservation' });
+      return { status: 'failed', state: 'fixture turn stopped' };
+    });
     await runAgentTurn({ messages: [], tools, nativeSession, signal: new AbortController().signal, emit() {} }, {
       now: Date.now, invokeRound: async () => { throw new Error('unexpected pull round'); }, describe: () => 'scoped.txt',
-      authorize: async () => 'require-approval', requestApproval: approvals, execute: effects, settled: positions,
-      async invokeAgent({ session: host }) {
-        ports.openTools = async () => host;
-        const first = await prepare(scoped); if (first.state !== 'ready') throw new Error(JSON.stringify(first));
-        expect(await first.supervisor.execute(scoped)).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, stderr: 'mcp-item-reservation' });
-        await first.supervisor.release(scoped);
-        const recorded = recordedNativeCliWorkerSupervisor(await first.supervisor.captureProfile());
-        expect(await recorded.inspectActivity(scoped)).toMatchObject({ state: 'exited', diagnostic: 'mcp-item-reservation' });
-        return { status: 'failed', state: 'fixture turn stopped' };
-      },
+      authorize: async () => 'require-approval', requestApproval: approvals, execute: effects, settled: positions, invokeAgent,
     });
-    expect(positions.mock.calls.map(([row]) => [row.index, row.call.id, row.status, row.content])).toEqual([[0, 'first', 'ok', 'first result']]);
-    expect(approvals.mock.calls.map(([row]) => row.call.id)).toEqual(['first']); expect(effects).toHaveBeenCalledOnce();
+    await invokeAgent.mock.results[0]!.value; // Surface assertions that the turn turns into a failed outcome.
+    expect(positions.mock.calls.map(([row]) => [row.index, row.call.id, row.status, row.content])).toEqual(expireApproval
+      ? [[0, 'first', 'approval-expired', expect.stringContaining('nothing ran')]] : [[0, 'first', 'ok', 'first result']]);
+    expect(approvals.mock.calls.map(([row]) => row.call.id)).toEqual(['first']);
+    if (expireApproval) expect(effects).not.toHaveBeenCalled();
+    else expect(effects).toHaveBeenCalledOnce();
+    if (project) {
+      const { runtime, identity } = project;
+      expect(await sealAttemptWorkerEvents(identity, runtime.artifacts, runtime.store,
+        { events, verification: null, unreported: 0, projectionComplete: true, maxBytes: 65536 })).toMatchObject({ status: 'sealed' });
+      expect((await project.prepare()).custody).toMatchObject({ status: 'released', workspace: 'removed' });
+      await expect(lstat(dirname(scoped.workspace))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
     expect(await file.read()).toBeNull();
     ports.openTools = async () => f.host.tools;
     const second = await prepare(next); if (second.state !== 'ready') throw new Error(JSON.stringify(second));
     expect(await second.supervisor.execute(next)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } }); await second.supervisor.release(next);
     expect(await file.read()).toMatchObject({ attemptId: next.identity.attemptId, verdict: { state: 'verified' } });
-  } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+    if (project) {
+      const { runtime, identity } = project, receipt = (await runtime.store.loadBoundDispatch(identity))!.output!;
+      const { path } = await runtime.artifacts.prepareReadOnlyFile(identity.scopeId, receipt);
+      const inspect = async (locale: string) => (await promisify(execFile)(process.execPath,
+        [resolve('dist/composition/core/cli/internal/entry.js'), 'workers', '--scope', identity.scopeId, '--verbose', '--lang', locale],
+        { cwd: project.project, env: { ...process.env, ...project.options.env } })).stdout;
+      const en = await inspect('en'), tr = await inspect('tr');
+      expect(en).toContain('A repeated or ambiguous tool request was refused before approval or execution.');
+      expect(en).toContain('check the operation record and the target system before retrying.');
+      expect(en).toContain('You can continue with a new message or a new worker attempt.');
+      expect(tr).toContain('onaya sunulmadan ve çalıştırılmadan reddedildi.');
+      expect(tr).toContain('yeniden denemeden önce işlem kaydını ve hedef sistemi kontrol edin.');
+      expect(tr).toContain('Yeni bir mesajla veya yeni bir işçi denemesiyle devam edebilirsiniz.');
+      const scopeInspect = { id: 'scope', effect: 'allow', scopes: ['s'], principals: project.principals, actions: ['inspect'], resource: { kind: 'scope', ids: ['s'] } };
+      await project.policy(['execute', 'release'], [scopeInspect]);
+      expect(await inspect('en')).not.toContain('A repeated or ambiguous tool request');
+      await project.policy(['read-output'], [scopeInspect]);
+      await writeFile(path, 'unreadable retained output');
+      expect(await inspect('en')).not.toContain('A repeated or ambiguous tool request');
+      await unlink(path);
+      expect(await inspect('en')).not.toContain('A repeated or ambiguous tool request');
+    }
+  } finally {
+    project?.runtime.store.close();
+    for (const root of [...roots, f.stateDir]) await rm(root, { recursive: true, force: true });
+  }
+}
+
+it('Card 168 stops only the conflicting Codex worker turn before a second position, approval or effect', async () => {
+  await checkWorkerReservation('settled');
+});
+it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('Card 168 keeps the reservation reason readable after normal attempt cleanup', async () => {
+  await checkWorkerReservation('cleanup');
+});
+it('Card 168 retains approval expiry alongside a reservation refusal', async () => {
+  await checkWorkerReservation('expiry');
 });
 
 it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {

@@ -13,11 +13,11 @@ import { inspectNativeCliWorker } from './readiness.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver, NativeCliWorkerToolContext } from './ports.js';
 import { nativeCliWorkerHandle, retainActiveNativeWorker, retainNativeWorkerResult } from './recorded.js';
 
-/** Only the recorded adapter identity selects native management; its version is checked by its own validator, never by Docker's. */
-const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
+export const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) =>
+  profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id && profile.adapterVersion === NATIVE_CLI_WORKER_ADAPTER.version;
 export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefined {
   const profile = supervisorProfileSchema.parse(input);
-  if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== NATIVE_CLI_WORKER_ADAPTER.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  if (!isNativeCliWorkerSupervisorProfile(profile)) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
   resolveNativeCliWorkerProfile(profile.parameters['task'] as ExecutionProfileDefinition);
   return undefined;
 }
@@ -149,7 +149,9 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
           || closure.effects !== 'settled' || closure.pendingCallIds.length)) outcome = this.unknown('NATIVE_WORKER_EFFECTS_UNKNOWN');
       }
     }
-    return diagnostic ? { ...outcome, stderr: diagnostic } : outcome;
+    if (!diagnostic) return outcome;
+    // The first call can settle its approval after the stream refuses the second request.
+    return { ...outcome, stderr: diagnostic, stdout: tools?.terminalFailure?.() === 'approval-expired' ? 'APPROVAL_EXPIRED' : outcome.stdout };
   }
   async cancel(request: SandboxRequest) {
     this.check(request); this.lifetime.abort();

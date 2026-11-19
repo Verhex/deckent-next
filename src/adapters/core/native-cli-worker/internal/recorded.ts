@@ -27,6 +27,11 @@ export function retainActiveNativeWorker(request: SandboxRequest, supervisor: Ex
 export async function retainNativeWorkerResult(file: JsonRecordFile, request: SandboxRequest, profile: SupervisorProfile, result: unknown) {
   await file.write(recordSchema.parse({ schemaVersion: 1, request, profileDigest: digest(profile), result }));
 }
+export function nativeWorkerReservationDiagnostics(output: { stdout: string; stderr: string }):
+  [] | [typeof CODEX_TOOL_ITEM_RESERVATION] | [typeof CODEX_TOOL_ITEM_RESERVATION, 'APPROVAL_EXPIRED'] {
+  if (output.stderr !== CODEX_TOOL_ITEM_RESERVATION) return [];
+  return output.stdout === 'APPROVAL_EXPIRED' ? [CODEX_TOOL_ITEM_RESERVATION, output.stdout] : [CODEX_TOOL_ITEM_RESERVATION];
+}
 /** Same-process cancel reaches its actual owner. Restart can recover confirmed retained output; missing custody stays unknown. */
 export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource & {
   inspectActivity(request: SandboxRequest): Promise<{ state: 'running' | 'exited' | 'unknown'; handle: string | null; diagnostic?: typeof CODEX_TOOL_ITEM_RESERVATION }>;
