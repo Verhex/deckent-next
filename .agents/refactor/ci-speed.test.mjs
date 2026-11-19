@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { partitionTests, inventoryDigest, validateShards, SHARDS, durationDrift, observedDurations } from '../../scripts/ci-test-plan.mjs';
-import { refreshedWeights, selectWeights, weightCoverage } from '../../scripts/ci-test-weights.mjs';
+import { refreshedWeights, selectWeights, weightCoverage, SELECTION_KIND } from '../../scripts/ci-test-weights.mjs';
 import { validateHostedChecks, REQUIRED_CHECKS } from '../../scripts/land-hosted-check.mjs';
 import { sealBuild, validateBuild } from '../../scripts/ci-build-artifact.mjs';
 import { writeBuildIdentity } from '../../scripts/build-identity.mjs';
@@ -56,10 +56,12 @@ test('prepare schedules with the per-file maximum of the restored main weights a
   const seed = { schemaVersion: 1, source: { runs: [7] }, durationMs: { [files[0]]: 299028, [files[1]]: 134000, [files[3]]: 40 } };
   const { weights, raised } = selectWeights(main, seed);
   assert.deepEqual(weights.durationMs, { [files[0]]: 299028, [files[1]]: 211000, [files[2]]: 800, [files[3]]: 40 });
-  assert.equal(raised, 2); assert.deepEqual(weights.source, main.source); assert.equal(weightCoverage(weights, files), 4);
+  assert.equal(raised, 2); assert.equal(weightCoverage(weights, files), 4);
+  // The packed file must not present merged figures as main's single run: both inputs keep their own source, the rule is named.
+  assert.deepEqual(weights.source, { kind: SELECTION_KIND, raisedFiles: 2, weightedEntries: 4, restoredMain: { runs: [9] }, committedSeed: { runs: [7] } });
   const bins = partitionTests(files.slice(0, 2), weights.durationMs, 2, 0);
   assert.notEqual(bins.findIndex(bin => bin.files.includes(files[0])), bins.findIndex(bin => bin.files.includes(files[1])));
-  // A seed that knows nothing larger changes nothing; a malformed figure is ignored.
+  // A seed that raises nothing (smaller or malformed figures) leaves main's file untouched, source included.
   assert.deepEqual(selectWeights(main, { durationMs: { [files[0]]: 10, [files[1]]: Number.NaN } }), { weights: main, raised: 0 });
 });
 

@@ -69,14 +69,21 @@ export function weightCoverage(weights, files) {
   const durations = weights?.durationMs ?? {};
   return files.filter(file => durations[file] > 0).length;
 }
-/** The restored main weights with every file raised to the committed seed's figure where that is larger; `raised` counts those files. */
+export const SELECTION_KIND = 'CI prepare selection: per-file maximum of the restored main weights and the committed seed; not one run\'s measurement';
+/** The restored main weights with every file raised to the committed seed's figure where that is larger; `raised` counts those files.
+ * When any file is raised the result names BOTH inputs as its source (each input's own source block, unchanged) and the rule;
+ * `weightedEntries` counts the positive figures of the merged map itself (the union of both inputs' files), not a tree inventory:
+ * coverage of the test files on disk is what the `select` summary line reports. */
 export function selectWeights(restored, seed) {
   const durationMs = { ...(restored?.durationMs ?? {}) };
   let raised = 0;
   for (const [file, ms] of Object.entries(seed?.durationMs ?? {})) {
     if (Number.isFinite(ms) && ms > (Number.isFinite(durationMs[file]) ? durationMs[file] : 0)) { durationMs[file] = ms; raised += 1; }
   }
-  return { weights: { ...restored, durationMs }, raised };
+  if (!raised) return { weights: restored, raised };
+  const source = { kind: SELECTION_KIND, raisedFiles: raised, weightedEntries: Object.values(durationMs).filter(ms => ms > 0).length,
+    restoredMain: restored?.source ?? null, committedSeed: seed?.source ?? null };
+  return { weights: { ...restored, source, durationMs }, raised };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

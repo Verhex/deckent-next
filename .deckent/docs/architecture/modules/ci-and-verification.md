@@ -228,8 +228,9 @@ larger (`select`: a branch that lengthened or added a test and refreshed its see
 the file into the Node build artifact, so every shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
 (`schedule`) and manual runs: `check` reports drift as a `::warning` and step-summary line without failing the job, then, when
 every shard passed, `refresh` over both Nodes' receipts of that run saves a new cache entry. CI never commits or pushes; PR-scoped
-caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Weights are now
-single-run maxima. A run with a cut shard does not refresh (the red tests job is the signal); a test that always overruns its
+caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Main's regenerated
+cache holds single-run maxima; a file `select` raised from a committed seed is not one run's measurement and says so in its
+`source` (the rule, the raised count and both inputs' own source blocks). A run with a cut shard does not refresh (the red tests job is the signal); a test that always overruns its
 shard still needs the manual path below. Manual seed refresh:
 `gh run download <run> -p 'shard-*' -D <dir>` per hosted run, then `node scripts/ci-test-weights.mjs refresh <dir>...` writes the
 per-file maximum of the shard `receipt.json` reporter durations across every given run, Node job and shard (rounded up to ms)
