@@ -212,7 +212,8 @@ async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurn
 }
 
 type IngressPause = { readonly call: AgentToolCall; readonly tool: AgentToolSpec; readonly index: number;
-  readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null };
+  readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null;
+  readonly blocked: (kind: 'uncertain' | 'cancelled') => void };
 /** The model and the approval card share this text. Decode stays on the projection and is not returned here. */
 async function presentModelIngress(content: string, pause: IngressPause | null, input: AgentTurnInput, ports: AgentTurnPorts, round: number): Promise<string> {
   const projected = projectModelIngressField(content);
@@ -225,6 +226,7 @@ async function presentModelIngress(content: string, pause: IngressPause | null, 
     argsDigest: pause.argsDigest, target: pause.target }, input.signal)).outcome; }
   catch { answer = null; }
   if (answer === 'allow') return projected.modelText;
+  if (answer !== 'deny') pause.blocked(answer === 'cancelled' ? 'cancelled' : 'uncertain');
   return projected.withheld;
 }
 
@@ -253,14 +255,16 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
     // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
     let personDecision: PersonDenial | undefined;
-    let auditMissing = false;
+    let auditMissing = false, approvalBlock: 'uncertain' | 'cancelled' | undefined;
     const presentationPorts: AgentTurnPorts = { ...ports, recordIngress: async notice => {
       if (!ports.recordIngress) { auditMissing = true; return; }
       try { await ports.recordIngress(notice); } catch (error) { auditMissing = true; throw error; }
     } };
     const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic, kind: ToolErrorClass = 'uncertain') => {
       if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
-      const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, { ...input, signal }, presentationPorts, round) : content;
+      const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf,
+        target: targetOf, blocked: kind => { approvalBlock = kind; } }, { ...input, signal }, presentationPorts, round) : content;
+      if (approvalBlock && status === 'ok') status = 'error';
       const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
@@ -268,7 +272,7 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
       const settled = Object.freeze({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
       await ports.settled?.(settled);
       const receipt = storedToolCalls.get(settled);
-      return { message, progressed, proof: receipt ? { receipt, kind: auditMissing ? 'uncertain' as const : kind, personDecision } : undefined, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
+      return { message, progressed, proof: receipt ? { receipt, kind: auditMissing ? 'uncertain' as const : approvalBlock ?? kind, personDecision } : undefined, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
         ...optionalField('cleanup', cleanup), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
     };
     if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled'); }
@@ -319,9 +323,9 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
     const completed = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, presentationPorts)}`,
       tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic, signal.aborted ? 'cancelled' : toolErrorClass(outcomeText));
-    if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
+    if (tool.toolClass === 'read' && completed.outcome.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
     // Cancellation is a transport fact; preserve the handler's completed effect in the native envelope.
-    return { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } };
+    return signal.aborted ? { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } } : completed;
   };
   return { run, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
     retain(visible: ReadonlySet<AgentTurnMessage>) { for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest); } };

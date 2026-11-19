@@ -2,10 +2,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { withToolErrorClass } from '#capabilities/index.js';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
 import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnInterruptedNote, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
-import type { AgentToolSpec, AgentTurnEvent } from '#domain/index.js';
+import { ApprovalError, type AgentToolSpec, type AgentTurnEvent } from '#domain/index.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -268,5 +269,35 @@ it('WER-A null-digest schema refusal retains its exact frozen call; ingress and 
       const rows = db.prepare('SELECT record FROM agent_turn_tool_calls ORDER BY call_index').all() as { record: string }[];
       expect(rows.map(row => JSON.parse(row.record).argsDigest)).toEqual([null, null, null]);
     } finally { db.close(); }
+  } finally { store.close(); }
+});
+it('WER-A a missing quarantine approval withholds the content and vetoes an ordinary error', async () => {
+  const store = await openSqliteAgentTurnStore(await file(), options);
+  const p = ports([]), nativeSession = { schemaVersion: 1 as const, turnId: 't1', generation: 3, tools: [readFile], approvalTtlMs: 60_000 };
+  const payload = 'visible-fixture' + String.fromCodePoint(0xe0061);
+  let approvals = 0, audited = 0;
+  const observed: unknown[] = [];
+  p.value.execute = async () => withToolErrorClass({ status: 'error' as const, text: payload }, 'ordinary');
+  p.value.recordIngress = async () => { audited++; };
+  p.value.requestApproval = async () => {
+    approvals++;
+    if (approvals === 1) return 'deny';
+    if (approvals === 2) throw new Error('approval store unavailable');
+    throw new ApprovalError('APPROVAL_UNSETTLED');
+  };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    for (const index of [0, 1, 2]) {
+      const call = { id: `quarantine-${index}`, name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
+      const result = await session.propose(call, { kind: 'codex-mcp', callId: `wire-${index}`, itemId: `fc-${index}`, deckentCallId: call.id }, signal);
+      expect(result.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('result withheld') });
+      expect(result.outcome.text).not.toContain('visible-fixture');
+      observed.push(session.recordedError?.(call, result));
+    }
+    return rounds[1]!;
+  };
+  try {
+    await runDurableAgentTurn({ claim: claim(), nativeSession, messages: [], tools: nativeSession.tools, signal: new AbortController().signal, emit() {} }, store, p.value);
+    expect([approvals, audited]).toEqual([3, 3]);
+    expect(observed).toEqual(['ordinary', 'uncertain', 'uncertain']);
   } finally { store.close(); }
 });

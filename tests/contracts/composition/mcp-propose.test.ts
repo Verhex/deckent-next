@@ -1,4 +1,5 @@
 import { observeToolOutcomes } from '../support/tool-producer.js';
+import { toolErrorClass } from '#capabilities/index.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
@@ -68,6 +69,11 @@ it.skipIf(process.platform !== 'linux')('MCP proposal producer returns an ordina
 });
 
 describe('a proposal is checked before anything is shown (pure)', () => {
+  it('WER-A classifies the argument count bound separately from a malformed proposal', () => {
+    expect(toolErrorClass(planMcpProposal({ ...proposal, args: Array<string>(65).fill('fixture') }))).toBe('limit');
+    expect(toolErrorClass(planMcpProposal({ ...proposal, args: 'fixture' }))).toBe('ordinary');
+  });
+
   it('no secret and no reference anywhere; setting names only; a valid name; every string through the ingress check', () => {
     expect(planMcpProposal(proposal)).toEqual({ ok: true, proposal, entry: { command: 'npx', args: ['-y', '@example/docs-mcp'], realm: 'sandbox-net' } });
     expect(planMcpProposal({ name: 'web', transport: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GITHUB_TOKEN' }, reason: 'r' }))

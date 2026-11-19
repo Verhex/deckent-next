@@ -18,6 +18,12 @@ export class EffectTargetError extends CodedError {
   constructor(override readonly code: 'EFFECT_TARGET_PRECONDITION' | 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_UNKNOWN', options?: ErrorOptions) {
     super(code, options); this.name = 'EffectTargetError';
   }
+  /** The application wraps these failures after saving the refusal or unknown state. */
+  static isRecordedFailure(error: unknown): error is EffectError {
+    return error instanceof EffectError && error.cause instanceof EffectTargetError
+      && ((error.code === 'EFFECT_REJECTED' && error.cause.code === 'EFFECT_TARGET_REJECTED')
+        || (error.code === 'EFFECT_OUTCOME_UNKNOWN' && error.cause.code === 'EFFECT_TARGET_UNKNOWN'));
+  }
 }
 export interface EffectApplyRequest {
   readonly target: EffectTargetRef; readonly operation: OperationRef; readonly idempotencyKey: string;

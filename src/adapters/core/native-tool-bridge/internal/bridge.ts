@@ -72,11 +72,12 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     const pending = Promise.resolve().then(() => propose(call.data, correlation.data, context.mcpReq.signal));
     replay.set(key, { digest: fingerprint, deckentCallId: call.data.id, result: pending });
     // The SDK suppresses a cancelled request's response; explicitly end its SSE instead of keeping it alive forever.
-    return serve(pending, call.data.id, context.mcpReq.id, context.mcpReq.signal);
+    // Only the original stream may publish delivery proof. Replays share its result, including after a disconnect.
+    return serve(pending, call.data.id, context.mcpReq.id, context.mcpReq.signal, inFlight.get(context.mcpReq.id));
   });
   const candidates = new WeakMap<CallToolResult, { host: Awaited<ReturnType<ToolSessionPort['propose']>>; signal: AbortSignal; suppressed: boolean }>();
-  async function serve(pending: Promise<CallToolResult>, callId: string, id: RequestId, signal: AbortSignal) {
-    const delivery = inFlight.get(id), cancelled = () => transport.closeSSEStream(id);
+  async function serve(pending: Promise<CallToolResult>, callId: string, id: RequestId, signal: AbortSignal, delivery?: { sent?: (frame: string) => void }) {
+    const cancelled = () => transport.closeSSEStream(id);
     signal.addEventListener('abort', cancelled, { once: true });
     try {
       const value = await pending, proof = candidates.get(value);

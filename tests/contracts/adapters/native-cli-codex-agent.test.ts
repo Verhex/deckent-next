@@ -64,7 +64,8 @@ it('WER-A synthetic production envelope: host class and selected completion evid
   const call = { id: 'deckent-call-b', name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' };
   for (const kind of ['ordinary', 'session', 'cancelled', 'limit', 'uncertain', 'absent', 'ok'] as const) {
     const result = { ...envelope(), outcome: { status: kind === 'ok' ? 'ok' as const : 'error' as const, text: 'same outer result' } };
-    for (const shape of ['failed-null', 'completed', 'cli-denial', 'changed-completed', 'changed-failed', 'missing-completed', 'missing-failed', 'absent-error', 'completed-absent'] as const) {
+    for (const shape of ['failed-null', 'completed', 'cli-denial', 'cli-error-with-result-completed', 'cli-error-with-result-failed',
+      'changed-completed', 'changed-failed', 'missing-completed', 'missing-failed', 'absent-error', 'completed-absent'] as const) {
       const driver = create(() => kind === 'absent' ? undefined : { call, result, recordedError: () => kind === 'ok' ? undefined : kind,
         selectedText: () => JSON.stringify(result) });
       expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
@@ -72,7 +73,7 @@ it('WER-A synthetic production envelope: host class and selected completion evid
       const line = finish('item_9', shape.startsWith('changed') ? { ...result, outcome: { ...result.outcome, text: 'changed' } } : result);
       const item = { ...line.item, status: shape.includes('completed') ? 'completed' : 'failed',
         result: shape === 'cli-denial' || shape.startsWith('missing') ? null : line.item.result,
-        error: shape === 'absent-error' || shape === 'completed-absent' ? undefined : shape === 'cli-denial' ? { message: 'CLI denied' } : null };
+        error: shape === 'absent-error' || shape === 'completed-absent' ? undefined : shape.startsWith('cli-') ? { message: 'CLI denied' } : null };
       const accepted = kind === 'ordinary' && ['failed-null', 'completed', 'completed-absent'].includes(shape) || kind === 'ok' && (shape === 'completed' || shape === 'completed-absent');
       expect(driver.line(JSON.stringify({ ...line, item })) === null, `${kind} / ${shape}`).toBe(accepted);
     }

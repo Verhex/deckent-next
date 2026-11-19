@@ -437,8 +437,8 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     const result = await f.decisions.execute(tool, given, { round: 1, index: 0 }, 'shell-call', async (_gate, authority, writes) => {
       expect(authority).toBe('full-auto');
       expect(writes).toBeDefined();
-      expect(await writes!.decide('dist/a.js', 'edit-self-source')).toEqual({ ok: false, reason: 'write-floor' });
-      expect(await writes!.decide('deckent.json', 'edit-authority')).toEqual({ ok: false, reason: 'configuration-file' });
+      expect(await writes!.decide('dist/a.js', 'edit-self-source')).toEqual({ ok: false, reason: 'write-floor', evidenceMissing: true });
+      expect(await writes!.decide('deckent.json', 'edit-authority')).toEqual({ ok: false, reason: 'configuration-file', evidenceMissing: true });
       expect(await writes!.decide('docs/a.md', 'edit')).toMatchObject({ ok: true });
       return { status: 'ok', text: 'checked' };
     });

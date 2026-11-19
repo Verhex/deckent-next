@@ -6,6 +6,7 @@ import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-mode
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { agentTurnStreamEventSchema } from '#domain/index.js';
 import { trackedChangesOfToolResult } from '#surfaces/core/terminal-kit/index.js';
+import { observeToolOutcomes } from '../support/tool-producer.js';
 
 // FA-TRACKED-WARN (owner 2026-09-30, option A) on the real runtime service: a full-access shell call runs without asking (MODES-3 stays), but
 // a git-tracked file it deleted or overwrote is shown — streamed, in the result the model reads, and as trusted leading metadata of that
@@ -102,10 +103,12 @@ describe.skipIf(process.platform !== 'linux')('full access: tracked-file warning
   }, 60_000);
 
   it('still shows the change when its audit record cannot be written: the command is not undone, never blocked', async () => {
-    const f = await tracked();
+    const f = await tracked(), observed = observeToolOutcomes();
     f.exec("CREATE TRIGGER tracked_refused BEFORE INSERT ON audit_events WHEN NEW.kind = 'tracked-files-changed' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
     const call = await f.call('run_shell', { command: 'rm CHANGELOG.md' }, 'deny', fa);
-    expect(call).toMatchObject({ card: false, status: 'ok' });
+    expect(call).toMatchObject({ card: false, status: 'error' });
+    expect(observed).toEqual(['uncertain']);
+    expect(trackedEvents(f)).toEqual([]);
     expect(call.text).toContain('deleted 1 (CHANGELOG.md), overwritten 0 — during this full-access call; nothing was blocked; the audit record of this could not be written.');
     expect(card(call)).toEqual({ deleted: 1, overwritten: 0 });
     await expect(access(join(f.project, 'CHANGELOG.md'))).rejects.toMatchObject({ code: 'ENOENT' });

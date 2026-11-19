@@ -4,7 +4,9 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { DEFAULT_INHERITED_ENV_VARS } from '@modelcontextprotocol/client/stdio';
-import { afterEach, describe, expect, it } from 'vitest';
+import { Client, ProtocolError, ProtocolErrorCode, SdkError, SdkErrorCode } from '@modelcontextprotocol/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { toolErrorClass } from '#capabilities/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 import { MCP_STDIO_BASE_ENVIRONMENT } from '#platform/core/host/index.js';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
@@ -43,6 +45,26 @@ const settings = (servers: McpClientSettings['servers'], extra: Partial<McpClien
 const context = (root: string) => ({ cwd: root, environment: { PATH: process.env['PATH'] }, sandboxes: [] });
 const pool = () => { const created = new McpClientPool(new AbortController().signal); pools.push(created); return created; };
 const pinOf = (live: McpLiveTool) => ({ name: live.name, digest: mcpToolPinDigest(live) });
+
+it('WER-A MCP producer distinguishes typed protocol refusal, unknown failure, and business error', async () => {
+  const live = tool('work', 'fail'), f = fixture('dual', [live]), server = f.server([pinOf(live)]), p = pool();
+  expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true });
+  const sdk = vi.spyOn(Client.prototype, 'callTool')
+    .mockRejectedValueOnce(new ProtocolError(ProtocolErrorCode.InvalidRequest, 'fixture refused'))
+    .mockRejectedValueOnce(new SdkError(SdkErrorCode.InvalidResult, 'fixture refused'))
+    .mockRejectedValueOnce(new Error('fixture refused'));
+  try {
+    const observed = [];
+    for (const index of [0, 1, 2, 3]) {
+      const outcome = await p.call('fx', 'work', pinOf(live).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal, admit: 'probe-only' });
+      const result = describeMcpResult(outcome, 'mcp:fx/work', 4_096);
+      expect(result.status, String(index)).toBe('error');
+      observed.push(toolErrorClass(result));
+    }
+    expect(f.events().filter(event => event.event === 'call')).toHaveLength(1);
+    expect(observed).toEqual(['session', 'session', 'uncertain', 'ordinary']);
+  } finally { sdk.mockRestore(); }
+}, 30_000);
 
 describe('MCP client: pin and names (pure)', () => {
   it('the pin digest binds name, description, input schema and annotations, not key order', () => {
@@ -404,6 +426,7 @@ describe('MCP client: every call carries the pinned tool definition', () => {
     expect(callsOf(f)).toHaveLength(1);
     const text = describeMcpResult(outcome, 'mcp:fx/st', 4_096);
     expect(text).toMatchObject({ status: 'error' });
+    expect(toolErrorClass(text)).toBe('session');
     expect(text.text).toContain('error=invalid-structured-result -32602'); expect(text.text).toContain('its effect may have happened');
   }, 30_000);
 

@@ -162,7 +162,7 @@ export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legac
 /** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
  * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
  * server answered, so its effect may have happened). */
-interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' }
+interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' | 'protocol' | 'unclassified' }
 /** Why the current registry and trust no longer admit a call (MCP-REVOKE): the trust was reset or the server removed or declined
  * (`trust-revoked`), its definition or scope is not the one the call was offered under (`definition-changed`), the tool's pin is gone or
  * different (`pin-revoked`), or the trust record cannot be read or locked (`trust-unavailable`, fail closed). */
@@ -172,7 +172,7 @@ export type McpSendRefusal = 'trust-revoked' | 'definition-changed' | 'pin-revok
 export type McpSendAdmission = (() => Promise<McpSendRefusal | null>) | 'probe-only';
 export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: McpAnsweredError }
   | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' | 'invalid-output-schema' | McpSendRefusal }
-  | { readonly outcome: 'unknown'; readonly reason: 'timed-out' | 'connection-closed' | 'cancelled' | 'failed' };
+  | { readonly outcome: 'unknown'; readonly reason: 'timed-out' | 'connection-closed' | 'cancelled' | 'failed'; readonly protocolViolation?: true };
 
 interface ServerState {
   readonly key: string;
@@ -214,23 +214,20 @@ const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprot
 const listAllTools = async (client: Client, timeoutMs: number, signal: AbortSignal) =>
   (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs * 2)]) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
-/** One listed tool as the pin binds it: its digest and exactly the digest-covered fields (frozen; nothing unpinned reaches the SDK). Deckent's
- * validator never writes into a schema (the SDK might); every use still gets a fresh copy of the frozen pin; `compiles` caches whether the
- * pinned outputSchema compiles (null = not compiled yet). */
-interface PinnedTool { readonly digest: string; readonly definition: Tool; compiles: boolean | null }
+/** The frozen pin and its compiled output validator (null means compilation failed). */
+interface PinnedTool { readonly digest: string; readonly definition: Tool; validateOutput?: ReturnType<DeckentJsonSchemaValidator['getValidator']> | null }
 const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object') { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } return value; };
 function pinnedTools(tools: readonly McpLiveTool[]): ReadonlyMap<string, PinnedTool> {
   return new Map(tools.map(tool => {
     const { name, title, description, inputSchema, outputSchema, annotations } = tool;
     const definition: McpLiveTool = deepFreeze(structuredClone(Object.fromEntries(Object.entries({ name, title, description, inputSchema, outputSchema, annotations })
       .filter(([, value]) => value !== undefined)) as unknown as McpLiveTool));
-    return [name, { digest: mcpToolPinDigest(definition), definition: definition as unknown as Tool, compiles: null }];
+    return [name, { digest: mcpToolPinDigest(definition), definition: definition as unknown as Tool }];
   }));
 }
 /** SEP-2243 HeaderMismatch (Streamable HTTP; the SDK does not export its constant). */
 const HEADER_MISMATCH = -32020;
 /** The SDK's own post-send structured-result checks (client 2.4.0 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
-const OUTPUT_SCHEMA_FAILURE = /^(?:Tool .+ has an output schema but did not return structured content|Structured content does not match the tool's output schema|Failed to validate structured content)/su;
 
 /**
  * The runtime service's MCP servers (MCP-CLIENT): each is started by the first turn (or `inspect`) that needs it, listed, verified against its
@@ -369,7 +366,7 @@ export class McpClientPool implements McpPoolView {
   }
   /**
    * Sends one `tools/call` on the live process whose listing matched `digest` (a restarted process is listed again first), carrying that
-   * listing's pinned definition (`toolDefinition`): the SDK validates structuredContent against the pinned outputSchema and never re-lists or
+   * listing's pinned definition (`toolDefinition`): the pool validates structuredContent against the pinned outputSchema and the SDK never re-lists or
    * re-sends (MCP-PIN-DEF). Nothing is sent when the server is not connected, the pin no longer matches, the pinned outputSchema cannot be
    * compiled or the call was cancelled first. After sending: an answer (a result or a JSON-RPC error, HEADER_MISMATCH and a nonconforming
    * structured result included) is `answered`; a timeout, a cancellation or a closed connection is `unknown` — it is never sent again here.
@@ -384,43 +381,57 @@ export class McpClientPool implements McpPoolView {
   }
   private async callLocked(state: ServerState, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
     readonly admit: McpSendAdmission }): Promise<McpCallOutcome> {
-    const client = state.client;
-    if (!client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
+    const { client, validator } = state;
+    if (!client || !validator || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
       try { state.listing = { generation: state.generation, tools: pinnedTools(await listAllTools(client, options.timeoutMs, options.signal)) }; }
       catch { return { outcome: 'refused', reason: 'not-connected' }; }
     }
     const pinned = state.listing.tools.get(tool);
     if (!pinned || pinned.digest !== digest) return { outcome: 'refused', reason: 'pin-mismatch' };
-    // The SDK compiles the given definition before sending and throws -32602 when it cannot: compiled here first (the same validator), so
-    // that case is refused with nothing sent instead of looking answered.
-    const definition = structuredClone(pinned.definition), outputSchema = pinned.definition.outputSchema as Record<string, unknown> | undefined;
-    if (outputSchema && state.validator) {
-      if (pinned.compiles === null) try { state.validator.getValidator(structuredClone(outputSchema)); pinned.compiles = true; } catch { pinned.compiles = false; }
-      if (!pinned.compiles) return { outcome: 'refused', reason: 'invalid-output-schema' };
+    const { outputSchema, ...definition } = structuredClone(pinned.definition);
+    // The SDK uses the same JSON-RPC codes for remote errors and local schema failures. Validate the pinned output here to keep their provenance.
+    if (outputSchema !== undefined) {
+      if (pinned.validateOutput === undefined) try { pinned.validateOutput = validator.getValidator(outputSchema); } catch { pinned.validateOutput = null; }
+      if (!pinned.validateOutput) return { outcome: 'refused', reason: 'invalid-output-schema' };
     }
+    const [{ ProtocolError, ProtocolErrorCode, SdkError, SdkErrorCode }] = await loadClientSdk();
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
     // The current trust decides last (after the approval wait and every local check): only local SDK steps separate it from the write.
     const refusal = options.admit === 'probe-only' ? null : await options.admit();
     if (refusal) return { outcome: 'refused', reason: refusal };
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
     if (state.client !== client) return { outcome: 'refused', reason: 'not-connected' };
+    let result: CallToolResult;
     try {
-      return { outcome: 'answered', result: await client.callTool({ name: tool, arguments: args },
-        { timeout: options.timeoutMs, signal: options.signal, toolDefinition: definition }) as CallToolResult };
+      result = await client.callTool({ name: tool, arguments: args },
+        { timeout: options.timeoutMs, signal: options.signal, toolDefinition: definition }) as CallToolResult;
     } catch (error) {
-      const [{ ProtocolError }] = await loadClientSdk();
-      if (error instanceof ProtocolError) {
-        if (error.code === HEADER_MISMATCH) return { outcome: 'answered', error: { code: error.code, message: error.message, kind: 'header-mismatch' } };
-        if (outputSchema && (error.code === -32600 || error.code === -32602) && OUTPUT_SCHEMA_FAILURE.test(error.message))
-          return { outcome: 'answered', error: { code: -32602, message: error.message, kind: 'output-schema' } };
-        return { outcome: 'answered', error: { code: error.code, message: error.message, kind: 'server' } };
-      }
-      const code = errorCode(error);
-      if (code === 'NOT_CONNECTED' || (error as Error)?.message === 'Not connected') return { outcome: 'refused', reason: 'not-connected' };
       if (options.signal.aborted) return { outcome: 'unknown', reason: 'cancelled' };
-      return { outcome: 'unknown', reason: code === 'REQUEST_TIMEOUT' ? 'timed-out' : code === 'CONNECTION_CLOSED' ? 'connection-closed' : 'failed' };
+      if (error instanceof ProtocolError) {
+        const { code, message } = error;
+        const kind = code === HEADER_MISMATCH ? 'header-mismatch'
+          : code !== ProtocolErrorCode.InternalError && Object.hasOwn(ProtocolErrorCode, code) ? 'protocol'
+          : code >= -32768 && code <= -32000 ? 'unclassified' : 'server';
+        return { outcome: 'answered', error: { code, message, kind } };
+      }
+      const code = error instanceof SdkError ? error.code : undefined;
+      if (code === SdkErrorCode.NotConnected) return { outcome: 'refused', reason: 'not-connected' };
+      if (code === SdkErrorCode.InvalidResult || code === SdkErrorCode.UnsupportedResultType) return { outcome: 'unknown', reason: 'failed', protocolViolation: true };
+      return { outcome: 'unknown', reason: code === SdkErrorCode.RequestTimeout ? 'timed-out' : code === SdkErrorCode.ConnectionClosed ? 'connection-closed' : 'failed' };
     }
+    if (pinned.validateOutput && !result.isError) {
+      let message: string | undefined;
+      if (result.structuredContent === undefined) message = `Tool ${tool} has an output schema but did not return structured content`;
+      else try {
+        const validation = pinned.validateOutput(result.structuredContent);
+        if (!validation.valid) message = `Structured content does not match the tool's output schema: ${validation.errorMessage}`;
+      } catch { return { outcome: 'unknown', reason: 'failed' }; }
+      if (message !== undefined) {
+        return { outcome: 'answered', error: { code: ProtocolErrorCode.InvalidParams, message, kind: 'output-schema' } };
+      }
+    }
+    return { outcome: 'answered', result };
   }
   /** The server's last stderr bytes, redacted (for `inspect`; never streamed into the service's own stderr). */
   private stderrIn(namespace: string, serverId: string): string {

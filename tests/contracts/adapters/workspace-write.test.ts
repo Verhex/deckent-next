@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, symlink, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { toolErrorClass } from '#capabilities/index.js';
 import { ABSENT_FILE_VERSION, WorkspaceFileTarget, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, fileContentVersion, planWorkspaceEdit,
   readWritableFile, resolveWritable } from '#adapters/index.js';
 
@@ -16,6 +17,13 @@ async function workspace() {
 const ref = (id: string) => ({ kind: 'workspace-file', id });
 
 describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', () => {
+  it('WER-A classifies the path length bound separately from malformed paths', async () => {
+    const { scope } = await workspace();
+    const plan = (path: string) => planWorkspaceEdit(scope, 'write_file', { path, content: 'fixture' });
+    expect(toolErrorClass(await plan('x'.repeat(4_097)))).toBe('limit');
+    expect(toolErrorClass(await plan('../invalid'))).toBe('ordinary');
+  });
+
   it('plans an exact edit as a diff against the current version, and refuses ambiguous, missing and pattern-bearing surprises', async () => {
     const { scope } = await workspace();
     const plan = await planWorkspaceEdit(scope, 'edit_file', { path: 'src/a.ts', old_string: 'const b = 2', new_string: 'const b = 3' });

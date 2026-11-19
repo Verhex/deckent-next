@@ -29,8 +29,8 @@ async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
-  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string } = {}) => new Promise<Answer>((resolve, reject) => {
-    const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false,
+  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; signal?: AbortSignal } = {}) => new Promise<Answer>((resolve, reject) => {
+    const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false, signal: options.signal,
       headers: { host: bridge.sentinelHost, accept: 'application/json, text/event-stream', 'content-type': 'application/json',
         [registry.bridge.tokenHeaderName]: bridge.tokenHeader, ...options.headers } }, response => {
       let text = ''; response.on('data', chunk => { text += String(chunk); }); response.on('error', reject);
@@ -165,6 +165,33 @@ it('WER-A publishes the selected redacted text only after the actual request id 
   expect(selected).toHaveBeenCalledOnce();
   await f.bridge.close(); expect(live()).toBe(false);
 });
+it('WER-A only the original SSE stream can establish ordinary error delivery', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture({ correlationKind: 'codex-mcp',
+    limits: { idleMs: 300, maxConnections: 1, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 } }, async (call, correlation) => {
+    if (correlation.kind === 'codex-mcp' && correlation.callId === 'pending') await pending;
+    return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'error', text: 'fixture-error' } };
+  });
+  const headers = await f.initialize(), abort = new AbortController();
+  const call = rpc(2, tool.name, {}, { callId: 'pending', itemId: 'first' });
+  const first = f.send(call, { headers, signal: abort.signal }).catch(() => null);
+  await vi.waitFor(() => expect(f.submit).toHaveBeenCalledOnce());
+  abort.abort();
+  expect(await first).toBeNull();
+  // The gateway has one MCP slot. Listing can complete only once the first stream releases it.
+  await vi.waitFor(async () => expect((await f.send({ jsonrpc: '2.0', id: 6, method: 'tools/list' }, { headers })).status).toBe(200));
+  release();
+  expect(resultEnvelope(await f.send({ ...call, id: 3 }, { headers })).outcome.text).toBe('fixture-error');
+  expect(f.port.selected).not.toHaveBeenCalled();
+  expect(f.submit).toHaveBeenCalledOnce();
+  const delivered = rpc(4, tool.name, {}, { callId: 'delivered', itemId: 'second' });
+  const original = resultEnvelope(await f.send(delivered, { headers }));
+  expect(resultEnvelope(await f.send({ ...delivered, id: 5 }, { headers }))).toEqual(original);
+  expect(f.port.selected).toHaveBeenCalledOnce();
+  expect(f.submit).toHaveBeenCalledTimes(2);
+});
+
 it('preserves unknown outcomes, validates result identity, and redacts the Deckent token from tool output', async () => {
   let text = '', kind = 'ok';
   const f = await fixture({}, async call => { if (kind === 'throw') throw new Error('private-canary'); return {

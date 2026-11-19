@@ -1,4 +1,4 @@
-import { effectToolError } from './effect-error.js';
+import { effectToolError, isRecordedTargetFailure } from './effect-error.js';
 import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { relative, resolve, sep } from 'node:path';
@@ -177,14 +177,15 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       // FA-TRACKED-WARN (owner 2026-09-30): a full-access call's effect on git-tracked files is measured around it — shown, told to the model, audited through `track` (the sealed `tracked-files-changed` event), never blocked.
       const baseline = authority === 'full-access' ? await snapshotTrackedFiles(scope.root) : null;
       // The counts lead the result's first line (`describeHostShellResult`); protocol v18 has no typed field for them (v19 hook, docs-delta).
-      const tracked = async (ran: HostShellResult | null): Promise<{ readonly text: string; readonly counts?: { readonly deleted: number; readonly overwritten: number } }> => {
+      const tracked = async (ran: HostShellResult | null): Promise<{ readonly text: string; readonly counts?: { readonly deleted: number; readonly overwritten: number }; readonly evidenceMissing?: boolean }> => {
         if (!baseline || !ran || ran.status === 'spawn-failed') return { text: '' };
         const change = baseline.kind === 'measured' ? await compareTrackedFiles(baseline) : null;
-        const line = change ? describeTrackedFilesChange(change, await track?.(change) === true) : describeTrackedFilesUnchecked(baseline);
+        const evidenceMissing = change !== null && await track?.(change) !== true;
+        const line = change ? describeTrackedFilesChange(change, !evidenceMissing) : describeTrackedFilesUnchecked(baseline);
         if (!line) return { text: '' };
         channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${line}\n` });
         await channel.drained();
-        return { text: `\n${line}`, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
+        return { text: `\n${line}`, evidenceMissing, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
       };
       const store = await (async () => openConfiguredLedger(context, { migration: 'forbid' }))()
         .catch(async (error: unknown) => { if (directory) await removeSandboxWriteSetDirectory(directory.dir); throw error; });
@@ -198,7 +199,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const ran = result as HostShellResult | null;
         if (!ran) return agentToolResult({ status: 'error' as const, text: '[deckent] run_shell: error=no-result' }, 'uncertain');
         await showCleanup(ran);
-        const { text: trackedLine, counts } = await tracked(ran);
+        const { text: trackedLine, counts, evidenceMissing: trackedMissing } = await tracked(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
         const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
         // B3: the write floor was read-only in this sandbox; a failure on a path it protects is explained by name. The read-only error in the
@@ -211,9 +212,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const report = directory && writes ? await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
           context, ...(input.peer ? { peer: input.peer } : {}), ...(input.sessions ? { sessions: input.sessions } : {}), scopeId, shellCommandId: commandId, signal }) : null;
         const settled = report ? describeSandboxWriteSetResult(report, input.language) : '';
-        const auditMissing = report?.notApplied.some(entry => entry.reason === 'audit-unavailable');
-        return agentToolResult({ status: ran.exitCode === 0 && !auditMissing ? 'ok' as const : 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
-          cleanup: ran.cleanup }, ran.status === 'exited' && ran.exitCode !== null && !auditMissing ? 'ordinary' : 'uncertain');
+        const evidenceMissing = trackedMissing || report?.evidenceMissing || report?.notApplied.some(entry => entry.reason === 'audit-unavailable');
+        return agentToolResult({ status: ran.exitCode === 0 && !evidenceMissing ? 'ok' as const : 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
+          cleanup: ran.cleanup }, ran.status === 'exited' && ran.exitCode !== null && !evidenceMissing ? 'ordinary' : 'uncertain');
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
@@ -229,7 +230,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
           return agentToolResult({ status: 'error' as const, text: `${describeHostShellResult(planned.command, ran, realm, counts)}${ran.status === 'spawn-failed' ? ''
             : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}${trackedLine}`, cleanup: ran.cleanup },
-            ran.status === 'cancelled' ? 'cancelled' : ran.status === 'timed-out' ? 'limit' : ran.status === 'spawn-failed' ? 'ordinary' : 'uncertain');
+            ran.status === 'cancelled' ? 'cancelled' : ran.status === 'timed-out' ? 'limit'
+              : ran.status === 'spawn-failed' && isRecordedTargetFailure(error) ? 'ordinary' : 'uncertain');
         }
         return agentToolResult({ status: 'error' as const, text: `${describeShellEffectRefusal(code)}${trackedLine}` }, effectToolError(error));
       } finally {

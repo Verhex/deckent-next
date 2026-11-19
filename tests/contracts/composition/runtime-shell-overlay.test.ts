@@ -2,13 +2,14 @@ import { toolErrorClass } from '#capabilities/index.js';
 import { createAgentShell } from '#composition/core/agent-turn/index.js';
 import * as adapters from '#adapters/index.js';
 import { createWorkspaceScope, readTerminalShellConfig, runHostShell } from '#adapters/index.js';
-import { refuseRequiredApproval } from '#engine/index.js';
-import { toolProducer } from '../support/tool-producer.js';
+import { agentToolArgumentsDigest, agentToolCallApprovalGate, refuseRequiredApproval } from '#engine/index.js';
+import { failEffectRecordWrite, observeToolOutcomes, toolProducer } from '../support/tool-producer.js';
 import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { globalStateRoot } from '#platform/index.js';
+import { globalStateRoot, SystemTrustedClock } from '#platform/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
 
@@ -63,6 +64,67 @@ it.skipIf(process.platform !== 'linux')('shell producer keeps the exit and vetoe
   } finally { settlement.mockRestore(); }
 });
 
+it.skipIf(process.platform !== 'linux')('WER-A spawn refusal requires its effect record', async () => {
+  const f = await toolProducer([rule('shell-run', 'operation', ['host.shell.run'], 'allow')]);
+  const launch = vi.fn(async () => ({ status: 'spawn-failed' as const, exitCode: null, signal: null, output: 'fixture spawn refused',
+    totalBytes: 21, omittedBytes: 0, durationMs: 0, cleanup: 'clean' as const }));
+  const shell = createAgentShell({ ...f, scope: await createWorkspaceScope(f.project), config: readTerminalShellConfig({}), productState: [], scratch: null,
+    channel: { signal: f.signal, emit() {}, async drained() { return true; }, room: () => 65_536 },
+    sandboxes: [{ kind: 'bubblewrap', usable: () => ({ ok: true, containment: 'sandbox', marker: 'fixture', notice: null, posture: () => '',
+      realm: { kind: 'bubblewrap', run: launch } }) }] });
+  const apply = (index: number) => shell.apply('run_shell', { command: 'exit 7' }, f.signal, `call-${index}`, { round: 1, index }, refuseRequiredApproval);
+  const recorded = await apply(0);
+  failEffectRecordWrite(f.ledger);
+  const unrecorded = await apply(1);
+  expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual([{ state: 'refused' }, { state: 'claimed' }]);
+  expect(launch).toHaveBeenCalledTimes(2);
+  expect(unrecorded).toMatchObject({ status: 'error', text: expect.stringContaining('fixture spawn refused') });
+  expect([toolErrorClass(recorded), toolErrorClass(unrecorded)]).toEqual(['ordinary', 'uncertain']);
+});
+
+it.skipIf(process.platform !== 'linux')('WER-A the inner effect approval gate has no call-time refusal evidence', async () => {
+  const f = await toolProducer([rule('shell-run', 'operation', ['host.shell.run'], 'require-approval')]);
+  const shell = createAgentShell({ ...f, scope: await createWorkspaceScope(f.project), config: readTerminalShellConfig({ terminal: { shell: { schemaVersion: 1, realm: 'host' } } }),
+    productState: [], scratch: null, sandboxes: [], channel: { signal: f.signal, emit() {}, async drained() { return true; }, room: () => 65_536 } });
+  const args = { command: 'exit 7' }, position = { round: 1, index: 0 };
+  const gate = agentToolCallApprovalGate(async () => { throw new Error('no approval was requested'); }, new SystemTrustedClock(), {
+    scopeId: f.scopeId, approval: null, subject: { kind: 'agent-tool-call', turnId: f.turnId, ...position,
+      tool: 'run_shell', toolVersion: 1, resource: '(no target)', argsDigest: agentToolArgumentsDigest('run_shell', args) } }, new Map());
+  const result = await shell.apply('run_shell', args, f.signal, 'call-gate', position, gate);
+  expect(result).toMatchObject({ status: 'error', text: expect.stringContaining('approval') });
+  expect(f.rows('SELECT state FROM effect_intents')).toEqual([]);
+  expect(toolErrorClass(result)).toBe('uncertain');
+});
+
+it.skipIf(process.platform !== 'linux')('WER-A a missing child effect record closes continuation for exit zero and nonzero', async () => {
+  const f = await toolProducer([rule('shell-run', 'operation', ['host.shell.run'], 'allow'), rule('write-op', 'operation', ['workspace.file.write'], 'allow')]);
+  const root = join(f.data, 'writes'); await mkdir(root);
+  const shell = createAgentShell({ ...f, scope: await createWorkspaceScope(f.project), config: readTerminalShellConfig({}), productState: [], scratch: null,
+    channel: { signal: f.signal, emit() {}, async drained() { return true; }, room: () => 65_536 }, writeSetRoot: async () => root,
+    sandboxes: [{ kind: 'bubblewrap', usable: () => ({ ok: true, containment: 'sandbox', marker: 'fixture', notice: null, posture: () => '', writeSets: true,
+      realm: { kind: 'bubblewrap', async run(request) {
+        const path = request.command === 'exit 0' ? 'first.txt' : 'second.txt';
+        await writeFile(join(request.writeSet!.upper, path), 'written\n');
+        return runHostShell({ cwd: request.cwd, command: request.command, signal: f.signal });
+      } } }) }] });
+  const db = new DatabaseSync(f.ledger);
+  try { db.exec("CREATE TRIGGER child_unavailable BEFORE UPDATE ON effect_intents WHEN NEW.target_kind = 'workspace-file' BEGIN SELECT RAISE(ABORT,'fixture write failure'); END"); }
+  finally { db.close(); }
+  const observed = [];
+  for (const [index, [path, exit]] of ([['first.txt', 0], ['second.txt', 7]] as const).entries()) {
+    const result = await shell.apply('run_shell', { command: `exit ${exit}` }, f.signal, `call-${index}`, { round: 1, index }, refuseRequiredApproval, 'owner-approved',
+      { async decide() { return { ok: true, gate: refuseRequiredApproval }; } });
+    expect(result.text).toContain(`exit ${exit} after`);
+    expect(result.text).toContain(`outcome unknown (read the file to see its state): ${path}`);
+    expect(await readFile(join(f.project, path), 'utf8')).toBe('written\n');
+    observed.push(result.status === 'ok' ? 'ok' : toolErrorClass(result));
+  }
+  expect(f.rows('SELECT target_kind, state FROM effect_intents ORDER BY rowid')).toEqual([
+    { target_kind: 'host-shell', state: 'settled' }, { target_kind: 'workspace-file', state: 'claimed' },
+    { target_kind: 'host-shell', state: 'settled' }, { target_kind: 'workspace-file', state: 'claimed' }]);
+  expect(observed).toEqual(['uncertain', 'uncertain']);
+});
+
 describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () => {
   it('a new floor name is not written; ordinary changes, file copies/removals and a new directory are applied, each audited like an edit', async () => {
     const f = await runtime();
@@ -70,7 +132,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     await writeFile(join(f.project, 'sub', 'deep', 'f'), 'f\n'); await writeFile(join(f.project, 'src', 'gone.ts'), 'gone\n');
     const result = await f.call('run_shell', { command: 'f=pack; echo \'{"name":"x"}\' >> src/${f}age.json; echo new >> src/x.ts; chmod +x src/x.ts; '
       + 'cp src/gone.ts src/moved.ts && rm src/gone.ts; d=deep; cp -r sub/$d sub/old && rm sub/$d/f && echo z >> sub/$d/z; g=.en; echo SECRET=1 >> ${g}v; echo done' });
-    expect(result).toMatchObject({ card: false, status: 'ok' });
+    expect(result).toMatchObject({ card: false, status: 'error' });
     expect(result.text).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0/u);
     // C5: the floor name the classifier could not see never reaches the project, and the model is told how it can.
     expect(existsSync(join(f.project, 'src', 'package.json'))).toBe(false);
@@ -99,9 +161,10 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
   }, 120_000);
 
   it('a company rule that denies project writes keeps every change out; the command still ran', async () => {
-    const f = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
+    const f = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]), observed = observeToolOutcomes();
     const result = await f.call('run_shell', { command: 'f=x; echo new >> src/$f.ts; echo done' });
-    expect(result).toMatchObject({ card: false, status: 'ok' });
+    expect(result).toMatchObject({ card: false, status: 'error' });
+    expect(observed).toEqual(['uncertain']);
     expect(result.text).toContain('not applied: src/x.ts (denied by policy)');
     expect(existsSync(join(f.project, 'src', 'x.ts'))).toBe(false);
   }, 120_000);
@@ -178,7 +241,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
       const denied = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
       await mkdir(join(denied.project, 'src', 'empty'));
       const held = await denied.call('run_shell', { command: 'd=empty; rm -d src/$d; echo done' });
-      expect(held).toMatchObject({ card: false, status: 'ok' });
+      expect(held).toMatchObject({ card: false, status: 'error' });
       expect(held.text).toContain('not applied: src/empty/ (denied by policy)');
       expect(existsSync(join(denied.project, 'src', 'empty'))).toBe(true);
       expect(effects(denied)).toEqual([]);
@@ -206,7 +269,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
       // held back by the same classification as a file of that name.
       await mkdir(join(f.project, 'Makefile'));
       const floor = await f.call('run_shell', { command: 'd=Make; rm -d ${d}file; echo done' });
-      expect(floor).toMatchObject({ card: false, status: 'ok' });
+      expect(floor).toMatchObject({ card: false, status: 'error' });
       expect(floor.text).toContain('not applied: Makefile/ (write floor: the owner approves');
       expect(existsSync(join(f.project, 'Makefile'))).toBe(true);
       await mkdir(join(f.project, 'src', 'empty'));

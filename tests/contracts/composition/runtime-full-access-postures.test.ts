@@ -81,7 +81,7 @@ describe.skipIf(process.platform !== 'linux')('full access composed with the Ast
         }
         // Truncating redirection is destructive in every mode: approve its actual card before asserting containment/settlement.
         const result = await f.call('run_shell', { command }, 'allow');
-        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: path !== null, status: path !== null ? 'ok' : 'error' });
+        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: path !== null, status: path !== null && !writeSet ? 'ok' : 'error' });
         expect(result.text).toContain(!writeSet && path !== null ? `sandbox: ${realm}; exit 0`
           : !writeSet ? 'the project was read-only for this unattended run'
             : path ? `[deckent] write set: not applied: ${path} (denied by policy).` : 'Read-only file system');

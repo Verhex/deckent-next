@@ -1,6 +1,5 @@
 import { CodedError } from '#platform/index.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { once } from 'node:events';
 
 /** Protocol codes only; person-facing explanations belong to the shared reason catalogs. */
 export function refuseBridge(response: ServerResponse, status: number, reason: string): void {
@@ -41,11 +40,7 @@ export async function bridgeResponse(source: Response, target: ServerResponse, m
   const send = async (bytes: Buffer) => {
     const projected = Buffer.from(project(bytes.toString('utf8')));
     if (projected.length > maxBytes || !count(projected.length)) throw new Error('NATIVE_BRIDGE_TRAFFIC_LIMIT');
-    if (!target.write(projected)) {
-      const controller = new AbortController(), closed = () => controller.abort(); target.once('close', closed);
-      try { await once(target, 'drain', { signal: controller.signal }); }
-      finally { target.off('close', closed); }
-    }
+    await new Promise<void>((resolve, reject) => { target.write(projected, error => error ? reject(error) : resolve()); });
     if (!target.destroyed) delivery.sent?.(projected.toString('utf8'));
   };
   try {

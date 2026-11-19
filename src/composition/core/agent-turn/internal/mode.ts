@@ -98,8 +98,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const writeOperation = WORKSPACE_FILE_WRITE_OPERATION.operation;
       const again = () => decide(tool, cell, undefined, { path: rel }, undefined, writeOperation);
       const fresh = await again();
-      /* S5 D1: a refused write-set entry is an effect-stage refusal of the turn's record. */ if (!fresh || fresh.decision !== 'allow') turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`)); if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
-      if (fresh.decision !== 'allow') return { ok: false, reason: cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor' };
+      if (!fresh || fresh.decision !== 'allow') {
+        turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`));
+        const reason = !fresh || fresh.decision === 'deny' ? 'denied-by-policy' : cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor';
+        return { ok: false, reason, evidenceMissing: true };
+      }
       const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined || fresh.standing !== undefined;
       if (audited) {
         const event = fresh.standing ? standingEvent('used', tool, { path: rel }, execution, callId, cell as Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
@@ -130,7 +133,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const first = await writeSet(tool, args, execution, callId).decide(rel, cell);
       if (first.ok || (first.reason !== 'approval-required' && first.reason !== 'write-floor')) return first;
       const again = () => decide(tool, cell, undefined, { path: rel }, undefined, WORKSPACE_FILE_WRITE_OPERATION.operation), fresh = await again();
-      if (!fresh || fresh.decision === 'deny') { turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`)); return { ok: false, reason: 'denied-by-policy' }; }
+      if (!fresh || fresh.decision === 'deny') { turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`)); return { ok: false, reason: 'denied-by-policy', evidenceMissing: true }; }
       const event = approvedWriteEntryAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: redactForRecord(rel, knownSecrets).slice(0, 4096) },
         eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write-approved'),
         call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, approvalId, cell);

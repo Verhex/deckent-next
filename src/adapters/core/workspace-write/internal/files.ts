@@ -23,7 +23,8 @@ const proc = (handle: FileHandle, name: string) => `/proc/self/fd/${handle.fd}/$
 
 /** The lexical part of `resolveWritable`: normalized, inside the root, not denied, a plain file name; nothing on disk is looked at. */
 export function writablePath(scope: WorkspaceScope, requested: unknown): WritablePath {
-  if (typeof requested !== 'string' || !requested || requested.length > 4096 || requested.includes('\0')) return { ok: false, error: 'invalid-path' };
+  if (typeof requested === 'string' && requested.length > 4096) return withToolErrorClass({ ok: false as const, error: 'invalid-path' }, 'limit');
+  if (typeof requested !== 'string' || !requested || requested.includes('\0')) return { ok: false, error: 'invalid-path' };
   let path = posix.normalize(requested.replace(/\\/g, '/'));
   if (path.startsWith('/')) {
     if (!path.startsWith(`${scope.root}/`)) return { ok: false, error: 'outside-workspace' };

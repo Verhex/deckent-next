@@ -49,7 +49,10 @@ export function planMcpProposal(args: Record<string, unknown>): McpProposalPlan 
   // Values a person binds are refused by name, before anything else (the model is told where they belong).
   if ('env' in args || 'headers' in args) return withToolErrorClass({ ok: false as const, reason: MCP_PROPOSAL_SECRETS_REFUSED }, 'ordinary');
   const parsed = proposalSchema.safeParse(args);
-  if (!parsed.success) return withToolErrorClass({ ok: false as const, reason: 'invalid-proposal' }, 'ordinary');
+  if (!parsed.success) {
+    const overArgsBound = parsed.error.issues.some(issue => issue.code === 'too_big' && issue.origin === 'array' && issue.path[0] === 'args');
+    return withToolErrorClass({ ok: false as const, reason: 'invalid-proposal' }, overArgsBound ? 'limit' : 'ordinary');
+  }
   const proposal = parsed.data, strings: [string, string][] = [['name', proposal.name], ['reason', proposal.reason], ['command', proposal.command ?? ''], ['url', proposal.url ?? ''],
     ...(proposal.args ?? []).map((value, index): [string, string] => [`args.${index}`, value]),
     ...(proposal.requiredSettings ?? []).map((value, index): [string, string] => [`requiredSettings.${index}`, value])];

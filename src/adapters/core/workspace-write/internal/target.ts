@@ -222,7 +222,7 @@ export type WorkspaceEditPlan = { readonly ok: true; readonly rel: string; reado
 export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, args: Record<string, unknown>,
   maxFileBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<WorkspaceEditPlan> {
   const target = await resolveWritable(scope, args['path']);
-  if (!target.ok) return withToolErrorClass({ ok: false as const, error: target.error }, 'ordinary');
+  if (!target.ok) return withToolErrorClass({ ok: false as const, error: target.error }, toolErrorClass(target) === 'limit' ? 'limit' : 'ordinary');
   const current = await readWritableFile(scope, target, maxFileBytes);
   if (!current.ok) return withToolErrorClass({ ok: false as const, error: current.error }, toolErrorClass(current));
   let before: string | null = null;
