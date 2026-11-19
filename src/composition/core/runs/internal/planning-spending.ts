@@ -14,7 +14,11 @@ export async function withPlanningSpending(root: string, result: RunPlanningResu
     const view = await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: proposal.scopeId, invocationId: source.invocationId, reference: source.reference }, options);
     const receipt = view.invocation;
     // Receipt identity and author are checked again before projecting optional financial evidence.
-    if (receipt?.request.commandId === source.commandId && receipt.outcome?.state === 'responded' && receipt.outcome.content.digest === source.responseDigest
+    const contribution = proposal.source.contribution;
+    if (receipt?.request.commandId === source.commandId && receipt.claim.invocationId === source.invocationId
+      && (!contribution || (contribution.requestDigest === receipt.request.requestDigest
+        && contribution.bindingDigest === receipt.request.expectedBinding.digest && contribution.activationRevision === receipt.activationRevision
+        && (!('billingAxis' in contribution) || contribution.billingAxis === modelInvocationBillingAxis(receipt.profile)))) && receipt.outcome?.state === 'responded' && receipt.outcome.content.digest === source.responseDigest
       && receipt.actor.id === proposal.proposer.id && receipt.actor.issuer === proposal.proposer.issuer && receipt.actor.subject === proposal.proposer.subject) {
       const spending = view.spending, state = spending?.disposition;
       const free = 'billingAxis' in receipt.profile ? receipt.profile.billingAxis !== 'metered' : spending ? providerSpendHasZeroTariff(spending.descriptor.quote) : classifyWorkSpending({ kind: 'model', profile: receipt.profile }) === 'not-metered';

@@ -13,7 +13,7 @@ and task-graph parse failures. Graph failures retain a safe typed rule (criterio
 principal and existing engine admission own authority.
 
 The existing connected-model invocation owns activation, binding, credentials,
-spending, claim and response custody. Planning has one model step, no tool loop
+spending, claim and response custody. Separate Brain planning has one model step, no tool loop
 and no blind retry; a subscription quota refusal with a known reset within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes) waits visibly and plans once more
 under a new derived command id (at most two attempts). A correctable refusal (an unregistered
@@ -68,11 +68,15 @@ unchanged.
 
 A successful repeated command/input reads its recorded proposal and sends no
 second model request. Failed or interrupted invocation claims also forbid a
-second send; configuration drift can conflict. The model source optionally carries
-a v1 contribution: template/version/digest, input/context/output/request digests,
+second send; configuration drift can conflict. For same-turn planning the engine validates a
+framed draft after native close, reads the saved response again and uses the chat invocation
+as the model source. The chat proposal still uses separate planning until that read is
+bound to an authorized reader on the production path. The same-turn finalizer has no quota
+or correction retry. Its v2 contribution adds the billing axis to the original contribution fields: template/version/digest, input/context/output/request digests,
 binding, activation, normalized usage and bounded masked summaries. Intent and
 context are redacted before invocation; graph text and summaries are redacted
-before proposal storage. A2 source verification consumes retained response
+before proposal storage. Same-turn usage covers the whole chat invocation, including planning.
+A2 source verification consumes retained response
 content under existing model `inspect-content` permission, revalidating its parsed
 output digest. Purged or unavailable content cannot authorize a fresh Run.
 Template/input summaries are planner attribution bound into the proposal, not a

@@ -45,8 +45,9 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     const field = (await createConfiguredConfigApplication(projectRoot, options).inspect({ keyPath, layer })).fields[0]!;
     return { keyPath, layer, current: field.value ?? null, choices: views.schemaChoices(field.schema) };
   }
+  const workCommandId = (callId: string) => `propose-work-${sha256(`propose-work:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}`;
   async function work(name: string, request: string, callId: string): Promise<AgentToolOutcome> {
-    const command: BrainPlanCommand = { schemaVersion: 1, commandId: `propose-work-${sha256(`propose-work:1\0${scopeId}\0${input.turnId}\0${callId}`).slice(0, 40)}`, scopeId, intent: request };
+    const command: BrainPlanCommand = { schemaVersion: 1, commandId: workCommandId(callId), scopeId, intent: request };
     // v31 (/do parity): the plan's progress reaches the person's terminal as `/do` shows it (planning, a Brain quota wait, the admitted Run for /tasks).
     const progress = (value: BrainPlanProgress) => { if (value.kind === 'planning') input.emit({ kind: 'work', callId, phase: 'planning', attempt: value.attempt });
       else if (value.kind === 'quota-wait') input.emit({ kind: 'work', callId, phase: 'quota-wait', untilMs: value.untilMs, attempt: value.attempt, maxAttempts: value.maxAttempts }); };
@@ -99,7 +100,14 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       try {
         if (planned.tool === 'choices') return { status: 'ok', text: JSON.stringify(await choices(planned.keyPath, 'project')) };
         return planned.tool === 'work' ? await work(name, planned.request, callId) : await setting(name, planned.keyPath, planned.choice, planned.layer, callId);
-      } catch (error) { return tag(name, `error=${codeOf(error)}; nothing was changed`); }
+      } catch (error) {
+        const code = codeOf(error);
+        if (planned.tool === 'work') {
+          const detail = code === 'RUN_PROPOSAL_OUTCOME_UNKNOWN' ? t('error.RUN_PROPOSAL_OUTCOME_UNKNOWN', {}, input.locale) : '';
+          return tag(name, [`error=${code}`, detail, t('cli.do.command', { command: workCommandId(callId) }, input.locale)].filter(Boolean).join(' '));
+        }
+        return tag(name, `error=${code}; nothing was changed`);
+      }
     },
   };
 }
