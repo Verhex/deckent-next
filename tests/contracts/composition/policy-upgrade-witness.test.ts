@@ -9,6 +9,7 @@ import * as adapters from '#adapters/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 import { terminalApplication } from '../support/approval-terminal.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { homeEnv } from '../support/host-platform.js';
 import { main } from '#surfaces/index.js';
 
@@ -83,7 +84,7 @@ it.skipIf(process.platform !== 'linux')('119-F1a: AI-marked person apply AND rol
     expect(await snapshot(root)).toEqual(before);
   }
   expect(await snapshot(root)).toEqual(before);
-  const personTerminalEnv = { ...homeEnv(join(root, 'home')), ...Object.fromEntries(getConfigFieldDefault('cli').agentEnvironment.map(name => [name, undefined])) };
+  const personTerminalEnv = { ...homeEnv(join(root, 'home')), ...personMarkersUnset() };
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!, { env: personTerminalEnv }, process.getuid?.(), undefined, attested))
     .toMatchObject({ status: 'upgraded', rules: FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id })) });
   expect(await terminalApplication({ project: root, env: personTerminalEnv }, 'policy-upgrade', 'installation', { mode: 'rollback', reason: 'person withdraws' }))
@@ -99,7 +100,7 @@ it.skipIf(process.platform !== 'linux')('119-F1a: AI-marked person apply AND rol
 
 it.skipIf(process.platform !== 'linux')('119-F1a-3: a fresh installed system-row baseline permits a real person governed21 add and archive rollback', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-fresh-governed-custody-')); roots.push(root);
-  const env = { ...homeEnv(join(root, 'home')), ...Object.fromEntries(getConfigFieldDefault('cli').agentEnvironment.map(name => [name, undefined])) };
+  const env = { ...homeEnv(join(root, 'home')), ...personMarkersUnset() };
   await applyPolicyTemplateInstallation(root, 'installation', { env });
   const path = join(root, '.deckent/policy.json'), baseline = JSON.parse(await readFile(path, 'utf8'));
   expect(baseline.grants.some((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false);

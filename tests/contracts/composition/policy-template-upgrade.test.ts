@@ -1,5 +1,6 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { terminalApplication, terminalRequest } from '../support/approval-terminal.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,7 +13,7 @@ import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { openPermissionModesInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
-import { clearConfigCache, getConfigFieldDefault } from '#platform/index.js';
+import { clearConfigCache } from '#platform/index.js';
 import { policyPanelPort, type PolicyTemplateUpgradePort } from '#surfaces/core/cli-terminal/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
@@ -66,7 +67,7 @@ async function project(shape: 'owner-role' | 'pure') {
   writeFileSync(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b-v4', modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode: 'full-auto' }],
     bindings: shape === 'owner-role' ? [{ id: 'root', principals: me, roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }] : [] }), { mode: 0o600 });
   // This positive control is a markerless person; the PTY helper otherwise inherits the test host's agent markers.
-  const personTerminal = { ...f, env: { ...f.env, ...Object.fromEntries(getConfigFieldDefault('cli').agentEnvironment.map(name => [name, undefined])) } };
+  const personTerminal = { ...f, env: { ...f.env, ...personMarkersUnset() } };
   const upgrade = (mode: 'preview' | 'apply' | 'rollback', expect?: string, only?: 'ai-proposals' | 'ai-execution') => terminalApplication<Awaited<ReturnType<typeof configuredPolicyTemplateUpgrade>>>(personTerminal, 'policy-upgrade', 'scope',
     { mode, reason: 'test upgrade', ...(expect ? { expect } : {}), ...(only ? { only } : {}) });
   const grants = () => (JSON.parse(readFileSync(join(f.data, 'policy.json'), 'utf8')) as { grants: { id: string; resource: { kind: string; ids: unknown } }[] }).grants;
