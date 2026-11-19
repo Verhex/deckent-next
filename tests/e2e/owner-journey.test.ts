@@ -75,8 +75,8 @@ const BRAIN = `const d = JSON.parse(prompt), kind = d.context.context.kinds[0].k
     workInput: { schemaVersion: 2, title: 'Append a line to notes.txt', task: d.intent, scope: { paths: ['notes.txt'] }, acceptance: 'notes.txt ends with the requested line.', workClass: 'small' } }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'The worker finished', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] },
     budgetCeiling: { currency: 'USD', limitMinorUnits: 0 }, requiredPermissions: [] });`;
-// Prerequisites: the built binary, python3 with `pty` (the PTY relay), Linux with the isolation realm (bubblewrap). The hosted CI shard job has a
-// 6-minute bound and this journey takes longer, so a hosted run skips unless JOURNEY_HOSTED=1 (a dedicated job). Each skip is a recorded reason.
+// Prerequisites: the built binary, python3 with `pty` (the PTY relay), Linux with the isolation realm (bubblewrap). The hosted CI shard job has an
+// 8-minute bound and this journey can use most of it by itself, so a hosted run skips unless JOURNEY_HOSTED=1 (a dedicated job). Each skip is a recorded reason.
 const FILE = 'tests/e2e/owner-journey.test.ts';
 const missing = process.env['GITHUB_ACTIONS'] === 'true' && process.env['JOURNEY_HOSTED'] !== '1' ? 'hosted-shard-budget'
   : !existsSync(cli) ? 'built-binary-missing' : spawnSync('python3', ['-c', 'import pty'], { timeout: 10_000 }).status !== 0 ? 'python3-pty-missing' : null;
