@@ -23,17 +23,19 @@ O-1 mutlak sealed backup/restore yasağı; backup bağımlı dallar unknown. Sys
 
 ## Şimdi (en çok 7)
 
-Kod inmesi kabul değildir; her sürümün kanıtı ve kabul durumu [COMPLETED-PLAN](COMPLETED-PLAN.md)'dadır.
+Kod inmesi kabul değildir. Sürüm kanıtı ve kabulü [COMPLETED-PLAN](COMPLETED-PLAN.md)'dadır.
 
 | İş grubu | Neden / beta bağı | Durum | Sıradaki adım |
 |---|---|---|---|
 | beta.1 kabul paketi ve owner terminal denemesi | Sekiz kapının gerçek yüzey/kalıcı sonuç kanıtı | Son yayın alpha.64 (PR #144, 2026-11-10). Bu belge turunda beta kapıları için yeni kapanış kanıtı yok; dört BeUser yolculuğu, owner terminal denemesi, N1 kurtarma ve temiz bağlam AI kurulum transkripti ayrı açık | Beta işleri: dış lead kaydı `proof/BETA-INVENTORY-2026-11-02/MERGED.md`; fast-uri 3.1.8 / SDK client-server 2.4.0, yalnız kurulu dev/test ağacı; risk bitişi 2026-12-21 (`dependencies.json`); otomatik kural henüz plan; owner kabulü ayrı |
 | SIWC Codex işçi etkinleştirmesi | ChatGPT planıyla chat açık; işçi çalıştırma ayrı kapı | `workerRelay.activation: hold`; host app-server yolu kapalı | U9F gerçek binary kontrol listesi → N1 kanıtı → yetkili etkinleştirme; kanıtsız `open` yok |
 | Codex/Cursor bağlam ve canlı kabulü | Alpha.53/54 talimat ve sağlayıcı kanıtının gerçek işçi karşılığı | Önceden sabitlenen Codex profillerini yeniden bildirme, şablonları bağlama ve Cursor C7 kabulü açık | N1 önce/sonra ölçümü (girdi token'ı, `find ..`, kabul sonucu), Cursor katalog kaydı ve gerçek uçtan uca görev |
-| beta.2.1 | Kapı 5; kurulum bağının kalıcı düzeltmesi | beta.2 canlıda ve N1'de (2026-11-15, geçiş `8678f6152e33-d939bc6c2ff2`); kanıt [COMPLETED-PLAN](COMPLETED-PLAN.md)'da | beta.2.1: bağ yazıcıları, bağlı klasörlü kaynağın kişisiz onarımı, ek kullanım kaydı, kendiliğinden açılan listeler (112), imaj yenileme kapsamı ve Docker onarım yolu (114), sohbet önerisinin ilerlememesi (119), yürüyüş düzeltmeleri (123), abonelik işçisi kartları (124; önce iki N1 denemesi, 127); defter sürümü yükselmez |
+| beta.2.1 | Kapı 5; kurulum bağının kalıcı düzeltmesi | beta.2 canlıda ve N1'de (2026-11-15, geçiş `8678f6152e33-d939bc6c2ff2`); kanıt [COMPLETED-PLAN](COMPLETED-PLAN.md)'da | beta.2.1: bağ yazıcıları, bağlı klasörlü kaynağın kişisiz onarımı, ek kullanım kaydı, kendiliğinden açılan listeler (112), imaj yenileme kapsamı ve Docker onarım yolu (114), sohbet önerisinin ilerlememesi (119), yürüyüş düzeltmeleri (123), abonelik işçisi kartları (124; iki N1 denemesi geçişten sonra, 151); defter sürümü yükselmez |
 | N1 50 görev, temiz kurulum/kaldırma ve test-ERP gözlemi | Kapı 4 ve 7; lead yardımı/elle JSON olmadan ilk kalıcı iş | Açık; eldeki son tarihli sayım 2026-10-18: 20/50, güncel sayım yok | Taze klasörde init→/do→teslim, soğuk Docker imajı, gerçek ilk commit; geçici kurulumda kaldır/geri yükle/yeniden kur; gerçek iş etkisini gözle |
 | K1–K8 komut sadeleştirme (beta işi) | Terminaldeki komut tekrarını kaldırır | K7 alpha.54 BR2 ile teslim; kalan dalın güncel main ile uzlaştırılması açık | Kalanı yeniden tabanla; yeni çalışma zamanı işlemleri tek protokol adımında; beta sırası korunur |
 | Beta içinde kalan yolculuk ve harcama kanıtı | walk16 RED'leri ve açık takipler | Eski 1–5 alpha.58 ile teslim; alpha.59–64 geçmişi COMPLETED-PLAN'da; harcama incelemesi 6 açık | Dört BeUser yolculuğu (onboarding, uninstall-v2, beuser-self, theme-light), owner terminal testi ve harcama uzlaştırma incelemesi; yayın kabul sayılmaz |
+
+**Beta.2.1 sırası (2026-11-20):** Owner'ın hedefi kendi işini yalnız deckent terminalinde yürütmek: sohbet → plan kartı → işçi → teslim. İlk kapalı teknik davet, kurulu adayda tek Codex aboneliğiyle bu uçtan uca yolculuğa bağlı (165a). Kararlaştırılmış tüm işler bitince tek paket canlıya, sonra N1'e gider (169). Adayın geniş kanıtı iki Node sürümünde hosted CI. Yerel tam test paketi koşmaz (170). [Kararlar](.deckent/docs/decisions/owner-decisions.md#owner-kararlari-2026-11-17-20-beta21)
 
 Betaya taşınanlar (owner 2026-10-18, 2026-10-22; SIWC chat alpha.56'da, işçi etkinleştirmesi açık): Y3 onay kanalı, Y4 taban, D3 uzak karar tasarımı ve OTONOM-TESLIM D0–D4; bilinen sınırlarda "beta sürecinde" yazılıdır. Yeni sabit lane/worker sayısı yok. Ayrıntılar [beta öncesi](.deckent/docs/plan/roadmap-2026-10-15.md#beta-oncesi) ve [güvence](.deckent/docs/plan/roadmap-2026-10-15.md#guvence) bölümlerinde.
 
