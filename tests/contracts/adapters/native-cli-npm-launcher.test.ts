@@ -7,6 +7,7 @@ import { ErrorRegistry, reportFatal, type DeckentError } from '#platform/index.j
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
 import { CODEX_FAMILY, codexAnswer, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
+import { FAMILY } from '../../fixtures/native-headless/stream.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 afterEach(cleanupConnections);
@@ -49,6 +50,19 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
         executable, ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: {}, now: Date.now, isolation: testIsolation });
       expect(base.executable).toBe(executable);
       expect((await f.read()).at(-1)).toMatchObject({ mode: 'auth', program: executable });
+    }
+  });
+
+  it('connects explicitly selected standalone executables named tool.js with and without a launcher registry row', async () => {
+    const c = await connection(), configDir = c.configDir, stateDir = join(c.root, 'state');
+    const codex = join(c.root, 'tool.js'), claude = join(dirname(c.executable), 'tool.js');
+    await rename(await writeFakeCodexCli(dirname(codex), { logPath: join(configDir, 'config.toml') }), codex);
+    await rename(c.executable, claude);
+    expect(nativeCliHeadless(FAMILY)?.command.npmLauncher).toBeUndefined();
+    for (const [protocolFamily, executable] of [[family, codex], [FAMILY, claude]] as const) {
+      await expect(prepareHeadlessConnection({ protocol: { family: protocolFamily, version: 'v1' }, minCliVersion: '9.0.0',
+        executable, ownedConfigDir: configDir, stateDir, env: {}, now: Date.now, isolation: testIsolation }))
+        .resolves.toMatchObject({ executable });
     }
   });
 
@@ -101,12 +115,13 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
   });
 
   it('names a missing payload and guides an unknown layout to an explicitly verified native file', async () => {
-    const f = await fixture(), dir = join(dirname(f.chosen), 'other-layout'), executable = join(dir, 'codex.js');
+    const f = await fixture(), dir = join(f.root, 'node_modules', 'other-layout'), executable = join(dir, 'tool');
     await unlink(f.payload);
     await expect(headlessPreflight(entry, f.definition, Date.now, testIsolation)).rejects.toMatchObject({
       code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-payload-missing' },
     });
     await mkdir(dir); await rename(f.launcher, executable);
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'other-layout', version: '1.0.0', bin: { tool: 'tool' } }));
     const refusal = await headlessPreflight(entry, { ...f.definition, executable }, Date.now, testIsolation).catch((error: unknown) => error);
     expect(refusal).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-layout-unknown' }, message: expect.stringContaining('--executable') });
     expect(await f.read()).toEqual([]);

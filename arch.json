@@ -601,6 +601,7 @@
       "dependencies": [
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",
+        "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/config",

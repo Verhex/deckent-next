@@ -8,7 +8,7 @@ import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
-import { inspectNativeChat } from '#composition/core/terminal-chat/index.js';
+import { inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
 import { nativeQuotaText, nativeAgentReasonText, type ToolSessionPort } from '#capabilities/index.js';
 import { snapshotKnownSecrets, clockText } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -105,9 +105,12 @@ it.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('uses the nati
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   const f = await fixture(families[1]!, {}, true), h = await f.start();
   expect(h.execution.executable).toBe(f.program);
+  const read = () => readNativeAgentObservation(f.profile), runtime = { readiness: { read } };
+  expect(await read()).toMatchObject({ toolSurface: null, plugins: null, bridge: null });
+  expect(await nativeChatVerificationExecution(f.profile, runtime)).toEqual(h.execution);
   expect(await h.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
-  const read = () => readNativeAgentObservation(f.profile);
   expect(await read()).toMatchObject({ toolSurface: true, execution: { executable: f.program } });
+  expect(await inspectNativeChat(f.profile, runtime)).toEqual({ state: 'ready', execution: h.execution });
   const binding = { schemaVersion: 1 as const, connectionId: '00000000-0000-4000-8000-000000000001', resourceKey: 'npm-fixture',
     profileDigest: h.execution.profileDigest, protocolFamily: f.profile.protocol.family,
     definition: nativeCliHeadlessDefinitionSchema.parse(f.profile.adapter.definition) };
@@ -119,6 +122,8 @@ it.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('uses the nati
   await writeFile(f.program, '\n// updated native program\n', { flag: 'a' });
   expect(await read()).toBeNull();
   expect(await readNativeAgentObservation(f.profile, Date.now, true)).toBeNull();
+  expect(await nativeChatVerificationExecution(f.profile, runtime)).toBeNull();
+  expect(await inspectNativeChat(f.profile, runtime)).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' });
   expect(await readiness()).toMatchObject({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
 });
 
