@@ -2,11 +2,11 @@ import { request as httpRequest } from 'node:http';
 import { mkdir, readFile } from 'node:fs/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CORE_WORK_CLASSES, encodeModelBindingDefinition, modelInvocationRequestEvidence, parseModelInvocationReceipt,
-  parseModelInvocationProfile, type ModelInvocationNativeResponse } from '#domain/index.js';
-import { prepareBrainPrompt, type SameTurnToolSessionPort } from '#capabilities/index.js';
+  parseModelInvocationProfile, readHeadlessRejection, type AgentTurnEvent, type ModelInvocationNativeResponse } from '#domain/index.js';
+import { prepareBrainPrompt, SAME_TURN_CHALLENGE_PREFIX, type SameTurnToolSessionPort } from '#capabilities/index.js';
 import { BrainPlanApplication } from '#engine/core/run-planner/index.js';
 import { createModelInvocationResponseRecord, modelInvocationProfileDigest, modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
-import { agentToolArgumentsDigest, agentTurnResultDigest } from '#engine/core/agent-turn/index.js';
+import { agentToolArgumentsDigest, agentTurnResultDigest, runAgentTurn, type AgentTurnPorts } from '#engine/core/agent-turn/index.js';
 import { createNativeAgentDriver, createClaudeAgentDriver, codexAgentTurn, nativeAgentFlagSetDigest, preflightNativeAgent, runHeadlessIsolated } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeQuotaPolicy, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
@@ -78,6 +78,7 @@ async function recording(cli: Cli, mode: string) {
   if (mode === 'middle') terminal.text = 'prefix' + framed;
   if (mode === 'suffix') terminal.text = framed.split('\n').reverse().join('\n');
   if (mode === 'wrong-token') terminal.text = framed.replace(/ [a-f0-9]{64}/, ' ' + '0'.repeat(64));
+  if (cli === 'claude' && ['middle', 'suffix', 'wrong-token'].includes(mode)) finish.result = terminal.text;
   const terminalIndex = wire.length - 2;
   if (mode === 'stitched' || mode === 'same-id-blocks') {
     const continuation = structuredClone(wire[terminalIndex]), cut = framed.indexOf('\n') + 1;
@@ -111,6 +112,14 @@ async function recording(cli: Cli, mode: string) {
   }
   if (cli === 'codex' && mode === 'old-start') wire.splice(3, 0, { type: 'item.started', item: { type: 'agent_message', id: wire[terminalIndex].item.id } });
   if (cli === 'claude') {
+    if (mode === 'request-id-conflict') wire[terminalIndex].request_id += '-other';
+    if (mode === 'delivery-id-conflict') wire[3].tool_result_meta[0].id += '-other';
+    if (mode === 'api-error-status') finish.api_error_status = 500;
+    if (mode === 'optional-fields-absent') {
+      delete wire[3].tool_result_meta;
+      delete wire[terminalIndex].request_id;
+      delete finish.api_error_status;
+    }
     if (mode === 'old-start') wire[terminalIndex].message.id = wire[1].message.id;
     if (mode === 'wrong-role') wire[terminalIndex].message.role = 'user';
     if (mode === 'assistant-length') wire[terminalIndex].message.stop_reason = 'max_tokens';
@@ -123,7 +132,14 @@ async function recording(cli: Cli, mode: string) {
   } else if (mode === 'length') finish.finish_reason = 'length';
   if (mode === 'extra-tool') {
     const extra = structuredClone(cli === 'codex' ? wire[4] : wire[1]);
-    if (cli === 'codex') extra.item.id += '-new'; else extra.message.content[0].id += '-new';
+    if (cli === 'codex') extra.item.id += '-new';
+    else {
+      const finalPart = wire[terminalIndex];
+      extra.message.id = finalPart.message.id;
+      extra.message.stop_reason = finalPart.message.stop_reason;
+      extra.request_id = finalPart.request_id;
+      extra.message.content[0].id += '-new';
+    }
     wire.splice(terminalIndex, 0, extra);
   }
   const observed = cli === 'codex' ? wire.find(e => e.item?.result)?.item.result.content[0] : wire.find(e => e.type === 'user')?.message.content[0].content[0];
@@ -131,6 +147,13 @@ async function recording(cli: Cli, mode: string) {
   expect(agentTurnResultDigest(custody.P)).toBe(custody.resultDigest);
   const draft = framed.slice(framed.indexOf('\n') + 1);
   return { meta, custody, wire, framed, draft };
+}
+
+// Inspect the strings delivered to each sink, before any JSON escaping changes their bytes.
+function stringFields(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (value instanceof Error) return [value.message, value.stack ?? ''];
+  return value && typeof value === 'object' ? Object.values(value).flatMap(stringFields) : [];
 }
 
 async function replay(cli: Cli, mode: string) {
@@ -161,123 +184,181 @@ async function replay(cli: Cli, mode: string) {
   let preparations = 0, responses = 0, reads = 0;
   const planning = brain.createSameTurnPlanning({ ...entropy,
     publicText: 'Preparing', toolResultDigest: agentTurnResultDigest, revalidate: async input => input, readResult: async () => retained, text: extract });
-  const prepareTool = { name: 'propose_work', toolClass: 'read' as const, version: 1, description: 'Prepare', inputSchema: { type: 'object' as const, properties: {} } };
-  const session: SameTurnToolSessionPort = { planning, session: { schemaVersion: 1, turnId: custody.turnId, generation: custody.generation, approvalTtlMs: 5000,
-    tools: mode === 'bridge-earlier' ? [prepareTool, { ...prepareTool, name: 'read_item', description: 'Read item' }] : [prepareTool] },
-    checkResultDelivery(call) {
-      try { planning.beforeTool(call.id, agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson))); return true; }
-      catch { return false; }
-    },
-    cancel: unreachable, revoke: unreachable, async propose(call) {
-      if (call.name === 'read_item') {
-        reads++;
-        return { schemaVersion: 1, turnId: custody.turnId, generation: custody.generation, deckentCallId: call.id, outcome: { status: 'ok', text: 'earlier-item' } };
-      }
-      preparations++;
-      const identity = { turnId: custody.turnId, generation: custody.generation, callId: call.id, argsDigest: agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson)) };
-      const result = await planning.prepare(planning.pin!, { command, prepared: { invocation, prompt: prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {}), kinds: ['purchase'] },
-        config: {}, settings: { cap: { value: null, origin: 'brain-default' }, reasoning: { value: 'model-default', origin: 'brain-default' }, applied: null },
-        call: identity, bounds: { preparationMaxBytes: 65536, draftMaxBytes: 65536 } });
-      const content = result.outcome.text;
-      if (mode !== 'unsettled') planning.preparationSettled(planning.pin!, { ...identity, content, bytes: Buffer.byteLength(content), resultDigest: agentTurnResultDigest(content) });
-      return result;
-    } };
+  const prepareTool = { name: 'propose_work', toolClass: 'read' as const, version: 1, description: 'Prepare',
+    inputSchema: { type: 'object' as const, required: ['request'], properties: { request: { type: 'string' } } } };
+  const tools = mode === 'bridge-earlier' ? [prepareTool, { ...prepareTool, name: 'read_item', description: 'Read item',
+    inputSchema: { type: 'object' as const, properties: {} } }] : [prepareTool];
+  const session = { schemaVersion: 1 as const, turnId: custody.turnId, generation: custody.generation, approvalTtlMs: 5000, tools };
+  const pin = planning.claimed(invocation, claimed);
+  const delivery = vi.spyOn(planning, 'preparationDelivered'), closed = vi.spyOn(planning, 'nativeClosed'), body = vi.spyOn(planning, 'responseBody');
+  const terminalCheck = vi.spyOn(planning, 'terminalEnvelope');
+  const settled: AgentTurnPorts['settled'] = async ({ call, argsDigest, content }) => {
+    if (call.name === prepareTool.name && mode !== 'unsettled') {
+      expect(argsDigest).not.toBeNull();
+      planning.preparationSettled(pin, { turnId: session.turnId, generation: session.generation, callId: call.id, argsDigest: argsDigest!,
+        content, bytes: Buffer.byteLength(content), resultDigest: agentTurnResultDigest(content) });
+    }
+  };
+  const execute: AgentTurnPorts['execute'] = async (spec, args, _signal, callId) => {
+    if (spec.name === 'read_item') { reads++; return { status: 'ok', text: 'earlier-item' }; }
+    preparations++;
+    const call = { turnId: session.turnId, generation: session.generation, callId, argsDigest: agentToolArgumentsDigest(spec.name, args) };
+    const result = await planning.prepare(pin, { command,
+      prepared: { invocation, prompt: prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {}), kinds: ['purchase'] },
+      config: {}, settings: { cap: { value: null, origin: 'brain-default' }, reasoning: { value: 'model-default', origin: 'brain-default' }, applied: null },
+      call, bounds: { preparationMaxBytes: 65536, draftMaxBytes: 65536 } });
+    return result.outcome;
+  };
   const definition = c.profile.adapter.definition, flagSetDigest = nativeAgentFlagSetDigest(entry);
   const execution = { schemaVersion: 1 as const, capability: 'NativeAgentExecution' as const, executable: c.executable, cliVersion: meta.version, ownerUid: process.getuid!(), profileDigest, flagSetDigest };
   vi.mocked(preflightNativeAgent).mockResolvedValue({ execution, preflight: { executable: c.executable, version: meta.version, flagSetDigest } } as Awaited<ReturnType<typeof preflightNativeAgent>>);
   await mkdir(definition['stateDir'] as string);
-  const notices: unknown[] = [];
-  const driver = createNativeAgentDriver({ profile, execution, session, isolation: unreachable, now: Date.now, onPaidUsage: async notice => { notices.push(notice); } });
-  const client = useBridge ? await bridgeClient(driver.port, entry, c.root) : undefined;
-  const native = driver.native(client?.bridge ?? ({ ...entry.bridge, turnToken: '~fixture-only', url: 'http://' + entry.bridge.sentinelHost + entry.bridge.path } as Parameters<typeof driver.native>[0]),
-    { configured: mode === 'redacted-D' ? knownSecretValues(['Durable business readback'])
-      : mode === 'stream-redaction' ? knownSecretValues(['}private-fixture-suffix']) : EMPTY_KNOWN_SECRETS, turn: client?.bridge.known ?? EMPTY_KNOWN_SECRETS });
-  const prepared = await native.prepare(profile, binding, request);
-  const pin = planning.claimed(invocation, claimed);
-  native.claimed?.(claimed);
-  const delivery = vi.spyOn(planning, 'preparationDelivered'), closed = vi.spyOn(planning, 'nativeClosed'), body = vi.spyOn(planning, 'responseBody');
-  const deltas: string[] = [];
-  vi.mocked(runHeadlessIsolated).mockImplementationOnce(async (_entry, _isolation, spawn, _bounds, signal, line) => {
-    let actual = '', challengeLine = '', stopped = false, called = false;
-    const earlier = { name: 'read_item', arguments: {}, _meta: { callId: 'read-call', itemId: 'read-item' } };
-    for (const event of wire) {
-      if (event.subtype === 'init') event.cwd = spawn.runDir;
-      if (challengeLine) {
-        const rebind = (text: string) => challengeLine + text.slice(text.indexOf('\n'));
-        if (event.item?.type === 'agent_message') event.item.text = rebind(event.item.text);
-        if (event.type === 'assistant') for (const block of event.message.content) if (block.type === 'text') block.text = rebind(block.text);
-        if (event.type === 'result') event.result = rebind(event.result);
-      }
-      let raw = JSON.stringify(event);
-      // Rebind W to current custody. The host-entropy variation also echoes its new challenge, always with the recorded D.
-      if (actual && mode !== 'original') raw = raw.replaceAll(JSON.stringify(JSON.stringify(custody.result)), () => JSON.stringify(actual));
-      if (await line!(raw, signal!) === 'stop') { stopped = true; break; }
-      if (client && mode === 'bridge-earlier' && event.type === 'turn.started') {
-        const item = { id: 'read-item', type: 'mcp_tool_call', server: entry.bridge.serverName, tool: earlier.name, arguments: earlier.arguments };
-        expect(await line!(JSON.stringify({ type: 'item.started', item: { ...item, status: 'in_progress' } }), signal!)).toBeUndefined();
-        const result = await client.request(earlier);
-        expect(JSON.parse(result.content[0].text).outcome).toEqual({ status: 'ok', text: 'earlier-item' });
-        expect(await line!(JSON.stringify({ type: 'item.completed', item: { ...item, status: 'completed', result } }), signal!)).toBeUndefined();
-      }
-      if (client && (event.type === 'user' || event.item?.result)) {
-        if (mode === 'bridge-earlier') {
-          const repeated = await client.request(earlier);
-          expect.soft(repeated.isError).toBe(true);
-          expect.soft(JSON.parse(repeated.content[0].text).outcome).toEqual({ status: 'error', text: 'BRAIN_SAME_TURN_REFUSED' });
-        } else {
-          expect(delivery).toHaveBeenCalledTimes(1);
-          expect(await client.repeat()).toBe(actual);
-          expect(delivery).toHaveBeenCalledTimes(1);
+  const notices: unknown[] = [], published: { active: boolean; event: AgentTurnEvent }[] = [];
+  const deltas: string[] = [], earlyDeltas: string[] = [];
+  const nativeChallenge = new Set([framed.split('\n')[0]!.split(' ')[1]!]);
+  const logs = (['log', 'info', 'warn', 'error', 'debug'] as const).map(method => vi.spyOn(console, method));
+  let diagnostics: unknown, failure: string | undefined, reason: string | undefined, check: string | null = null, unexpected: unknown;
+  const invokeAgent: NonNullable<AgentTurnPorts['invokeAgent']> = async ({ session: wired }, onDelta, signal) => {
+    const driver = createNativeAgentDriver({ profile, execution, session: wired, isolation: unreachable, now: Date.now,
+      onPaidUsage: async notice => { notices.push(notice); } });
+    const client = useBridge ? await bridgeClient(driver.port, entry, c.root) : undefined;
+    const native = driver.native(client?.bridge ?? ({ ...entry.bridge, turnToken: '~fixture-only', url: 'http://' + entry.bridge.sentinelHost + entry.bridge.path } as Parameters<typeof driver.native>[0]),
+      { configured: mode === 'redacted-D' ? knownSecretValues(['Durable business readback'])
+        : mode === 'stream-redaction' ? knownSecretValues(['}private-fixture-suffix']) : EMPTY_KNOWN_SECRETS, turn: client?.bridge.known ?? EMPTY_KNOWN_SECRETS });
+    const prepared = await native.prepare(profile, binding, request);
+    native.claimed?.(claimed);
+    vi.mocked(runHeadlessIsolated).mockImplementationOnce(async (_entry, _isolation, spawn, _bounds, signal, line) => {
+      let actual = '', challengeLine = '', stopped = false, called = false;
+      const earlier = { name: 'read_item', arguments: {}, _meta: { callId: 'read-call', itemId: 'read-item' } };
+      for (const event of wire) {
+        if (event.subtype === 'init') event.cwd = spawn.runDir;
+        if (challengeLine) {
+          const rebind = (text: string) => challengeLine + text.slice(text.indexOf('\n'));
+          if (event.item?.type === 'agent_message') event.item.text = rebind(event.item.text);
+          if (event.type === 'assistant') for (const block of event.message.content) if (block.type === 'text') block.text = rebind(block.text);
+          if (event.type === 'result') event.result = rebind(event.result);
+        }
+        let raw = JSON.stringify(event);
+        // Rebind W to current custody. The host-entropy variation also echoes its new challenge, always with the recorded D.
+        if (actual && mode !== 'original') raw = raw.replaceAll(JSON.stringify(JSON.stringify(custody.result)), () => JSON.stringify(actual));
+        if (await line!(raw, signal!) === 'stop') { stopped = true; break; }
+        if (client && mode === 'bridge-earlier' && event.type === 'turn.started') {
+          const item = { id: 'read-item', type: 'mcp_tool_call', server: entry.bridge.serverName, tool: earlier.name, arguments: earlier.arguments };
+          expect(await line!(JSON.stringify({ type: 'item.started', item: { ...item, status: 'in_progress' } }), signal!)).toBeUndefined();
+          const result = await client.request(earlier);
+          expect(JSON.parse(result.content[0].text).outcome).toEqual({ status: 'ok', text: 'earlier-item' });
+          expect(await line!(JSON.stringify({ type: 'item.completed', item: { ...item, status: 'completed', result } }), signal!)).toBeUndefined();
+        }
+        if (client && (event.type === 'user' || event.item?.result)) {
+          if (mode === 'bridge-earlier') {
+            const repeated = await client.request(earlier);
+            expect.soft(repeated.isError).toBe(true);
+            expect.soft(JSON.parse(repeated.content[0].text).outcome).toEqual({ status: 'error', text: 'BRAIN_SAME_TURN_REFUSED' });
+          } else {
+            expect(delivery).toHaveBeenCalledTimes(1);
+            expect(await client.repeat()).toBe(actual);
+            expect(delivery).toHaveBeenCalledTimes(1);
+          }
+        }
+        const tool = cli === 'codex' ? event.type === 'item.started' && event.item.type === 'mcp_tool_call' && event.item : event.message?.content?.find((b: { type: string }) => b.type === 'tool_use');
+        if (tool && !called) {
+          called = true;
+          const args = tool.arguments ?? tool.input;
+          expect(agentToolArgumentsDigest('propose_work', args)).toBe(custody.argsDigest);
+          if (client) {
+            const _meta = cli === 'codex' ? { callId: custody.correlation.callId, itemId: custody.correlation.itemId } : { 'claudecode/toolUseId': tool.id };
+            actual = await client.call({ name: 'propose_work', arguments: args, _meta });
+            challengeLine = JSON.parse(actual).outcome.text.split('\n')[0];
+            nativeChallenge.add(challengeLine.split(' ')[1]!);
+          } else {
+            const result = await driver.port.propose({ id: custody.callId, name: 'propose_work', argumentsJson: JSON.stringify(args) }, custody.correlation, signal!);
+            actual = JSON.stringify(mode === 'wrong-W' ? { ...result, outcome: { ...result.outcome, text: result.outcome.text + ' ' } }
+              : mode === 'failed-W' ? { ...result, outcome: { ...result.outcome, status: 'error' } } : result);
+          }
         }
       }
-      const tool = cli === 'codex' ? event.type === 'item.started' && event.item.type === 'mcp_tool_call' && event.item : event.message?.content?.find((b: { type: string }) => b.type === 'tool_use');
-      if (tool && !called) {
-        called = true;
-        const args = tool.arguments ?? tool.input;
-        expect(agentToolArgumentsDigest('propose_work', args)).toBe(custody.argsDigest);
-        if (client) {
-          const _meta = cli === 'codex' ? { callId: custody.correlation.callId, itemId: custody.correlation.itemId } : { 'claudecode/toolUseId': tool.id };
-          actual = await client.call({ name: 'propose_work', arguments: args, _meta });
-          challengeLine = JSON.parse(actual).outcome.text.split('\n')[0];
-        } else {
-          const result = await driver.port.propose({ id: custody.callId, name: 'propose_work', argumentsJson: JSON.stringify(args) }, custody.correlation, signal!);
-          actual = JSON.stringify(mode === 'wrong-W' ? { ...result, outcome: { ...result.outcome, text: result.outcome.text + ' ' } }
-            : mode === 'failed-W' ? { ...result, outcome: { ...result.outcome, status: 'error' } } : result);
-        }
+      return { ...meta.process, started: true, reason: stopped ? 'stopped' : mode === 'cancel' ? 'cancelled' : mode === 'disconnect' ? 'signal' : 'exit',
+        exitCode: mode === 'exit' ? 1 : meta.process.exitCode, stdoutTruncated: mode === 'truncated', limit: mode === 'limit' ? 'cpu' : null };
+    });
+    try {
+      const result = await native.send(prepared, signal, delta => {
+        (planning.active ? deltas : earlyDeltas).push(delta.text);
+        onDelta(delta);
+      });
+      if ('native' in result) {
+        responses++;
+        expect(closed).toHaveBeenCalledTimes(1);
+        expect(body).toHaveBeenCalledTimes(1);
+        expect(closed.mock.invocationCallOrder[0]!).toBeLessThan(body.mock.invocationCallOrder[0]!);
+        const record = createModelInvocationResponseRecord(claimed, result as ModelInvocationNativeResponse, 2);
+        retained = { replayed: false, receipt: record.receipt, response: result, contentStatus: 'retained', purge: null };
+        return { status: 'responded', content: extract(retained)!, reasoning: '', finish: 'stop', toolCalls: [], usage: null };
       }
+      const rejection = readHeadlessRejection(result.evidence);
+      diagnostics = rejection;
+      if (rejection && 'subtype' in rejection) reason = rejection.subtype;
+      if (rejection && 'field' in rejection && rejection.field) check = 'agent-surface:' + rejection.field;
+    } catch (error) {
+      const issue = error as Error & { code?: string; params?: { reason?: string } };
+      if (!['BRAIN_SAME_TURN_REFUSED', 'HEADLESS_OUTCOME_UNKNOWN'].includes(issue.code ?? issue.message)) unexpected = error;
+      failure = issue.message;
+      reason = issue.params?.reason;
+    } finally {
+      check = driver.refusalCheck() ?? check;
+      diagnostics = [diagnostics, driver.notices(), driver.refusal(), check, notices];
+      await client?.close(); await driver.close();
     }
-    return { ...meta.process, started: true, reason: stopped ? 'stopped' : mode === 'cancel' ? 'cancelled' : mode === 'disconnect' ? 'signal' : 'exit',
-      exitCode: mode === 'exit' ? 1 : meta.process.exitCode, stdoutTruncated: mode === 'truncated', limit: mode === 'limit' ? 'cpu' : null };
-  });
+    return { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
+  };
+  let turn: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
-    const result = await native.send(prepared, undefined, d => { if (planning.active) deltas.push(d.text); });
-    if ('native' in result) {
-      responses++;
-      expect(closed).toHaveBeenCalledTimes(1);
-      expect(body).toHaveBeenCalledTimes(1);
-      expect(closed.mock.invocationCallOrder[0]!).toBeLessThan(body.mock.invocationCallOrder[0]!);
-      const record = createModelInvocationResponseRecord(claimed, result as ModelInvocationNativeResponse, 2);
-      retained = { replayed: false, receipt: record.receipt, response: result, contentStatus: 'retained', purge: null };
-      await planning.finalize(pin, retained);
+    turn = await runAgentTurn({ nativeSession: session, messages: [{ role: 'user', content: 'Purchase' }], tools,
+      emit: event => { published.push({ active: planning.active, event }); }, signal: new AbortController().signal, language: 'en' },
+    { planning, now: Date.now, describe: () => null, authorize: async () => 'allow', execute, settled, invokeAgent, invokeRound: unreachable,
+      finishPlanning: async signal => { await planning.finalize(pin, retained, signal); return 'Prepared'; } });
+    if (unexpected) throw unexpected;
+    const ordinaryText = cli === 'codex' && mode !== 'unknown-start'
+      ? wire.find(event => event.type === 'item.completed' && event.item?.type === 'agent_message')?.item.text as string : '';
+    // The configured secret's leading brace keeps the last brace and LF in the redactor's buffer.
+    const early = mode === 'stream-redaction' ? ordinaryText.slice(0, -2)
+      : mode === 'redacted-D' ? ordinaryText.replace('Durable business readback', '[REDACTED]') : ordinaryText;
+    const scenario = cli + '/' + mode;
+    expect.soft(earlyDeltas.join(''), scenario).toBe(early);
+    expect.soft(published.flatMap(({ active, event }) => !active && event.kind === 'text' ? [event.text] : []).join(''), scenario).toBe(early);
+    expect.soft(published.flatMap(({ active, event }) => active && event.kind === 'text' ? [event.text] : []), scenario)
+      .toEqual(proposals.length ? ['Prepared'] : []);
+    const history = published.flatMap(({ event }) => event.kind === 'message' ? [event.message.content] : []);
+    expect.soft(history, scenario).toEqual([
+      ...(reads ? ['', 'earlier-item'] : []), ...(preparations ? ['', 'Preparing'] : []), ...(proposals.length ? ['Prepared'] : []),
+    ]);
+    expect(published.filter(({ event }) => event.kind === 'reasoning' || event.kind === 'tool.output')).toEqual([]);
+    const publicFacts = [turn, diagnostics, deltas.join(''), logs.map(log => log.mock.calls), published.map(row => row.event).filter(event => event.kind !== 'text')];
+    for (const text of stringFields(publicFacts)) {
+      expect.soft(text, mode).not.toContain(SAME_TURN_CHALLENGE_PREFIX);
+      for (const challenge of nativeChallenge) expect.soft(text, mode).not.toContain(challenge);
+      expect.soft(text, mode).not.toContain(draft);
     }
-    return { proposals, deltas, responses, preparations, reads, deliveries: delivery.mock.calls.length, selected: retained! && extract(retained), draft };
-  } catch (error) {
-    if (!['BRAIN_SAME_TURN_REFUSED', 'HEADLESS_OUTCOME_UNKNOWN'].includes((error as { code?: string }).code ?? (error as Error).message)) throw error;
-    return { proposals, deltas, responses, preparations, reads, deliveries: delivery.mock.calls.length, selected: null, draft, failure: (error as Error).message };
+    for (const text of earlyDeltas) for (const challenge of nativeChallenge) expect.soft(text, mode).not.toContain(challenge);
+    if (proposals.length) expect(turn.answer).toBe('Prepared');
+    else expect(turn.answer).toBeNull();
   } finally {
-    if (mode === 'stream-redaction') {
-      expect(body).toHaveBeenCalledTimes(1);
-      expect(body.mock.calls[0]?.[1]).not.toBe(draft);
-    }
-    const publicFacts = JSON.stringify([driver.notices(), driver.refusalCheck(), notices, deltas]);
-    expect(publicFacts).not.toContain(framed.split('\n')[0]!.split(' ')[1]);
-    expect(publicFacts).not.toContain(draft);
-    await client?.close(); await driver.close();
+    for (const log of logs) log.mockRestore();
   }
+  if (['middle', 'suffix', 'wrong-token'].includes(mode)) {
+    expect(terminalCheck).toHaveBeenCalledTimes(1);
+    expect(terminalCheck.mock.results[0]).toMatchObject({ type: 'throw', value: { code: 'BRAIN_SAME_TURN_REFUSED', params: { reason: 'stale-terminal' } } });
+  }
+  if (mode === 'stream-redaction') {
+    expect(body).toHaveBeenCalledTimes(1);
+    expect(body.mock.calls[0]?.[1]).not.toBe(draft);
+  }
+  return { proposals, deltas, earlyDeltas, responses, preparations, reads, deliveries: delivery.mock.calls.length, selected: retained! && extract(retained), draft,
+    failure, reason, check, selectedMessage: terminalCheck.mock.calls[0]?.[1].messageId };
+
 }
 it('binds K1 preparation to the recorded terminal message and finalizes the exact recorded draft on both drivers', async () => {
   for (const cli of ['codex', 'claude'] as const) {
-    for (const mode of ['current-custody', 'bridge-replay', 'whitespace-D', ...(cli === 'claude' ? ['same-id-blocks'] : [])]) {
+    for (const mode of ['current-custody', 'bridge-replay', 'whitespace-D', ...(cli === 'claude' ? ['same-id-blocks', 'optional-fields-absent'] : [])]) {
       const result = await replay(cli, mode);
       expect(result.preparations).toBe(1);
       expect(result.proposals).toHaveLength(1);
@@ -285,6 +366,41 @@ it('binds K1 preparation to the recorded terminal message and finalizes the exac
       expect(result.deltas).toEqual([]);
     }
   }
+});
+
+it('refuses conflicting Claude request ids within the recorded final assistant message', async () => {
+  expect(await replay('claude', 'request-id-conflict')).toMatchObject({
+    responses: 0, proposals: [], deliveries: 1, check: 'agent-surface:planning-request-id',
+  });
+});
+
+it('refuses explicit Claude contradictions in the recorded delivery metadata and terminal API status', async () => {
+  for (const [mode, check, deliveries] of [
+    ['delivery-id-conflict', 'agent-surface:planning-delivery-id', 0],
+    ['api-error-status', 'agent-surface:planning-api-error-status', 1],
+  ] as const) {
+    expect.soft(await replay('claude', mode), mode).toMatchObject({ responses: 0, proposals: [], deliveries, check });
+  }
+});
+
+it('checks the actual challenge in each framing mutation after assistant and result text agree', async () => {
+  for (const cli of ['codex', 'claude'] as const) {
+    for (const mode of ['middle', 'suffix', 'wrong-token']) {
+      expect(await replay(cli, mode), cli + '/' + mode).toMatchObject({ responses: 0, proposals: [], reason: 'stale-terminal' });
+    }
+  }
+});
+
+it('publishes the recorded early Codex answer as ordinary chat and selects only the later message', async () => {
+  const { wire, draft } = await recording('codex', 'current-custody');
+  const early = wire.find(event => event.item?.type === 'agent_message').item;
+  const terminal = wire.at(-2).item;
+  expect(early.id).not.toBe(terminal.id);
+  expect(JSON.parse(early.text)).toEqual(JSON.parse(draft));
+  const result = await replay('codex', 'current-custody');
+  expect(result.earlyDeltas.join('')).toBe(early.text);
+  expect(result.selectedMessage).toBe(terminal.id);
+  expect(result.selected).toBe(draft);
 });
 
 it('refuses an earlier cached tool result at the bridge before it can reach the active planning turn', async () => {
@@ -296,6 +412,7 @@ it('binds the first local Codex turn id even when it arrives after turn.started'
   const conflict = await replay('codex', 'late-turn-conflict');
   expect.soft(conflict.responses).toBe(0);
   expect.soft(conflict.proposals).toHaveLength(0);
+  expect.soft(conflict.check).toBe('agent-surface:planning-identity');
   for (const mode of ['late-turn-match', 'current-custody']) {
     const accepted = await replay('codex', mode);
     expect(accepted.proposals).toHaveLength(1);
@@ -303,11 +420,37 @@ it('binds the first local Codex turn id even when it arrives after turn.started'
   }
 });
 
+const sharedRefusals = {
+  unsettled: 'preparation-unsettled', 'redacted-D': 'stale-terminal',
+  'stream-redaction': 'completion-unknown', 'extra-json': 'stale-terminal', middle: 'stale-terminal',
+  suffix: 'stale-terminal', 'wrong-token': 'stale-terminal', 'stderr-truncated': 'output-truncated',
+  exit: 'native-failed', cancel: 'cancelled', limit: 'output-truncated', truncated: 'output-truncated',
+};
+const wireRefusals = {
+  codex: { original: 'mcp-correlation', 'wrong-W': 'mcp-correlation', 'failed-W': 'mcp-correlation', 'unknown-start': 'item-order',
+    'error-finish': 'turn.failed', 'old-start': 'planning-message', 'extra-tool': 'planning-tool',
+    length: 'planning-finish', 'conflicting-thread': 'planning-identity' },
+  claude: { 'failed-W': 'planning-delivery', 'unknown-start': 'planning-message', stitched: 'planning-message',
+    'no-final': 'planning-finish', 'old-start': 'planning-message', 'second-message': 'planning-message',
+    'extra-tool': 'planning-tool', length: 'planning-finish', 'wrong-session': 'planning-session', 'wrong-result': 'planning-finish',
+    'unknown-stop': 'planning-finish', nested: 'subagent', 'error-result': 'planning-delivery',
+    'wrong-role': 'planning-message', 'assistant-length': 'planning-message' },
+};
+const cliRefusals = {
+  codex: { stitched: 'stale-terminal', 'no-final': 'stale-terminal', 'second-message': 'stale-terminal',
+    'missing-finish': 'incomplete', disconnect: 'completion-unknown' },
+  claude: { original: 'preparation-unsettled', 'wrong-W': 'preparation-unsettled', 'error-finish': 'native-failed',
+    'missing-finish': 'native-failed', disconnect: 'native-failed' },
+};
+
 it('closes planning on stale identity, foreign delivery, ambiguous framing and incomplete protocol or process evidence', async () => {
   for (const cli of ['codex', 'claude'] as const) {
-    for (const mode of ['original', 'unsettled', 'wrong-W', 'failed-W', 'redacted-D', 'stream-redaction', 'extra-json', 'unknown-start', 'stitched', 'error-finish', 'stderr-truncated', 'no-final', 'old-start', 'second-message', 'middle', 'suffix', 'wrong-token', 'extra-tool',
-      'length', 'exit', 'cancel', 'disconnect', 'limit', 'truncated', 'missing-finish', ...(cli === 'claude' ? ['wrong-session', 'wrong-result', 'unknown-stop', 'nested', 'error-result', 'wrong-role', 'assistant-length'] : ['conflicting-thread'])]) {
+    const reasons = { ...sharedRefusals, ...cliRefusals[cli] }, fields = wireRefusals[cli];
+    for (const mode of [...Object.keys(reasons), ...Object.keys(fields)]) {
       const result = await replay(cli, mode);
+      const diagnostic = Object.hasOwn(fields, mode) ? { check: 'agent-surface:' + (fields as Record<string, string>)[mode] }
+        : { reason: (reasons as Record<string, string>)[mode] };
+      expect.soft(result, cli + '/' + mode).toMatchObject(diagnostic);
       expect(result.responses, cli + '/' + mode).toBe(0);
       expect(result.proposals, cli + '/' + mode).toHaveLength(0);
       expect(result.deltas, cli + '/' + mode).toEqual([]);

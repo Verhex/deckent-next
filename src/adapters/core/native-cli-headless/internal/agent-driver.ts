@@ -142,6 +142,13 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const cancelled = combined.aborted || evidence.reason === 'cancelled';
               if (!wire || !evidence.started || evidence.reason !== 'exit' || evidence.exitCode !== 0 || evidence.signal !== null
                 || truncated || cancelled || stopped || refusal || claude && finished?.kind !== 'completed') {
+                const rejection = (stopped as Refusal | null)?.body;
+                const field = finished?.kind === 'refused' ? finished.field
+                  : rejection && ('field' in rejection && rejection.field || 'subtype' in rejection && rejection.subtype);
+                if (field) {
+                  refusal = finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
+                  refusalCheck = `agent-surface:${field}`.slice(0, 64);
+                }
                 const reason = cancelled ? 'cancelled' : truncated ? 'output-truncated'
                   : evidence.reason === 'exit' && evidence.exitCode !== 0 || finished?.kind === 'failed' ? 'native-failed' : 'completion-unknown';
                 if (pin) planning.abandon(pin, reason);

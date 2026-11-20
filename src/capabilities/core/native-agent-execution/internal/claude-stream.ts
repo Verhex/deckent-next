@@ -49,7 +49,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   if (entry.agent.transport.kind !== 'claude-mcp' || !Number.isSafeInteger(options.outputMaxBytes) || options.outputMaxBytes <= 0) invalid('definition');
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const wire = options.planning, oldMessages = new Set<string>();
-  let sessionId: unknown, priorIdentityUnknown = false, finalId: string | undefined, finalText = '';
+  let sessionId: unknown, priorIdentityUnknown = false, finalId: string | undefined, finalRequestId: string | undefined, finalText = '';
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
   const pluginPolicy = entry.agent.transport.guards.plugins;
@@ -124,6 +124,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
         if (wire.delivered) {
           if (!top || priorIdentityUnknown || oldMessages.has(id) || finalId !== undefined && finalId !== id
             || message.stop_reason != null && message.stop_reason !== 'end_turn') return fail('planning-message');
+          if (typeof value.request_id === 'string') {
+            if (finalRequestId !== undefined && value.request_id !== finalRequestId) return fail('planning-request-id');
+            finalRequestId = value.request_id;
+          }
           finalId = id;
         } else if (top) oldMessages.add(id);
         else priorIdentityUnknown = true;
@@ -156,6 +160,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
         const blocks = message!.content as Record<string, unknown>[];
         if (value.parent_tool_use_id !== null || message!.role !== 'user' || blocks.length !== 1 || wire.delivered) return fail('planning-delivery');
         const block = blocks[0]!, call = calls.get(block.tool_use_id as string);
+        if (Array.isArray(value.tool_result_meta) && value.tool_result_meta.some(entry => {
+          const id = record(entry)?.id;
+          return id != null && id !== block.tool_use_id;
+        })) return fail('planning-delivery-id');
         const content = block.content, text = Array.isArray(content) && content.length === 1 ? record(content[0]) : null;
         if (!call?.settled || !call.streamed || block.is_error !== undefined && block.is_error !== false
           || text?.type !== 'text' || typeof text.text !== 'string'
@@ -199,6 +207,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (!models || Object.keys(models).length !== 1 || !Object.hasOwn(models, model)) return fail('model-usage');
     if ([...calls.values()].some(call => !call.streamed || !call.settled)) return fail('correlation-incomplete');
     if (wire?.active) {
+      if (value.api_error_status != null) return fail('planning-api-error-status');
       if (!wire.delivered || !finalId || value.result !== finalText || value.stop_reason !== 'end_turn'
         || value.terminal_reason !== undefined && value.terminal_reason !== 'completed') return fail('planning-finish');
       wire.terminal(finalId, finalText);
