@@ -57,6 +57,11 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     const stage = step.stages[0], pending = step.pending;
     const title = pending ? t('onboarding.parked.title', {}, locale) : stage ? onboardingMessage(stage.title, {}, locale) : '';
     const body = stage ? [onboardingMessage(stage.reason.code, stage.reason.params, locale)] : pending ? [pending.status === 'starting' ? t('onboarding.parked.unknown', {}, locale) : pending.status === 'released' ? t('onboarding.parked.released', {}, locale) : ErrorRegistry.createError(pending.fact.reason, { locale, params: pending.fact.params }).message] : [];
+    const externalConnections = model.snapshot.observation.model.externalConnections;
+    if (stage?.id === 'core:model' && externalConnections?.length) {
+      body.push(headlessGovernedUseText(locale).text);
+      for (const id of externalConnections) body.push(id, headlessGovernedUseText(locale, id).next);
+    }
     const pool = model.snapshot.plan.stages.find(row => row.id === 'work:pool');
     if (stage?.id === 'core:model' || step.kind === 'work' || step.kind === 'ready') {
       if (pool?.reason.code === 'setup.work.poolNeedsKind') body.push(t('setup.work.poolNeedsKind', {}, locale));

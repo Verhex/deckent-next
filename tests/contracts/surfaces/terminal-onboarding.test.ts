@@ -1,4 +1,5 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { planSetup, SetupStageRegistry, WORK_SETUP_FAMILY, type SetupStage } from '#engine/index.js';
 import { personEnv } from '../support/person-env.js';
@@ -248,6 +249,44 @@ it('CARD-156: the only subscription is outside the installation, in the choice a
       expect.soft(applied).toEqual([]);
     } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
   }
+});
+
+const reopenModelCopy = {
+  en: { step: 'Step 1/1', title: 'Model connection', selected: 'Chat model selected:',
+    reason: 'Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.',
+    next: (id: string) => `From the owning person’s terminal, run deckent models login --connection ${id} without --config-dir. Then reconnect the same model with deckent models connect, also without --config-dir.`,
+    action: '> Enter · Continue', hints: 'Enter · Continue · Esc · Later · Ctrl+Y copy (card and options)' },
+  tr: { step: 'Adım 1/1', title: 'Model bağlantısı', selected: 'Seçilen sohbet modeli:',
+    reason: 'Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.',
+    next: (id: string) => `Sahibin terminalinde, --config-dir vermeden deckent models login --connection ${id} komutunu çalıştırın. Ardından aynı modeli deckent models connect ile yine --config-dir vermeden bağlayın.`,
+    action: '> Enter · Devam', hints: 'Enter · Devam · Esc · Sonra · Ctrl+Y kopyala (kart ve seçenekler)' },
+};
+it.each([
+  ['en', 'outside-a/chat-model', ['outside-a', 'outside-b'], false],
+  ['tr', 'outside-a/chat-model', ['outside-a', 'outside-b'], false],
+  ['en', 'inside-a/chat-model', ['outside-b'], true],
+  ['tr', 'inside-a/chat-model', ['outside-b'], true],
+] satisfies [keyof typeof reopenModelCopy, string, string[], boolean][])('CARD-156: reopened model card in %s with %s selected', async (locale, selection, externalConnections, modelUsable) => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  const current = { ...observation, model: { connections: 2, selection, externalConnections } };
+  const plan = planSetup(current, undefined, new SetupStageRegistry(), { phase: 'onboarding' });
+  const observe = vi.fn(async () => ({ ...snapshot, observation: current, plan, modelUsable,
+    deferred: ['onboarding:first-task:done'], budget: { ...snapshot.budget, needed: false } }));
+  const port = { observe, assertPerson: async () => {} } as OnboardingPort;
+  const controller = new AbortController(), copy = reopenModelCopy[locale];
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 240, rows: 40 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const run = runOnboardingSession(port, { locale } as never,
+    { locale, env: personEnv({ TERM: 'xterm-256color' }), stdin: stdin as never, stdout: stdout as never, signal: controller.signal }, true);
+  try {
+    await until(() => frame.includes(copy.hints), copy.title);
+    const lines = stripVTControlCharacters(frame).split('\n').map(line => line.trim()).filter(Boolean);
+    expect(lines).toEqual([copy.step, copy.title, `${copy.selected} ${selection}.`, copy.reason,
+      ...externalConnections.flatMap(id => [id, copy.next(id)]), copy.action, copy.hints]);
+    expect(observe).toHaveBeenCalledTimes(1);
+  } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
 });
 
 it('U6-S4: image consent immediately follows work choice, offers verified adoption first (highlighted, owner 2026-10-26) and preserves missing-only repair', async () => {
