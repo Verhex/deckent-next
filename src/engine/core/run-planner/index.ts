@@ -315,7 +315,10 @@ export class BrainPlanApplication {
     assertPin?.();
     // Approval-time verification keeps only the selected draft and receipt, without capturing the native result.
     const sourceText = propose ? this.ports.text(result) : null;
-    const assertSource = (value: RunProposal, known: KnownSecretSnapshot) => assertRunProposalSource(value, receipt, sourceText, known);
+    const assertSource = (value: RunProposal, known: KnownSecretSnapshot) => {
+      if (sourceText !== null && redactForRecord(sourceText, known) !== sourceText) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+      assertRunProposalSource(value, receipt, sourceText, known);
+    };
     const recorded = await (propose ? propose(proposal, receipt, assertSource) : this.ports.propose(proposal));
     return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
