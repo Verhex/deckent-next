@@ -311,9 +311,11 @@ export class BrainPlanApplication {
         requestDigest: receipt.request.requestDigest, activationRevision: receipt.activationRevision, bindingDigest: receipt.request.expectedBinding.digest,
         inputSummary: prompt.intent.slice(0, limit), outputSummary: redactForRecord(JSON.stringify(draft), this.ports.knownSecrets).slice(0, limit),
         usage: usage.success ? { inputTokens: usage.data.prompt_tokens, outputTokens: usage.data.completion_tokens, totalTokens: usage.data.total_tokens } : null } } };
-    const assertSource = (value: RunProposal, known: KnownSecretSnapshot) => assertRunProposalSource(value, receipt, this.ports.text(result), known);
     assertActive(signal);
     assertPin?.();
+    // Approval-time verification keeps only the selected draft and receipt, without capturing the native result.
+    const sourceText = propose ? this.ports.text(result) : null;
+    const assertSource = (value: RunProposal, known: KnownSecretSnapshot) => assertRunProposalSource(value, receipt, sourceText, known);
     const recorded = await (propose ? propose(proposal, receipt, assertSource) : this.ports.propose(proposal));
     return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;

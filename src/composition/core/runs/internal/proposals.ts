@@ -15,22 +15,11 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
   return propose(projectRoot, input, options);
 }
 type AssertTurnSource = (value: RunProposal, known: ReturnType<typeof getConfigKnownSecrets>) => void;
-/** Both sends use the same immutable proposal. Consume its private draft check once, then recheck only actor-authorized retention. */
+/** Both sends verify the same proposal against the masking snapshot loaded for that send. */
 export function bindConfiguredTurnProposal(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
   inspect: InspectPlanningSpending, assertSource: AssertTurnSource) {
   const proposal = parseRunProposal(input);
-  let check: AssertTurnSource | undefined = assertSource, verified = false;
-  const verify: AssertTurnSource = (value, known) => {
-    if (check) {
-      const first = check; check = undefined;
-      first(value, known); verified = true;
-    }
-    if (!verified) throw queryFailure({ code: 'RUN_PROPOSAL_SOURCE_INVALID' });
-  };
-  return async () => {
-    try { return await propose(projectRoot, proposal, options, { inspect, verify }); }
-    finally { check = undefined; }
-  };
+  return () => propose(projectRoot, proposal, options, { inspect, verify: assertSource });
 }
 async function propose(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
   turnSource?: { inspect: InspectPlanningSpending; verify: AssertTurnSource }) {

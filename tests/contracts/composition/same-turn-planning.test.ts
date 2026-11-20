@@ -15,7 +15,7 @@ import { inspectConfiguredModelInvocation } from '#composition/core/model-invoca
 import { createServiceSameTurnPlanning, planServiceRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadProposalViews } from '#surfaces/index.js';
-import { clearConfigCache, sha256 } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigReadPath, sha256 } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { personEnv } from '../support/person-env.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
@@ -34,7 +34,7 @@ const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 const RAW = 'fixture-private-native-body-marker';
 type Card = Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
-type Outcome = 'allow' | 'deny' | 'refuse' | 'lost' | 'corrupt' | 'cancel-card';
+type Outcome = 'allow' | 'deny' | 'refuse' | 'lost' | 'corrupt' | 'cancel-card' | 'masking-changed';
 
 async function recording(cli: 'codex' | 'claude') {
   const dir = new URL('../../fixtures/same-turn-planning/' + cli + '/recorded/', import.meta.url);
@@ -66,6 +66,14 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] },
   } });
   cleanups.push(f.close);
+  const approval = decision === 'masking-changed' ? 'allow' : decision;
+  let maskingValue = 'synthetic-unused-value';
+  if (decision === 'masking-changed') {
+    const globalPath = await resolveGlobalConfigReadPath(f.options.env);
+    const globalConfig = JSON.parse(await readFile(globalPath, 'utf8'));
+    await writeFile(globalPath, JSON.stringify({ ...globalConfig, projectName: '$DECK:PLAN_MASKING_FIXTURE' }));
+    Object.assign(f.options, { secretResolver: async (name: string) => name === 'PLAN_MASKING_FIXTURE' ? maskingValue : undefined });
+  }
   const profile = modelInvocationProfileSchema.parse(f.config.provider_invocation_profiles.profiles[0]), entry = nativeCliAgent(family)!;
   expect(f.config.provider_invocation_profiles.profiles).toHaveLength(1);
   expect(profile.billingAxis).toBe('subscription'); expect(profile.allocation.maxInFlight).toBe(1);
@@ -253,19 +261,24 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
         });
         await retain('pending', event);
         if (decision === 'cancel-card') { abort.abort(); return; }
-        if (decision !== 'allow' && decision !== 'deny') throw new Error('UNEXPECTED_APPROVAL');
+        if (approval !== 'allow' && approval !== 'deny') throw new Error('UNEXPECTED_APPROVAL');
+        if (decision === 'masking-changed') {
+          expect(selected).toBe(1);
+          maskingValue = 'Durable business readback';
+          expect(draft).toContain(maskingValue);
+        }
         // The person answers over the runtime's separate decision request, outside the chat's MCP callback.
         const decided = await withLocalPrincipalChannel(undefined, () => configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', commandId: 'person-answer', approvalId: event.approvalId,
-          expectedRevision: event.revision, decision, reason: 'Fixture person decision', channel: 'local-terminal-card', decisionCapability: event.decisionCapability },
+          expectedRevision: event.revision, decision: approval, reason: 'Fixture person decision', channel: 'local-terminal-card', decisionCapability: event.decisionCapability },
         f.options, peer, undefined, {}, host.decisions, host.answers), peer);
-        expect(decided).toMatchObject({ status: 'decided', decision: { decision, actor: { issuer: owner.issuer, subject: owner.subject } } });
+        expect(decided).toMatchObject({ status: 'decided', decision: { decision: approval, actor: { issuer: owner.issuer, subject: owner.subject } } });
       })().catch(error => { cardError = error; abort.abort(); });
     },
   }).finally(async () => { await answered; await host.mcp.close(); });
   if (cardError) throw cardError;
   if (card) await retain(decision, card);
   const cards = events.filter(event => event.kind === 'approval.requested');
-  const shouldCard = decision === 'allow' || decision === 'deny' || decision === 'cancel-card';
+  const shouldCard = approval === 'allow' || approval === 'deny' || decision === 'cancel-card';
   if (shouldCard && !cards.length && trace.some(row => row['event'] === 'claim-refused')) {
     expect(trace.filter(row => row['event'] === 'claim-register-attempt')).toHaveLength(2);
     expect(trace.filter(row => row['event'] === 'claim-attempt')).toHaveLength(2);
@@ -286,8 +299,8 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
   snapshot(f.path, db => {
     const proposals = db.prepare('SELECT record FROM run_proposals').all();
     expect(proposals).toHaveLength(shouldCard ? 1 : 0);
-    expect(db.prepare('SELECT command FROM run_receipts').all()).toHaveLength(decision === 'allow' ? 1 : 0);
     expect(db.prepare('SELECT snapshot FROM runs').all()).toHaveLength(decision === 'allow' ? 1 : 0);
+    expect(db.prepare('SELECT command FROM run_receipts').all()).toHaveLength(decision === 'allow' ? 1 : 0);
     const [response] = db.prepare('SELECT record FROM model_invocation_contents').all();
     const { response: stored } = JSON.parse(String(response?.record));
     expect(stored.native.choices[0].message.content).toBe(draft);
@@ -302,7 +315,8 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     expect(sinks).not.toContain(RAW);
     expect(JSON.stringify({ result, events, turn })).not.toContain("DECKENT-PLAN-CHALLENGE/1 ");
     if (shouldCard) {
-      const { proposal } = JSON.parse(String(proposals[0]?.record));
+      const { proposal, status, reason } = JSON.parse(String(proposals[0]?.record));
+      if (decision === 'masking-changed') expect({ status, reason }).toEqual({ status: 'rejected', reason: 'RUN_PROPOSAL_SOURCE_INVALID' });
       expect(proposal.graph).toEqual(JSON.parse(draft).graph);
       expect(proposal.source).toMatchObject({ kind: 'model', receipt: { reference: f.reference },
         contribution: { schemaVersion: 2, billingAxis: 'subscription' } });
@@ -314,6 +328,10 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
   });
   if (decision === 'cancel-card') {
     expect(events).toContainEqual(expect.objectContaining({ kind: 'approval.settled', outcome: 'cancelled' }));
+  }
+  if (decision === 'masking-changed') {
+    expect(events).toContainEqual(expect.objectContaining({ kind: 'approval.settled', outcome: 'allow' }));
+    expect(result).toMatchObject({ finish: 'error', note: 'The plan could not be completed in this chat turn. No Run was started by this proposal. Ask again in chat, or use /do to request a separate plan.' });
   }
   if (decision === 'allow' || decision === 'deny') {
     const restarted = createHost(), replayEvents: AgentTurnStreamEvent[] = [];
@@ -342,6 +360,10 @@ for (const [cli, decision] of [['codex', 'allow'], ['claude', 'deny']] as const)
     await run(cli, decision);
   }, 45_000);
 }
+
+it.skipIf(process.platform !== 'linux')('approval refuses a draft that current masking would change without a second body read or model call', async () => {
+  await run('codex', 'masking-changed');
+}, 45_000);
 
 it.skipIf(process.platform !== 'linux')('private read denial, lost connection and corrupt body stop before proposal, and cancellation stops at an open card', async () => {
   for (const decision of ['refuse', 'lost', 'corrupt', 'cancel-card'] as const) {
