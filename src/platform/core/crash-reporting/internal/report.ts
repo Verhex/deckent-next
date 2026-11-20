@@ -16,6 +16,8 @@ export function formatHumanError(error: DeckentError, options: ColorOptions & { 
   let heading = t('error.heading', { message: localized?.message ?? error.message, code: error.code }, locale);
   if (colorTier(options) !== 'none') heading = `\x1b[31m${heading}\x1b[0m`;
   const lines = [heading];
+  const files = options.isTTY && process.stdin.isTTY ? ErrorRegistry.localHeadlessPathDetail(error, locale) : undefined;
+  if (files) lines.push(files);
   const suggestion = localized?.suggestion ?? error.suggestion;
   if (suggestion) lines.push(t('error.suggestion', { text: suggestion }, locale));
   const whatHappened = localized?.whatHappened ?? error.whatHappened;

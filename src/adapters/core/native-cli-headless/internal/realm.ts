@@ -2,7 +2,7 @@ import { isCodedError } from '#platform/index.js';
 import type { Dir } from 'node:fs';
 import { constants } from 'node:fs';
 import { access, mkdtemp, open, opendir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { headlessEgressSchema, headlessEgressReasons, nativeCliIdSchema, type HeadlessEgress } from '#domain/index.js';
 import type { BubblewrapCapability } from '#adapters/core/host-shell/index.js';
@@ -11,6 +11,7 @@ import { runNodeProcess, type ProcessCommand, type ProcessEvidence, type Process
 import { isolatedProcessCommand, verifyBubblewrapLauncher } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { refuse } from './contract.js';
 import type { HeadlessEntry } from './env.js';
+import { headlessExecutableRefusal, pinHeadlessExecutable, type HeadlessExecutable } from './executable.js';
 import { withLoginLock } from './login-lock.js';
 
 /** S3-5: the host's bubblewrap measurement the realm launches with (composition: the service's own, under the global state root). */
@@ -18,9 +19,12 @@ export type HeadlessIsolation = () => Promise<BubblewrapCapability>;
 /** The launcher identity a passing check sealed (preflight record and doctor). */
 export type HeadlessIsolationSeal = Readonly<{ launcher: string; version: string }>;
 /** What bubblewrap and the relay print when the realm itself could not start (never the CLI's own output); f5: the limiter's own refusal too. */
+const FD_BIND_CHANGED = /^bwrap: (?:Race condition binding dirfd|Can't find source path \/proc\/self\/fd\/3:)/u;
 const REALM_FAILURE = /^(?:bwrap|deckent-relay|prlimit): /u, LIMITS_FAILURE = /^(?:deckent-relay: limits|prlimit: )/u;
 /** `/proc/<pid>/stat` CPU fields count USER_HZ ticks, fixed at 100 in the Linux ABI (proc(5)). */
 const USER_HZ = 100;
+const RELAY_STATUS = 204;
+const PROGRAM_FD = 3;
 /** f5: which realm bound stopped the CLI (its reserved relay exit code), or null. */
 type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
 
@@ -77,8 +81,13 @@ server.listen(c.port, c.host, () => {
     const near = (value, bound) => value * 1000 >= bound * c.permille, abnormal = !interrupted && signal !== 'SIGINT' && signal !== 'SIGTERM' && (signal !== null || code >= 128);
     const cause = abnormal && (signal === 'SIGXCPU' || (signal === 'SIGKILL' && near(peak.cpuTicks, peak.cpuLimit * c.ticks))) ? 'cpu-time'
       : abnormal && near(peak.tasks, peak.processes) ? 'processes' : abnormal && near(peak.data, peak.dataLimit) ? 'memory' : null;
+    if (cause) process.exit(c.exits[cause]);
+    if (c.versionProbe && (signal || code === c.statusExit || Object.values(c.exits).includes(code))) {
+      fs.writeSync(2, '\ndeckent-relay-status: ' + (signal ?? code) + '\n');
+      process.exit(c.statusExit);
+    }
     const mirrored = code ?? 128 + (constants.signals[signal] ?? 0);
-    process.exit(cause ? c.exits[cause] : Object.values(c.exits).includes(mirrored) ? 1 : mirrored);
+    process.exit(Object.values(c.exits).includes(mirrored) ? 1 : mirrored);
   });
 });`;
 
@@ -122,7 +131,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
   return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
 }
 
-export type HeadlessSpawn = Readonly<{ executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
+export type HeadlessSpawn = Readonly<{ executable: string; program: HeadlessExecutable; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
   promptFile?: string | undefined; mcpConfigFile?: string | undefined; mcp?: Parameters<typeof openNativeEgressGateway>[0]['mcp']; now: () => number }>;
 /** f5: the connection's refusal record beside `preflight.json` (doctor reads it without a spawn). */
 export const HEADLESS_EGRESS_RECORD = 'egress.json';
@@ -177,6 +186,12 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
   const seal = await headlessIsolationSeal(isolation), realm = entry.headless.isolation, provider = nativeCliIdSchema.safeParse(entry.id);
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
+  const { program } = spawn, packageRoot = program.packageRoot;
+  const contains = (outer: string, inner: string) => inner === outer || inner.startsWith(outer + sep);
+  if (spawn.executable !== program.executable) headlessExecutableRefusal('executable-changed', program.chosen, program.executable);
+  if (packageRoot && [spawn.configDir, spawn.runDir].some(path => contains(path, packageRoot) || contains(packageRoot, path)))
+    headlessExecutableRefusal('npm-payload-unverified', program.chosen);
+  let file: Awaited<ReturnType<typeof pinHeadlessExecutable>> | undefined;
   let scratch: string | undefined, gateway: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
   try {
     // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
@@ -185,24 +200,33 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
     const limiter = await realpath(caps.limiter).catch(() => null);
     if (!limiter || !await access(limiter, constants.X_OK).then(() => true, () => false)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
+    if (packageRoot && [node, limiter].some(path => contains(packageRoot, path)))
+      headlessExecutableRefusal('npm-payload-unverified', program.chosen);
     gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir, ...(spawn.mcp ? { mcp: spawn.mcp } : {}) }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
     const cpu = `${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`, egress = nativeEgressLimits();
+    const versionProbe = spawn.args === entry.headless.preflight.versionArgs;
     const relay = JSON.stringify({ socket: realm.socketPath, host: realm.proxy.host, port: realm.proxy.port, connections: egress.connections, idleMs: egress.idleMs,
       cpu, processes: `${caps.processes}:${caps.processes}`, data: `${caps.dataBytes}:${caps.dataBytes}`, ticks: USER_HZ,
-      sampleMs: caps.sampleMs, permille: caps.attributionPermille, exits: caps.exits });
+      sampleMs: caps.sampleMs, permille: caps.attributionPermille, exits: caps.exits, statusExit: RELAY_STATUS, versionProbe });
+    file = await pinHeadlessExecutable(entry, program);
     const command = isolatedProcessCommand({ shell: realm.shell, launcher: seal.path, fileSizeBlocks: realm.limits.fileSizeBlocks, openFiles: realm.limits.openFiles,
-      view: { workDir: spawn.runDir, workFiles: [spawn.promptFile, spawn.mcpConfigFile].filter((file): file is string => file !== undefined), executables: [...new Set([spawn.executable, node, limiter])], stateDir: spawn.configDir,
+      view: { workDir: spawn.runDir, workFiles: [spawn.promptFile, spawn.mcpConfigFile].filter((file): file is string => file !== undefined), executables: [...new Set([node, limiter])],
+        pinnedExecutable: { fd: PROGRAM_FD, target: spawn.executable, ...(packageRoot ? { hideDirectory: packageRoot } : {}) }, stateDir: spawn.configDir,
         stateMasks: masks, stateCopies: masks.copies, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },
       command: [limiter, `--cpu=${cpu}`, `--nproc=${caps.processes}`, `--data=${caps.dataBytes}`, '--', node, '-e', RELAY, relay, spawn.executable, ...spawn.args] });
     if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
     const evidence = await runNodeProcess({ schemaVersion: 2, requestId: randomUUID(), executable: command.executable, args: [...command.args], cwd: spawn.runDir, env: spawn.env,
-      ...bounds }, signal, onLine);
+      ...bounds }, signal, onLine, file.fd);
     const summary = gateway.egress();
     await recordEgress(spawn.stateDir, summary, spawn.now, egress.refusedHostsMax).catch(() => undefined);
     const stderr = evidence.reason === 'exit' && evidence.exitCode !== 0 ? Buffer.from(evidence.stderrBase64, 'base64').toString('utf8') : '';
+    if (FD_BIND_CHANGED.test(stderr)) headlessExecutableRefusal('executable-changed', program.chosen, program.executable);
     if (LIMITS_FAILURE.test(stderr)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
     if (REALM_FAILURE.test(stderr)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'realm' });
     const limit = evidence.reason === 'exit' ? (Object.entries(caps.exits) as [HeadlessLimit, number][]).find(([, code]) => code === evidence.exitCode)?.[0] ?? null : null;
-    return { ...evidence, egress: summary, limit };
-  } finally { try { await gateway?.close(); } finally { if (scratch) await rm(scratch, { recursive: true, force: true }); } }
+    const status = versionProbe && evidence.reason === 'exit' && evidence.exitCode === RELAY_STATUS ? /\ndeckent-relay-status: (SIG[A-Z0-9]+|\d{1,3})\n$/u.exec(stderr) : null;
+    const result = !status ? evidence : { ...evidence, stderrBase64: Buffer.from(stderr.slice(0, status.index)).toString('base64'),
+      ...(/^SIG/u.test(status[1]!) ? { reason: 'signal' as const, exitCode: null, signal: status[1]! } : { exitCode: Number(status[1]) }) };
+    return { ...result, egress: summary, limit };
+  } finally { try { await file?.close(); } finally { try { await gateway?.close(); } finally { if (scratch) await rm(scratch, { recursive: true, force: true }); } } }
 }

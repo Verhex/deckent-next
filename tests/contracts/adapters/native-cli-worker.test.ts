@@ -326,7 +326,7 @@ async function transportFixture(family: string) {
       stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
   });
   const transport: NativeCliWorkerTransport = { profile,
-    preflight: vi.fn(async () => ({ execution: seal, preflight: { executable: seal.executable, version: seal.cliVersion, flagSetDigest: seal.flagSetDigest,
+    preflight: vi.fn(async () => ({ execution: seal, preflight: { executable: seal.executable, program: { chosen: seal.executable, executable: seal.executable, identity: 'synthetic', fileStamp: 'synthetic', size: 0, mtimeMs: 0 }, version: seal.cliVersion, flagSetDigest: seal.flagSetDigest,
       runDir: stateDir, env: {}, isolation: { launcher: '/synthetic/bwrap', version: 'synthetic' } } })),
     claudeDriver: vi.fn(options => ({ ...options.port, signal: new AbortController().signal, line() {}, finish: () => ({ kind: 'completed', text: 'answer' }) })),
     runIsolated: isolated };

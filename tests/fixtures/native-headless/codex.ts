@@ -1,7 +1,7 @@
 // A scripted fake Codex CLI for the headless step (no real CLI, no model call): `--version`, `exec --help`, `[-c k=v] login [status]` and one
 // `exec --json` call replaying `codex exec --json` lines (shapes from tests/fixtures/native-codex/exec-0.163.0-ok.stdout.jsonl).
-import { chmod, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { chmod, mkdir, rename, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 export const CODEX_FAMILY = registry.adapters.codex.headless.protocolFamily;
@@ -13,6 +13,8 @@ export const codexAnswer = (text: string): Line[] => [{ type: 'thread.started', 
 /** `login`: what `login status` reports (`chatgpt` | `api-key` | `none`); `authFromLogin`: ChatGPT exactly when `login` wrote auth.json. */
 export interface FakeCodexScenario { readonly logPath: string; readonly version?: string; readonly login?: 'chatgpt' | 'api-key' | 'none'; readonly authFromLogin?: boolean;
   readonly installationId?: string | undefined;
+  readonly versionExit?: number; readonly versionSignal?: NodeJS.Signals; readonly versionStderr?: string;
+  readonly probe?: { readonly absent: readonly string[]; readonly readOnly: string };
   readonly steps?: readonly ({ line: Line | string } | { exit: number } | { stderr: string })[] }
 /** Help naming every option the registry's call uses, the way `codex exec --help` (0.166.0) lists them. */
 export function codexHelp(): string {
@@ -24,10 +26,16 @@ export async function writeFakeCodexCli(dir: string, scenario: FakeCodexScenario
   const path = join(dir, 'fake-codex'), config = { version: 'codex-cli 9.1.0', help: codexHelp(), login: 'chatgpt', steps: [], ...scenario };
   const script = `#!${process.execPath}
 const fs = require('node:fs'), p = require('node:path'); const s = ${JSON.stringify(config)}; let argv = process.argv.slice(2); const all = argv;
-const log = entry => { try { fs.appendFileSync(s.logPath, JSON.stringify({ argv: all, env: { ...process.env }, cwd: process.cwd(), ...entry }) + '\\n'); } catch { /* Not visible. */ } };
+const log = entry => { try { fs.appendFileSync(s.logPath, JSON.stringify({ program: process.argv[1], argv: all, env: { ...process.env }, cwd: process.cwd(), ...entry }) + '\\n'); } catch { /* Not visible. */ } };
 while (argv[0] === '-c') argv = argv.slice(2);
 const auth = () => p.join(process.env.CODEX_HOME, 'auth.json');
-if (argv[0] === '--version') { log({ mode: 'version' }); process.stdout.write(s.version + '\\n'); process.exit(0); }
+if (argv[0] === '--version') {
+  let mode;
+  if (s.probe) { try { fs.closeSync(fs.openSync(s.probe.readOnly, 'r+')); mode = 'writable'; } catch (error) { mode = error.code; } }
+  log({ mode: 'version', visibility: s.probe?.absent.map(path => fs.existsSync(path)), writeAccess: mode });
+  if (s.versionSignal) process.kill(process.pid, s.versionSignal);
+  process.stdout.write(s.version + '\\n'); if (s.versionStderr) process.stderr.write(s.versionStderr); process.exit(s.versionExit ?? 0);
+}
 if (argv[0] === 'exec' && argv[1] === '--help') { log({ mode: 'help' }); process.stdout.write(s.help); process.exit(0); }
 if (argv[0] === 'login' && argv[1] === 'status') { log({ mode: 'auth' }); const kind = s.authFromLogin ? (fs.existsSync(auth()) ? 'chatgpt' : 'none') : s.login;
   process.stderr.write(kind === 'chatgpt' ? 'Logged in using ChatGPT\\n' : kind === 'api-key' ? 'API key configured - sk-proj-***\\nAuthentication is checked when you send a request.\\n' : 'Not logged in\\n');
@@ -50,4 +58,25 @@ const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); proces
 `;
   await writeFile(path, script, { mode: 0o700 }); await chmod(path, 0o700);
   return path;
+}
+
+export async function fakeCodexNpm(prefix: string, scenario: FakeCodexScenario, checkVisibility = false) {
+  const root = join(prefix, 'lib/node_modules/@openai/codex'), launcher = join(root, 'bin/codex.js'), chosen = join(prefix, 'bin/codex');
+  const platform = '@openai/codex-linux-x64', platformRoot = join(root, 'node_modules', platform);
+  const payload = join(platformRoot, 'vendor/x86_64-unknown-linux-musl/bin/codex'), version = '0.169.0';
+  await mkdir(dirname(chosen), { recursive: true });
+  await mkdir(dirname(launcher), { recursive: true });
+  await mkdir(dirname(payload), { recursive: true });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@openai/codex', version, bin: { codex: 'bin/codex.js' },
+    optionalDependencies: { [platform]: `npm:@openai/codex@${version}-linux-x64` } }));
+  await writeFile(join(platformRoot, 'package.json'), JSON.stringify({ name: '@openai/codex', version: `${version}-linux-x64` }));
+  await writeFile(launcher, `#!/usr/bin/env node
+const child = require('node:child_process').spawnSync(require('node:path').join(__dirname, ${JSON.stringify(relative(dirname(launcher), payload))}),
+  process.argv.slice(2), { stdio: 'inherit' });
+process.exit(child.status ?? 91);
+`, { mode: 0o755 });
+  await symlink(relative(dirname(chosen), launcher), chosen);
+  const probe = checkVisibility ? { absent: [chosen, launcher, join(root, 'package.json'), join(platformRoot, 'package.json')], readOnly: payload } : undefined;
+  await rename(await writeFakeCodexCli(dirname(payload), { ...scenario, ...(probe ? { probe } : {}) }), payload);
+  return { chosen, launcher, payload, platformRoot, root };
 }

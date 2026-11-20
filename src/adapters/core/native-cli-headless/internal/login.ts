@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { nativeCliAgent, nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { refuse } from './contract.js';
 import { headlessExecutable } from './connect.js';
+import { resolveHeadlessExecutable } from './executable.js';
 import { buildHeadlessEnv, headlessLoginEnv } from './env.js';
 import { loginRecordPath, withLoginLock } from './login-lock.js';
 import { emptyRunDir, headlessAuth, privateDir } from './preflight.js';
@@ -43,7 +44,8 @@ export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<Headl
   const record = loginRecordPath(input.configDir, input.stateDir), temporary = `${record}.${randomUUID()}.tmp`;
   await writeFile(temporary, JSON.stringify({ schemaVersion: 1, atMs: input.now(), exit }), { mode: 0o600, flag: 'wx' }); await rename(temporary, record);
   await emptyRunDir(runDir);
-  const status = await runHeadlessIsolated(entry, input.isolation, { executable, args: headless.preflight.authStatusArgs, env: buildHeadlessEnv(headless, runDir, input.configDir),
+  const program = await resolveHeadlessExecutable(entry, executable, uid);
+  const status = await runHeadlessIsolated(entry, input.isolation, { executable: program.executable, program, args: headless.preflight.authStatusArgs, env: buildHeadlessEnv(headless, runDir, input.configDir),
     stateDir: input.stateDir, runDir, configDir: input.configDir, now: input.now }, { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, input.signal);
   const decoded = (base64: string) => Buffer.from(base64, 'base64').toString('utf8');
   const auth = status.reason === 'exit' && !status.limit ? headlessAuth(headless.auth, { exitCode: status.exitCode, stdout: decoded(status.stdoutBase64), stderr: decoded(status.stderrBase64) }, input.configDir) : null, signedIn = auth?.state === 'signed-in';

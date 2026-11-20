@@ -183,7 +183,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         await emptyRunDir(preflight.runDir);
         await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' });
         // S3-5: the call runs in the realm like every preflight spawn; the prompt file is the only host file it sees in its private run dir.
-        evidence = await runHeadlessIsolated(prepared.entry, options.isolation, { executable: preflight.executable,
+        evidence = await runHeadlessIsolated(prepared.entry, options.isolation, { executable: preflight.executable, program: preflight.program,
           args: headlessArgv(prepared.entry, preflight.runDir, prepared.model, prepared.effortArgs), env: preflight.env, stateDir: prepared.definition.stateDir,
           runDir: preflight.runDir, configDir: prepared.definition.configDir, promptFile, now: options.now },
         { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,

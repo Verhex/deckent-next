@@ -107,6 +107,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
   const connect = host.providerConnect; let backend = '-', isolation: unknown = null; // PV 2a: the last isolation refusal read for the list
   const subscriptionReadiness = subscriptionReadinessPort(root, scopeId, host, options);
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
+  const connectErrorText = (error: unknown) => [errorText(error), ErrorRegistry.localHeadlessPathDetail(error, locale)].filter(Boolean).join('\n');
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   /** `connected`: the governed connection's own status (R2b), never inferred from the tone of a readiness row. */
   const pullModels = async (kind: ProviderConnectKindView, endpoint: string | null, lines: PanelLine[], workspaceRequired: boolean):
@@ -132,7 +133,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         === referenceKey(row.reference))).map(row => row.availability))) { lines.push({ label: '', text: t('tui.provider.login.brainOnly', {}, locale), tone: 'success' }); return done; }
       lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : t('tui.provider.pull.blocked', { reason: result.status === 'approval-pending' ? result.approval?.approvalId ?? '-' : result.budget?.state === 'missing' ? t('tui.budget.missing', { scope: scopeId }, locale) : t('tui.provider.unavailable', {}, locale) }, locale), tone: usable ? 'success' : 'warning' });
       return done;
-    } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); return { connected: false }; }
+    } catch (error) { lines.push({ label: '', text: connectErrorText(error), tone: 'warning' }); return { connected: false }; }
   };
   /** One governed `models.connect` of a chosen model; PV: a CLI subscription also names its login dir and the person's delegated-use choice. */
   async function connectChosen(request: ProviderModelRequest, extra: Pick<ModelConnectCommand, 'cli' | 'delegate'> = {}): Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null; observationFailed?: true }>> {
@@ -156,7 +157,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       pendingConnections.delete(pendingKey);
       // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
       if (isCodedError(error, 'SECRET_GRANT_REQUIRED')) throw error;
-      return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error), error instanceof DeckentError ? error.params?.['connectPhase'] : undefined); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
+      return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${connectErrorText(error)}` : connectErrorText(error), error instanceof DeckentError ? error.params?.['connectPhase'] : undefined); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
     }
     if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
     while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
@@ -400,7 +401,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     },
     keyName(kind, endpoint) { return connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? null; },
     ...(host.connectModel ? { connectModel: (request: ProviderModelRequest) => connectChosen(request).then(chosen => chosen.outcome) } : {}),
-    ...(host.connectModel && connect.login && connect.loginDir ? { subscription: subscriptionPort({ root, policy: host, scopeId, options, locale, errorText, connect: { ...connect, login: connect.login, loginDir: connect.loginDir },
+    ...(host.connectModel && connect.login && connect.loginDir ? { subscription: subscriptionPort({ root, policy: host, scopeId, options, locale, errorText: connectErrorText, connect: { ...connect, login: connect.login, loginDir: connect.loginDir },
       kindLabel: id => kindLabel(kindOf(id), id, locale), refusal: () => isolation,
       connectModel: (kind, cli, delegate) => connectChosen({ kind, endpoint: null, model: PULL }, { ...(cli ? { cli } : {}), ...(delegate ? { delegate: [...delegate] } : {}) }) }) } : {}),
     get transparency(): readonly PanelLine[] {

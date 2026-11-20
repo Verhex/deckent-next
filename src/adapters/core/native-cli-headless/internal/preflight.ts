@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ProcessEvidence } from '#adapters/core/process-runner/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
@@ -7,13 +7,12 @@ import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation, type HeadlessIsolationSeal } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
+import { headlessExecutableRefusal, resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
 
-/** What a passing preflight proved for one executable state (S7: `executable` is the realpath the connected path resolved to now, the file every spawn
- * binds); the call's init guard compares the reported CLI version with it. */
-export interface HeadlessPreflight { readonly executable: string; readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;
+/** The verified program for this preflight and its caller. Every spawn binds that file and the init guard checks its reported version. */
+export interface HeadlessPreflight { readonly executable: string; readonly program: HeadlessExecutable; readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;
   readonly isolation: HeadlessIsolationSeal }
-/** Per process (every service start re-runs it): keyed by the executable's realpath, size, mtime and inode, config dir, registry revision and the
- * realm's launcher (S3-5: a passing check is always an isolated one). */
+/** Per process. The chosen path, launcher, rule and native file identity must all match a passing isolated check. */
 const passed = new Map<string, HeadlessPreflight>();
 const AUTH_FIELDS = ['loggedIn', 'authMethod', 'apiProvider', 'subscriptionType', 'configDirectory'] as const;
 export async function privateDir(path: string, uid: number): Promise<void> {
@@ -58,16 +57,15 @@ export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Re
 export async function headlessPreflight(entry: HeadlessEntry, definition: NativeCliHeadlessDefinition, now: () => number, isolation: HeadlessIsolation,
   signal?: AbortSignal, agent?: Readonly<{ flagSetDigest: string; requiredFlags: readonly string[] }>): Promise<HeadlessPreflight> {
   if (process.getuid?.() !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
-  // S7 (owner 2026-10-31): the person's path is resolved on every call (a CLI that updates itself moves its realpath); the key below re-runs the check once.
-  const executable = await realpath(definition.executable).catch(() => null), info = executable ? await stat(executable).catch(() => null) : null;
-  if (!executable || !info?.isFile() || (info.mode & 0o111) === 0) refuse('HEADLESS_CLI_UNAVAILABLE');
+  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid), { executable } = program;
+  const versionRefusal = (params: Record<string, string>) => headlessExecutableRefusal('version', program.chosen, executable, params);
   const config = await stat(definition.configDir).catch(() => null);
   if (!config?.isDirectory() || config.uid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
   const { headless, command } = entry, runDir = join(definition.stateDir, 'run'), flagSetDigest = agent?.flagSetDigest ?? headlessFlagSetDigest(entry);
   await privateDir(definition.stateDir, definition.ownerUid); await privateDir(runDir, definition.ownerUid);
   const record = async (body: Record<string, unknown>) => {
     const target = join(definition.stateDir, 'preflight.json'), temporary = `${target}.${randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify({ schemaVersion: 1, checkedAtMs: now(), executable, version: null, flagSetDigest, revision: headless.revision, ...body }), { mode: 0o600, flag: 'wx' });
+    await writeFile(temporary, JSON.stringify({ schemaVersion: 1, checkedAtMs: now(), executable: entry.command.executable, version: null, flagSetDigest, revision: headless.revision, ...body }), { mode: 0o600, flag: 'wx' });
     await rename(temporary, target);
   };
   const closed = async (error: unknown): Promise<never> => {
@@ -79,21 +77,27 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   const seal = await headlessIsolationSeal(isolation).catch(closed), isolated = Object.freeze({ launcher: seal.launcher, version: seal.version });
   // s3c: a sign-in through `models login` since the last check (Deckent's own record, not the login dir) re-runs it: the account may have changed.
   const login = await stat(loginRecordPath(definition.configDir, definition.stateDir)).then(record => [record.ino, record.mtimeMs], () => null);
-  const key = JSON.stringify([executable, info.size, info.mtimeMs, info.ino, definition.configDir, definition.minCliVersion, flagSetDigest, seal.path, seal.version, login]);
+  const revision = headlessExecutableRevision(entry, program);
+  const key = JSON.stringify([revision, definition.stateDir, definition.configDir, definition.minCliVersion, flagSetDigest, seal.path, seal.version, login]);
   const cached = passed.get(key);
   if (cached) return cached;
   const env = buildHeadlessEnv(headless, runDir, definition.configDir);
   const run = async (args: readonly string[], cwd = runDir, spawnEnv = env, configDir = definition.configDir): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
     // No emptying here: another process's preflight must never remove an in-flight call's prompt file (only `send` empties, under maxInFlight).
-    const result = await runHeadlessIsolated(entry, isolation, { executable, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir, now },
+    const result = await runHeadlessIsolated(entry, isolation, { executable, program, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir, now },
       { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
     if (result.limit) refuse('HEADLESS_LIMIT_REACHED', { limit: result.limit });
-    if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'spawn' });
+    if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', {
+      check: result.reason === 'signal' || result.reason === 'cancelled' ? result.reason : 'spawn',
+    });
     return { ...result, stdout: Buffer.from(result.stdoutBase64, 'base64').toString('utf8'), stderr: Buffer.from(result.stderrBase64, 'base64').toString('utf8') };
   };
   try {
-    const versionRun = await run(headless.preflight.versionArgs), version = new RegExp(headless.preflight.versionPattern, 'u').exec(versionRun.stdout.trim())?.[1] ?? null;
-    if (versionRun.exitCode !== 0 || version === null || compareToolchainVersions(version, definition.minCliVersion) < 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'version' });
+    const versionRun = await run(headless.preflight.versionArgs);
+    if (versionRun.exitCode !== 0) versionRefusal({ reason: 'exit', exitCode: String(versionRun.exitCode) });
+    const version = verifiedCliVersion(new RegExp(headless.preflight.versionPattern, 'u').exec(versionRun.stdout.trim())?.[1]);
+    if (version === null) return versionRefusal({ reason: 'unreadable' });
+    if (compareToolchainVersions(version, definition.minCliVersion) < 0) versionRefusal({ reason: 'too-old', version, minimum: definition.minCliVersion });
     const help = (await run(headless.preflight.helpArgs)).stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
     // A hidden flag is proven by the parser refusing a bad value, in an empty temporary config dir: the probe never sees the person's login.
     const accepted = async (probe: NonNullable<ReturnType<typeof hidden.get>>) => {
@@ -110,12 +114,18 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
     if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED');
     if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state === 'config-dir' ? 'config-dir' : 'auth-status' });
-    const sealed = Object.freeze({ executable, version, flagSetDigest, runDir, env, isolation: isolated });
+    const current = await resolveHeadlessExecutable(entry, program.chosen, definition.ownerUid).catch(() => null);
+    if (current?.identity !== program.identity) headlessExecutableRefusal('executable-changed', program.chosen, executable);
+    const sealed = Object.freeze({ executable, program, version, flagSetDigest, runDir, env, isolation: isolated });
     // S7: the version an earlier passing check of this connection proved, kept while it differs (the doctor's "CLI updated A → B" note).
     const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; updatedFrom?: unknown }, () => null);
     const updatedFrom = prior?.state === 'open' && typeof prior.version === 'string' && prior.version !== version ? prior.version : prior?.version === version && typeof prior.updatedFrom === 'string' ? prior.updatedFrom : null;
-    await record({ state: 'open', version, updatedFrom, size: info.size, mtimeMs: info.mtimeMs, isolation: isolated,
+    await record({ state: 'open', executable: program.packageRoot ? entry.command.executable : executable, revision, version, updatedFrom, size: program.size, mtimeMs: program.mtimeMs, isolation: isolated,
       auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: auth.subscriptionType } });
     passed.set(key, sealed); return sealed;
   } catch (error) { return closed(error); }
 }
+
+// The record's existing revision field binds registry semantics to this installation's identity.
+export const headlessExecutableRevision = (entry: HeadlessEntry, program: HeadlessExecutable) => `${entry.headless.revision}:${program.identity}`;
+export const verifiedCliVersion = (input: unknown) => typeof input === 'string' && /^\d{1,9}\.\d{1,9}\.\d{1,9}$/u.test(input) ? input : null;

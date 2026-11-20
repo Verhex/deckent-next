@@ -26,3 +26,4 @@ export { preflightNativeAgent, readNativeAgentObservation } from './internal/age
 export { createNativeAgentDriver } from './internal/agent-driver.js';
 export { nativeAgentLaunch, nativeAgentCorrelationKind, nativeBridgeLimits } from './internal/launch.js';
 export { initGuard as nativeHeadlessInitRefusal } from './internal/port.js';
+export { resolveHeadlessExecutable } from './internal/executable.js';

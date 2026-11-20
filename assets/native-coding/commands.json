@@ -15,6 +15,20 @@
   "adapters": {
     "codex": {
       "executable": "codex",
+      "npmLauncher": {
+        "schemaVersion": 1,
+        "source": "158/G3: npm global @openai/codex 0.169.0 (Linux x64), W17/W17b and ASTRA-3396",
+        "packageName": "@openai/codex",
+        "command": "codex",
+        "packagePath": "lib/node_modules/@openai/codex",
+        "linkPath": "bin/codex",
+        "launcherPath": "bin/codex.js",
+        "platform": "linux",
+        "arch": "x64",
+        "platformPackage": "@openai/codex-linux-x64",
+        "platformPackagePath": "node_modules/@openai/codex-linux-x64",
+        "payloadPath": "vendor/x86_64-unknown-linux-musl/bin/codex"
+      },
       "args": [
         "exec",
         "--json",

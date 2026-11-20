@@ -375,6 +375,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   to you and AI actors; connected MCP clients use that same AI identity. You may restrict use to yourself; background/system
   use needs separate consent. **Connect with an API key** keeps masked entry, custody, grants and priced-call budgets.
   Real-account login and Windows Terminal acceptance still need the assembled-release walk.
+- **Codex CLI installed with npm (beta.2.1):** on Linux x64, the verified global `@openai/codex` layout uses
+  `<prefix>/bin/codex`, the package launcher `bin/codex.js`, and the platform package's
+  `vendor/x86_64-unknown-linux-musl/bin/codex`. Connect keeps the selected path and checks the native executable again
+  before use. Only that executable from the package is available in the isolated CLI process. If your layout differs,
+  select the native CLI file you have verified with `deckent models connect --connection codex-cli-subscription --executable <path>`.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
   codex-cli-subscription` (it runs `codex login` into its own deckent-owned directory, `headless/logins/codex`; `--config-dir` and

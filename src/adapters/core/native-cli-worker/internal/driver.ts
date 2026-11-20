@@ -23,7 +23,7 @@ export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
   preflight(signal: AbortSignal): Promise<{ execution: NativeAgentExecution; preflight: Preflight }>;
   claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
-  runIsolated(entry: Entry, spawn: { executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
+  runIsolated(entry: Entry, spawn: { executable: string; program: Preflight['program']; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
     line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;
 }
@@ -65,7 +65,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
       let refused = false;
-      const evidence = await transport.runIsolated(entry, { ...launch.spawn, executable: checked.preflight.executable, stateDir: input.binding.definition.stateDir,
+      const evidence = await transport.runIsolated(entry, { ...launch.spawn, executable: checked.preflight.executable, program: checked.preflight.program, stateDir: input.binding.definition.stateDir,
         mcp: bridge, now: Date.now }, launch.bounds, AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
         const stop = claude ? claude.line(raw) === 'stop' : !!turn!.line(raw);
         if (stop) { refused = true; return 'stop'; }
