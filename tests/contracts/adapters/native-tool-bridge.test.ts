@@ -50,6 +50,9 @@ it('routes only the exact sentinel; exposes only session tools and sends correla
   const answer = await f.send(rpc(3), { headers }); expect(resultEnvelope(answer)).toMatchObject({ generation: 1, outcome: { text: 'scoped-result' } });
   expect(f.submit).toHaveBeenCalledOnce(); expect(f.submit.mock.calls[0]![1]).toMatchObject({ kind: 'claude-tool-use', toolUseId: 'tool-3' });
   const forbidden = await f.send(rpc(4, 'decide_approval'), { headers }); expect(resultEnvelope(forbidden).outcome.text).toBe('NATIVE_BRIDGE_TOOL_UNKNOWN');
+  expect(jsonMessages(forbidden)[0].result.isError).toBe(true);
+  expect(resultEnvelope(forbidden).outcome.status).toBe('error');
+  expect(f.submit).toHaveBeenCalledOnce();
   expect((await f.send(init, { path: '/mcp' })).status).toBe(403);
   expect((await f.send(init, { path: `${f.bridge.url}?redirect=1` })).status).toBe(403);
   expect((await f.send(init, { path: 'http://foreign.invalid/mcp' })).status).toBe(403);
@@ -66,6 +69,34 @@ it('authenticates before parsing, rejects second initialize/foreign sessions and
   expect((await f.send(rpc(2), { headers: { ...headers, Origin: 'https://foreign.invalid' } })).body).toContain('NATIVE_BRIDGE_ORIGIN_INVALID');
   expect(f.submit).not.toHaveBeenCalled(); expect(f.gateway.mcpStatistics().refused).toBe(4);
   expect((await f.send({ ...rpc(2), id: 'x'.repeat(registry.bridge.frameMaxBytes / 2) }, { headers })).status).toBe(400);
+});
+
+it('refuses a batched POST before any tool execution or plan finalization', async () => {
+  let preparation = false, reply: Answer | undefined;
+  const tools = [{ ...tool, name: 'propose_work' }], finishPlanning = vi.fn(async () => 'proposed');
+  const planning: SameTurnPlanningPort = {
+    get active() { return preparation; }, pin: null, normalClosed: true, beforeTool: vi.fn(),
+    privateResult: () => null, bindNativeSession: vi.fn(), bindDeliveryProjection: vi.fn(), preparationSettled: vi.fn(),
+    preparationDelivered: vi.fn(), terminalEnvelope: vi.fn(), nativeClosed: vi.fn(), responseBody: vi.fn(), abandon: vi.fn(),
+  };
+  const execute = vi.fn(async () => {
+    preparation = true;
+    return { status: 'ok' as const, text: 'prepared' };
+  });
+  const result = await runAgentTurn({ nativeSession: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, approvalTtlMs: 5000, tools },
+    messages: [{ role: 'user', content: 'fixture' }], tools, emit: vi.fn(), signal: new AbortController().signal, language: 'en' }, {
+    planning, finishPlanning, execute, now: Date.now, authorize: async () => 'allow', describe: () => null,
+    invokeRound: async () => { throw new Error('unexpected model round'); },
+    invokeAgent: async ({ session }) => {
+      const f = await fixture({ port: session }), headers = await f.initialize();
+      reply = await f.send([rpc(2, 'propose_work'), rpc(3, 'propose_work')], { headers });
+      return { status: 'responded', content: 'done', reasoning: '', finish: 'stop', toolCalls: [], usage: null };
+    },
+  });
+  expect({ status: reply?.status, executions: execute.mock.calls.length, finalizations: finishPlanning.mock.calls.length })
+    .toEqual({ status: 400, executions: 0, finalizations: 0 });
+  expect(JSON.parse(reply!.body)).toMatchObject({ id: null, error: { data: { reason: 'NATIVE_BRIDGE_REQUEST_INVALID' } } });
+  expect(result).toMatchObject({ finish: 'stop', answer: 'done' });
 });
 
 it('replays a pending and completed call once, refuses changed arguments and never evicts to re-execute', async () => {

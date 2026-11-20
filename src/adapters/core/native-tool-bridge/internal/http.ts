@@ -29,7 +29,10 @@ export async function bridgeBody(request: IncomingMessage, maxBytes: number, cou
     };
     request.on('data', data); request.once('end', end); request.once('error', error); request.once('aborted', aborted);
   });
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))) as unknown;
+  const body: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
+  // The bridge tracks one delivery per POST. Batch members would bypass that binding.
+  if (Array.isArray(body)) throw new CodedError('NATIVE_BRIDGE_REQUEST_INVALID');
+  return body;
 }
 
 /** Hold a complete SSE frame before forwarding it. Backpressure never grows an unbounded queue. */
