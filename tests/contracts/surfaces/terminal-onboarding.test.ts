@@ -283,8 +283,8 @@ it.each([
   try {
     await until(() => frame.includes(copy.hints), copy.title);
     const lines = stripVTControlCharacters(frame).split('\n').map(line => line.trim()).filter(Boolean);
-    expect(lines).toEqual([copy.step, copy.title, `${copy.selected} ${selection}.`, copy.reason,
-      ...externalConnections.flatMap(id => [id, copy.next(id)]), copy.action, copy.hints]);
+    expect(lines).toEqual([copy.step, copy.title, `${copy.selected} ${selection}.`,
+      ...externalConnections.flatMap(id => [`${id} · ${copy.reason}`, copy.next(id)]), copy.action, copy.hints]);
     expect(observe).toHaveBeenCalledTimes(1);
   } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
 });
