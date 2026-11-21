@@ -41,11 +41,13 @@ it('workers list prints one model row per pinned worker in en and tr, and JSON c
   expect(english.text).toContain('  Task t: Model on claude-cli-subscription: requested claude-sonnet-5-5 (declared auxiliary: claude-haiku-4-5-20251001) → init claude-sonnet-5-5'
     + ' → usage claude-sonnet-5-5, claude-opus-5-5 → SUBSTITUTED (undeclared model; attempt not accepted) [sealed log] · undeclared models used: claude-opus-5-5');
   expect(english.text).toContain('  Task u: Model on codex-cli: requested gpt-exact-1 (declared auxiliary: none) → init none → usage none → unverified [sealed log]');
+  expect(english.text).toContain('requested model gpt-exact-1; its use could not be verified');
   expect(english.text).not.toContain('Task plain:');
   const turkish = await run(['workers', 'watch', '--scope', 's', '--verbose', '--samples', '1', '--lang', 'tr'], handlers, root);
   expect(turkish.text).toContain('  Görev t: claude-cli-subscription kanalında model: istenen claude-sonnet-5-5');
   expect(turkish.text).toContain('İKAME EDİLDİ (beyan edilmemiş model; deneme kabul edilmez) [mühürlü günlük] · beyan edilmemiş kullanılan modeller: claude-opus-5-5');
   expect(turkish.text).toContain('→ doğrulanmadı [mühürlü günlük]');
+  expect(turkish.text).toContain('istenen model gpt-exact-1; kullanıldığı doğrulanamadı');
   const json = await run(['workers', 'list', '--scope', 's', '--json'], handlers, root);
   expect(JSON.parse(json.text).sources[0].workers.map((worker: { model?: unknown }) => worker.model ?? null)).toEqual([substituted, codex, null]);
 });

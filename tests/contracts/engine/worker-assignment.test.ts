@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { parseProviderCatalogDocument, readWorkerModelPin, type CatalogModel, type ExecutionProfileDefinition, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
-import { assertRunExecution, assignTaskWorker, composeModelRolePolicy, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
+import { assertRunExecution, inspectWorkerReadiness, assignTaskWorker, composeModelRolePolicy, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
 import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeWorkerEffortCapability } from '#adapters/index.js';
 
 // ATAMA-1 (owner ASS1, A1, A5): a work input without a model gets its worker from the task's WorkClass candidate list, through the same
@@ -190,4 +190,16 @@ it('the approval card shows the assigned worker, its effort and the list positio
   const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-2', auxiliaryModelIds: [] } }));
   const pinnedExecution = await resolveWorkerEffortExecution(pinned, registry(), reader, validation, compiler, context());
   expect(renderRunCreateApprovalSummary({ ...command, graph: pinned as never }, { ...create, graph: pinned as never, execution: pinnedExecution }, verdict, 'en')).not.toContain('worker:');
+});
+
+
+it('D2 F1 readiness stays on the first-job kind when another profile is eligible', async () => {
+  const { reader } = await catalog({ 's/claude-cli-subscription': [], 's/codex-cli-subscription': ['gpt-6-luna'] });
+  const data = registry(); data.kinds[1]!.kind = 'review';
+  const readiness = await inspectWorkerReadiness(data as never, data.profiles.map(profile => ({ profile: profile as never, provider: (profile.parameters.invocation as { provider: string }).provider })),
+    reader, context(), (value, work, evidence) => compileNativeCodingWorkInput(value, work, undefined, evidence), async () => true, 'coding');
+  expect(readiness).toMatchObject({ ready: false, code: 'WORKER_MODEL_NOT_ACTIVE' });
+  await expect(inspectWorkerReadiness(data as never, [], reader, context(), compiler.compile, async () => true, 'coding')).resolves.toBeNull();
+  await expect(assignTaskWorker({ id: 'first', kind: 'coding', workClass: 'small' }, input() as never, data.profiles[0] as never, undefined, reader,
+    (value, work) => compileNativeCodingWorkInput(value, work), context())).rejects.toMatchObject({ code: 'WORKER_ASSIGNMENT_NONE' });
 });

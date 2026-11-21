@@ -298,7 +298,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, true)}${check ? ` (${check})` : ''}` : null; };
+        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, true, check)}${check ? ` (${check})` : ''}` : null; };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.

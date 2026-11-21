@@ -163,9 +163,13 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
               return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
-            if (stopped || refusal) {
-              refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
-              return rejectResult(stopped ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
+            const stoppedTurn = stopped as Refusal | null; // The line callback owns this typed refusal.
+            if (stoppedTurn || refusal) {
+              if (!stoppedTurn || stoppedTurn.body.refusal === 'guard') {
+                refusal ??= 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
+                refusalCheck = stoppedTurn && 'field' in stoppedTurn.body ? stoppedTurn.body.field ?? 'guard' : 'proposal-order';
+              }
+              return rejectResult(stoppedTurn ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
             }
             if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
             if (evidence.limit || evidence.reason === 'output-limit' || evidence.reason === 'line-limit' || evidence.stdoutTruncated || evidence.stderrTruncated)

@@ -124,7 +124,7 @@ After setup-node, the workflow canonicalizes only the OS temporary parent into T
 Vitest, standalone host node:test and native children then allocate fixtures under the same real path.
 Explicit product roots and the managed-file symlink/permission floor remain unchanged.
 The existing job bound stays 30 minutes; verify has a 20-minute step bound, preserving time for always-run summary
-and SHA-pinned official upload-artifact v7.0.1 (current sharded workflow: prepare 8, test shard 6, required verify 3 minutes). Host node:test replaces Infinity with a 180-second
+and SHA-pinned official upload-artifact v7.0.1 (current sharded workflow: prepare 8, test shard 8, required verify 3 minutes). Host node:test replaces Infinity with a 180-second
 execution bound (existing fixture subprocess ceiling); native node:test uses the existing 30-second Vitest ceiling,
 and each native compile/test invocation is capped at 180 seconds. Host/native test concurrency is two and their reporter is explicitly TAP so failed names/skip notes reach the collector. These bounds
 reduce unbounded defaults; they do not increase existing fixture or Vitest timeouts. Each job retains the original verify exit through bash pipefail,
@@ -167,7 +167,7 @@ claimed. Official [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.htm
 [unix(7)](https://man7.org/linux/man-pages/man7/unix.7.html) verified 2026-10-03; author/hosted/review evidence is
 separate in external `proof/SOCKET-PUBLICATION-2026-10-03/`.
 
-**CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling (current sharded workflow: prepare 8, test shard 6, required verify 3 minutes),
+**CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling (current sharded workflow: prepare 8, test shard 8, required verify 3 minutes),
 with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); cells cannot inherit
 the 360-minute GitHub default. Linux-only local runtime socket/live OS-session tests name their capability in
 collected test titles and skip only cases requiring it; portable policy/grammar and existing typed refusals stay
@@ -223,12 +223,14 @@ range 1.479–1.634) = 106.9 s.
 Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29; automatic refresh CI-WEIGHTS, owner 2026-11-02).
 `scripts/ci-test-durations.json` is generated, not hand-edited, and the committed copy is only the seed. Each prepare (`actions: read`) looks up the
 newest `ci-weights-v1-*` cache entry scoped to `refs/heads/main` and restores that exact key over it (none keeps the seed; no prefix
-`restore-keys`, which the bwrap cache test forbids workflow-wide) and packs the file into the Node build artifact, so every
-shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
+`restore-keys`, which the bwrap cache test forbids workflow-wide), raises each file to the committed seed's figure where that is
+larger (`select`: a branch that lengthened or added a test and refreshed its seed is planned with its own measurement) and packs
+the file into the Node build artifact, so every shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
 (`schedule`) and manual runs: `check` reports drift as a `::warning` and step-summary line without failing the job, then, when
 every shard passed, `refresh` over both Nodes' receipts of that run saves a new cache entry. CI never commits or pushes; PR-scoped
-caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Weights are now
-single-run maxima. A run with a cut shard does not refresh (the red tests job is the signal); a test that always overruns its
+caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Main's regenerated
+cache holds single-run maxima; a file `select` raised from a committed seed is not one run's measurement and says so in its
+`source` (the rule, the raised count and both inputs' own source blocks). A run with a cut shard does not refresh (the red tests job is the signal); a test that always overruns its
 shard still needs the manual path below. Manual seed refresh:
 `gh run download <run> -p 'shard-*' -D <dir>` per hosted run, then `node scripts/ci-test-weights.mjs refresh <dir>...` writes the
 per-file maximum of the shard `receipt.json` reporter durations across every given run, Node job and shard (rounded up to ms)

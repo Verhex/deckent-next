@@ -5,7 +5,7 @@ import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
-import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
+import { workerReadinessText, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
@@ -27,6 +27,7 @@ export interface DoctorCheckFacts {
   readonly attachmentFolders?: Readonly<{ record: Parameters<typeof countMismatchedAttachments>[0]; projectRoot: string;
     observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
+  readonly workerReadiness?: import('#domain/index.js').WorkerReadiness | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
   readonly providerSpending?: ProviderSpendAccountInspection | null;
@@ -183,6 +184,8 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
+    : f.poolStatus === 'ready' && f.workerReadiness?.ready === false ? { ...row('work', 'work.pool', 'warning', workerReadinessText(f.workerReadiness.code, l), f.workerReadiness.cli.join(' ')), needsAttention: true }
+    : f.poolStatus === 'ready' && f.workerReadiness === null ? { ...row('work', 'work.pool', 'untested', t('setup.work.workerUnknown', {}, l), scoped('deckent doctor', f)), needsAttention: true }
     : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))

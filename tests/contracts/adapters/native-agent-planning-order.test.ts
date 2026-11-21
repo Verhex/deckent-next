@@ -304,7 +304,9 @@ async function replay(cli: Cli, mode: string) {
       failure = issue.message;
       reason = issue.params?.reason;
     } finally {
-      check = driver.refusalCheck() ?? check;
+      // The driver reports a stopped guard turn by its bare field (main, PR #168) and a planning refusal with the surface prefix: compare one form.
+      const reported = driver.refusalCheck();
+      check = reported === null ? check : reported.startsWith('agent-surface:') ? reported : 'agent-surface:' + reported;
       diagnostics = [diagnostics, driver.notices(), driver.refusal(), check, notices];
       await client?.close(); await driver.close();
     }

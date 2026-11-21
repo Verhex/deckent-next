@@ -2440,7 +2440,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/primitives/internal/values.ts`: `a3fac69f055866b7387f6a69f289c76a06b238e3bd45785874947ac05652a4a1`
 - `src/domain/core/principal/index.ts`: `34d34e7172aebce0ed53aae46ef2adaa6bfd62d734b21ad7b24332506e7bc13e`
 - `src/domain/core/principal/internal/principal.ts`: `cd65d09e087f956157342ea8f14b58745bc13fa0fcad60dd987673dcbfd654a7`
-- `src/domain/core/provider-catalog/index.ts`: `47828821b5983602b195815d162938be9a8f4a0924b7dc6ee1d0a45b0c990ebe`
+- `src/domain/core/provider-catalog/index.ts`: `9551c2fdb701ee215830be4e5f4d217b38c896947a4c42001d514c52bee407ba`
 - `src/domain/core/provider-catalog/internal/binding.ts`: `8993ed3f60a625cd4da7b030f68a2aa520b42c722c291a00796e1afc9e15e4d9`
 - `src/domain/core/provider-catalog/internal/catalog-document.ts`: `587f0ec51d56f08530014b6ce52da49ef4eca7dddbad3ddc8d3cee840dab9c61`
 - `src/domain/core/provider-catalog/internal/catalog-metadata.ts`: `0fd6ec004fe800fff33c610bb024260c19a954e5f5e3d6ede5d2e70dc13e4a33`
@@ -2451,6 +2451,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/provider-catalog/internal/model-role.ts`: `ecfa20cf4b8197c3c130d6e63784bc3780db7dfaa8c4d8ae9ffa7c3a49828688`
 - `src/domain/core/provider-catalog/internal/native-cli.ts`: `497c444e81e3cfe299f88a339a3287fa697943a3934553b8b5145278e1d42f0a`
 - `src/domain/core/provider-catalog/internal/worker-effort.ts`: `18072f14a324e255c663dec0e94fb29199e2d58304f5532222b95399208b2458`
+- `src/domain/core/provider-catalog/internal/worker-readiness.ts`: `a9ff0c7cdc74ca4dc1c11c8db02f58bbb180333f4079b735611ab3f858a76531`
 - `src/domain/core/worker-event/index.ts`: `a1d585a33302d2002820a7a3e36b27a92cdd4a2172794c5189361620a0ca4a2a`
 - `src/domain/core/worker-event/internal/contract.ts`: `166d28d542f9ab0e4b3c68703d696696e99ce20b1fc89b400bce8e0183216670`
 - `src/domain/core/worker-event/internal/models.ts`: `dfb5da588f12141160445ad0aedaa0299764b1861a0a84975f4a2e2429b64328`

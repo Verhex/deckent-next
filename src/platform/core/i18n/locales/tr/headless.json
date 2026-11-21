@@ -132,5 +132,6 @@
   "headless.chat.quotaWindow.seven_day_opus": "Opus için haftalık pencere",
   "headless.chat.quotaWindow.seven_day_sonnet": "Sonnet için haftalık pencere",
   "headless.chat.quotaFallback": "Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.",
-  "headless.chat.paidExtraUsage": "Planınızın kullanım sınırına ulaşıldı ({window}). Sıfırlanma: {reset} (yerel saat). Sağlayıcı hesabınızın ücretli ek kullanımı devrede; deckent tutarı göremez. Bunun yerine durmak için `deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'` komutunu çalıştırın."
+  "headless.chat.paidExtraUsage": "Planınızın kullanım sınırına ulaşıldı ({window}). Sıfırlanma: {reset} (yerel saat). Sağlayıcı hesabınızın ücretli ek kullanımı devrede; deckent tutarı göremez. Bunun yerine durmak için `deckent config set models.headless.paidExtraUsage '\"stop-at-limit\"'` komutunu çalıştırın.",
+  "headless.agent.guardStopped": "Komut satırı aracının güvenlik denetimi bu turu reddetti. Hiçbir araç izinsiz çalışmadı; denetimin adı aşağıdadır."
 }

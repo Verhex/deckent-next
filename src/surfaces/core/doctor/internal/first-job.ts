@@ -1,8 +1,9 @@
-import { WORK_SETUP_FAMILY, SetupStageRegistry, type SetupStage, type SetupStageState } from '#engine/index.js';
+import { WORK_DEFAULTS, WORK_SETUP_FAMILY, SetupStageRegistry, type SetupStage, type SetupStageState } from '#engine/index.js';
 import { messageText, t, type Locale } from '#platform/index.js';
 
 /** Configuration and pool-ledger facts; the work family's own evaluators interpret them. Never run a registry preview here. */
-export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean }>;
+export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean; workerReadiness?: import('#domain/index.js').WorkerReadiness | null }>;
+export const firstJobKind = WORK_DEFAULTS.kind;
 type FirstJobStep = Pick<SetupStage, 'id' | 'phase' | 'title' | 'state'>;
 export const poolProvisioned = (status: string) => status === 'ready' || status === 'drift';
 
@@ -22,3 +23,9 @@ export function firstJobSteps(stages: readonly FirstJobStep[]): readonly FirstJo
 }
 export const firstJobTitle = (step: FirstJobStep, locale: Locale) => messageText(step.title, locale) ?? step.title;
 export const onboardingNext = (step: string, locale: Locale) => t('doctor.firstJob.next', { step }, locale);
+
+/** Setup and doctor share the same catalog diagnosis; the typed code remains secondary. */
+export function workerReadinessText(code: string, locale: Locale): string {
+  const reason = messageText(`setup.work.workerReason.${code}`, locale, {}) ?? t('setup.work.workerReason.unknown', {}, locale);
+  return t('setup.work.workerMissing', { code, reason }, locale);
+}

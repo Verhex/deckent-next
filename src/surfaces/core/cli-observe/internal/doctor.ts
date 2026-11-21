@@ -4,7 +4,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -40,6 +40,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
     codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
     egress: await egressFacts(root, config, context, options),

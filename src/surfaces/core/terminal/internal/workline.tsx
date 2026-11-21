@@ -315,10 +315,11 @@ export function WorklineApp(props: WorklineProps) {
       workRef.current?.observeWorkers(workers);
     }
     if (snapshot.runs) {
+      workRef.current?.observeRuns();
       completion.observe(snapshot.runs);
       if (watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
     }
-    if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
+    if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals, snapshot.approvalsTruncated !== false);
     // I-5: the opening snapshot says once whether work is running (one system line from what it was allowed to read; nothing when idle).
     if (!openingTold.current) {
       openingTold.current = true;
