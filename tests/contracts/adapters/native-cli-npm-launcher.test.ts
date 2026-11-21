@@ -1,7 +1,7 @@
 import { chmod, link, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, runHeadlessLogin,
+import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, resolveHeadlessExecutable, runHeadlessLogin,
   type HeadlessIsolation } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry, reportFatal, type DeckentError } from '#platform/index.js';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
@@ -165,6 +165,17 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
       sso: false, env: {}, now: Date.now, isolation: testIsolation })).resolves.toMatchObject({ signedIn: true, exit: 'completed' });
     expect(JSON.parse(await readFile(marker, 'utf8'))).toEqual(entry.headless.login.args);
     expect(await f.read()).toMatchObject([{ mode: 'auth', program: f.payload }]);
+  });
+});
+
+it.skipIf(process.platform === 'win32')('guides an unknown launcher to a verified file when its valid manifest exceeds the read limit', async () => {
+  const { root } = await connection(), dir = join(root, 'node_modules', 'other-layout'), executable = join(dir, 'tool');
+  await mkdir(dir, { recursive: true });
+  await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'other-layout', version: '1.0.0', bin: { tool: 'tool' },
+    description: 'a'.repeat(entry.headless.limits.preflightOutputBytes) }));
+  await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).rejects.toMatchObject({
+    code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-layout-unknown' }, message: expect.stringContaining('--executable'),
   });
 });
 

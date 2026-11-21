@@ -82,23 +82,24 @@ async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix:
 }
 
 /** Diagnose package scripts declared as npm commands. A package may also expose a standalone binary. */
-async function isNpmLauncher(launcher: string, maxBytes: number): Promise<boolean> {
+async function npmLauncherRelation(launcher: string, maxBytes: number): Promise<'none' | 'launcher' | 'undetermined'> {
   const parts = launcher.split(sep), modules = parts.lastIndexOf('node_modules');
   const packageEnd = modules + (parts[modules + 1]?.startsWith('@') ? 3 : 2);
-  if (modules < 0 || packageEnd >= parts.length) return false;
+  if (modules < 0 || packageEnd >= parts.length) return 'none';
   const packageRoot = parts.slice(0, packageEnd).join(sep);
   const manifest = await metadata(join(packageRoot, 'package.json'), maxBytes).catch(() => null);
-  const bin = manifest?.value?.bin;
+  if (!manifest) return 'undetermined';
+  const bin = manifest.value?.bin;
   const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
-  if (!targets.some(path => typeof path === 'string' && !isAbsolute(path) && resolve(packageRoot, path) === launcher)) return false;
+  if (!targets.some(path => typeof path === 'string' && !isAbsolute(path) && resolve(packageRoot, path) === launcher)) return 'none';
   const file = await open(launcher, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
-  if (!file) return false;
+  if (!file) return 'none';
   try {
-    if (!(await file.stat()).isFile()) return false;
+    if (!(await file.stat()).isFile()) return 'none';
     const header = Buffer.alloc(2);
     const { bytesRead } = await file.read(header, 0, header.length, 0);
-    return bytesRead === header.length && header.toString('ascii') === '#!';
-  } catch { return false; }
+    return bytesRead === header.length && header.toString('ascii') === '#!' ? 'launcher' : 'none';
+  } catch { return 'none'; }
   finally { await file.close(); }
 }
 
@@ -110,7 +111,8 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
   const rule = entry.command.npmLauncher, suffix = rule && `/${rule.packagePath}/${rule.launcherPath}`;
   const target = rule && suffix && launcher.endsWith(suffix)
     ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes) : undefined;
-  if (!target && await isNpmLauncher(launcher, entry.headless.limits.preflightOutputBytes)) headlessExecutableRefusal('npm-layout-unknown', chosen);
+  if (!target && await npmLauncherRelation(launcher, entry.headless.limits.preflightOutputBytes) !== 'none')
+    headlessExecutableRefusal('npm-layout-unknown', chosen);
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);
   return Object.freeze({ chosen, executable, fileStamp, size: Number(info.size), mtimeMs: Number(info.mtimeMs), ...(target ? { packageRoot: target.packageRoot } : {}),
     identity: digest([chosen, stamp(chosenInfo), launcher, stamp(launcherInfo), target?.packageIdentity, executable, fileStamp]) });
