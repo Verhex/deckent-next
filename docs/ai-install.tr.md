@@ -39,14 +39,16 @@ deckent doctor --json
 
 JSON'un tamamını ve süreç çıkışını okuyun. Kurulumun bitmesi başlangıç adımlarının bitmesinden ayrıdır.
 Başsız kurulum yetkiyi beklemede bırakır; kişinin tanıklı ilk terminal açılışı profil ve izin varsayılanlarını önizler.
-Kayıtlı iş türü ve havuz, küçük iş çalışanının kabul edilebildiğini kanıtlamaz. Kurulum ve doctor, ayarlı
+Main’deki yayımlanmamış sürümde kayıtlı iş türü ve havuz, küçük işçinin kabul edilebildiğini kanıtlamaz. Kurulum ve doctor, ayarlı
 varsayılanlardan gelen ilk iş türü için aynı model kabulünü ve bağlı giriş bilgilerini denetler. Başka iş türünün hazır
 olması bu türün hazır olduğunu kanıtlamaz. Eksik adımı söyler veya gözlemin okunamadığını bildirirler; diğer
 bağdaştırıcılar için burada ölçülmüş yerel çalışan kabulü yoktur. Hiçbiri modeli etkinleştirmez. `<tier>/<roles>` içeren
 rol komutu bir şablondur: kişi, eksik çalışan rolü de dahil olmak üzere değerleri listelenen kayıt seçeneklerinden
 doldurur.
-Kurulum sıfır döndü diye “hazır” demeyin. Doctor eksik model, işçi yapılandırması, uyarı ya da sınanmamış denetim bildirebilir.
-Hazırlığı denetler; Docker kurmaz veya başlatmaz.
+Komut başarıyla çıksa bile bildirilen durumu okuyun. Main’de havuz hazır görünürken ilk işçi atanamıyorsa ya da
+hazırlığı okunamadıysa doctor JSON’da `degraded`, CLI ve `/doctor` ekranında “Durum: ilgi bekliyor” gösterir.
+Terminal penceresi sınanmayan denetimlerin sayısını da gösterir. Eksik veya yapılandırılmamış havuz İş bölümünde
+bildirilir. Doctor, Docker kurmadan veya başlatmadan hazırlığı denetler.
 
 ## Bu adımları kişiye bırakın
 

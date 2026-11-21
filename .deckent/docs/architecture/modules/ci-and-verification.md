@@ -130,6 +130,11 @@ and each native compile/test invocation is capped at 180 seconds. Host/native te
 reduce unbounded defaults; they do not increase existing fixture or Vitest timeouts. Each job retains the original verify exit through bash pipefail,
 raw log, collected `verify-evidence`, failed Vitest/collection and Node host-test names and actual `verify-not-run` notes.
 Missing Vitest outcomes are `VERIFY_OUTCOMES_UNAVAILABLE`, never zero passing tests; summary is not whole-job acceptance.
+
+The hosted test shard job limit on main is eight minutes (PR #173). The workflow still supplies a
+30-second default test timeout. The subscription-connect consent case in
+`tests/contracts/composition/model-connect-headless.test.ts` sets its own 120-second timeout (PR #160).
+That override belongs to the test harness.
 Native manifest exclusions now emit `verify-not-run` with `NATIVE_PLATFORM_UNSUPPORTED`.
 The config file adapter defaults its bootstrap layout to the actual host platform; explicit simulations remain explicit.
 The detached runtime launcher refuses Windows/missing O_NOFOLLOW before log I/O as RUNTIME_LAUNCH_UNSUPPORTED.
@@ -220,12 +225,14 @@ summed per-file time, while shard 1's extra cost is wall time, so reserve = post
 "Duration" line to the artifact upload step) × 1.574 (median of summed reporter time / Vitest duration over the same 64 jobs,
 range 1.479–1.634) = 106.9 s.
 
-Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29; automatic refresh CI-WEIGHTS, owner 2026-11-02).
-`scripts/ci-test-durations.json` is generated, not hand-edited, and the committed copy is only the seed. Each prepare (`actions: read`) looks up the
-newest `ci-weights-v1-*` cache entry scoped to `refs/heads/main` and restores that exact key over it (none keeps the seed; no prefix
-`restore-keys`, which the bwrap cache test forbids workflow-wide), raises each file to the committed seed's figure where that is
-larger (`select`: a branch that lengthened or added a test and refreshed its seed is planned with its own measurement) and packs
-the file into the Node build artifact, so every shard of one Node partitions with identical weights. The `duration weights refresh` job runs only on main push, nightly
+Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29; automatic refresh CI-WEIGHTS, owner 2026-11-02;
+per-file selection on main, PR #174).
+`scripts/ci-test-durations.json` is generated, and the committed copy is the seed. Each prepare (`actions: read`) looks up the
+newest `ci-weights-v1-*` cache entry scoped to `refs/heads/main`. With no key it uses the seed. With a key it
+saves the seed, requires an exact-key restore, then runs `select` to use the greater duration per file.
+A branch that refreshes weights for added or longer tests therefore keeps those larger measurements in the plan.
+Prepare packs the selected file into the Node build artifact so every shard of one Node uses the same weights.
+The `duration weights refresh` job runs only on main push, nightly
 (`schedule`) and manual runs: `check` reports drift as a `::warning` and step-summary line without failing the job, then, when
 every shard passed, `refresh` over both Nodes' receipts of that run saves a new cache entry. CI never commits or pushes; PR-scoped
 caches are not readable from main, and `validateShards` still enforces complete coverage whatever the weights. Main's regenerated

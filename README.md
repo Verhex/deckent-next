@@ -236,6 +236,8 @@ flowchart LR
    The policy lets you connect and call models, keep keys and set budgets in that scope; each of those actions is still
    checked and recorded. `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init`
    runs the same setup step by step and lists what is still missing.
+   On main (unreleased), setup checks the configured first-job kind. If the pool reports ready but doctor cannot
+   confirm that kind’s first worker can be assigned, the summary says “needs attention”.
 2. **Open the terminal** with `deckent`. It opens in the scope you just set up (`deckent --scope my-project` picks one
    explicitly) and starts the runtime service in the background. To start in Turkish, run `deckent --lang tr`; save that
    preference with `deckent config set --global language '"tr"'` (English: `'"en"'`; the value is JSON, so the quotes are needed). You can also choose it during `deckent init --lang tr`.

@@ -306,3 +306,17 @@ data sent as `output_config.effort` (GA, no beta header) and forwarded to `count
 model announcement (no refresh mechanism yet). Not yet: SSE byte/token metering in live streaming, an OS keyring backend for the key (K2; the key resolves through the installation's configured secret store since SECRET-K1),
 the owner's first billed smoke call (Opus 5.5 `effort`, Sonnet 5.5 `between_tools`), tariff rows for legacy models, a neutral
 `reasoning: {mode, effort}` (P2).
+
+## Native worker tool bridge
+
+On main (unreleased, PRs #155 and #158), the common worker instruction `deckent-worker-core@6` names
+`edit_file`, `write_file` and `run_shell` as deckent tools for the admitted work area. The CLI runtime’s
+read-only or shell-disabled notice describes its own tools. The worker reports the actual refusal or waiting
+result from deckent’s tool, whose call still goes through the existing policy and approval checks. Frozen
+older instruction payloads retain their original text and version.
+
+The bridge registry sets 128 replay entries and a 128 MiB replay budget. It reserves the full 1 MiB frame
+per new call. After 128 distinct calls the bound refuses another with `NATIVE_BRIDGE_REPLAY_LIMIT`. Replay
+of an existing call uses its entry. These are configured ceilings. The native worker read tools in the
+project and input views independently narrow `service.responseMaxBytes` to their 1 MiB upper bound.
+Values below their 1 KiB minimum still fail validation. The service transport limit keeps its own value.
