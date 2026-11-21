@@ -4,7 +4,7 @@ Bu belge main’e inen işleri, yayımlanan sürümleri ve kapanan işleri kayde
 
 ## beta.2.1 — main'de, yayımlanmadı (on main, not released)
 
-- **Durum:** Aşağıdaki PR'lar `61c47ef30` itibarıyla main'de. Canlı ve N1, beta.2 (`8678f6152`) üzerinde. Birleşik beta.2.1 adayının kurulu kabulü ve yayını açık.
+- **Durum:** Aşağıdaki PR'lar `61c47ef30` itibarıyla main'de. Son yayımlanan sürüm beta.2. Birleşik beta.2.1 adayının kurulu kabulü ve yayını açık.
 - **Kanıt:** Bağımsız inceleme PR başına, hosted CI ilgili PR koşumuna bağlıdır. #158'in yeşil koşumu `3e8a6e983` ağacını, #160'tan önceki main tabanını kullandı. #160'ın test süre sınırı değişikliği kendi PR'ında yeşildi. Bu koşumlar birleşik adayın kurulu kabulünü karşılamaz. İnceleme kayıtları ve CI makbuzları depo dışında tutulur.
 
 | PR ve baş | Kişinin gördüğü sonuç | Bağımsız inceleme | Hosted CI (yeşil) | Birleşik adayda açık kanıt |
