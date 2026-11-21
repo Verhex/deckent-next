@@ -1,8 +1,10 @@
-import { chmod, link, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { fstatSync } from 'node:fs';
+import { chmod, link, lstat, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
+import { dirname, join, sep } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, resolveHeadlessExecutable, runHeadlessLogin,
   type HeadlessIsolation } from '#adapters/core/native-cli-headless/index.js';
+import * as processRunner from '#adapters/core/process-runner/index.js';
 import { ErrorRegistry, reportFatal, type DeckentError } from '#platform/index.js';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
 import { CODEX_FAMILY, codexAnswer, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
@@ -179,53 +181,174 @@ it.skipIf(process.platform === 'win32')('guides an unknown launcher to a verifie
   });
 });
 
-describe.skipIf(process.platform === 'win32')('G3 package classification', () => {
-  async function packageProgram(manifest: unknown, mode = 0o700) {
-    const { root } = await connection(), dir = join(root, 'node_modules', 'other-layout'), executable = join(dir, 'tool');
-    await mkdir(dir, { recursive: true });
-    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode });
-    await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
-    return executable;
-  }
+function elfHeader(kind = 2, machine = 62) {
+  const header = Buffer.alloc(64);
+  header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
+  header.writeUInt16LE(kind, 16);
+  header.writeUInt16LE(machine, 18);
+  header.writeUInt32LE(1, 20);
+  header.writeBigUInt64LE(0x401000n, 24);
+  header.writeUInt16LE(64, 52);
+  return header;
+}
 
+function dynamicElf(flags: bigint) {
+  const header = elfHeader(3);
+  header.writeBigUInt64LE(64n, 32);
+  header.writeUInt16LE(56, 54);
+  header.writeUInt16LE(1, 56);
+  const program = Buffer.alloc(56), dynamic = Buffer.alloc(32);
+  program.writeUInt32LE(2, 0); // PT_DYNAMIC
+  program.writeBigUInt64LE(120n, 8);
+  program.writeBigUInt64LE(32n, 32);
+  dynamic.writeBigInt64LE(0x6ffffffbn, 0); // DT_FLAGS_1
+  dynamic.writeBigUInt64LE(flags, 8);
+  return Buffer.concat([header, program, dynamic]);
+}
+
+describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 package classification', () => {
   const manifest = { name: 'other-layout', version: '1.0.0' };
   const unknownLayout = {
     code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-layout-unknown' }, message: expect.stringContaining('--executable'),
   };
+  const classify = (executable: string) => resolveHeadlessExecutable(entry, executable, process.getuid!());
 
-  it.skipIf(process.getuid?.() === 0)('refuses a matching package command with an execute-only header', async () => {
-    const executable = await packageProgram({ ...manifest, bin: 'tool' }, 0o100);
-    await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
-    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).rejects.toMatchObject(unknownLayout);
-  });
+  async function packageProgram(content: unknown, bytes: string | Buffer = '#!/bin/sh\nexit 0\n', mode = 0o700) {
+    const connectionFixture = await fixture();
+    const packageRoot = join(dirname(connectionFixture.stateDir), 'node_modules', '@example', 'other-layout'), executable = join(packageRoot, 'tool');
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(executable, bytes, { mode });
+    if (content !== undefined) await writeFile(join(packageRoot, 'package.json'), JSON.stringify(content));
+    return { ...connectionFixture, packageRoot, executable };
+  }
+
+  async function expectPreflightBind(f: Awaited<ReturnType<typeof fixture>>, executable: string, packageRoot?: string, replace?: () => Promise<void>) {
+    const launcher = await lstat(process.execPath, { bigint: true }), expected = await lstat(executable, { bigint: true });
+    let seals = 0;
+    const isolation: HeadlessIsolation = async () => {
+      if (++seals === 2) await replace?.();
+      return { status: 'available', rejected: [], restriction: null, detail: null,
+        launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+          identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') } };
+    };
+    const stopped = new Error('version probe captured before spawn');
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async (command, _signal, _onLine, fd) => {
+      expect(fd).toBeDefined();
+      expect(fstatSync(fd!, { bigint: true })).toMatchObject({ dev: expected.dev, ino: expected.ino, ctimeNs: expected.ctimeNs });
+      const args = command.args;
+      expect(args.at(-2)).toBe(executable);
+      const binds = args.flatMap((arg, i) => arg === '--ro-bind-fd' ? [args.slice(i, i + 3)] : []);
+      expect(binds).toEqual([['--ro-bind-fd', '3', executable]]);
+      if (packageRoot) {
+        const mask = args.indexOf(packageRoot), bind = args.indexOf('--ro-bind-fd'), remount = args.lastIndexOf(packageRoot);
+        expect(args.slice(mask - 5, mask + 1)).toEqual(['--perms', '0755', '--size', String(entry.headless.isolation.limits.tmpfsBytes), '--tmpfs', packageRoot]);
+        expect(mask).toBeLessThan(bind);
+        expect(remount).toBeGreaterThan(bind);
+        expect(args[remount - 1]).toBe('--remount-ro');
+        const hostBinds = args.flatMap((arg, i) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? args.slice(i + 1, i + 3) : []);
+        expect(hostBinds.filter(path => path === packageRoot || path.startsWith(packageRoot + sep))).toEqual([]);
+      }
+      throw stopped;
+    });
+    try {
+      const preflight = expect(headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation));
+      if (replace) {
+        await preflight.rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'executable-changed' } });
+        expect(runner).not.toHaveBeenCalled();
+      } else {
+        await preflight.rejects.toBe(stopped);
+        expect(runner).toHaveBeenCalledOnce();
+      }
+    } finally { runner.mockRestore(); }
+  }
 
   it.each([
-    ['a null manifest', null],
-    ['an array manifest', []],
-    ['an invalid bin type', { ...manifest, bin: true }],
-    ['a non-string command target', { ...manifest, bin: { tool: 42 } }],
-  ])('refuses %s with executable guidance', async (_label, content) => {
-    const executable = await packageProgram(content);
-    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).rejects.toMatchObject(unknownLayout);
-  });
-
-  it('accepts a file when a valid manifest has no matching command', async () => {
-    const executable = await packageProgram({ ...manifest, bin: { other: 'other' } });
-    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
-  });
-
-  it('accepts a matching command whose readable header identifies a standalone executable', async () => {
-    const executable = await packageProgram({ ...manifest, bin: { tool: 'tool' } });
-    await writeFile(executable, '\x7fELF');
-    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
-  });
-
-  it.skipIf(process.getuid?.() === 0)('accepts an execute-only standalone file outside a package', async () => {
-    const { executable } = await connection();
-    await chmod(executable, 0o100);
-    await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
-    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
-  });
+    [1, 'registry match takes priority and keeps the payload-specific refusal', async () => {
+      const f = await fixture();
+      await expect(classify(f.chosen)).resolves.toMatchObject({ executable: f.payload, packageRoot: f.root });
+      await writeFile(f.launcher, elfHeader());
+      await unlink(f.payload);
+      await expect(classify(f.chosen)).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-payload-missing' } });
+    }],
+    [2, 'explicit native vendor program uses its own header even without a manifest', async () => {
+      const f = await fixture();
+      await writeFile(f.payload, elfHeader());
+      await unlink(join(f.platformRoot, 'package.json'));
+      await expect(classify(f.payload)).resolves.toMatchObject({ executable: f.payload });
+      await expectPreflightBind(f, f.payload, f.root);
+      const replacement = `${f.payload}.replacement`;
+      await writeFile(replacement, elfHeader(), { mode: 0o700 });
+      await expectPreflightBind(f, f.payload, f.root, () => rename(replacement, f.payload));
+    }],
+    [3, 'unsupported package script is recognized by identity', async () => {
+      const { executable, packageRoot } = await packageProgram({ ...manifest, bin: { tool: './tool' } });
+      await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      await link(executable, join(packageRoot, 'alias'));
+      await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ ...manifest, bin: 'alias' }));
+      await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+    }],
+    [4, 'package command without a supported readable ELF header keeps the guidance', async () => {
+      for (const bytes of [Buffer.from([0x7f, 0x45, 0x4c, 0x46]), elfHeader().subarray(0, 60), elfHeader(2, 183), dynamicElf(1n)]) {
+        const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, bytes);
+        await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+      if (process.getuid!() !== 0) {
+        const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, elfHeader(), 0o100);
+        await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
+        await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+    }],
+    [5, 'execute-only program outside a package still reaches isolated preflight', async () => {
+      const f = await fixture(), { executable } = await connection();
+      await writeFile(executable, elfHeader());
+      await chmod(executable, 0o100);
+      if (process.getuid!() !== 0) await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
+      await expect(classify(executable)).resolves.toMatchObject({ executable });
+      await expectPreflightBind(f, executable);
+    }],
+    [6, 'an offered package command can also be the explicit native PIE', async () => {
+      const f = await packageProgram({ ...manifest, bin: { tool: 'tool' } }, dynamicElf(0x08000000n));
+      await expect(classify(f.executable)).resolves.toMatchObject({ executable: f.executable });
+      await expectPreflightBind(f, f.executable, f.packageRoot);
+    }],
+    [7, 'standalone script outside a package keeps its isolated preflight', async () => {
+      const f = await fixture(), { root, executable } = await connection();
+      await expectPreflightBind(f, executable);
+      const cache = join(root, 'node_modules', '.cache'), cached = join(cache, 'tool');
+      await mkdir(cache, { recursive: true });
+      await rename(executable, cached);
+      await expectPreflightBind(f, cached);
+    }],
+    [8, 'a different existing command inode proves a package file is standalone', async () => {
+      const f = await packageProgram({ ...manifest, bin: { other: './nested/other' } });
+      await mkdir(join(f.packageRoot, 'nested'));
+      await writeFile(join(f.packageRoot, 'nested', 'other'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+      if (process.getuid!() !== 0) {
+        await chmod(f.executable, 0o100);
+        await expect(readFile(f.executable)).rejects.toMatchObject({ code: 'EACCES' });
+      }
+      await expect(classify(f.executable)).resolves.toMatchObject({ executable: f.executable });
+      await expectPreflightBind(f, f.executable, f.packageRoot);
+    }],
+    [9, 'missing or unsupported package declarations leave the outcome undetermined', async () => {
+      for (const content of [undefined, null, [], { ...manifest, bin: true }, { ...manifest, bin: { tool: 42 } },
+        { ...manifest, directories: { bin: 'bin' } }, { ...manifest, bin: 'missing' }]) {
+        const { executable } = await packageProgram(content);
+        await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+      const { executable, packageRoot } = await packageProgram(undefined);
+      const manifestPath = join(packageRoot, 'package.json'), outside = join(dirname(packageRoot), 'outside');
+      await writeFile(outside, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+      await link(outside, join(packageRoot, 'other'));
+      await symlink(executable, join(packageRoot, 'alias'));
+      await symlink(dirname(packageRoot), join(packageRoot, 'redirected'));
+      const overBudget = Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`command-${index}`, 'other']));
+      for (const bin of [executable, '../outside', 'alias', 'redirected/outside', ['other'], overBudget]) {
+        await writeFile(manifestPath, JSON.stringify({ ...manifest, bin }));
+        await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+    }],
+  ] as const)('row %i — %s', async (_row, _risk, verify) => { await verify(); });
 });
 
 it('gives an old generic version refusal no specific reason or update advice', () => {

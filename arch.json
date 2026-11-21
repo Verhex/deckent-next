@@ -6072,6 +6072,30 @@
     ],
     "invariants": [
       {
+        "file": "src/adapters/core/native-cli-headless/internal/executable.ts",
+        "symbol": "ELF_TABLE_MAX_BYTES",
+        "values": [
+          4096
+        ],
+        "reason": "158/G3 evidence invariant. Either ELF64 table may consume at most 4096 bytes of the fixed executable-kind read budget. Larger tables provide no ELF proof."
+      },
+      {
+        "file": "src/adapters/core/native-cli-headless/internal/executable.ts",
+        "symbol": "BIN_MAX_TARGETS",
+        "values": [
+          64
+        ],
+        "reason": "158/G3 evidence invariant. An identity proof resolves at most 64 declared command targets, bounding filesystem work for an untrusted manifest."
+      },
+      {
+        "file": "src/adapters/core/native-cli-headless/internal/executable.ts",
+        "symbol": "BIN_MAX_DEPTH",
+        "values": [
+          32
+        ],
+        "reason": "158/G3 evidence invariant. A declared command path may have at most 32 components, bounding the no-follow descriptor walk per target."
+      },
+      {
         "file": "src/domain/core/agent-turn/internal/contract.ts",
         "symbol": "CHAT_TURN_RESULT_NOTICES/CHAT_TURN_STEER_LINES",
         "values": [
