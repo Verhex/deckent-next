@@ -9,6 +9,8 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { ModelInvocationAuthorizer } from './application.js';
 import { verifyModelInvocationRecord } from './content.js';
 import { ModelInvocationStoreError, type ModelInvocationRecord } from './port.js';
+import { verifyModelInvocationReceipt } from './evidence.js';
+import type { ModelInvocationResult } from './application.js';
 import { checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 // Today's successful response map predates the bounded v2 observation; keep all of its valid names readable.
 const legacyPlugins = z.object({ cliVersion: z.string().min(1), builtinPlugins: z.array(z.string().min(1)) });
@@ -18,6 +20,8 @@ export interface ModelInvocationInspectionReader {
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
   loadObservationPage?(scopeId: string, after: string | null, limit: number): Promise<{ records: readonly ModelInvocationInspectionRecord[]; next: string | null }>;
+  matchRetainedResponse?(receipt: ModelInvocationReceipt): Readonly<{ planUsage: ModelInvocationPlanUsageRead | null }> | null;
+  readMatchedResponse?(receipt: ModelInvocationReceipt, isCurrent: () => boolean): ModelInvocationRecord | null;
   close(): void;
 }
 export type ModelInvocationInspection = Readonly<{ schemaVersion: 7; scopeId: string; invocationId: string;
@@ -30,6 +34,41 @@ export type ModelInvocationInspection = Readonly<{ schemaVersion: 7; scopeId: st
 export class ModelInvocationInspectionApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelInvocationAuthorizer,
     private readonly openReader: () => Promise<ModelInvocationInspectionReader>) {}
+  /** Internal only. The trusted turn supplies its completed receipt, the live person policy gate and a synchronous custody check. */
+  async readRetainedTurnResponse(expected: ModelInvocationReceipt,
+    authorizePerson: (target: Parameters<ModelInvocationAuthorizer['authorize']>[1]) => Promise<void>,
+    isCurrent: () => boolean): Promise<ModelInvocationResult> {
+    const receipt = await this.authorizeRetainedTurnReceipt(expected);
+    if (!isCurrent()) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    const reader = await this.openReader();
+    try {
+      if (!reader.matchRetainedResponse?.(receipt) || !reader.readMatchedResponse)
+        throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      // The precheck is complete before awaiting a different authority. No SQLite snapshot survives this wait.
+      await authorizePerson({ scopeId: receipt.request.scopeId, reference: receipt.request.reference });
+      const record = reader.readMatchedResponse(receipt, isCurrent);
+      if (record?.content?.kind !== 'native-response') throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      return Object.freeze({ replayed: true, receipt: record.receipt, response: record.content.response, contentStatus: 'retained', purge: null });
+    } finally { reader.close(); }
+  }
+  /** Recheck source retention and optional usage without entering the person's channel or fetching the response again. */
+  async inspectRetainedTurnReceipt(expected: ModelInvocationReceipt) {
+    const receipt = await this.authorizeRetainedTurnReceipt(expected), reader = await this.openReader();
+    try {
+      const match = reader.matchRetainedResponse?.(receipt);
+      if (!match) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      return { invocation: receipt, spending: null, planUsage: match.planUsage };
+    } finally { reader.close(); }
+  }
+  private async authorizeRetainedTurnReceipt(expected: ModelInvocationReceipt) {
+    const receipt = verifyModelInvocationReceipt(expected), { scopeId, reference } = receipt.request;
+    const principal = await authenticate(this.verifier, undefined, scopeId);
+    await this.authorization.authorize('inspect', { scopeId, reference }, principal);
+    const { id, issuer, subject, assurance } = principal;
+    if (!isDeepStrictEqual(receipt.actor, { id, issuer, subject, assurance }) || receipt.outcome?.state !== 'responded')
+      throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    return receipt;
+  }
   /** Scoped, bounded history, with the ordinary inspection authority checked separately for each reference. */
   async inspectNativePlugins(scopeId: string, limits: { pageSize: number; maxRecords: number }, credential?: unknown) {
     const principal = await authenticate(this.verifier, credential, scopeId);

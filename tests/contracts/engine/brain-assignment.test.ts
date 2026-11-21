@@ -18,7 +18,9 @@ it('selects template v6 (F2-11 class descriptions over v5: person language, syst
   const config = brainPlannerConfigSchema.parse({});
   expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system'], [5, 'system'], [6, 'system']]);
   const [v5, v6] = [5, 6].map(version => config.templates.find(row => row.version === version)!.instruction);
-  expect(v6).toBe(v5!.replace('acceptance criteria.', "acceptance criteria. Choose each task's WorkClass from the supplied class descriptions: the narrowest class whose description fits that task; a kind's binding is only the default when no narrower class fits."));
+  expect(v6).toBe(v5!.replace('acceptance criteria.', "acceptance criteria. Choose each task's WorkClass from the supplied class descriptions: the narrowest class whose description fits that task; a kind's binding is only the default when no narrower class fits.")
+    // Same-turn planning (owner 141, design Rev 3 R3.3): v6 alone gains the conditional framing sentence; v1–v5 keep their bytes.
+    + ' If and only if this is a same-turn preparation result, copy its DECKENT-PLAN-CHALLENGE/1 line exactly at byte zero, then one LF and exactly one JSON object in the supplied schema; call no more tools and write no other text. Otherwise return plain JSON as above.');
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).modelAssignment).toBe('brain');
   expect(brainAssignsWorkers({})).toBe(false); expect(brainAssignsWorkers({ selected: { id: 'run-proposal', version: 2 } })).toBe(true);
 });

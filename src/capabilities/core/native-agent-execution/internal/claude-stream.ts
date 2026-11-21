@@ -3,7 +3,7 @@ import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { nativeAgentInitReason } from './guards.js';
-import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema, type NativeAgentCorrelation, type ToolSessionPort } from './session.js';
+import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema, type NativeAgentCorrelation, type NativeAgentToolResult, type ToolSessionPort } from './session.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { parseNativeCliRegistry } from './command-registry.js';
 import { emitDelta, reportedCounters } from './stream.js';
@@ -30,13 +30,26 @@ export class ClaudeAgentError extends CodedError {
 }
 function invalid(field: string): never { throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field); }
 
+/** Private observations shared by the two wire readers. K1 owns challenge and settlement validation. */
+interface PlanningWire {
+  readonly active: boolean;
+  readonly delivered: boolean;
+  session(id: string): void;
+  delivery(envelope: NativeAgentToolResult): void;
+  replay(envelope: NativeAgentToolResult): void;
+  terminal(id: string, text: string): void;
+  response(): string;
+}
+
 /** K4 wraps this ToolSessionPort, K1 remains its delegate. Feed stdout through line; pass signal to the existing isolated process runner.
  * Finish only after process exit. A facade call may precede its assistant tool_use (A0-4); both channels must agree before completion. */
 export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string;
-  outputMaxBytes: number; quotaPolicy: ClaudeQuotaPolicy; paidExtraUsage?: 'continue' | 'stop-at-limit'; onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
+  outputMaxBytes: number; planning?: PlanningWire; quotaPolicy: ClaudeQuotaPolicy; paidExtraUsage?: 'continue' | 'stop-at-limit'; onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; onDelta?: ModelInvocationDeltaSink }>): ClaudeAgentDriver {
   const { entry, port, model, cliVersion, runDir } = options, session = toolSessionSchema.parse(port.session), controller = new AbortController();
   if (entry.agent.transport.kind !== 'claude-mcp' || !Number.isSafeInteger(options.outputMaxBytes) || options.outputMaxBytes <= 0) invalid('definition');
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
+  const wire = options.planning, oldMessages = new Set<string>();
+  let sessionId: unknown, priorIdentityUnknown = false, finalId: string | undefined, finalRequestId: string | undefined, finalText = '';
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
   const pluginPolicy = entry.agent.transport.guards.plugins;
@@ -46,7 +59,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     // Case-folded so a spelling variant cannot pass a stop event; a non-identifier name ('?') stops too.
     const type = fact(value.type).toLowerCase(), name = `${type}${value.subtype === undefined ? '' : `/${fact(value.subtype).toLowerCase()}`}`;
     if (name.includes('?') || stopEvents.has(name) || stopEvents.has(type)) return fail('event', undefined, facts([name]));
-    if (notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
+    if (!wire?.active && notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
   };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
   let paidUsage: ClaudeRateLimit | null = null;
@@ -68,6 +81,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     const name = block.name.slice(entry.bridge.toolPrefix.length), input = block.input;
     if (!checkCall(name, input)) return fail('tool-use', undefined, toolFacts());
     const prior = calls.get(block.id);
+    if (wire?.active && !prior) return fail('planning-tool');
     if (prior && (prior.streamed || prior.name !== name || !isDeepStrictEqual(prior.input, input))) return fail('correlation');
     if (prior) prior.streamed = true; else calls.set(block.id, { name, input, streamed: true });
     return undefined;
@@ -85,11 +99,14 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (value.model !== model || value.claude_code_version !== cliVersion || value.cwd !== runDir
         || value.plugin_errors !== undefined && (!Array.isArray(value.plugin_errors) || value.plugin_errors.length !== 0)) return fail('init-binding');
       builtinPlugins = nativeBuiltinPlugins(value.plugins, pluginPolicy)!;
+      sessionId = value.session_id;
+      if (typeof sessionId === 'string' && sessionId) wire?.session(sessionId);
       init = true; return;
     }
     // A0's inert invalidation may precede init; other system events follow the registry stop rules.
     if (value.type === 'system' && value.subtype === 'ui_invalidate') return;
     if (!init) return value.type === 'system' ? notice(value) : fail('before-init');
+    if (wire?.active && (!sessionId || value.session_id !== sessionId)) return fail('planning-session');
     // CLI 2.1.318 thinking progress: two token estimates, no content.
     if (value.type === 'system' && value.subtype === 'thinking_tokens' && value.parent_tool_use_id == null
       && [value.estimated_tokens, value.estimated_tokens_delta].every(n => typeof n === 'number' && Number.isFinite(n))) return;
@@ -101,15 +118,35 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (value.type === 'assistant') {
       const message = record(value.message);
       if (!message || message.model !== model || !Array.isArray(message.content)) return fail('assistant');
+      if (wire) {
+        const id = message.id, top = typeof id === 'string' && id.length > 0 && message.type === 'message' && message.role === 'assistant'
+          && value.parent_tool_use_id === null && value.session_id === sessionId;
+        if (wire.delivered) {
+          if (!top || priorIdentityUnknown || oldMessages.has(id) || finalId !== undefined && finalId !== id
+            || message.stop_reason != null && message.stop_reason !== 'end_turn') return fail('planning-message');
+          if (typeof value.request_id === 'string') {
+            if (finalRequestId !== undefined && value.request_id !== finalRequestId) return fail('planning-request-id');
+            finalRequestId = value.request_id;
+          }
+          finalId = id;
+        } else if (top) oldMessages.add(id);
+        else priorIdentityUnknown = true;
+      }
       // Validate the whole message before emitting any text or accepting its tool records.
       for (const input of message.content) {
         const block = record(input);
         if (!block) return fail('block');
-        if (block.type === 'tool_use') { if (addStreamCall(block)) return 'stop'; }
+        if (block.type === 'tool_use') {
+          if (wire?.delivered) return fail('planning-tool');
+          if (addStreamCall(block)) return 'stop';
+        }
         else if (block.type === 'text') { if (typeof block.text !== 'string') return fail('text'); }
         else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') return fail('block');
       }
-      for (const block of message.content as Record<string, unknown>[]) if (block.type === 'text') emitDelta(options.onDelta, block.text as string);
+      for (const block of message.content as Record<string, unknown>[]) if (block.type === 'text') {
+        if (wire?.delivered) finalText += block.text;
+        else if (!wire?.active) emitDelta(options.onDelta, block.text as string);
+      }
       return;
     }
     if (value.type === 'user') {
@@ -119,6 +156,22 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       });
       if (foreign === null || foreign !== undefined) return fail('tool-result', undefined, foreign === null ? 'shape'
         : facts([`type=${fact(record(foreign)?.type)}`, `known=${typeof record(foreign)?.tool_use_id === 'string' && calls.has(record(foreign)!.tool_use_id as string) ? 1 : 0}`]));
+      if (wire?.active) {
+        const blocks = message!.content as Record<string, unknown>[];
+        if (value.parent_tool_use_id !== null || message!.role !== 'user' || blocks.length !== 1 || wire.delivered) return fail('planning-delivery');
+        const block = blocks[0]!, call = calls.get(block.tool_use_id as string);
+        if (Array.isArray(value.tool_result_meta) && value.tool_result_meta.some(entry => {
+          const id = record(entry)?.id;
+          return id != null && id !== block.tool_use_id;
+        })) return fail('planning-delivery-id');
+        const content = block.content, text = Array.isArray(content) && content.length === 1 ? record(content[0]) : null;
+        if (!call?.settled || !call.streamed || block.is_error !== undefined && block.is_error !== false
+          || text?.type !== 'text' || typeof text.text !== 'string'
+          || value.tool_use_result !== undefined && !isDeepStrictEqual(value.tool_use_result, content)) return fail('planning-delivery');
+        const decoded = nativeAgentToolResultSchema.safeParse(objectJson(text.text));
+        if (!decoded.success || decoded.data.deckentCallId !== call.deckentCallId || decoded.data.outcome.status !== 'ok') return fail('planning-delivery');
+        wire.delivery(decoded.data);
+      }
       return;
     }
     if (value.type === 'tool_progress') return typeof value.tool_use_id === 'string' && calls.has(value.tool_use_id) ? undefined : fail('tool-progress');
@@ -128,13 +181,20 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (limit.kind === 'overage') {
         const stop = () => fail('rate-limit', undefined, `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, { ...limit, kind: 'quota' });
         const deliver = options.onPaidUsage;
+        const shown = wire?.active ? { ...limit, window: '?' } : limit;
         if (!deliver) return stop();
-        return Promise.resolve().then(() => deliver(limit, signal)).then(() => { if (signal?.aborted || ended) return stop(); paidUsage ??= limit; }, stop);
+        return Promise.resolve().then(() => deliver(shown, signal)).then(() => { if (signal?.aborted || ended) return stop(); paidUsage ??= shown; }, stop);
       }
       return limit.kind === 'allowed' ? undefined : fail(limit.kind === 'unknown' ? 'rate-limit-status' : 'rate-limit', undefined,
         `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, limit);
     }
-    if (value.type !== 'result') return notice(value);
+    if (value.type !== 'result') {
+      if (wire && value.type === 'stream_event') {
+        if (wire.active) return fail('planning-message');
+        priorIdentityUnknown = true;
+      }
+      return notice(value);
+    }
     terminal = true;
     if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials', undefined, Array.isArray(value.permission_denials)
       ? facts(value.permission_denials.map(denial => offeredName(record(denial)?.tool_name))) : 'shape');
@@ -146,17 +206,28 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     const models = record(value.modelUsage);
     if (!models || Object.keys(models).length !== 1 || !Object.hasOwn(models, model)) return fail('model-usage');
     if ([...calls.values()].some(call => !call.streamed || !call.settled)) return fail('correlation-incomplete');
+    if (wire?.active) {
+      if (value.api_error_status != null) return fail('planning-api-error-status');
+      if (!wire.delivered || !finalId || value.result !== finalText || value.stop_reason !== 'end_turn'
+        || value.terminal_reason !== undefined && value.terminal_reason !== 'completed') return fail('planning-finish');
+      wire.terminal(finalId, finalText);
+    }
   };
   const propose: ToolSessionPort['propose'] = async (call: Call, correlation: NativeAgentCorrelation, signal: AbortSignal) => {
     function refuse(field: string, detail?: string): never { fail(field, undefined, detail); throw new ClaudeAgentError(failure!.reason, failure!.field); }
     if (failure || controller.signal.aborted || signal.aborted || !init || ended || terminal) refuse('proposal-order');
+    if (wire && (!sessionId || typeof sessionId !== 'string') && call.name === 'propose_work') refuse('planning-session');
     const checked = nativeAgentCorrelationSchema.safeParse(correlation), input = objectJson(call.argumentsJson);
     if (!checked.success || checked.data.kind !== 'claude-tool-use' || call.id !== checked.data.deckentCallId || !checkCall(call.name, input)) refuse('proposal');
     const id = (checked.data as Extract<NativeAgentCorrelation, { kind: 'claude-tool-use' }>).toolUseId;
     const prior = calls.get(id), previousId = deckentIds.get(call.id);
     if (previousId !== undefined && previousId !== id || prior && (prior.name !== call.name || !isDeepStrictEqual(prior.input, input)
       || prior.deckentCallId !== undefined && prior.deckentCallId !== call.id)) refuse('correlation');
-    if (prior?.promise) return prior.promise;
+    if (prior?.promise) {
+      const seen = await prior.promise;
+      if (wire?.active) wire.replay(seen);
+      return seen;
+    }
     if (!charge(Buffer.byteLength(JSON.stringify([call, correlation])))) refuse('size');
     const current: Seen = prior ?? { name: call.name, input: input!, streamed: false };
     current.deckentCallId = call.id; calls.set(id, current); deckentIds.set(call.id, id);
@@ -178,7 +249,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     });
     return current.promise;
   };
-  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => [...notices], builtinPlugins: () => builtinPlugins, paidExtraUsage: () => paidUsage,
+  return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => wire?.active ? [] : [...notices], builtinPlugins: () => builtinPlugins, paidExtraUsage: () => paidUsage,
     async cancel() { ended = true; controller.abort(); return port.cancel(); },
     async revoke() { ended = true; controller.abort(); return port.revoke(); },
     finish(exit: StreamExit): ClaudeAgentResult {

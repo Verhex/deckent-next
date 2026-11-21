@@ -1,0 +1,24 @@
+{
+  "cli": "claude",
+  "group": "positive",
+  "provenance": "hand-built",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    "All bytes authored; public deterministic challenge is test data, never a recording. No START invented. Host events and expected acceptance are a future replay oracle, not executed evidence."
+  ],
+  "files": [
+    {
+      "file": "stdout.jsonl",
+      "sha256": "cf435d4a90abd8a81d60be2fca1cc8ca18a7b0edbd20f1f35481906b0901df87",
+      "bytes": 3880,
+      "lines": 6
+    },
+    {
+      "file": "host.json",
+      "sha256": "e8659bbda90af5542fc8ec9ad72ff093a0b36a56775908be7b8e731582cb54ef",
+      "bytes": 2211,
+      "lines": 61
+    }
+  ]
+}

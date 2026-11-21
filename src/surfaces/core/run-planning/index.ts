@@ -37,11 +37,22 @@ export function brainProposalLines(result: RunPlanningResult, locale: Locale, po
   ];
 }
 /** R9f: the plan approval card's preview — only what the card's own summary (tasks, permissions, budget, decision) does not say. */
-export function brainProposalCardLines(result: RunPlanningResult, locale: Locale, pool?: PlanningPoolHold | null): readonly string[] {
+export function brainProposalCardLines(result: RunPlanningResult, locale: Locale, pool?: PlanningPoolHold | null,
+  sameTurn?: Readonly<{ invocationId: string; chosenBrain: string | null }>): readonly string[] {
   if (isRunIntentResult(result)) return runIntentLines(result, locale);
   const proposal = result.proposal.proposal, held = heldPool(pool);
-  return [...(held ? [t('brain.poolHeld', held, locale)] : []), ...proposal.graph.tasks.flatMap(task => task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))),
-    ...planningSpendingLines(result, locale), ...brainModelLines(result, locale)];
+  const source = proposal.source;
+  const safeName = (value: string) => terminalSafeText(redactForRecord(value));
+  const chat = sameTurn && source.kind === 'model' && source.receipt.invocationId === sameTurn.invocationId
+    && source.contribution?.schemaVersion === 2 && source.contribution.billingAxis === 'subscription';
+  const attribution = chat ? [
+    t('brain.sameTurn.author', { model: safeName(source.receipt.reference.modelId), provider: safeName(source.receipt.reference.providerId) }, locale),
+    ...(sameTurn.chosenBrain ? [t('brain.sameTurn.choice', { model: safeName(sameTurn.chosenBrain) }, locale)] : []),
+    t('brain.sameTurn.checks', {}, locale),
+    source.contribution.usage ? t('brain.sameTurn.usage', { tokens: source.contribution.usage.totalTokens }, locale) : t('brain.sameTurn.usageUnknown', {}, locale),
+  ] : [];
+  return [...attribution, ...(held ? [t('brain.poolHeld', held, locale)] : []), ...proposal.graph.tasks.flatMap(task => task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))),
+    ...(!chat ? planningSpendingLines(result, locale) : []), ...brainModelLines(result, locale)];
 }
 /** Owner 2026-11-06: one information line when a model below the recommended Brain class made the plan (never a refusal). */
 const brainModelLines = (result: RunProposalResult, locale: Locale) => result.brainBelowRecommended ? [t('assignment.brain.belowRecommended', {}, locale)] : [];

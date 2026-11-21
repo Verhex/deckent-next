@@ -22,6 +22,7 @@ import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
 import { createAgentProposals, type AgentProposalViews } from './proposals.js';
+import { createChatSameTurnPlanning, type CreateServiceSameTurnPlanning } from './same-turn.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -47,14 +48,16 @@ export interface RuntimeChatTurnHost {
   readonly mcp: McpClientPool;
   /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
   /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun; /** The proposal card and choice views the CLI host lends (absent: the proposal tools answer unavailable). */ readonly proposalViews?: () => Promise<AgentProposalViews>;
+  readonly planSameTurn?: CreateServiceSameTurnPlanning;
 }
 /** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
 export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal,
   /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>, planSameTurn?: CreateServiceSameTurnPlanning): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}), ...(proposalViews ? { proposalViews } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
+  return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}),
+    ...(planSameTurn ? { planSameTurn } : {}), ...(proposalViews ? { proposalViews } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 /** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
  * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
@@ -199,11 +202,14 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     mcpNotices = [...mcpNotices, ...mcpTools.notices];
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
+    const sameTurn = native && runtime && host.planSameTurn && host.proposalViews
+      ? createChatSameTurnPlanning({ root: projectRoot, options, actor: context, witness: loaded.witness, peer, profile: native.profile,
+        signal, locale: language, turnId: command.turnId, bridgeMaxBytes: runtime.limits.replayMaxBytes, create: host.planSameTurn, recheck: recheckNative }) : null;
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
     // alpha.64 B + C (owner S4/S5): work and setting proposals, decided and applied as the AI actor in both loops; the person's card decides.
-    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language, ...(host.proposalViews ? { views: host.proposalViews } : {}),
+    const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language, sameTurn, ...(host.proposalViews ? { views: host.proposalViews } : {}),
       emit: event => event.kind === 'work' ? channel.emit(event) : emitApproval(event),
       ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal, observe: BrainPlanObserver) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
         undefined, invokeSignal ?? planSignal), planSignal, observe) } : {}) }) : null;
@@ -297,10 +303,15 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
           const show: Parameters<AgentTurnPorts['invokeRound']>[1] = delta => {
+            if (sameTurn?.planning.active) return;
             if (delta.kind === 'text') shownText += delta.text; else shownReasoning += delta.text;
             onDelta(delta);
           };
-          result = agent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, agent, text => { pluginNotices.add(text); })
+          const boundAgent = agent && sameTurn ? { ...agent, port: { ...agent.port, claimed(receipt: import('#domain/index.js').ModelInvocationReceipt) {
+            sameTurn.claim(invocation, receipt);
+            agent.port.claimed?.(receipt);
+          } } } : agent;
+          result = boundAgent ? await invokePeerConfiguredAgentModel(projectRoot, invocation, peer, options, host.model, show, roundSignal, boundAgent, text => { pluginNotices.add(text); })
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
@@ -313,6 +324,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
+          if (sameTurn?.planning.active) return { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
           const cliSubscription = evidence && profile && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
             && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
@@ -346,23 +358,30 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           }
           return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
         }
-        const refusal = openAiProviderRefusal(result.response);
+        const refusal = sameTurn?.planning.active ? null : openAiProviderRefusal(result.response);
         if (refusal) return { status: 'failed', state: t('tui.openai.refusal', { message: refusal.message }, language) };
         const message = openAiChatMessageFromInvocation(result);
         if (!message) return { status: 'failed', state: 'unreadable' };
+        const counted = openAiChatUsageFromInvocation(result);
+        const usage = counted ? { promptTokens: counted.promptTokens, completionTokens: counted.completionTokens } : null;
+        for (const text of deliveredPaidNotices) pluginNotices.add(text);
+        if (sameTurn?.planning.active) {
+          sameTurn.keep(result);
+          return { status: 'responded', content: '', reasoning: '', toolCalls: message.toolCalls, finish: typeof message.finish === 'string' ? message.finish : 'unknown',
+            ...(message.providerStop ? { providerStop: message.providerStop } : {}), usage };
+        }
         // What was shown is always a prefix of the governed result; anything else ends the turn, never merged.
         if (!message.content.startsWith(shownText) || !message.reasoning.startsWith(shownReasoning)) return { status: 'failed', state: 'stream-mismatch' };
         if (message.reasoning.length > shownReasoning.length) onDelta({ kind: 'reasoning', text: message.reasoning.slice(shownReasoning.length) });
         if (message.content.length > shownText.length) onDelta({ kind: 'text', text: message.content.slice(shownText.length) });
-        const usage = openAiChatUsageFromInvocation(result);
-        for (const text of deliveredPaidNotices) pluginNotices.add(text);
         return { status: 'responded', content: message.content, reasoning: message.reasoning, toolCalls: message.toolCalls,
           ...(message.continuation ? { continuation: message.continuation } : {}), ...(message.providerStop ? { providerStop: message.providerStop } : {}),
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
-          usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
+          usage };
       };
     const ports: AgentTurnPorts = {
       invokeRound,
+      ...(sameTurn && agentProposals ? { planning: sameTurn.planning, finishPlanning: agentProposals.finishSameTurn } : {}),
       ...(native && runtime ? { invokeAgent: (input: Parameters<NonNullable<AgentTurnPorts['invokeAgent']>>[0],
         onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile, onPaidUsage, paidExtraUsage: config.models.headless.paidExtraUsage,
           execution: native.execution, session: input.session, signal: agentSignal, knownSecrets: getConfigKnownSecrets(context.config), recheck: recheckNative },

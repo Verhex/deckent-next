@@ -1,0 +1,66 @@
+{
+  "cli": "claude",
+  "group": 2,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "same-call-replay",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "8931add58df4079163131e718df1093e23278259213ffdcd4eea9fc11c80b2f5",
+          "replacementBytes": 278
+        }
+      ]
+    },
+    {
+      "case": "two-finalizers",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "b8fad463204ec1c8c11aaf1bfbf30ee06a18e3da6830cf6611337150c1f54429",
+          "replacementBytes": 292
+        }
+      ]
+    },
+    {
+      "case": "different-second-proposal",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "110b12729c34e0d2adc5804cc8c67ad06ff681f1a7274d980dd32f7b5c3fa719",
+          "replacementBytes": 143
+        }
+      ]
+    },
+    {
+      "case": "post-preparation-tool-before-execution",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "04c442a5f4dab703d74deacc471fd771083c0df4740d128ac8503f7fff0403fc",
+          "replacementBytes": 142
+        },
+        {
+          "path": "/wire",
+          "replacementSha256": "04bc76cdfed15f477f3436ff9d8f07e7c9298910a4bcf5977f9c72c777eb435b",
+          "replacementBytes": 4201
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "65c99cefd60a7908cdab4b58397f1aec4633f40e69be036699f6849155557e30",
+      "bytes": 29251,
+      "lines": 4
+    }
+  ]
+}

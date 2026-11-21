@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { toolSessionSchema, nativeAgentCorrelationSchema, type ToolSession, type ToolSessionPort, type NativeAgentToolResult } from '#capabilities/index.js';
+import { toolSessionSchema, nativeAgentCorrelationSchema, type ToolSession, type NativeAgentToolResult, type SameTurnPlanningPort, type SameTurnToolSessionPort } from '#capabilities/index.js';
 import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
 import { createAgentContextCarry } from './carry.js';
 import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
@@ -7,7 +7,7 @@ import { projectModelIngressField, type ModelIngressProjection } from './model-i
 import { checkModelIngressArguments, projectModelIngressSchema } from './model-ingress-json.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
-import { optionalField, LOCALES, t, type Locale } from '#platform/index.js';
+import { optionalField, LOCALES, t, ErrorRegistry, type Locale } from '#platform/index.js';
 import { chatTurnResultSchema, agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
   type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
@@ -26,6 +26,11 @@ export type AgentRoundOutcome =
  * run. The loop itself holds no authority and no provider or storage knowledge.
  */
 export interface AgentTurnPorts {
+  /** Private preparation custody; the host wires the same K1 owner into the native driver and durable turn. */
+  readonly planning?: SameTurnPlanningPort;
+  /** Calls that owner's ONE finalizer after native close/drain and retained invocation, then awaits the person card with the parent signal.
+   * Returns a rendered catalog result only. It never creates a second coordinator or calls a model. */
+  finishPlanning?(signal: AbortSignal): Promise<string>;
   /** Delivery failure reported by the host, retained in the same durable outcome rather than mislabeled as user cancellation. */
   contextFailure?(): AgentContextFailure | null;
   /** BeUser M-10: true when the runtime service itself is stopping (not the person's cancel); such a turn ends as an error that says so. */
@@ -36,7 +41,7 @@ export interface AgentTurnPorts {
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Native driver owns model transport only; every proposal goes through this turn's single call coordinator. */
   invokeAgent?(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[];
-    readonly session: ToolSessionPort }, onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void,
+    readonly session: SameTurnToolSessionPort }, onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void,
     signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
    * call's position in the turn (the identity the turn's decision record names; never used for authority). */
@@ -251,11 +256,19 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
       if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
       const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, { ...input, signal }, ports, round) : content;
-      const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
+      const privateResult = ports.planning?.privateResult(call.id, shown);
+      const settlement = { round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status,
+        content: privateResult?.content ?? shown, ...(diagnostic ? { diagnostic } : {}) };
+      // The facade cannot resolve until the exact private P is durably recorded. History/carry/events see only the public projection.
+      if (privateResult) {
+        if (!ports.settled) throw new Error('TOOL_SETTLEMENT_UNAVAILABLE');
+        await ports.settled(settlement);
+      }
+      const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: privateResult?.publicText ?? shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
         ...optionalField('cleanup', cleanup) });
-      await ports.settled?.({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
+      if (!privateResult) await ports.settled?.(settlement);
       return { message, progressed, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
         ...optionalField('cleanup', cleanup), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
     };
@@ -268,6 +281,7 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
     if (!checked.ok) { return result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); }
     const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest; pauseArgs = checked.args;
+    ports.planning?.beforeTool(call.id, digest);
     if (tool.toolClass === 'read' && seenReads.has(digest)) {
       return result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)!.callId} earlier in this turn; its result is above. Change the arguments to read something else.`);
     }
@@ -308,7 +322,7 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     // Cancellation is a transport fact; preserve the handler's completed effect in the native envelope.
     return { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } };
   };
-  return { run, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
+  return { run, planning: ports.planning, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
     retain(visible: ReadonlySet<AgentTurnMessage>) { for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest); } };
 }
 
@@ -317,7 +331,7 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
   push: (message: AgentTurnMessage) => AgentTurnMessage, historyBytes: () => number) {
   const controller = new AbortController(), records = new Map<string, { fingerprint: string; result: Promise<NativeAgentToolResult> }>();
   const pending = new Set<string>();
-  let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false;
+  let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false, planningRefused = false;
   const envelope = (deckentCallId: string, outcome: AgentToolOutcome): NativeAgentToolResult => Object.freeze({ schemaVersion: 1,
     turnId: session.turnId, generation: session.generation, deckentCallId, outcome: Object.freeze({ ...outcome }) });
   const refusal = (id: string, reason: string) => envelope(id, { status: 'error', text: `[deckent] error=${reason}` });
@@ -326,15 +340,37 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
     return { turnId: session.turnId, generation: session.generation, pendingCallIds: [...pending], termination: 'unverified' as const,
       effects: pending.size || coordinator.effectsUnknown || failedSettlement ? 'unknown' as const : 'settled' as const };
   };
-  const port: ToolSessionPort = { session,
+  const abandon = (reason: 'cancelled' | 'preparation-unsettled') => {
+    if (coordinator.planning?.pin && coordinator.planning.active) coordinator.planning.abandon(coordinator.planning.pin, reason);
+  };
+  const refusePlanning = () => { planningRefused = true; close(); abandon('preparation-unsettled'); };
+  const checkPlanning = (call: AgentToolCall): boolean => {
+    if (!coordinator.planning?.active) return true;
+    try {
+      coordinator.planning.beforeTool(call.id, agentToolArgumentsDigest(call.name, JSON.parse(call.argumentsJson || '{}') as Record<string, unknown>));
+      return true;
+    } catch {
+      refusePlanning();
+      return false;
+    }
+  };
+  const port: SameTurnToolSessionPort = { session, ...(coordinator.planning ? { planning: coordinator.planning, checkResultDelivery: checkPlanning } : {}),
     async propose(rawCall, rawCorrelation, signal) {
       const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
       const callId = parsed.success ? parsed.data.deckentCallId : checked.success ? checked.data.id : 'invalid-call';
-      if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) return refusal(callId, 'tool-correlation-invalid');
+      if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) {
+        if (coordinator.planning?.active) refusePlanning();
+        return refusal(callId, 'tool-correlation-invalid');
+      }
       const call = Object.freeze(checked.data), correlation = parsed.data;
       if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed');
+      if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
       const fingerprint = createHash('sha256').update(canonical({ call, correlation })).digest('hex'), prior = records.get(call.id);
-      if (prior) return prior.fingerprint === fingerprint ? prior.result : refusal(call.id, 'tool-call-conflict');
+      if (prior) {
+        if (prior.fingerprint === fingerprint) return prior.result;
+        if (input.nativeSession && coordinator.planning?.pin) coordinator.planning.abandon(coordinator.planning.pin, 'stale-terminal');
+        return refusal(call.id, 'tool-call-conflict');
+      }
       const bound = input.admission?.requestMaxBytes;
       const bytes = Buffer.byteLength(JSON.stringify(call), 'utf8');
       if (bound !== undefined && historyBytes() + pendingBytes + bytes > bound) return refusal(call.id, 'AGENT_CONTEXT_REQUEST_TOO_LARGE');
@@ -342,18 +378,23 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
       pending.add(call.id); pendingBytes += bytes;
       const result = queue.then(async () => {
         pendingBytes -= bytes;
-        try { push({ role: 'assistant', content: '', toolCalls: [call] }); return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome); }
-        catch { failedSettlement = true; closed = true; controller.abort(); return refusal(call.id, 'tool-settlement-unknown'); }
+        try {
+          // A request queued before preparation must pass the same fence before any history, event or target publication.
+          if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
+          push({ role: 'assistant', content: '', toolCalls: [call] });
+          return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome);
+        }
+        catch { failedSettlement = true; closed = true; controller.abort(); abandon('preparation-unsettled'); return refusal(call.id, 'tool-settlement-unknown'); }
         finally { pending.delete(call.id); }
       });
       records.set(call.id, { fingerprint, result }); queue = result;
       return result;
     },
-    async cancel() { interrupted = true; return { kind: 'cancelled', ...close() }; },
-    async revoke() { interrupted = true; return { kind: 'revoked', ...close() }; },
+    async cancel() { interrupted = true; abandon('cancelled'); return { kind: 'cancelled', ...close() }; },
+    async revoke() { interrupted = true; abandon('cancelled'); return { kind: 'revoked', ...close() }; },
   };
   return { port, close, signal: AbortSignal.any([input.signal, controller.signal]), get interrupted() { return interrupted; },
-    get failedSettlement() { return failedSettlement; }, drain: async () => { await queue; } };
+    get planningRefused() { return planningRefused; }, get failedSettlement() { return failedSettlement; }, drain: async () => { await queue; } };
 }
 
 /**
@@ -483,16 +524,46 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     let streamed = '';
     // NATIVE-BAGLAM: a leading inline `<think>` block in the answer text goes to the reasoning channel, streamed and settled alike.
     const routed = createInlineReasoningRouter(), show = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { if (delta.kind === 'text') streamed += delta.text; emit(delta); };
-    const onDelta = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part); };
+    const onDelta = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => {
+      if (ports.planning?.active) return;
+      for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part);
+    };
     try {
       if (native) {
         try { outcome = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port }, onDelta, native.signal)
           : { status: 'failed', state: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' }; }
         finally { native.close(); await native.drain(); }
         if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown' };
+        else if (native.planningRefused) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
         else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled' };
         // Native transport already submitted proposals. Returned calls must never become a second execution path.
         if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
+        if (ports.planning?.active && outcome.status === 'responded') {
+          // Reaching the chat's token threshold does not prove that a tool-less answer was cut short.
+          const truncated = outcome.finish === 'length';
+          if (signal.aborted || outcome.providerStop || outcome.finish !== 'stop' || truncated || !ports.planning.normalClosed) {
+            if (ports.planning.pin) ports.planning.abandon(ports.planning.pin, signal.aborted ? 'cancelled'
+              : truncated ? 'output-truncated' : outcome.providerStop ? 'native-failed' : 'completion-unknown');
+            outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
+          } else if (!ports.finishPlanning) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
+          else {
+            try {
+              outcome = { ...outcome, content: await ports.finishPlanning(signal), reasoning: '' };
+              show({ kind: 'text', text: outcome.content });
+            }
+            catch (error) {
+              // Admission may already have committed: preserve the typed unknown rather than saying no work started.
+              const { code, params } = (error as { code?: unknown; params?: { reason?: unknown; commandId?: unknown } } | null) ?? {};
+              if (code === 'BRAIN_SAME_TURN_REFUSED' && params?.reason === 'read-refused')
+                return finish('error', t('brain.sameTurn.readRefused', {}, input.language));
+              const rendered = typeof code === 'string' ? ErrorRegistry.get(code, input.language)?.message : undefined;
+              const note = rendered ?? t('error.RUN_PROPOSAL_OUTCOME_UNKNOWN', {}, input.language);
+              if (code === 'RUN_PROPOSAL_OUTCOME_UNKNOWN' && typeof params?.commandId === 'string')
+                return finish('error', `${note} ${t('cli.do.command', { command: params.commandId }, input.language)}`);
+              return finish('error', note);
+            }
+          }
+        }
       } else outcome = await ports.invokeRound({ round: rounds, messages, tools }, onDelta, signal);
     } catch { outcome = { status: 'failed', state: native?.failedSettlement ? 'unknown' : signal.aborted || native?.interrupted ? 'cancelled' : 'unavailable' }; }
     if (outcome.status === 'responded') {
@@ -501,6 +572,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (split.reasoning) outcome = { ...outcome, content: split.content, reasoning: `${outcome.reasoning}${split.reasoning}` };
     }
     if (outcome.status === 'failed') {
+      if (ports.planning?.active && ports.planning.pin) {
+        ports.planning.abandon(ports.planning.pin, signal.aborted ? 'cancelled' : 'native-failed');
+        return finish(signal.aborted ? 'cancelled' : 'error', t('error.BRAIN_SAME_TURN_REFUSED', {}, input.language));
+      }
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.
         if (streamed) push({ role: 'assistant', content: `${streamed}\n${ports.serviceStopping?.() ? `[deckent] ${t('agent.turn.outcome.serviceStoppedMidAnswer', {}, input.language)}` : cancelledMidAnswer(input.language)}`, toolCalls: [] });

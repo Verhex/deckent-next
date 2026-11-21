@@ -1,0 +1,123 @@
+{
+  "provenance": "masked recording",
+  "cli": "codex",
+  "version": "0.169.0",
+  "model": "gpt-6.1-sol",
+  "nativeModel": "gpt-6.1-sol",
+  "date": "2026-11-17",
+  "kitCommit": "3c8d4f35dd1cb6313c492f243646fd8f9bfaa546",
+  "originalSha256": {
+    "manifest.json": "6f06729dc52b45779ef607e003f512748f776b6510fb4ae71f7dc4acfbea2262",
+    "stdout.jsonl": "6be4be41d2fb5ad392126a80a2427e3670f19b8314d48b7d885f910344906e07",
+    "stderr.txt": "059783b8708dce30763adc783b68187b9f4a2589daa592695520ff2aeef45bdf",
+    "custody.jsonl": "f26e9146435848e3f681aa1a69fc761095b4a4a0c148fac15c122ce72225a331",
+    "kit-stdout.json": "9926b673ecd02031c8dbd4add4f08c2714a0162bcf80c0af52a30d1dfcb68dbc"
+  },
+  "process": {
+    "reason": "exit",
+    "exitCode": 0,
+    "signal": null,
+    "stdoutTruncated": false,
+    "stderrTruncated": false,
+    "limit": null,
+    "egress": {
+      "connected": 6,
+      "refused": 0,
+      "hosts": {},
+      "other": 0,
+      "reasons": {},
+      "otherReasons": {}
+    }
+  },
+  "maskedSha256": {
+    "stdout.jsonl": "113f220e78ba0db7223a51d1b5c900cd11c07f45f3e7939ee7006e69022d0aeb",
+    "custody.jsonl": "55ee98f831ccafdd77aab6d1d99a52d361969e4924ffc6d0a7d8d5387f4dbed2"
+  },
+  "changes": {
+    "stdout.jsonl": [
+      {
+        "line": 1,
+        "path": "/thread_id",
+        "replacement": "thread_id"
+      },
+      {
+        "line": 2,
+        "path": "/item/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 4,
+        "path": "/item/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 5,
+        "path": "/item/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 6,
+        "path": "/item/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 6,
+        "path": "/item/result/content/0/text (decoded JSON)/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 6,
+        "path": "/item/result/content/0/text (decoded JSON)/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 7,
+        "path": "/item/id",
+        "replacement": "native id"
+      }
+    ],
+    "custody.jsonl": [
+      {
+        "line": 1,
+        "path": "/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 1,
+        "path": "/callId",
+        "replacement": "callId"
+      },
+      {
+        "line": 1,
+        "path": "/correlation/callId",
+        "replacement": "callId"
+      },
+      {
+        "line": 1,
+        "path": "/correlation/itemId",
+        "replacement": "itemId"
+      },
+      {
+        "line": 1,
+        "path": "/correlation/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 1,
+        "path": "/result/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 1,
+        "path": "/result/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 2,
+        "path": "/callId",
+        "replacement": "callId"
+      }
+    ]
+  },
+  "custody": "argsDigest covers unchanged tool arguments; resultDigest and bytes cover unchanged P. Call identifiers outside P are masked. Derive envelope expectations by decoding the masked wire bytes."
+}

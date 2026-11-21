@@ -131,9 +131,14 @@ export function brainWorkClassView(policy: WorkClassPolicy) {
 /** Each failure stage is explicit and contains no provider text or secret-bearing parse diagnostics. */
 /** `requireCurrentGraph` is for a NEW model reply only. Verifying a stored proposal's model contribution keeps reading every graph
  * version the contract accepts, so an upgrade never turns a pending, valid older proposal into a rejection (Astra 2524). */
-export function parseBrainDraft(text: string, known?: KnownSecretSnapshot, options: { readonly requireCurrentGraph?: boolean } = {}): BrainDraft {
+export function parseBrainDraft(text: string, known?: KnownSecretSnapshot, options: { readonly requireCurrentGraph?: boolean; readonly exact?: boolean } = {}): BrainDraft {
   let input: unknown;
-  try { input = redactJson(JSON.parse(unfence(text)) as unknown, known); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
+  try {
+    const decoded: unknown = JSON.parse(options.exact ? text : unfence(text));
+    input = redactJson(decoded, known);
+    // A same-turn body is retained byte for byte: decoded strings AND property names must survive redaction unchanged.
+    if (options.exact && (redactForRecord(text, known) !== text || JSON.stringify(decoded) !== JSON.stringify(input))) throw new Error('REDACTION');
+  } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
   const parsed = brainDraftSchema.safeParse(input);
   if (!parsed.success) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'schema' } });
   if (options.requireCurrentGraph && parsed.data.graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION) throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_GRAPH_VERSION' } });
