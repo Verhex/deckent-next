@@ -179,6 +179,55 @@ it.skipIf(process.platform === 'win32')('guides an unknown launcher to a verifie
   });
 });
 
+describe.skipIf(process.platform === 'win32')('G3 package classification', () => {
+  async function packageProgram(manifest: unknown, mode = 0o700) {
+    const { root } = await connection(), dir = join(root, 'node_modules', 'other-layout'), executable = join(dir, 'tool');
+    await mkdir(dir, { recursive: true });
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode });
+    await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+    return executable;
+  }
+
+  const manifest = { name: 'other-layout', version: '1.0.0' };
+  const unknownLayout = {
+    code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-layout-unknown' }, message: expect.stringContaining('--executable'),
+  };
+
+  it.skipIf(process.getuid?.() === 0)('refuses a matching package command with an execute-only header', async () => {
+    const executable = await packageProgram({ ...manifest, bin: 'tool' }, 0o100);
+    await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
+    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).rejects.toMatchObject(unknownLayout);
+  });
+
+  it.each([
+    ['a null manifest', null],
+    ['an array manifest', []],
+    ['an invalid bin type', { ...manifest, bin: true }],
+    ['a non-string command target', { ...manifest, bin: { tool: 42 } }],
+  ])('refuses %s with executable guidance', async (_label, content) => {
+    const executable = await packageProgram(content);
+    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).rejects.toMatchObject(unknownLayout);
+  });
+
+  it('accepts a file when a valid manifest has no matching command', async () => {
+    const executable = await packageProgram({ ...manifest, bin: { other: 'other' } });
+    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
+  });
+
+  it('accepts a matching command whose readable header identifies a standalone executable', async () => {
+    const executable = await packageProgram({ ...manifest, bin: { tool: 'tool' } });
+    await writeFile(executable, '\x7fELF');
+    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
+  });
+
+  it.skipIf(process.getuid?.() === 0)('accepts an execute-only standalone file outside a package', async () => {
+    const { executable } = await connection();
+    await chmod(executable, 0o100);
+    await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
+    await expect(resolveHeadlessExecutable(entry, executable, process.getuid!())).resolves.toMatchObject({ executable });
+  });
+});
+
 it('gives an old generic version refusal no specific reason or update advice', () => {
   for (const locale of ['en', 'tr'] as const) {
     const message = ErrorRegistry.get('HEADLESS_PREFLIGHT_FAILED', locale, { check: 'version' })!.message;

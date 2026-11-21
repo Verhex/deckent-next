@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { access, lstat, open, readlink, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, isRecord } from '#platform/index.js';
 import { refuse } from './contract.js';
 import type { HeadlessEntry } from './env.js';
 
@@ -40,7 +40,7 @@ async function metadata(path: string, maxBytes: number, owners?: readonly bigint
     const info = await file.stat({ bigint: true });
     if (!info.isFile() || info.size > maxBytes || owners && (info.nlink !== 1n || !trusted(info, owners))) throw new Error();
     const data = Buffer.alloc(maxBytes + 1), { bytesRead } = await file.read(data, 0, data.length, 0);
-    if (bytesRead > maxBytes || stamp(info) !== stamp(await file.stat({ bigint: true }))) throw new Error();
+    if (bytesRead > maxBytes || BigInt(bytesRead) !== info.size || stamp(info) !== stamp(await file.stat({ bigint: true }))) throw new Error();
     const value = JSON.parse(data.subarray(0, bytesRead).toString('utf8')) as { name?: unknown; version?: unknown; bin?: string | Record<string, unknown>; optionalDependencies?: Record<string, unknown> } | null;
     return { value, identity: stamp(info) };
   } finally { await file.close(); }
@@ -82,25 +82,30 @@ async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix:
 }
 
 /** Diagnose package scripts declared as npm commands. A package may also expose a standalone binary. */
-async function npmLauncherRelation(launcher: string, maxBytes: number): Promise<'none' | 'launcher' | 'undetermined'> {
+async function npmLauncherRelation(launcher: string, maxBytes: number): Promise<'standalone' | 'launcher' | 'undetermined'> {
   const parts = launcher.split(sep), modules = parts.lastIndexOf('node_modules');
   const packageEnd = modules + (parts[modules + 1]?.startsWith('@') ? 3 : 2);
-  if (modules < 0 || packageEnd >= parts.length) return 'none';
-  const packageRoot = parts.slice(0, packageEnd).join(sep);
-  const manifest = await metadata(join(packageRoot, 'package.json'), maxBytes).catch(() => null);
-  if (!manifest) return 'undetermined';
-  const bin = manifest.value?.bin;
-  const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
-  if (!targets.some(path => typeof path === 'string' && !isAbsolute(path) && resolve(packageRoot, path) === launcher)) return 'none';
-  const file = await open(launcher, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
-  if (!file) return 'none';
+  if (modules < 0 || packageEnd >= parts.length) return 'standalone';
   try {
-    if (!(await file.stat()).isFile()) return 'none';
-    const header = Buffer.alloc(2);
-    const { bytesRead } = await file.read(header, 0, header.length, 0);
-    return bytesRead === header.length && header.toString('ascii') === '#!' ? 'launcher' : 'none';
-  } catch { return 'none'; }
-  finally { await file.close(); }
+    const packageRoot = parts.slice(0, packageEnd).join(sep);
+    const manifest: unknown = (await metadata(join(packageRoot, 'package.json'), maxBytes)).value;
+    if (!isRecord(manifest)) throw new Error();
+    const { bin } = manifest;
+    if (bin !== undefined && typeof bin !== 'string' && !isRecord(bin)) throw new Error();
+    const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
+    if (!targets.every(path => typeof path === 'string')) throw new Error();
+    if (!targets.some(path => !isAbsolute(path) && resolve(packageRoot, path) === launcher)) return 'standalone';
+
+    const file = await open(launcher, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const info = await file.stat();
+      if (!info.isFile()) throw new Error();
+      const header = Buffer.alloc(2);
+      const { bytesRead } = await file.read(header, 0, header.length, 0);
+      if (bytesRead !== Math.min(info.size, header.length)) throw new Error();
+      return header.toString('latin1') === '#!' ? 'launcher' : 'standalone';
+    } finally { await file.close(); }
+  } catch { return 'undetermined'; }
 }
 
 export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number): Promise<HeadlessExecutable> {
@@ -111,7 +116,7 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
   const rule = entry.command.npmLauncher, suffix = rule && `/${rule.packagePath}/${rule.launcherPath}`;
   const target = rule && suffix && launcher.endsWith(suffix)
     ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes) : undefined;
-  if (!target && await npmLauncherRelation(launcher, entry.headless.limits.preflightOutputBytes) !== 'none')
+  if (!target && await npmLauncherRelation(launcher, entry.headless.limits.preflightOutputBytes) !== 'standalone')
     headlessExecutableRefusal('npm-layout-unknown', chosen);
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);
   return Object.freeze({ chosen, executable, fileStamp, size: Number(info.size), mtimeMs: Number(info.mtimeMs), ...(target ? { packageRoot: target.packageRoot } : {}),
