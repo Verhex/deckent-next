@@ -1307,3 +1307,17 @@ changed/untracked file list over `execution.git.outputBytes` (PATCH_WORKING_TREE
 (PATCH_WORKING_TREE_UNSUPPORTED) refuse the base before anything is read; all three are permanent launch refusals (the attempt closes, no
 retry loop). A subfolder is refused rather than supported: Git lists changed paths from the top folder while the reader, writer and patch
 paths are rooted at the project folder, so support needs a path-prefix mapping through every site.
+
+## Delivery refusals and fresh decisions
+
+On main (unreleased, PR #166), a group- or other-writable Git custody directory causes `PATCH_UNSAFE`
+with reason `git-directory-write`. Init, doctor and the first `/do` use the delivery check for their warning.
+Interactive init and delivery can offer a witnessed card to remove group and other write bits on that
+directory. The adapter pins the directory and rechecks custody before changing its mode. Displayed paths
+are sanitized. The command is shell-quoted when the path can be displayed faithfully and omitted otherwise.
+Refusing the card leaves delivery blocked. After the confirmed change and a successful recheck, delivery
+can retry the same command once. A prepared integration remains selectable until a delivery receipt settles it.
+
+Each new effect, permission, verification or queue question in `/deliver` starts a fresh quiet-input period,
+including a changed question of the same kind. Refreshing an identical ordered verification list preserves
+the selection, including the optional empty choice. A changed list resets the selection and re-arms the question.

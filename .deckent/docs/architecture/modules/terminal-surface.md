@@ -710,3 +710,13 @@ fixture verification, not physical paint, live-installation timings, independent
 Local `/help`, `/model`, `/provider` and `/tasks` windows can open during startup. A command selected from help,
 a task-window action or an approval opened after a settings action meets the opening gate under its own command
 name. Progress, final results and errors from an aborted or superseded model/provider inspection cannot change the new view.
+
+On main (unreleased, PR #163), a list opened by a slash command that waited in the turn queue starts the shared
+quiet-input guard. Early keys are discarded and restart the wait. Directly opened lists keep their usual input
+handling. `/mode` selects the current mode on open when it is known. The queued-list guard covers work lists,
+including the `/run` and `/runs` selectors and the multiple-target `/deliver` list.
+
+On main (unreleased, PRs #168 and #169), `/runs` preserves selection by Run identity on refresh. The approval
+count labels partial scans and distinguishes an opened list’s snapshot from a fresh count. `/doctor` uses the
+shared doctor summary for the overall verdict and includes the untested count on its first page. With a pool
+reporting ready, a refused or unreadable first-worker assignment makes the verdict need attention.

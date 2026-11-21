@@ -138,6 +138,8 @@ panel offers the same registered MCP groups and preview/confirm path; it is not 
 policy editor. Group availability and effective state come from `list`, not a copied example.
 A revoke removes that group's managed grants only: custom/role grants can still permit the
 action. Inspect the **effective** state after revocation. No revocation erases past effects.
+On main (unreleased), the MCP grant result states that a tool marked “always ask” still
+asks on every call in every mode. Calls remain audited.
 
 Standing tool permissions and template maintenance have separate commands:
 
