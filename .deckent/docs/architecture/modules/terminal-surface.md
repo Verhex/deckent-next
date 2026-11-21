@@ -7,7 +7,7 @@ Kaynak/Source: ARCHITECTURE.md @58537c7f lines 690–842, 1005–1027, 1117–11
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
 not a second shell. Principal, scope, resource and policy travel with every turn; persona grants nothing.
-Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/TERMINAL-UI-LANDSCAPE/`).
+Market notes live in the private proof record `TERMINAL-UI-LANDSCAPE`.
 
 - **Regions:** banner, status strip (scope, chat model, busy/cancelling), work ledger (append-only chat,
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
@@ -489,7 +489,7 @@ The full banner uses the 16-cell, 10-row Unicode mark at 100 columns and 30 rows
 ASCII stays at 8 cells and 5 rows. The launch shell and conversation share the same size rule on resize, with the facts bottom-aligned beside the mark.
 The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) contained
 ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
-`/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
+private proof record (`TUI2-2026-10-07/L2-review.md`).
 
 **Theme set and background detection (TEMA-OKUNURLUK L1–L2, alpha.60; owner S2/S6/S8 A 2026-10-30).** `terminal.theme` takes the Claude
 Code set `auto|dark|light|dark-daltonized|light-daltonized|dark-ansi|light-ansi` plus `dark-high-contrast|light-high-contrast` (7:1) and

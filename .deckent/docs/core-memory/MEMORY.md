@@ -1,4 +1,4 @@
-# Memory — 10 KALICI KANUN (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
+# Memory — 10 KALICI KANUN (owner-seçimi; genişletme/daraltma yalnız owner-onayıyla)
 
 > Bu dosya ve aynı dizindeki referanslar bu repo için canonical ürün/geliştirme core-memory authority'sidir.
 > Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; kimde-ne-var/sıradaki adım host süreç panosunda (`node .agents/refactor/board.mjs show`), koşum kanıtı dış proof'ta; `follow-up-works/current-flow.md` kısa süreli görev hafızasıdır (owner 2026-10-10).
@@ -13,7 +13,7 @@ Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_
 
 1. **[Kanıt ve kapanış](law_evidence_and_closure.md)** — DONE = gerçek yüzey + çalışan binary + kalıcı kanıt; test-yeşili/projection/doküman/HOLD kapanış DEĞİL; engeli önce söyle; Brain kabul, Auditor denetim, Nervous gözlem; canlılık adapter custody + süreç/heartbeat/log/result ile; landing öncesi diff (amend. 2026-08-17).
 2. **[Yetki sınırı ve karar disiplini](law_authority_boundary.md)** — ADR/mimari önce okunur, çelişkide amendment; onay approved-DAG sınırında; yalnız owner-admitted outcome, bulgu otomatik iş değil; otonomi ≠ izinsiz sprint; sessiz ikame/devir yok (amend. 2026-08-17).
-3. **[Owner iletişimi](law_owner_communication.md)** — sade Türkçe, terim EN ve ilk kullanımda açıklanır; önce iş sonucu sonra kod kanıtı; Alperen kodu açmadan karar verebilsin.
+3. **[Owner iletişimi](law_owner_communication.md)** — sade Türkçe, terim EN ve ilk kullanımda açıklanır; önce iş sonucu sonra kod kanıtı; Owner kodu açmadan karar verebilsin.
 4. **[Doküman ve memory haritası](law_documents_and_memory.md)** — ARCHITECTURE sözleşme, PLAN iş, current-flow geçici, memory kalıcı ders, kanıt dış alan; her kayıtta iş mi durum mu sor; doküman wiring değildir.
 5. **[İş bölme ve kök neden](law_work_decomposition_root_cause.md)** — semptom yaması yerine kök neden + negatif kanıt; closure paketi forward iş taşımaz (amend. 2026-08-17); task/paralellik config + DAG + kapasiteden; darboğazı kanıtla bildir.
 6. **[Model ve provider tek kaynaktan](law_model_provider_source.md)** — 0-hardcode (ADR-G-036 + ratchet); provider-scoped explicit-active, sessiz ikame yok; kritik iş üst tier'a; tarihsel login/liste güncel kanıt değil.

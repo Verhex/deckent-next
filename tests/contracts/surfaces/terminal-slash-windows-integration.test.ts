@@ -47,7 +47,7 @@ async function open(extra: Partial<WorklineProps> = {}) {
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'd') } }));
   const info = terminalAdminPorts({ root, scopeId: 's', installationId: '7d1e2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b', projectId: '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d',
     options: { env: { HOME: join(root, 'h') } }, locale: 'en', context: {}, status: async () => 'Terminal: stdin yes', doctor: async sink => { sink.write('DOCTOR\n'); },
-    principalName: 'alperen' }).info;
+    principalName: 'user-1' }).info;
   const completeTurn = vi.fn(async () => 'unexpected');
   const view = mountWorkline({ info, ledger: LEDGER, pollMs: 60_000, completeTurn,
     sessions: { async save() { /* kept in memory by the view */ }, async list() { return []; }, async load() { return null; } },

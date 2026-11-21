@@ -5,15 +5,20 @@
 // Safety (law-audit MAJOR): a container is removed only by the exact 64-hex id in the dispatch record of an Attempt of a Run this pack admitted
 // itself, re-read right before removal and matched by `docker inspect` (same id, /workspace bind under the N1 root); never a name or label filter.
 // It refuses to start, and stops before every destructive step, without a valid WINDOW.json covering now. Any unexpected state stops it.
-// It never writes a verdict, promotion or grant, never restarts Docker (item 4 is the owner's sudo step) and never touches live or proje-wsl.
+// It never writes a verdict, promotion or grant, never restarts Docker (item 4 is the owner's sudo step) and never touches live or other installations.
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir, userInfo } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// Default host paths come from the operating-system account's home (not the HOME variable): a session started with another HOME must not
+// point the pack at another tree. `--apply` refuses before any step when the two differ (see homeMatchesAccount).
+const ACCOUNT_HOME = userInfo().homedir;
+export const homeMatchesAccount = () => resolve(homedir()) === resolve(ACCOUNT_HOME);
 export const DEFAULTS = Object.freeze({
-  cli: '/home/alperen/deckent-dogfood/bin/cli.sh', n1Root: '/home/alperen/deckent-dogfood', unit: 'deckent-n1.service',
-  accept: '/home/alperen/deckent-refactor-work/proof/ALPHA56-2026-10-24/accept', scope: 'live', k: 4,
+  cli: join(ACCOUNT_HOME, 'deckent-dogfood', 'bin', 'cli.sh'), n1Root: join(ACCOUNT_HOME, 'deckent-dogfood'), unit: 'deckent-n1.service',
+  accept: join(ACCOUNT_HOME, 'deckent-refactor-work', 'proof', 'ALPHA56-2026-10-24', 'accept'), scope: 'live', k: 4,
   batchDeadlineMs: 10 * 60_000, pollMs: 15_000, daemonPollMs: 1_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 5_000, maxWorkerPages: 64,
 });
 /** Rule ids are the Nervous seed's (assets/nervous/rules.json); `expect` is the per-rule detection delta one batch must produce (null: measured only). */
@@ -216,6 +221,8 @@ async function main(argv) {
     console.log(JSON.stringify({ mode: 'dry-run', ...shown, window, task: existsSync(config.task) ? config.task : 'missing', apply: 'add --apply to run these steps on N1' }, null, 2));
     return;
   }
+  // Closed before any outside effect: the defaults are bound to the operating-system account's home, so a differing HOME is a wrong target.
+  if (!homeMatchesAccount()) { console.error('PACK_HOME_MISMATCH: HOME differs from the account home; nothing was run.'); process.exitCode = 2; return; }
   const state = await execute(config, hostPorts(config), scenario);
   console.log(JSON.stringify({ mode: 'applied', runs: state.runs, records: state.records, report: config.reportFile }, null, 2));
 }

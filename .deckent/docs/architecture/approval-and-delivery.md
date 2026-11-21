@@ -684,7 +684,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   Run; re-authorized at reservation, custody fingerprint binds it from first acquisition) — next slice with more than one target.
   Adoption is local SDK/CLI only. `merge-tree` "update branch" is a later slice. The foreign-owner refusal is exercised through the
   group/other-writable branch only. Node 26 not measured.
-- **U1 (owner 2026-09-30).** No `npm run build` / `npm run verify` in the live checkout `/home/alperen/deckent-next`; build and verify
+- **U1 (owner 2026-09-30).** No `npm run build` / `npm run verify` in the live checkout `<repo>`; build and verify
   run in lane/integration worktrees, and the live checkout is built only in the governed switch (full verify + independent PASS + push +
   owner-approved restart). A rule, not a hook (a hook would also block the governed switch build). U2 (versioned side-by-side
   installation; owner option C, design `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`) replaces the rule by construction.

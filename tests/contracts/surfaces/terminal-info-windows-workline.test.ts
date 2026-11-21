@@ -31,7 +31,7 @@ async function project(config: Record<string, unknown> = {}) {
 }
 function admin(root: string, context: TerminalAdminContext, extra: Partial<Parameters<typeof terminalAdminPorts>[0]> = {}) {
   return terminalAdminPorts({ root, scopeId: 's', installationId: INSTALLATION, projectId: PROJECT, options: { env: homeEnv(join(root, 'h')) }, locale: 'en', context,
-    status: async () => 'Terminal: stdin yes', doctor: async sink => { sink.write('DOCTOR-TEXT-1\nDOCTOR-TEXT-2\n'); }, principalName: 'alperen', ...extra });
+    status: async () => 'Terminal: stdin yes', doctor: async sink => { sink.write('DOCTOR-TEXT-1\nDOCTOR-TEXT-2\n'); }, principalName: 'user-1', ...extra });
 }
 async function open(props: Partial<WorklineProps>) {
   const view = mountWorkline({ ...props, labels: { ...WORKLINE_TEST_LABELS, composer: { ...WORKLINE_TEST_LABELS.composer, slash: terminalComposerLabels('en').slash } } });

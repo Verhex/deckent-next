@@ -27,9 +27,9 @@ async function ledger(prefix = 'dn-audit-') {
 /** A permission-mode relaxation as the agent turn will report it (design note §4): summary only, no raw command or file content. */
 function event(scopeId: string, n: number, cell: 'edit-non-floor' | 'shell-modify' = 'edit-non-floor'): AuditEvent {
   return {
-    schemaVersion: 1, eventId: `${scopeId}-evt-${n}`, scopeId, principal: { issuer: 'local-os', subject: 'alperen' }, policyRevision: 'p7', atMs: 1_700_000_000_000 + n,
+    schemaVersion: 1, eventId: `${scopeId}-evt-${n}`, scopeId, principal: { issuer: 'local-os', subject: 'user-1' }, policyRevision: 'p7', atMs: 1_700_000_000_000 + n,
     subject: { kind: 'permission-mode', mode: 'auto-edit', cell, tool: { name: cell === 'shell-modify' ? 'shell' : 'edit_file', version: 1 },
-      call: { turnId: 'turn-1', round: 1, index: n, callId: `call-${n}` }, grants: { company: 'company-edit', person: 'alperen-auto-edit' },
+      call: { turnId: 'turn-1', round: 1, index: n, callId: `call-${n}` }, grants: { company: 'company-edit', person: 'user-1-auto-edit' },
       decision: { previous: 'require-approval', next: 'allow' },
       summary: cell === 'shell-modify' ? { kind: 'shell', head: 'git commit -m x', argsDigest: 'a'.repeat(64) } : { kind: 'edit', path: `src/file-${n}.ts` } },
   };

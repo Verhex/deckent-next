@@ -13,13 +13,13 @@ Owner 2026-10-05 hedefleri; hiçbiri uygulama kabulü değildir. Her biri kendi 
 - #8 GLM, #9 DeepSeek: model/provider kayıtları mevcut `provider-openai-chat` (OpenAI uyumlu) veya `provider-openrouter-chat` adaptörleriyle katalog verisi olarak eklenir; yeni adaptör yalnız kanıtlı bir yetenek açığı varsa.
 
 ## SIWC — OpenAI "Sign in with ChatGPT"
-- PKCE OIDC; açık kaynak geliştiriciler uygun; yalnız Responses API kapsamı. Kaynaklar: `/home/alperen/deckent-refactor-work/proof/SUBSCRIPTION-LOGIN-2026-10-05/sources.md`. Önce tasarım ve uygunluk kartı.
+- PKCE OIDC; açık kaynak geliştiriciler uygun; yalnız Responses API kapsamı. Kaynaklar: dış kanıt kaydı (`SUBSCRIPTION-LOGIN-2026-10-05/sources.md`). Önce tasarım ve uygunluk kartı.
 
 ## CLAUDE-API-KEY-TERMINAL
 - Native terminalde Claude, API anahtarıyla. Anthropic üçüncü taraf claude.ai girişini ve abonelik OAuth'unu yasaklar; abonelik yolu yalnız değiştirilmemiş Claude Code worker'ıdır. Test sonra.
 
 ## CI-DEBT, BOARD-DASHBOARD, B36, QWEN–JEV
-- CI-DEBT: owner'ın ayrı Codex ajanı, `/home/alperen/deckent-refactor-work/proof/CI-DEBT-2026-10-05/STATUS.md`.
+- CI-DEBT: owner'ın ayrı Codex ajanı, dış kanıt kaydı (`CI-DEBT-2026-10-05/STATUS.md`).
 - BOARD-DASHBOARD: Codex lane'i; PR #14 indi. B36 gerilemeleri: PR #12 indi (Astra 2365 PASS, main `0e773b3b`).
 - QWEN–JEV gölge karşılaştırma: 2/20 vaka; ayrıntı [qwen-host-pilot](qwen-host-pilot.md).
 

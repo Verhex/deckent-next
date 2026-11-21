@@ -26,7 +26,7 @@ const decision = (out) => out.hookSpecificOutput?.permissionDecision ?? 'pass';
 
 test('legacy runtime execution is denied, legacy reads pass', () => {
   assert.equal(decision(guard('pre-tool', bash(`node ${legacy}/dist/cli.js run`), ctx())), 'deny');
-  assert.equal(decision(guard('pre-tool', bash('cd /home/alperen/deckent-dev && npm run start'), ctx())), 'deny');
+  assert.equal(decision(guard('pre-tool', bash('cd /home/user-1/deckent-dev && npm run start'), ctx())), 'deny');
   assert.equal(decision(guard('pre-tool', bash(`docker compose -f ${legacy}/compose.yml up`), ctx())), 'deny');
   assert.equal(decision(guard('pre-tool', bash(`cat ${legacy}/PLAN.md | head`), ctx())), 'pass');
   assert.equal(decision(guard('pre-tool', bash(`git -C ${legacy} log --oneline -5`), ctx())), 'pass');

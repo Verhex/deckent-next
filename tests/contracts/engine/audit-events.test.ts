@@ -10,7 +10,7 @@ import { createHmacIntegrity, snapshotKnownSecrets } from '#platform/index.js';
 
 const integrity = createHmacIntegrity('audit-key', randomBytes(32));
 const base = {
-  schemaVersion: 1, eventId: 'evt-1', scopeId: 'scope', principal: { issuer: 'local-os', subject: 'alperen' }, policyRevision: 'p1', atMs: 10,
+  schemaVersion: 1, eventId: 'evt-1', scopeId: 'scope', principal: { issuer: 'local-os', subject: 'user-1' }, policyRevision: 'p1', atMs: 10,
   subject: { kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify', tool: { name: 'shell', version: 2 },
     call: { turnId: 't', round: 1, index: 0, callId: 'c' }, grants: { company: 'g-company', person: 'g-person' },
     decision: { previous: 'require-approval', next: 'allow' }, summary: { kind: 'shell', head: 'rm build/out.txt', argsDigest: 'f'.repeat(64) } },
@@ -25,7 +25,7 @@ it('audit event v1 is a bounded summary: strict shape, no raw command or content
   expect(auditEventSchema.safeParse({ ...base, subject: { ...base.subject, summary: { kind: 'edit', path: 'src/a.ts' } } }).success).toBe(true);
   expect(auditEventSchema.safeParse({ ...base, subject: { ...base.subject, decision: { previous: 'deny', next: 'allow' } } }).success).toBe(false);
   expect(auditEventSchema.safeParse({ ...base, subject: { ...base.subject, mode: 'ask' } }).success).toBe(false);
-  expect(auditEventSchema.safeParse({ ...base, principal: { issuer: 'local-os', subject: 'alperen', persona: 'x' } }).success).toBe(false);
+  expect(auditEventSchema.safeParse({ ...base, principal: { issuer: 'local-os', subject: 'user-1', persona: 'x' } }).success).toBe(false);
   expect(auditEventSchema.safeParse({ ...base, schemaVersion: 2 }).success).toBe(false);
 });
 
@@ -75,7 +75,7 @@ it('the application seals inside the store append, verifies every listed record 
 
 it('BeUser D-08: a refused work request is sealed with a redacted one-line title (known secrets and credential patterns) and its typed code', () => {
   const known = snapshotKnownSecrets([{ name: 'ERP_TOKEN', value: 'zz-erp-secret-value-991' }]);
-  const event = runRequestRefusedEvent({ scopeId: 'scope', principal: { issuer: 'local-os', subject: 'alperen' }, policyRevision: 'p1', commandId: 'c1',
+  const event = runRequestRefusedEvent({ scopeId: 'scope', principal: { issuer: 'local-os', subject: 'user-1' }, policyRevision: 'p1', commandId: 'c1',
     request: `Approve invoices\nwith zz-erp-secret-value-991 and sk-live-abcdef1234567890abcdef ${'x'.repeat(400)}`, code: 'RUN_ADMISSION_NOT_CONFIGURED', atMs: 5, known });
   const subject = event.subject as { kind: string; title: string; code: string; requestDigest: string };
   expect(subject).toMatchObject({ kind: 'run-request-refused', code: 'RUN_ADMISSION_NOT_CONFIGURED' });
@@ -87,7 +87,7 @@ it('BeUser M-33: the latest dismissal record of a task wins; a restored task is 
   const rows: ReturnType<typeof sealAuditRecord>[] = [];
   const store: AuditStore = { append: (event, seal) => { const record = seal(rows.length + 1); rows.push(record); return record; }, page: () => rows, increment: () => { throw new Error('unused'); }, counters: () => [],
     recentOfKind: (scopeId, kind, since, limit) => rows.filter(r => r.event.scopeId === scopeId && r.event.subject.kind === kind && r.event.atMs >= since).reverse().slice(0, limit) };
-  const audit = new AuditApplication(store, integrity), principal = { issuer: 'local-os', subject: 'alperen' };
+  const audit = new AuditApplication(store, integrity), principal = { issuer: 'local-os', subject: 'user-1' };
   const mark = (taskId: string, action: 'dismiss' | 'restore', atMs: number) => audit.record(deliveryDismissalEvent({ scopeId: 'scope', principal, policyRevision: 'p1', runId: 'r1', taskId, attemptId: 'a-' + taskId, action, atMs }));
   mark('t1', 'dismiss', 1); mark('t2', 'dismiss', 2); mark('t1', 'restore', 3); mark('t3', 'restore', 4);
   expect(dismissedDeliveries(audit, 'scope', 200)).toEqual([{ runId: 'r1', taskId: 't2', atMs: 2 }]);

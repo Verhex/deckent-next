@@ -19,7 +19,7 @@ never create work, authorize fixes or constitute owner acceptance.
 
 ## Preserve the read-only boundary
 
-- Inspect Next sources and retained evidence. Legacy `/home/alperen/deckent-dev` is a frozen
+- Inspect Next sources and retained evidence. The legacy `deckent-dev` checkout is a frozen
   read-only reference; never execute its runtime, workers, entry points or recovery procedures.
 - Read tests as source, but do not run tests, builds, benchmarks, services, deckent flows,
   migrations, cleanup or recovery. Do not edit code/documents/configuration, consume channel

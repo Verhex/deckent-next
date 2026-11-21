@@ -18,7 +18,7 @@ sonrasında gerçek CLI checkout yolunu ve Jev hazırlık sürümünü doğrular
 
 ## Kullanım
 
-Cwd `/home/alperen/deckent-next`. Vaka biçimi mevcut `jev-workflow.md` schemaVersion 2'dir:
+Cwd: depo kökü. Vaka biçimi mevcut `jev-workflow.md` schemaVersion 2'dir:
 north star + süreç + gözlenmiş kanıt + kazanç/kayıp + en az iki gerçek seçenek ve kontrol.
 İki ayrı çekimser seçenek hazırlamada otomatik eklenir. `prepare` model çağırmaz.
 
@@ -119,7 +119,7 @@ testlendi. Final kimlik doğrulamalı HTTP vaka 362 ms + replay/401 geçti. Type
 geçti; client/store 11 + API 5 test (16), mevcut Jev transport 9 + review 21 test (30) geçti.
 Bağımsız reviewer PASS ve hosted/live ürün kabulü bu pilotta alınmadı; commit/push yapılmadı.
 
-Kaynak/proof: `/home/alperen/deckent-refactor-work/proof/QWEN-DEV-DECISION-2026-10-05/`.
+Kaynak/proof: dış kanıt kaydı `QWEN-DEV-DECISION-2026-10-05`.
 Kalan: daha çeşitli gerçek geliştirme vakalarıyla etiketli kalite/kalibrasyon; idle-only yeni-vaka ölçümü;
 paralel kullanım ayrıca kabul edilirse vLLM logprob/MTP uyumluluğu ve gerçek terminal etkisi ayrı dilim.
 

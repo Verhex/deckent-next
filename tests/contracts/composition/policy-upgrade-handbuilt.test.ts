@@ -28,7 +28,7 @@ const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeIns
 // scope, and only the v5 rules that person lacks are added (archived, on the previewed revision; a second run is `current`). Real adapters, temp dirs.
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const PERSON = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
+const PERSON = { issuer: 'host-1', subject: 'user-1' };
 const SCOPE = 'live';
 const MCP_PERSON = { issuer: `${PERSON.issuer}/mcp`, subject: PERSON.subject };
 const DISTILLER = { issuer: `${PERSON.issuer}/memory-distiller`, subject: PERSON.subject };
@@ -208,7 +208,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     for (const [kind, action] of [['run', 'inspect'], ['run', 'create'], ['run', 'reserve'], ['pool', 'use'], ['attempt', 'execute'], ['attempt', 'evaluate'], ['attempt', 'read-output']]) {
       const request = { principal: owner, scopeId: SCOPE, action: action!, resource: { kind: kind!, id: 'any' } };
       expect(evaluatePolicy(policy, request).decision).toBe('allow');
-      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: '1001', id: 'stranger' } }).decision).toBe('deny');
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: 'user-2', id: 'stranger' } }).decision).toBe('deny');
       expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
     }
     expect(file.grants.slice(0, v9.grants.length)).toEqual(v9.grants);
@@ -219,7 +219,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const f = await installation();
     const before = await f.bytes();
     expect(await f.upgrade(true, { person: MCP_PERSON })).toMatchObject({ status: 'unavailable', reason: 'person-not-named' });
-    const stranger = { issuer: 'DESKTOP-7NLBLGA', subject: '1001' };
+    const stranger = { issuer: 'host-1', subject: 'user-2' };
     expect(await f.upgrade(false, { person: stranger })).toMatchObject({ status: 'unavailable', reason: 'person-not-named', people: [PERSON], rules: [] });
     expect(await f.upgrade(true, { person: stranger })).toMatchObject({ status: 'unavailable', reason: 'person-not-named' });
     // Named only on a rule of another scope (`pilot`) or on an `all`-scopes rule: not named in this scope.
@@ -308,8 +308,8 @@ describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-1
     const decide = (principal: typeof owner, scopeId: string, kind: string, action: string, id: string) => evaluatePolicy(loaded, { principal, scopeId, action, resource: { kind, id } }).decision;
     expect(decide(owner, SCOPE, 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('allow');
     expect(decide(owner, SCOPE, 'scope', 'inspect', SCOPE)).toBe('allow');
-    expect(decide({ ...owner, subject: '1001', id: 'stranger' }, SCOPE, 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('deny');
-    expect(decide({ ...owner, subject: '1001', id: 'stranger' }, SCOPE, 'scope', 'inspect', SCOPE)).toBe('deny');
+    expect(decide({ ...owner, subject: 'user-2', id: 'stranger' }, SCOPE, 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('deny');
+    expect(decide({ ...owner, subject: 'user-2', id: 'stranger' }, SCOPE, 'scope', 'inspect', SCOPE)).toBe('deny');
     expect(decide(owner, 'foreign', 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('deny');
     expect(decide(owner, 'foreign', 'scope', 'inspect', 'foreign')).toBe('deny');
 
