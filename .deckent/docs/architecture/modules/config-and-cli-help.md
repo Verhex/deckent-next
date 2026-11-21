@@ -90,6 +90,10 @@ group, summary and detail must exist in both locales. New actions register metad
 in this catalog (A1/A3 `run close|resume` and `task accept|reject` are registered since batch 27);
 no top-level help string is hand-edited. The `config` family keeps its lazy handler edge (terminal-render/Ink).
 Help locale (owner 2026-10-03): explicit `--lang`, then `DECKENT_LANGUAGE` / `DECKENT_LANG`, then project/global `language`, then system locale/default. CLI ingress supplies the read-only `loadConfigLanguage` projection to the help recognizer. It reuses the config layer readers and version/language schema, preserves absent language, and does not initialize provider sections, resolve secrets, heal, write or lock. Invalid/unreadable language configuration silently falls back; unrelated execution sections are not validated by help. Explicit/environment locale skips the config read.
+
+On main (unreleased, PR #164), `init --help` and guided init’s final doctor check honor the selected language.
+The config result names the restart command for a restart-bound change and tells the person to reopen the
+terminal after a language change. A numeric validation refusal includes the applicable minimum when available.
 Help paragraphs are authored without soft line breaks; intentional blank lines and command lists remain separate.
 Wrapping keeps bracket/angle tokens, flag-placeholder pairs and inline commands whole, and balances short prose tails.
 Sub-help renders an optional `<detail-key>.examples` message (shared by the family); absent examples are omitted.

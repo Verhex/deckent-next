@@ -366,4 +366,5 @@ command; on the host, in a fallback or in a degraded sandbox it asks. Both are a
 `shell-read` (audit event schema 1, enum widened; ledger v74 of this release already refuses older builds). `test` and `[ … ]` (file
 tests and comparisons) joined the read table. Other-modify, destructive, always-ask, fetch, MCP and the floors are unchanged. The
 worker core prompt `deckent-worker-core@4` asks workers to read with the read tools and edit with the edit tools, and to use the shell
-only when the work needs it.
+only when the work needs it. On main (unreleased, PR #158), [worker core v6](agent-tools.md#native-worker-tool-bridge)
+names deckent’s tools and directs workers to report the actual result of a refused or waiting call.

@@ -237,6 +237,8 @@ flowchart LR
    Bu politika o kapsamda model bağlamanıza ve çağırmanıza, anahtar saklamanıza ve bütçe belirlemenize izin verir; bu
    eylemlerin her biri yine kontrol edilir ve kaydedilir. `deckent doctor` neyin hazır olduğunu söyler, kurulum
    başlayamıyorsa sıfır dışı kodla çıkar. `deckent init` aynı kurulumu adım adım yapar ve eksik kalanı listeler.
+   Main’de (yayımlanmadı) kurulum, ayarlı ilk iş türünü denetler. Havuz hazır görünürken doctor o türün ilk
+   işçisinin atanabildiğini doğrulayamazsa özette “ilgi bekliyor” yazar.
 2. **Terminali açın**: `deckent`. Az önce kurduğunuz kapsamda açılır (`deckent --scope my-project` kapsamı açıkça seçer) ve
    deckent servisini arka planda başlatır. İlk açılışı Türkçe yapmak için `deckent --lang tr` kullanın; tercihi
    `deckent config set --global language '"tr"'` ile kaydedin (İngilizce: `'"en"'`; değer JSON olduğu için tırnaklar gerekir). `deckent init --lang tr` sırasında da seçebilirsiniz.

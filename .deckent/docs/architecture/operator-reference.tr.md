@@ -146,6 +146,9 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   imajıyla profil ekleme önizlemesinde sunar; mevcut profiller, türler ve değerlendiriciler korunur. Değişmiş önizleme veya
   reddedilen yazım uygulanmaz. İlk kayıt mevcut registry'nin üzerine yazmaz. Etkin ayarlar `deckent config explain execution`
   ve `deckent config explain admission` ile görülür.
+- **Main’de ilk işçi denetimi (yayımlanmadı):** Kurulum ve doctor, ayarlı ilk iş türünün küçük işçi atamasını
+  ve bağlı modelini okur. Eksik gereksinim, izlenecek adımla gösterilir. Havuz hazır görünürken atama reddedilirse
+  veya sınanamazsa doctor “ilgi bekliyor” bildirir.
 - **Açık CLI kurulumu:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
   --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` mevcut kaydın üzerine yazmadan ilk
   registry'yi önizler; `--apply` aynı yönetilen sahibi kullanır. Docker'sız abonelik türü için `--connection <profile-id>` verin
@@ -228,6 +231,10 @@ kartıdır ve yalnız dokunulan her yol hâlâ teslim edilen içerikle eşleşiy
 yolu olmadığı için reddedilir. Ayar değişikliği mevcut Run'ların değil, yeni Run'ların modunu seçer.
 
 ### Terminalde teslim penceresi
+
+Main’de (yayımlanmadı), yazılabilir Git muhafaza klasörü reddi kişiye nedenini ve varsa izin onarım kartını
+gösterir. Kart yalnız o klasörün yazma iznini daraltır. Her yeni karar taze yanıt bekler. Doğrulama listesinin
+sırası ve içeriği aynıysa seçiminiz korunur. Liste değişirse yeniden sorulur.
 
 - **Açılış.** Bu terminalin `/do` ile başlattığı bir Run'ın görevi "kabul edildi · yama hazır, teslim bekliyor" durumuna
   gelince teslim penceresi kendiliğinden, girişin odağını almadan açılır (Ctrl+O ya da Aktif iş şeridindeki "teslim bekliyor"

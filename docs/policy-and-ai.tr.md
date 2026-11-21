@@ -137,6 +137,8 @@ yönetici ihlali değişikliği reddeder. Terminal `/policy` paneli aynı kayıt
 örnekten değil `list` çıktısından alın. Geri alma yalnız grubun yönettiği izinleri kaldırır;
 özel/rol izinleri eyleme izin vermeyi sürdürebilir. Ardından **effective** (etkin) durumu
 inceleyin. Geri alma geçmiş etkileri silmez.
+Main’de (yayımlanmadı) MCP izin sonucu, “her zaman sor” işaretli bir aracın her kipte
+her çağrıda onay istediğini belirtir. Çağrılar denetim kaydına yazılır.
 
 Kalıcı araç izinleri ve şablon bakımı ayrı komutlardır:
 

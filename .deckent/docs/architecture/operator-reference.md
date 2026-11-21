@@ -144,6 +144,9 @@ one section; other sections link to it.
   On an image-backed path, `/setup` offers an additional signed-in provider through a profile-add preview with that provider's image; existing profiles, kinds and
   evaluators are preserved. A changed preview or denied write is refused. Bootstrap never overwrites an existing registry.
   `deckent config explain execution` and `deckent config explain admission` show the effective settings.
+- **First-worker check on main (unreleased):** Setup and doctor read the small-worker assignment and
+  connected model binding for the configured first-job kind. A missing requirement comes with its next step.
+  When the pool reports ready, a refused or untested assignment makes doctor report “needs attention”.
 - **Explicit CLI setup:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
   --execution-slots <n> --in-flight-slots <n> [--connection <profile-id>] --preview` previews the first registry without
   overwriting one; `--apply` uses the same governed owner. For a Dockerless subscription kind, use `--connection <profile-id>`
@@ -226,6 +229,10 @@ hold an item; it only advises. Company policy may deny file delivery; an extra `
 is refused because this build has no second-approver path. Configuration changes select the mode of new Runs, not existing ones.
 
 ### Delivery window in the terminal
+
+On main (unreleased), a writable Git custody folder refusal gives the person a reason and, where available,
+a permission repair card. The card narrows write permission only on that folder. Each new decision waits for
+a fresh answer. Refreshing the same ordered verification list keeps your choice. A changed list asks again.
 
 - **Opening.** When a task of a Run that this terminal's `/do` started reaches "accepted · patch ready, awaiting delivery", a
   delivery window opens by itself without taking input (Ctrl+O, or "awaiting delivery" in the Active work strip with Ctrl+T and
