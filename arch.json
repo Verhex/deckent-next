@@ -6819,14 +6819,9 @@
       ],
       "allow": [
         {
-          "file": ".agents/skills/deckent-authority-bootstrap/SKILL.md",
-          "count": 2,
-          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
-        },
-        {
-          "file": ".agents/skills/deckent-readonly-audit/SKILL.md",
+          "file": ".deckent/docs/architecture/modules/terminal-surface.md",
           "count": 1,
-          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+          "reason": "The match is the keyboard key list PgUp/PgDn/Home/End, not a host path."
         }
       ]
     },

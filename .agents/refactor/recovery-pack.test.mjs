@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { execute, plan, checkWindow } from './recovery-pack.mjs';
+import { homeMatchesAccount, DEFAULTS as PACK_DEFAULTS, execute, plan, checkWindow } from './recovery-pack.mjs';
 
 // R-DESIGN §6 G5 negatives: a container id not from a self-admitted Attempt's dispatch record, a bind source outside the N1 root, or a
 // missing/expired WINDOW.json stops the pack before any `docker rm -f`. All ports are fakes: no N1, no Docker, no systemd.
@@ -102,4 +102,14 @@ test('the default is a dry run: it prints the planned steps and spawns nothing',
   const out = JSON.parse(result.stdout);
   assert.equal(out.mode, 'dry-run'); assert.equal(out.k, 3); assert.ok(out.steps.some(step => step.step === 'kill-service' && step.destructive));
   assert.equal(spawnSync(process.execPath, [script, '9'], { encoding: 'utf8' }).status, 1);
+});
+
+test('default host paths follow the account home, not the HOME variable', () => {
+  const saved = process.env.HOME;
+  try {
+    assert.equal(homeMatchesAccount(), true);
+    process.env.HOME = '/tmp/another-home';
+    assert.equal(homeMatchesAccount(), false);
+    assert.ok(!PACK_DEFAULTS.n1Root.startsWith('/tmp/another-home'));
+  } finally { if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved; }
 });

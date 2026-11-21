@@ -183,7 +183,7 @@ for (const file of files) {
       else missing.push(`${file}:${index + 1}: authorized privacy replacement is missing`);
       continue;
     }
-    if (corpus.has(norm(line))) found++; else missing.push(`${file}:${index + 1}: ${line.slice(0, 160)}`);
+    if (corpus.has(norm(line))) found++; else missing.push(`${file}:${index + 1}: sha256 ${digest(line.replace(/\r$/u, '')).slice(0, 16)} (removed line not found; text withheld)`);
   }
 }
 console.log(`removed non-empty lines: ${removed}; found elsewhere: ${found}; separators/rules (no content): ${skipped}; authorized privacy replacements: ${redacted}; not found: ${missing.length}`);
