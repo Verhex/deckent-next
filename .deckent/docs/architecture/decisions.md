@@ -452,7 +452,7 @@ processes nor a live landing, test result, Task acceptance, or automatic executi
 
 Next is the repository where refactoring and product completion happen. The pre-refactor
 product repository stays read-only reference. Local historical documents, experiments,
-proof and toolchains live outside Next in `/home/alperen/deckent-refactor-work`; this
+proof and toolchains live outside Next in the external refactor work area; this
 document surface stays outside Git and npm publication. Skills and active links use that
 external location; no local directory or compatibility symlink is retained in Next.
 Next core-memory is canonical and verified by its local digest manifest; optional comparison

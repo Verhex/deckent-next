@@ -15,7 +15,7 @@ const channel = { channelId: 'local-vllm', access: 'allowed' as const, revision:
     model: { id: 'qwen3-8b', version: 1, lifecycle: { state: 'active' }, vendorId: 'qwen', displayName: 'Qwen 3 8B', capabilities: { tools: 'supported' }, contextWindow: 131072 } }] };
 const REPORT = (locale: Locale) => [`${locale === 'en' ? 'Installation identity' : 'Kurulum kimliği'}: ${INSTALLATION}`, `${locale === 'en' ? 'Project identity' : 'Proje kimliği'}: ${PROJECT}`, 'REPORT-TAIL'].join('\n');
 const ports = (locale: Locale, overrides: Record<string, unknown> = {}) => terminalAdminPorts({ root: '/work/deckent-next', scopeId: 'scope-main', installationId: INSTALLATION, projectId: PROJECT, options: {},
-  locale, status: async () => REPORT(locale), doctor: async () => undefined, principalName: 'alperen', context: {
+  locale, status: async () => REPORT(locale), doctor: async () => undefined, principalName: 'user-1', context: {
     describeTerminalChatPlan: async () => ({ status: 'ready', reference: { providerId: 'local-vllm', providerVersion: 1, modelId: 'qwen3-8b', modelVersion: 1 } }),
     inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope-main', channels: [channel] }) as never,
     describeRuntimeService: async () => ({ instanceId: SERVICE, processId: 4242, build: { sourceCommit: 'a'.repeat(40) } }),
@@ -28,7 +28,7 @@ describe.each([
   ['en', {
     status: [`deckent is running · version ${VERSION} · model Qwen 3 8B (local server)`, 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  REPORT-TAIL', `  Runtime service now: instance ${SERVICE}, pid 4242, build aaaaaaaaaaaa`],
-    scope: ['You: alperen · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standard · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
+    scope: ['You: user-1 · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standard · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  Permission mode: standart (policy revision p-7; modes supported: yes; full access allowed: no)'],
     model: ['Current model: Qwen 3 8B (local server) · tool calls supported', 'Model catalog · scope scope-main · channels: 1', '  local-vllm · local server · enabled',
       '    Qwen 3 8B (qwen3-8b) · available · enabled  <- current', 'Listed from the ledger catalog; availability of a model is not observed here.', 'Details: exact reference local-vllm@1/qwen3-8b@1'],
@@ -41,7 +41,7 @@ describe.each([
   ['tr', {
     status: [`deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  REPORT-TAIL', `  deckent servisi şimdi: örnek ${SERVICE}, pid 4242, sürüm aaaaaaaaaaaa`],
-    scope: ['Siz: alperen · Proje: deckent-next (b7d1e2f3) · Şirket: varsayılan · Mod: standart · Kural sürümü: p-7', 'Kapsam: scope-main', 'Yüzey erişimi: işler, işçiler, onaylar', 'Ayrıntı',
+    scope: ['Siz: user-1 · Proje: deckent-next (b7d1e2f3) · Şirket: varsayılan · Mod: standart · Kural sürümü: p-7', 'Kapsam: scope-main', 'Yüzey erişimi: işler, işçiler, onaylar', 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  İzin modu: standart (politika revizyonu p-7; modlar destekleniyor: evet; tam erişim izinli: hayır)'],
     model: ['Geçerli model: Qwen 3 8B (yerel sunucu) · araç çağrısı destekli', 'Model kataloğu · kapsam scope-main · kanal sayısı: 1', '  local-vllm · yerel sunucu · etkin',
       '    Qwen 3 8B (qwen3-8b) · kullanılabilir · etkin  <- geçerli', 'Defter kataloğundan listelenir; bir modelin erişilebilirliği burada gözlenmez.', 'Ayrıntı: tam başvuru local-vllm@1/qwen3-8b@1'],

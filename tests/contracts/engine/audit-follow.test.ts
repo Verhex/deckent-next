@@ -18,7 +18,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const integrity = createHmacIntegrity('audit-key', randomBytes(32));
-const event = (scopeId: string, n: number): AuditEvent => ({ schemaVersion: 1, eventId: `${scopeId}-evt-${n}`, scopeId, principal: { issuer: 'local-os', subject: 'alperen' },
+const event = (scopeId: string, n: number): AuditEvent => ({ schemaVersion: 1, eventId: `${scopeId}-evt-${n}`, scopeId, principal: { issuer: 'local-os', subject: 'user-1' },
   policyRevision: 'p7', atMs: 1_700_000_000_000 + n, subject: { kind: 'model-ingress', fieldDigest: 'a'.repeat(64), projectedDigest: 'b'.repeat(64), decodedDigest: null, codePoints: n, disposition: 'note' } });
 async function ledger(count: number, scopeId = 'scope') {
   const root = await mkdtemp(join(tmpdir(), 'dn-audit-follow-')); roots.push(root);
@@ -126,7 +126,7 @@ it('reads a future refusal beside old records without enabling any writer, and j
     expect(relatedAuditRecords(audit, [record], { pageSize: 1, maxRecords: 1 }).correlationLimited).toBe(true);
     expect(auditRefusalMatchesPolicy(refusal, policy)).toBe(true);
     expect(auditRefusalMatchesPolicy({ ...refusal, scopeId: 'other' }, policy)).toBe(false);
-    expect(auditRefusalMatchesPolicy({ ...refusal, principal: { issuer: 'other', subject: 'alperen' } }, policy)).toBe(false);
+    expect(auditRefusalMatchesPolicy({ ...refusal, principal: { issuer: 'other', subject: 'user-1' } }, policy)).toBe(false);
     if (policy.subject.kind !== 'policy-turn') throw new Error('fixture');
     for (const mismatch of [{ round: 2 }, { index: 1 }, { callId: 'other' }]) {
       const entry = policy.subject.allowed.calls[0]!;

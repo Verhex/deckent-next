@@ -223,9 +223,13 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     expect(bad.connection.statistics().connected).toBe(0);
   });
   it('keeps network none and host/foreign identities hidden; raw native output is suppressed', async () => {
+    const hostRoot = await fixture();
+    const hostAuthPath = join(hostRoot, '.codex', 'auth.json');
+    await mkdir(dirname(hostAuthPath));
+    await writeFile(hostAuthPath, '{}');
     const f = await worker(['node', '-e', `const fs=require('node:fs');const os=require('node:os');const net=require('node:net');const http=require('node:http');
       (async()=>{const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.config/cursor/auth.json'));
-      const forbidden=['/var/run/docker.sock','/home/alperen/.codex/auth.json',process.env.HOME+'/.claude/.credentials.json',process.env.HOME+'/.codex/auth.json'];
+      const forbidden=['/var/run/docker.sock',${JSON.stringify(hostAuthPath)},process.env.HOME+'/.claude/.credentials.json',process.env.HOME+'/.codex/auth.json'];
       if(Object.keys(auth).join()!=='accessToken'||forbidden.some(p=>fs.existsSync(p))||Object.keys(os.networkInterfaces()).some(k=>k!=='lo'))process.exit(11);
       for(const host of ['1.1.1.1','172.17.0.1','169.254.169.254'])await new Promise((resolve,reject)=>{const s=net.connect({host,port:443});s.setTimeout(500,()=>s.destroy());s.on('connect',()=>{s.destroy();reject(Error())});s.on('error',()=>{});s.on('close',resolve)});
       await new Promise((resolve,reject)=>{const proxy=new URL(process.env.HTTPS_PROXY);const req=http.request({hostname:proxy.hostname,port:proxy.port,method:'CONNECT',path:'example.com:443'});req.on('connect',()=>reject(Error()));req.on('error',resolve);req.end()});

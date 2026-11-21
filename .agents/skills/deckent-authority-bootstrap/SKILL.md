@@ -14,7 +14,7 @@ implementation, verification, review or documentation workflow.
 Produce a read-only snapshot. Loading this skill, reading a document, receiving a channel
 message or obtaining a snapshot grants no new work, runtime, recovery, delegation or release
 authority. Preserve existing owner authorization; do not request it again for routine steps.
-The frozen `/home/alperen/deckent-dev` repository supplies read-only historical evidence;
+The frozen legacy `deckent-dev` checkout supplies read-only historical evidence;
 never run its runtime, workers, entry points, generation or recovery commands.
 
 ## When to refresh
@@ -27,7 +27,7 @@ does not replace current authority and relevant verification.
 
 ## Establish authority and repository context
 
-- Work from `/home/alperen/deckent-next`; identify the actual checkout/worktree and Next HEAD.
+- Work from the `deckent-next` checkout; identify the actual checkout/worktree and Next HEAD.
   Record branch, relevant upstream relation and staged, unstaged and untracked changes.
   Check overlapping worktrees and assigned paths. Do not infer dirty-state ownership from a
   filename or branch; mark unknown ownership and preserve those edits.

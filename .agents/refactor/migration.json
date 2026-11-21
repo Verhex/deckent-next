@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "sourceRoot": "/home/alperen/deckent-dev",
-  "targetRoot": "/home/alperen/deckent-next",
+  "sourceRoot": "~/deckent-dev",
+  "targetRoot": "~/deckent-next",
   "skillSources": {
     "deckent-agentic-ux": ".codex/skills/deckent-agentic-ux",
     "deckent-authority-bootstrap": ".codex/skills/deckent-authority-bootstrap",

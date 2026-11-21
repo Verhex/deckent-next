@@ -101,7 +101,7 @@ aralıkları yeniden ölçülmedi; ilk dilim süreleri effort aracıyla kaydedil
   ve Windows Node 24.15 (ikisi de 2026-10-21 bu oturumda WSL'den `/mnt/c` git ve `cmd.exe` ile okundu) deckent'in istediği ≥ 24.22.0'ın altında. N2 öncesi: Node 24.22+/26, MSVC build araçları, taze
   klon; deckent burada paralel geliştirilir ve native testler burada koşar. WSL'den sürme yolu (`cmd.exe`/`powershell.exe`)
   10-03 notunda.
-- **İlk gerçek kullanıcı:** owner'ın Windows projesi (`verhex-eggres-shield`, Rust + Windows 11 hedefli) WSL motoruyla kurulamadı (`/mnt/c` → `BOOTSTRAP_STATE_UNSAFE`) ve owner kararıyla N2'yi bekliyor; N2 kabulü bu projede gerçek iş olarak yapılır.
+- **İlk gerçek kullanıcı:** Windows projesi WSL motoruyla kurulamadı (`/mnt/c` → `BOOTSTRAP_STATE_UNSAFE`) ve owner kararıyla N2'yi bekliyor; N2 kabulü bu projede gerçek iş olarak yapılır.
 - **macOS:** yerel makine yok; bugün yalnız barındırılan runner'lar. Gerçek yüzey kabulü (terminal tanığı, Keychain,
   Seatbelt, Docker Desktop) için fiziksel ya da bulut Mac gerekir (§6 f).
 - Her kart başlamadan önce kullandığı platform API'sinin güncel resmî belgesi okunur ve tarihiyle kaydedilir (Seatbelt,

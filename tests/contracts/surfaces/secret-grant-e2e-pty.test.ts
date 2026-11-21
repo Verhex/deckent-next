@@ -13,7 +13,7 @@ import { inspectSecretProjectTarget } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { PROJECT_VAULT, projectVaultKey } from '#engine/index.js';
 
-// PRE-8 v2 end to end (lead fan-in check): a proje-wsl-shaped installation (first-run policy, legacy main key in the encrypted store, no .deck)
+// PRE-8 v2 end to end (lead fan-in check): a project-2-shaped installation (first-run policy, legacy main key in the encrypted store, no .deck)
 // → the terminal turn is refused SECRET_GRANT_REQUIRED → the first-use card → y → the REAL governed grant (witness, secret/set, sealed decision,
 // grants.json) → the same message is answered from the main vault, without re-entering the key. Off a terminal the same grant is refused.
 const fixture = resolve('tests/contracts/surfaces/secret-grant-e2e-pty.fixture.mjs'), cli = resolve('dist/composition/core/cli/internal/entry.js');

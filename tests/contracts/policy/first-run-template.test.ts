@@ -13,11 +13,11 @@ const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
 // a fresh, terminal-only installation gets from `deckent init policy`.
-const me = { issuer: 'os', subject: 'alperen' };
+const me = { issuer: 'os', subject: 'user-1' };
 /** PRE-9 (b): a stored full-auto counts only with its grant, so the person first opens it (`init policy --modes full-auto`: the managed rule). */
 const openFullAuto = (policy: unknown) => ({ ...(policy as object), grants: [...(policy as { grants: readonly unknown[] }).grants, { id: 'installer-permission-mode-full-auto', effect: 'allow',
   actions: ['set'], scopes: ['installation'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] });
-const principal = { id: 'os:alperen', ...me, assurance: 'os-user' as const, scopeIds: ['installation'] };
+const principal = { id: 'os:user-1', ...me, assurance: 'os-user' as const, scopeIds: ['installation'] };
 const READ_TOOLS = ['read_file', 'list_dir', 'grep', 'glob'];
 const SCRATCH_TOOLS = ['scratch_write', 'scratch_read', 'scratch_list'];
 const EDIT_SHELL_TOOLS = ['edit_file', 'write_file', 'run_shell'];

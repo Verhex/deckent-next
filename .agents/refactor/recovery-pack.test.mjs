@@ -69,7 +69,7 @@ test('every G5 stop happens before any docker rm -f', async t => {
     ['PACK_CONTAINER_ID_MISSING', { workers: row => ({ ...row, dispatch: { containerId: 'deckent-name' } }) }],
     ['PACK_CONTAINER_ID_MISMATCH', { inspectId: () => hex(9) }],
     ['PACK_BIND_OUTSIDE_N1', { mount: () => '/n1-other/workspace' }], // a sibling with the root as prefix is outside
-    ['PACK_BIND_OUTSIDE_N1', { mount: () => '/home/alperen/deckent-next' }],
+    ['PACK_BIND_OUTSIDE_N1', { mount: () => '/home/user-1/deckent-next' }],
   ];
   for (const [code, options] of cases) {
     const f = fixture(t, options);

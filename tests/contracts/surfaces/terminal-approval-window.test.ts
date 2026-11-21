@@ -51,7 +51,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
         expect(text).toContain(w.mode['standart']!);
         // R6a (owner D5): an AI-turn card ('-') says the AI in this chat asks on your behalf; a listed card keeps its requester.
         expect(text).toContain({ en: 'the AI in this chat, on your behalf (you decide)', tr: 'bu sohbetteki yapay zekâ, senin adına (kararı sen verirsin)' }[locale]);
-        expect(approvalCardLines({ ...fixture.approval, requester: 'alperen@host' }, work, fixture.preview, null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n')).not.toContain(w.onBehalfSelf);
+        expect(approvalCardLines({ ...fixture.approval, requester: 'user-1@host-1' }, work, fixture.preview, null, { project: '/home/u/acme', mode: 'standart' }, NOW).join('\n')).not.toContain(w.onBehalfSelf);
         // Raw codes stay out of the primary rows: the digest and the policy cell appear only after the details heading.
         const details = lines.indexOf(w.field.detail);
         expect(details).toBeGreaterThan(0);
@@ -266,7 +266,7 @@ describe('approval window in the real Workline', () => {
 
   it('/approvals rows with the catalog: what, who and how long; no approval id on the row', async () => {
     const now = Date.now();
-    const items = [base({ approvalId: 'b8f1c2d3-0000-4000-8000-000000000001', tool: 'run_shell', target: 'npm test', requester: 'alperen@host', createdAt: now - 125_000, expiresAt: now + 600_000 }),
+    const items = [base({ approvalId: 'b8f1c2d3-0000-4000-8000-000000000001', tool: 'run_shell', target: 'npm test', requester: 'user-1@host-1', createdAt: now - 125_000, expiresAt: now + 600_000 }),
       base({ approvalId: 'b8f1c2d3-0000-4000-8000-000000000002', summary: 'Deploy the release', runId: 'run-1', taskId: 'task-1', requester: 'svc@host', expiresAt: now + 600_000 })];
     for (const locale of ['en', 'tr'] as const) {
       const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) };
@@ -276,7 +276,7 @@ describe('approval window in the real Workline', () => {
       await until(() => view.stdout.frame.includes(labels.work.window.approvalsTitle), `approvals window ${locale}`); await settle(40);
       const frame = view.stdout.frame;
       proof(`approvals list ${locale}`, frame);
-      expect(frame).toContain(locale === 'en' ? '1. A shell command will run: npm test · requested by alperen@host · waiting 2' : '1. Kabuk komutu çalıştırılacak: npm test · isteyen alperen@host · 2');
+      expect(frame).toContain(locale === 'en' ? '1. A shell command will run: npm test · requested by user-1@host-1 · waiting 2' : '1. Kabuk komutu çalıştırılacak: npm test · isteyen user-1@host-1 · 2');
       expect(frame).toContain(locale === 'en' ? '2. Deploy the release · requested by svc@host · waiting an unknown time' : '2. Deploy the release · isteyen svc@host · bilinmeyen bir süredir bekliyor');
       expect(frame).not.toContain('b8f1c2d3');
       view.stdin.write('\u001B'); await settle(40);

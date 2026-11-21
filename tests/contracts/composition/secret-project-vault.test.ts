@@ -34,7 +34,7 @@ async function home() {
   cleanups.push(() => rm(base, { recursive: true, force: true }));
   const user = join(base, 'home');
   await mkdir(user, { mode: 0o700 });
-  // The main vault is the environment backend here: the legacy installation-wide key (proje-wsl shape).
+  // The main vault is the environment backend here: the legacy installation-wide key (project-2 shape).
   return { base, env: { HOME: user, USERPROFILE: user, PATH: process.env.PATH ?? '/usr/bin:/bin', DECKENT_ANTHROPIC_KEY: MAIN_VALUE } };
 }
 /** An installed project has its ledger and integrity key (the grant decision is sealed there). */
@@ -60,7 +60,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd,
 
 describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and grant at use', () => {
   it('migration: a legacy main key with no .deck is refused until one grant, then works without re-entering the key; the grant is sealed first', async () => {
-    const { base, env } = await home(), root = await project(base, 'proje-wsl');
+    const { base, env } = await home(), root = await project(base, 'project-2');
     expect(await (await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY')).toEqual({ source: 'refused', code: 'SECRET_GRANT_REQUIRED' });
     const refused = await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY').catch((error: Error & { suggestion?: string }) => error);
     expect(refused).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });

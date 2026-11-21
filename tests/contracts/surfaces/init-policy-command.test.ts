@@ -91,13 +91,13 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
 });
 it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with --upgrade, split at the last slash, repeated in the next command; refusals name --person and the people', async () => {
   const calls: unknown[][] = [], output: string[] = [];
-  const person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
+  const person = { issuer: 'host-1', subject: 'user-1' };
   let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
     conflicts: [], wireRules: [] };
   const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; }, stdout: { write(value: string) { output.push(value); } } });
-  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'DESKTOP-7NLBLGA/1000', '--lang', 'en'], ctx)).toBe(0);
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'host-1/user-1', '--lang', 'en'], ctx)).toBe(0);
   expect(calls.at(-1)).toEqual(['/project', 'live', false, undefined, person]);
-  expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person DESKTOP-7NLBLGA/1000');
+  expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person host-1/user-1');
   expect(output.join('')).toContain('hand-built policy');
   output.length = 0;
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--person', 'https://idp.example/realm/42'], ctx)).toBe(0);
@@ -107,7 +107,7 @@ it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with 
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
   const refusal = output.join('');
   expect(refusal).toContain('deckent init policy --scope live --upgrade --preview --person <issuer>/<subject>');
-  expect(refusal).toContain('DESKTOP-7NLBLGA/1000, evil/7');
+  expect(refusal).toContain('host-1/user-1, evil/7');
   expect(refusal).not.toContain('\u001b');
   output.length = 0; result = { status: 'unavailable', reason: 'person-not-named', person: { issuer: 'x', subject: 'y' }, people: [person] };
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'x/y', '--lang', 'tr'], ctx)).toBe(0);
@@ -121,7 +121,7 @@ it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with 
   }
 });
 it('alpha.56.1: a hand-built policy refusal repeats the mode the person typed (--apply [--expect] stays --apply) and adds --person', async () => {
-  const output: string[] = [], person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' }, refused = { status: 'unavailable', reason: 'not-first-run', people: [person] };
+  const output: string[] = [], person = { issuer: 'host-1', subject: 'user-1' }, refused = { status: 'unavailable', reason: 'not-first-run', people: [person] };
   const ctx = context({ async upgradePolicyTemplateInstallation() { return refused; }, async openPermissionModesInstallation() { return refused; },
     stdin: { isTTY: true }, stdout: { isTTY: true, write(value: string) { output.push(value); return true; } }, agentEnvironment: [], env: { HOME: tmpdir(), TERM: 'xterm' } });
   expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--lang', 'en'], ctx)).toBe(0);

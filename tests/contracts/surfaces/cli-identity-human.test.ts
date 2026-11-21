@@ -40,7 +40,7 @@ async function project(config: Record<string, unknown> = { terminal: { scopeId: 
 }
 const capture = () => { const lines: string[] = []; return { text: () => lines.join(''), sink: { write: (text: string) => { lines.push(String(text)); return true; } } }; };
 const listing = listIdentityProfiles([]);
-const person = { id: 'os-1234', label: 'alperen@host', kind: 'human' as const, principal: { issuer: 'os', subject: '1000' } };
+const person = { id: 'os-1234', label: 'user-1@host-1', kind: 'human' as const, principal: { issuer: 'os', subject: '1000' } };
 const choices = { schemaVersion: 1 as const, profiles: listing.profiles, principals: [person], scopeIds: ['live'],
   bindings: [{ id: 'owner', principals: [{ issuer: 'os', subject: '1000' }], roles: ['admin', 'operator'], scopes: { values: ['live'] } }] };
 function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; value: unknown }[] = []) {
@@ -84,7 +84,7 @@ it('bare identity is a status: profile, people and roles in words; a selected pr
   const text = h.out.text();
   expect(text).toContain('scope: live (default)');
   expect(text).toMatch(/Profile: Team/u);
-  expect(text).toMatch(/alperen@host/u);
+  expect(text).toMatch(/user-1@host-1/u);
   expect(text).toMatch(/admin, operator/u);
   // BeUser S-03: with one known person, how a colleague gets access is said plainly (Core account vs Enterprise company sign-in).
   expect(text).toContain('this installation knows only you so far'); expect(text).toContain('Enterprise feature');
@@ -96,7 +96,7 @@ it('choices: a labelled table of profiles with their roles, people and scopes, n
   expect(await main(['identity', 'choices', '--scope', 'live'], h.context)).toBe(0);
   const text = h.out.text();
   expect(text).toMatch(/Profile\s+Roles/u); expect(text).toMatch(/Team\s+profile-reader, profile-contributor/u);
-  expect(text).toMatch(/People/u); expect(text).toContain('alperen@host');
+  expect(text).toMatch(/People/u); expect(text).toContain('user-1@host-1');
   expect(text).toMatch(/Scopes/u);
   expect(text).not.toMatch(/^core:team@1: /mu);
 });

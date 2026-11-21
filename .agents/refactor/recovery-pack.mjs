@@ -8,12 +8,13 @@
 // It never writes a verdict, promotion or grant, never restarts Docker (item 4 is the owner's sudo step) and never touches live or proje-wsl.
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const DEFAULTS = Object.freeze({
-  cli: '/home/alperen/deckent-dogfood/bin/cli.sh', n1Root: '/home/alperen/deckent-dogfood', unit: 'deckent-n1.service',
-  accept: '/home/alperen/deckent-refactor-work/proof/ALPHA56-2026-10-24/accept', scope: 'live', k: 4,
+  cli: join(homedir(), 'deckent-dogfood', 'bin', 'cli.sh'), n1Root: join(homedir(), 'deckent-dogfood'), unit: 'deckent-n1.service',
+  accept: join(homedir(), 'deckent-refactor-work', 'proof', 'ALPHA56-2026-10-24', 'accept'), scope: 'live', k: 4,
   batchDeadlineMs: 10 * 60_000, pollMs: 15_000, daemonPollMs: 1_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 5_000, maxWorkerPages: 64,
 });
 /** Rule ids are the Nervous seed's (assets/nervous/rules.json); `expect` is the per-rule detection delta one batch must produce (null: measured only). */
