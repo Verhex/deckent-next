@@ -27,7 +27,7 @@ async function fixture() {
   const events: AuditEvent[] = [], writes: unknown[] = [], published: boolean[] = [];
   let held = false;
   // Every authority write records whether it ran inside `hold` (the configuration layers' lock).
-  const writer: Pick<FilePolicySource, 'updateAuthority'> = { updateAuthority: (work, key) => source.updateAuthority(snapshot => {
+  const writer: Pick<FilePolicySource, 'updateAuthority' | 'lookupAuthority'> = { lookupAuthority: source.lookupAuthority.bind(source), updateAuthority: (work, key) => source.updateAuthority(snapshot => {
     const planned = work(snapshot); if (planned.write) published.push(held); return planned; }, key) };
   const port = (reads: () => ReturnType<FirstRunServiceIdentityPort['read']>): FirstRunServiceIdentityPort => ({ read: reads,
     write: async value => { writes.push(value); }, hold: async work => { held = true; try { return await work(); } finally { held = false; } } });
@@ -59,9 +59,9 @@ it.skipIf(process.platform !== 'linux')('locked read → publish: the policy is 
   const preview = await f.run(f.port(sequence('a')), false);
   expect(preview).toMatchObject({ status: 'preview', serviceIdentity: { status: 'kept' } });
   expect(await f.run(f.port(sequence('a')), true, preview.expect!)).toMatchObject({ status: 'upgraded' });
-  expect(f.published).toEqual([true]);
+  expect(f.published).toEqual([true, true]); // baseline, then optional execution; both inside the same config lock
   expect((JSON.parse(await f.bytes()) as { grants: { id: string; resource: unknown }[] }).grants.find(rule => rule.id === V12[1])?.resource).toEqual({ kind: 'service', ids: ['a'] });
-  expect(f.events).toHaveLength(1);
+  expect(f.events).toHaveLength(2);
 });
 
 it.skipIf(process.platform !== 'linux')('the apply token binds the identity: another identity\'s token or a bare revision writes nothing', async () => {

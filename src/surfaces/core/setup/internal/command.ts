@@ -4,7 +4,8 @@ import { askCliCard, directoryPermissionCard, cliMode, holdTerminalInput, lendHe
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { observeSetup } from './observe.js';
-import { renderSetupLines, setupDocument } from './render.js';
+import { renderSetupLines, setupDocument, setupMessage } from './render.js';
+import { offerExecutionPermission } from './execution-permission.js';
 import registry from './modes.json' with { type: 'json' };
 
 export type SetupFormat = 'json' | 'plain' | 'interactive';
@@ -91,7 +92,8 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     // cards the terminal is held (raw, typed keys discarded: no `^[[B` echo, no stray answer); each view borrows it, a child gets it plain.
     const release = holdTerminalInput(stdin);
     try {
-      do {
+      await controller.offerExecution();
+      if (!controller.interrupted()) do {
         const giveBack = lendHeldInput(stdin);
         try { await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env, root }); } finally { giveBack(); }
       } while (await controller.runPending());
@@ -113,8 +115,11 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     plan = planFor(observed, unattendedAnswers(observed.observation, flags, false, observed.registry), flags.phase);
   }
   const outcome = { requested: flags.yes, results };
-  if (format === 'json') emit(setupDocument(plan, outcome), { ...sinks, json: true });
-  else emit(renderSetupLines(plan, locale, outcome), sinks);
+  const executionScope = flags.scope ?? observed.observation.folder.configuredScope;
+  const executionPermission = executionScope && context.upgradePolicyTemplate && plan.stages.some(stage => stage.id === 'core:policy' && ['done', 'skipped'].includes(stage.state))
+    ? await offerExecutionPermission(context, root, executionScope, locale, false) : undefined;
+  if (format === 'json') emit({ ...setupDocument(plan, outcome), ...(executionPermission ? { executionPermission } : {}) }, { ...sinks, json: true });
+  else emit([renderSetupLines(plan, locale, outcome), ...(executionPermission ? [setupMessage(executionPermission.key, executionPermission.params, locale)] : [])].join('\n'), sinks);
   if (results.some(result => result.status === 'not-wired')) throw ErrorRegistry.createError('SETUP_APPLY_UNAVAILABLE');
   // A refused stage (no terminal, no witness, no grant): typed, naming the stage; nothing after it was attempted.
   const refused = results.find(result => result.status === 'refused');

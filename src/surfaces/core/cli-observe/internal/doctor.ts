@@ -1,10 +1,11 @@
 import {
-  ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation,
+  ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
-import { configuredInvocationProfiles, configServiceState } from '#engine/index.js';
-import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { executionRegistrySchema, NATIVE_CODING_TEMPLATE_ADAPTER_ID } from '#domain/index.js';
+import { configuredInvocationProfiles, configServiceState, hasCapacityRoom } from '#engine/index.js';
+import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
@@ -15,7 +16,7 @@ type DoctorConfig = Awaited<ReturnType<typeof loadConfig>>;
 
 /** Facts only the grouped view needs: each is read-soft (a failed read is "not tested"), secret names only, never a value. */
 async function checkFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions, toolchainsRequested: boolean,
-  poolStatus: DoctorCheckFacts['poolStatus'], locale: import('#platform/index.js').Locale): Promise<DoctorCheckFacts> {
+  poolReadiness: Awaited<ReturnType<typeof assessPoolReadiness>>, locale: import('#platform/index.js').Locale): Promise<DoctorCheckFacts> {
   const scopeId = (config.terminal as { scopeId?: string } | undefined)?.scopeId ?? null;
   const providerSpending = context.inspectProviderSpendAccount && scopeId ? await context.inspectProviderSpendAccount(root,
     { schemaVersion: 1, scopeId, current: true }, options).catch(() => null) : null;
@@ -39,7 +40,37 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const mcpUsers = (name: string) => inventory?.rows.find(row => row.name === name && row.vault === 'main')?.usedBy.filter(user => user.startsWith('mcp:')).map(user => user.slice(4)) ?? [];
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
+  let progressionRuns: DoctorCheckFacts['progressionRuns'] = null;
+  if (scopeId && context.inspectSurfaceRunIds && context.inspectRun) {
+    const ids = await context.inspectSurfaceRunIds(root, scopeId, options).catch(() => null);
+    if (ids) {
+      progressionRuns = [];
+      for (const runId of ids.slice(0, ((config.terminal ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns)) {
+        const data = await context.inspectRun(root, { schemaVersion: 1, scopeId, runId }, options).catch(() => null);
+        progressionRuns.push({ run: data?.run ?? { scopeId, runId, revision: 0 }, ...(data?.progression ? { progression: data.progression } : {}) });
+      }
+    }
+  }
+  const monitor = await context.inspectMonitor?.(root, options, { schemaVersion: 1, install: 'current' }).catch(() => null);
+  const pool = 'pool' in poolReadiness ? poolReadiness.pool : undefined;
+  const observedPool = monitor?.installs.find(install => install.id === 'current' && install.status === 'available')?.pools.find(row => row.poolId === pool?.poolId);
+  const registry = executionRegistrySchema.safeParse(config.admission?.registry).data;
+  const selected = registry?.kinds.find(row => row.kind === firstJobKind)?.profile;
+  const profile = registry?.profiles.find(row => row.id === selected?.id && row.version === selected.version);
+  const templateDocker = profile?.adapter.id === NATIVE_CODING_TEMPLATE_ADAPTER_ID && !profile.parameters['worker'];
+  const parameters = profile?.parameters as { imageId?: unknown; docker?: { imageId?: unknown } } | undefined;
+  const selectedImage = templateDocker ? parameters?.docker?.imageId : parameters?.imageId;
+  const firstWorkerImage = typeof selectedImage !== 'string' ? templateDocker ? 'unmeasured' : null
+    : selectedImage === docker?.imageId ? 'configured' : templateDocker ? 'kind' : 'unmeasured';
   return {
+    progressionRuns,
+    poolHeld: observedPool?.held,
+    poolHasRoom: observedPool?.capacity != null && observedPool.executionCapacity != null && observedPool.executing !== undefined
+      ? hasCapacityRoom({ executionSlots: observedPool.executionCapacity, inFlightSlots: observedPool.capacity },
+        { execution: observedPool.executing, inFlight: observedPool.inFlight })
+      : undefined,
+    firstWorkerImage,
+    executionPermission: scopeId ? await context.inspectExecutionPermission?.(root, scopeId, options).catch(() => null) ?? null : null,
     workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
     codingRepository: context.inspectCodingRepository ? await context.inspectCodingRepository(root, options).catch(() => null) : null,
@@ -53,7 +84,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
           stale: binding != null && (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) };
       })),
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
-    scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
+    scopeId, toolchainsRequested, poolStatus: poolReadiness.status, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry, connection: !!config.execution && !docker }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
@@ -65,8 +96,8 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
     // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
-    stuckRuns: context.inspectMonitor ? await context.inspectMonitor(root, options, { schemaVersion: 1, install: 'current' }).then(snapshot => snapshot.installs.flatMap(install => install.runs)
-      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
+    stuckRuns: monitor?.installs.flatMap(install => install.runs)
+      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []) ?? null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins({ profiles: configuredInvocationProfiles(config) }, scopeId, options).catch(() => null) : null,
   };
 }
@@ -139,7 +170,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
-  const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
+  const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness, locale);
   const checks = [...doctorChecks(data, facts, locale)];
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, next: permission.command });
@@ -150,7 +181,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
   return { data: { ...data, status: doctorNeedsAttention(checks) ? 'degraded' as const : 'ready' as const,
-    summary: doctorCounts(checks), providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
+    summary: { ...doctorCounts(checks), checks: doctorReadinessChecks(facts, checks, locale) }, providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
@@ -173,7 +204,7 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
   const [command] = args.positionals;
   if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
   const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
-    const grouped = renderDoctorChecks(measured.checks, call.locale);
+    const grouped = renderDoctorChecks(measured.checks, call.locale, measured.data.summary.checks);
     return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
       renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale,
         { status: false, imageId: measured.config.execution?.docker?.imageId ?? null })].join('\n') : grouped;

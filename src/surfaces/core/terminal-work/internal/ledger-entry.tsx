@@ -1,9 +1,12 @@
+import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { type LedgerBuffer, type LedgerRow, type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { projectHumanPickerText, AssistantUnitRow, HumanTextRow, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render-ink/index.js';
 import { SYSTEM_SUMMARY_ENTRY_ID, SystemSummaryLine } from '#surfaces/core/terminal-window/index.js';
+import type { Locale } from '#platform/index.js';
 export interface LedgerEntryLabels {
+  readonly locale?: Locale;
   /** The system summary line's label (`terminal.info.systemLabel`). */
   readonly system?: string | undefined;
   readonly runCard: string;
@@ -84,6 +87,7 @@ function LedgerEntryBody({ entry, labels, groupView }: { readonly entry: WorkLed
         <Text {...ink.muted}>{head}</Text>
         <Text>{revision}</Text>
         <Text {...ink.muted}>{phases}</Text>
+        {runProgressionLines({ ...entry, state: entry.runState }, entry.progression, labels.locale ?? 'en').map((line, index) => <Text key={index}>{line}</Text>)}
       </Box>
     );
   }

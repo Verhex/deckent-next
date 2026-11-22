@@ -1,12 +1,12 @@
 import { FIRST_RUN_V16_RULE_IDS, FIRST_RUN_V18_RULE_IDS, FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, RECOVERY_ROLLOUT, IDENTITY_MAX_LENGTH, firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, IDENTITY_MAX_LENGTH, firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, firstRunTemplateRollback,
   mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
-// Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+// Historical fixtures exclude v16 onward, including the separate v20 proposal and v21 execution families.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 // POLICY-V12 (owner 2026-10-16, "Evet, v12 hazırla"; clean-install rehearsal F1/F2): the named installing person inspects the installed scope and
 // shuts down exactly this installation's runtime service. No new MCP/AI authority; edited and hand-built policies keep the v11 add-only plan.
@@ -81,11 +81,16 @@ it('exact v11 upgrades to v12 (also naming a configured service id); edited and 
   for (const [plan, current] of [[firstRunTemplateAdditions(edited, { ...names, person }), edited], [namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' }), handBuilt]] as const) {
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v12 plan');
     expect(plan.rules.filter(rule => !v13ids.includes(rule.id))).toEqual(v12rules); expect(plan.conflicts).toEqual([]);
+    const allIds = [...v12ids, ...v13ids];
+    expect(plan.rules.map(rule => rule.id)).toEqual(allIds.slice(0, POLICY_CHANGE_MAX));
+    expect(allIds.slice(-3)).toEqual(['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts']);
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     // Applied (since v16 in two batches of at most POLICY_CHANGE_MAX), the next plan is current; a configured service id is the one named.
     const next = (policy: typeof current) => firstRunTemplateAdditions(policy, { ...names, person }).status === 'unavailable' ? namedPersonPolicyAdditions(policy, { ...names, person, scopeId: 'installation' })
       : firstRunTemplateAdditions(policy, { ...names, person });
     const applied = { ...current, grants: [...current.grants, ...plan.rules] }, rest = next(applied);
+    expect(rest.status === 'plan' ? rest.rules.map(rule => rule.id) : null).toEqual(allIds.slice(POLICY_CHANGE_MAX));
+    expect(rest.status === 'plan' && rest.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(next({ ...applied, grants: [...applied.grants, ...(rest.status === 'plan' ? rest.rules : [])] }).status).toBe('current');
   }
   const named = firstRunTemplateAdditions(edited, { ...names, person, serviceId: 'configured' });
@@ -98,5 +103,5 @@ it('exact v11 upgrades to v12 (also naming a configured service id); edited and 
   expect(partial.status === 'plan' ? partial.rules.map(rule => rule.id).filter(id => !v13ids.includes(id)) : []).toEqual([v12ids[0]]);
   // The rollback delta (v13's since I-POL) never holds the v12 owner rules: `policy upgrade --template current --rollback` never removes them.
   expect(POST_V15_RULE_IDS.some(id => v12ids.includes(id))).toBe(false);
-  expect(firstRunTemplateRollback(current.policy, person, undefined, input).rules.map(rule => rule.id).some(id => v12ids.includes(id))).toBe(false);
+  expect(firstRunTemplateRollback(current.policy, person, undefined).rules.map(rule => rule.id).some(id => v12ids.includes(id))).toBe(false);
 });

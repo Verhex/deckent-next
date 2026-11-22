@@ -1,10 +1,11 @@
-import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
-  PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
+import { automationMarker, ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
+import { executionPermissionCoverage, verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+  PolicyAdministrationInspection, PolicyTemplateUpgrade, assertAuthorityWitness, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
@@ -25,7 +26,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
     try {
       const audit = new AuditApplication(auditStore, integrity);
       const administration = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
-        requestTtlMs: config.approvals.requestTtlMs, audit: event => { audit.record(event); } });
+        requestTtlMs: config.approvals.requestTtlMs, locale: resolveLocale(undefined, options.env, config.language), audit: event => { audit.record(event); } });
       const approve = async (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
         if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
         sessions.requireInteractiveTerminal();
@@ -90,12 +91,32 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
  * `deckent policy upgrade --template current`: current first-run additions for this local person through the governed chain. Preview reads
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
-export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
-  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' }): Promise<TemplateUpgradeResult> {
-  return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
-    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
-      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }));
+export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly previewRollback?: boolean;
+  readonly expect?: string; readonly reason: string; readonly only?: 'ai-proposals' | 'ai-execution' }, agents?: readonly string[], verifiedRoot?: import('#domain/index.js').Policy | null): Promise<TemplateUpgradeResult> {
+  return runConfiguredPolicyTemplateUpgrade(root, scopeId, options, input, agents, verifiedRoot);
 }
+/** The interactive command binds its in-process preview to the same witnessed writer. */
+export function applyReviewedPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3],
+  reviewedRules: readonly unknown[], agents?: readonly string[]): Promise<TemplateUpgradeResult> {
+  return runConfiguredPolicyTemplateUpgrade(root, scopeId, options, input, agents, undefined, reviewedRules);
+}
+async function runConfiguredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3],
+  agents: readonly string[] | undefined, verifiedRoot?: import('#domain/index.js').Policy | null, reviewedRules?: readonly unknown[]): Promise<TemplateUpgradeResult> {
+  if (input.mode !== 'preview' && input.only !== 'ai-proposals') {
+    const config = await loadComposedConfig(root, { ...options, heal: false });
+    await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), { attest: async () =>
+      automationMarker(options.env ?? process.env, agents ?? config.cli.agentEnvironment) === null && await attestLocalInteractiveTerminal() });
+  }
+  return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
+    new PolicyTemplateUpgrade(deps, { ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId }, reviewedRules)
+      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.previewRollback ? { previewRollback: true } : {}), ...(input.expect === undefined ? {} : { expect: input.expect }), ...(input.only ? { only: input.only } : {}) }, input.mode === 'preview' ? verifiedRoot : null));
+}
+/** Standing coverage across resource ids in this scope. A concrete Run may have narrower permissions. */
+export async function inspectConfiguredExecutionPermission(root: string, scopeId: string, options: ConfigLoadOptions) {
+  const { document, principal } = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+  return executionPermissionCoverage(document, principal, scopeId);
+}
+
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {
   return withPolicyAdministration(root, query.scopeId, options, 'read', (deps, person) => new PolicyAdministrationInspection(deps.policy).inspect(person, query));

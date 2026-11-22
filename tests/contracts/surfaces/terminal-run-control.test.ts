@@ -272,3 +272,41 @@ describe('terminal answer port over the CLI handler (BR2)', () => {
     expect(createWorklineLedgerPorts({ root: '/p', scopeId: 's', options: {}, renderRunCancellation: () => '', inspectWorkers: async () => ({}) as never, inspectRun: async () => ({}) as never })!.answerTask).toBeUndefined();
   });
 });
+
+it('119-C4: /runs Enter opens the bound diagnosis; h and cancel remain person operations while AI cancel is missing (EN/TR)', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const item = runs[RUNNING]!, now = Date.now();
+    const progression = { schemaVersion: 1 as const, scopeId: item.scopeId, runId: item.runId, revision: item.revision, observedAtMs: now, validUntilMs: now + 60000, actorClass: 'ai' as const,
+      state: 'blocked' as const, reason: 'POLICY_DENIED', session: 'eligible' as const, suspended: true, parkUnavailable: true,
+      missing: ['reserve', 'cancel'].map(action => ({ kind: 'run' as const, id: item.runId, action, scope: item.scopeId, reason: 'NO_GRANT', code: 'POLICY_DENIED' as const })) };
+    const control = vi.fn(async () => 'PERSON-HOLD'), cancel = vi.fn(async () => 'PERSON-CANCEL');
+    const ledger = { ...ports(control), cancelRun: cancel, inspectRunObservation: async (id: string) => id === RUNNING ? { ...item, progression } : runs[id] ?? null };
+    const h = await open(ledger, locale);
+    expect(h.stdout.frame).toContain(locale === 'en' ? 'AI execution permission is missing' : 'Yapay zekâ yürütme izni eksik');
+    await press(h, '\r', 150);
+    await until(() => h.stdout.frame.includes('RUN_PROGRESSION_PARK_UNAVAILABLE'), 'diagnosis detail');
+    const text = squeeze(h.stdout.frame);
+    expect(text).toContain(squeeze('deckent policy upgrade --template current --only ai-execution --scope scope-a --preview'));
+    expect(text).toContain(squeeze(`run/${RUNNING}/cancel`));
+    await press(h, ESC, 120); await press(h, 'h', 120);
+    await until(() => h.stdout.frame.includes(locale === 'en' ? 'Hold run' : 'beklet'), 'person hold card');
+    await press(h, 'y', 150); await until(() => control.mock.calls.length === 1, 'person hold');
+    expect(control).toHaveBeenCalledWith(RUNNING, 'hold', 7, undefined);
+    await press(h, ESC, 120); h.stdin.write('/cancel\r');
+    await settle(150); await press(h, '\r', 120); await press(h, 'y', 150);
+    await until(() => cancel.mock.calls.length === 1, 'person cancel');
+    expect(cancel).toHaveBeenCalledWith(RUNNING, 7);
+    h.instance.unmount();
+    for (const reason of ['DENIED', 'APPROVAL_REQUIRED']) {
+      const restricted = { ...ledger, inspectRunObservation: async (id: string) => id === RUNNING ? { ...item, progression: { ...progression,
+        missing: [{ ...progression.missing[0]!, reason }] } } : runs[id] ?? null };
+      const frame = await open(restricted, locale);
+      expect(frame.stdout.frame).toContain(reason === 'DENIED' ? locale === 'en' ? 'AI execution is explicitly denied' : 'Yapay zekâ yürütmesi açıkça reddedildi'
+        : locale === 'en' ? 'AI execution requires approval' : 'Yapay zekâ yürütmesi için onay gerekiyor');
+      await press(frame, '\r', 150);
+      await until(() => frame.stdout.frame.includes(reason), 'restricted policy detail');
+      expect(squeeze(frame.stdout.frame)).not.toContain('--onlyai-execution');
+      frame.instance.unmount();
+    }
+  }
+});

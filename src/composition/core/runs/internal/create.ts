@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
-import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { sha256, ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { isNativeCliWorkerProfile, bindSiwcWorker, nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, openSqliteInventoryReader, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget, nativeDockerSubscriptionRefusal } from '#adapters/index.js';
 import { verifiedPrincipal, runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
@@ -8,6 +8,7 @@ import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
+import { runProgressionSession, beginRunSession, type RunSessionPin } from '#engine/index.js';
 import { withRunCreationAuthority } from './authority.js';
 import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
@@ -20,6 +21,7 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
   work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>,
   validateProfile?: (profile: import('#domain/index.js').ExecutionProfileDefinition) => undefined,
   agentUses: readonly TaskAgentUse[] = []) {
+  const session = runProgressionSession(); let sessionPin: RunSessionPin | undefined;
   let warnings: readonly WorkerAdmissionWarning[] = [], compiled = false;
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const siwc = await configuredSiwcWorkerConnections(projectRoot, context, options), [scopeId] = principal.scopeIds; // U9-7 producer facts (none while held)
@@ -49,10 +51,17 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
             const profile = compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra], task?.agent);
             return isNativeCliWorkerProfile(profile) ? profile : bindSiwcWorker(profile, siwc, scopeId ?? '');
           } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } }); } } })),
-      ...nativeWorkerAdmission(projectRoot, scopeId ?? '', options) });
+      ...nativeWorkerAdmission(projectRoot, scopeId ?? '', options),
+      ...(session ? { session: async (command: import('#engine/index.js').BoundRunAdmission) => {
+        sessionPin = await beginRunSession(session, { ledger: sha256(await path()), companyId: config.company.id, scopeId: command.scopeId,
+          runId: command.runId, commandId: command.commandId, actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject } }, principal);
+        const pin = sessionPin;
+        if (!pin) return { committed() {}, async finish() {} };
+        return { committed(receipt: import('#engine/index.js').RunReceipt, commit: 'fresh' | 'replay') { if (commit === 'fresh') session.admission(pin, receipt.snapshot, principal, command.commandId); }, finish: () => session.finish(pin) };
+      } } : {}) });
   // A withheld snapshot is reported only when this admission compiled a worker prompt; a replay or a template-free Run says nothing.
   return work(app, authority, () => [...(compiled && instructions.withheld ? [instructions.withheld] : []), ...warnings, ...memory.warnings()], agents);
-  });
+  }, record => { if (sessionPin) session?.request(sessionPin, record); });
 }
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
   pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {

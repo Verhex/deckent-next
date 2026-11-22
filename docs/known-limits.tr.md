@@ -894,6 +894,36 @@ denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde 
 
 ## Kurtarma ve yükseltme
 
+### beta.2.1 yükseltmesinden sonra yapay zekâ işi (119)
+
+İlk politika yapay zekâ yürütme izni vermez. Servisin iş tanısı bu iznin eksik olduğunu söylüyorsa,
+kişi kendi sade terminalinde (bir yapay zekâ aracının terminali dışında) önizlemeyi açmalıdır:
+
+```sh
+deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
+```
+
+Aynı komutta `--preview` yerine `--apply` kullanmadan önce adı verilen yapay zekâ
+kimliğini, kapsamları ve geniş izni inceleyin. Açık şirket yasağı veya onay gereği yetkili yöneticiyle incelenmelidir;
+allow eklemek sorunu çözmeyebilir. Bu izin yalnız yapay zekânın kendi önerileriyle sınırlı değildir.
+
+Güncel servis gözlemini `/runs` (ayrıntı için Enter), `deckent run inspect --scope SCOPE_ID --id RUN_ID` veya
+`deckent doctor` ile okuyun. Sebep, aktörü, kapsamı ve eksik izin hücrelerini içerir. `attempt/all`, henüz ayrılmamış
+denemeler için bütün kimlikleri kapsayan izindir; uydurma deneme kimliği değildir. Eksik, eski veya okunamayan gözlem
+bilinmiyor der; kayıtlı iş durumu ayrıdır. Gözlem iş kaydına yazılmaz. Uygunluk, güncel ilerletme önkoşuludur;
+başlangıç veya kabul kanıtı değildir. Model, giriş ve ağ kontrolleri ayrı kalır.
+
+Servis yeniden başlamadan önce onaylanmış ama başlamamış yapay zekâ önerisi yeniden önerilmelidir. İş kaydı varsa
+`deckent run cancel --scope SCOPE_ID --id RUN_ID` ile kendi izinlerinizle iptal edin, ardından servis üzerinden yeni
+öneri oluşturup yeni kartı cevaplayın. Servis oturumunun başlangıç kaydının bulunmaması, işin ne zaman oluşturulduğunu
+kanıtlamaz. Daha önce açılmış ama yeni servis üzerinden gerçekten taze cevaplanmış kart yeni işi kabul edebilir.
+Yapay zekânın iptal izni de yoksa servis işi kalıcı olarak beklemeye alamayabilir; yalnız izni uygulamak o durdurulmuş
+işi yeniden başlatmaz. Bekletme (`h` veya `deckent run hold --scope SCOPE_ID --id RUN_ID`) ve iptal kendi güncel
+izinlerinizi kullanır; bunlar da reddedilebilir. Başlamış veya belirsiz iş bakımda kalır; iptal, işçinin sonlandırıldığını
+kanıtlamaz ve belirsiz etkileri uzlaştırmaz. İzni geri almak geçmiş etkileri geri almaz.
+Birleşik sürüm ve gerçek hesap yolculuğunun kabulü açıktır.
+
+
 - **beta.2’den beta.1.2’ye dönmeden önce, hâlâ beta.2’deyken ücretli kullanım anahtarını kaldırın.** Ayarı yazdığınız her projede çalıştırın:
 
   ```sh

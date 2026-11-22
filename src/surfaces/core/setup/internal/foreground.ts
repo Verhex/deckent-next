@@ -74,13 +74,13 @@ export async function runForegroundStage(context: Omit<SetupCommandContext, 'ins
       return applied.status === 'created' || applied.status === 'current' ? result('applied') : result('refused', `POOL_${applied.status.toUpperCase()}`);
     }
     if (op === 'installation.policy-upgrade' && context.upgradePolicyTemplateInstallation) {
-      const preview = await context.upgradePolicyTemplateInstallation(root, scopeId, false);
+      const preview = await context.upgradePolicyTemplateInstallation(root, scopeId, false, undefined, undefined, { env }, true);
       if (preview.status !== 'preview' || !preview.expect) return result('refused', `POLICY_UPGRADE_${preview.status.toUpperCase()}`);
       const rules = (preview.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string } }; return `+ ${terminalSafeText(grant.id ?? '-')}: ${terminalSafeText(grant.resource?.kind ?? '-')}`; });
       const answer = await askCliCard({ title: t('setup.foreground.upgradeTitle', {}, locale), body: [t('setup.foreground.upgradeBody', { scope: terminalSafeText(scopeId) }, locale), ...rules],
         options: [{ id: 'apply', label: t('setup.foreground.upgradeApply', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }] }, io);
       if (answer !== 'apply') { emit(t('setup.foreground.notApplied', {}, locale), { stdout: process.stdout }); return result('declined'); }
-      const applied = await context.upgradePolicyTemplateInstallation(root, scopeId, true, preview.expect);
+      const applied = await context.upgradePolicyTemplateInstallation(root, scopeId, true, preview.expect, undefined, { env }, true);
       return result(applied.status === 'upgraded' ? 'applied' : 'refused', applied.status === 'upgraded' ? undefined : `POLICY_UPGRADE_${applied.status.toUpperCase()}`);
     }
     return result('not-wired');

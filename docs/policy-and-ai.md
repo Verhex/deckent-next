@@ -2,7 +2,7 @@
 
 [Türkçe](policy-and-ai.tr.md) · [Architecture](architecture-overview.md) · [Compliance report](reports/ai-floor-compliance.md)
 
-Last checked against source: 2026-10-23. Policy says which verified actor may perform an action on a
+Last checked against source: 2026-11-17. Policy says which verified actor may perform an action on a
 resource in a scope. A grant permits an application to consider that action; it does not
 skip state checks, approvals, isolation, acceptance criteria or durable effect evidence.
 An administrator grants only authority they hold. AI actors cannot administer authority.
@@ -116,6 +116,88 @@ The native agent and external MCP clients share this actor. No AI decision step,
 other configuration, secret, policy, backup or uninstall authority is delegated by default. Existing
 custom installations keep their own grants; an upgrade preview is not a reset or grant.
 
+## Optional standing AI execution permissions (family 21)
+
+The first-run template is baseline v20: it includes its proposal rules and carries
+no standing AI execution permission.
+Plain policy install, setup and attachment share this baseline; supplied profiles
+without a witness stay within the same authority bound. A person at a terminal can
+separately add family 21, three explicit MCP rules in the installed scope: `run/reserve`,
+`run/cancel`, and `attempt/execute,evaluate,read-output,recover-output`. There is no
+ownership condition: the same AI identity can use its MCP tools on your or another
+actor's Runs in that scope, including trying old stuck work, reading output, preparing
+patches, requesting cancellation and holding work. The service itself does not start
+old stuck AI Runs. A proposal approved but not started before restart must be proposed
+again; cancel its Run first if one exists. A still-pending older card can be answered
+fresh in the new service session, subject to current checks.
+
+At a markerless interactive terminal, `deckent init` offers one separate execution
+permission card after reading the installed baseline and before starting permissions.
+Its full body names the AI identity, scopes, permission cells and withdrawal command.
+A verified never-granted history preselects **Grant permission and continue**; a
+witnessed earlier withdrawal or an unverified history preselects **Not now** and says
+why. A plain **Not now** is not saved, so a later init can offer again. Esc and Ctrl+C
+continue without granting. Scripts, AI-marked terminals, `--yes` and `--json` never
+accept this card. Accepting uses the existing witnessed administrator path and the
+exact preview revision; a changed or unknown result is reported without retry.
+
+When earlier permission state cannot be verified (older or profile-based installations, a moved project, or a damaged archive), the card preselects "Not now".
+
+Startup never adds family 21, and never restores revoked v20 proposal permissions. Existing installations receive no v21 execution permission at startup. The person
+previews `deckent init policy --scope SCOPE_ID --upgrade --preview`, checks the named
+AI identity, scopes, cells, conflicts and existing coverage, then repeats the exact
+printed apply command and `--expect` token at their own terminal. Hand-built policies
+require the explicitly named person. The governed administrator alternative is
+`deckent policy upgrade --template current --scope SCOPE_ID`, followed by `--apply
+--expect REVISION`. On a person's interactive terminal that supports cards, a text
+apply that adds family 21 shows the whole plan, including other families. `--json`
+uses the direct path on the same terminal. `TERM=dumb` uses plain text output.
+The card preselects granting only when the history proves this permission was never
+given in any scope the plan grants it to. A withdrawal or unverified history in any
+of those scopes preselects keeping the current policy and shows the reason. Ordinary
+previews read the archive. The card can also use a verified first publication.
+The person can change the selection and press Enter to confirm. Declining or cancelling
+keeps the policy and archive untouched. If the plan or revision changes before
+publication, the command asks for a fresh preview. AI cannot apply or roll back.
+Same-id changes and custom denials remain visible and are never overridden.
+An allow or role coverage does not override a deny or an approval requirement.
+
+The governed command accepts `--only ai-execution` for just the three execution
+rules, or `--only ai-proposals` for the v20 family. An installer upgrade with a baseline
+or system-row update publishes that update first, then family 21 separately, with its
+own version-21 archive key. These two publications are not atomic together: the second
+starts only after the first is verified, on its verified state. A foreign change between
+them causes a conflict. If the second step is proven absent or refused before writing,
+the baseline stays; preview again before adding the missing permission. An interrupted
+write is reconciled by the same archive key: proven applied means added; an unknown
+outcome never means permission was not added. Inspect the retained evidence before
+trying again; there is no automatic rewrite. A hand edit, supplied profile or combined older
+candidate publication does not establish managed family-21 custody; use authorized
+policy editing when the managed rollback cannot prove its lineage.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback --preview` reads the current withdrawal scopes without writing.
+CLI and `/policy` show each complete id as a quoted record on its own line, escaping invisible and directional marks.
+The persisted short card states only the scope count and current read command; it makes no claim about an earlier printed list.
+
+`deckent policy upgrade --template current --scope SCOPE_ID --rollback` removes only
+unmodified, provably managed family-21 execution rules through the person's existing
+approval route. A managed rule added for several scopes is removed with all its scopes,
+including scopes other than `SCOPE_ID`; the preview and decision card name them.
+The person's current delegation authority must cover every affected scope; a missing
+grant, deny or restriction in any of them refuses the whole removal without writing.
+Each rule needs its own retained proof of the managed addition. Changing today's
+scope configuration does not narrow the affected scopes of a previously added rule.
+It preserves v20 proposals, pool/target use and all earlier rules.
+The **AI proposals** toggle remains v20; CLI rollback of that family uses `--rollback
+--only ai-proposals`. Revoking it remains off after restart. Custom or role grants can
+still allow the same cells; inspect the remaining authority. Rollback does not undo
+past effects or kill running work, and downgrading the binary does not revoke policy.
+Neither family grants attempt cancel/release/reconcile, integration/adoption, policy
+administration, secrets or additional decision steps. Direct patch preparation may
+still refuse its separate custody release; evaluation patch preparation does not
+promise that release. Existing task, target, pool, model, tool, company, approval and
+worker-mode checks still apply.
+
 ## Inspect, grant and revoke using available surfaces
 
 Run from the installed project. Replace `SCOPE_ID`, `GROUP_ID`, `PREVIEW_DIGEST` and grant ids
@@ -140,6 +222,15 @@ A revoke removes that group's managed grants only: custom/role grants can still 
 action. Inspect the **effective** state after revocation. No revocation erases past effects.
 On main (unreleased), the MCP grant result states that a tool marked “always ask” still
 asks on every call in every mode. Calls remain audited.
+
+Policy approval cards keep their 2048-character bound. Changes that grant or widen an AI
+identity's permissions come first; other lines keep their submitted order. The stored
+change still executes in submitted order. A card that omits or cuts lines says how many
+changes are not shown in full and asks you to review the full change before answering.
+AI lines alone can exceed the card, so this is no guarantee that every AI permission is
+visible there. Both upgrade previews above show every change line; values within a line
+remain shortened to 48 characters and lists to six entries plus a count. The breadth
+explanation is appended to the sealed card only if it fits whole after the change.
 
 Standing tool permissions and template maintenance have separate commands:
 
@@ -239,7 +330,7 @@ is not business acceptance. The existing CLI is
 
 **“MCP read-only observer.”** Since template v19 the first-run policy also lets the MCP actor
 call models and use agent tools; a company deny for the MCP actor on `model-invocation` and
-`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback` on your card removes exactly the newest (v20 proposal) AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
+`agent-tool` keeps it an observer but also stops the native agent; `deckent policy upgrade --template current --rollback --only ai-proposals` on your card removes exactly the v20 proposal AI-actor rules (fresh installs too). Inspect `policy mcp list` and grant
 no write groups. On an existing installation revoke each unwanted managed group
 with the preview/apply sequence above and review custom/role grants too. “No managed groups”
 does not prove read-only when other grants exist. Tool discovery is not authority; ordinary

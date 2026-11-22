@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
 import { applySuppliedInstallation } from '#composition/core/installation/index.js';
 import { evaluatePolicy, firstRunPolicyTemplate, mcpPrincipalRef, policyFileSchema, resolvePolicyBindings } from '#domain/index.js';
-import { FIRST_RUN_TOOL_NAMES, hashInstallationProfilePayload, InstallationPreviewApplication, installationPublishTargets } from '#engine/core/installation/index.js';
+import { FIRST_RUN_TOOL_NAMES, hashInstallationProfilePayload, InstallationPreviewApplication, installationPublishTargets, suppliedPolicyWithinTemplate } from '#engine/core/installation/index.js';
 import { main } from '#surfaces/index.js';
 import { installationProfile } from '../support/installation-profile.js';
 
@@ -47,6 +47,16 @@ describe.skipIf(process.platform !== 'linux')('supplied installation profile aut
     const profilePath = join(root, 'profile.json'); await writeFile(profilePath, JSON.stringify(profile([widened])), { mode: 0o600 });
     expect(await adapters.attestLocalInteractiveTerminal()).toBe(false); // vitest has no controlling terminal
     expect(await apply(profile([widened]))).toBe('AUTHORITY_WITNESS_REQUIRED');
+    // Renaming, splitting actions and mixing people cannot hide authority for the MCP identity.
+    const execution = { id: 'renamed-execution', effect: 'allow', actions: ['execute', 'evaluate'], scopes: ['scope-1'],
+      principals: [mcpPrincipalRef(local)], resource: { kind: 'attempt', ids: 'all' } };
+    for (const rules of [[execution], execution.actions.map(action => ({ ...execution, id: action, actions: [action] })),
+      [{ ...execution, principals: [local, mcpPrincipalRef(local)] }]]) {
+      const candidate = profile(); candidate.policy.grants.push(...rules as never[]);
+      candidate.profile.digest = hashInstallationProfilePayload({ ...candidate, profile: { id: candidate.profile.id, version: candidate.profile.version } });
+      expect(await apply(candidate)).toBe('AUTHORITY_WITNESS_REQUIRED');
+      expect(await readdir(root)).toEqual(['profile.json']);
+    }
     // The `init apply` command (in process, host wiring) exits non-zero with the existing EN/TR witness text.
     for (const [lang, words] of [['en', 'needs a person at an interactive terminal'], ['tr', 'etkileşimli terminaldeki bir kişi gerektirir']] as const) {
       const errors: string[] = [], sink = { write(value: string) { errors.push(value); } };
@@ -66,4 +76,17 @@ describe.skipIf(process.platform !== 'linux')('supplied installation profile aut
     // Under MCP the installer's principal is the MCP actor: a profile naming it passes preview, and the witness refuses it even though it would attest.
     expect(await adapters.withLocalPrincipalChannel('mcp', () => apply(profile([widened], mcpPrincipalRef(local))))).toBe('AUTHORITY_WITNESS_REQUIRED');
   });
+});
+
+it('119-F1a: profile bounds are semantic for renamed, split and mixed-principal execution cells, while the person keeps their own cells', () => {
+  const template = firstRunPolicyTemplate({ scopeId: 'scope-1', principal: local, ...FIRST_RUN_TOOL_NAMES });
+  const check = (grants: unknown[]) => suppliedPolicyWithinTemplate({ scopeId: 'scope-1', principal: local,
+    policy: { schemaVersion: 1, revision: 'profile', grants } as never, shutdown: { serviceIdentity: null } });
+  const grant = { id: 'renamed', effect: 'allow', actions: ['execute', 'evaluate'], scopes: ['scope-1'],
+    principals: [mcpPrincipalRef(local)], resource: { kind: 'attempt', ids: 'all' } };
+  expect(check([grant])).toBe(false);
+  expect(check(grant.actions.map(action => ({ ...grant, id: action, actions: [action] })))).toBe(false);
+  expect(check([{ ...grant, principals: [local, mcpPrincipalRef(local)] }])).toBe(false);
+  expect(check([{ ...grant, principals: [local] }])).toBe(true);
+  expect(check(template.policy.grants)).toBe(true);
 });

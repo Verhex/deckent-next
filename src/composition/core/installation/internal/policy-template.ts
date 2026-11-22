@@ -5,9 +5,9 @@ import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInt
 import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { optionalField, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { optionalField, automationMarker, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
+import { immutableJsonObjectSchema, asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -33,6 +33,24 @@ async function prepare(projectRoot: string, scopeId: string, options: ConfigLoad
   return { prepared, service, configured, layout, maxBytes: Math.min(installation.profileMaxBytes, inspection.policyMaxBytes), timeoutMs: installation.writeLockTimeoutMs };
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) { const { prepared, service } = await prepare(projectRoot, scopeId, options); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, false) }); }
+/** Wizard-only history root: prove the retained first publication against its original target bytes, without healing. */
+export async function verifiedFirstPublicationPolicy(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
+  try {
+    const observed = await observeBootstrapState(projectRoot), record = observed.record;
+    if (record?.phase !== 'committed') return null;
+    const { prepared } = await prepare(projectRoot, scopeId, options);
+    const origin = { scopeId: record.recovery['scopeId'], principal: record.recovery['principal'], template: record.recovery['template'] };
+    const rows = record.recovery['systemRows'] as { key?: unknown; packageDigest?: unknown } | undefined;
+    if (JSON.stringify(immutableJsonObjectSchema.parse(origin)) !== JSON.stringify(immutableJsonObjectSchema.parse({ scopeId, principal: prepared.preview.principal, template: prepared.preview.template }))
+      || rows?.key !== prepared.preview.systemRows?.key || rows?.packageDigest !== prepared.preview.systemRows?.packageDigest) return null;
+    if (record.planDigest !== prepared.preview.planDigest || record.transactionId !== prepared.preview.transactionId
+      || record.resources.length !== prepared.targets.length || prepared.targets.some(target => !record.resources.some(resource =>
+        resource.resource === target.resource && resource.path === target.path && resource.targetDigest === target.digest))) return null;
+    if (['policy', 'bindings'].some(name => !record.resources.some(resource => resource.resource === name && resource.preimageDigest === null))) return null;
+    const root = prepared.resolvedPolicy;
+    return (await observeBootstrapState(projectRoot)).generation === observed.generation ? root : null;
+  } catch { return null; }
+}
 export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, shared?: AttachmentInstall) {
   if (!shared) await assertConfiguredInstallationIdentity(projectRoot, true, options); const { prepared, service, configured, layout, maxBytes, timeoutMs } = await prepare(projectRoot, scopeId, options, undefined, shared), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
   const installationIdentity = shared ? { admitWrite: shared.identity, loadOrCreate: shared.identity } : new FileInstallationIdentityStore(layout, timeoutMs, undefined, await configuredInstallationBinding(projectRoot, options)), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
@@ -80,16 +98,18 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
  * refused for the MCP actor, with `AUTHORITY_WITNESS_REQUIRED` before any configuration, policy, identity or audit is read or written. */
 export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {},
   callerUid: number | undefined = process.getuid?.(), person?: { readonly issuer: string; readonly subject: string },
-  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }, baselineOnly = false) {
   if (apply) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), witness);
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
+  if (apply && !baselineOnly) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(),
+    { attest: async () => automationMarker(options.env ?? process.env, config.cli.agentEnvironment) === null && await witness.attest() });
   if (apply) await assertConfiguredInstallationIdentity(projectRoot, false, options);
   // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
   // missing, foreign or unreadable documents fail closed as `not-owner`.
   const owner = await ownsAuthority(layout, callerUid);
   const writer = contextPolicySource({ layout, config, ownerUid: callerUid });
-  const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
+  const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply, baselineOnly,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...optionalField('expect', expect), ...optionalField('person', person) };
   const observed = await observeBootstrapState(projectRoot), seeded = observed.record?.phase === 'committed' ? observed.record.recovery['systemRows'] : null;
   const history = await writer.authorityHistory();

@@ -353,9 +353,16 @@ and the card's approval binds. A mode change after the card was drawn changes th
 unused card (pending or allowed) cannot admit the Run: it is retired and a fresh card with the new basis and mode line is opened for the
 same plan (alpha.63 L1c, `RunCreateApprovalBroker` + `supersedeRunCreate`); the terminal shows it in the same /do flow and the person decides
 there, so the Run is never dropped silently. A changed graph, Run, requester, or a denied card still refuse (`APPROVAL_CONFLICT`/`APPROVAL_DENIED`).
-The shown mode and the recorded mode are therefore the same. A Run
-admitted without a card (policy allow, CLI/SDK), an AI-created Run and any older Run record no ceiling. Their worker follows the
-person's current effective mode, as before. On every call with a ceiling, the person's current mode is recomputed (stored full
+The shown mode and the recorded mode are therefore the same. Since beta.2.1 (119-C3), an AI proposal approved on the person's card
+also records this ceiling in the general execution snapshot, even for non-native profiles. Trusted composition observes only the
+verified own-MCP actor's own person for the mode; that person never becomes the admission or execution identity. An unknown relation
+records standard with `askEdits`; full access never passes to the worker. The card states that work uses the AI's own execution
+permissions and grants no missing policy permission. A plain create admitted without a card (policy allow, CLI/SDK) still removes
+the ceiling; older Runs receive none retroactively. Without a ceiling the worker follows the person's current effective mode, as before.
+The card labels each displayed worker profile: native profiles alone promise the per-tool check and later mode reductions;
+other profiles show the recorded ceiling and their own sandbox/profile boundary. Mixed plans keep those protections attributed.
+The minimum-mode enforcement described here belongs to the native worker tool broker; non-native profiles retain their existing
+sandbox/profile limits and do not gain that broker by recording a ceiling. On every native call with a ceiling, the person's current mode is recomputed (stored full
 access capped at full-auto under `fullAutoGrant` on that snapshot, else standart). The mode applied is the lower of the two;
 `askEdits` applies if either side sets it. The ceiling never raises anything and is never a source of authority. Full access never
 reaches a worker (no `fullAccess`), so the destructive table, always-ask, edit-self-source and the write floor ask or refuse as

@@ -4,7 +4,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, readLocalOsIdentity } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
@@ -15,12 +15,12 @@ import { clearConfigCache } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
-const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
 const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
-  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
+  upgradeInstallation(args[0], args[1], args[2], args[3], { ...args[4], env: args[4]?.env ?? { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DECKENT_GLOBAL_HOME: process.env.DECKENT_GLOBAL_HOME } }, args[5], args[6], { attest: async () => true });
 
 // POLICY-UPGRADE-HANDBUILT (lead 2026-10-08, Jev b6dba079): the live and N1 installations run a hand-built policy (`live-read-tools`, no
 // first-run read rule), so both upgrade commands refused them and MCP calls (decided on `mcp-server` since alpha.11) were denied. The installer
@@ -139,6 +139,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       { id: 'first-run-mcp-observe-memory', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'memory', ids: 'all' } },
       // v15 (S4B-1 + S7): the batch reaches POLICY_CHANGE_MAX (32) here; the person's memory propose and the distiller's first two rules come first.
       grant('first-run-memory-propose', 'memory', ['propose'], 'all'), ...([['first-run-memory-distiller', 'memory', ['inspect', 'propose']], ['first-run-memory-distiller-runs', 'run', ['inspect']]] as const).map(([id, kind, actions]) => ({ ...grant(id, kind, [...actions], 'all'), principals: [DISTILLER] })),
+      ...firstRunExecutionRules([], PERSON, [SCOPE]).wanted,
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -152,23 +153,24 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(after.grants.slice(HAND_BUILT.length)).toEqual(preview.rules);
     // The authority-revision archive (the installer upgrade's backup and audit record) holds the documents before and after, committed.
     const entries = await f.archive();
-    expect(entries).toHaveLength(1);
-    const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
-      before: { policy: unknown }; after: { policy: unknown } };
-    // R3-B: unapplied BeUser system rows share this one installer publication, keyed spr1-…; otherwise the template-upgrade key.
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(new RegExp(`^(policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$`)) });
-    expect(record.before.policy).toEqual(handBuilt());
-    expect(record.after.policy).toEqual(after);
+    expect(entries).toHaveLength(2);
+    const records = await Promise.all(entries.map(async name => JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', name), 'utf8'))));
+    const execution = records.find(record => record.key.startsWith('policy-template-upgrade-v21-'))!;
+    const baseline = records.find(record => record !== execution)!;
+    expect(baseline).toMatchObject({ state: 'committed', key: expect.stringMatching(new RegExp(`^(policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$`)) });
+    expect(baseline.before.policy).toEqual(handBuilt());
+    expect(execution).toMatchObject({ state: 'committed', before: { policy: baseline.after.policy }, after: { policy: after } });
+    expect(baseline.after.policy.grants.some((rule: { id: string }) => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id))).toBe(false);
     // The same upgrade run again adds the remaining rules (each run add-only and idempotent, POLICY_CHANGE_MAX each; v20 made it three runs); then current.
     const rest = [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }, { id: 'first-run-memory-review' }, { id: 'first-run-memory-evaluator' }, { id: 'first-run-memory-evaluator-runs' }, { id: 'first-run-memory-evaluator-model' }, { id: 'first-run-memory-purge' }, { id: 'first-run-recovery-model' }, { id: 'first-run-skill-signers' }, { id: 'first-run-agent-catalog-import' },
       // S8-3: the catalog aggregator's exact list.
-      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }, ...POST_V15_RULE_IDS.map(id => ({ id }))];
+      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }, ...POST_V15_RULE_IDS.filter(id => !FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(id)).map(id => ({ id }))];
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: rest.slice(0, POLICY_CHANGE_MAX) });
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: rest.slice(POLICY_CHANGE_MAX) });
     const upgraded = await f.bytes();
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
     expect(await f.bytes()).toBe(upgraded);
-    expect(await f.archive()).toHaveLength(3);
+    expect(await f.archive()).toHaveLength(4); // three baseline batches plus the separate execution publication
     // After: the mcp-server resource allows; the call itself still asks on its card (the `mcp-call` hard-floor cell raises an allow).
     expect(await f.mcp()).toEqual({ server: 'allow', call: 'require-approval' });
     // v9: the MCP actor observes, but a mutation the person holds (owner-model-catalog) is refused without a grant naming `<issuer>/mcp`.
@@ -209,7 +211,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       const request = { principal: owner, scopeId: SCOPE, action: action!, resource: { kind: kind!, id: 'any' } };
       expect(evaluatePolicy(policy, request).decision).toBe('allow');
       expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: 'user-2', id: 'stranger' } }).decision).toBe('deny');
-      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && ['inspect', 'reserve', 'cancel'].includes(action!) || kind === 'attempt' && ['execute', 'evaluate', 'read-output', 'recover-output'].includes(action!) || kind === 'pool' && action === 'use' ? 'allow' : kind === 'run' && action === 'create' ? 'require-approval' : 'deny'); // v20: a Run only on the person's card (its pool use allowed)
     }
     expect(file.grants.slice(0, v9.grants.length)).toEqual(v9.grants);
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current' });
@@ -270,7 +272,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(same).toMatchObject({ status: 'preview', basis: 'first-run', person: owner });
     expect(same.rules).toEqual(plain.rules);
     expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, plain.expect!)).toMatchObject({ status: 'upgraded' });
-    expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
+    expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual({ ...v5, revision: expect.stringMatching(/^a-/u), grants: [...v5.grants, ...firstRunExecutionRules([], owner, [SCOPE]).wanted] });
     expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, undefined, {}, process.getuid?.(), owner)).toMatchObject({ status: 'current', basis: 'first-run' });
   });
 });

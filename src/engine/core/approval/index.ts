@@ -1,6 +1,6 @@
 export { agentToolUndo } from './internal/assurance.js';
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval, expireApproval } from './internal/integrity.js';
-export { admitDecided, agentToolApprovalLeft, expireDue } from './internal/integrity.js';
+export { decidedRefusal, admitDecided, agentToolApprovalLeft, expireDue } from './internal/integrity.js';
 export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, authorizeOwnApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalDecisionRestriction } from './internal/application.js';
@@ -35,3 +35,4 @@ export type { RunCreateApprovalInput } from './internal/run-create.js';
 export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance, approvalAssuranceProducerInventory } from './internal/producer-registry.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceAttester, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceProducerManifest, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ApprovalAssuranceProducerRegistration } from './internal/producer-registry.js';
 export { mcpCapabilityScopeCandidates } from '#engine/core/policy/index.js';
+export { executionPermissionCoverage, policyGrantDescription, policyExecutionLines, policyExecutionScopeList } from './internal/policy-execution.js';

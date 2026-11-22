@@ -5,11 +5,11 @@ import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
-import { workerReadinessText, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
+import { workerReadinessText, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
-import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { runProgressionLines, readRunProgressionDiagnostic, recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
@@ -27,6 +27,7 @@ export interface DoctorCheckFacts {
   readonly attachmentFolders?: Readonly<{ record: Parameters<typeof countMismatchedAttachments>[0]; projectRoot: string;
     observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
+  readonly executionPermission?: Readonly<{ actor: string; total: number; allowed: number; restricted: boolean }> | null;
   readonly workerReadiness?: import('#domain/index.js').WorkerReadiness | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
@@ -55,6 +56,9 @@ export interface DoctorCheckFacts {
     egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
+  readonly poolHeld?: boolean | undefined;
+  readonly poolHasRoom?: boolean | undefined;
+  readonly firstWorkerImage?: 'configured' | 'kind' | 'unmeasured' | null;
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
   /** `connection` (R8b): execution is configured without Docker, so work runs on a connected subscription. */
   readonly firstJob?: Readonly<{ execution: boolean; registry: boolean; connection?: boolean }> | null;
@@ -72,6 +76,7 @@ export interface DoctorCheckFacts {
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
   /** BeUser D-05: this install's Runs parked after a failure, with the typed failure code (monitor snapshot); null or absent when not read. */
+  readonly progressionRuns?: { run: Pick<import('#engine/index.js').RunView, 'runId' | 'scopeId' | 'revision'> & Partial<Pick<import('#engine/index.js').RunView, 'state' | 'cancellationRequested'>>; progression?: import('#engine/index.js').RunProgressionDiagnostic }[] | null;
   readonly stuckRuns?: readonly Readonly<{ runId: string; code: string }>[] | null;
   /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
   readonly egress?: DoctorEgress | null;
@@ -177,10 +182,15 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   return rows;
 }
 
+function workerKindCheck(kind: import('#engine/index.js').WorkerKindAvailability, l: Locale): DoctorCheck {
+  return row('work', 'work.kind', 'warning', kind.reason === 'image-missing'
+    ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l),
+  kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l));
+}
+
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(row('work', 'work.kind', 'warning',
-    kind.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l), kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l)));
+  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(workerKindCheck(kind, l));
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
@@ -194,6 +204,13 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   // runtime service stopped repeatedly while starting its work. Each names the inspect step; resume follows once the cause is fixed.
   for (const { runId, code } of f.stuckRuns ?? []) { const run = runId.slice(0, 12);
     rows.push(row('work', 'work.stuckRun', 'warning', code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l) : t('doctor.check.run.parked', { run, code }, l), scoped(`deckent run inspect --id ${run}`, f))); }
+  if (f.progressionRuns === null) rows.push(row('work', 'work.progression', 'untested', t('run.progression.unknown', {}, l), 'deckent run list'));
+  for (const entry of f.progressionRuns ?? []) {
+    const diagnostic = readRunProgressionDiagnostic(entry.run, entry.progression);
+    const lines = runProgressionLines(entry.run, diagnostic, l);
+    if (lines.length) rows.push(row('work', 'work.progression', !diagnostic || diagnostic.state === 'unknown' ? 'untested' : diagnostic.state === 'eligible' ? 'ok' : 'warning',
+      lines.join(' ')));
+  }
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
     ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)
@@ -332,6 +349,45 @@ const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doc
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
   : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
+/** Two first-page observations, independent of the installation health verdict and its counts. */
+export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly DoctorCheck[], locale: Locale): readonly DoctorCheck[] {
+  const pool = checks.find(check => check.id === 'work.pool');
+  const worker = f.workerReadiness, kind = f.workerKinds?.find(value => value.kind === firstJobKind);
+  const kindCheck = kind?.reason ? workerKindCheck(kind, locale) : undefined;
+  const startupBlock = checks.find(check => check.id === 'setup.startability' && check.state === 'error');
+  const docker = f.firstWorkerImage ? checks.find(check => check.id === 'work.docker') : undefined;
+  const image = f.firstWorkerImage === 'configured' ? checks.find(check => check.id === 'work.workerImage') : undefined;
+  const firstRow = (state: DoctorCheckState, text: string, next?: string) => row('work', 'work.firstWorker', state, text, next);
+  const blocked = (reason: string, next?: string) => firstRow('warning', t('doctor.firstWorker.blocked', { reason }, locale), next);
+  const unknown = (next?: string) => firstRow('untested', t('doctor.firstWorker.unmeasured', {}, locale), next ?? scoped('deckent doctor', f));
+  const poolStatus = scoped('deckent pool status', f);
+  const poolMissing = f.poolStatus === 'unconfigured' || f.poolStatus === 'missing';
+  const first = poolMissing ? firstRow('warning',
+    t('doctor.firstWorker.pool', { state: f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, locale) : t('doctor.check.pool.unconfigured', {}, locale) }, locale),
+    pool?.next ?? onboardingNext(t('doctor.firstJob.pool', {}, locale), locale))
+    : f.poolHeld ? blocked(t('monitor.blocker.poolHeld', {}, locale), poolStatus)
+    : f.poolStatus === 'drift' && pool ? blocked(pool.text, pool.next)
+    : f.poolHasRoom === false ? blocked(t('monitor.blocker.waitingPoolSlot', {}, locale), poolStatus)
+    : image?.state === 'error' ? blocked(image.text, image.next)
+    : kind?.reason === 'image-missing' && kindCheck ? blocked(kindCheck.text, kindCheck.next)
+    : docker && (docker.state === 'error' || docker.state === 'warning') ? blocked(docker.text, docker.next)
+    : startupBlock ? blocked(startupBlock.text, startupBlock.next)
+    : worker?.ready === false ? firstRow('warning', workerReadinessText(worker.code, locale), worker.cli.join(' '))
+    : f.poolStatus !== 'ready' || f.poolHeld !== false || f.poolHasRoom !== true ? unknown(poolStatus)
+    : kindCheck ? firstRow('untested', kindCheck.text, kindCheck.next)
+    : f.firstWorkerImage && (docker?.state !== 'ok' || (f.firstWorkerImage === 'configured' ? image?.state !== 'ok' : f.firstWorkerImage !== 'kind' || !kind))
+      ? unknown(docker?.next ?? image?.next)
+    : worker?.ready ? firstRow('ok', t('doctor.firstWorker.ready', {}, locale)) : unknown();
+  const permission = f.executionPermission, scope = terminalSafeText(f.scopeId ?? '-');
+  const complete = !!permission && permission.allowed === permission.total && !permission.restricted;
+  const params = { scope, actor: terminalSafeText(permission?.actor ?? '-'), allowed: permission?.allowed ?? 0, total: permission?.total ?? 0 };
+  const text = !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
+    : permission.restricted ? t('doctor.aiExecution.restricted', params, locale) : permission.allowed ? t('doctor.aiExecution.partial', params, locale)
+    : t('doctor.aiExecution.absent', params, locale);
+  return [first, row('work', 'work.aiExecution', complete ? 'ok' : permission ? 'warning' : 'untested', text,
+    complete || !f.scopeId ? undefined : `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview`)];
+}
+
 /** One health verdict for JSON and the human summary; unverified health is never ready. */
 export function doctorNeedsAttention(checks: readonly DoctorCheck[]): boolean {
   return checks.some(check => check.state === 'error' || check.needsAttention === true);
@@ -351,10 +407,10 @@ export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): s
 }
 
 /** The grouped human view: summary, then each group with a word marker per row and its next step on the line below. */
-export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale): string {
+export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale, readiness: readonly DoctorCheck[] = []): string {
   const marks = { ok: markWord('ok', locale), warning: markWord('warning', locale), error: markWord('error', locale), untested: markWord('untested', locale) };
   const width = Math.max(...Object.values(marks).map(mark => mark.length));
-  const lines = [doctorSummary(checks, locale)];
+  const lines = [doctorSummary(checks, locale), ...readiness.map(check => [check.text, check.next].filter(Boolean).join(' · '))];
   for (const group of registry.groups as DoctorGroup[]) {
     const rows = checks.filter(check => check.group === group);
     if (!rows.length) continue;

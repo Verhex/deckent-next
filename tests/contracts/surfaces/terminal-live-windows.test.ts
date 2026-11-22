@@ -28,7 +28,7 @@ const labelsOf = (work: typeof EN): LiveWindowRenderLabels => ({ live: work.live
 const worker = (index: number): WorkLedgerWorkerEntry => ({ schemaVersion: 1, kind: 'worker', id: `w-${index}`, scopeId: 'scope-a', taskId: `task-${index}`, process: 'running',
   provider: 'docker', authority: 'next-ledger', ordinal: index + 1 });
 const run = (index: number, extra: Partial<WorkLedgerRunEntry> = {}): WorkLedgerRunEntry => ({ schemaVersion: 1, kind: 'run', id: `r-${index}`, runId: `run-${index}`, scopeId: 'scope-a',
-  revision: index + 1, cancellationRequested: false, taskPhases: 'active:1', ...extra });
+  revision: index + 1, cancellationRequested: false, runState: { kind: 'running' }, taskPhases: 'active:1', ...extra });
 
 describe('live window content (pure)', () => {
   it('words the workers list and the combined tasks window in the session language, with an empty line before the first read', () => {

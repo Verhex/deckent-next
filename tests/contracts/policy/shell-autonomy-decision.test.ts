@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePolicyBindings, STANDING_GRANT_KIND, type ShellRealmContainment } from '#domain/index.js';
+import { mcpPrincipalRef, resolvePolicyBindings, STANDING_GRANT_KIND, type ShellRealmContainment } from '#domain/index.js';
 import { classifyShellContainment, decideAgentToolCall, shellNamedPaths, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
+import { runWorkerMode } from '#engine/core/policy/index.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28): the one decision function takes the planned realm's containment and the command's containment.
 // Only full-auto ∧ enforced sandbox ∧ contained lowers the shell cells the classifier could not bound; never destructive, never on the
@@ -46,6 +47,35 @@ describe('full-auto inside an enforced sandbox (SHELL-AUTONOMY decision)', () =>
 });
 
 describe('R9 background worker (owner 2026-11-05): plan-moment mode and read-only shell', () => {
+  it('seals only the verified own-person mode for an AI proposal; unknown, foreign and full-access contexts never widen it', () => {
+    const ai = { ...principal, ...mcpPrincipalRef(principal), id: 'ai', assurance: 'workload-verified' as const };
+    const safe = { mode: 'standart', askEdits: true };
+    expect(runWorkerMode(policy('full-auto'), ai, 'scope', principal)).toEqual({ mode: 'full-auto', askEdits: false });
+    expect(runWorkerMode(policy('full-access', 'require-approval', true, { askEdits: true }), ai, 'scope', principal)).toEqual({ mode: 'full-auto', askEdits: true });
+    expect(runWorkerMode(policy('full-access', 'require-approval', true, {}, false), ai, 'scope', principal)).toEqual({ mode: 'standart', askEdits: false });
+    for (const person of [undefined, ai, { ...principal, subject: 'foreign' }, { ...principal, scopeIds: ['foreign'] }])
+      expect(runWorkerMode(policy('full-auto'), ai, 'scope', person)).toEqual(safe);
+  });
+  it('an AI worker takes the minimum of its sealed ceiling and fresh person/company policy, including askEdits and hard floors', () => {
+    const ai = { ...principal, ...mcpPrincipalRef(principal), id: 'ai', assurance: 'workload-verified' as const };
+    const worker = (mode: string, ceiling: { mode: 'standart' | 'full-auto'; askEdits: boolean }, cell: AgentToolCallCell = 'shell-narrow-mutating', askEdits = false, fullAuto = true, effect = 'require-approval') => {
+      const snapshot = policy(mode, effect, true, askEdits ? { askEdits: true } : {}, fullAuto);
+      return decideAgentToolCall({ ...snapshot, grants: snapshot.grants.map(row => ({ ...row, principals: row.resource.kind === 'permission-mode' ? row.principals : [me, mcpPrincipalRef(me)] })) },
+        { principal: ai, person: principal, scopeId: 'scope', tool: { name: 'run_shell' }, operation: { id: 'host.shell.run' }, cell,
+          shell: { realm: 'sandbox', contained: true }, origin: { kind: 'run', ceiling } });
+    };
+    const standard = { mode: 'standart', askEdits: false } as const, auto = { mode: 'full-auto', askEdits: false } as const;
+    expect(worker('full-auto', standard).decision).toBe('require-approval'); // later raise cannot exceed the card
+    expect(worker('standart', auto).decision).toBe('require-approval'); // later narrowing applies now
+    expect(worker('full-access', auto)).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });
+    expect(worker('full-access', auto).fullAccess).toBeUndefined();
+    expect(worker('full-access', auto, 'shell-narrow-mutating', false, false).decision).toBe('require-approval');
+    expect(worker('full-auto', auto, 'shell-narrow-mutating', false, true, 'deny').decision).toBe('deny');
+    expect(worker('full-auto', { ...auto, askEdits: true }, 'edit').decision).toBe('require-approval');
+    expect(worker('full-auto', auto, 'edit', true).decision).toBe('require-approval');
+    for (const cell of ['shell-destructive', 'edit-floor', 'edit-self-source', 'edit-authority'] as const)
+      expect(worker('full-access', auto, cell).decision).not.toBe('allow');
+  });
   it('lowers a read-only shell command for a Run worker only, caps full access at full-auto and takes the lower of ceiling and current mode', () => {
     const worker = (snapshot: unknown, cell: AgentToolCallCell, ceiling: { mode: 'standart' | 'full-auto'; askEdits: boolean } | null, realm: ShellRealmContainment = 'host', contained = true) =>
       decideAgentToolCall(snapshot, { principal, scopeId: 'scope', tool: { name: 'run_shell' }, operation: { id: 'host.shell.run' }, cell, shell: { realm, contained }, origin: { kind: 'run', ceiling } });

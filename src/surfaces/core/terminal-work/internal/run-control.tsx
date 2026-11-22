@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { RunView } from '#engine/index.js';
-import { shortId } from '#platform/index.js';
+import { shortId, t } from '#platform/index.js';
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels, DecisionCard } from '#surfaces/core/approval-presentation-ink/index.js';
 import { fillTemplate, loadRunViewsForWatch, runControlActions, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { runHoldText, runStateText, runTitle } from './job-windows.js';
+import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
+import { runHoldText, runStateText, runTitle, runDetailLines, queueRowSummaries } from './job-windows.js';
 import RUN_CONTROL from './run-control.json' with { type: 'json' };
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
@@ -38,7 +39,7 @@ export interface RunAnswerLabels {
 /** A row key of the Runs window: the three Y1 controls and the answer to a worker's question. */
 type RunRowAction = RunControlAction | 'answer';
 export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ runId: string; spans: readonly Span[]; actions: readonly RunRowAction[] }>[]; status: string;
-  empty: string; selected: number }>;
+  empty: string; selected: number; detailHint?: string }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
 export type RunAnswerPresentation = Readonly<{ kind: 'run-answer'; run: RunView; question: string; reread?: string }>;
 
@@ -67,9 +68,10 @@ export function RunsControlWindow({ value, labels, position, onAnswer, onSelect 
   const notes: WindowLine[] = value.status ? [...value.status.split('\n').map(text => ({ spans: project([span(text, { role: 'accent' })]) })), { spans: [] }] : [];
   const body: WindowLine[] = [...notes, ...value.rows.map((item, index) => ({ spans: [span(index === selected ? '› ' : '  ', index === selected ? { role: 'accent', bold: true } : {}), ...project(item.spans)] })),
     ...(count ? [] : [{ spans: [span(value.empty, { role: 'muted' })] }])];
-  return <Window title={[span(value.title)]} status={[span(String(count))]} body={body} hints={runsHints(labels, row?.actions ?? [])} position={position} reveal={notes.length + selected}
+  return <Window title={[span(value.title)]} status={[span(String(count))]} body={body} hints={[runsHints(labels, row?.actions ?? []), ...(value.detailHint && count ? [value.detailHint] : [])].join(' · ')} position={position} reveal={notes.length + selected}
     onClose={() => onAnswer(null)} onInput={(input, key) => {
       if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { const next = (selected + (key.upArrow ? count - 1 : 1)) % count; setSelected(next); onSelect?.(value.rows[next]!.runId); return true; }
+      if (key.return && !key.ctrl && !key.meta && count) { onAnswer(`inspect:${selected}`); return true; }
       const action = runControlKey(input, key);
       if (action && row?.actions.includes(action)) { onAnswer(`${action}:${selected}`); return true; }
       return false;
@@ -145,12 +147,19 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     selection.current = runs[selected]?.runId ?? null; // A vanished row resets to the first remaining row.
     const answerable = Boolean(ledger.answerTask && work.runAnswer && words.keyAnswer);
     const rows = runs.map(run => ({ runId: run.runId, actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
-      span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
-    const choices = ['close', 'refresh', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
-    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected }, choices);
+      ...runProgressionLines(run, run.progression, jobs.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
+    const choices = ['close', 'refresh', ...rows.map((_, index) => `inspect:${index}`), ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
+    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected, detailHint: t('run.progression.openDetail', {}, jobs.locale) }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;
     if (choice === 'refresh') continue;
-    const [action, index] = choice.split(':') as [RunRowAction, string];
+    const [action, index] = choice.split(':') as [RunRowAction | 'inspect', string];
+    if (action === 'inspect') {
+      const chosen = runs[Number(index)]!; selection.current = chosen.runId;
+      const fresh = await (ledger.inspectRunObservation ?? ledger.inspectRun)(chosen.runId);
+      if (fresh) await panel.pick(execution, { kind: 'job-window', title: runTitle(fresh, jobs), lines: runDetailLines(fresh, work, await queueRowSummaries(fresh, ledger.queueSummaryLines)) }, ['close']);
+      else status = fillTemplate(words.gone, { run: shortId(chosen.runId) });
+      continue;
+    }
     if (action === 'answer') {
       const chosen = runs[Number(index)]!; selection.current = chosen.runId;
       const line = await runAnswerFlow(panel, execution, ledger, work, chosen.runId, errorText, reason).catch((error: unknown) => errorText(error));

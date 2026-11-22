@@ -32,7 +32,7 @@ import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecis
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, inspectConfiguredWorkerKinds, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { applyReviewedPolicyTemplateUpgrade, changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredExecutionPermission, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { changeConfiguredDeliveryDismissal, checkConfiguredWorkTarget, interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
@@ -44,9 +44,9 @@ import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfigur
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
-import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
+import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, verifiedFirstPublicationPolicy, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, loadConfig, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
+import { getConfigFieldDefault, loadConfig, t, emit, ErrorRegistry, isCodedError, terminalSafeText, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
@@ -72,7 +72,8 @@ type CliHostBase = { readonly root: string; readonly locale: Locale; readonly si
  * COLDSTART: every host operation of the CLI, bound to its composition unit. The entry loads this module only when a command or the terminal
  * runs (`loadHost`), so help, `--version` and an unknown command never evaluate the adapters and engine graph behind these imports.
  */
-export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & object {
+type SetupExecutionPreview = (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => ReturnType<typeof configuredPolicyTemplateUpgrade>;
+export function createCliHost(base: CliHostBase, serviceEntry?: string): Parameters<typeof runCli>[1] & { readonly previewSetupExecutionPermission: SetupExecutionPreview } & object {
   const { root, locale, signal } = base, runtime = createConfiguredRuntimeClient(root);
   const narrowDirectory = async (path: string, json = false, language: Locale = locale, setup = false) => {
     if (cliMode(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}, json).reason !== 'tty') return false;
@@ -90,6 +91,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   // PV: the person at this terminal for a CLI subscription sign-in: its TTY witness and none of the installation's AI-agent or CI markers.
   const person = (options: { env?: NodeJS.ProcessEnv }) => headlessPersonWitness(options.env ?? process.env, base.agentEnvironment ?? getConfigFieldDefault('cli').agentEnvironment);
+  const previewPersonPolicyUpgrade = async (root: string, scopeId: string, input: Parameters<typeof configuredPolicyTemplateUpgrade>[3], options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) =>
+    typed(configuredPolicyTemplateUpgrade(root, scopeId, options, { ...input, mode: 'preview' }, base.agentEnvironment, await verifiedFirstPublicationPolicy(root, scopeId, options)));
   const host: Parameters<typeof runCli>[1] & object = { ...base, gitDeliveryPermission: (...args) => typed(configuredGitDeliveryPermission(...args)), initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
     walkBeuser: async (...args) => typed((await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args)),
     readBeuserReport: async (...args) => typed((await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args)),
@@ -259,14 +262,17 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     applyPolicyTemplateInstallation: (projectRoot, scopeId, interaction) => typed(applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId, {}, path => narrowDirectory(path, interaction?.json))),
     openOwnerBaselineInstallation: (projectRoot, scopeId, input) => typed(openOwnerBaselineInstallation(projectRoot, scopeId, input)),
     openPermissionModesInstallation: (projectRoot, scopeId, input) => typed(openPermissionModesInstallation(projectRoot, scopeId, input)),
-    upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)),
+    upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, named, options = {}, baselineOnly = false) => typed(upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, options, process.getuid?.(), named, baselineOnly ? undefined : person(options), baselineOnly)),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => typed(installConfiguredExecutionPool(projectRoot, scopeId, apply)),
     inspectOwnerBaseline: (root, scopeId, options) => typed(inspectOwnerBaselineInstallation(root, scopeId, options)),
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options), inspectAnchoredPolicyTemplate,
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
-    inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
-    upgradePolicyTemplate: (root, scopeId, input, options) => typed(configuredPolicyTemplateUpgrade(root, scopeId, options, input)),
+    inspectExecutionPermission: inspectConfiguredExecutionPermission, inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
+    previewPersonPolicyUpgrade,
+    upgradePolicyTemplate: (root, scopeId, input, options, reviewedRules) => typed(reviewedRules === undefined
+      ? configuredPolicyTemplateUpgrade(root, scopeId, options, input, base.agentEnvironment)
+      : applyReviewedPolicyTemplateUpgrade(root, scopeId, options, input, reviewedRules, base.agentEnvironment)),
     delegations: { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation },
     // alpha.56: lost-worker recovery cards, in this process at the person's witnessed terminal (no protocol op); the rollout read for doctor too.
     inspectRecoveryRollout: inspectConfiguredRecoveryRollout, recovery: { inspectRollout: inspectConfiguredRecoveryRollout, inspectPolicy: inspectConfiguredRecoveryPolicy,
@@ -282,5 +288,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   };
-  return { ...host, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
+  const previewSetupExecutionPermission = async (root: string, scopeId: string, options: Parameters<typeof configuredPolicyTemplateUpgrade>[2]) => previewPersonPolicyUpgrade(root, scopeId,
+    { mode: 'preview', only: 'ai-execution', reason: t('cli.policy.upgrade.reason', {}, locale) }, options);
+  return { ...host, previewSetupExecutionPermission, ...configuredSetup(host, undefined, (path, language) => narrowDirectory(path, false, language, true)) }; // I-S3: bare `deckent init`
 }
