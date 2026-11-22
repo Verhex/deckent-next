@@ -1,3 +1,5 @@
+import { effectToolError, isRecordedTargetFailure } from './effect-error.js';
+import { agentToolResult } from '#engine/index.js';
 import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
@@ -63,7 +65,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   return { ...tools, async apply(name: string, args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number },
     gate: EffectApprovalGate): Promise<AgentToolOutcome> {
     const entry = tools.entry(name);
-    if (!entry) return { status: 'error', text: `[deckent] ${name}: error=unknown-tool` };
+    if (!entry) return agentToolResult({ status: 'error' as const, text: `[deckent] ${name}: error=unknown-tool` }, 'session');
     const command = tools.command(entry, args, { scopeId, turnId, ...execution, argsDigest: agentToolArgumentsDigest(name, args) }), clock = new SystemTrustedClock();
     let ran: McpCallOutcome | null = null;
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
@@ -73,11 +75,14 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     try {
       await new EffectApplication({ async resolve(ref) { return ref.id === MCP_TOOL_CALL_OPERATION.operation.id && ref.version === 1 ? MCP_TOOL_CALL_OPERATION : null; } },
         { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
-      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry) : describeMcpRefusal(entry.display, 'no-result');
     } catch (error) {
-      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry)
-        : describeMcpRefusal(entry.display, error instanceof EffectError ? error.code : (error as { code?: unknown })?.code);
+      if (!ran) {
+        const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
+        return agentToolResult(describeMcpRefusal(entry.display, code), effectToolError(error));
+      }
+      if (!isRecordedTargetFailure(error)) return agentToolResult(describeMcpRefusal(entry.display, undefined), 'uncertain');
     } finally { store.close(); }
+    return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry) : describeMcpRefusal(entry.display, 'no-result');
   } };
 }
 /** `deckent mcp import` (L1 item 2): the servers another MCP client declares, each added untrusted through the registry's own `add` (its audited

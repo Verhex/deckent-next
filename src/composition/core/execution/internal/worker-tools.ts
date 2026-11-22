@@ -1,3 +1,4 @@
+import { agentToolResult } from '#engine/index.js';
 import { nativeWorkerToolFloor } from './worker-floor.js';
 import { workerToolCardSummary, nativeWorkerToolLifetime, type ToolSessionPort } from '#capabilities/index.js';
 import { ErrorRegistry, SystemTrustedClock, sha256, redactForRecord, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
@@ -50,7 +51,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
           subject: approvals.subject(input, input.tool, input.target, input.argsDigest), facts: agentToolApprovalFacts(policy, scopeId, decisions.cell(input.tool, input.args)),
           policyRevision: policy.revision, summary: workerToolCardSummary({ identity: request.identity, turnId, tool: input.tool.name, resource: redactForRecord(input.target ?? '(no target)', known), resourceDigest: sha256(input.target ?? '(no target)'), argsDigest: input.argsDigest }),
           createdAt: started.wallMs, expiresAt: started.wallMs + context.config.approvals.requestTtlMs });
-        const answer = await settleAgentToolApproval(journal.store, integrity, record, clock, callSignal, started, {
+        const answer = await settleAgentToolApproval(journal.store, integrity, record, clock, callSignal, started, { ...(input.personDenied ? { personDenied: input.personDenied } : {}),
           recheck: async () => { await recheckNativeWorkerUse(root, scopeId, binding, options); return await new AgentToolPolicyAuthorization(context.policy).decide(input.tool, scopeId, context.principal) !== 'deny'; },
           refused: () => decisions.refusedAfterApproval(input.tool, input.args, { round: input.round, index: input.index, callId: input.call.id }, policy.revision),
           allowed: approval => approvals.allowed(input, approval) });
@@ -65,7 +66,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
         ? await decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'
           ? edits.apply(tool.name, args, execution, gate) : shell.apply(tool.name, args, callSignal, callId, execution, gate, authority, writes, track))
         : await inputs.read(tool.name, args, callSignal) ?? await workspace.execute(tool.name, args, callSignal);
-      return { ...result, text: redactForRecord(result.text, known) };
+      return agentToolResult({ ...result, text: redactForRecord(result.text, known) }, result);
     }, now: Date.now,
   };
   const turn = runDurableAgentTurn({ claim: { scopeId, turnId, principalKey: `${context.principal.issuer}\0${context.principal.subject}`,
@@ -77,6 +78,6 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   // Cancellation before K1 reaches invokeAgent must not leave an unresolved openTools promise.
   void turn.then(() => lifetime.failed(ErrorRegistry.createError('NATIVE_AGENT_BRIDGE_UNAVAILABLE')), lifetime.failed);
   const session = await lifetime.opened;
-  return { session: session.session, terminalFailure: () => failure, propose: async (...args) => {
+  return { ...session, terminalFailure: () => failure, propose: async (...args) => {
     if (failure) throw ErrorRegistry.createError('APPROVAL_EXPIRED'); return session.propose(...args); }, cancel: () => lifetime.close(() => session.cancel(), turn), revoke: () => lifetime.close(() => session.revoke(), turn) };
 }

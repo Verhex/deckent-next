@@ -1,3 +1,4 @@
+import { withToolErrorClass, toolErrorClass } from '#capabilities/index.js';
 import { sha256, persistedString, persistedInteger, redactBounded } from '#platform/index.js';
 import { z } from 'zod';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
@@ -35,17 +36,17 @@ export type FetchPlan = { readonly ok: true; readonly url: string; readonly host
  * verdict: an allowlisted host (exact match) is `listed`; any other host is refused under `allowlist` egress and asks under `approval`.
  */
 export function planFetchCall(settings: FetchSettings, args: Record<string, unknown>): FetchPlan {
-  if (settings.egress === 'none') return { ok: false, error: 'network-disabled' };
+  if (settings.egress === 'none') return withToolErrorClass({ ok: false as const, error: 'network-disabled' }, 'ordinary');
   const raw = args['url'], limit = args['maxBytes'];
-  if (typeof raw !== 'string' || (limit !== undefined && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1))) return { ok: false, error: 'invalid-arguments' };
-  if (raw.length > FETCH_URL_MAX_CHARS) return { ok: false, error: 'url-too-long' };
+  if (typeof raw !== 'string' || (limit !== undefined && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1))) return withToolErrorClass({ ok: false as const, error: 'invalid-arguments' }, 'ordinary');
+  if (raw.length > FETCH_URL_MAX_CHARS) return withToolErrorClass({ ok: false as const, error: 'url-too-long' }, 'limit');
   let url: URL;
-  try { url = new URL(raw); } catch { return { ok: false, error: 'invalid-url' }; }
+  try { url = new URL(raw); } catch { return withToolErrorClass({ ok: false as const, error: 'invalid-url' }, 'ordinary'); }
   const refused = fetchableUrlError(url);
-  if (refused) return { ok: false, error: refused };
+  if (refused) return withToolErrorClass({ ok: false as const, error: refused }, 'ordinary');
   url.hash = '';
   const listed = settings.allowedHosts.includes(url.hostname);
-  if (!listed && settings.egress !== 'approval') return { ok: false, error: 'host-not-allowed' };
+  if (!listed && settings.egress !== 'approval') return withToolErrorClass({ ok: false as const, error: 'host-not-allowed' }, 'ordinary');
   return { ok: true, url: url.href, host: url.hostname, listed, maxBytes: Math.min(settings.maxBytes, typeof limit === 'number' ? limit : settings.maxBytes) };
 }
 
@@ -92,7 +93,7 @@ export class NetworkFetchTarget implements EffectTarget {
       maxRedirects: settings.maxRedirects, redirectAllowed, transport, signal });
     const stored = result.outcome === 'response'
       ? await this.run.deposit(`fetch/${sha256(result.body)}.${extensionOf(result.contentType)}`, result.body, signal)
-        .catch(() => ({ ok: false as const, error: signal.aborted ? 'cancelled' : 'scratch-unavailable' }))
+        .catch(() => withToolErrorClass({ ok: false as const, error: signal.aborted ? 'cancelled' : 'scratch-unavailable' }, signal.aborted ? 'cancelled' : 'uncertain'))
       : null;
     this.run.onResult({ result, stored });
     if (result.outcome === 'refused') throw new EffectTargetError('EFFECT_TARGET_REJECTED');
@@ -111,13 +112,14 @@ function head(body: Buffer, bytes: number): string {
 /** The model's result of one fetch: what happened, where the body is, and a redacted head of a text body. */
 export function describeFetchResult(run: FetchRun): AgentToolOutcome {
   const { result, stored } = run, tag = '[deckent] fetch_url:';
-  if (result.outcome === 'refused') return { status: 'error', text: `${tag} error=${result.reason}; nothing was sent` };
+  const kind = result.reason === 'cancelled' ? 'cancelled' : result.reason === 'timed-out' || result.reason === 'too-many-redirects' ? 'limit' : 'ordinary';
+  if (result.outcome === 'refused') return withToolErrorClass({ status: 'error' as const, text: `${tag} error=${result.reason}; nothing was sent` }, kind);
   if (result.outcome === 'unknown') {
-    return { status: 'error', text: `${tag} error=${result.reason}; the request was sent and its outcome is unknown; it is not sent again` };
+    return withToolErrorClass({ status: 'error' as const, text: `${tag} error=${result.reason}; the request was sent and its outcome is unknown; it is not sent again` }, kind);
   }
   if (result.outcome === 'stopped') {
-    return { status: 'error', text: `${tag} error=${result.reason}${result.location ? ` (to ${result.location}, status ${result.httpStatus})` : ''} after `
-      + `${result.redirects} redirect(s) from ${result.finalUrl}; the earlier request(s) were sent` };
+    return withToolErrorClass({ status: 'error' as const, text: `${tag} error=${result.reason}${result.location ? ` (to ${result.location}, status ${result.httpStatus})` : ''} after `
+      + `${result.redirects} redirect(s) from ${result.finalUrl}; the earlier request(s) were sent` }, kind);
   }
   const lines = [`${tag} status=${result.httpStatus} content-type=${result.contentType ?? 'unknown'} bytes=${result.body.length} truncated=${result.truncated} `
     + `redirects=${result.redirects} url=${result.finalUrl}`];
@@ -128,7 +130,7 @@ export function describeFetchResult(run: FetchRun): AgentToolOutcome {
     if (result.body.length > FETCH_HEAD_BYTES) lines.push(`[deckent] showing the first ${FETCH_HEAD_BYTES} of ${result.body.length} bytes`);
   }
   const ok = stored?.ok === true && result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;
-  return { status: ok ? 'ok' : 'error', text: lines.join('\n') };
+  return withToolErrorClass({ status: ok ? 'ok' as const : 'error' as const, text: lines.join('\n') }, stored?.ok ? 'ordinary' : stored ? toolErrorClass(stored) : 'uncertain');
 }
 
 /** The result of a call whose effect did not run (policy, approval or an effect error), in the shell tool's words. */

@@ -477,7 +477,7 @@ it('observes the literal masked recording envelope and terminal identity in each
       paidExtraUsage: 'continue', planning: observe }) : null;
     const codex = cli === 'codex' ? codexAgentTurn({ entry, model: meta.nativeModel } as Parameters<typeof codexAgentTurn>[0],
       { version: meta.version, flagSetDigest: nativeAgentFlagSetDigest(entry) } as Parameters<typeof codexAgentTurn>[1], session,
-      id => id === call.id ? { call, result: custody.result } : undefined, undefined, EMPTY_KNOWN_SECRETS, observe) : null;
+      id => id === call.id ? { call, result: custody.result } : undefined, undefined, EMPTY_KNOWN_SECRETS, undefined, observe) : null;
     for (const event of wire) {
       if (claude) expect(await claude.line(JSON.stringify(event))).toBeUndefined();
       if (codex) expect(codex.line(JSON.stringify(event))).toBeNull();

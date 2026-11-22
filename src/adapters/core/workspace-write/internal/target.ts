@@ -1,3 +1,4 @@
+import { withToolErrorClass, toolErrorClass } from '#capabilities/index.js';
 import { optionalField, persistedString, persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -221,28 +222,28 @@ export type WorkspaceEditPlan = { readonly ok: true; readonly rel: string; reado
 export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, args: Record<string, unknown>,
   maxFileBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<WorkspaceEditPlan> {
   const target = await resolveWritable(scope, args['path']);
-  if (!target.ok) return { ok: false, error: target.error };
+  if (!target.ok) return withToolErrorClass({ ok: false as const, error: target.error }, toolErrorClass(target) === 'limit' ? 'limit' : 'ordinary');
   const current = await readWritableFile(scope, target, maxFileBytes);
-  if (!current.ok) return { ok: false, error: current.error };
+  if (!current.ok) return withToolErrorClass({ ok: false as const, error: current.error }, toolErrorClass(current));
   let before: string | null = null;
   if (current.bytes) {
-    try { before = new TextDecoder('utf-8', { fatal: true }).decode(current.bytes); } catch { return { ok: false, error: 'not-utf8-text' }; }
+    try { before = new TextDecoder('utf-8', { fatal: true }).decode(current.bytes); } catch { return withToolErrorClass({ ok: false as const, error: 'not-utf8-text' }, 'ordinary'); }
   }
   let after: string;
   if (tool === 'write_file') {
-    if (typeof args['content'] !== 'string') return { ok: false, error: 'invalid-arguments' };
+    if (typeof args['content'] !== 'string') return withToolErrorClass({ ok: false as const, error: 'invalid-arguments' }, 'ordinary');
     after = args['content'];
   } else if (tool === 'edit_file') {
     const old = args['old_string'], replacement = args['new_string'];
-    if (before === null) return { ok: false, error: 'not-found (use write_file to create a file)' };
-    if (typeof old !== 'string' || typeof replacement !== 'string' || old === '') return { ok: false, error: 'invalid-arguments' };
+    if (before === null) return withToolErrorClass({ ok: false as const, error: 'not-found (use write_file to create a file)' }, 'ordinary');
+    if (typeof old !== 'string' || typeof replacement !== 'string' || old === '') return withToolErrorClass({ ok: false as const, error: 'invalid-arguments' }, 'ordinary');
     const parts = before.split(old);
-    if (parts.length === 1) return { ok: false, error: 'old_string not found' };
-    if (parts.length > 2 && args['replace_all'] !== true) return { ok: false, error: `old_string matches ${parts.length - 1} places; add surrounding lines or set replace_all` };
+    if (parts.length === 1) return withToolErrorClass({ ok: false as const, error: 'old_string not found' }, 'ordinary');
+    if (parts.length > 2 && args['replace_all'] !== true) return withToolErrorClass({ ok: false as const, error: `old_string matches ${parts.length - 1} places; add surrounding lines or set replace_all` }, 'ordinary');
     after = args['replace_all'] === true ? parts.join(replacement) : before.slice(0, before.indexOf(old)) + replacement + before.slice(before.indexOf(old) + old.length);
-  } else return { ok: false, error: 'unknown-tool' };
-  if (after === before) return { ok: false, error: 'no change' };
-  if (Buffer.byteLength(after, 'utf8') > maxFileBytes) return { ok: false, error: 'too-large' };
+  } else return withToolErrorClass({ ok: false as const, error: 'unknown-tool' }, 'session');
+  if (after === before) return withToolErrorClass({ ok: false as const, error: 'no change' }, 'ordinary');
+  if (Buffer.byteLength(after, 'utf8') > maxFileBytes) return withToolErrorClass({ ok: false as const, error: 'too-large' }, 'limit');
   // NF-8: a trailing newline is not a phantom line (the delivery stat's reading), unless it is the only difference; the two header lines are not counted.
   const trim = (before === null || before.endsWith('\n')) && after.endsWith('\n');
   const preview = unifiedDiff(target.rel, trim ? before?.slice(0, -1) ?? null : before, trim ? after.slice(0, -1) : after), lines = preview.split('\n').slice(2);

@@ -59,8 +59,10 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
+  const deliveries = new WeakMap<Awaited<ReturnType<ToolSessionPort['propose']>>, () => string | undefined>();
   const port: ToolSessionPort = { session: input.session.session,
     checkResultDelivery: call => input.session.checkResultDelivery?.(call) ?? true,
+    selected(host, text, live) { deliveries.set(host, () => live() ? text : undefined); },
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
       if (entry.agent.transport.kind === 'claude-mcp') {
@@ -73,7 +75,9 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
       }
       const result = await input.session.propose(call, correlation, AbortSignal.any([signal, lifetime.signal]));
       // Retain the exact facade result; JSONL item ids never stand in for Deckent call custody.
-      calls.set(call.id, { call: Object.freeze({ ...call }), result: projectToolResult(result) }); return result;
+      const frozen = Object.freeze({ ...call });
+      calls.set(call.id, { call: frozen, active: () => !signal.aborted && !lifetime.signal.aborted, result: projectToolResult(result), recordedError: () => input.session.recordedError?.(frozen, result),
+        selectedText: () => deliveries.get(result)?.() }); return result;
     },
     async cancel() { lifetime.abort(); return input.session.cancel(); },
     async revoke() { lifetime.abort(); return input.session.revoke(); },
@@ -123,7 +127,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, ...(wire ? { planning: wire } : {}), quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
-          const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known, wire);
+          const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known, combined, wire);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',
             evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason, reason.status,
@@ -137,12 +141,14 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               mcp: bridge, now: input.now }, launch.bounds, claude ? AbortSignal.any([combined, claude.signal]) : combined,
             (raw, lineSignal) => { if (claude) return claude.line(raw, lineSignal); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
+            // Proposal admission can stop the realm before the line callback sees another event.
+            const stoppedTurn = (stopped as Refusal | null) ?? turn?.refusal();
             if (planning?.active) {
               const truncated = evidence.limit || evidence.stdoutTruncated || evidence.stderrTruncated || evidence.reason === 'output-limit' || evidence.reason === 'line-limit';
               const cancelled = combined.aborted || evidence.reason === 'cancelled';
               if (!wire || !evidence.started || evidence.reason !== 'exit' || evidence.exitCode !== 0 || evidence.signal !== null
-                || truncated || cancelled || stopped || refusal || claude && finished?.kind !== 'completed') {
-                const rejection = (stopped as Refusal | null)?.body;
+                || truncated || cancelled || stoppedTurn || refusal || claude && finished?.kind !== 'completed') {
+                const rejection = stoppedTurn?.body;
                 const field = finished?.kind === 'refused' ? finished.field
                   : rejection && ('field' in rejection && rejection.field || 'subtype' in rejection && rejection.subtype);
                 if (field) {
@@ -163,7 +169,6 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
               return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
-            const stoppedTurn = stopped as Refusal | null; // The line callback owns this typed refusal.
             if (stoppedTurn || refusal) {
               if (!stoppedTurn || stoppedTurn.body.refusal === 'guard') {
                 refusal ??= 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';

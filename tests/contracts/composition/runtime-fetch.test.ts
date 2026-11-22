@@ -1,3 +1,4 @@
+import { failEffectRecordWrite, observeToolOutcomes } from '../support/tool-producer.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -50,6 +51,21 @@ async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' |
   await Promise.all(pending);
   return { result, events };
 }
+
+it.skipIf(process.platform !== 'linux')('fetch producer requires a recorded outcome after a single send', async () => {
+  const t = await tlsFixture(), observed = observeToolOutcomes();
+  t.routes.set('/unknown', req => req.socket.destroy());
+  t.routes.set('/ok', (_req, res) => res.writeHead(200).end('ok'));
+  const f = await runtime({ extraGrants: fetchGrants(), fetch: fetchSection('allowlist'), fetchTransport: t.transport }); await f.start();
+  for (const failWrite of [false, true]) {
+    if (failWrite) failEffectRecordWrite(f.ledger);
+    f.state.script.push(call('fetch_url', { url: 'https://docs.example/unknown' }), call('fetch_url', { url: 'https://docs.example/ok' }), { content: 'Done.' });
+    await answered(f, `fetch-record-${failWrite}`, null);
+  }
+  expect(t.seen.map(row => row.path)).toEqual(['/unknown', '/ok', '/unknown', '/ok']);
+  expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual(['unknown', 'settled', 'claimed', 'claimed'].map(state => ({ state })));
+  expect(observed).toEqual(['ordinary', 'ok', 'uncertain', 'uncertain']);
+});
 
 describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime service (FETCH S7)', () => {
   it('an allowlisted host runs without a card: one real HTTPS GET, the body lands in the scratch area, the model gets a redacted head', async () => {

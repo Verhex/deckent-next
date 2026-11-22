@@ -7,7 +7,7 @@ import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-regi
 import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
-import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
 import { NativeCliWorkerError } from './profile.js';
 
@@ -54,7 +54,11 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         system: input.system, user: input.user, effortArgs };
       claude = entry.agent.transport.kind === 'claude-mcp' ? transport.claudeDriver({ entry, port: input.tools, model: input.model,
         cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes }) : undefined;
-      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, gate.lookup);
+      const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, id => {
+        const host = gate.lookup(id);
+        if (!host || host.result.outcome.status === 'ok') return host;
+        return { ...host, result: JSON.parse(bridge.project(JSON.stringify(host.result))) as typeof host.result };
+      }, undefined, undefined, AbortSignal.any([combined, gate.signal]));
       gate.bind(claude ?? { async propose(call, correlation, callSignal) {
         if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
         return input.tools.propose(call, correlation, callSignal);
@@ -73,6 +77,8 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       });
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
+      if (result && 'refusal' in result && 'field' in result.refusal.body && result.refusal.body.field === CODEX_TOOL_ITEM_RESERVATION)
+        return { termination: 'confirmed', status: 'failed', text: CODEX_TOOL_ITEM_RESERVATION, refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
       return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined, gate.terminalFailure());
     },
     async close() {

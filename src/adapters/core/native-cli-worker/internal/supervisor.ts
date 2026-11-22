@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { KnownSecretSnapshot, JsonRecordFile } from '#platform/index.js';
-import { nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type WorkerEvent } from '#domain/index.js';
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
   type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfile, type SupervisorProfileSource } from '#engine/index.js';
@@ -13,11 +13,11 @@ import { inspectNativeCliWorker } from './readiness.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver, NativeCliWorkerToolContext } from './ports.js';
 import { nativeCliWorkerHandle, retainActiveNativeWorker, retainNativeWorkerResult } from './recorded.js';
 
-/** Only the recorded adapter identity selects native management; its version is checked by its own validator, never by Docker's. */
-const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
+export const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) =>
+  profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id && profile.adapterVersion === NATIVE_CLI_WORKER_ADAPTER.version;
 export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefined {
   const profile = supervisorProfileSchema.parse(input);
-  if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== NATIVE_CLI_WORKER_ADAPTER.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  if (!isNativeCliWorkerSupervisorProfile(profile)) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
   resolveNativeCliWorkerProfile(profile.parameters['task'] as ExecutionProfileDefinition);
   return undefined;
 }
@@ -82,7 +82,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     let interruptCause: SandboxResult['interruptCause'];
     const stop = () => { interruptCause ??= sandboxInterruptCause(deadline.aborted ? 'deadline' : 'signal', signal?.reason); };
     combined.addEventListener('abort', stop, { once: true }); if (combined.aborted) stop();
-    let tools: ToolSessionPort | undefined, outcome: SandboxResult;
+    let tools: ToolSessionPort | undefined, outcome: SandboxResult, diagnostic: typeof CODEX_TOOL_ITEM_RESERVATION | undefined;
     try { work: {
       const ready = await inspectNativeCliWorker(this.resolved.binding, this.input.ports);
       if (ready.state !== 'ready') { outcome = this.unknown(ready.reason); break work; }
@@ -95,7 +95,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       await guard();
       tools = await this.input.ports.openTools(this.input.request, this.resolved.binding, combined, this.input.toolContext ?? {});
       const session = toolSessionSchema.parse(tools.session), delegate = tools;
-      const guarded: ToolSessionPort = { session, terminalFailure: () => delegate.terminalFailure?.() ?? null, async propose(call, correlation, signal) {
+      const guarded: ToolSessionPort = { ...delegate, session, terminalFailure: () => delegate.terminalFailure?.() ?? null, async propose(call, correlation, signal) {
         await guard(); if (signal.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
         return delegate.propose(call, correlation, AbortSignal.any([combined, signal]));
       }, cancel: () => delegate.cancel(), revoke: () => delegate.revoke() };
@@ -121,8 +121,12 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       const result = await this.driver.run(this.bridge, combined);
       if (result.termination !== 'confirmed') { outcome = this.unknown('NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }
       if (result.refusal) {
-        if (!this.verification) { outcome = this.unknown(result.refusal); break work; }
-        const reason = nativeWorkerGuardRefusal(result.refusal); this.verdict = { state: 'refused', reason };
+        const turnOnly = result.refusal === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' && result.text === CODEX_TOOL_ITEM_RESERVATION;
+        if (!this.verification && !turnOnly) { outcome = this.unknown(result.refusal); break work; }
+        const reason = turnOnly ? CODEX_TOOL_ITEM_RESERVATION : nativeWorkerGuardRefusal(result.refusal);
+        // A turn-only failure abandons the verification claim when the Attempt releases.
+        if (reason === CODEX_TOOL_ITEM_RESERVATION) diagnostic = reason;
+        else this.verdict = { state: 'refused', reason };
         outcome = { handle: this.handle, result: { kind: 'exited', exitCode: 1 }, stdout: '', stderr: reason, outputCompleteness: 'complete', interrupted: false }; break work;
       }
       if (result.status === 'completed' && !combined.aborted) this.verdict = { state: 'verified' };
@@ -145,7 +149,9 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
           || closure.effects !== 'settled' || closure.pendingCallIds.length)) outcome = this.unknown('NATIVE_WORKER_EFFECTS_UNKNOWN');
       }
     }
-    return outcome;
+    if (!diagnostic) return outcome;
+    // The first call can settle its approval after the stream refuses the second request.
+    return { ...outcome, stderr: diagnostic, stdout: tools?.terminalFailure?.() === 'approval-expired' ? 'APPROVAL_EXPIRED' : outcome.stdout };
   }
   async cancel(request: SandboxRequest) {
     this.check(request); this.lifetime.abort();
@@ -156,7 +162,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     this.check(request); const result = this.result ?? this.unknown('NATIVE_WORKER_CUSTODY_UNKNOWN');
     return { handle: result.handle, result: result.result };
   }
-  async recoverOutput(request: SandboxRequest) { this.check(request); return { stdout: this.result?.stdout ?? '', stderr: '', completeness: 'partial' as const }; }
+  async recoverOutput(request: SandboxRequest) { this.check(request); return { stdout: this.result?.stdout ?? '', stderr: this.result?.stderr === CODEX_TOOL_ITEM_RESERVATION ? CODEX_TOOL_ITEM_RESERVATION : '', completeness: 'partial' as const }; }
   async collectOutputFiles(request: SandboxRequest) {
     this.check(request); if (this.result?.result.kind !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
     return this.resolved.options.outputFiles ? collectDockerOutputFiles(request.workspace, this.resolved.options.outputFiles) : [];

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { parseCodexExecLine } from '#adapters/core/native-connection/index.js';
-import { type createClaudeAgentDriver, nativeAgentItemReason, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, type createClaudeAgentDriver, nativeAgentItemReason, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import { refuse } from './contract.js';
@@ -9,7 +9,7 @@ import { headlessArgv } from './env.js';
 import { codexTurn } from './codex.js';
 import type { HeadlessPreflight } from './preflight.js';
 import { reject, type HeadlessTurn, type Prepared, type Refusal } from './turn.js';
-export type CodexAgentResultLookup = (deckentCallId: string) => Readonly<{ call: Parameters<ToolSessionPort['propose']>[0]; result: NativeAgentToolResult }> | undefined;
+export type CodexAgentResultLookup = (deckentCallId: string) => Readonly<{ call: Parameters<ToolSessionPort['propose']>[0]; result: NativeAgentToolResult; active?: () => boolean; recordedError?: () => ReturnType<NonNullable<ToolSessionPort['recordedError']>>; selectedText?: () => string | undefined }> | undefined;
 const MILLISECONDS_PER_SECOND = 1000; // Unit conversion, never a timeout policy.
 export function codexAgentArgv(entry: NonNullable<ReturnType<typeof nativeCliAgent>>, session: ToolSession, runDir: string, model: string, effortArgs: readonly string[], bridgeUrl: string): readonly string[] {
   const { agent, bridge } = entry, transport = agent.transport;
@@ -25,18 +25,29 @@ function toolResult(value: unknown): NativeAgentToolResult | null { const result
   let decoded: unknown; try { decoded = JSON.parse(block['text']); } catch { return null; }
   const parsed = nativeAgentToolResultSchema.safeParse(decoded); if (!parsed.success || result?.['structured_content'] != null && !isDeepStrictEqual(result['structured_content'], parsed.data)) return null; return parsed.data; }
 /** Observes K4 results, never executes: item.id is stream lifecycle; deckentCallId is facade custody. Caller owns bounds and stop-on-refusal. */
-export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS, wire?: Parameters<typeof createClaudeAgentDriver>[0]['planning']) {
+export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS, signal?: AbortSignal, wire?: Parameters<typeof createClaudeAgentDriver>[0]['planning']) {
   const entry = prepared.entry.headless.protocolFamily ? nativeCliAgent(prepared.entry.headless.protocolFamily) : null;
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const beforeDelivery = new Set<string>();
   const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
   let threadId: string | undefined, turnId: string | undefined, conflictingIdentity = false;
+  // Reserve synchronously before either driver can delegate to its tool session.
+  const reserved = new WeakMap<object, string>();
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
-  return { accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
+  return { refusal: () => refusal, accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
       if (refusal || !started || completed) return false;
       let args: unknown; try { args = JSON.parse(call.argumentsJson); } catch { return false; }
-      return [...active.values()].some(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
+      const matches = [...active.values()].filter(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
+      const item = matches[0];
+      if (!item) return false;
+      const previous = reserved.get(item);
+      if (matches.length !== 1 || previous !== undefined && previous !== call.id) {
+        fail(CODEX_TOOL_ITEM_RESERVATION);
+        return false;
+      }
+      reserved.set(item, call.id);
+      return true;
     }, line(raw: string) {
       if (refusal) return refusal; const line = parseCodexExecLine(raw);
       if (line.kind === 'invalid') return line.reason === 'blank' ? null : fail('json'); if (completed) return fail('after-turn');
@@ -67,10 +78,21 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
           if (!prior || !isDeepStrictEqual(prior, identity)) return fail('mcp-order');
           if (type === 'item.updated') return item.status === 'in_progress' && item.result == null && item.error == null ? null : fail('mcp-update');
           const envelope = toolResult(item.result);
-          if (item.status !== 'completed' || item.error != null || !envelope || envelope.turnId !== session.turnId || envelope.generation !== session.generation || calls.has(envelope.deckentCallId)) return fail('mcp-result');
+          if (signal?.aborted || item.error != null || !envelope || envelope.turnId !== session.turnId || envelope.generation !== session.generation || calls.has(envelope.deckentCallId)) return fail('mcp-result');
           const recorded = lookup(envelope.deckentCallId); let argumentsValue: unknown;
           try { argumentsValue = recorded ? JSON.parse(recorded.call.argumentsJson) : undefined; } catch { return fail('mcp-correlation'); }
-          if (!recorded || recorded.call.name !== item.tool || !isDeepStrictEqual(argumentsValue, item.arguments) || !isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          if (!recorded || recorded.active?.() === false || recorded.call.name !== item.tool || !isDeepStrictEqual(argumentsValue, item.arguments)) return fail('mcp-correlation');
+          if (recorded.result.outcome.status === 'ok') {
+            if (item.status !== 'completed') return fail('mcp-result');
+            if (!isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          } else {
+            // Completed keeps today's error-field rule (absent or null, checked above); a failed completion needs the explicit null the wire evidence shows.
+            if (item.status === 'failed' ? item.error !== null : item.status !== 'completed') return fail('mcp-result');
+            const content = record(item.result)?.['content'] as readonly unknown[];
+            if (envelope.outcome.status !== 'error' || recorded.call.id !== envelope.deckentCallId || reserved.get(prior) !== recorded.call.id
+              || recorded.recordedError?.() !== 'ordinary' || recorded.selectedText?.() !== record(content[0])?.['text']
+              || !isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          }
           if (wire?.active) {
             const errorFlag = record(item.result)?.isError;
             if (wire.delivered || envelope.outcome.status !== 'ok' || errorFlag !== undefined && errorFlag !== false) return fail('planning-delivery');

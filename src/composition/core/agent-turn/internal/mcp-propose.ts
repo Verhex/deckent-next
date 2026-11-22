@@ -1,3 +1,5 @@
+import { type ToolErrorClass } from '#capabilities/index.js';
+import { agentToolResult } from '#engine/index.js';
 import { agentToolApprovalFacts, aiProposalRequester } from '#engine/index.js';
 import { SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { mcpCardApprovalAsker, MCP_PROPOSAL_SECRETS_REFUSED, openLocalIntegrityAuthority, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, type McpCardAskerInput, type McpProposal } from '#adapters/index.js';
@@ -26,26 +28,27 @@ export function describeMcpProposal(proposal: McpProposal, proposer: string, loc
 export function createMcpProposals(input: { readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>;
   readonly scopeId: string; readonly turnId: string; readonly signal: AbortSignal; readonly emit: McpCardAskerInput['emit']; readonly proposer: string; readonly locale: Locale;
   /** Tests only: the window's answer (the turn's approval journal otherwise). */ readonly ask?: (text: string, name: string) => Promise<boolean | null> }) {
-  const { context, scopeId } = input, tag = (text: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${PROPOSE_MCP_SERVER_TOOL}: ${text}` });
-  const ask = input.ask ?? (async (text: string, name: string) => {
+  const { context, scopeId } = input, tag = (text: string, basis: ToolErrorClass | object): AgentToolOutcome => agentToolResult({ status: 'error' as const, text: `[deckent] ${PROPOSE_MCP_SERVER_TOOL}: ${text}` }, basis);
+  const ask = input.ask ?? (async (text: string, name: string, personDenied: () => void) => {
     const policy = await context.policy.load().catch(() => null);
     return mcpCardApprovalAsker({ ledgerPath: () => context.path(), sqlite: context.config.storage.sqlite, integrity: () => openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true),
       clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: aiProposalRequester(context.principal),
       policyRevision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), facts: agentToolApprovalFacts(policy, scopeId, null), ttlMs: context.config.approvals.requestTtlMs,
-      signal: input.signal, emit: input.emit }, 2_000_000)({ tool: PROPOSE_MCP_SERVER_TOOL, name, phase: 'proposal', text });
+      signal: input.signal, emit: input.emit }, 2_000_000)({ tool: PROPOSE_MCP_SERVER_TOOL, name, phase: 'proposal', text, personDenied });
   });
   return {
     owns: (name: string) => name === PROPOSE_MCP_SERVER_TOOL,
     async apply(args: Record<string, unknown>): Promise<AgentToolOutcome> {
       const plan = planMcpProposal(args);
       if (!plan.ok) return tag(plan.reason === MCP_PROPOSAL_SECRETS_REFUSED ? `error=${plan.reason}: secrets are bound by a person in /mcp; a proposal names the settings it needs `
-        + '(requiredSettings) and carries no value or reference; nothing was proposed' : `error=${plan.reason}; nothing was proposed`);
-      const answer = await ask(describeMcpProposal(plan.proposal, input.proposer, input.locale), plan.proposal.name).catch(() => null);
-      if (answer === null) return tag('no answer came; nothing was written');
-      if (!answer) return tag('the person declined; nothing was written');
+        + '(requiredSettings) and carries no value or reference; nothing was proposed' : `error=${plan.reason}; nothing was proposed`, plan);
+      let sealedNo = false;
+      const answer = await ask(describeMcpProposal(plan.proposal, input.proposer, input.locale), plan.proposal.name, () => { sealedNo = true; }).catch(() => null);
+      if (answer === null) return tag('no answer came; nothing was written', 'uncertain');
+      if (!answer) return tag('the person declined; nothing was written', sealedNo ? 'ordinary' : 'uncertain');
       try {
         await runConfiguredMcpCommand(input.projectRoot, { verb: 'add', scope: 'local', name: plan.proposal.name, entry: plan.entry, approve: false }, input.options, async () => null, input.locale);
-      } catch (error) { return tag(`error=${String((error as { code?: unknown })?.code ?? 'failed')}; the person approved, but the server was not added`); }
+      } catch (error) { return tag(`error=${String((error as { code?: unknown })?.code ?? 'failed')}; the person approved, but the server was not added`, 'uncertain'); }
       return { status: 'ok', text: `[deckent] ${PROPOSE_MCP_SERVER_TOOL}: the person approved; ${plan.proposal.name} was added to this project's local MCP registry, untrusted. `
         + 'Its trust is asked separately on the next message; its tools are offered only after that.' };
     },

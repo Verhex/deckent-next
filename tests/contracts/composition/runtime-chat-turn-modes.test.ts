@@ -1,7 +1,14 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createWorkspaceScope, projectEditArea, WorkspaceFileTarget } from '#adapters/index.js';
+import { SqliteEffectJournal } from '#adapters/core/sqlite-effect-store/index.js';
+import { toolErrorClass } from '#capabilities/index.js';
+import { createAgentFileEdits } from '#composition/core/agent-turn/index.js';
+import { EffectError } from '#domain/index.js';
+import { EffectTargetError, refuseRequiredApproval } from '#engine/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
+import { toolProducer } from '../support/tool-producer.js';
 
 // T-L4 slice 4a on the real runtime service: cell × mode. The company marks a require-approval rule `modeEligible` (policy v2); the
 // person's mode lives in bindings.json (v2 `modes`). A mode lowers only an eligible require-approval on a relaxable cell, writes one
@@ -16,6 +23,23 @@ const edit = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: boolean
 const shell = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: boolean } = {}) => [
   rule('shell-tool', 'agent-tool', ['run_shell'], tool, eligible.tool), rule('shell-run', 'operation', ['host.shell.run'], op, eligible.op)];
 const setA = (to: number) => ({ path: 'src/a.ts', old_string: `a = ${to - 1}`, new_string: `a = ${to}` });
+
+it.skipIf(process.platform !== 'linux')('WER-A direct edit uncertainty requires the outer record', async () => {
+  const f = await toolProducer([rule('file-write', 'operation', ['workspace.file.write'], 'allow')]);
+  const edits = createAgentFileEdits({ ...f, area: projectEditArea(await createWorkspaceScope(f.project)) });
+  const target = vi.spyOn(WorkspaceFileTarget.prototype, 'apply').mockRejectedValue(new EffectTargetError('EFFECT_TARGET_UNKNOWN'));
+  const record = vi.spyOn(SqliteEffectJournal.prototype, 'saveEffect');
+  try {
+    const apply = (path: string, index: number) => edits.apply('write_file', { path, content: 'fixture' }, { round: 1, index }, refuseRequiredApproval);
+    const recorded = await apply('first.txt', 0);
+    record.mockRejectedValueOnce(new EffectError('EFFECT_OUTCOME_UNKNOWN', { cause: new Error('fixture journal unavailable') }));
+    const unrecorded = await apply('second.txt', 1);
+    expect(target).toHaveBeenCalledTimes(2);
+    expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual([{ state: 'unknown' }, { state: 'claimed' }]);
+    expect([recorded.status, unrecorded.status]).toEqual(['error', 'error']);
+    expect([toolErrorClass(recorded), toolErrorClass(unrecorded)]).toEqual(['ordinary', 'uncertain']);
+  } finally { record.mockRestore(); target.mockRestore(); }
+});
 
 describe.skipIf(process.platform !== 'linux')('permission modes through the runtime service (T-L4 slice 4a)', () => {
   it('lowers an eligible require-approval on an ordinary edit in auto-edit and full-auto, with one audit event each; ask still shows the card', async () => {

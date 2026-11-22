@@ -199,7 +199,7 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
         'mkdir -p sub && d=Docker; echo x >> sub/${d}file', 'echo hi >> notes.txt && cat notes.txt'];
       for (const [index, command] of commands.entries()) {
         const result = await f.call('run_shell', { command });
-        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: writeSet ? 'ok' : 'error' });
+        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: 'error' });
         expect(result.text).toContain(writeSet ? `[deckent] write set: not applied: ${created[index]} (denied by policy).` : 'the project was read-only for this unattended run');
       }
       for (const path of created) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });

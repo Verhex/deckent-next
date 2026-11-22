@@ -5,7 +5,7 @@ import { approvalRequestSchema, approvalSubject, requiresPersonProposalDecision,
 import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
+import { approvalRequestDigest, admitDecided, agentToolApprovalLeft, approvalActorRef, expireApproval, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
 import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
@@ -62,7 +62,7 @@ async function closeExpired(store: ApprovalStore, integrity: IntegrityAuthority,
  * except a stored `allow`.
  */
 export async function awaitAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord,
-  clock: TrustedClock, signal: AbortSignal, pollMs = 250, started: ClockSample = clock.sample()): Promise<AgentToolApprovalOutcome> {
+  clock: TrustedClock, signal: AbortSignal, pollMs = 250, started: ClockSample = clock.sample(), onPersonDenial?: (current: ApprovalRecord) => void): Promise<AgentToolApprovalOutcome> {
   const { scopeId, approvalId, expiresAt } = record.request;
   const settled = (current: ApprovalRecord): AgentToolApprovalOutcome | null =>
     current.status === 'expired' ? 'expired' : current.status === 'decided' ? current.decision?.decision === 'allow' ? 'allow' : 'deny' : null;
@@ -77,7 +77,11 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
     const left = agentToolApprovalLeft(expiresAt, started, clock.sample());
     if (left <= 0) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'expired'; }
     const stored = settled(current);
-    if (stored) return stored;
+    if (stored) {
+      if (current.status === 'decided' && current.decision?.decision === 'deny' && witnessedPersonDecision(current)
+        && current.decision.requestDigest === approvalRequestDigest(current.request)) onPersonDenial?.(current);
+      return stored;
+    }
     await new Promise<void>(resolve => {
       const timer = setTimeout(done, Math.max(1, Math.min(pollMs, left)));
       function done() { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); }
@@ -92,10 +96,17 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
  * budget spent meanwhile; only a usable allow is `allowed`. `settled` hears the outcome once (`unsettled`: the wait failed). APPROVER-NOTE: a note comes only with the owner's own decision.
  */
 export async function settleAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord, clock: TrustedClock, signal: AbortSignal, started: ClockSample,
-  steps: { recheck?(): Promise<boolean>; refused?(): void; allowed?(approval: NonNullable<AgentToolCallAdmission['approval']>): void; settled?(outcome: AgentToolApprovalOutcome | 'unsettled'): void }) {
+  steps: { personDenied?(proof: { approvalId: string; actionDigest: string; subject: ApprovalSubject }): void; recheck?(): Promise<boolean>; refused?(): void; allowed?(approval: NonNullable<AgentToolCallAdmission['approval']>): void; settled?(outcome: AgentToolApprovalOutcome | 'unsettled'): void }) {
   let settlement: AgentToolApprovalOutcome | 'unsettled' = 'unsettled';
   try {
-    const decided = await awaitAgentToolApproval(store, integrity, record, clock, signal, 250, started);
+    const decided = await awaitAgentToolApproval(store, integrity, record, clock, signal, 250, started, current => {
+      const subject = approvalSubject(current.request);
+      if (steps.personDenied && current.request.approvalId === record.request.approvalId
+        && current.request.scopeId === record.request.scopeId && subject.kind === 'agent-tool-call'
+        && current.request.actionDigest === agentToolCallActionDigest(record.request.scopeId, subject)
+        && current.request.actionDigest === record.request.actionDigest && isDeepStrictEqual(subject, approvalSubject(record.request)))
+        steps.personDenied({ approvalId: current.request.approvalId, actionDigest: current.request.actionDigest, subject });
+    });
     if (decided === 'allow' && steps.recheck && !await steps.recheck()) { steps.refused?.(); settlement = 'allow'; return 'policy-deny'; }
     const outcome: AgentToolApprovalOutcome = decided !== 'allow' ? decided : signal.aborted ? 'cancelled' : agentToolApprovalLeft(record.request.expiresAt, started, clock.sample()) <= 0 ? 'expired' : 'allow';
     settlement = outcome;

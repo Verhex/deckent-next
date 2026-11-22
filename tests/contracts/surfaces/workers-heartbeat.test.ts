@@ -91,10 +91,15 @@ it('PRE-34: a finished worker whose events never reported a session end says so,
     messages: 0, quota: [], unmapped: 0, dropped: 0, events: 0, models: null, modelVerification: null } as const;
   const live = { ...worker(null), usage, usageEvidence: 'sealed' as const };
   const released = { ...live, process: 'missing' as const, terminal: { handle: 'h', exitCode: 0, interrupted: false }, custody: 'released' as const };
+  const refused = { ...released, terminal: { ...released.terminal, exitCode: 1 }, diagnostics: ['mcp-item-reservation'] };
+  const expired = { ...refused, diagnostics: [...refused.diagnostics, 'APPROVAL_EXPIRED'] };
   const lines = (w: WorkerObservation, locale: 'en' | 'tr') => renderWorkerSource({ id: 'current', path: '/p', kind: 'next', status: 'available', workers: [w], nextAfter: null, truncated: false }, locale).join('\n');
   for (const locale of ['en', 'tr'] as const) {
     expect(lines(released, locale)).toContain(t('monitor.human.usageOutcomeUnreported', {}, locale));
     expect(lines(released, locale)).not.toContain(t('monitor.human.usageOutcomeRunning', {}, locale));
     expect(lines(live, locale)).toContain(t('monitor.human.usageOutcomeRunning', {}, locale));
+    expect(lines(refused, locale)).toContain(t('headless.agent.toolItemStopped', {}, locale));
+    expect(lines(expired, locale)).toContain(t('error.APPROVAL_EXPIRED', {}, locale));
+    expect(lines(expired, locale)).toContain(t('headless.agent.toolItemStopped', {}, locale));
   }
 });

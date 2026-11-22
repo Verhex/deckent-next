@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 export interface BridgeDelivery {
   beforeWrite?(frame: string): (() => void) | undefined;
+  sent?(frame: string): void;
 }
 
 /** Protocol codes only; person-facing explanations belong to the shared reason catalogs. */
@@ -57,6 +58,7 @@ export async function bridgeResponse(source: Response, target: ServerResponse, m
         target.write(projected, error => error ? reject(error) : resolve());
       });
     } finally { target.off('close', closed); release?.(); }
+    if (!target.destroyed) delivery.sent?.(projected.toString('utf8'));
   };
   try {
     while (!target.destroyed) {

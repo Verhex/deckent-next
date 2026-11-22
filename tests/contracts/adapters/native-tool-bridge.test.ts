@@ -23,18 +23,19 @@ const resultEnvelope = (answer: Answer) => JSON.parse(jsonMessages(answer).find(
 async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0]> = {}, propose?: ToolSessionPort['propose']) {
   const directory = await mkdtemp(join(tmpdir(), 'native-bridge-')); cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const session = { schemaVersion: 1 as const, turnId: 'fixture-turn', generation: 1, tools: [tool], approvalTtlMs: 5000 };
-  const submit = vi.fn(propose ?? (async (call) => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
+  const submit = vi.fn<ToolSessionPort['propose']>(propose ?? (async (call) => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped-result' } })));
   const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'unknown' as const };
-  const port: ToolSessionPort = { session, propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' })) };
+  const port: ToolSessionPort = { session, selected: vi.fn(), propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' as const })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' as const })) };
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
-  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; onData?: () => void } = {}) => new Promise<Answer>((resolve, reject) => {
-    const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false,
+  const send = (body: unknown, options: { method?: string; headers?: Record<string, string>; path?: string; raw?: string; signal?: AbortSignal; onData?: () => void } = {}) => new Promise<Answer>((resolve, reject) => {
+    const req = httpRequest({ socketPath: gateway.socketPath, path: options.path ?? bridge.url, method: options.method ?? 'POST', agent: false, signal: options.signal,
       headers: { host: bridge.sentinelHost, accept: 'application/json, text/event-stream', 'content-type': 'application/json',
         [registry.bridge.tokenHeaderName]: bridge.tokenHeader, ...options.headers } }, response => {
-      let text = ''; response.on('data', chunk => { text += String(chunk); options.onData?.(); }); response.on('error', reject);
+      let text = ''; response.on('data', chunk => { text += String(chunk); }); response.on('error', reject);
+      if (options.onData) response.once('data', options.onData);
       response.on('end', () => resolve({ status: response.statusCode!, headers: response.headers, body: text }));
     });
     req.on('error', reject); req.end(options.raw ?? (body === undefined ? undefined : JSON.stringify(body)));
@@ -99,19 +100,23 @@ it('refuses a batched POST before any tool execution or plan finalization', asyn
   expect(result).toMatchObject({ finish: 'stop', answer: 'done' });
 });
 
-it('replays a pending and completed call once, refuses changed arguments and never evicts to re-execute', async () => {
+it.each(['claude-tool-use', 'codex-mcp'] as const)('replays pending and completed %s calls once, refuses changed arguments and never evicts to re-execute', async correlationKind => {
   let release!: () => void; const wait = new Promise<void>(resolve => { release = resolve; });
-  const f = await fixture({ limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } }, async (call) => {
+  const call = (id: number, args = {}) => correlationKind === 'claude-tool-use' ? rpc(id, tool.name, args)
+    : rpc(id, tool.name, args, { callId: `call-${id}`, itemId: `item-${id}` });
+  const f = await fixture({ correlationKind, limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } }, async (call) => {
     await wait; return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'ok', text: 'once' } };
   });
-  const headers = await f.initialize(), first = f.send(rpc(2), { headers });
+  const headers = await f.initialize(), first = f.send(call(2), { headers });
   await vi.waitFor(() => expect(f.submit).toHaveBeenCalledOnce());
-  expect((await f.send(rpc(2), { headers })).status).toBe(409);
-  const duplicate = f.send({ ...rpc(2), id: 3 }, { headers }); release();
+  expect((await f.send(call(2), { headers })).status).toBe(409);
+  const acceptedReplay = vi.fn();
+  const duplicate = f.send({ ...call(2), id: 3 }, { headers, onData: acceptedReplay });
+  try { await vi.waitFor(() => expect(acceptedReplay).toHaveBeenCalledOnce()); } finally { release(); }
   const [a, b] = await Promise.all([first, duplicate]); expect(resultEnvelope(a)).toEqual(resultEnvelope(b));
-  expect(resultEnvelope(await f.send(rpc(2), { headers }))).toEqual(resultEnvelope(a));
-  expect(resultEnvelope(await f.send(rpc(2, tool.name, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
-  expect(resultEnvelope(await f.send(rpc(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
+  expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
+  expect(resultEnvelope(await f.send(call(2, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
+  expect(resultEnvelope(await f.send(call(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
 });
 
 it('selects pending results against the live K1 session and preserves ordinary chat replay', async () => {
@@ -343,6 +348,60 @@ it('bounds declared/chunked bodies and output frames, without invoking unknown e
   expect(tooLarge.status).toBe(413); expect(f.submit).toHaveBeenCalledOnce();
   expect((await f.send(undefined, { raw: 'x'.repeat(4097), headers: { ...headers, 'Transfer-Encoding': 'chunked' } })).status).toBe(413);
   expect(JSON.stringify(f.gateway.statistics())).not.toContain(canary);
+});
+
+it('WER-A publishes the selected redacted text only after the actual request id fits and invalidates it on closure', async () => {
+  const canary = 'synthetic-selected-secret', selected = vi.fn<NonNullable<ToolSessionPort['selected']>>();
+  let release!: () => void;
+  const late = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture({ correlationKind: 'codex-mcp', bridge: { ...registry.bridge, frameMaxBytes: 2048 },
+    knownSecrets: snapshotKnownSecrets([{ name: null, value: canary }]) }, async (call, correlation) => {
+    if (correlation.kind === 'codex-mcp' && correlation.callId === 'late') await late;
+    return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'error', text: canary + 'x'.repeat(900) } };
+  });
+  f.port.selected = selected;
+  const headers = await f.initialize(), request = rpc(2, tool.name, {}, { callId: 'a', itemId: 'b' });
+  const tooLarge = await f.send({ ...request, id: 'r'.repeat(1000) }, { headers });
+  expect(resultEnvelope(tooLarge).outcome.text).toBe('NATIVE_BRIDGE_FRAME_LIMIT'); expect(selected).not.toHaveBeenCalled();
+  const sent = await f.send(rpc(3, tool.name, {}, { callId: 'c', itemId: 'd' }), { headers });
+  const [[host, text, live]] = selected.mock.calls as [Parameters<NonNullable<ToolSessionPort['selected']>>];
+  expect(host.outcome.text).toContain(canary); expect(text).not.toContain(canary);
+  expect(jsonMessages(sent)[0].result.content[0].text).toBe(text); expect(live()).toBe(true);
+  const lateRequest = rpc(4, tool.name, {}, { callId: 'late', itemId: 'other' });
+  const waiting = f.send(lateRequest, { headers });
+  await vi.waitFor(() => expect(f.submit).toHaveBeenCalledTimes(3));
+  await f.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 4 } }, { headers });
+  await waiting; release();
+  const replay = await f.send({ ...lateRequest, id: 5 }, { headers });
+  expect(resultEnvelope(replay).outcome.text).toBe('NATIVE_BRIDGE_CANCELLED');
+  expect(selected).toHaveBeenCalledOnce();
+  await f.bridge.close(); expect(live()).toBe(false);
+});
+it('WER-A only the original SSE stream can establish ordinary error delivery', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture({ correlationKind: 'codex-mcp',
+    limits: { idleMs: 300, maxConnections: 1, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 } }, async (call, correlation) => {
+    if (correlation.kind === 'codex-mcp' && correlation.callId === 'pending') await pending;
+    return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'error', text: 'fixture-error' } };
+  });
+  const headers = await f.initialize(), abort = new AbortController();
+  const call = rpc(2, tool.name, {}, { callId: 'pending', itemId: 'first' });
+  const first = f.send(call, { headers, signal: abort.signal }).catch(() => null);
+  await vi.waitFor(() => expect(f.submit).toHaveBeenCalledOnce());
+  abort.abort();
+  expect(await first).toBeNull();
+  // The gateway has one MCP slot. Listing can complete only once the first stream releases it.
+  await vi.waitFor(async () => expect((await f.send({ jsonrpc: '2.0', id: 6, method: 'tools/list' }, { headers })).status).toBe(200));
+  release();
+  expect(resultEnvelope(await f.send({ ...call, id: 3 }, { headers })).outcome.text).toBe('fixture-error');
+  expect(f.port.selected).not.toHaveBeenCalled();
+  expect(f.submit).toHaveBeenCalledOnce();
+  const delivered = rpc(4, tool.name, {}, { callId: 'delivered', itemId: 'second' });
+  const original = resultEnvelope(await f.send(delivered, { headers }));
+  expect(resultEnvelope(await f.send({ ...delivered, id: 5 }, { headers }))).toEqual(original);
+  expect(f.port.selected).toHaveBeenCalledOnce();
+  expect(f.submit).toHaveBeenCalledTimes(2);
 });
 
 it('preserves unknown outcomes, validates result identity, and redacts the Deckent token from tool output', async () => {

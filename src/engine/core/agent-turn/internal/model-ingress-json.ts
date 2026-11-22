@@ -1,3 +1,4 @@
+import { withToolErrorClass } from '#capabilities/index.js';
 import policy from './model-ingress-policy.json' with { type: 'json' };
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 
@@ -22,8 +23,8 @@ export async function checkModelIngressArguments(value: unknown, record?: ModelI
     else if (item && typeof item === 'object') for (const [key, child] of Object.entries(item)) { await check(key); pending.push(child); }
   }
   const notice = refused as ModelIngressProjection | null;
-  return notice ? { ok: false, text: `ingress-refused:arguments (${auditFailed || notice.disposition === 'quarantine' ? notice.withheld
-    : `[hidden-unicode: ${notice.codePoints} cp, argument, ${notice.fieldDigest.slice(0, 12)}]`})` } : { ok: true };
+  return notice ? withToolErrorClass({ ok: false as const, text: `ingress-refused:arguments (${auditFailed || notice.disposition === 'quarantine' ? notice.withheld
+    : `[hidden-unicode: ${notice.codePoints} cp, argument, ${notice.fieldDigest.slice(0, 12)}]`})` }, !record || auditFailed ? 'uncertain' : 'session') : { ok: true };
 }
 
 /** Project schema prose only; property names, refs, required/default/enum values keep their exact meaning.

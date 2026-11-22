@@ -1,5 +1,6 @@
+import { storedToolCalls } from './tool-error.js';
 import { createHash } from 'node:crypto';
-import { toolSessionSchema, nativeAgentCorrelationSchema, type ToolSession, type NativeAgentToolResult, type SameTurnPlanningPort, type SameTurnToolSessionPort } from '#capabilities/index.js';
+import { toolSessionSchema, nativeAgentCorrelationSchema, withToolErrorClass, toolErrorClass, type ToolErrorClass, type ToolSession, type NativeAgentToolResult, type SameTurnPlanningPort, type SameTurnToolSessionPort } from '#capabilities/index.js';
 import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
 import { createAgentContextCarry } from './carry.js';
 import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
@@ -8,11 +9,13 @@ import { checkModelIngressArguments, projectModelIngressSchema } from './model-i
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
 import { optionalField, LOCALES, t, ErrorRegistry, type Locale } from '#platform/index.js';
-import { chatTurnResultSchema, agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type AgentTurnEvent, type AgentTurnFinish,
+import { chatTurnResultSchema, agentToolCallSchema, type AgentContextQuality, type AgentToolCall, type AgentToolCleanup, type AgentToolDiagnostic, type AgentToolOutcome, type AgentToolSpec, type AgentToolCallStatus, type ApprovalSubject, type AgentTurnEvent, type AgentTurnFinish,
   type AgentTurnMessage, type AgentMessageContinuation, type AgentProviderStop, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 const providerStopWords = (language: Locale | undefined) => ({ 'content-filter': t('agent.turn.outcome.contentFilter', {}, language), 'context-window': t('agent.turn.outcome.providerContext', {}, language),
   'network-error': t('agent.turn.outcome.providerNetwork', {}, language), 'resource-exhausted': t('agent.turn.outcome.providerResource', {}, language), 'aborted': t('agent.turn.outcome.providerAborted', {}, language) });
+
+type PersonDenial = { approvalId: string; actionDigest: string; subject: ApprovalSubject };
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
 export type AgentRoundOutcome =
@@ -78,7 +81,7 @@ export interface AgentTurnPorts {
    * `policy-deny`: the owner allowed, but policy denies the call now (re-evaluated after the approval) — a policy refusal, not the owner's.
    */
   requestApproval?(input: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec;
-    readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null }, signal: AbortSignal):
+    readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null; readonly personDenied?: (proof: PersonDenial) => void }, signal: AbortSignal):
     Promise<'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | AgentToolOwnerAnswer>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
@@ -193,39 +196,44 @@ function canonical(value: unknown): string {
 export const agentToolArgumentsDigest = (name: string, args: Record<string, unknown>) => createHash('sha256').update(`agent-tool-args:1\0${name}\0${canonical(args)}`).digest('hex');
 
 /** Arguments against the tool's declared JSON schema subset: an object, required keys present, declared primitive types. */
-async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurnPorts): Promise<{ ok: true; args: Record<string, unknown> } | { ok: false; detail: string }> {
+async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurnPorts): Promise<{ ok: true; args: Record<string, unknown> } | { ok: false; detail: string; kind: ToolErrorClass }> {
   let parsed: unknown;
-  try { parsed = JSON.parse(raw === '' ? '{}' : raw); } catch { return { ok: false, detail: 'arguments are not valid JSON' }; }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, detail: 'arguments must be a JSON object' };
+  try { parsed = JSON.parse(raw === '' ? '{}' : raw); } catch { return { ok: false, kind: 'session', detail: 'arguments are not valid JSON' }; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, kind: 'session', detail: 'arguments must be a JSON object' };
   const ingress = await checkModelIngressArguments(parsed, ports.recordIngress?.bind(ports));
-  if (!ingress.ok) return { ok: false, detail: ingress.text };
+  if (!ingress.ok) return { ok: false, kind: toolErrorClass(ingress), detail: ingress.text };
   const args = parsed as Record<string, unknown>, properties = tool.inputSchema.properties as Record<string, { type?: unknown }>;
-  for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, detail: `missing required argument "${key}"` };
+  for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, kind: 'ordinary', detail: `missing required argument "${key}"` };
   for (const [key, value] of Object.entries(args)) {
     const type = Object.hasOwn(properties, key) ? properties[key]?.type : undefined;
     // Owner terminal test 2026-10-07: grep got `maxMatches` twice; the refusal names the arguments the tool takes, so the next call can be right.
-    if (type === undefined) return { ok: false, detail: `unknown argument "${key}"; valid arguments: ${Object.keys(properties).join(', ') || 'none'}` };
+    if (type === undefined) return { ok: false, kind: 'ordinary', detail: `unknown argument "${key}"; valid arguments: ${Object.keys(properties).join(', ') || 'none'}` };
     const matches = type === 'string' ? typeof value === 'string' : type === 'integer' ? Number.isSafeInteger(value) : type === 'boolean' ? typeof value === 'boolean'
       : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : true;
-    if (!matches) return { ok: false, detail: `argument "${key}" must be ${String(type)}` };
+    if (!matches) return { ok: false, kind: 'ordinary', detail: `argument "${key}" must be ${String(type)}` };
   }
   return { ok: true, args };
 }
 
 type IngressPause = { readonly call: AgentToolCall; readonly tool: AgentToolSpec; readonly index: number;
-  readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null };
+  readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null;
+  readonly matchesDenial: (proof: PersonDenial) => boolean;
+  readonly blocked: (kind: 'uncertain' | 'cancelled') => void };
 /** The model and the approval card share this text. Decode stays on the projection and is not returned here. */
 async function presentModelIngress(content: string, pause: IngressPause | null, input: AgentTurnInput, ports: AgentTurnPorts, round: number): Promise<string> {
   const projected = projectModelIngressField(content);
   if (projected.disposition === 'unchanged') return content;
   try { await ports.recordIngress?.(projected); } catch { return projected.withheld; }
   if (projected.disposition === 'note') return projected.modelText;
-  if (!pause || input.fullAccess || !ports.requestApproval) return projected.withheld;
+  if (!pause || input.fullAccess) return projected.withheld;
+  if (!ports.requestApproval) { pause.blocked('uncertain'); return projected.withheld; }
   let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
+  let personDenied = false;
   try { answer = ownerOutcome(await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
-    argsDigest: pause.argsDigest, target: pause.target }, input.signal)).outcome; }
+    argsDigest: pause.argsDigest, target: pause.target, personDenied: proof => { personDenied = pause.matchesDenial(proof); } }, input.signal)).outcome; }
   catch { answer = null; }
   if (answer === 'allow') return projected.modelText;
+  if (answer !== 'deny' || !personDenied) pause.blocked(answer === 'cancelled' ? 'cancelled' : 'uncertain');
   return projected.withheld;
 }
 
@@ -253,33 +261,48 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     let progressed = false;
     let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
     // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
-    const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
+    let personDecision: PersonDenial | undefined;
+    const matchesDenial = ({ subject }: PersonDenial) => subject.kind === 'agent-tool-call'
+      && (!input.nativeSession || subject.turnId === input.nativeSession.turnId)
+      && subject.round === round && subject.index === index && subject.argsDigest === digestOf && subject.tool === call.name
+      && subject.toolVersion === tool?.version && subject.resource === (targetOf ?? '(no target)');
+    let auditMissing = false, approvalBlock: 'uncertain' | 'cancelled' | undefined;
+    const presentationPorts: AgentTurnPorts = { ...ports, recordIngress: async notice => {
+      try {
+        if (!ports.recordIngress) throw new Error('AUDIT_UNAVAILABLE');
+        await ports.recordIngress(notice);
+      } catch (error) { auditMissing = true; throw error; }
+    } };
+    const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic, kind: ToolErrorClass = 'uncertain') => {
+      const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf,
+        target: targetOf, matchesDenial, blocked: kind => { approvalBlock = kind; } }, { ...input, signal }, presentationPorts, round) : content;
+      if ((auditMissing || approvalBlock) && (status === 'ok' || status === 'duplicate')) status = 'error';
       if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
-      const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, { ...input, signal }, ports, round) : content;
       const privateResult = ports.planning?.privateResult(call.id, shown);
-      const settlement = { round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status,
-        content: privateResult?.content ?? shown, ...(diagnostic ? { diagnostic } : {}) };
+      const settled = Object.freeze({ round, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status,
+        content: privateResult?.content ?? shown, ...(diagnostic ? { diagnostic } : {}) });
       // The facade cannot resolve until the exact private P is durably recorded. History/carry/events see only the public projection.
       if (privateResult) {
         if (!ports.settled) throw new Error('TOOL_SETTLEMENT_UNAVAILABLE');
-        await ports.settled(settlement);
+        await ports.settled(settled);
       }
       const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: privateResult?.publicText ?? shown });
       carry.observed(message, call, round, index, invoked, status, cleanup);
       emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
         ...optionalField('cleanup', cleanup) });
-      if (!privateResult) await ports.settled?.(settlement);
-      return { message, progressed, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
+      if (!privateResult) await ports.settled?.(settled);
+      const receipt = storedToolCalls.get(settled);
+      return { message, progressed, proof: receipt ? { receipt, kind: auditMissing ? 'uncertain' as const : approvalBlock ?? kind, personDecision } : undefined, outcome: { status: status === 'ok' || status === 'duplicate' ? 'ok' : 'error', text: shown,
         ...optionalField('cleanup', cleanup), ...(diagnostic ? { diagnostic } : {}) } as AgentToolOutcome };
     };
-    if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
+    if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled'); }
     // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
-    if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens)); }
-    if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('error', `[deckent] ${call.name}: error=unknown-tool`); }
+    if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens), undefined, undefined, 'limit'); }
+    if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('error', `[deckent] ${call.name}: error=unknown-tool`, undefined, undefined, 'session'); }
     const checked = await checkArguments(tool, call.argumentsJson, ports);
     targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
     emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
-    if (!checked.ok) { return result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); }
+    if (!checked.ok) { return result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`, undefined, undefined, checked.kind); }
     const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest; pauseArgs = checked.args;
     ports.planning?.beforeTool(call.id, digest);
     if (tool.toolClass === 'read' && seenReads.has(digest)) {
@@ -291,23 +314,24 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     if (ports.prepare) {
       let prepared: Awaited<ReturnType<NonNullable<AgentTurnPorts['prepare']>>>;
       try { prepared = await ports.prepare(tool, checked.args, signal); } catch { prepared = { ok: false, text: `[deckent] ${call.name}: error=failed` }; }
-      if (!prepared.ok) { return result('error', prepared.text); }
+      if (!prepared.ok) { return result('error', prepared.text, undefined, undefined, toolErrorClass(prepared)); }
       if (prepared.requireApproval && decision === 'allow') decision = 'require-approval';
     }
     if (decision === 'require-approval') {
       // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
-      if (!ports.requestApproval) { return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); }
+      if (!ports.requestApproval) { return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`, undefined, undefined, 'ordinary'); }
       let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
-      try { const owner = ownerOutcome(await ports.requestApproval({ round, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal));
+      try { const owner = ownerOutcome(await ports.requestApproval({ round, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf,
+          personDenied: proof => { if (matchesDenial(proof)) personDecision = proof; } }, signal));
         answer = owner.outcome; noteOf = owner.note; }
       catch { answer = null; }
       if (answer === null && !signal.aborted) { return result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); }
-      if (signal.aborted || answer === 'cancelled') { return result('cancelled', `[deckent] ${call.name}: error=cancelled`); }
-      if (answer === 'deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, ports)}`); }
+      if (signal.aborted || answer === 'cancelled') { return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled'); }
+      if (answer === 'deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, presentationPorts)}`, undefined, undefined, personDecision ? 'ordinary' : 'uncertain'); }
       if (answer === 'policy-deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); }
       if (answer === 'expired') { return result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); }
     }
-    if (signal.aborted) return result('cancelled', `[deckent] ${call.name}: error=cancelled`);
+    if (signal.aborted) return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled');
     toolCalls++;
     invoked = true;
     let outcomeText: AgentToolOutcome;
@@ -316,11 +340,11 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
     if (tool.toolClass !== 'read') seenReads.clear();
     // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
-    const completed = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
-      tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic);
-    if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
-    // Cancellation is a transport fact; preserve the handler's completed effect in the native envelope.
-    return { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } };
+    const completed = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, presentationPorts)}`,
+      tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic, signal.aborted ? 'cancelled' : toolErrorClass(outcomeText));
+    if (tool.toolClass === 'read' && completed.outcome.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: completed.message });
+    // Preserve the completed handler outcome on cancellation once its presentation has cleared the evidence checks.
+    return signal.aborted && !auditMissing && !approvalBlock ? { ...completed, outcome: { ...completed.outcome, status: outcomeText.status } } : completed;
   };
   return { run, planning: ports.planning, get toolCalls() { return toolCalls; }, get cut() { return cut; }, get effectsUnknown() { return effectsUnknown; },
     retain(visible: ReadonlySet<AgentTurnMessage>) { for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest); } };
@@ -329,12 +353,13 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
 /** A generation-local replay fence. Durable turn replay remains owned by runDurableAgentTurn. */
 function createNativeToolSession(session: ToolSession, input: AgentTurnInput, coordinator: ReturnType<typeof createAgentToolCoordinator>,
   push: (message: AgentTurnMessage) => AgentTurnMessage, historyBytes: () => number) {
-  const controller = new AbortController(), records = new Map<string, { fingerprint: string; result: Promise<NativeAgentToolResult> }>();
+  const controller = new AbortController(), records = new Map<string, { call: AgentToolCall; fingerprint: string; result: Promise<NativeAgentToolResult>;
+    evidence?: { result: NativeAgentToolResult; proof: NonNullable<Awaited<ReturnType<typeof coordinator.run>>['proof']>; signal: AbortSignal } }>();
   const pending = new Set<string>();
   let pendingBytes = 0, closed = false, interrupted = false, queue: Promise<unknown> = Promise.resolve(), nextIndex = 0, failedSettlement = false, planningRefused = false;
   const envelope = (deckentCallId: string, outcome: AgentToolOutcome): NativeAgentToolResult => Object.freeze({ schemaVersion: 1,
     turnId: session.turnId, generation: session.generation, deckentCallId, outcome: Object.freeze({ ...outcome }) });
-  const refusal = (id: string, reason: string) => envelope(id, { status: 'error', text: `[deckent] error=${reason}` });
+  const refusal = (id: string, reason: string, kind: ToolErrorClass) => Object.freeze(withToolErrorClass(envelope(id, { status: 'error', text: `[deckent] error=${reason}` }), kind));
   const close = () => {
     closed = true; controller.abort();
     return { turnId: session.turnId, generation: session.generation, pendingCallIds: [...pending], termination: 'unverified' as const,
@@ -355,39 +380,47 @@ function createNativeToolSession(session: ToolSession, input: AgentTurnInput, co
     }
   };
   const port: SameTurnToolSessionPort = { session, ...(coordinator.planning ? { planning: coordinator.planning, checkResultDelivery: checkPlanning } : {}),
+    recordedError(call, result) {
+      const entry = records.get(call.id), proof = entry?.evidence;
+      return !closed && !input.signal.aborted && proof && !proof.signal.aborted && proof.result === result
+        && entry.call.name === call.name && entry.call.argumentsJson === call.argumentsJson ? proof.proof.kind : undefined;
+    },
     async propose(rawCall, rawCorrelation, signal) {
       const parsed = nativeAgentCorrelationSchema.safeParse(rawCorrelation), checked = agentToolCallSchema.safeParse(rawCall);
       const callId = parsed.success ? parsed.data.deckentCallId : checked.success ? checked.data.id : 'invalid-call';
       if (!parsed.success || !checked.success || parsed.data.deckentCallId !== checked.data.id) {
         if (coordinator.planning?.active) refusePlanning();
-        return refusal(callId, 'tool-correlation-invalid');
+        return refusal(callId, 'tool-correlation-invalid', 'session');
       }
       const call = Object.freeze(checked.data), correlation = parsed.data;
-      if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed');
-      if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
+      if (closed || input.signal.aborted) return refusal(correlation.deckentCallId, 'tool-session-closed', input.signal.aborted ? 'cancelled' : 'session');
+      if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED', 'session');
       const fingerprint = createHash('sha256').update(canonical({ call, correlation })).digest('hex'), prior = records.get(call.id);
       if (prior) {
         if (prior.fingerprint === fingerprint) return prior.result;
         if (input.nativeSession && coordinator.planning?.pin) coordinator.planning.abandon(coordinator.planning.pin, 'stale-terminal');
-        return refusal(call.id, 'tool-call-conflict');
+        return refusal(call.id, 'tool-call-conflict', 'session');
       }
       const bound = input.admission?.requestMaxBytes;
       const bytes = Buffer.byteLength(JSON.stringify(call), 'utf8');
-      if (bound !== undefined && historyBytes() + pendingBytes + bytes > bound) return refusal(call.id, 'AGENT_CONTEXT_REQUEST_TOO_LARGE');
+      if (bound !== undefined && historyBytes() + pendingBytes + bytes > bound) return refusal(call.id, 'AGENT_CONTEXT_REQUEST_TOO_LARGE', 'limit');
       const combined = AbortSignal.any([input.signal, controller.signal, signal]), index = nextIndex++;
       pending.add(call.id); pendingBytes += bytes;
       const result = queue.then(async () => {
         pendingBytes -= bytes;
         try {
           // A request queued before preparation must pass the same fence before any history, event or target publication.
-          if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED');
+          if (!checkPlanning(call)) return refusal(call.id, 'BRAIN_SAME_TURN_REFUSED', 'session');
           push({ role: 'assistant', content: '', toolCalls: [call] });
-          return envelope(call.id, (await coordinator.run(call, { round: 1, index }, combined)).outcome);
+          const completed = await coordinator.run(call, { round: 1, index }, combined), value = envelope(call.id, completed.outcome);
+          if (completed.proof && completed.proof.receipt.turnId === session.turnId && value.outcome.status === 'error')
+            records.get(call.id)!.evidence = { result: value, proof: completed.proof, signal: combined };
+          return value;
         }
-        catch { failedSettlement = true; closed = true; controller.abort(); abandon('preparation-unsettled'); return refusal(call.id, 'tool-settlement-unknown'); }
+        catch { failedSettlement = true; closed = true; controller.abort(); abandon('preparation-unsettled'); return refusal(call.id, 'tool-settlement-unknown', 'uncertain'); }
         finally { pending.delete(call.id); }
       });
-      records.set(call.id, { fingerprint, result }); queue = result;
+      records.set(call.id, { call, fingerprint, result }); queue = result;
       return result;
     },
     async cancel() { interrupted = true; abandon('cancelled'); return { kind: 'cancelled', ...close() }; },

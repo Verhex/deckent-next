@@ -1,3 +1,4 @@
+import { withToolErrorClass } from '#capabilities/index.js';
 import { CodedError } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readlink, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
@@ -22,7 +23,8 @@ const proc = (handle: FileHandle, name: string) => `/proc/self/fd/${handle.fd}/$
 
 /** The lexical part of `resolveWritable`: normalized, inside the root, not denied, a plain file name; nothing on disk is looked at. */
 export function writablePath(scope: WorkspaceScope, requested: unknown): WritablePath {
-  if (typeof requested !== 'string' || !requested || requested.length > 4096 || requested.includes('\0')) return { ok: false, error: 'invalid-path' };
+  if (typeof requested === 'string' && requested.length > 4096) return withToolErrorClass({ ok: false as const, error: 'invalid-path' }, 'limit');
+  if (typeof requested !== 'string' || !requested || requested.includes('\0')) return { ok: false, error: 'invalid-path' };
   let path = posix.normalize(requested.replace(/\\/g, '/'));
   if (path.startsWith('/')) {
     if (!path.startsWith(`${scope.root}/`)) return { ok: false, error: 'outside-workspace' };
@@ -58,19 +60,19 @@ async function openParent(scope: WorkspaceScope, target: Extract<WritablePath, {
 async function currentUnder(dir: FileHandle, name: string, maxBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<CurrentFile> {
   let info;
   try { info = await lstat(proc(dir, name)); } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { ok: true, version: ABSENT_FILE_VERSION, bytes: null, mode: 0o644 } : { ok: false, error: 'unreadable' };
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { ok: true, version: ABSENT_FILE_VERSION, bytes: null, mode: 0o644 } : withToolErrorClass({ ok: false as const, error: 'unreadable' }, 'ordinary');
   }
-  if (info.isSymbolicLink()) return { ok: false, error: 'is-link' };
-  if (!info.isFile()) return { ok: false, error: 'not-a-file' };
-  if (info.nlink > 1) return { ok: false, error: 'hard-linked' };
-  if (info.size > maxBytes) return { ok: false, error: 'too-large' };
+  if (info.isSymbolicLink()) return withToolErrorClass({ ok: false as const, error: 'is-link' }, 'ordinary');
+  if (!info.isFile()) return withToolErrorClass({ ok: false as const, error: 'not-a-file' }, 'ordinary');
+  if (info.nlink > 1) return withToolErrorClass({ ok: false as const, error: 'hard-linked' }, 'ordinary');
+  if (info.size > maxBytes) return withToolErrorClass({ ok: false as const, error: 'too-large' }, 'limit');
   const handle = await open(proc(dir, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = await handle.stat();
-    if (before.ino !== info.ino || !before.isFile()) return { ok: false, error: 'changed' };
+    if (before.ino !== info.ino || !before.isFile()) return withToolErrorClass({ ok: false as const, error: 'changed' }, 'ordinary');
     const bytes = await handle.readFile();
     const after = await handle.stat();
-    if (after.size !== bytes.length || after.mtimeMs !== before.mtimeMs) return { ok: false, error: 'changed' };
+    if (after.size !== bytes.length || after.mtimeMs !== before.mtimeMs) return withToolErrorClass({ ok: false as const, error: 'changed' }, 'ordinary');
     return { ok: true, version: fileContentVersion(bytes), bytes, mode: before.mode & 0o777 };
   } finally { await handle.close(); }
 }

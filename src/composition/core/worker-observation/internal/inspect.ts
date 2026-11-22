@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteInventoryReader, inspectRecordedTaskActivity, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { verifiedPrincipal, workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, readThrough,
+import { openSqliteInventoryReader, inspectRecordedTaskActivity, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers, isNativeCliWorkerSupervisorProfile, nativeWorkerReservationDiagnostics } from '#adapters/index.js';
+import { verifiedPrincipal, workerObservationQuerySchema, WorkerObservationError, DispatchInventoryApplication, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels, parseRetainedOutputEnvelope, readThrough,
   type DispatchInventoryEntry, type MonitorRecall, type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
@@ -44,6 +44,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
         }, value => !value.failed);
         // Live part (every call): resource traces, process activity, sidecars; worker models are recalled per attempt and live usage summary.
         const { target, entries } = ledger, views = await inspectConfiguredResources(target.config, target.layout, entries.map(value => value.entry.identity)); let opened: ReturnType<typeof openSqliteInventoryReader> | undefined;
+        const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes);
         const reader = () => opened ??= inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']).then(path => openSqliteInventoryReader(path, { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs }));
         const workers = await mapBounded(entries, HOST_LIMITS_REGISTRY.observationConcurrency, async ({ entry, refused, record }, index): Promise<WorkerObservation> => {
           const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
@@ -55,13 +56,23 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           try {
             if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
             const activity = await inspectRecordedTaskActivity(record.profile, record.request).catch(() => ({ state: 'unknown' as const, handle: null }));
+            const activityDiagnostic = 'diagnostic' in activity ? activity.diagnostic : undefined;
+            // Only the native supervisor writes this stderr marker; other runtimes retain worker-authored stderr.
+            const retainedDiagnostics = record.output && record.terminal?.exitCode === 1 && (activity.state === 'unknown' || activityDiagnostic)
+              && isNativeCliWorkerSupervisorProfile(record.profile)
+              ? await artifacts.read(entry.identity.scopeId, record.output).then(bytes => {
+                const output = parseRetainedOutputEnvelope(bytes, entry.identity);
+                return output.completeness === 'unavailable' ? [] : nativeWorkerReservationDiagnostics(output);
+              }).catch(() => []) : [];
             let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
               .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
             const evidence = await recall(JSON.stringify(['models', entry.identity, files?.usage ?? null]), async () => observeAttemptWorkerModels(await reader(),
-              FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null), value => value.usageEvidence !== 'unavailable'), model = evidence.model;
+              artifacts, entry.identity, files?.usage ?? null), value => value.usageEvidence !== 'unavailable'), model = evidence.model;
             return { ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
-              patchRecorded: !!record.patch, dispatch: { containerId: record.containerId ?? null }, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
-                ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] };
+              patchRecorded: !!record.patch, dispatch: { containerId: record.containerId ?? null }, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [
+                ...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+                ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable']),
+                ...(retainedDiagnostics.length ? retainedDiagnostics : activityDiagnostic ? [activityDiagnostic] : [])] };
           } catch { return { ...basic, diagnostics: ['observation-unavailable'] }; }
         }).finally(() => opened?.then(value => value.close(), () => undefined));
         remaining -= workers.length;

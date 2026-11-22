@@ -4,10 +4,13 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { DEFAULT_INHERITED_ENV_VARS } from '@modelcontextprotocol/client/stdio';
-import { afterEach, describe, expect, it } from 'vitest';
+import { Client, ProtocolError, ProtocolErrorCode, SdkError, SdkErrorCode } from '@modelcontextprotocol/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { toolErrorClass } from '#capabilities/index.js';
 import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 import { MCP_STDIO_BASE_ENVIRONMENT } from '#platform/core/host/index.js';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
+import { MCP_TOOL_CALL_OPERATION, McpToolTarget, type McpCallOutcome } from '#adapters/core/mcp-client/index.js';
 import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, inspectShellRealmSelection, isWriteApprovalFloored, McpClientPool,
   mcpDefinitionDigest, mcpToolPinDigest, mcpToolWireName, readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, shippedShellSandboxes, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX,
   type McpClientSettings, type McpLiveTool, type McpTrustCard, type ShellSandbox } from '#adapters/index.js';
@@ -43,6 +46,26 @@ const settings = (servers: McpClientSettings['servers'], extra: Partial<McpClien
 const context = (root: string) => ({ cwd: root, environment: { PATH: process.env['PATH'] }, sandboxes: [] });
 const pool = () => { const created = new McpClientPool(new AbortController().signal); pools.push(created); return created; };
 const pinOf = (live: McpLiveTool) => ({ name: live.name, digest: mcpToolPinDigest(live) });
+
+it('WER-A MCP producer distinguishes typed protocol refusal, unknown failure, and business error', async () => {
+  const live = tool('work', 'fail'), f = fixture('dual', [live]), server = f.server([pinOf(live)]), p = pool();
+  expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true });
+  const sdk = vi.spyOn(Client.prototype, 'callTool')
+    .mockRejectedValueOnce(new ProtocolError(ProtocolErrorCode.InvalidRequest, 'fixture refused'))
+    .mockRejectedValueOnce(new SdkError(SdkErrorCode.InvalidResult, 'fixture refused'))
+    .mockRejectedValueOnce(new Error('fixture refused'));
+  try {
+    const observed = [];
+    for (const index of [0, 1, 2, 3]) {
+      const outcome = await p.call('fx', 'work', pinOf(live).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal, admit: 'probe-only' });
+      const result = describeMcpResult(outcome, 'mcp:fx/work', 4_096);
+      expect(result.status, String(index)).toBe('error');
+      observed.push(toolErrorClass(result));
+    }
+    expect(f.events().filter(event => event.event === 'call')).toHaveLength(1);
+    expect(observed).toEqual(['session', 'session', 'uncertain', 'ordinary']);
+  } finally { sdk.mockRestore(); }
+}, 30_000);
 
 describe('MCP client: pin and names (pure)', () => {
   it('the pin digest binds name, description, input schema and annotations, not key order', () => {
@@ -404,7 +427,29 @@ describe('MCP client: every call carries the pinned tool definition', () => {
     expect(callsOf(f)).toHaveLength(1);
     const text = describeMcpResult(outcome, 'mcp:fx/st', 4_096);
     expect(text).toMatchObject({ status: 'error' });
+    expect(toolErrorClass(text)).toBe('session');
     expect(text.text).toContain('error=invalid-structured-result -32602'); expect(text.text).toContain('its effect may have happened');
+  }, 30_000);
+
+  it('WER-A a local validator exception preserves the answer and never sends twice', async () => {
+    const live = tool('st', 'structured', { outputSchema: idSchema, structured: { id: 'a-1' } } as Partial<McpLiveTool>);
+    const f = fixture('dual', [live]), pin = pinOf(live), server = f.server([pin]), p = pool();
+    expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true });
+    const validate = vi.fn(() => { throw new Error('fixture local validator failure'); });
+    const spy = vi.spyOn(DeckentJsonSchemaValidator.prototype, 'getValidator').mockReturnValueOnce(validate);
+    const answers: McpCallOutcome[] = [];
+    const target = new McpToolTarget({ pool: p, timeoutMs: 5_000, signal: signal(), onResult: answer => answers.push(answer), admit: async () => null });
+    try {
+      const applied = await target.apply({ target: { kind: target.kind, id: 'fx/st' }, operation: MCP_TOOL_CALL_OPERATION.operation,
+        idempotencyKey: 'local-validator-exception', expectedVersion: null, input: { server: 'fx', tool: 'st', digest: pin.digest, arguments: {} } })
+        .catch((error: { code: string }) => error.code);
+      const described = describeMcpResult(answers[0]!, 'mcp:fx/st', 4_096);
+      expect(validate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
+      expect(callsOf(f)).toHaveLength(1);
+      expect({ target: applied, answers: answers.map(answer => answer.outcome), status: described.status, kind: toolErrorClass(described) })
+        .toEqual({ target: { version: null }, answers: ['answered'], status: 'error', kind: 'uncertain' });
+      expect(described.text).not.toMatch(/fixture local validator failure|a-1/);
+    } finally { spy.mockRestore(); }
   }, 30_000);
 
   it('a live list that differs from the pin never lends its definition to a call (validated against the pin; the drift is refused on the next open)', async () => {

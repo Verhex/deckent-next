@@ -1,3 +1,4 @@
+import { failEffectRecordWrite, observeToolOutcomes } from '../support/tool-producer.js';
 import { largeMcpTools } from '../../fixtures/mcp-large-tools.js';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -71,6 +72,22 @@ async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' |
   await Promise.all(pending);
   return { result, events };
 }
+
+it.skipIf(process.platform !== 'linux')('MCP producer requires a recorded outcome after a single send', async () => {
+  const m = mcpFixture('dual', [echo, { ...echo, name: 'lost', behavior: 'crash' }]), observed = observeToolOutcomes();
+  const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+  registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
+  for (const failWrite of [false, true]) {
+    if (failWrite) failEffectRecordWrite(f.ledger);
+    for (const tool of ['lost', 'echo']) {
+      f.state.script.push(call(`mcp__fx__${tool}`, { text: 'same' }), { content: 'Done.' });
+      await answered(f, `mcp-record-${tool}-${failWrite}`, 'allow');
+    }
+  }
+  expect(m.calls().map(call => call.name)).toEqual(['lost', 'echo', 'lost', 'echo']);
+  expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual(['unknown', 'settled', 'claimed', 'claimed'].map(state => ({ state })));
+  expect(observed).toEqual(['ordinary', 'ok', 'uncertain', 'uncertain']);
+}, 60_000);
 
 describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime service (MCP-CLIENT)', () => {
   it('an approved server\'s pinned tool asks even under a policy allow; allow sends that call once, redacted; a tool added later is not offered', async () => {

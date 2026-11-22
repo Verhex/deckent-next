@@ -53,9 +53,57 @@ it('K3: fake CLI JSONL correlates reordered MCP completions by facade id, preser
   expect(driver.end({ exited: true, exitCode: 0 }, egress)).toMatchObject({ response: { native: { model: 'fixture-pinned', choices: [{ message: { content: 'answer' } }] },
     usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15, cache_read: 2 } } });
   const denied = { ...envelope(), outcome: { status: 'error' as const, text: 'denied by policy' } };
-  const errorTurn = create(() => ({ call: { id: 'vendor', name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' }, result: denied }));
-  expect(feed(errorTurn, [thread, turn, start(), { type: 'item.updated', item: start().item }, finish('item_9', denied), answer, done])).toEqual([null, null, null, null, null, null, null]);
+  const call = { id: denied.deckentCallId, name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' };
+  // Synthetic call-time evidence. A policy summary written after the turn cannot supply this receipt.
+  const errorTurn = create(() => ({ call, result: denied, recordedError: () => 'ordinary', selectedText: () => JSON.stringify(denied) }));
+  expect(feed(errorTurn, [thread, turn, start()])).toEqual([null, null, null]); expect(errorTurn.accepts(call)).toBe(true);
+  expect(feed(errorTurn, [{ type: 'item.updated', item: start().item }, finish('item_9', denied), answer, done])).toEqual([null, null, null, null]);
   expect(errorTurn.end({ exited: true, exitCode: 0 }, egress)).toHaveProperty('response');
+});
+it('WER-A synthetic production envelope: host class and selected completion evidence govern continuation', () => {
+  const call = { id: 'deckent-call-b', name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' };
+  for (const kind of ['ordinary', 'session', 'cancelled', 'limit', 'uncertain', 'absent', 'ok'] as const) {
+    const result = { ...envelope(), outcome: { status: kind === 'ok' ? 'ok' as const : 'error' as const, text: 'same outer result' } };
+    for (const shape of ['failed-null', 'completed', 'cli-denial', 'cli-error-with-result-completed', 'cli-error-with-result-failed',
+      'changed-completed', 'changed-failed', 'missing-completed', 'missing-failed', 'absent-error', 'completed-absent'] as const) {
+      const driver = create(() => kind === 'absent' ? undefined : { call, result, recordedError: () => kind === 'ok' ? undefined : kind,
+        selectedText: () => JSON.stringify(result) });
+      expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
+      expect(driver.accepts(call)).toBe(true);
+      const line = finish('item_9', shape.startsWith('changed') ? { ...result, outcome: { ...result.outcome, text: 'changed' } } : result);
+      const item = { ...line.item, status: shape.includes('completed') ? 'completed' : 'failed',
+        result: shape === 'cli-denial' || shape.startsWith('missing') ? null : line.item.result,
+        error: shape === 'absent-error' || shape === 'completed-absent' ? undefined : shape.startsWith('cli-') ? { message: 'CLI denied' } : null };
+      const accepted = kind === 'ordinary' && ['failed-null', 'completed', 'completed-absent'].includes(shape) || kind === 'ok' && (shape === 'completed' || shape === 'completed-absent');
+      expect(driver.line(JSON.stringify({ ...line, item })) === null, `${kind} / ${shape}`).toBe(accepted);
+    }
+  }
+});
+it('WER-A error completion needs prior unique reservation, durable evidence and exact live delivery', () => {
+  const call = { id: 'host-a', name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' };
+  const result = { ...envelope(call.id), outcome: { status: 'error' as const, text: 'same failure' } };
+  for (const shape of ['completed', 'failed']) for (const gap of ['not-reserved', 'ambiguous', 'rebound', 'unrecorded', 'not-selected', 'bytes-changed', 'cancelled']) {
+    const driver = create(() => ({ call, result, active: () => gap !== 'cancelled', recordedError: () => gap === 'unrecorded' ? undefined : 'ordinary',
+      selectedText: () => gap === 'not-selected' ? undefined : (gap === 'bytes-changed' ? ' ' : '') + JSON.stringify(result) }));
+    expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
+    if (gap === 'ambiguous') expect(driver.line(JSON.stringify(start('another-item')))).toBeNull();
+    if (gap !== 'not-reserved') expect(driver.accepts(call)).toBe(gap !== 'ambiguous');
+    if (gap === 'ambiguous' || gap === 'rebound') expect(driver.accepts({ ...call, id: 'host-b' })).toBe(false);
+    const completed = finish('item_9', result);
+    expect(driver.line(JSON.stringify({ ...completed, item: { ...completed.item, status: shape } })), shape + '/' + gap)
+      .toMatchObject({ body: { refusal: 'guard', field: gap === 'ambiguous' || gap === 'rebound' ? 'mcp-item-reservation' : 'mcp-correlation' } });
+  }
+});
+it('Card 168 admits an identical call after the prior item completes', () => {
+  const first = envelope('first-call'), second = envelope('second-call');
+  const call = (id: string) => ({ id, name: 'read_file', argumentsJson: '{"path":"fixture.txt"}' });
+  const driver = create(id => ({ call: call(id), result: id === first.deckentCallId ? first : second }));
+  expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
+  expect(driver.accepts(call(first.deckentCallId))).toBe(true);
+  expect(feed(driver, [finish('item_9', first), start('next-item')])).toEqual([null, null]);
+  expect(driver.accepts(call(second.deckentCallId))).toBe(true);
+  expect(feed(driver, [finish('next-item', second), answer, done])).toEqual([null, null, null]);
+  expect(driver.end({ exited: true, exitCode: 0 }, egress)).toHaveProperty('response');
 });
 it('K3: native execution, file writes and unknown items fail closed, and refusal stays sticky', () => {
   for (const type of ['command_execution', 'file_change', 'web_search', 'unknown']) {

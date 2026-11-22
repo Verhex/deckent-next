@@ -1,5 +1,5 @@
 import { isCodedError } from '#platform/index.js';
-import type { EffectApprovalGate } from './application.js';
+import { EffectTargetError, type EffectApprovalGate } from './application.js';
 
 /** One change the sandboxed command made to the project, as the lower (the real project) must receive it. `lowerVersion`: the sha256 of the
  * lower file when scanned, or `absent` — the write's precondition. */
@@ -48,10 +48,12 @@ export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
 export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority' | 'edit-self-source';
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
-  | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
+  | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable'; readonly evidenceMissing?: true };
 /** Decides one entry exactly like an edit of that path (design §6); the decision's owner audits a relaxation before handing out the gate. */
 export interface SandboxWriteDecider { decide(rel: string, cell: SandboxWriteCell): Promise<SandboxWriteDecision> }
 export interface SandboxWriteSetReport {
+  /** Required evidence for an entry could not be verified during this call. */
+  readonly evidenceMissing?: true;
   /** The whole set was not applied (its bound or its listing); null otherwise. */
   readonly refused: string | null;
   readonly applied: readonly string[];
@@ -124,7 +126,12 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
   const stayedBeneath = (rel: string) => [...report.notApplied.map(entry => entry.rel), ...report.unknown].some(other => other.startsWith(`${rel}/`));
   // Astra 2182 R3: the new directories above a write, shallowest first, each decided once per set like an entry; the new ones this write
   // still needs, or null when one of them is refused (reported once, as `dir/` with its own reason).
+  let evidenceMissing = false;
   const verdicts = new Map<string, boolean>(), created = new Set<string>();
+  const refuse = (rel: string, decision: { readonly reason: string; readonly evidenceMissing?: true }) => {
+    if (decision.evidenceMissing) evidenceMissing = true;
+    report.notApplied.push({ rel, reason: decision.reason });
+  };
   const newParents = async (rel: string): Promise<string[] | null> => {
     const needed: string[] = [], segments = rel.split('/');
     for (let i = 1; i < segments.length; i++) {
@@ -136,7 +143,7 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
         const decision = cell === 'denied' ? { ok: false as const, reason: 'denied' } : await input.decider.decide(`${directory}/`, cell);
         allowed = decision.ok;
         verdicts.set(directory, allowed);
-        if (!decision.ok) report.notApplied.push({ rel: `${directory}/`, reason: decision.reason });
+        if (!decision.ok) refuse(`${directory}/`, decision);
       }
       if (!allowed) return null;
       needed.push(directory);
@@ -150,7 +157,7 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       const cell = input.classify(change.rel, change.kind);
       if (cell === 'denied') { report.notApplied.push({ rel: shown(change), reason: 'denied' }); continue; }
       const decision = await input.decider.decide(change.rel, cell);
-      if (!decision.ok) { report.notApplied.push({ rel: shown(change), reason: decision.reason }); continue; }
+      if (!decision.ok) { refuse(shown(change), decision); continue; }
       // Astra 2182 x SBX-05 (lead 2026-10-09): a floor file an approval admits is written only into existing directories, so a shell call never
       // makes a floor-named directory for it (an unattended floor entry is never admitted, so this only bounds approved ones).
       if (change.kind === 'write' && cell !== 'edit' && change.rel.split('/').slice(0, -1).some((_, i, parts) => scan.newDirectories.has(parts.slice(0, i + 1).join('/')))) {
@@ -166,6 +173,7 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       try { await input.execute(change, decision.gate); report.applied.push(shown(change)); }
       catch (error) {
         const code = (error as { code?: unknown } | null)?.code;
+        if (!isCodedError(error, 'EFFECT_PRECONDITION_CHANGED') && !EffectTargetError.isRecordedFailure(error)) evidenceMissing = true;
         if (typeof code !== 'string' || !isCodedError(error, code)) { report.unknown.push(shown(change)); report.stopped = true; }
         else if (isCodedError(error, 'EFFECT_PRECONDITION_CHANGED')) { report.notApplied.push({ rel: shown(change), reason: 'conflict' }); report.stopped = true; }
         else if (isCodedError(error, 'EFFECT_OUTCOME_UNKNOWN')) { report.unknown.push(shown(change)); report.stopped = true; }
@@ -173,5 +181,5 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       }
     }
   }
-  return report;
+  return evidenceMissing ? { ...report, evidenceMissing: true } : report;
 }

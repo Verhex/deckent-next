@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { CODEX_TOOL_ITEM_RESERVATION } from '#capabilities/index.js';
 import { jsonRecordDirectory, type JsonRecordFile } from '#platform/index.js';
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, SupervisorError, type ExecutionSupervisor,
   type SupervisorProfile, type SupervisorProfileSource, type SandboxRequest } from '#engine/index.js';
@@ -26,9 +27,14 @@ export function retainActiveNativeWorker(request: SandboxRequest, supervisor: Ex
 export async function retainNativeWorkerResult(file: JsonRecordFile, request: SandboxRequest, profile: SupervisorProfile, result: unknown) {
   await file.write(recordSchema.parse({ schemaVersion: 1, request, profileDigest: digest(profile), result }));
 }
+export function nativeWorkerReservationDiagnostics(output: { stdout: string; stderr: string }):
+  [] | [typeof CODEX_TOOL_ITEM_RESERVATION] | [typeof CODEX_TOOL_ITEM_RESERVATION, 'APPROVAL_EXPIRED'] {
+  if (output.stderr !== CODEX_TOOL_ITEM_RESERVATION) return [];
+  return output.stdout === 'APPROVAL_EXPIRED' ? [CODEX_TOOL_ITEM_RESERVATION, output.stdout] : [CODEX_TOOL_ITEM_RESERVATION];
+}
 /** Same-process cancel reaches its actual owner. Restart can recover confirmed retained output; missing custody stays unknown. */
 export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource & {
-  inspectActivity(request: SandboxRequest): Promise<{ state: 'running' | 'exited' | 'unknown'; handle: string | null }>;
+  inspectActivity(request: SandboxRequest): Promise<{ state: 'running' | 'exited' | 'unknown'; handle: string | null; diagnostic?: typeof CODEX_TOOL_ITEM_RESERVATION }>;
 } {
   validateNativeCliWorkerSupervisorProfile(profile);
   const resolved = resolveNativeCliWorkerProfile(profile.parameters['task'] as import('#domain/index.js').ExecutionProfileDefinition);
@@ -56,8 +62,10 @@ export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): E
     async execute() { throw new SupervisorError('SUPERVISOR_REQUEST_INVALID'); },
     observe,
     async inspectActivity(request) {
-      const result = await observe(request);
-      return { state: result.result.kind === 'exited' ? 'exited' : 'unknown', handle: result.handle };
+      const owner = await get(request), result = owner ? await owner.observe(request) : await read(request);
+      const stderr = result && 'stderr' in result ? result.stderr : (await owner?.recoverOutput(request))?.stderr;
+      return { state: result?.result.kind === 'exited' ? 'exited' : 'unknown', handle: result?.handle ?? nativeCliWorkerHandle(request.identity),
+        ...(stderr === CODEX_TOOL_ITEM_RESERVATION ? { diagnostic: CODEX_TOOL_ITEM_RESERVATION } : {}) };
     },
     async cancel(request) { const owner = await get(request); return owner ? owner.cancel(request) : observe(request); },
     async recoverOutput(request) {

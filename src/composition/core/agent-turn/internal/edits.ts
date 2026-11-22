@@ -1,3 +1,5 @@
+import { effectToolError } from './effect-error.js';
+import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, SessionAuthenticationError, type SessionVerifier, type SessionAuthority, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
@@ -52,7 +54,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
     async apply(tool: string, args: Record<string, unknown>, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
-      if (!planned.ok) return { status: 'error', text: `[deckent] ${tool}: error=${planned.error}` };
+      if (!planned.ok) return agentToolResult({ status: 'error' as const, text: `[deckent] ${tool}: error=${planned.error}` }, planned);
       const commandId = agentFileEffectCommandId(scopeId, turnId, execution, callKey, planned.beforeVersion);
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: descriptor.operation,
         target: { kind: descriptor.targetKind, id: area.targetId(planned.rel) }, idempotencyKey: commandId, input: { content: planned.after },
@@ -76,7 +78,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the write needs an approval that was not given'
           : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was written`
           : typeof code === 'string' ? code : 'failed';
-        return { status: 'error', text: `[deckent] ${tool}: error=${why} (${planned.rel})` };
+        return agentToolResult({ status: 'error' as const, text: `[deckent] ${tool}: error=${why} (${planned.rel})` }, effectToolError(error));
       } finally { store.close(); }
     },
   };

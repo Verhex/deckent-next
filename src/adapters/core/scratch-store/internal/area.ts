@@ -1,3 +1,4 @@
+import { withToolErrorClass, toolErrorClass } from '#capabilities/index.js';
 import { CodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -114,7 +115,7 @@ export interface ScratchSession {
   deposit(rel: string, data: Uint8Array, signal?: AbortSignal): Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 }
 
-const quotaRefusal = (detail: string): WorkspaceEditPlan => ({ ok: false, error: `scratch-quota-exceeded (${detail})` });
+const quotaRefusal = (detail: string): WorkspaceEditPlan => withToolErrorClass({ ok: false as const, error: `scratch-quota-exceeded (${detail})` }, 'limit');
 /** The session and installation ceilings for writing `bytes` to `rel` (the file it replaces is not counted twice); null when within. Advisory
  * when planning (before any card); binding only inside the custody's write lane (`spend`), where no other scratch write runs meanwhile. */
 async function quotaCheck(session: Pick<ScratchSession, 'root' | 'dir' | 'limits'>, rel: string, bytes: number): Promise<WorkspaceEditPlan | null> {
@@ -133,13 +134,13 @@ async function quotaCheck(session: Pick<ScratchSession, 'root' | 'dir' | 'limits
  * absent. The directories are created only at the effect, after the decision. */
 async function planIntoNewDirectories(scope: WorkspaceScope, path: unknown, content: string): Promise<WorkspaceEditPlan> {
   const target = writablePath(scope, path);
-  if (!target.ok) return { ok: false, error: target.error };
+  if (!target.ok) return withToolErrorClass({ ok: false as const, error: target.error }, 'ordinary');
   const segments = target.parentRel.split('/');
   for (let index = 1; index <= segments.length; index++) {
     const prefix = segments.slice(0, index).join('/'), found = await scope.resolve(prefix);
     if (found.ok && found.rel === prefix) continue;
     if (!found.ok && found.error === 'not-found') break;
-    return { ok: false, error: found.ok ? 'parent-is-link' : `parent-${found.error}` };
+    return withToolErrorClass({ ok: false as const, error: found.ok ? 'parent-is-link' : `parent-${found.error}` }, 'ordinary');
   }
   const preview = unifiedDiff(target.rel, null, content), lines = preview.split('\n');
   return { ok: true, rel: target.rel, beforeVersion: ABSENT_FILE_VERSION, after: content, preview,
@@ -228,13 +229,13 @@ async function openHeld(root: string, key: string, limits: ScratchLimits, custod
     const handOn = await custody.lane(signal);
     try {
       const refused = await quotaCheck(measured, rel, bytes);
-      return refused && !refused.ok ? { ok: false as const, error: refused.error } : { ok: true as const, value: await write() };
+      return refused && !refused.ok ? withToolErrorClass({ ok: false as const, error: refused.error }, toolErrorClass(refused)) : { ok: true as const, value: await write() };
     } finally { handOn(); }
   } };
   const writes: WorkspaceEditArea = Object.freeze({ operation: SCRATCH_FILE_WRITE_OPERATION,
     async plan(tool: string, args: Record<string, unknown>): Promise<WorkspaceEditPlan> {
       const content = args['content'];
-      if (tool !== 'scratch_write' || typeof content !== 'string') return { ok: false, error: tool === 'scratch_write' ? 'invalid-arguments' : 'unknown-tool' };
+      if (tool !== 'scratch_write' || typeof content !== 'string') return withToolErrorClass({ ok: false as const, error: tool === 'scratch_write' ? 'invalid-arguments' : 'unknown-tool' }, tool === 'scratch_write' ? 'ordinary' : 'session');
       const bytes = Buffer.byteLength(content, 'utf8'), encoded = Buffer.byteLength(encodeCommandProjection('effect-input', { content }), 'utf8');
       if (bytes > limits.writeMaxBytes) return quotaRefusal(`write: ${bytes} > ${limits.writeMaxBytes} bytes`);
       // The write travels as the effect's input: its encoded form (content plus JSON escaping) must fit the catalog bound too.
@@ -248,16 +249,16 @@ async function openHeld(root: string, key: string, limits: ScratchLimits, custod
   return Object.freeze({ ...base, writes, release, reads: (tool: string) => Object.hasOwn(READ_AS, tool),
     async read(tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> {
       const as = READ_AS[tool];
-      if (!as) return { status: 'error', text: `[deckent] ${tool}: error=unknown-tool` };
+      if (!as) return withToolErrorClass({ status: 'error' as const, text: `[deckent] ${tool}: error=unknown-tool` }, 'session');
       const result = await tools.execute(as, args, signal);
-      return { ...result, text: result.text.replaceAll(`[deckent] ${as}:`, `[deckent] ${tool}:`) };
+      return withToolErrorClass({ ...result, text: result.text.replaceAll(`[deckent] ${as}:`, `[deckent] ${tool}:`) }, toolErrorClass(result));
     },
     // Not a `scratch_write` effect (its content would ride in the intent, bounded at 1 MiB): the producing effect owns the bytes, the area
     // owns the quota and the file. The check and the write are one transition in the custody's write lane (Astra 2149 R2): an exclusive
     // 0600 temporary file in the (link-free, created here) directory, flushed, then renamed.
     async deposit(rel: string, data: Uint8Array, signal?: AbortSignal) {
       const parts = rel.split('/');
-      if (parts.some(part => !part || part === '.' || part === '..')) return { ok: false as const, error: 'invalid-path' };
+      if (parts.some(part => !part || part === '.' || part === '..')) return withToolErrorClass({ ok: false as const, error: 'invalid-path' }, 'ordinary');
       const written = await base.spend(rel, data.byteLength, async () => {
         await ensureScratchDirectories(dir, parts.slice(0, -1));
         const path = join(dir, ...parts), temporary = join(dir, ...parts.slice(0, -1), `.deposit-${randomUUID()}`);
@@ -266,6 +267,6 @@ async function openHeld(root: string, key: string, limits: ScratchLimits, custod
         try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
         return path;
       }, signal);
-      return written.ok ? { ok: true as const, path: written.value, rel } : { ok: false as const, error: written.error };
+      return written.ok ? { ok: true as const, path: written.value, rel } : written;
     } });
 }

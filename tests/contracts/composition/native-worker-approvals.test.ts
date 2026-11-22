@@ -180,7 +180,9 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     expect(shown.worker!.resource).not.toContain('synthetic-private-display-target');
     const deniedWrite = f.propose('denied-output', 'src/denied.ts'), deniedCard = await f.pending();
     expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: deniedCard.request.approvalId, commandId: 'human-deny-worker', decision: 'deny' })).response.ok).toBe(true);
-    expect((await deniedWrite).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
+    const deniedResult = await deniedWrite;
+    expect(f.port.recordedError?.({ id: 'denied-output', name: 'write_file', argumentsJson: JSON.stringify({ path: 'src/denied.ts', content: 'denied-output' }) }, deniedResult)).toBe('ordinary');
+    expect(deniedResult.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-owner') });
     await expect(readFile(join(f.attempt, 'src/denied.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
     // KG4 F1 (X3): the worker settles like the chat. Policy denies the call after the owner allowed it: the policy's refusal, in the turn's audit record.
     const revoked = f.propose('revoked-output', 'src/revoked.ts'), revokedCard = await f.pending();
@@ -188,7 +190,9 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'revoked', grants: [{ id: 'no-write', effect: 'deny', principals: 'all', scopes: ['scope'], actions: ['invoke'],
       resource: { kind: 'agent-tool', ids: ['write_file'] } }, ...policy.grants] }), { mode: 0o600 }); clearConfigCache();
     expect((await terminalRequest(f, 'decideApproval', { ...command, approvalId: revokedCard.request.approvalId, commandId: 'human-allow-revoked' })).response.ok).toBe(true);
-    expect((await revoked).outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
+    const policyResult = await revoked;
+    expect(f.port.recordedError?.({ id: 'revoked-output', name: 'write_file', argumentsJson: JSON.stringify({ path: 'src/revoked.ts', content: 'revoked-output' }) }, policyResult)).toBe('uncertain');
+    expect(policyResult.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
     await expect(readFile(join(f.attempt, 'src/revoked.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
     await adapters.withMcpPrincipal(() => f.port.cancel());
     expect(f.policyTurns().flatMap(turn => turn.refused.calls)).toContainEqual(expect.objectContaining({ decision: 'deny', stage: 'effect', revision: expect.stringContaining(policy.revision),
