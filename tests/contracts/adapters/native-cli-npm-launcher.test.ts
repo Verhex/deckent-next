@@ -206,6 +206,35 @@ function dynamicElf(flags: bigint) {
   return Buffer.concat([header, program, dynamic]);
 }
 
+function elfProgram({ dynamicFlags, machine }: { dynamicFlags?: bigint; machine?: number } = {}) {
+  const dynamicImage = dynamicFlags !== undefined;
+  const header = elfHeader(dynamicImage ? 3 : 2, machine), load = Buffer.alloc(56);
+  const dynamic = dynamicFlags === undefined ? Buffer.alloc(0) : dynamicElf(dynamicFlags).subarray(64);
+  const code = Buffer.from([0xb8, 60, 0, 0, 0, 0x31, 0xff, 0x0f, 0x05]); // Linux x86-64 exit(0).
+  const entryOffset = header.length + load.length + dynamic.length, size = BigInt(entryOffset + code.length);
+  const base = dynamicImage ? 0n : 0x400000n;
+  header.writeBigUInt64LE(base + BigInt(entryOffset), 24);
+  header.writeBigUInt64LE(BigInt(header.length), 32);
+  header.writeUInt16LE(load.length, 54);
+  header.writeUInt16LE(dynamicImage ? 2 : 1, 56);
+  load.writeUInt32LE(1, 0); // PT_LOAD, starting from the ELF header.
+  load.writeUInt32LE(5, 4); // PF_R | PF_X
+  load.writeBigUInt64LE(base, 16);
+  load.writeBigUInt64LE(base, 24);
+  load.writeBigUInt64LE(size, 32);
+  load.writeBigUInt64LE(size, 40);
+  load.writeBigUInt64LE(4096n, 48);
+  if (dynamicImage) {
+    const offset = BigInt(header.length + 2 * load.length);
+    dynamic.writeBigUInt64LE(offset, 8);
+    dynamic.writeBigUInt64LE(offset, 16);
+    dynamic.writeBigUInt64LE(offset, 24);
+    dynamic.writeBigUInt64LE(32n, 40);
+    dynamic.writeBigUInt64LE(8n, 48);
+  }
+  return Buffer.concat([header, load, dynamic, code]);
+}
+
 describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 package classification', () => {
   const manifest = { name: 'other-layout', version: '1.0.0' };
   const unknownLayout = {
@@ -220,6 +249,15 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
     await writeFile(executable, bytes, { mode });
     if (content !== undefined) await writeFile(join(packageRoot, 'package.json'), JSON.stringify(content));
     return { ...connectionFixture, packageRoot, executable };
+  }
+
+  const nestedTarget = 'node_modules/inner/tool';
+  async function nestedProgram(outerManifest: unknown, bytes?: Buffer) {
+    const f = await packageProgram(outerManifest, bytes), executable = join(f.packageRoot, nestedTarget);
+    await mkdir(dirname(executable), { recursive: true });
+    await rename(f.executable, executable);
+    await writeFile(join(dirname(executable), 'package.json'), JSON.stringify({ name: 'inner', version: '1.0.0' }));
+    return { ...f, executable };
   }
 
   async function expectPreflightBind(f: Awaited<ReturnType<typeof fixture>>, executable: string, packageRoot?: string, replace?: () => Promise<void>) {
@@ -270,14 +308,14 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       await unlink(f.payload);
       await expect(classify(f.chosen)).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-payload-missing' } });
     }],
-    [2, 'explicit native vendor program uses its own header even without a manifest', async () => {
+    [2, 'explicit native vendor program uses its own loadable ELF even without a manifest', async () => {
       const f = await fixture();
-      await writeFile(f.payload, elfHeader());
+      await writeFile(f.payload, elfProgram());
       await unlink(join(f.platformRoot, 'package.json'));
       await expect(classify(f.payload)).resolves.toMatchObject({ executable: f.payload });
       await expectPreflightBind(f, f.payload, f.root);
       const replacement = `${f.payload}.replacement`;
-      await writeFile(replacement, elfHeader(), { mode: 0o700 });
+      await writeFile(replacement, elfProgram(), { mode: 0o700 });
       await expectPreflightBind(f, f.payload, f.root, () => rename(replacement, f.payload));
     }],
     [3, 'unsupported package script is recognized by identity', async () => {
@@ -286,16 +324,24 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       await link(executable, join(packageRoot, 'alias'));
       await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ ...manifest, bin: 'alias' }));
       await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      const nested = await nestedProgram({ ...manifest, bin: nestedTarget });
+      await expect(classify(nested.executable)).rejects.toMatchObject(unknownLayout);
     }],
-    [4, 'package command without a supported readable ELF header keeps the guidance', async () => {
-      for (const bytes of [Buffer.from([0x7f, 0x45, 0x4c, 0x46]), elfHeader().subarray(0, 60), elfHeader(2, 183), dynamicElf(1n)]) {
+    [4, 'package command without a supported loadable ELF keeps the guidance', async () => {
+      for (const bytes of [Buffer.from([0x7f, 0x45, 0x4c, 0x46]), elfHeader().subarray(0, 60),
+        elfProgram({ machine: 183 }), elfProgram({ dynamicFlags: 1n })]) {
         const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, bytes);
         await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
       }
       if (process.getuid!() !== 0) {
-        const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, elfHeader(), 0o100);
+        const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, elfProgram(), 0o100);
         await expect(readFile(executable)).rejects.toMatchObject({ code: 'EACCES' });
         await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+      const truncatedSegment = elfProgram().subarray(0, -1);
+      for (const bytes of [elfHeader(), dynamicElf(0x08000000n), truncatedSegment, elfProgram().subarray(0, 119)]) {
+        const { executable } = await packageProgram({ ...manifest, bin: 'tool' }, bytes);
+        await expect.soft(classify(executable)).rejects.toMatchObject(unknownLayout);
       }
     }],
     [5, 'execute-only program outside a package still reaches isolated preflight', async () => {
@@ -307,9 +353,12 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       await expectPreflightBind(f, executable);
     }],
     [6, 'an offered package command can also be the explicit native PIE', async () => {
-      const f = await packageProgram({ ...manifest, bin: { tool: 'tool' } }, dynamicElf(0x08000000n));
+      const pie = elfProgram({ dynamicFlags: 0x08000000n });
+      const f = await packageProgram({ ...manifest, bin: { tool: 'tool' } }, pie);
       await expect(classify(f.executable)).resolves.toMatchObject({ executable: f.executable });
       await expectPreflightBind(f, f.executable, f.packageRoot);
+      const nested = await nestedProgram(undefined, pie);
+      await expect(classify(nested.executable)).resolves.toMatchObject({ executable: nested.executable, packageRoot: nested.packageRoot });
     }],
     [7, 'standalone script outside a package keeps its isolated preflight', async () => {
       const f = await fixture(), { root, executable } = await connection();
@@ -329,6 +378,9 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       }
       await expect(classify(f.executable)).resolves.toMatchObject({ executable: f.executable });
       await expectPreflightBind(f, f.executable, f.packageRoot);
+      const nested = await nestedProgram(manifest);
+      await expect(classify(nested.executable)).resolves.toMatchObject({ executable: nested.executable, packageRoot: nested.packageRoot });
+      await expectPreflightBind(nested, nested.executable, nested.packageRoot);
     }],
     [9, 'missing or unsupported package declarations leave the outcome undetermined', async () => {
       for (const content of [undefined, null, [], { ...manifest, bin: true }, { ...manifest, bin: { tool: 42 } },
@@ -342,10 +394,37 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       await link(outside, join(packageRoot, 'other'));
       await symlink(executable, join(packageRoot, 'alias'));
       await symlink(dirname(packageRoot), join(packageRoot, 'redirected'));
+      const deepTarget = Array.from({ length: 32 }, () => 'd').join('/') + '/other';
+      await mkdir(dirname(join(packageRoot, deepTarget)), { recursive: true });
+      await link(outside, join(packageRoot, deepTarget));
       const overBudget = Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`command-${index}`, 'other']));
-      for (const bin of [executable, '../outside', 'alias', 'redirected/outside', ['other'], overBudget]) {
+      for (const bin of [executable, '../outside', 'alias', 'redirected/outside', ['other'], deepTarget, overBudget]) {
         await writeFile(manifestPath, JSON.stringify({ ...manifest, bin }));
         await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
+      }
+      const nested = await nestedProgram(undefined);
+      await expect.soft(classify(nested.executable)).rejects.toMatchObject(unknownLayout);
+      const inner = dirname(nested.executable);
+      await writeFile(join(inner, 'other'), '#!/bin/sh\nexit 0\n');
+      await writeFile(join(inner, 'package.json'), JSON.stringify({ name: 'inner', version: '1.0.0', bin: 'other' }));
+      for (const count of [63, 64]) {
+        const bin = Object.fromEntries(Array.from({ length: count }, (_, index) => [`command-${index}`, 'node_modules/inner/other']));
+        await writeFile(join(nested.packageRoot, 'package.json'), JSON.stringify({ ...manifest, bin }));
+        if (count === 63) await expect(classify(nested.executable)).resolves.toMatchObject({ executable: nested.executable });
+        else await expect.soft(classify(nested.executable)).rejects.toMatchObject(unknownLayout);
+      }
+      await writeFile(join(nested.packageRoot, 'package.json'), JSON.stringify(manifest));
+      let dir = inner, selected = nested.executable;
+      for (let depth = 3; depth <= 33; depth++) {
+        dir = join(dir, 'node_modules', 'deep');
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'deep', version: '1.0.0' }));
+        if (depth < 32) continue;
+        const next = join(dir, 'tool');
+        await rename(selected, next);
+        selected = next;
+        if (depth === 32) await expect(classify(selected)).resolves.toMatchObject({ executable: selected });
+        else await expect.soft(classify(selected)).rejects.toMatchObject(unknownLayout);
       }
     }],
   ] as const)('row %i — %s', async (_row, _risk, verify) => { await verify(); });

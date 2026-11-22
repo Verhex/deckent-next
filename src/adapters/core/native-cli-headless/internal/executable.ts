@@ -20,7 +20,7 @@ const ELF64 = {
   magic: 0x7f454c46, x86_64: 62, executable: 2, dynamic: 3,
   ident: { elfClass: 2, littleEndian: 1, version: 1, systemV: 0, linux: 3 },
   header: { size: 64, type: 16, machine: 18, version: 20, entry: 24, programOffset: 32, declaredSize: 52, programSize: 54, programCount: 56 },
-  program: { size: 56, offset: 8, fileSize: 32, dynamic: 2 },
+  program: { size: 56, offset: 8, fileSize: 32, memorySize: 40, load: 1, dynamic: 2 },
   dynamicEntry: { size: 16, value: 8, nullTag: 0n, flags1Tag: 0x6ffffffbn, pie: 0x08000000n },
 } as const;
 const ELF_TABLE_MAX_BYTES = 4_096;
@@ -92,10 +92,9 @@ async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix:
   }
 }
 
-/** The nearest package supplies the manifest. The outermost package is what the realm must mask. */
+/** Every enclosing package can declare a bin target. The realm masks the outermost one. */
 function packagePosition(path: string) {
-  const parts = path.split(sep);
-  let packageRoot: string | undefined, manifestRoot: string | undefined;
+  const parts = path.split(sep), manifestRoots: string[] = [];
   for (const [index, part] of parts.entries()) {
     if (part !== 'node_modules') continue;
     const name = parts[index + 1];
@@ -103,10 +102,11 @@ function packagePosition(path: string) {
     if (!name || /^[._]/u.test(name)) continue;
     const end = index + (name.startsWith('@') ? 3 : 2);
     if (end >= parts.length) continue;
-    manifestRoot = parts.slice(0, end).join(sep);
-    packageRoot ??= manifestRoot;
+    manifestRoots.push(parts.slice(0, end).join(sep));
+    if (manifestRoots.length > BIN_MAX_DEPTH) break;
   }
-  return packageRoot && manifestRoot ? { packageRoot, manifestRoot } : undefined;
+  const packageRoot = manifestRoots[0];
+  return packageRoot ? { packageRoot, manifestRoots } : undefined;
 }
 
 async function binTargetInfo(root: FileHandle, target: unknown) {
@@ -127,45 +127,64 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
   } finally { if (current !== root) await current.close(); }
 }
 
-async function manifestExcludesFile(packageRoot: string, chosen: BigIntStats, maxBytes: number): Promise<boolean> {
-  if (process.platform !== 'linux') return false;
+async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIntStats, maxBytes: number, remaining: number): Promise<number | null> {
   try {
     const root = await open(packageRoot, O_PATH | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try {
       const before = await root.stat({ bigint: true });
       const manifestPath = join(fdPath(root), 'package.json');
       const { value: manifest, identity: manifestStamp }: { value: unknown; identity: string } = await metadata(manifestPath, maxBytes);
-      if (!isRecord(manifest)) return false;
+      if (!isRecord(manifest)) return null;
       const { bin, directories } = manifest;
-      if (directories !== undefined && (!isRecord(directories) || Object.hasOwn(directories, 'bin'))) return false;
-      if (bin !== undefined && typeof bin !== 'string' && !isRecord(bin)) return false;
+      if (directories !== undefined && (!isRecord(directories) || Object.hasOwn(directories, 'bin'))) return null;
+      if (bin !== undefined && typeof bin !== 'string' && !isRecord(bin)) return null;
       const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
-      if (targets.length > BIN_MAX_TARGETS) return false;
+      if (targets.length > remaining) return null;
       for (const target of targets) {
         const info = await binTargetInfo(root, target);
-        if (info.dev === chosen.dev && info.ino === chosen.ino) return false;
+        if (info.dev === chosen.dev && info.ino === chosen.ino) return null;
       }
-      return manifestStamp === stamp(await infoAt(manifestPath)) && stamp(before) === stamp(await infoAt(packageRoot));
+      if (manifestStamp !== stamp(await infoAt(manifestPath)) || stamp(before) !== stamp(await infoAt(packageRoot))) return null;
+      return remaining - targets.length;
     } finally { await root.close(); }
-  } catch { return false; }
+  } catch { return null; }
+}
+
+async function manifestsExcludeFile(manifestRoots: readonly string[], chosen: BigIntStats, maxBytes: number): Promise<boolean> {
+  if (process.platform !== 'linux' || manifestRoots.length > BIN_MAX_DEPTH) return false;
+  let remaining = BIN_MAX_TARGETS;
+  for (const root of manifestRoots) {
+    const next = await remainingTargetsAfterExclusion(root, chosen, maxBytes, remaining);
+    if (next === null) return false;
+    remaining = next;
+  }
+  return true;
+}
+
+async function readElfTable(file: FileHandle, size: bigint, offset: bigint, length: number) {
+  if (offset < ELF64.header.size || length <= 0 || length > ELF_TABLE_MAX_BYTES || offset + BigInt(length) > size) return null;
+  const table = Buffer.alloc(length);
+  const { bytesRead } = await file.read(table, 0, length, offset);
+  return bytesRead === length ? table : null;
+}
+
+function hasLoadableSegment(programs: Buffer, size: bigint): boolean {
+  for (let i = 0; i < programs.length; i += ELF64.program.size) {
+    if (programs.readUInt32LE(i) !== ELF64.program.load) continue; // PT_LOAD
+    const offset = programs.readBigUInt64LE(i + ELF64.program.offset);
+    const length = programs.readBigUInt64LE(i + ELF64.program.fileSize);
+    if (length > 0n && length <= programs.readBigUInt64LE(i + ELF64.program.memorySize) && offset + length <= size) return true;
+  }
+  return false;
 }
 
 /** ET_DYN also describes shared libraries. Require the linker's explicit PIE flag. */
-async function isPie(file: FileHandle, header: Buffer, size: bigint): Promise<boolean> {
-  const readTable = async (offset: bigint, length: number) => {
-    if (offset < ELF64.header.size || length <= 0 || length > ELF_TABLE_MAX_BYTES || offset + BigInt(length) > size) return null;
-    const table = Buffer.alloc(length);
-    const { bytesRead } = await file.read(table, 0, length, offset);
-    return bytesRead === length ? table : null;
-  };
-  if (header.readBigUInt64LE(ELF64.header.entry) === 0n || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return false;
-  const programs = await readTable(header.readBigUInt64LE(ELF64.header.programOffset), header.readUInt16LE(ELF64.header.programCount) * ELF64.program.size);
-  if (!programs) return false;
+async function isPie(file: FileHandle, programs: Buffer, size: bigint): Promise<boolean> {
   for (let i = 0; i < programs.length; i += ELF64.program.size) {
     if (programs.readUInt32LE(i) !== ELF64.program.dynamic) continue; // PT_DYNAMIC
     const length = programs.readBigUInt64LE(i + ELF64.program.fileSize);
     if (length > ELF_TABLE_MAX_BYTES || length % BigInt(ELF64.dynamicEntry.size) !== 0n) return false;
-    const dynamic = await readTable(programs.readBigUInt64LE(i + ELF64.program.offset), Number(length));
+    const dynamic = await readElfTable(file, size, programs.readBigUInt64LE(i + ELF64.program.offset), Number(length));
     if (!dynamic) return false;
     let pie = false;
     for (let j = 0; j < dynamic.length; j += ELF64.dynamicEntry.size) {
@@ -194,9 +213,14 @@ async function provesNativeExecutable(path: string, expected: BigIntStats): Prom
           || header[4] !== ident.elfClass || header[5] !== ident.littleEndian || header[6] !== ident.version
           || header[7] !== ident.systemV && header[7] !== ident.linux
           || header.readUInt16LE(ELF64.header.machine) !== ELF64.x86_64 || header.readUInt32LE(ELF64.header.version) !== ident.version
-          || header.readUInt16LE(ELF64.header.declaredSize) !== ELF64.header.size) return false;
+          || header.readUInt16LE(ELF64.header.declaredSize) !== ELF64.header.size
+          || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return false;
         const type = header.readUInt16LE(ELF64.header.type); // ET_EXEC or ET_DYN with DF_1_PIE
-        return (type === ELF64.executable || type === ELF64.dynamic && await isPie(file, header, info.size))
+        if (type !== ELF64.executable && type !== ELF64.dynamic) return false;
+        const programs = await readElfTable(file, info.size, header.readBigUInt64LE(ELF64.header.programOffset),
+          header.readUInt16LE(ELF64.header.programCount) * ELF64.program.size);
+        return programs !== null && hasLoadableSegment(programs, info.size)
+          && (type === ELF64.executable || header.readBigUInt64LE(ELF64.header.entry) !== 0n && await isPie(file, programs, info.size))
           && stamp(await file.stat({ bigint: true })) === expectedStamp;
       } finally { await file.close(); }
     } finally { await pinned.close(); }
@@ -212,7 +236,7 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
   const target = rule && suffix && launcher.endsWith(suffix)
     ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes) : undefined;
   const position = target ? undefined : packagePosition(launcher);
-  if (position && !await manifestExcludesFile(position.manifestRoot, launcherInfo, entry.headless.limits.preflightOutputBytes)
+  if (position && !await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes)
     && !await provesNativeExecutable(launcher, launcherInfo)) headlessExecutableRefusal('npm-layout-unknown', chosen);
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);
   const packageRoot = target?.packageRoot ?? position?.packageRoot;
