@@ -152,6 +152,16 @@ const privacyReplacements = new Map([
     ['16:6b78c1ddcc6875c1e5728895ef2d170ecd7acae9be858a67411635aecf83de20', '4228e11cc8ba5e78cee97839131261193965c9edebec971ab9e62baa43418b9c'],
     ['22:596510b1ce87f0480ad96f8829750b99216a4f3c946cbba8c306959bc3e16150', '25c38d1bfe40a1313d31efc848c2d6412343b8e967747643e72bbb9bc8752b1d'],
   ])],
+  ['.deckent/docs/core-memory/law_second_opinion_jev.md', new Map([
+    // Owner order of 2026-11-22 for four protected lines (base 8b45a20e8).
+    ['17:bec389f58bc3541e2df4630c8642f01d42516a01a680f0e69260e2d4f0112057', '3908e8901bcec915cc67fb6591f31215735763238a32c4d4496e2a637587bca4'],
+  ])],
+  ['.deckent/docs/core-memory/law_work_decomposition_root_cause.md', new Map([
+    // Owner order of 2026-11-22 for four protected lines (base 8b45a20e8).
+    ['14:96071a5350a25b6e0d1aef527ca0e50f0bb5d5fd5e0d78cb0f81db3ef9af12ea', '3f0feb979a23387c85b064c131e1745d603fbf4cadc4f690312c24ca14d57247'],
+    ['21:d4e58a8ebaaa063e5c828912d5decc68806662396d29b535174cc9704381f2fd', 'b57c4994377d6e66b55755845b2c407a813cba92677deba0f3af3ad1dc17de0e'],
+    ['29:9b211be72e604935761514368f9c1ec900f4a9ee0ff9b4dea8875aedb59eac2d', 'df0817e3548c4787f913cb989199b05ea4c045f57e432812e7882b869bd07a72'],
+  ])],
   ['.deckent/docs/core-memory/MEMORY.md', new Map([
     ['1:1b65753b8e125886cde5d6b628bd9696c4c027443953178c42045a51e90b6680', '1254ab329c779db98537253e429f57097c5a158764f091a23ba8f6a7c8b4ffae'],
     ['16:bb807ed7c1e099db9a881997825e34f5975da0823542f7da9907b4b00d083680', '4366e4f8ece29dd3c38b65b3844f89cb8fe03ae2ed6a50cb4dce08d7c4746df5'],
