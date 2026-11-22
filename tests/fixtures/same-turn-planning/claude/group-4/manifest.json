@@ -1,0 +1,252 @@
+{
+  "cli": "claude",
+  "group": 4,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "length",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "30f825decffd0dc7f2f4a7e3b65fd154fb6bccf6bf5eb834d02154107cdf4d82",
+          "replacementBytes": 8
+        }
+      ]
+    },
+    {
+      "case": "limit",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "2d056c0111ed28e7dbee2e3a669613720fb9b89b1ecb2471ec297c616d0b6545",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "stdout-truncation",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "98728962bede4e5495dc1c3bc669c4ff3244e0015f92be0ba463d75c4fe76de2",
+          "replacementBytes": 19
+        },
+        {
+          "path": "/host/finish/stdoutTruncated",
+          "replacementSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "stderr-truncation",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "0cfa63a30a7c6d0a99da58483a1d146fbc68752eb425db3733d117cf4129b029",
+          "replacementBytes": 19
+        },
+        {
+          "path": "/host/finish/stderrTruncated",
+          "replacementSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "cancelled",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "06234c1cf33df85364aedb5de2e65dc2fcb144ff65a249457c5f140fde7ee1d4",
+          "replacementBytes": 11
+        }
+      ]
+    },
+    {
+      "case": "failed",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "33d04bd775e7b6c6436742508b41fa693a15bd2c902fcd994253392abd717740",
+          "replacementBytes": 8
+        }
+      ]
+    },
+    {
+      "case": "unknown",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "eb8bf0d80db323992f6b634aab492b1e6d9e96a8e87a511c2a0db75ab929452c",
+          "replacementBytes": 9
+        }
+      ]
+    },
+    {
+      "case": "missing-completion",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "d11026010f34c8b091db4102d3a2f57031247a158fa16a80ef655c7cf73b9e2e",
+          "replacementBytes": 20
+        },
+        {
+          "path": "/wire",
+          "replacementSha256": "0224e69c4b68f104f028bf723a359886ce4ec295057bd0bd3df7063e8e1bb61b",
+          "replacementBytes": 2980
+        }
+      ]
+    },
+    {
+      "case": "conflicting-completion",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/finish/limit",
+          "replacementSha256": "79b212b9f97c22e30ebcc412401e8b320fee699cdf9e95388c95bc5515d3d467",
+          "replacementBytes": 24
+        }
+      ]
+    },
+    {
+      "case": "multiple-json",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "f19104a37c3d5a998d0e76b80ad0d888f1368ada5a948aabec9d0efdba1472b8",
+          "replacementBytes": 580
+        }
+      ]
+    },
+    {
+      "case": "trailing-payload",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "4d9f226680568761d3d77a267d45bb46cf5900b75da8a02c87c11ae9c13d666b",
+          "replacementBytes": 585
+        }
+      ]
+    },
+    {
+      "case": "second-envelope",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "8caa835f3e00ef0fc35feec28805e0da0ee279f4fb942ef0625f311257a730ee",
+          "replacementBytes": 1152
+        }
+      ]
+    },
+    {
+      "case": "oversize",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "047f865a32ece736eeee3e0a584686fd93704d62afb05caa714595a21f64b3dd",
+          "replacementBytes": 66112
+        }
+      ]
+    },
+    {
+      "case": "result-stop_reason-None",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/stop_reason",
+          "replacementSha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "result-stop_reason-max_tokens",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/stop_reason",
+          "replacementSha256": "495cfb85b6ad85ade58cf923329d00b54419a17574b1d84396c4abeae8b78712",
+          "replacementBytes": 12
+        }
+      ]
+    },
+    {
+      "case": "result-result-DECKENT-PLAN",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/result",
+          "replacementSha256": "c70b488ee94d39adf592f60886d50854d7e059bebc040cecb0fa2c2618488e88",
+          "replacementBytes": 577
+        }
+      ]
+    },
+    {
+      "case": "result-session_id-other",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/session_id",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "result-is_error-True",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/is_error",
+          "replacementSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+          "replacementBytes": 4
+        }
+      ]
+    },
+    {
+      "case": "assistant-other-parent",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/parent_tool_use_id",
+          "replacementSha256": "df319cdcaaedd35a8ce76560a44f0fdd5d776ec7f341439cf5bdb7f40eaa2716",
+          "replacementBytes": 10
+        }
+      ]
+    },
+    {
+      "case": "conflicting-assistant-stop",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/stop_reason",
+          "replacementSha256": "2ea06e16082e89486ae012b8e8d7b0949cea064ad35edc07765cf6f84ed8f35e",
+          "replacementBytes": 10
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "7d0e3489f5f352692f9fa224c5ce048419e68bd058c51261b6c18116b34443a3",
+      "bytes": 257106,
+      "lines": 20
+    }
+  ]
+}

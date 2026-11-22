@@ -1,0 +1,318 @@
+{
+  "provenance": "masked recording",
+  "cli": "claude",
+  "version": "2.1.326",
+  "model": "sonnet-5-5",
+  "nativeModel": "claude-sonnet-5-5",
+  "date": "2026-11-18",
+  "kitCommit": "3c8d4f35dd1cb6313c492f243646fd8f9bfaa546",
+  "originalSha256": {
+    "manifest.json": "7ffbdb91121036dba8962b69ca766a4bb1ead567feaf02235c86c8d43b697f8d",
+    "stdout.jsonl": "787af843ba5a0477ffe9e5ec14cb9ccc1b8a140ceaefe738b8328222a9c3e9df",
+    "stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "custody.jsonl": "c9e1e33e30283791f564fbc558b4c0da3e280a59a08e3fe07f01c664f81fc207",
+    "kit-stdout.json": "e6d59b37a4aa4bb33167863cc26575bf1a8cdb77d3b6b043c1cf2f10025e3efa"
+  },
+  "process": {
+    "reason": "exit",
+    "exitCode": 0,
+    "signal": null,
+    "stdoutTruncated": false,
+    "stderrTruncated": false,
+    "limit": null,
+    "egress": {
+      "connected": 3,
+      "refused": 0,
+      "hosts": {},
+      "other": 0,
+      "reasons": {},
+      "otherReasons": {}
+    }
+  },
+  "maskedSha256": {
+    "stdout.jsonl": "aa88fd268ba64ea34a41f8136a98e1e7ffc30de055ccf3841729adfb1a89f4f2",
+    "custody.jsonl": "69d2536e9d2951e1d5e50a922106ac6b29dab79c26e1e344c13c63c85d85d525"
+  },
+  "changes": {
+    "stdout.jsonl": [
+      {
+        "line": 1,
+        "path": "/cwd",
+        "replacement": "sandbox path"
+      },
+      {
+        "line": 1,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 1,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 1,
+        "path": "/original_cwd",
+        "replacement": "sandbox path"
+      },
+      {
+        "line": 2,
+        "path": "/message/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 2,
+        "path": "/message/content/0/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 2,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 2,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 2,
+        "path": "/request_id",
+        "replacement": "request_id"
+      },
+      {
+        "line": 2,
+        "path": "/tool_use_meta/0/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/status",
+        "replacement": "synthetic status"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/resetsAt",
+        "replacement": "synthetic resetsAt"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/rateLimitType",
+        "replacement": "synthetic rateLimitType"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/overageStatus",
+        "replacement": "synthetic overageStatus"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/overageDisabledReason",
+        "replacement": "synthetic overageDisabledReason"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/isUsingOverage",
+        "replacement": "synthetic isUsingOverage"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/five_hour/utilization",
+        "replacement": "synthetic utilization"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/five_hour/resetsAt",
+        "replacement": "synthetic resetsAt"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/five_hour/status",
+        "replacement": "synthetic status"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/seven_day/utilization",
+        "replacement": "synthetic utilization"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/seven_day/resetsAt",
+        "replacement": "synthetic resetsAt"
+      },
+      {
+        "line": 3,
+        "path": "/rate_limit_info/unifiedWindows/seven_day/status",
+        "replacement": "synthetic status"
+      },
+      {
+        "line": 3,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 3,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 4,
+        "path": "/message/content/0/tool_use_id",
+        "replacement": "tool_use_id"
+      },
+      {
+        "line": 4,
+        "path": "/message/content/0/content/0/text (decoded JSON)/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 4,
+        "path": "/message/content/0/content/0/text (decoded JSON)/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 4,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 4,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 4,
+        "path": "/tool_use_result/0/text (decoded JSON)/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 4,
+        "path": "/tool_use_result/0/text (decoded JSON)/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 4,
+        "path": "/tool_result_meta/0/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 5,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 5,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 6,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 6,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 7,
+        "path": "/message/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 7,
+        "path": "/message/content/0/signature",
+        "replacement": "opaque thinking signature"
+      },
+      {
+        "line": 7,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 7,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 7,
+        "path": "/request_id",
+        "replacement": "request_id"
+      },
+      {
+        "line": 8,
+        "path": "/message/id",
+        "replacement": "native id"
+      },
+      {
+        "line": 8,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 8,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 8,
+        "path": "/request_id",
+        "replacement": "request_id"
+      },
+      {
+        "line": 9,
+        "path": "/session_id",
+        "replacement": "session_id"
+      },
+      {
+        "line": 9,
+        "path": "/uuid",
+        "replacement": "uuid"
+      },
+      {
+        "line": 9,
+        "path": "/credential_expires_at",
+        "replacement": "credential expiry"
+      }
+    ],
+    "custody.jsonl": [
+      {
+        "line": 1,
+        "path": "/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 1,
+        "path": "/callId",
+        "replacement": "callId"
+      },
+      {
+        "line": 1,
+        "path": "/correlation/toolUseId",
+        "replacement": "toolUseId"
+      },
+      {
+        "line": 1,
+        "path": "/correlation/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 1,
+        "path": "/result/turnId",
+        "replacement": "turnId"
+      },
+      {
+        "line": 1,
+        "path": "/result/deckentCallId",
+        "replacement": "deckentCallId"
+      },
+      {
+        "line": 2,
+        "path": "/callId",
+        "replacement": "callId"
+      }
+    ]
+  },
+  "custody": "argsDigest covers unchanged tool arguments; resultDigest and bytes cover unchanged P. Call identifiers outside P are masked. Derive envelope expectations by decoding the masked wire bytes."
+}

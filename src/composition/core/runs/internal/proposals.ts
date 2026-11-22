@@ -1,5 +1,5 @@
 import { brainInputDigest } from '#capabilities/index.js';
-import { withPlanningSpending } from './planning-spending.js';
+import { withPlanningSpending, type InspectPlanningSpending } from './planning-spending.js';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation, withLocalPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
@@ -12,6 +12,17 @@ import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { withConfiguredRunAdmission } from './create.js';
 export async function proposeConfiguredRun(projectRoot: string, input: RunProposal, options: ConfigLoadOptions = {}) {
+  return propose(projectRoot, input, options);
+}
+type AssertTurnSource = (value: RunProposal, known: ReturnType<typeof getConfigKnownSecrets>) => void;
+/** Both sends verify the same proposal against the masking snapshot loaded for that send. */
+export function bindConfiguredTurnProposal(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
+  inspect: InspectPlanningSpending, assertSource: AssertTurnSource) {
+  const proposal = parseRunProposal(input);
+  return () => propose(projectRoot, proposal, options, { inspect, verify: assertSource });
+}
+async function propose(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
+  turnSource?: { inspect: InspectPlanningSpending; verify: AssertTurnSource }) {
   try {
     const proposal = parseRunProposal(input), context = await loadConfiguredScopeContext(projectRoot, proposal.scopeId, options, 'write');
     const result = await withConfiguredRunAdmission(projectRoot, context, options, async (runs, authority, _warnings, agents) => {
@@ -28,6 +39,12 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
           },
           async verifySource(value) {
             if (value.source.kind === 'human') return;
+            if (turnSource) {
+              try { await turnSource.inspect(); }
+              catch { throw queryFailure({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }); }
+              turnSource.verify(value, getConfigKnownSecrets(context.config));
+              return;
+            }
             const reference = value.source.receipt, query = { schemaVersion: 2 as const, scopeId: value.scopeId, invocationId: reference.invocationId, reference: reference.reference };
             // The receipt under the caller's own inspect authority; a Brain contribution's retained answer is read as the system's integrity check
             // (alpha.64, lead option b: the installation person's channel, as turn.ts classifies retained content): it never reaches the caller
@@ -42,7 +59,7 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
         }).propose(proposal);
       } finally { store.close(); }
     });
-    return await withPlanningSpending(projectRoot, result, options);
+    return await withPlanningSpending(projectRoot, result, options, turnSource?.inspect);
   } catch (error) { throw queryFailure(error); }
 }
 export async function inspectConfiguredRunProposal(projectRoot: string, input: RunProposalQuery, options: ConfigLoadOptions = {}) {

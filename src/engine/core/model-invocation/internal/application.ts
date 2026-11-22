@@ -34,6 +34,8 @@ export interface ModelInvocationAuthorizer {
 export interface ModelInvocationNativePort {
   /** Trusted transport capability. Absent means metered/local tariff transport; profile input cannot grant subscription billing. */
   readonly billingAxis?: 'subscription';
+  /** Ephemeral custody only, after a fresh durable claim AND a verified granted send permit. Never on replay/register/denial. */
+  claimed?(receipt: ModelInvocationReceipt): void;
   /** Pure validation/serialization only: no network, credential lookup or other external effect. */
   prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject, signal?: AbortSignal): Promise<unknown>;
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
@@ -305,6 +307,7 @@ export class ModelInvocationApplication {
         }
         let response;
         try {
+          native.claimed?.(claimReceipt);
           const sendSignal = live ? (signal ? AbortSignal.any([signal, live.signal]) : live.signal) : signal;
           response = parseModelInvocationNativeResult(await (onDelta ? native.send(prepared, sendSignal, onDelta) : native.send(prepared, sendSignal)));
           if ('kind' in response) verifyModelInvocationResponseEvidence(response.evidence, profile);

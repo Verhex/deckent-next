@@ -1,0 +1,222 @@
+{
+  "cli": "codex",
+  "group": 3,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "challenge-leak-prompt",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "01ba4538091c693b793d9cee299ce1e390ced64b0b4f1d8102c51ee266aec61e",
+          "replacementBytes": 272
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "d82b922d2d5331ba019576dfac6acb8e876fd651ef30bfa19c279f4e331387be",
+          "replacementBytes": 116
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-another-result",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "921afd9e49aca4a8989496be6be610b0e9e6d5563ae37e53753286e0a70ad3c4",
+          "replacementBytes": 280
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "9e50a4a7bf9f508af2b4e387a813c823e3524ed273882a7fdfb808001928d467",
+          "replacementBytes": 124
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-early-stream",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "4ca4cfbe3ca4891cca30bd4278eaf02b4bbb904669029acd212e7226ac7e2ccf",
+          "replacementBytes": 278
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "6bea0de0a333dfcad18d7a60e4ab05c5773df87fa3b9a2dbf344571069d28ab4",
+          "replacementBytes": 122
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-log",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "7d2cfb6a21436bcca81b8d8041b14f2eb90145c86c928aaffa07d1652eb7e09a",
+          "replacementBytes": 269
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "fcc9091c147efcdaed0fbbbe53c5d5e1f06a4b45d19e913a062c12248713cefa",
+          "replacementBytes": 113
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-ui",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "c0c3c08707cddbd8967514b8f94dddd8ae7b0a612df44aafd17a8967c53ed974",
+          "replacementBytes": 268
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "e916e477bc5f716d577ff2ec8ba7eabea4f44d79a7e224751e656d02720d7ede",
+          "replacementBytes": 112
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-history",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "aca190ff13377718e500165e495e57e2d4b16aa534ebff1d9bc7ea559bf0f88f",
+          "replacementBytes": 273
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "093099cb539d9e6658b9bf8ca678aef3905eaf3772ced141b796a091ff549eaf",
+          "replacementBytes": 117
+        }
+      ]
+    },
+    {
+      "case": "challenge-leak-diagnostic",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "42f90ecc9522a07b49c1706a2caa1fcfd8de6ecfc622dbb12be60004a123126a",
+          "replacementBytes": 276
+        },
+        {
+          "path": "/host/exposedSink",
+          "replacementSha256": "dbe2c5860d7f4ad69f4879540a95f6a8175339eaf15c184c99dbddb3be08ef44",
+          "replacementBytes": 120
+        }
+      ]
+    },
+    {
+      "case": "host-stitched-old-json",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "a501637e356d411bf109d2addfc799314f82b130564029c23e59f74c902dd6da",
+          "replacementBytes": 576
+        }
+      ]
+    },
+    {
+      "case": "challenge-middle",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "da24dedad3f6f2b3d9af5aa7f97c83705aae8eb468b62116192cc5bd8dec025d",
+          "replacementBytes": 585
+        }
+      ]
+    },
+    {
+      "case": "challenge-suffix",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "a501637e356d411bf109d2addfc799314f82b130564029c23e59f74c902dd6da",
+          "replacementBytes": 576
+        }
+      ]
+    },
+    {
+      "case": "bom",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "cfcb17b7cfa55511103e9b5e7e887d6b395d45b732571eb4cc70fcaaba608228",
+          "replacementBytes": 579
+        }
+      ]
+    },
+    {
+      "case": "fence",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "1b11598c26f36afc9ee57bfd0f9ca9514125ebf1013b0e08d3c8207bb818c893",
+          "replacementBytes": 590
+        }
+      ]
+    },
+    {
+      "case": "tool-user-result-only",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "replacementBytes": 2
+        }
+      ]
+    },
+    {
+      "case": "cross-message-stitch",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/5/item/text",
+          "replacementSha256": "ae8f7310402ff277b52b1e828a8288b4826bc6f199ac1af6b4c0bdd19f305991",
+          "replacementBytes": 91
+        },
+        {
+          "path": "/host/events",
+          "replacementSha256": "6894a40f6e19953cf40731cd86b37b114fcd341042c74e1268ce05e0dcb2e3c9",
+          "replacementBytes": 156
+        }
+      ]
+    },
+    {
+      "case": "bounded-chunked-line-same-message",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/transportChunkBytes",
+          "replacementSha256": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451",
+          "replacementBytes": 1
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "9f6374f24a238c1304d6cac1c0eac0c28734843dc36b3b5fbbad31dd805f3a20",
+      "bytes": 71432,
+      "lines": 15
+    }
+  ]
+}

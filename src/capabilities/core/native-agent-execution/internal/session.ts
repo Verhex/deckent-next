@@ -32,6 +32,8 @@ export type ToolSessionClosure = Readonly<{ turnId: string; generation: number; 
 /** K1 owns call authorization/execution/settlement. K2/K3 and K4 only transport proposals and these results. */
 export interface ToolSessionPort {
   readonly session: ToolSession;
+  /** Consult the session's current planning fence immediately before releasing a tool result. */
+  checkResultDelivery?(call: AgentToolCall): boolean;
   /** Producer-owned terminal cause, independent of the model's final answer. Not accepted from wire input. */
   terminalFailure?(): 'approval-expired' | null;
   propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<NativeAgentToolResult>;

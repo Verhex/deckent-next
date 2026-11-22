@@ -82,6 +82,8 @@ it('runs both real isolated CLI drivers through R with exact correlation, readon
     expect(result).toMatchObject({ schemaVersion: 1, native: { choices: [{ message: { content: expect.stringContaining('agent completed') }, finish_reason: 'stop' }] } });
     const content = (result as { native: { choices: { message: { content: string } }[] } }).native.choices[0]!.message.content;
     expect(content).toBe(h.deltas.map(delta => delta.text).join('')); expect(content).toMatch(/^Before the tool\.\n/u);
+    expect(h.deltas.every(delta => delta.kind === 'text')).toBe(true);
+    expect(content.match(/Before the tool\./gu)).toHaveLength(1);
     expect(f.propose).toHaveBeenCalledOnce();
     expect(f.propose.mock.calls[0]![1]).toMatchObject({ kind: f.entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp' });
     const projected = JSON.stringify({ result, deltas: h.deltas });

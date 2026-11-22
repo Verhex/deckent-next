@@ -1,0 +1,24 @@
+{
+  "cli": "codex",
+  "group": "positive",
+  "provenance": "hand-built",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    "All bytes authored; public deterministic challenge is test data, never a recording. No START invented. Host events and expected acceptance are a future replay oracle, not executed evidence."
+  ],
+  "files": [
+    {
+      "file": "stdout.jsonl",
+      "sha256": "611d91d0e521bb2ae99a1b08d264a0fbb1b8addc15cf9febcfff7185dc95ee3e",
+      "bytes": 2250,
+      "lines": 7
+    },
+    {
+      "file": "host.json",
+      "sha256": "e8659bbda90af5542fc8ec9ad72ff093a0b36a56775908be7b8e731582cb54ef",
+      "bytes": 2211,
+      "lines": 61
+    }
+  ]
+}

@@ -3771,7 +3771,8 @@
         "src/engine/core/run-proposal",
         "src/domain/core/provider-catalog",
         "src/engine/core/model-activation",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

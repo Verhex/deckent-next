@@ -177,7 +177,7 @@ decided in shadow is not asked again after the switch to live. Every escalation 
 
 ## Headless subscription Brain and quota (S3-1…S3-5, S9, F3, F4)
 
-The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own deckent-owned
+For a separate Brain call, the connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own deckent-owned
 login (s3c, owner 2026-10-24: layout resource `headlessLogins`, `headless/logins/claude` under the global state root, 0700, never backed
 up, never read by deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
 sign-in at their terminal; the person's `~/.claude` is not used, and `--config-dir` is the person's override): one turn, no tools, no MCP,
@@ -252,7 +252,14 @@ a changed realpath, size, mtime or inode runs the preflight once, every spawn bi
 `updatedFrom` while the version differs (`readHeadlessLogins` `cliUpdated`, catalog `doctor.headless.updated`), and a path that leads to
 no executable file is `HEADLESS_CLI_UNAVAILABLE`, whose text names the reconnect command. Profiles sealed with a realpath stay valid.
 
-When a subscription quota is exhausted, the Brain waits visibly and cancellably if the known reset is within
+In an eligible native chat, `propose_work` prepares a draft for the chat model to return
+within its existing tool session. This uses the chat sign-in, the authorized preparation
+result and a normal CLI close. The [same-turn finalizer](run-planning.md) verifies the
+retained answer in a private read before any proposal reaches the person's approval card.
+A Brain on another sign-in or API connection, chat without a native planning session,
+explicit `/do` and external MCP and SDK planning keep the separate planner.
+
+When a separate Brain call exhausts its subscription quota, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command
 id; otherwise it returns `HEADLESS_QUOTA_EXHAUSTED` with the reset time. The wait appears in the standalone monitor and MCP
 `inspect_monitor` before a Run exists. A worker Run parked on a quota waits at most `runRuntime.quotaRecovery.maxWaitMs` (default 5 hours)

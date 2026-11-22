@@ -1,17 +1,23 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedInteger, type ModelInvocationReceipt } from '#domain/index.js';
 import { readInvocationPlanUsage } from './plan-usage.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
 import { ledgerTransaction, openLedgerDatabase, MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord } from './read.js';
+import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord, matchesRetainedResponse, readMatchedResponse } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
 const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
 export type ModelInvocationReader = Pick<ModelInvocationStore, 'loadInvocation' | 'loadReceipt' | 'close'> & ModelInvocationInspectionReader;
 class SqliteModelInvocationReader implements ModelInvocationReader {
   constructor(private readonly db: DatabaseSync) {}
+  matchRetainedResponse(receipt: ModelInvocationReceipt) {
+    return ledgerTransaction(this.db, () => matchesRetainedResponse(this.db, receipt)
+      ? { planUsage: readInvocationPlanUsage(this.db, requireLedgerVersion(this.db, MODEL_INVOCATION_LEDGER_VERSION), { receipt, content: null, purge: null }, false) }
+      : null, { mode: 'read', join: false, unknown: () => new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'), failure: error => error });
+  }
+  readMatchedResponse(receipt: ModelInvocationReceipt, isCurrent: () => boolean) { return readMatchedResponse(this.db, receipt, isCurrent); }
   async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationRecord(this.db, scopeId, invocationId); }
   async loadReceipt(scopeInput: string, commandInput: string) {
     return loadInvocationCommandRecord(this.db, scopeInput, commandInput);
