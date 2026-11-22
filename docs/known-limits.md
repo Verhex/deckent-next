@@ -417,7 +417,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   worker's own time. A Run parked before its worker started keeps the sign-in's single slot until it is cancelled (`deckent run cancel`);
   chat and planning on that sign-in stop meanwhile.
 - **Native worker read limit.** In beta.2, a `service.responseMaxBytes` above 1 MiB prevents native CLI workers from
-  starting. Main (unreleased) caps native worker read-tool results at 1 MiB while using the configured service limit
+  starting. In beta.2, set the limit to 1 MiB and restart the service. This limits service responses to 1 MiB. Main (unreleased) caps native worker read-tool results at 1 MiB while using the configured service limit
   for transport. See the [first-worker check](ai-install.md#prepare-and-install) for readiness.
 - **Work proposed by the AI is admitted but not started (beta.2; fix admitted for beta.2.1).** When the chat AI or an AI client over MCP
   proposes work and you approve the card, the Run is admitted and listed, but the service does not advance it (the chat case was shown by a throwaway source probe that is not in the

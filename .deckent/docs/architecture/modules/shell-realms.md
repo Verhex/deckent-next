@@ -54,8 +54,7 @@ sandboxed command could replace it. `launcher.overlay` (≥ 0.11.0) is what SHEL
 `src/…/bundled/` from a verifying build-bwrap output (`DECKENT_BWRAP_BUILD` or `.pack/bwrap/*`) and says loudly when none exists;
 `bwrap-real-sandbox-guard.test.ts` fails a Linux host with open user namespaces that selected no working launcher with overlay (the
 bubblewrap tests would otherwise skip); vitest gives every worker a temporary `DECKENT_GLOBAL_HOME`, so the realized copy never lands in
-the owner's `~/.deckent/bin` (the development entry `.agents/refactor/next-entry.mjs` keeps its global home outside the checkout,
-`~/.local/state/deckent-next-dev`, 0360bab9: a home inside the project put the copy there, which the rule above refuses — live 2026-09-29).
+the installation’s normal launcher directory. The development entry keeps its global state outside the checkout (commit `0360bab9`).
 `selectBubblewrapLauncher({ place: false })` is the read-only measurement (doctor): an already placed, verifying copy is used; nothing is
 created, written or re-moded, and a copy the service has not placed yet is reported as "not placed … yet". The shipped provider list is
 one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the service's default port, MCP `inspect` starts and doctor.

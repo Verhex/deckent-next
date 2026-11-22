@@ -684,31 +684,15 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   Run; re-authorized at reservation, custody fingerprint binds it from first acquisition) — next slice with more than one target.
   Adoption is local SDK/CLI only. `merge-tree` "update branch" is a later slice. The foreign-owner refusal is exercised through the
   group/other-writable branch only. Node 26 not measured.
-- **U1 (owner 2026-09-30).** No `npm run build` / `npm run verify` in the live checkout `<repo>`; build and verify
-  run in lane/integration worktrees, and the live checkout is built only in the governed switch (full verify + independent PASS + push +
-  owner-approved restart). A rule, not a hook (a hook would also block the governed switch build). U2 (versioned side-by-side
-  installation; owner option C, design `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`) replaces the rule by construction.
-- **DEV-U2-0 versioned dev releases (2026-09-30; host tooling only, no `src/` change).** `.agents/refactor/dev-release.mjs`
-  requires Linux `/proc` process custody and util-linux `flock`; its command entry refuses other platforms with
+- **U1 (owner 2026-09-30).** Builds and verification run away from the running installation. The governed update requires full verification, independent review and an authorized restart.
+  U2 uses versioned side-by-side installation to enforce this rule (owner option C).
+- **DEV-U2-0 versioned dev releases (2026-09-30; host tooling only).** The maintainers keep their deployment steps in the private record.
+  The tool requires Linux `/proc` process custody and util-linux `flock`; its command entry refuses other platforms with
   `DEV_RELEASE_PLATFORM_UNSUPPORTED` before installation reads or writes (CI-FULL, 2026-10-01). Portable layout checks remain exercised.
-  (`stage|switch|rollback|start|status|prune`) keeps `versions/<commit12>-<tree12>/` (unpacked build-dist package + `release.json` +
-  per-file sha256 `manifest.json`), an atomic relative `current` symlink, `previous`, and `switches.jsonl` under
-  `$DECKENT_NEXT_INSTALL_ROOT` (default `~/.local/share/deckent-next-dev`; inside the project it is refused). `next-entry.mjs` runs
-  `realpath(current)` (a process loads lazily from its own version directory for life); an invalid `current` is the typed
-  `NEXT_ENTRY_CURRENT_INVALID` refusal, never a silent fall-back to the checkout `dist`; cwd is the project root. `stage` clones the live repo
-  with `git clone --local --no-hardlinks` (Jev 2b6f9f73; the live `.git` is not written), builds, runs `build-dist --pack --bwrap` and pack-smoke
-  (tarball and `--root`) and installs atomically; unknown or dirty-symbolic sources, sources missing from the remote,
-  and sources that cannot be published or fail smoke tests are refused
-  (`--waive-smoke <check>` is recorded in `release.json` and is an emergency option only: pack-smoke now passes the terminal check).
-  `switch` stops the old service through its own CLI (governed shutdown), flips the pointer, starts the new service detached and verifies
-  describe `build.sourceCommit`; a mismatch restores the pointer and the old service, or, when the ledger already advanced,
-  `DEV_RELEASE_OPERATOR_REQUIRED`. `rollback` is pointer-only when the target opens the live ledger version; otherwise
-  `rollback --restore-ledger` (Jev 39e921e3) stops the service, prints a loss report plus a token bound to the stopped ledger state, and
-  `--confirm <token>` recomputes it under the native ledger lock (stale token refused; replaced ledger files are kept as `rolledback` backups,
-  never deleted). U1 host guard: `build|verify|tsc` is refused while a process runs from the target's `dist/`. Open limits: typed drain is available from ledger v44 (K5 `pool hold` + `pool status` `drained`), `dev-release switch` does not
-  use it yet (proposal `proof/K5-POOL-HOLD-2026-10-01/docs-delta.md` §3); G5/G6 are operating rules (after a switch reopen terminals and MCP host
-  sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
-  not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
+  Releases are versioned and validated, and a running process keeps its own version. An invalid selection is refused with `NEXT_ENTRY_CURRENT_INVALID`.
+  The previous service must stop under its own authority. Verify the replacement against its expected source commit. If the ledger has already advanced, a failed switch can require operator recovery (`DEV_RELEASE_OPERATOR_REQUIRED`).
+  Before an upgrade, keep a verified ledger backup. If the old binary cannot read the new ledger, stop the service, review the potential loss and restore the compatible pre-upgrade backup before starting the old version.
+  After an upgrade, reopen terminal and MCP host sessions. Use the updated terminal for service operations.
 
 ### ACCEPT-EVIDENCE (2026-10-03; lane/accept-evidence, base 9740baae; landed in batch 32, alpha.4 line)
 
@@ -1162,9 +1146,9 @@ intent (if any) is released (receipt in the artifact store) and the ticket parks
 `new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch under a recorded intent never releases.
 TTL never proves a writer dead. A failed
 fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
-actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57/v58 switch, use and verify the
+actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before upgrading to ledger v57/v58, use and verify the
 existing ledger backup. Rollback of the schema requires stopping the service and restoring the pre-switch backup, not starting older
-source against the upgraded ledger. This lane does not switch live or N1.
+source against the upgraded ledger.
 
 ## Delivery card summary and autonomy shadow (alpha.53; TESLIM-KARTI-OZET, OTONOM-TESLIM shadow)
 

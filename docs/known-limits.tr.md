@@ -414,7 +414,7 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   cevaplayabildiği bir kart ister ve bu bekleme işçinin kendi süresinden yer. İşçisi başlamadan bekletilen bir iş, iptal edilene kadar
   (`deckent run cancel`) girişin tek yerini tutar; o sırada aynı girişle sohbet ve planlama durur.
 - **Yerel işçi okuma sınırı.** beta.2’de `service.responseMaxBytes` 1 MiB’ı aşarsa yerel CLI işçileri başlayamaz.
-  Main (yayımlanmadı), servis aktarımında ayarlı sınırı kullanır ve yerel işçinin okuma aracı sonuçlarını 1 MiB ile sınırlar.
+  beta.2’de sınırı 1 MiB’a ayarlayın ve servisi yeniden başlatın. Bu ayarla servis cevapları 1 MiB ile sınırlanır. Main (yayımlanmadı), servis aktarımında ayarlı sınırı kullanır ve yerel işçinin okuma aracı sonuçlarını 1 MiB ile sınırlar.
   Hazırlık için [ilk işçi denetimine](ai-install.tr.md#hazırlık-ve-kurulum) bakın.
 - **Yapay zekânın önerdiği iş kabul edilir ama başlamaz (beta.2; düzeltmesi beta.2.1 için kabul edildi).** Sohbetteki yapay zekâ ya da
   MCP üzerinden bağlanan bir yapay zekâ istemcisi iş önerip siz kartı onayladığınızda iş kabul edilir ve listelenir, ama servis onu ilerletmez (sohbet durumu depoya alınmamış geçici bir kaynak denemesiyle gösterildi;

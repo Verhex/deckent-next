@@ -235,7 +235,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## backup
 
-**Ölçüm:** argümansız ve `--set`'siz İngilizce genel hata. Parola gizli istem veya stdin, argüman olamaz; parola owner'da olduğu için gerçek `verify` yapılmadı; `create`/`restore` yazdığı için çalıştırılmadı. `config get backup`: `schedule: before-upgrade`, `retention: 7`. Var olan setler yalnız dosya sisteminde bulundu: `.deckent/live-data/state/backups/recovery/` altında 2026-10-09–10-15 arası en az 5 set.
+**Ölçüm:** argümansız ve `--set`'siz İngilizce genel hata. Parola gizli istem veya stdin, argüman olamaz; parola owner'da olduğu için gerçek `verify` yapılmadı; `create`/`restore` yazdığı için çalıştırılmadı. `config get backup`: `schedule: before-upgrade`, `retention: 7`. Yedek kümeleri yalnız dosya sisteminden görülebildi. Bakım ekibinin kendi yedek konumu özel kayıttadır.
 
 **Bulgular:**
 1. **Öncelikli (owner 2026-10-19):** `backup verify --scope live --set /nonexistent` (yol yok) → "Parola yanlış ya da kurtarma seti değiştirilmiş: set açılamıyor… set özgün değildir, başka bir set kullanın." (`BACKUP_PASSPHRASE_INVALID`, çıkış 78). Kurtarma anında yanlış teşhis.
