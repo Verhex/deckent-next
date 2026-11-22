@@ -7,7 +7,7 @@ import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prep
 import * as processRunner from '#adapters/core/process-runner/index.js';
 import { ErrorRegistry, reportFatal, type DeckentError } from '#platform/index.js';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
-import { CODEX_FAMILY, codexAnswer, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
+import { CODEX_FAMILY, codexAnswer, codexHelp, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { FAMILY } from '../../fixtures/native-headless/stream.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -22,6 +22,17 @@ async function fixture(scenario: Partial<FakeCodexScenario> = {}) {
   const read = async () => (await readFile(logPath, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)
     .map(line => JSON.parse(line) as { mode: string; program: string });
   return { ...paths, definition, profile: c.profile, logPath, read, stateDir: definition.stateDir };
+}
+
+async function fixtureIsolation(beforeSeal?: (seal: number) => Promise<void>): Promise<HeadlessIsolation> {
+  const launcher = await lstat(process.execPath, { bigint: true });
+  let seals = 0;
+  return async () => {
+    await beforeSeal?.(++seals);
+    return { status: 'available', rejected: [], restriction: null, detail: null,
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') } };
+  };
 }
 
 describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 'linux' || process.arch !== 'x64')('G3 npm CLI identity in the Linux realm', () => {
@@ -242,6 +253,61 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
   };
   const classify = (executable: string) => resolveHeadlessExecutable(entry, executable, process.getuid!());
 
+  it('keeps the manifest reason and local entry when either recheck cannot verify the npm program', async () => {
+    for (const stage of ['before-bind', 'after-auth-status'] as const) {
+      const f = await fixture(), manifestPath = join(f.platformRoot, 'package.json');
+      const isolation = await fixtureIsolation(async seal => {
+        if (stage === 'before-bind' && seal === 2) await chmod(manifestPath, 0o664);
+      });
+      const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => {
+        if (stage === 'before-bind') throw new Error('Unexpected spawn after a refused bind');
+        const auth = command.args.at(-1) === 'status';
+        if (auth) await chmod(manifestPath, 0o664);
+        const stdout = command.args.at(-1) === '--version' ? 'codex-cli 9.1.0' : codexHelp();
+        return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+          stdoutBase64: Buffer.from(stdout).toString('base64'), stderrBase64: auth ? Buffer.from('Logged in using ChatGPT').toString('base64') : '',
+          stdoutTruncated: false, stderrTruncated: false, durationMs: 0 };
+      });
+      try {
+        const error = await headlessPreflight(entry, f.definition, Date.now, isolation).catch((failure: unknown) => failure) as DeckentError;
+        const params = { check: 'npm-payload-unverified', reason: 'group-or-other-writable', recheck: 1 };
+        expect.soft(error, stage).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+        expect.soft(error.localize?.('en').message).toContain('The program could not be checked again. The entry is writable by the group or by other users.');
+        expect.soft(error.localize?.('tr').message).toContain('Program yeniden denetlenemedi. Bu dosya veya dizine grup veya diğer kullanıcılar yazabilir.');
+        expect.soft(error.localize?.('en').message).not.toContain('changed');
+        expect.soft(error.localize?.('tr').message).not.toContain('değişti');
+        for (const locale of ['en', 'tr'] as const) {
+          expect.soft(ErrorRegistry.localHeadlessPathDetail(error, locale, f.root)).toContain(`~/${relative(f.root, manifestPath)}`);
+        }
+        let shared = '';
+        await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+        expect.soft(JSON.parse(shared)).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+        expect.soft(shared + JSON.stringify(error)).not.toContain(f.root);
+        expect(runner).toHaveBeenCalledTimes(stage === 'before-bind' ? 0 : 3);
+      } finally { runner.mockRestore(); }
+    }
+  });
+
+  it('reports an empty PATH search for a new connection in both languages without a local path', async () => {
+    const f = await fixture(), bin = join(f.root, 'empty-bin');
+    await mkdir(bin);
+    const error = await prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+      ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: { PATH: bin }, now: Date.now, isolation: await fixtureIsolation() })
+      .catch((failure: unknown) => failure) as DeckentError;
+    expect.soft(error).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE', params: { check: 'path-search-empty' } });
+    for (const [locale, message] of [
+      ['en', "The provider's program was not found on PATH. Install it or use --executable to choose a program file you have verified."],
+      ['tr', 'Sağlayıcının programı PATH üzerinde bulunamadı. Programı kurun veya doğruladığınız bir program dosyasını --executable ile seçin.'],
+    ] as const) {
+      expect.soft(error.localize?.(locale).message).toBe(message);
+      expect(ErrorRegistry.localHeadlessPathDetail(error, locale)).toBeUndefined();
+    }
+    let shared = '';
+    await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+    expect(shared + JSON.stringify(error)).not.toContain(bin);
+    expect(await f.read()).toEqual([]);
+  });
+
   it('reports the first npm check locally and carries only its reason in the shared refusal', async () => {
     const { root: home } = await connection(), prefix = join(home, 'npm');
     const f = await fakeCodexNpm(prefix, { logPath: join(home, 'unused.log') });
@@ -316,14 +382,8 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
   }
 
   async function expectPreflightBind(f: Awaited<ReturnType<typeof fixture>>, executable: string, packageRoot?: string, replace?: () => Promise<void>) {
-    const launcher = await lstat(process.execPath, { bigint: true }), expected = await lstat(executable, { bigint: true });
-    let seals = 0;
-    const isolation: HeadlessIsolation = async () => {
-      if (++seals === 2) await replace?.();
-      return { status: 'available', rejected: [], restriction: null, detail: null,
-        launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
-          identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') } };
-    };
+    const expected = await lstat(executable, { bigint: true });
+    const isolation = await fixtureIsolation(async seal => { if (seal === 2) await replace?.(); });
     const stopped = new Error('version probe captured before spawn');
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async (command, _signal, _onLine, fd) => {
       expect(fd).toBeDefined();
@@ -344,12 +404,15 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
       throw stopped;
     });
     try {
-      const preflight = expect(headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation));
+      const preflight = headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation);
       if (replace) {
-        await preflight.rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'executable-changed' } });
+        const error = await preflight.catch((failure: unknown) => failure) as DeckentError;
+        expect(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'executable-changed' } });
+        expect(error.localize?.('en').message).toContain('The verified CLI changed before it could start.');
+        expect(error.localize?.('tr').message).toContain('Doğrulanan CLI başlatılmadan önce değişti.');
         expect(runner).not.toHaveBeenCalled();
       } else {
-        await preflight.rejects.toBe(stopped);
+        await expect(preflight).rejects.toBe(stopped);
         expect(runner).toHaveBeenCalledOnce();
       }
     } finally { runner.mockRestore(); }

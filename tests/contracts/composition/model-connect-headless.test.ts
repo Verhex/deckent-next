@@ -442,7 +442,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
     const run = (env: Record<string, string>, commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
       connection: 'claude-cli-subscription', endpoint: null, model: { nativeId } }, { env: { ...h.f.env, ...env } });
-    await expect(run({ PATH: join(h.f.data, 'empty-bin') }, 'c-0')).rejects.toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
+    await expect(run({ PATH: join(h.f.data, 'empty-bin') }, 'c-0')).rejects.toMatchObject({
+      code: 'HEADLESS_CLI_UNAVAILABLE', params: { check: 'path-search-empty' },
+    });
     expect(await h.spawns()).toEqual([]);
     const owned = join(await realpath(home), '.deckent', 'headless', 'logins', 'claude');
     await expect(run({ PATH: bin }, 'c-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: owned, owned: true } });

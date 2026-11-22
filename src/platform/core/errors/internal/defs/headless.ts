@@ -49,13 +49,17 @@ const preflight = (p: Params, l: Locale) => {
     case 'npm-payload-missing':
     case 'npm-payload-unverified': {
       const reason = npmReason(p['reason'], l);
-      if (reason !== undefined) return t('error.headless.npmRefusal', { reason }, l);
+      if (reason !== undefined) return p['recheck'] === 1
+        ? t('error.headless.npmRecheckRefusal', { reason }, l) : t('error.headless.npmRefusal', { reason }, l);
       return p['check'] === 'npm-payload-missing' ? t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-missing', {}, l)
         : t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-unverified', {}, l);
     }
     case 'signal': return t('error.HEADLESS_PREFLIGHT_FAILED.signal', {}, l);
     case 'cancelled': return t('error.HEADLESS_PREFLIGHT_FAILED.cancelled', {}, l);
     case 'selected-file': return selectionRefusal(p['reason'], l);
+    case 'executable-recheck': return t('error.headless.executableRecheckRefusal', {
+      reason: npmReason(p['reason'], l) ?? t('error.headless.npmReason.verification-unavailable', {}, l),
+    }, l);
     case 'executable-changed': return t('error.HEADLESS_PREFLIGHT_FAILED.executable-changed', {}, l);
     case 'flags': return t('error.HEADLESS_PREFLIGHT_FAILED.flags', p, l);
     case 'auth-status': return t('error.HEADLESS_PREFLIGHT_FAILED.auth-status', p, l);
@@ -93,7 +97,12 @@ export const headlessErrors: ErrorDefinitions = errorTable('headless', plainErro
 }), plainErrors('headless.agent.reason.', {
   NATIVE_AGENT_CLI_UNAVAILABLE: 'error', NATIVE_AGENT_LOGIN_REQUIRED: 'error', NATIVE_AGENT_CAPABILITY_UNSEALED: 'error', NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: 'error',
   NATIVE_AGENT_PLUGIN_UNEXPECTED: 'error', NATIVE_AGENT_BRIDGE_UNAVAILABLE: 'error', NATIVE_AGENT_ENVIRONMENT_REFUSED: 'error',
-}), plainErrors('error.', { HEADLESS_CLI_UNAVAILABLE: 'error', HEADLESS_OWNER_MISMATCH: 'error' }), {
+}), {
+  HEADLESS_CLI_UNAVAILABLE: { category: 'error', render: (p, l) => ({
+    message: p['check'] === 'path-search-empty'
+      ? t('error.headless.pathSearchEmpty', {}, l) : t('error.HEADLESS_CLI_UNAVAILABLE', {}, l),
+  }) },
+}, plainErrors('error.', { HEADLESS_OWNER_MISMATCH: 'error' }), {
   HEADLESS_PREFLIGHT_FAILED: { category: 'error', render: (p, l) => ({ message: preflight(p, l) }) },
 }, plainErrors('error.', { HEADLESS_LOGIN_REQUIRED: 'error', HEADLESS_REQUEST_INVALID: 'error' }), {
   HEADLESS_ISOLATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: isolation(p, l) }) },

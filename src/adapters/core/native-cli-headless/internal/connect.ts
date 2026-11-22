@@ -21,6 +21,7 @@ export async function headlessExecutable(entry: NonNullable<ReturnType<typeof na
   const executable = named && isAbsolute(named) ? await realpath(named).catch(() => null) : null;
   if (!executable) {
     if (selection === 'new' && named) headlessSelectionRefusal(named, 'unavailable');
+    if (selection === 'new' && named === null) refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'path-search-empty' });
     refuse('HEADLESS_CLI_UNAVAILABLE');
   }
   // A path with `.`/`..` segments is kept by its realpath (a lexical normalization could name another file).

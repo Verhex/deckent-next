@@ -114,8 +114,8 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
     if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED');
     if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state === 'config-dir' ? 'config-dir' : 'auth-status' });
-    const current = await resolveHeadlessExecutable(entry, program.chosen, definition.ownerUid).catch(() => null);
-    if (current?.identity !== program.identity) headlessExecutableRefusal('executable-changed', program.chosen, executable);
+    const current = await resolveHeadlessExecutable(entry, program.chosen, definition.ownerUid, 'recheck');
+    if (current.identity !== program.identity) headlessExecutableRefusal('executable-changed', program.chosen, executable);
     const sealed = Object.freeze({ executable, program, version, flagSetDigest, runDir, env, isolation: isolated });
     // S7: the version an earlier passing check of this connection proved, kept while it differs (the doctor's "CLI updated A → B" note).
     const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; updatedFrom?: unknown }, () => null);

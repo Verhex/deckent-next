@@ -38,6 +38,12 @@ export function headlessSelectionRefusal(chosen: string, reason: SelectionFailur
 type NpmCheckReason = 'missing' | 'not-directory' | 'not-regular-file' | 'not-expected-link' | 'untrusted-owner'
   | 'group-or-other-writable' | 'set-id' | 'multiple-hard-links' | 'manifest-mismatch' | 'manifest-too-large'
   | 'manifest-unreadable' | 'not-executable' | 'changed-during-check' | 'verification-unavailable';
+function executableRecheckRefusal(path: string, reason: NpmCheckReason): never {
+  throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
+    params: { check: 'executable-recheck', reason },
+  }), path);
+}
+
 class NpmCheckFailure extends Error {
   constructor(readonly reason: NpmCheckReason) { super(reason); }
 }
@@ -96,7 +102,7 @@ function checkReason(error: unknown): NpmCheckReason {
   }
 }
 
-async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix: string, ownerUid: number, launcherInfo: BigIntStats, maxBytes: number) {
+async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix: string, ownerUid: number, launcherInfo: BigIntStats, maxBytes: number, recheck: boolean) {
   const packageRoot = join(prefix, rule.packagePath), chosenLink = join(prefix, rule.linkPath);
   if (process.platform !== rule.platform || process.arch !== rule.arch || chosen !== launcher && chosen !== chosenLink)
     headlessExecutableRefusal('npm-layout-unknown', chosen);
@@ -149,7 +155,9 @@ async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix:
     return { executable, packageRoot, info, packageIdentity: [rule, top.identity, platform.identity] };
   } catch (error) {
     const reason = checkReason(error), check = reason === 'missing' ? 'npm-payload-missing' : 'npm-payload-unverified';
-    throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check, reason } }), failedPath, expected);
+    throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
+      params: recheck ? { check, reason, recheck: 1 } : { check, reason },
+    }), failedPath, expected);
   }
 }
 
@@ -288,20 +296,24 @@ async function provesNativeExecutable(path: string, expected: BigIntStats): Prom
   } catch { return false; }
 }
 
-export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, selection?: 'new'): Promise<HeadlessExecutable> {
-  const unavailable = (reason: SelectionFailure): never => {
-    if (selection === 'new') headlessSelectionRefusal(chosen, reason);
+export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, context?: 'new' | 'recheck'): Promise<HeadlessExecutable> {
+  const unavailable = (reason: SelectionFailure, failedPath = chosen): never => {
+    if (context === 'new') headlessSelectionRefusal(chosen, reason);
+    if (context === 'recheck') {
+      const check = reason === 'directory' ? 'not-regular-file' : reason === 'unavailable' ? 'verification-unavailable' : reason;
+      executableRecheckRefusal(failedPath, check);
+    }
     return refuse('HEADLESS_CLI_UNAVAILABLE');
   };
   const launcher = await realpath(chosen).catch(() => null), launcherInfo = launcher ? await infoAt(launcher).catch(() => null) : null;
-  if (!launcher || !launcherInfo) return unavailable('unavailable');
-  if (!launcherInfo.isFile()) return unavailable(launcherInfo.isDirectory() ? 'directory' : 'not-regular-file');
-  if ((launcherInfo.mode & 0o111n) === 0n) return unavailable('not-executable');
+  if (!launcher || !launcherInfo) return unavailable('unavailable', launcher ?? chosen);
+  if (!launcherInfo.isFile()) return unavailable(launcherInfo.isDirectory() ? 'directory' : 'not-regular-file', launcher);
+  if ((launcherInfo.mode & 0o111n) === 0n) return unavailable('not-executable', launcher);
   const chosenInfo = await infoAt(chosen).catch(() => null);
   if (!chosenInfo) return unavailable('unavailable');
   const rule = entry.command.npmLauncher, suffix = rule && `/${rule.packagePath}/${rule.launcherPath}`;
   const target = rule && suffix && launcher.endsWith(suffix)
-    ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes) : undefined;
+    ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes, context === 'recheck') : undefined;
   const position = target ? undefined : packagePosition(launcher);
   if (position && !await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes)
     && !await provesNativeExecutable(launcher, launcherInfo)) headlessExecutableRefusal('npm-layout-unknown', chosen);
@@ -313,10 +325,11 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
 
 export async function pinHeadlessExecutable(entry: HeadlessEntry, resolution: HeadlessExecutable) {
   const changed = () => headlessExecutableRefusal('executable-changed', resolution.chosen, resolution.executable);
-  const file = await open(resolution.executable, O_PATH | constants.O_NOFOLLOW).catch(changed);
+  const unreadable = (error: unknown) => executableRecheckRefusal(resolution.executable, checkReason(error));
+  const file = await open(resolution.executable, O_PATH | constants.O_NOFOLLOW).catch(unreadable);
   try {
-    const current = await resolveHeadlessExecutable(entry, resolution.chosen, process.getuid!()).catch(changed);
-    const info = await file.stat({ bigint: true }).catch(changed);
+    const current = await resolveHeadlessExecutable(entry, resolution.chosen, process.getuid!(), 'recheck');
+    const info = await file.stat({ bigint: true }).catch(unreadable);
     if (!info.isFile() || stamp(info) !== resolution.fileStamp || current.identity !== resolution.identity) changed();
     return file;
   } catch (error) {
