@@ -55,9 +55,9 @@ export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Re
  * unisolated spawn exist on any path: an unusable realm is refused typed before any spawn, on every check.
  */
 export async function headlessPreflight(entry: HeadlessEntry, definition: NativeCliHeadlessDefinition, now: () => number, isolation: HeadlessIsolation,
-  signal?: AbortSignal, agent?: Readonly<{ flagSetDigest: string; requiredFlags: readonly string[] }>): Promise<HeadlessPreflight> {
+  signal?: AbortSignal, agent?: Readonly<{ flagSetDigest: string; requiredFlags: readonly string[] }>, selection?: 'new'): Promise<HeadlessPreflight> {
   if (process.getuid?.() !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
-  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid), { executable } = program;
+  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid, selection), { executable } = program;
   const versionRefusal = (params: Record<string, string>) => headlessExecutableRefusal('version', program.chosen, executable, params);
   const config = await stat(definition.configDir).catch(() => null);
   if (!config?.isDirectory() || config.uid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });

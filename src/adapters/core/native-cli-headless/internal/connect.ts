@@ -6,7 +6,7 @@ import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { headlessExecutableRevision, headlessPreflight, verifiedCliVersion } from './preflight.js';
-import { resolveHeadlessExecutable } from './executable.js';
+import { headlessSelectionRefusal, resolveHeadlessExecutable } from './executable.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
 type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
@@ -15,11 +15,14 @@ type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; vers
 /** The absolute executable the person gave, else the first of the registry's CLI name in the person's PATH (bounded search). S7 (owner 2026-10-31): that
  * path is kept, not its realpath (a self-updating CLI moves it); it must resolve to a file now, and every call resolves it again. */
 export async function headlessExecutable(entry: NonNullable<ReturnType<typeof nativeCliHeadless>>, input: Readonly<{ executable?: string | undefined;
-  env: Readonly<Record<string, string | undefined>>; signal?: AbortSignal | undefined }>): Promise<string> {
+  env: Readonly<Record<string, string | undefined>>; signal?: AbortSignal | undefined }>, selection?: 'new'): Promise<string> {
   const { connect } = entry.headless, controller = AbortSignal.timeout(connect.pathSearchTimeoutMs);
   const named = input.executable ?? await findExecutable(entry.command.executable, input.env, connect.pathSearchDirectories, input.signal ? AbortSignal.any([input.signal, controller]) : controller);
   const executable = named && isAbsolute(named) ? await realpath(named).catch(() => null) : null;
-  if (!executable) refuse('HEADLESS_CLI_UNAVAILABLE');
+  if (!executable) {
+    if (selection === 'new' && named) headlessSelectionRefusal(named, 'unavailable');
+    refuse('HEADLESS_CLI_UNAVAILABLE');
+  }
   // A path with `.`/`..` segments is kept by its realpath (a lexical normalization could name another file).
   return resolve(named!) === named ? named! : executable;
 }
@@ -33,11 +36,11 @@ export async function prepareHeadlessConnection(input: HeadlessConnectInput): Pr
   const entry = nativeCliHeadless(input.protocol.family), uid = process.getuid?.();
   if (!entry || uid === undefined) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   await headlessIsolationSeal(input.isolation);
-  const executable = await headlessExecutable(entry, input), asked = input.configDir ?? input.ownedConfigDir;
+  const executable = await headlessExecutable(entry, input, 'new'), asked = input.configDir ?? input.ownedConfigDir;
   const configDir = isAbsolute(asked) ? await realpath(asked).catch(() => null) : null;
   if (!configDir) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
   const base = { schemaVersion: 1 as const, executable, configDir, stateDir: input.stateDir, ownerUid: uid, minCliVersion: input.minCliVersion };
-  await headlessPreflight(entry, nativeCliHeadlessDefinitionSchema.parse({ ...base, delegatedUse: null }), input.now, input.isolation, input.signal);
+  await headlessPreflight(entry, nativeCliHeadlessDefinitionSchema.parse({ ...base, delegatedUse: null }), input.now, input.isolation, input.signal, undefined, 'new');
   return base;
 }
 /** The person's consent choice (`classes` undefined: keep the existing one; empty: withdrawn); an unchanged choice keeps its record byte for byte.

@@ -377,6 +377,7 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   kullanmadan önce yeniden doğrular. Yalıtılmış CLI süreci paketten yalnız bu programı görür. Yerleşiminiz farklıysa
   paket içindeki yerel program dahil, doğruladığınız bir Linux x64 ELF çalıştırılabilir dosyasını
   `deckent models connect --connection codex-cli-subscription --executable <yol>` ile doğrudan seçebilirsiniz.
+  Grubun yazabildiği npm kurulumlarında otomatik seçim reddedilir. Doğruladığınız bir program dosyasını `--executable` ile seçin.
 - **Codex CLI aboneliği (alpha.60):** Brain, yalıtılmış `codex-cli-subscription` bağlantısıyla kendi Codex CLI'nizle (ChatGPT planı)
   da planlayabilir; her seferinde tek `codex exec` turu. Giriş: `deckent models login --connection codex-cli-subscription` (`codex login`'i
   deckent'e ait kendi dizinine, `headless/logins/codex`, çalıştırır; `--config-dir` ve `--executable` başka bir giriş dizini ya da ikili

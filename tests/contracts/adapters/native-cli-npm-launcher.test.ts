@@ -1,6 +1,6 @@
 import { fstatSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, resolveHeadlessExecutable, runHeadlessLogin,
   type HeadlessIsolation } from '#adapters/core/native-cli-headless/index.js';
@@ -241,6 +241,61 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
     code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-layout-unknown' }, message: expect.stringContaining('--executable'),
   };
   const classify = (executable: string) => resolveHeadlessExecutable(entry, executable, process.getuid!());
+
+  it('reports the first npm check locally and carries only its reason in the shared refusal', async () => {
+    const { root: home } = await connection(), prefix = join(home, 'npm');
+    const f = await fakeCodexNpm(prefix, { logPath: join(home, 'unused.log') });
+    const manifestPath = join(f.platformRoot, 'package.json'), manifestBytes = await readFile(manifestPath);
+    const expectedPath = `~/${relative(home, f.payload)}`;
+    const refused = async (path: string, reason: string, expected = true) => {
+      const error = await classify(f.chosen).catch((failure: unknown) => failure) as DeckentError;
+      const params = { check: reason === 'missing' ? 'npm-payload-missing' : 'npm-payload-unverified', reason };
+      expect.soft(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+      expect.soft(error.params).toEqual(params);
+      expect.soft(JSON.stringify(error)).not.toContain(home);
+      let shared = '';
+      await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+      expect.soft(JSON.parse(shared)).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+      expect.soft(shared).not.toContain(home);
+      const local = ErrorRegistry.localHeadlessPathDetail(error, 'en', home);
+      expect.soft(local).toContain(`Failed check at: ${path === home ? '~' : `~/${relative(home, path)}`}`);
+      if (expected) expect.soft(local).toContain(`Expected native program location (unverified): ${expectedPath}`);
+      else expect.soft(local).not.toContain('Expected native program location');
+      return error;
+    };
+
+    await chmod(manifestPath, 0o664);
+    await chmod(home, 0o775);
+    await refused(home, 'group-or-other-writable', false);
+    await chmod(home, 0o700);
+    const writable = await refused(manifestPath, 'group-or-other-writable');
+    expect.soft(writable.localize?.('en').message).toContain('writable by the group or by other users');
+    expect.soft(writable.localize?.('tr').message).toContain('grup veya diğer kullanıcılar yazabilir');
+    await chmod(manifestPath, 0o644);
+
+    await writeFile(manifestPath, JSON.stringify({ name: 'different', version: '0.169.0-linux-x64' }));
+    await link(f.payload, `${f.payload}.alias`);
+    await refused(manifestPath, 'manifest-mismatch');
+    await writeFile(manifestPath, manifestBytes);
+    await refused(f.payload, 'multiple-hard-links');
+    await unlink(`${f.payload}.alias`);
+    await unlink(f.payload);
+    await refused(f.payload, 'missing');
+    const otherLink = join(prefix, 'bin', 'different');
+    await symlink(f.launcher, otherLink);
+    const unknown = await classify(otherLink).catch((error: unknown) => error);
+    expect(unknown).toMatchObject(unknownLayout);
+    expect(ErrorRegistry.localHeadlessPathDetail(unknown, 'en', home)).not.toContain(expectedPath);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('reports the first directory whose owner is outside the trusted set', async () => {
+    const f = await fixture(), prefix = dirname(dirname(f.chosen));
+    const wrongOwnerUid = process.getuid!() + 1;
+    const error = await resolveHeadlessExecutable(entry, f.chosen, wrongOwnerUid).catch((failure: unknown) => failure);
+    expect.soft(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-payload-unverified', reason: 'untrusted-owner' } });
+    expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', prefix)).toContain('Failed check at: ~/lib/node_modules/@openai/codex');
+    expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', prefix)).not.toContain('Expected native program location');
+  });
 
   async function packageProgram(content: unknown, bytes: string | Buffer = '#!/bin/sh\nexit 0\n', mode = 0o700) {
     const connectionFixture = await fixture();

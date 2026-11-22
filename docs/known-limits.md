@@ -380,6 +380,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `vendor/x86_64-unknown-linux-musl/bin/codex`. Connect keeps the selected path and checks the native executable again
   before use. Only that executable from the package is available in the isolated CLI process. If your layout differs,
   you can select a verified Linux x64 ELF executable directly, including the native file inside the package, with `deckent models connect --connection codex-cli-subscription --executable <path>`.
+  Automatic selection refuses a group-writable npm installation. Choose a program file you have verified with `--executable`.
 - **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
   `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
   codex-cli-subscription` (it runs `codex login` into its own deckent-owned directory, `headless/logins/codex`; `--config-dir` and

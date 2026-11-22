@@ -1,5 +1,37 @@
 import { clockText, t, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { errorTable, plainErrors, type ErrorDefinitions } from '../definition.js';
+
+function npmReason(reason: unknown, locale: Locale): string | undefined {
+  switch (reason) {
+    case 'missing': return t('error.headless.npmReason.missing', {}, locale);
+    case 'not-directory': return t('error.headless.npmReason.not-directory', {}, locale);
+    case 'not-regular-file': return t('error.headless.npmReason.not-regular-file', {}, locale);
+    case 'not-expected-link': return t('error.headless.npmReason.not-expected-link', {}, locale);
+    case 'untrusted-owner': return t('error.headless.npmReason.untrusted-owner', {}, locale);
+    case 'group-or-other-writable': return t('error.headless.npmReason.group-or-other-writable', {}, locale);
+    case 'set-id': return t('error.headless.npmReason.set-id', {}, locale);
+    case 'multiple-hard-links': return t('error.headless.npmReason.multiple-hard-links', {}, locale);
+    case 'manifest-mismatch': return t('error.headless.npmReason.manifest-mismatch', {}, locale);
+    case 'manifest-too-large': return t('error.headless.npmReason.manifest-too-large', {}, locale);
+    case 'manifest-unreadable': return t('error.headless.npmReason.manifest-unreadable', {}, locale);
+    case 'not-executable': return t('error.headless.npmReason.not-executable', {}, locale);
+    case 'changed-during-check': return t('error.headless.npmReason.changed-during-check', {}, locale);
+    case 'verification-unavailable': return t('error.headless.npmReason.verification-unavailable', {}, locale);
+    default: return undefined;
+  }
+}
+
+function selectionRefusal(reason: unknown, locale: Locale): string {
+  let kind: string;
+  switch (reason) {
+    case 'directory': kind = t('error.headless.selectionKind.directory', {}, locale); break;
+    case 'not-regular-file': kind = t('error.headless.selectionKind.not-regular-file', {}, locale); break;
+    case 'not-executable': kind = t('error.headless.selectionKind.not-executable', {}, locale); break;
+    default: return t('error.headless.selectionUnavailable', {}, locale);
+  }
+  return t('error.headless.selectionRefused', { kind }, locale);
+}
+
 /** The failed preflight check selects the sentence; a check this release does not know keeps the generic one. */
 const preflight = (p: Params, l: Locale) => {
   switch (p['check']) {
@@ -14,10 +46,16 @@ const preflight = (p: Params, l: Locale) => {
       return t('error.HEADLESS_PREFLIGHT_FAILED.version', {}, l);
     }
     case 'npm-layout-unknown': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-layout-unknown', {}, l);
-    case 'npm-payload-missing': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-missing', {}, l);
+    case 'npm-payload-missing':
+    case 'npm-payload-unverified': {
+      const reason = npmReason(p['reason'], l);
+      if (reason !== undefined) return t('error.headless.npmRefusal', { reason }, l);
+      return p['check'] === 'npm-payload-missing' ? t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-missing', {}, l)
+        : t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-unverified', {}, l);
+    }
     case 'signal': return t('error.HEADLESS_PREFLIGHT_FAILED.signal', {}, l);
     case 'cancelled': return t('error.HEADLESS_PREFLIGHT_FAILED.cancelled', {}, l);
-    case 'npm-payload-unverified': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-unverified', {}, l);
+    case 'selected-file': return selectionRefusal(p['reason'], l);
     case 'executable-changed': return t('error.HEADLESS_PREFLIGHT_FAILED.executable-changed', {}, l);
     case 'flags': return t('error.HEADLESS_PREFLIGHT_FAILED.flags', p, l);
     case 'auth-status': return t('error.HEADLESS_PREFLIGHT_FAILED.auth-status', p, l);
