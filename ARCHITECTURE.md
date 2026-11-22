@@ -52,7 +52,7 @@ The 2026-09-21 O4 reopening is superseded by Mission → Run → Task → Attemp
 ## M5 design — owner 2026-10-11 (accepted target; alpha.29 implements the binding slice)
 
 Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. alpha.55 implements the core layers (next section); before it nothing below was implemented except the alpha.29
-binding slice (live 2026-10-11): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
+binding slice (released with alpha.29 on 2026-10-11): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
 transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
 (`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); without trusted effect-to-Attempt provenance or an exact settlement digest already accepted by a Task of this Run, a pre-grant settlement remains `unknown` with `OPERATION_EVIDENCE_EARLIER`, including the wall-skew window. Evaluation returns a complete Run view and requires Run `inspect` before mutation or replay; denial writes no evaluation. Evaluation reply and Run inspection share result briefs and delivery outlook under per-Attempt `read-output` authority; a denied Attempt has no `resultBrief` or delivery observation (replay pins the receipt snapshot). Delivery receipts retain producer Attempt identity and are filtered by that producer's read-output authority before aggregation; unattributed receipts are withheld, and output-derived Run outlook is withheld without every bound producer's authority. Internal lost-dispatch recovery revalidates binding, fence and termination against the current Run snapshot and releases custody with its revision CAS; absent Run/Attempt rows refuse with `DISPATCH_NOT_ADMITTED`. Owner 2026-10-23 (S6R, KARAR 12 closed) assigns the first fence to the Nervous broker in `live` mode (S6R-3): it writes the fence when a measured (`live`) rule fires under the owner's standing `recovery-action` grant; Core seed rules start `provisional`; alpha.56 adds the person-only measured-rule promotion and recovery-action cards, while production fencing still requires promotion, grant and live mode (see core layers); every new effect intent records a mandatory `producer` (Attempt identity or `principal`, S6R-1; older intents read as absent).
 
@@ -632,8 +632,8 @@ refresh, usage and dogfood closure remain open.
 - **Unreleased versions change in place (owner 2026-09-26, Jev f4c8bc32).** A protocol, schema or config version that was never pushed and
   is run by no installed service may be amended in place; once pushed or run by an installed service, a change needs a version bump.
   Recorded amendment: runtime protocol v14 gained the `approval.settled` outcome `unsettled` and the `tool.output` producer before v14
-  was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump. v15 was introduced 2026-09-27 (T-L5 `@file`) as the single v15 package
-  (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump. v15 was pushed and runs in the live service (released). v16 was
+  was pushed (2026-09-26, `5fa0812`). From `5fa0812` on, v14 is released: further changes bump. v15 was introduced 2026-09-27 (T-L5 `@file`) as the single v15 package
+  (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump. v15 was pushed (released). v16 was
   introduced 2026-09-28 (OPEN-REASONING-FILE, owner) as the single v16 package: `chatTurn` gains the optional `reasoning`; it is
   unreleased until pushed, and further v16 items add to it without another bump. SCR-A adds to v16: `chatTurn.sessionId?` and the
   operations `inspectScratch` / `clearScratch` (`{ schemaVersion: 1, scopeId, sessionId }`, delivery required, current version only;
@@ -656,8 +656,8 @@ refresh, usage and dogfood closure remain open.
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
   describe and stop a v18 service, nothing else; a mismatched envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT` —
-  there is no dedicated version-refusal code), and a v18 terminal's describe of a v17 service retries at v17 and shows the build skew. The
-  live service has run v18 since the 2026-09-29 switch (the v16 service was stopped with the old build's own CLI). FA-TRACKED-WARN adds no
+  there is no dedicated version-refusal code), and a v18 terminal's describe of a v17 service retries at v17 and shows the build skew.
+  FA-TRACKED-WARN adds no
   wire field: a v18 frame never carries `tool.finished.trackedChanges` (the released parser rejects it); the typed field waits for the v19
   bundle (with `chatTurn.language`), and until then the warning reaches every client as result text (see FA-TRACKED-WARN).
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an

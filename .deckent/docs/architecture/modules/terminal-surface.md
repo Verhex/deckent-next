@@ -92,7 +92,7 @@ Market notes live in the private proof record `TERMINAL-UI-LANDSCAPE`.
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
   in the previous and the current protocol version ([16, 15] since v16; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
-  from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
+  from an older build (for example, a v11 terminal handles a v10 service through the skew notice and `/service-restart`). A retry resends the same
   shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
   descriptor; a service without `service.identity` cannot be stopped that way (`RUNTIME_SHUTDOWN_UNAVAILABLE` says how
   to configure identity and a shutdown grant) and the terminal banner says so. **Upgrade:** `runtime serve` upgrades an

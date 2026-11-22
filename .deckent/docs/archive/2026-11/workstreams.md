@@ -29,7 +29,7 @@ altyapısı** (tamamen yerel sistemler için) ayrı iş. ~~GPU owner'a ayrıldı
 (native Anthropic dahil); terminalde bütçe/limit yok, sonsuz akış için otomatik bağlam sıkıştırma; kabuk Claude Code gibi kullanıcının
 makinesinde izin modlarıyla (izolasyon iddiası değil); Deckent işlevleri/onayları/süreçleri komut, sorgu ve MCP ile; tasarım ve akış
 legacy'den taşınır, kanıtlı kusurlar taşınmaz; vLLM worker hattı sonra. Owner'ın canlı kabulü için T-L5 (otomatik sıkıştırma) ve
-T-L7 (yerel uzun bağlam profili) önkoşuldur; canlı profil 2026-09-25 owner göçüyle `maxCalls: null` allocation'a geçti.
+T-L7 (yerel uzun bağlam profili) önkoşuldur; Bakım ekibinin uygulama kaydı özeldir.
 Analiz ve dilimler (T-L1..L7):
 `deckent-refactor-work/TERMINAL-CLAUDE-CODE-CLASS-ANALYSIS-2026-09-24.md`.
 

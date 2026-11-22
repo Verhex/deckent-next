@@ -22,7 +22,7 @@ list **bubblewrap, then Landlock**). `host` → host (result bytes unchanged); a
 `require-sandbox` refuses before any plan, approval or effect (`SHELL_SANDBOX_UNAVAILABLE`), `prefer-sandbox` runs on the host and says
 so in the approval preview, the live stream, the model result and the finished line (`sandbox: none; running on host (bubblewrap: …;
 landlock: …)`) — never a silent fallback. A later provider that wins after a preferred one was passed over **for any reason**
-(REALM-NOTICE, live 2026-09-29: a host restriction such as AppArmor with its fix, a launcher inside the project or scratch area, an
+(REALM-NOTICE, 2026-09-29: a host restriction such as AppArmor with its fix, a launcher inside the project or scratch area, an
 unavailable or changed launcher) is a visible fallback too, in every sandbox mode: `[deckent] sandbox: <chosen> instead of <preferred>
 (<preferred>: <reason>)` (one helper, `describeSandboxFallback`; each reason one line, control characters as spaces, at most 480
 characters, `boundSandboxReason`) leads the resolution notice (live stream, model result) and follows the winning provider's posture

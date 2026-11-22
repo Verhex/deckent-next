@@ -62,7 +62,7 @@ in it can reach the model provider through the worker's one egress. The terminal
 - **Acknowledgements (`execution.secretGate`, v1, empty by default):** `allowPatternPaths` (≤ 64 globs) lifts content-pattern hits only;
   `acknowledgedDenyPaths` (≤ 64 exact paths) lifts the deny-path rule for a settings-only file such as `.npmrc`, whose content is still
   scanned. Bounds `maxFiles`, `maxFileBytes`, `maxTotalBytes`, `timeoutMs` fail closed as `WORKER_TREE_SCAN_INCOMPLETE` naming the setting.
-- **Dependency class (owner 2026-10-17, before beta; replaces the live/N1 interim `allowPatternPaths: ["node_modules/**"]` + 32 MiB):**
+- **Dependency class (owner 2026-10-17, before beta; replaces an interim pattern allowlist and inspection limit):**
   the signal is profile data, never a path string: a `readOnlyMounts` entry declares `dependencyTree: { lockfile }` (a path inside the
   bind), pinned with the Run and its profile fingerprint; the checkout, task inputs, handoff files and prompt text never take the class,
   and a declared bind keeps it only when its real path shares no tree with the attempt workspace or the work-target checkout

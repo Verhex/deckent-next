@@ -42,7 +42,7 @@ ceiling check. No total Run spending ceiling is enforced during execution. Since
 [core layers](core-layers.md#headless-subscription-brain-and-quota-s3-1s3-5-s9-f3-f4)).
 
 The system, not the proposer, decides which permissions admission evaluates
-(live 2026-10-18: a model's invented `scope/inspect` and `model-invocation`
+(a model's invented `scope/inspect` and `model-invocation`
 entries refused its plan). `evaluatePermissions` derives one `task/execute` per
 graph task and reads it as execution-time `TaskApprovalAdmission` does: an
 explicit deny refuses the plan early and `NO_GRANT` means the optional task

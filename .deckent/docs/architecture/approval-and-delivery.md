@@ -408,7 +408,7 @@ project read-only (C5, above); a failed answer (`isError` or a server JSON-RPC e
 decided from the typed `projectReadOnly` on `McpServerOpen`/`McpOfferedTool`, never from the answer text; the launch card carries a posture
 line (`mcpRealmPosture`). Not yet: a typed diagnosis for a server that crashes at start while writing the project.
 `runConfiguredMcpCommand` (the one host boundary of CLI `mcp *` and terminal `/mcp`) maps a `ManagedFileError` through `queryFailure`
-(registry code + diagnosis params, caller's locale, exit 1, no crash report); any other error is unchanged (LANG-CRASH, live session 1d428e9f).
+(registry code + diagnosis params, caller's locale, exit 1, no crash report); any other error is unchanged (LANG-CRASH).
 Open (LANG-CRASH finding): `mcp add`/`mcp remove` write the registry file before the trust audit; when the audit refuses, the registry has
 already changed, and after `remove` the trust record stays (the same definition added again can look trusted without a card).
 
@@ -455,7 +455,7 @@ name: the repository identity is the SHA-256 of the canonical Git common directo
 hosts renumber across restarts). A `git clone` is a new directory and never copies `refs/deckent/*`, so a re-registered clone starts
 its own chain at sequence 1. v58 rebuilds `workspace_adoptions` with a `repository` column and `UNIQUE(repository,target_ref,sequence)`
 over unreleased rows; every older row is kept byte for byte with repository `pre-v58`, because a ledger migration cannot observe Git and
-"the project repository" is false on real data (N1's stuck sequence 20 was claimed in the clone). A `pre-v58` chain is attributed by
+"the project repository" does not hold when the claim was made in a separate clone. A `pre-v58` chain is attributed by
 the only evidence that exists: the repository whose fence names its latest applied record continues it under its own identity; an
 unsettled `pre-v58` row blocks every repository of that target until resolved; no claim ever writes `pre-v58`. A claim, and the queue
 before publication, refuse with `ADOPTION_FENCE_MISMATCH` when the repository's fence does not name the journal's latest applied record
@@ -915,7 +915,7 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
   (moved unchanged from `workspace-read`, which re-exports it): one grammar, one matcher for the deny language, sandbox anchors and K6.
   Any change of match semantics bumps `matcher`.
 - **Switch.** `execution.workTargets` schemaVersion 2 `targets[].scope.mode` `warn | enforce` (optional; absent, v1 or no target = warn),
-  re-read per operation. v1 is released (pushed `21110d09`, run live) and stays unchanged: a v1 target with `scope` is refused.
+  re-read per operation. v1 is released (source `21110d09`) and stays unchanged: a v1 target with `scope` is refused.
 - **Gates.** Patch prepare/preview and integration check always succeed and show the classification. In enforce, integration prepare refuses
   before the intent claim and delivery before the delivery claim: `PATCH_SCOPE_VIOLATION` (count, first 16 paths, omitted) or
   `PATCH_SCOPE_UNDECLARED`. No bypass flag; override = a new Run whose work input declares the paths. Published deliveries still settle.

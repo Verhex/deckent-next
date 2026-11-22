@@ -176,7 +176,7 @@ the project's git-tracked files is shown and audited — never blocked, never a 
   shell outcome, terminal-chat delta, `ToolDelta`, text reading kept as fallback) waits for a later protocol step (Jev 34a8df5c; not
   added through protocol v29, so the text reading remains the path).
 
-**Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4; live findings 3/4 of session 1d428e9f).** A full-access call in a realm that
+**Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4).** A full-access call in a realm that
 `opens` (bubblewrap) runs with `--unshare-all --share-net`, `--bind / /` then a fresh `/proc` and minimal `/dev` (PID namespace,
 `--die-with-parent`, `--new-session` kept): host network, the real HOME readable and writable, the project and `.git` writable. The hard floor
 is structural, from `ShellSandboxLayout.hardFloor` (`agentShellHardFloor`, `adapters/core/agent-workspace-floor`, all managed turns): the
