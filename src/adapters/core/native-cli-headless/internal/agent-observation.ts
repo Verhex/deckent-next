@@ -13,7 +13,7 @@ import { nativeAgentFlagSetDigest, headlessRequiredFlags } from './env.js';
 import { headlessPreflight, type HeadlessPreflight } from './preflight.js';
 import type { HeadlessIsolation } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
-import { resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
+import { headlessExecutableRefusal, resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
 
 export function agentTarget(input: ModelInvocationProfile) {
   const profile = modelInvocationProfileSchema.parse(input), definition = nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition);
@@ -47,11 +47,12 @@ async function identity(profile: ModelInvocationProfile, program: HeadlessExecut
 export async function recordNativeAgentObservation(profile: ModelInvocationProfile, preflight: HeadlessPreflight,
   execution: z.infer<typeof nativeAgentExecutionSchema>, now: () => number, surface?: true | NativeAgentReadinessReason): Promise<void> {
   const { definition, entry } = agentTarget(profile);
-  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid);
+  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid, 'recheck');
   const observed = { cli: true, login: true, environment: true, execution,
     ...(surface === true ? { toolSurface: true, plugins: true, bridge: true } : surface ? {
       ...(surface === 'NATIVE_AGENT_PLUGIN_UNEXPECTED' ? { plugins: false } : { toolSurface: false }) } : {}) };
-  if (preflight.program.identity !== program.identity || preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
+  if (preflight.program.identity !== program.identity) headlessExecutableRefusal('agent-program-changed', program.chosen, program.executable);
+  if (preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const path = targetPath(profile, definition.stateDir), temporary = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, JSON.stringify(recordSchema.parse({ schemaVersion: 1, scopeId: profile.scopeId, reference: profile.reference,

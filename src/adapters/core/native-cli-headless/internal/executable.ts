@@ -36,7 +36,7 @@ export function headlessSelectionRefusal(chosen: string, reason: SelectionFailur
 }
 
 type NpmCheckReason = 'missing' | 'not-directory' | 'not-regular-file' | 'not-expected-link' | 'untrusted-owner'
-  | 'group-or-other-writable' | 'set-id' | 'multiple-hard-links' | 'manifest-mismatch' | 'manifest-too-large'
+  | 'group-or-other-writable' | 'set-id' | 'multiple-hard-links' | 'no-hard-links' | 'manifest-mismatch' | 'manifest-invalid' | 'manifest-too-large'
   | 'manifest-unreadable' | 'not-executable' | 'changed-during-check' | 'verification-unavailable';
 function executableRecheckRefusal(path: string, reason: NpmCheckReason): never {
   throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
@@ -56,7 +56,7 @@ function checkTrust(info: BigIntStats, owners: readonly bigint[], allowSticky = 
 }
 
 function checkSingleLink(info: BigIntStats) {
-  if (info.nlink !== 1n) throw new NpmCheckFailure(info.nlink > 1n ? 'multiple-hard-links' : 'changed-during-check');
+  if (info.nlink !== 1n) throw new NpmCheckFailure(info.nlink > 1n ? 'multiple-hard-links' : 'no-hard-links');
 }
 
 async function parents(path: string, top: string, owners: readonly bigint[], checking: (path: string) => string, installation = false) {
@@ -83,7 +83,8 @@ async function metadata(path: string, maxBytes: number, owners?: readonly bigint
       checkSingleLink(info);
       checkTrust(info, owners);
     }
-    const data = Buffer.alloc(maxBytes + 1), { bytesRead } = await file.read(data, 0, data.length, 0);
+    const data = Buffer.alloc(maxBytes + 1), { bytesRead } = await file.read(data, 0, data.length, 0)
+      .catch(() => { throw new NpmCheckFailure('manifest-unreadable'); });
     if (bytesRead > maxBytes) throw new NpmCheckFailure('manifest-too-large');
     if (BigInt(bytesRead) !== info.size) throw new NpmCheckFailure('manifest-unreadable');
     if (stamp(info) !== stamp(await file.stat({ bigint: true }))) throw new NpmCheckFailure('changed-during-check');
@@ -94,7 +95,7 @@ async function metadata(path: string, maxBytes: number, owners?: readonly bigint
 
 function checkReason(error: unknown): NpmCheckReason {
   if (error instanceof NpmCheckFailure) return error.reason;
-  if (error instanceof SyntaxError) return 'manifest-mismatch';
+  if (error instanceof SyntaxError) return 'manifest-invalid';
   switch ((error as NodeJS.ErrnoException | null)?.code) {
     case 'ENOENT': return 'missing';
     case 'ENOTDIR': return 'not-directory';
@@ -196,45 +197,54 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
   } finally { if (current !== root) await current.close(); }
 }
 
-async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIntStats, maxBytes: number, remaining: number): Promise<number | null> {
+type ManifestExclusionFailure = 'manifest-exclusion-unverified' | 'manifest-exclusion-changed' | 'manifest-declares-bin';
+
+async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIntStats, maxBytes: number, remaining: number): Promise<number | ManifestExclusionFailure> {
+  let failure: ManifestExclusionFailure = 'manifest-exclusion-unverified';
   try {
     const root = await open(packageRoot, O_PATH | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try {
       const before = await root.stat({ bigint: true });
       const manifestPath = join(fdPath(root), 'package.json');
       const { value: manifest, identity: manifestStamp }: { value: unknown; identity: string } = await metadata(manifestPath, maxBytes);
-      if (!isRecord(manifest)) return null;
+      if (!isRecord(manifest)) return failure;
       const { bin, directories } = manifest;
-      if (directories !== undefined && (!isRecord(directories) || Object.hasOwn(directories, 'bin'))) return null;
-      if (bin !== undefined && typeof bin !== 'string' && !isRecord(bin)) return null;
+      if (directories !== undefined && (!isRecord(directories) || Object.hasOwn(directories, 'bin'))) return failure;
+      if (bin !== undefined && typeof bin !== 'string' && !isRecord(bin)) return failure;
       const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
-      if (targets.length > remaining) return null;
+      if (targets.length > remaining) return failure;
       for (const target of targets) {
         const info = await binTargetInfo(root, target);
-        if (info.dev === chosen.dev && info.ino === chosen.ino) return null;
+        if (info.dev === chosen.dev && info.ino === chosen.ino) {
+          failure = 'manifest-declares-bin';
+          return failure;
+        }
       }
-      if (manifestStamp !== stamp(await infoAt(manifestPath)) || stamp(before) !== stamp(await infoAt(packageRoot))) return null;
+      if (manifestStamp !== stamp(await infoAt(manifestPath)) || stamp(before) !== stamp(await infoAt(packageRoot))) {
+        failure = 'manifest-exclusion-changed';
+        return failure;
+      }
       return remaining - targets.length;
     } finally { await root.close(); }
-  } catch { return null; }
+  } catch { return failure; }
 }
 
-async function manifestsExcludeFile(manifestRoots: readonly string[], chosen: BigIntStats, maxBytes: number): Promise<boolean> {
-  if (process.platform !== 'linux' || manifestRoots.length > BIN_MAX_DEPTH) return false;
+async function manifestsExcludeFile(manifestRoots: readonly string[], chosen: BigIntStats, maxBytes: number): Promise<true | ManifestExclusionFailure> {
+  if (process.platform !== 'linux' || manifestRoots.length > BIN_MAX_DEPTH) return 'manifest-exclusion-unverified';
   let remaining = BIN_MAX_TARGETS;
   for (const root of manifestRoots) {
     const next = await remainingTargetsAfterExclusion(root, chosen, maxBytes, remaining);
-    if (next === null) return false;
+    if (typeof next !== 'number') return next;
     remaining = next;
   }
   return true;
 }
 
 async function readElfTable(file: FileHandle, size: bigint, offset: bigint, length: number) {
-  if (offset < ELF64.header.size || length <= 0 || length > ELF_TABLE_MAX_BYTES || offset + BigInt(length) > size) return null;
+  if (offset < ELF64.header.size || length <= 0 || length > ELF_TABLE_MAX_BYTES || offset + BigInt(length) > size) return 'native-format-unverified' as const;
   const table = Buffer.alloc(length);
   const { bytesRead } = await file.read(table, 0, length, offset);
-  return bytesRead === length ? table : null;
+  return bytesRead === length ? table : 'native-read-incomplete' as const;
 }
 
 function hasLoadableSegment(programs: Buffer, size: bigint): boolean {
@@ -248,75 +258,100 @@ function hasLoadableSegment(programs: Buffer, size: bigint): boolean {
 }
 
 /** ET_DYN also describes shared libraries. Require the linker's explicit PIE flag. */
-async function isPie(file: FileHandle, programs: Buffer, size: bigint): Promise<boolean> {
+async function isPie(file: FileHandle, programs: Buffer, size: bigint): Promise<true | 'native-format-unverified' | 'native-read-incomplete'> {
   for (let i = 0; i < programs.length; i += ELF64.program.size) {
     if (programs.readUInt32LE(i) !== ELF64.program.dynamic) continue; // PT_DYNAMIC
     const length = programs.readBigUInt64LE(i + ELF64.program.fileSize);
-    if (length > ELF_TABLE_MAX_BYTES || length % BigInt(ELF64.dynamicEntry.size) !== 0n) return false;
+    if (length > ELF_TABLE_MAX_BYTES || length % BigInt(ELF64.dynamicEntry.size) !== 0n) return 'native-format-unverified';
     const dynamic = await readElfTable(file, size, programs.readBigUInt64LE(i + ELF64.program.offset), Number(length));
-    if (!dynamic) return false;
+    if (typeof dynamic === 'string') return dynamic;
     let pie = false;
     for (let j = 0; j < dynamic.length; j += ELF64.dynamicEntry.size) {
       const tag = dynamic.readBigInt64LE(j);
-      if (tag === ELF64.dynamicEntry.nullTag) return pie; // DT_NULL
+      if (tag === ELF64.dynamicEntry.nullTag) return pie || 'native-format-unverified'; // DT_NULL
       if (tag === ELF64.dynamicEntry.flags1Tag) pie = (dynamic.readBigUInt64LE(j + ELF64.dynamicEntry.value) & ELF64.dynamicEntry.pie) !== 0n; // DT_FLAGS_1 / DF_1_PIE
     }
-    return false;
+    return 'native-format-unverified';
   }
-  return false;
+  return 'native-format-unverified';
 }
 
-async function provesNativeExecutable(path: string, expected: BigIntStats): Promise<boolean> {
-  if (process.platform !== 'linux' || process.arch !== 'x64') return false;
+type NativeProofFailure = 'native-platform-unverified' | 'native-file-changed' | 'native-format-unverified' | 'native-read-incomplete' | 'native-proof-unavailable';
+
+async function provesNativeExecutable(path: string, expected: BigIntStats): Promise<true | NativeProofFailure> {
+  if (process.platform !== 'linux' || process.arch !== 'x64') return 'native-platform-unverified';
+  let failure: NativeProofFailure = 'native-proof-unavailable';
   try {
     const pinned = await open(path, O_PATH | constants.O_NOFOLLOW);
     try {
       const info = await pinned.stat({ bigint: true }), expectedStamp = stamp(expected);
-      if (!info.isFile() || stamp(info) !== expectedStamp) return false;
+      if (!info.isFile() || stamp(info) !== expectedStamp) {
+        failure = 'native-file-changed';
+        return failure;
+      }
       const file = await open(fdPath(pinned), constants.O_RDONLY | constants.O_NONBLOCK);
       try {
         const header = Buffer.alloc(ELF64.header.size);
         const { bytesRead } = await file.read(header, 0, header.length, 0);
         const { ident } = ELF64;
-        if (bytesRead !== header.length || header.readUInt32BE(0) !== ELF64.magic
+        if (bytesRead !== header.length) return 'native-read-incomplete';
+        if (header.readUInt32BE(0) !== ELF64.magic
           || header[4] !== ident.elfClass || header[5] !== ident.littleEndian || header[6] !== ident.version
           || header[7] !== ident.systemV && header[7] !== ident.linux
           || header.readUInt16LE(ELF64.header.machine) !== ELF64.x86_64 || header.readUInt32LE(ELF64.header.version) !== ident.version
           || header.readUInt16LE(ELF64.header.declaredSize) !== ELF64.header.size
-          || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return false;
+          || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return 'native-format-unverified';
         const type = header.readUInt16LE(ELF64.header.type); // ET_EXEC or ET_DYN with DF_1_PIE
-        if (type !== ELF64.executable && type !== ELF64.dynamic) return false;
+        if (type !== ELF64.executable && type !== ELF64.dynamic) return 'native-format-unverified';
         const programs = await readElfTable(file, info.size, header.readBigUInt64LE(ELF64.header.programOffset),
           header.readUInt16LE(ELF64.header.programCount) * ELF64.program.size);
-        return programs !== null && hasLoadableSegment(programs, info.size)
-          && (type === ELF64.executable || header.readBigUInt64LE(ELF64.header.entry) !== 0n && await isPie(file, programs, info.size))
-          && stamp(await file.stat({ bigint: true })) === expectedStamp;
+        if (typeof programs === 'string') return programs;
+        if (!hasLoadableSegment(programs, info.size)) return 'native-format-unverified';
+        if (type !== ELF64.executable) {
+          if (header.readBigUInt64LE(ELF64.header.entry) === 0n) return 'native-format-unverified';
+          const pie = await isPie(file, programs, info.size);
+          if (pie !== true) return pie;
+        }
+        if (stamp(await file.stat({ bigint: true })) !== expectedStamp) {
+          failure = 'native-file-changed';
+          return failure;
+        }
+        return true;
       } finally { await file.close(); }
     } finally { await pinned.close(); }
-  } catch { return false; }
+  } catch { return failure; }
 }
 
-export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, context?: 'new' | 'recheck'): Promise<HeadlessExecutable> {
-  const unavailable = (reason: SelectionFailure, failedPath = chosen): never => {
+export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, context?: 'new' | 'path' | 'recheck'): Promise<HeadlessExecutable> {
+  const unavailable = (reason: SelectionFailure, failedPath = chosen, missing = false): never => {
     if (context === 'new') headlessSelectionRefusal(chosen, reason);
+    if (context === 'path') headlessExecutableRefusal('path-candidate-unverified', failedPath, undefined, { reason });
     if (context === 'recheck') {
       const check = reason === 'directory' ? 'not-regular-file' : reason === 'unavailable' ? 'verification-unavailable' : reason;
       executableRecheckRefusal(failedPath, check);
     }
+    if (reason === 'unavailable' && !missing) refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'recorded-path-unverified' });
     return refuse('HEADLESS_CLI_UNAVAILABLE');
   };
-  const launcher = await realpath(chosen).catch(() => null), launcherInfo = launcher ? await infoAt(launcher).catch(() => null) : null;
-  if (!launcher || !launcherInfo) return unavailable('unavailable', launcher ?? chosen);
+  const unavailableAt = (path: string) => (error: NodeJS.ErrnoException) =>
+    unavailable('unavailable', path, error.code === 'ENOENT' || error.code === 'ENOTDIR');
+  const launcher = await realpath(chosen).catch(unavailableAt(chosen));
+  if (!launcher) return unavailable('unavailable');
+  const launcherInfo = await infoAt(launcher).catch(unavailableAt(launcher));
   if (!launcherInfo.isFile()) return unavailable(launcherInfo.isDirectory() ? 'directory' : 'not-regular-file', launcher);
   if ((launcherInfo.mode & 0o111n) === 0n) return unavailable('not-executable', launcher);
-  const chosenInfo = await infoAt(chosen).catch(() => null);
-  if (!chosenInfo) return unavailable('unavailable');
+  const chosenInfo = await infoAt(chosen).catch(unavailableAt(chosen));
   const rule = entry.command.npmLauncher, suffix = rule && `/${rule.packagePath}/${rule.launcherPath}`;
   const target = rule && suffix && launcher.endsWith(suffix)
     ? await npmTarget(rule, chosen, launcher, launcher.slice(0, -suffix.length) || sep, ownerUid, launcherInfo, entry.headless.limits.preflightOutputBytes, context === 'recheck') : undefined;
   const position = target ? undefined : packagePosition(launcher);
-  if (position && !await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes)
-    && !await provesNativeExecutable(launcher, launcherInfo)) headlessExecutableRefusal('npm-layout-unknown', chosen);
+  if (position) {
+    const reason = await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes);
+    if (reason !== true) {
+      const native = await provesNativeExecutable(launcher, launcherInfo);
+      if (native !== true) headlessExecutableRefusal('npm-layout-unknown', chosen, undefined, { reason, native });
+    }
+  }
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);
   const packageRoot = target?.packageRoot ?? position?.packageRoot;
   return Object.freeze({ chosen, executable, fileStamp, size: Number(info.size), mtimeMs: Number(info.mtimeMs), ...(packageRoot ? { packageRoot } : {}),
@@ -329,11 +364,11 @@ export async function pinHeadlessExecutable(entry: HeadlessEntry, resolution: He
   const file = await open(resolution.executable, O_PATH | constants.O_NOFOLLOW).catch(unreadable);
   try {
     const current = await resolveHeadlessExecutable(entry, resolution.chosen, process.getuid!(), 'recheck');
-    const info = await file.stat({ bigint: true }).catch(unreadable);
+    const info = await file.stat({ bigint: true }).catch(error => current.identity !== resolution.identity ? changed() : unreadable(error));
     if (!info.isFile() || stamp(info) !== resolution.fileStamp || current.identity !== resolution.identity) changed();
     return file;
   } catch (error) {
-    await file.close();
+    await file.close().catch(() => undefined);
     throw error;
   }
 }

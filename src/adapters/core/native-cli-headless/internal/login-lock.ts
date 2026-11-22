@@ -12,7 +12,7 @@ type Holder = Readonly<{ schemaVersion?: 2; pid: number; atMs: number; token: st
 async function cliLockHeld(configDir: string, names: readonly string[]): Promise<boolean> {
   for (const name of names) if (await lstat(join(configDir, name)).then(() => true, error => {
     if ((error as { code?: unknown }).code === 'ENOENT') return false;
-    refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+    refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'lock-unverified' });
   })) return true;
   return false;
 }
@@ -22,7 +22,7 @@ export const loginRecordPath = (configDir: string, stateDir: string) => join(dir
 export const loginLockPath = (configDir: string, stateDir: string) => join(dirname(stateDir), LOCK_DIR, `${lockName(configDir)}.lock`);
 const read = async (path: string) => {
   try { return (await readPinnedFile(path))?.bytes.toString('utf8') ?? null; }
-  catch { refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir' }); }
+  catch { refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir', reason: 'unverified' }); }
 };
 /** Legacy marker compatibility: only a provably absent PID is reclaimable. Age, malformed records and PID reuse never prove release. */
 async function legacyBusy(path: string): Promise<boolean> {

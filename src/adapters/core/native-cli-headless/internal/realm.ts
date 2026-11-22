@@ -19,8 +19,9 @@ export type HeadlessIsolation = () => Promise<BubblewrapCapability>;
 /** The launcher identity a passing check sealed (preflight record and doctor). */
 export type HeadlessIsolationSeal = Readonly<{ launcher: string; version: string }>;
 /** What bubblewrap and the relay print when the realm itself could not start (never the CLI's own output); f5: the limiter's own refusal too. */
-const FD_BIND_CHANGED = /^bwrap: (?:Race condition binding dirfd|Can't find source path \/proc\/self\/fd\/3:)/u;
-const REALM_FAILURE = /^(?:bwrap|deckent-relay|prlimit): /u, LIMITS_FAILURE = /^(?:deckent-relay: limits|prlimit: )/u;
+const FD_BIND_CHANGED = /^bwrap: Race condition binding dirfd/u;
+const FD_BIND_UNVERIFIED = /^bwrap: Can't find source path \/proc\/self\/fd\/3:/u;
+const REALM_FAILURE = /^(?:bwrap|deckent-relay|prlimit): /u, LIMITS_FAILURE = /^(deckent-relay: limits|prlimit: )/u;
 /** `/proc/<pid>/stat` CPU fields count USER_HZ ticks, fixed at 100 in the Linux ABI (proc(5)). */
 const USER_HZ = 100;
 const RELAY_STATUS = 204;
@@ -93,10 +94,11 @@ server.listen(c.port, c.host, () => {
 
 /** The registry's isolation is usable now: the measured launcher works with user namespaces and is still the measured file. Typed refusal otherwise. */
 export async function headlessIsolationSeal(isolation: HeadlessIsolation): Promise<HeadlessIsolationSeal & { path: string }> {
-  if (process.platform !== 'linux') refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'launcher' });
+  if (process.platform !== 'linux') refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'launcher', reason: 'platform' });
   const capability = await isolation().catch(() => null);
   if (capability?.status === 'restricted') refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'user-namespace' });
-  if (capability?.status !== 'available' || !capability.launcher || !verifyBubblewrapLauncher(capability.launcher).ok) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'launcher' });
+  if (capability?.status !== 'available' || !capability.launcher || !verifyBubblewrapLauncher(capability.launcher).ok)
+    refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'launcher', reason: 'unverified' });
   return Object.freeze({ launcher: capability.launcher.source, version: capability.launcher.version, path: capability.launcher.path });
 }
 
@@ -104,20 +106,23 @@ export async function headlessIsolationSeal(isolation: HeadlessIsolation): Promi
 async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['isolation'], scratch: string | undefined) {
   const directories: string[] = [], files: string[] = [];
   const copies: { source: string; target: string }[] = [];
+  function maskRefusal(reason: string): never { return refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason }); }
   let dir: Dir | undefined, seen = 0;
   try {
     dir = await opendir(configDir);
     for (let entry = await dir.read(); entry; entry = await dir.read()) {
-      if (++seen > realm.configMaxEntries) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+      if (++seen > realm.configMaxEntries) maskRefusal('entry-limit');
       if (realm.configEphemeral?.files.includes(entry.name)) {
-        if (!entry.isFile() || !scratch) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+        if (!entry.isFile()) maskRefusal('copy-entry-rejected');
+        if (!scratch) maskRefusal('mask-unverified');
         const target = join(configDir, entry.name), source = join(scratch, entry.name);
         const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
         try {
           const info = await file.stat(), max = realm.configEphemeral.maxBytes;
-          if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid!() || info.size > max) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+          if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid!()) maskRefusal('copy-entry-rejected');
+          if (info.size > max) maskRefusal('copy-size-limit');
           const buffer = Buffer.alloc(max + 1), { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
-          if (bytesRead > max) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+          if (bytesRead > max) maskRefusal('copy-size-limit');
           await writeFile(source, buffer.subarray(0, bytesRead), { mode: 0o600, flag: 'wx' });
           copies.push({ source, target });
         } finally { await file.close(); }
@@ -126,7 +131,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
       if (realm.configVisible.includes(entry.name) || entry.isSymbolicLink()) continue;
       (entry.isDirectory() ? directories : files).push(join(configDir, entry.name));
     }
-  } catch (error) { if (isCodedError(error, 'HEADLESS_PREFLIGHT_FAILED')) throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
+  } catch (error) { if (isCodedError(error, 'HEADLESS_PREFLIGHT_FAILED')) throw error; maskRefusal('mask-unverified'); }
   finally { await dir?.close().catch(() => undefined); }
   return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
 }
@@ -188,9 +193,9 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const { program } = spawn, packageRoot = program.packageRoot;
   const contains = (outer: string, inner: string) => inner === outer || inner.startsWith(outer + sep);
-  if (spawn.executable !== program.executable) headlessExecutableRefusal('executable-changed', program.chosen, program.executable);
+  if (spawn.executable !== program.executable) headlessExecutableRefusal('executable-bind-target-mismatch', program.chosen, program.executable);
   if (packageRoot && [spawn.configDir, spawn.runDir].some(path => contains(path, packageRoot) || contains(packageRoot, path)))
-    headlessExecutableRefusal('npm-payload-unverified', program.chosen);
+    headlessExecutableRefusal('npm-package-directory-overlap', program.chosen);
   let file: Awaited<ReturnType<typeof pinHeadlessExecutable>> | undefined;
   let scratch: string | undefined, gateway: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
   try {
@@ -199,9 +204,11 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     const masks = await loginMasks(spawn.configDir, realm, scratch), node = process.execPath, caps = realm.limits;
     // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
     const limiter = await realpath(caps.limiter).catch(() => null);
-    if (!limiter || !await access(limiter, constants.X_OK).then(() => true, () => false)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
+    if (!limiter) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits', reason: 'limiter-unverified' });
+    if (!await access(limiter, constants.X_OK).then(() => true, () => false))
+      refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits', reason: 'limiter-unrunnable' });
     if (packageRoot && [node, limiter].some(path => contains(packageRoot, path)))
-      headlessExecutableRefusal('npm-payload-unverified', program.chosen);
+      headlessExecutableRefusal('npm-package-runtime-overlap', program.chosen);
     gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir, ...(spawn.mcp ? { mcp: spawn.mcp } : {}) }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
     const cpu = `${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`, egress = nativeEgressLimits();
     const versionProbe = spawn.args === entry.headless.preflight.versionArgs;
@@ -214,14 +221,16 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
         pinnedExecutable: { fd: PROGRAM_FD, target: spawn.executable, ...(packageRoot ? { hideDirectory: packageRoot } : {}) }, stateDir: spawn.configDir,
         stateMasks: masks, stateCopies: masks.copies, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },
       command: [limiter, `--cpu=${cpu}`, `--nproc=${caps.processes}`, `--data=${caps.dataBytes}`, '--', node, '-e', RELAY, relay, spawn.executable, ...spawn.args] });
-    if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+    if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-command-unverified' });
     const evidence = await runNodeProcess({ schemaVersion: 2, requestId: randomUUID(), executable: command.executable, args: [...command.args], cwd: spawn.runDir, env: spawn.env,
       ...bounds }, signal, onLine, file.fd);
     const summary = gateway.egress();
     await recordEgress(spawn.stateDir, summary, spawn.now, egress.refusedHostsMax).catch(() => undefined);
     const stderr = evidence.reason === 'exit' && evidence.exitCode !== 0 ? Buffer.from(evidence.stderrBase64, 'base64').toString('utf8') : '';
     if (FD_BIND_CHANGED.test(stderr)) headlessExecutableRefusal('executable-changed', program.chosen, program.executable);
-    if (LIMITS_FAILURE.test(stderr)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
+    if (FD_BIND_UNVERIFIED.test(stderr)) headlessExecutableRefusal('executable-bind-unverified', program.chosen, program.executable);
+    const limitsFailure = LIMITS_FAILURE.exec(stderr);
+    if (limitsFailure) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits', reason: limitsFailure[1] === 'prlimit: ' ? 'limit-application' : 'limit-verification' });
     if (REALM_FAILURE.test(stderr)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'realm' });
     const limit = evidence.reason === 'exit' ? (Object.entries(caps.exits) as [HeadlessLimit, number][]).find(([, code]) => code === evidence.exitCode)?.[0] ?? null : null;
     const status = versionProbe && evidence.reason === 'exit' && evidence.exitCode === RELAY_STATUS ? /\ndeckent-relay-status: (SIG[A-Z0-9]+|\d{1,3})\n$/u.exec(stderr) : null;

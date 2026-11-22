@@ -11,7 +11,9 @@ function npmReason(reason: unknown, locale: Locale): string | undefined {
     case 'group-or-other-writable': return t('error.headless.npmReason.group-or-other-writable', {}, locale);
     case 'set-id': return t('error.headless.npmReason.set-id', {}, locale);
     case 'multiple-hard-links': return t('error.headless.npmReason.multiple-hard-links', {}, locale);
+    case 'no-hard-links': return t('error.headless.npmReason.no-hard-links', {}, locale);
     case 'manifest-mismatch': return t('error.headless.npmReason.manifest-mismatch', {}, locale);
+    case 'manifest-invalid': return t('error.headless.npmReason.manifest-invalid', {}, locale);
     case 'manifest-too-large': return t('error.headless.npmReason.manifest-too-large', {}, locale);
     case 'manifest-unreadable': return t('error.headless.npmReason.manifest-unreadable', {}, locale);
     case 'not-executable': return t('error.headless.npmReason.not-executable', {}, locale);
@@ -32,6 +34,53 @@ function selectionRefusal(reason: unknown, locale: Locale): string {
   return t('error.headless.selectionRefused', { kind }, locale);
 }
 
+function npmLayoutRefusal(p: Params, l: Locale): string {
+  const manifest = p['reason'] === 'manifest-exclusion-changed' ? t('error.headless.npmProof.manifest-exclusion-changed', {}, l)
+    : p['reason'] === 'manifest-declares-bin' ? t('error.headless.npmProof.manifest-declares-bin', {}, l)
+      : t('error.headless.npmProof.manifest-exclusion-unverified', {}, l);
+  let native: string;
+  switch (p['native']) {
+    case 'native-platform-unverified': native = t('error.headless.npmProof.native-platform-unverified', {}, l); break;
+    case 'native-file-changed': native = t('error.headless.npmProof.native-file-changed', {}, l); break;
+    case 'native-format-unverified': native = t('error.headless.npmProof.native-format-unverified', {}, l); break;
+    case 'native-read-incomplete': native = t('error.headless.npmProof.native-read-incomplete', {}, l); break;
+    case 'native-proof-unavailable': native = t('error.headless.npmProof.native-proof-unavailable', {}, l); break;
+    default: return t('error.HEADLESS_PREFLIGHT_FAILED.npm-layout-unknown', {}, l);
+  }
+  return t('error.headless.npmProof.refused', { manifest, native }, l);
+}
+
+function configRefusal(reason: unknown, l: Locale): string {
+  switch (reason) {
+    case 'relative-path': return t('error.headless.config.relative-path', {}, l);
+    case 'unresolved': return t('error.headless.config.unresolved', {}, l);
+    case 'missing': return t('error.headless.config.missing', {}, l);
+    case 'not-directory': return t('error.headless.config.not-directory', {}, l);
+    case 'untrusted-owner': return t('error.headless.config.untrusted-owner', {}, l);
+    case 'unverified': return t('error.headless.config.unverified', {}, l);
+    case 'unreported': return t('error.headless.config.unreported', {}, l);
+    case 'reported-mismatch': return t('error.headless.config.reported-mismatch', {}, l);
+    case 'entry-limit': return t('error.headless.config.entry-limit', {}, l);
+    case 'copy-entry-rejected': return t('error.headless.config.copy-entry-rejected', {}, l);
+    case 'copy-size-limit': return t('error.headless.config.copy-size-limit', {}, l);
+    case 'mask-unverified': return t('error.headless.config.mask-unverified', {}, l);
+    case 'private-entry-refused': return t('error.headless.config.private-entry-refused', {}, l);
+    case 'lock-unverified': return t('error.headless.config.lock-unverified', {}, l);
+    default: return t('error.HEADLESS_PREFLIGHT_FAILED.config-dir', {}, l);
+  }
+}
+
+function spawnRefusal(reason: unknown, l: Locale): string {
+  switch (reason) {
+    case 'timeout': return t('error.headless.probe.timeout', {}, l);
+    case 'start-failed': return t('error.headless.probe.start-failed', {}, l);
+    case 'output-limit': return t('error.headless.probe.output-limit', {}, l);
+    case 'line-limit': return t('error.headless.probe.line-limit', {}, l);
+    case 'stopped': return t('error.headless.probe.stopped', {}, l);
+    default: return t('error.HEADLESS_PREFLIGHT_FAILED.spawn', {}, l);
+  }
+}
+
 /** The failed preflight check selects the sentence; a check this release does not know keeps the generic one. */
 const preflight = (p: Params, l: Locale) => {
   switch (p['check']) {
@@ -45,7 +94,7 @@ const preflight = (p: Params, l: Locale) => {
         return t('error.HEADLESS_PREFLIGHT_FAILED.version-too-old', { version, minimum }, l);
       return t('error.HEADLESS_PREFLIGHT_FAILED.version', {}, l);
     }
-    case 'npm-layout-unknown': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-layout-unknown', {}, l);
+    case 'npm-layout-unknown': return npmLayoutRefusal(p, l);
     case 'npm-payload-missing':
     case 'npm-payload-unverified': {
       const reason = npmReason(p['reason'], l);
@@ -57,25 +106,50 @@ const preflight = (p: Params, l: Locale) => {
     case 'signal': return t('error.HEADLESS_PREFLIGHT_FAILED.signal', {}, l);
     case 'cancelled': return t('error.HEADLESS_PREFLIGHT_FAILED.cancelled', {}, l);
     case 'selected-file': return selectionRefusal(p['reason'], l);
+    case 'path-candidate-unverified': return t('error.headless.pathCandidateUnverified', {}, l);
     case 'executable-recheck': return t('error.headless.executableRecheckRefusal', {
       reason: npmReason(p['reason'], l) ?? t('error.headless.npmReason.verification-unavailable', {}, l),
     }, l);
     case 'executable-changed': return t('error.HEADLESS_PREFLIGHT_FAILED.executable-changed', {}, l);
-    case 'flags': return t('error.HEADLESS_PREFLIGHT_FAILED.flags', p, l);
+    case 'executable-bind-unverified': return t('error.headless.executableBindUnverified', {}, l);
+    case 'executable-bind-target-mismatch': return t('error.headless.executableBindTargetMismatch', {}, l);
+    case 'npm-package-directory-overlap': return t('error.headless.npmPackageDirectoryOverlap', {}, l);
+    case 'npm-package-runtime-overlap': return t('error.headless.npmPackageRuntimeOverlap', {}, l);
+    case 'realm-command-unverified': return t('error.headless.realmCommandUnverified', {}, l);
+    case 'preflight-record-write': return t('error.headless.preflightRecordWrite', {}, l);
+    case 'preflight-record-unreadable': return t('error.headless.preflightRecordUnreadable', {}, l);
+    case 'flags':
+      if (p['reason'] === 'help-unverified') return t('error.headless.probe.help-unverified', {}, l);
+      if (p['reason'] === 'parser-unverified') return t('error.headless.probe.parser-unverified', {}, l);
+      return t('error.HEADLESS_PREFLIGHT_FAILED.flags', p, l);
     case 'auth-status': return t('error.HEADLESS_PREFLIGHT_FAILED.auth-status', p, l);
-    case 'config-dir': return t('error.HEADLESS_PREFLIGHT_FAILED.config-dir', p, l);
-    case 'state-dir': return t('error.HEADLESS_PREFLIGHT_FAILED.state-dir', p, l);
-    case 'spawn': return t('error.HEADLESS_PREFLIGHT_FAILED.spawn', p, l);
+    case 'config-dir': return configRefusal(p['reason'], l);
+    case 'state-dir':
+      if (p['reason'] === 'not-directory') return t('error.headless.state.not-directory', {}, l);
+      if (p['reason'] === 'unverified') return t('error.headless.state.unverified', {}, l);
+      return t('error.HEADLESS_PREFLIGHT_FAILED.state-dir', p, l);
+    case 'spawn': return spawnRefusal(p['reason'], l);
+    case 'agent-program-changed': return t('error.headless.agentProgramChanged', {}, l);
+    case 'agent-seal': return t('error.headless.agentSealMismatch', {}, l);
     default: return t('error.HEADLESS_PREFLIGHT_FAILED', p, l);
   }
 };
 /** S3-5: why the isolation realm is not usable selects the sentence (no usable bubblewrap, a restricted user namespace, a realm or gateway that did not start). */
 const isolation = (p: Params, l: Locale) => {
   switch (p['check']) {
+    case 'launcher':
+      if (p['reason'] === 'unverified') return t('error.headless.isolation.launcher-unverified', {}, l);
+      if (p['reason'] === 'platform') return t('error.headless.isolation.launcher-platform', {}, l);
+      return t('error.HEADLESS_ISOLATION_UNAVAILABLE', p, l);
     case 'user-namespace': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.user-namespace', p, l);
     case 'realm': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.realm', p, l);
     case 'gateway': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.gateway', p, l);
-    case 'limits': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.limits', p, l);
+    case 'limits':
+      if (p['reason'] === 'limiter-unverified') return t('error.headless.isolation.limiter-unverified', {}, l);
+      if (p['reason'] === 'limiter-unrunnable') return t('error.headless.isolation.limiter-unrunnable', {}, l);
+      if (p['reason'] === 'limit-application') return t('error.headless.isolation.limit-application', {}, l);
+      if (p['reason'] === 'limit-verification') return t('error.headless.isolation.limit-verification', {}, l);
+      return t('error.HEADLESS_ISOLATION_UNAVAILABLE.limits', p, l);
     default: return t('error.HEADLESS_ISOLATION_UNAVAILABLE', p, l);
   }
 };
@@ -98,10 +172,15 @@ export const headlessErrors: ErrorDefinitions = errorTable('headless', plainErro
   NATIVE_AGENT_CLI_UNAVAILABLE: 'error', NATIVE_AGENT_LOGIN_REQUIRED: 'error', NATIVE_AGENT_CAPABILITY_UNSEALED: 'error', NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: 'error',
   NATIVE_AGENT_PLUGIN_UNEXPECTED: 'error', NATIVE_AGENT_BRIDGE_UNAVAILABLE: 'error', NATIVE_AGENT_ENVIRONMENT_REFUSED: 'error',
 }), {
-  HEADLESS_CLI_UNAVAILABLE: { category: 'error', render: (p, l) => ({
-    message: p['check'] === 'path-search-empty'
-      ? t('error.headless.pathSearchEmpty', {}, l) : t('error.HEADLESS_CLI_UNAVAILABLE', {}, l),
-  }) },
+  HEADLESS_CLI_UNAVAILABLE: { category: 'error', render: (p, l) => {
+    switch (p['check']) {
+      case 'path-search-empty': return { message: t('error.headless.pathSearchEmpty', {}, l) };
+      case 'path-search-incomplete': return { message: t('error.headless.pathSearchIncomplete', {}, l) };
+      case 'recorded-path-unverified': return { message: t('error.headless.recordedPathUnverified', {}, l) };
+      case 'login-launch-unverified': return { message: t('error.headless.loginLaunchUnverified', {}, l) };
+      default: return { message: t('error.HEADLESS_CLI_UNAVAILABLE', {}, l) };
+    }
+  } },
 }, plainErrors('error.', { HEADLESS_OWNER_MISMATCH: 'error' }), {
   HEADLESS_PREFLIGHT_FAILED: { category: 'error', render: (p, l) => ({ message: preflight(p, l) }) },
 }, plainErrors('error.', { HEADLESS_LOGIN_REQUIRED: 'error', HEADLESS_REQUEST_INVALID: 'error' }), {

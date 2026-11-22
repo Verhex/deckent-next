@@ -2,4 +2,4 @@
 export { detectExecutionFacts, parseExecutionRuntimes, EXECUTION_RUNTIMES, HOST_EXECUTION_PORTS, type ExecutionDetectPorts } from './internal/detect.js';
 export { executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, type ExecutionFacts, type RuntimeFacts, type ExecutionInstallOffer } from './internal/family.js';
 export { workerImageEstimate } from './internal/estimate.js';
-export { findExecutable, runDetectCommand, type DetectEnvironment, type DetectRunner } from './internal/process.js';
+export { findExecutable, searchExecutable, runDetectCommand, type DetectEnvironment, type DetectRunner } from './internal/process.js';
