@@ -154,7 +154,7 @@ const privacyReplacements = new Map([
   ])],
   ['.deckent/docs/core-memory/law_second_opinion_jev.md', new Map([
     // Owner order of 2026-11-22 for four protected lines (base 8b45a20e8).
-    ['17:bec389f58bc3541e2df4630c8642f01d42516a01a680f0e69260e2d4f0112057', '3af281bd8a17b65b12725cea4f9226aa926c06172d524f2f1e1dce59dc065ec5'],
+    ['17:bec389f58bc3541e2df4630c8642f01d42516a01a680f0e69260e2d4f0112057', '3908e8901bcec915cc67fb6591f31215735763238a32c4d4496e2a637587bca4'],
   ])],
   ['.deckent/docs/core-memory/law_work_decomposition_root_cause.md', new Map([
     // Owner order of 2026-11-22 for four protected lines (base 8b45a20e8).
