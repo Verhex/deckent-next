@@ -40,7 +40,7 @@ power failure; telemetry always remains partial and is never an acceptance ledge
 shared lock still syncs its small owner record per append. Trace writes are proportional to the
 new sample, plus bounded segment/checkpoint overhead at rotation/eviction; reading and replay
 checking still scan retained bounded storage, once per worker page for all of its Attempts (`readMany`;
-2026-10-17 the per-Attempt re-scan made one N1 page set take 5.8 s). No OFF/ON pilot improvement is claimed.
+the previous per-Attempt re-scan took 5.8 s for one page set in a completed local measurement). The OFF/ON pilot has yet to establish an improvement.
 Replay deduplicates samples; unknown/dropped writes never imply complete coverage.
 A failed write is buffered as a gap for the next successful write. If the process or disk prevents
 that marker, the reader still reports partial/unavailable/stale, never full recording.

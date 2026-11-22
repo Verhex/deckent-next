@@ -688,8 +688,8 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
 - **alpha.64’ten alpha.63.3’e geri dönüş yoktur (owner 2026-11-09; son alpha).** alpha.64 onay kökeni, teslim modu,
   Brain kökeni ve resource-key kayıtlarını yazar; alpha.63.3 bunları okuyamaz. Kurtarma ileri sürümde düzeltme gerektirir.
 - **alpha.64 veri yükseltmesi canlı geçiş kanıtı değildir.** Kurulum defteri v74 → v75 (15 indeks, invocation resource key,
-  `ledger_extensions`); ayrı Hub server deposu v3 → v4 (4 sorgu indeksi); servis protokol v30 → v31. Tutulan live/N1
-  kopyası kanıtları eski satırların korunmasını, integrity ve yeniden açmayı doğrular; canlı yükseltme kabulü ayrı kapıdır.
+  `ledger_extensions`); ayrı Hub server deposu v3 → v4 (4 sorgu indeksi); servis protokol v30 → v31. Saklanan çevrimdışı defter
+  kopyası yükseltme kontrolleri eski satırların korunmasını, integrity ve yeniden açmayı doğrular; canlı yükseltme kabulü ayrı kapıdır.
   Eski v30 istemci yalnız lifecycle işlemleriyle uyumludur; normal işler için güncel terminali açın.
 - **Dosya özetleri olmayan eski teslim onayı yeniden evet ister (alpha.64).** Onay kartı değişiklik özetlerini taşıyor,
   bekleyen onay taşımıyorsa sürüm yükseltmesinden sonra terminal aynı kartı yeniden onaylamanızı ister.

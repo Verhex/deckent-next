@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 on 2026-10-29. The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19R using an alpha.58 build (2026-10-30) stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) shipped in alpha.59 on 2026-10-30. Walk20 on alpha.59 (2026-10-30) ended all three without a verdict on harness causes (wait patience charged by the requested time, a key sent to a card the persona never saw, an unread lifecycle probe); `beuser-limits-4` below addresses them and `beuser-limits-5` raises the development budget; both are in the alpha.60 candidate and the three journeys are walked again after it. alpha.58's BeUser scope is installation and first settings.
+B1 shipped in alpha.57 on 2026-10-29. The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). An assembled alpha.58 walk stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) shipped in alpha.59 on 2026-10-30. Walk20 on alpha.59 (2026-10-30) ended all three without a verdict on harness causes (wait patience charged by the requested time, a key sent to a card the persona never saw, an unread lifecycle probe); `beuser-limits-4` below addresses them and `beuser-limits-5` raises the development budget; both are in the alpha.60 candidate and the three journeys are walked again after it. alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
@@ -357,7 +357,7 @@ digits masked in one place (`beuserSettledScreen`); consecutive presses on one s
 number stepper does, are not a cycle. The `observeStop`th (4) consecutive `look`/`wait` on one
 digit-masked screen is `observing` (walk18: a walker that only observes is stuck, not a silent
 patience bound). Both are RED `persona-stuck` findings with their reason. Registry revision
-`beuser-limits-3` adds `settleMs` (10000; walk19R, 2026-10-30: a walker deciding in about a second
+`beuser-limits-3` adds `settleMs` (10000; in the alpha.58 walk, a walker deciding in about a second
 read screens the product had not redrawn yet, while it applied a setup step for 1-3.5 s or drew
 its first frame for 7-8 s): on a screen unchanged since the walker's last action either rule holds
 only once that digit-masked screen has stayed unchanged for `settleMs`; before that the action

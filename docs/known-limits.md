@@ -695,7 +695,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   Brain origin and resource-key records; alpha.63.3 cannot read them. Recovery requires a forward fix.
 - **The alpha.64 data upgrade is not evidence of a live switch.** Installation ledger v74 → v75 adds 15 indexes, the invocation
   resource key and `ledger_extensions`; the separate Hub server store v3 → v4 adds four query indexes; runtime protocol changes
-  from v30 to v31. Retained live/N1-copy proofs verify old-row preservation, integrity and reopen; live upgrade acceptance is
+  from v30 to v31. Retained offline upgrade checks on ledger copies verify old-row preservation, integrity and reopen; live upgrade acceptance is
   separate. Old v30 clients are compatible only for lifecycle operations; reopen the current terminal for ordinary work.
 - **An older delivery consent without per-file digests needs a fresh yes (alpha.64).** If the confirmation card carries
   change digests but the pending consent does not, the terminal asks you to confirm the exact card again after upgrading.
