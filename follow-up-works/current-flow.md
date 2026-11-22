@@ -2,7 +2,7 @@
 
 Owner 2026-10-10: bu dosya **geçici işleri ve kimde olduklarını** taşır; biten iş buradan **silinir** (kalıcı kayıt PLAN/COMPLETED-PLAN/CHANGELOG'a gider). Ana oturum günceller. Kalıcı kaynaklar: `PLAN.md`, `ARCHITECTURE.md`, karar günlüğü, host panosu (`node .agents/refactor/board.mjs show`), iş planı panosu https://claude.ai/artifact/1ESSNiUPCxWVRa8mw9va2Q.
 
-Son güncelleme: 2026-11-03 (lead). **Canlı = N1 runtime = alpha.62** (`09b03c40fb72-decfb7ec4c7e`, 2026-11-02 22:17Z; PR #136). main `09b03c40f`. Lead tek yetkili. Sıra owner 2026-11-03: alpha.62 belge turu → alpha.63 abonelik paritesi (önce tasarım + kanun denetimi) → beta işleri.
+Son güncelleme: 2026-11-03 (lead). **Tarihsel sürüm kaydı:** alpha.62 (2026-11-02, PR #136, ana dal `09b03c40f`). Lead tek yetkili. Sıra owner 2026-11-03: alpha.62 belge turu → alpha.63 abonelik paritesi (önce tasarım + kanun denetimi) → beta işleri.
 
 | İş | Kimde | Durum | Sonraki adım | Belge borcu |
 |---|---|---|---|---|
