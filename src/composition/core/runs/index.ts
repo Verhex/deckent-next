@@ -21,5 +21,6 @@ export { inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionT
 export { createRecordedCancellationDelivery } from './internal/cancellation-runtime.js';
 
 export { nativeWorkerAdmission, resolveNativeWorkerUse, recheckNativeWorkerUse, assertNativeWorkerReservation, type NativeWorkerUse } from './internal/native-worker.js';
+export { inspectConfiguredNativeInputs, produceConfiguredNativeInputs } from './internal/native-inputs.js';
 
 export { inspectConfiguredWorkerReadiness } from './internal/worker-readiness.js';

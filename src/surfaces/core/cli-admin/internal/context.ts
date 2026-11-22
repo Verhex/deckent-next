@@ -5,7 +5,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { AuditRebaselineHandler, AuditVerifyHandler } from './audit.js';
 import type { BackupHandler, BackupSetsHandler } from './backup.js';
-import type { CodingProfilePreparationHandler, CodingTemplateHandler } from './coding.js';
+import type { CodingAllowanceHandler, CodingDependenciesHandler, CodingProfilePreparationHandler, CodingTemplateHandler, ProduceCodingDependenciesHandler } from './coding.js';
 import type { OperationEffectHandler, OperationInspectHandler } from './operation.js';
 import type { PoolCapacityApplyHandler, PoolCapacityInspectHandler, PoolHoldApplyHandler, PoolHoldInspectHandler, QuotaReleaseHandler } from './pool.js';
 import type { AdminPathsHandler, RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
@@ -37,6 +37,9 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   updateToolchains?: ToolchainUpdateHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   configureCodingTemplate?: CodingTemplateHandler;
+  changeCodingAllowance?: CodingAllowanceHandler;
+  inspectCodingDependencies?: CodingDependenciesHandler;
+  produceCodingDependencies?: ProduceCodingDependenciesHandler;
   /** R8b/R8c: the worker CLI id a subscription connection's protocol family runs (native agent registry), or null. */
   workerCliOf?: (protocolFamily: string) => string | null;
   inspectWorkerReadiness?: (root: string, scopeId: string, options: ConfigLoadOptions, targetKind: string) => Promise<import('#domain/index.js').WorkerReadiness | null>;

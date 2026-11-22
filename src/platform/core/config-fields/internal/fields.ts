@@ -1,5 +1,5 @@
 import { persistedString, persistedInteger, persistedUrl } from '#platform/core/validate/index.js';
-import { workerImageConsentSchema } from './worker-consent.js';
+import { workerImageConsentSchema, workerPackageAllowancesSchema } from './worker-consent.js';
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, WORKER_INSTRUCTION_SETTINGS, DELIVERY_MODE, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
@@ -42,7 +42,11 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     get backupKeep() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(3); },
     get writeLockTimeoutMs() { return persistedInteger().positive().max(2147483647).prefault(2000); },
   }).prefault({})),
-  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files'] }, 'live', z.strictObject({
+  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files', 'src/composition/core/workspace-patch'] }, 'live', z.strictObject({
+    get sealedPackageStoreMaxBytes() { return persistedInteger().positive().max(Number.MAX_SAFE_INTEGER).prefault(2147483648)
+      .describe('config.field.installation.sealedPackageStoreMaxBytes'); },
+    get npmPackageCache() { return persistedString(z.string().min(1).max(4096).regex(/^\/[^\p{Cc}\p{Cf}]*$/u)).optional()
+      .describe('config.field.installation.npmPackageCache'); },
     get sharedRegistrationId() { return persistedString(z.string().uuid()).optional(); },
     get profileMaxBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1048576); },
     get writeLockTimeoutMs() { return persistedInteger().positive().max(2147483647).prefault(2000); },
@@ -178,7 +182,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     }).refine(value => new Set(value.sources.map(source => source.id)).size === value.sources.length).prefault({}); },
   }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
   resourceObservation: field('config.field.resourceObservation', { state: 'bound', consumers: ['src/composition/core/resource-observation'] }, 'restart', RESOURCE_OBSERVATION_SETTINGS),
-  toolchains: field('config.field.toolchains', { state: 'bound', consumers: ['src/composition/core/toolchains'] }, 'restart', z.strictObject({ get currency() { return z.strictObject({
+  toolchains: field('config.field.toolchains', { state: 'bound', consumers: ['src/composition/core/toolchains'] }, 'restart', z.strictObject({
+    get packageAllowances() { return workerPackageAllowancesSchema.optional(); },
+    get currency() { return z.strictObject({
     mode: z.enum(['off', 'report']).prefault('report'),
     registryEndpoint: persistedUrl().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE').prefault('https://registry.npmjs.org'),
     timeoutMs: persistedInteger().positive().max(2_147_483_647).prefault(5000),

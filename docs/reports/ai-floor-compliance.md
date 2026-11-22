@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=384 floor=280 policy=2304 steps=48 uyumlu=2352 İHLAL=0
+ai-floor: routes=390 floor=286 policy=2340 steps=48 uyumlu=2388 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1035,6 +1035,24 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | config / global:toolchains.image[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:toolchains.image[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:toolchains.image[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:toolchains.packageAllowances / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:toolchains.packageAllowances[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:toolchains.packageAllowances[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project: / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project: / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project: / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1683,6 +1701,24 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | config / project:toolchains.image[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project:toolchains.image[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project:toolchains.image[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:toolchains.packageAllowances / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:toolchains.packageAllowances[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:toolchains.packageAllowances[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | decision / fixture-target / ask | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | decision / fixture-target / ask | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | decision / fixture-target / ask | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -2385,8 +2421,8 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/agent-turn/internal/contract.ts`: `6cb78d50d5dee9a273016b9a68f9f467786994c8a69d77aaa56582e185a55a9f`
 - `src/domain/core/agent-turn/internal/scratch.ts`: `309f7e4222cedc665efdb97ae21f7dac32e26db9627635268fb231b725e33d04`
 - `src/domain/core/agent-turn/internal/workspace-files.ts`: `246d8587821d717da9ecd3db34845c252bfceae0e44acb1beeaee0bce9c22c21`
-- `src/domain/core/approval/index.ts`: `b9765ec9a3ccfee203b72b8cab35edfa4d842325d04b2749e7241f0c2e9b8563`
-- `src/domain/core/approval/internal/ai-cells.ts`: `15dcacecb46fad2f2609ee1ebf78e2001b1a0161c1a0d837ba4cf50a7566a59d`
+- `src/domain/core/approval/index.ts`: `5b3dcc4376a4c80ccfa72c324cea35e921e3407f975feb4ff2028947c9d7327b`
+- `src/domain/core/approval/internal/ai-cells.ts`: `c3c1313d7057df5e8a9c117b341fef943f7436eba7e9392d2c69d361e407116d`
 - `src/domain/core/approval/internal/contract.ts`: `a023fbb93c94475e453f9bfbf4cce01aba929ce1ae92d37aa409c4d69ecd348f`
 - `src/domain/core/attempt/index.ts`: `2ef16bfdc5d5645c3c84b87832bdf81f4139ee06bfece6a309f62eb49f807fd5`
 - `src/domain/core/attempt/internal/contract.ts`: `b0439ca3825487d7ffeb418ff56bd1c51a7aa8c61eefbd7a4c66d141b5567cf8`
@@ -2412,7 +2448,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/index.ts`: `a94b6f635687e027f79cf46ddd15b0dfbf436e026a570723705d449b3d200be8`
 - `src/domain/core/policy/internal/administer.ts`: `dd4c879dab610bf6fe3479bef0075f1401310133fda48a967cd0bc01ae98d5d6`
 - `src/domain/core/policy/internal/administration.ts`: `1614326b89d61c3a380563923731058e1441f5087335bfa07dbb47017e452ce9`
-- `src/domain/core/policy/internal/ai-floor.ts`: `1aef758554fc427d0f7faeaa9b5c84a3b8d2e5faeec82d9c35933858eb94ea37`
+- `src/domain/core/policy/internal/ai-floor.ts`: `1da067d4b550f537f6ebaacce49be89d767cd33f295d579365770c785b735952`
 - `src/domain/core/policy/internal/decision-step.ts`: `14cb20fd04e31b6f36df54e00c9194ddcb8c5ec05bee44053d36137c650f3b42`
 - `src/domain/core/policy/internal/delegations.ts`: `6546b036e43863772a916e0e84fc81cdaebc0d07f23ca88739a14d865a146cb0`
 - `src/domain/core/policy/internal/describe.ts`: `bd6021e452de650d9a6e7bbc40bbd9eb8df91d6b2fd4609a249cbab6709d75f9`
@@ -2452,8 +2488,8 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/provider-catalog/internal/native-cli.ts`: `497c444e81e3cfe299f88a339a3287fa697943a3934553b8b5145278e1d42f0a`
 - `src/domain/core/provider-catalog/internal/worker-effort.ts`: `18072f14a324e255c663dec0e94fb29199e2d58304f5532222b95399208b2458`
 - `src/domain/core/provider-catalog/internal/worker-readiness.ts`: `a9ff0c7cdc74ca4dc1c11c8db02f58bbb180333f4079b735611ab3f858a76531`
-- `src/domain/core/worker-event/index.ts`: `a1d585a33302d2002820a7a3e36b27a92cdd4a2172794c5189361620a0ca4a2a`
+- `src/domain/core/worker-event/index.ts`: `3fd0f9189337ad9f2fad5f8cd6df42b286a509bc8c2fe35e94aa61413e54d6eb`
 - `src/domain/core/worker-event/internal/contract.ts`: `166d28d542f9ab0e4b3c68703d696696e99ce20b1fc89b400bce8e0183216670`
-- `src/domain/core/worker-event/internal/models.ts`: `dfb5da588f12141160445ad0aedaa0299764b1861a0a84975f4a2e2429b64328`
+- `src/domain/core/worker-event/internal/models.ts`: `7971e773fc9c0ba94a3fc0c82e9e6a0eed9d1c907015d25b76df84fa22e5604e`
 - `src/domain/core/worker-event/internal/quota.ts`: `7f795cb7dfaece7c6bb0e0d08a4d67c59641d17c66532c65b373423f37b99fe7`
 - `src/domain/core/worker-event/internal/report.ts`: `8272967d525547ded3bc7efae9647726690acffec0ca885f289e04b6cbec7ac8`

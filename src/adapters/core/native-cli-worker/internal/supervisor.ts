@@ -17,8 +17,9 @@ import { nativeCliWorkerHandle, retainActiveNativeWorker, retainNativeWorkerResu
 const isNativeCliWorkerSupervisorProfile = (profile: SupervisorProfile) => profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id;
 export function validateNativeCliWorkerSupervisorProfile(input: unknown): undefined {
   const profile = supervisorProfileSchema.parse(input);
-  if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== NATIVE_CLI_WORKER_ADAPTER.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
-  resolveNativeCliWorkerProfile(profile.parameters['task'] as ExecutionProfileDefinition);
+  const task = executionProfileDefinitionSchema.parse(profile.parameters['task']);
+  if (!isNativeCliWorkerSupervisorProfile(profile) || profile.adapterVersion !== task.adapter.version) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  resolveNativeCliWorkerProfile(task);
   return undefined;
 }
 export async function prepareNativeCliWorker(input: Readonly<{ profile: ExecutionProfileDefinition; request: SandboxRequest; ports: NativeCliWorkerPorts;
@@ -30,6 +31,7 @@ export async function prepareNativeCliWorker(input: Readonly<{ profile: Executio
   if (ready.state !== 'ready') return ready;
   // Owner 2026-11-05: the worker follows the connection's current sealed CLI version (recorded with the Attempt's execution), not the template's.
   if ((resolved.readOnlyMounts?.length ?? 0) !== (input.toolContext?.readOnlyMounts?.length ?? 0)) return { state: 'waiting' as const, reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' as const };
+  if (resolved.dependencies?.state === 'declared' || resolved.dependencies?.listDigest !== input.toolContext?.sealedNodeModules?.digest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
   if (signal.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
   await frozen.ports.recheck(frozen.request, resolved.binding, signal);
   if (!await frozen.fence()) return { state: 'waiting' as const, reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' as const };
@@ -58,7 +60,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     private readonly releaseCapacity: () => Promise<void>, private readonly verification?: Awaited<ReturnType<NonNullable<NativeCliWorkerPorts['verification']>['acquire']>>) {
     this.handle = nativeCliWorkerHandle(input.request.identity);
   }
-  async captureProfile() { return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: NATIVE_CLI_WORKER_ADAPTER.id, adapterVersion: NATIVE_CLI_WORKER_ADAPTER.version, parameters: { task: this.input.profile } }); }
+  async captureProfile() { return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: NATIVE_CLI_WORKER_ADAPTER.id, adapterVersion: this.input.profile.adapter.version, parameters: { task: this.input.profile } }); }
   private check(request: SandboxRequest) { if (!sameSandboxRequest(request, this.input.request)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT'); }
   private unknown(reasonCode: string): SandboxResult { return { handle: this.handle, result: { kind: 'unknown', reasonCode }, stdout: '', stderr: '', outputCompleteness: 'unavailable', interrupted: this.lifetime.signal.aborted }; }
   async execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {

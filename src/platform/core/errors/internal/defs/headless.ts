@@ -57,4 +57,11 @@ export const headlessErrors: ErrorDefinitions = errorTable('headless', plainErro
 }, plainErrors('headless.agent.worker.', {
   NATIVE_WORKER_VERIFICATION_WAIT: 'error', NATIVE_WORKER_F08_INVALID: 'error', NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED: 'error', NATIVE_WORKER_PLUGIN_UNEXPECTED: 'error',
   NATIVE_WORKER_INPUT_REFUSED: 'error',
-}));
+}), {
+  NATIVE_WORKER_LOCKFILE_CHANGED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: t('headless.agent.worker.NATIVE_WORKER_LOCKFILE_CHANGED', p, l) }) },
+  NATIVE_WORKER_DEPENDENCIES_REFUSED: { category: 'error', launch: 'permanent', render: (p, l) => ({ message: typeof p['size'] === 'number' ? t('headless.agent.worker.NATIVE_WORKER_DEPENDENCIES_REFUSED.size', p, l)
+    : p['needed'] !== undefined ? t('headless.agent.worker.NATIVE_WORKER_DEPENDENCIES_REFUSED.capacity', p, l)
+    : typeof p['package'] === 'string' ? t('headless.agent.worker.NATIVE_WORKER_DEPENDENCIES_REFUSED.cache', p, l)
+    : p['preview'] === 'over-limit' ? t('headless.agent.worker.NATIVE_WORKER_DEPENDENCIES_REFUSED.preview', p, l)
+    : t('headless.agent.worker.NATIVE_WORKER_DEPENDENCIES_REFUSED', p, l) }) },
+});

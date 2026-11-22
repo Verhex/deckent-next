@@ -318,6 +318,58 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   bileşimi daha güçlü tanık verebilir); yapay zekâ ajanının kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder.
   Bir kipi kapatmak kişinin kayıtlı tam otomatik seçimini bağlarda tutar ama geçerli kılmaz: her çağrı izni yeniden denetler.
 
+- **Native Node bağımlılık girdileri.** Seçili Git çalışma hedefinde npm v3 paketlerini kurun ve
+  `package-lock.json` dosyasını commit edin. `deckent coding template --produce-dependencies` komutu
+  `deckent-package-files.json` dosyasını yazar. Deckent çevrimdışı çalışır. npm arşivlerini commit edilmiş kilit
+  dosyasıyla, kurulu dosyaları arşivlerin içeriğiyle doğrular. Varsayılan dizin `~/.npm/_cacache` konumudur.
+  Başka bir `_cacache` dizini için `--npm-cache <dizin>` kullanın. Sonraki inceleme ve kabulde bu dizini kullanmak için
+  yetkili operatör mutlak yolu `installation.npmPackageCache` ayarına yazar. Arşiv eksikse veya eşleşmiyorsa paket
+  kurulumunuzu yeniden çalıştırıp tekrar deneyin. Liste npm kayıt dosyalarını ve test önbelleklerini dışarıda tutar.
+  Kanıtlanan çalıştırılabilir bağları listeler ve mühürleme sırasında her sabit bağ adı için ayrı bir dosya oluşturur.
+  Çıktıda tam listeyi ve her eşleşme satırını inceleyip üretilen listeyi commit edin. Listeyi üreten ve kabulde
+  denetleyen Deckent aynı doğrulayıcıyı kullanır. Ortak bir uygulama hatası her iki denetimden de geçebilir.
+  Kişinin onayı incelediği seçimi kayda geçirir.
+
+  Yerleşimi `deckent coding template --connection <profil-id> --kind <tür> --node-dependencies` ile bildirin.
+  `deckent coding template --inspect-dependencies` ile tam listeyi ve iki SHA-256 özetini inceleyin. Run kartı
+  her kalıp eşleşmesinin yolunu, kuralını ve içerik özetini gösterir. Yol ve kural adı içeriğin güvenli olup
+  olmadığını göstermez. Deckent’te kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına
+  gönderebilir. Onayı reddedebilirsiniz. Kayıtlı sır, güvenli olmayan yol, okunamayan dosya, arşiv veya eksik tarama
+  onayı engeller. İçerik veya eşleşen kurallar değişirse yeniden onay gerekir. Yetkili operatör geçerli yürütme
+  yapılandırmasında `execution.secretGate.maxFileBytes` değerini yükseltebilir. Bu değişiklik aynı yapılandırmayı
+  kullanan bütün taramalara uygulanır. Toplam bayt, dosya sayısı ve süre sınırları da geçerlidir.
+
+  Mühürlü paket deposunun kurulum başına ortak sınırı 2 GiB’dir. Saklanan kopyalar, özel hazırlama alanları ve
+  yarım kalmış kopyalar bu sınıra dahildir. Yeni kopya sığmadığında Deckent sınırı, kullanılan alan hesabını ve
+  gereken bayt sayısını gösterir. Yetkili kişi `deckent config set --global` ile
+  `installation.sealedPackageStoreMaxBytes` değerini yükseltebilir. Doğrulanmış bir kopya alan sınırında da yeniden
+  kullanılabilir. Deckent saklanan kopyaları korur.
+
+  Her kabuk denetimi kendi onayından geçer. İşçi salt okunur `node_modules` bağını ve geçici dosyalar ile önbellek
+  için kendi sınırlı `/tmp` alanını kullanır. Kaydedilen bağlama yerini ve özetleri görmek için inceleme komutuna
+  `--run <id>` ekleyin. Denetimleri çalışma kopyasından çalıştırın. Dosya sistemi modül önbelleği olan Vitest için
+  `--configLoader runner --no-cache --fsModuleCachePath /tmp/vitest-fs` kullanın. Gerekli bir denetim çalışmazsa
+  nedenini belirterek `not-run` olarak kaydedin. Kayıp kopya veya değişen kilit dosyası yeni kabul gerektirir.
+
+- **Yeniden kullanılabilir paket onayı.** Projede
+  `deckent coding template --allow-dependencies --kind <tür> --scope <id>` komutunu çalıştırın. Yapılandırma ve
+  çalışma hedefi yetkisi bulunan, terminalde doğrulanmış bir kişi tam listeyi ve her kalıp eşleşmesini inceler.
+  İzin, aynı kurulum, şirket, kapsam, proje, Git hedefi ve profil içindeki tam sürüm için geçerlidir. İzin yoksa
+  paket onayı Run kartında alınır. Her Run ve Attempt kendi yetki kontrollerinden geçer. Yanlışlıkla onaylanan
+  kayıtsız bir sırrı sonraki yetkili işçiler okuyabilir ve model sağlayıcısına gönderebilir.
+
+  Yetkisi süren onaylayan veya kapsam yöneticisi izni geri çekebilir. Bu izne dayanan sonraki kabul ve paket
+  açılışı durur. Çalışan süreçler ve geçmiş kanıt korunur.
+  `deckent coding template --inspect-dependencies --scope <id> --run <id>` kayıtlı kararı ve varsa sürümün
+  sonlandırılma nedenini ve zamanını gösterir. Son kontroller, yönetilen politika yazıcısı ve kurulumun yönettiği,
+  seçili ve listelenebilir sır deposuyla sıralanır. Proje kasası değişiklikleri, dış depoya yönetim yolu dışından
+  yapılan yazımlar, elle dosya düzenleme ve süreç ortamı değişiklikleri bu sıranın kapsamı dışındadır.
+
+  Yetkili Git kaynağında doğrulanan değişiklik, sonlandırma olayı yazılınca onay neslini kalıcı olarak bitirir.
+  Uyumsuz bir revizyona sabitlenmiş istek kendi başına reddedilir. deckent değişikliği doğruladıktan sonra
+  kayıt yazılmadan kesilirse ve yeniden denemeden önce onaylı sürüm geri gelirse, güncel politika ve sır
+  kontrolleri geçildiğinde aynı sürüm kullanılabilir. Kaynak değişik kalırsa yeniden deneme reddedilir.
+  Sonlandırma kaydından sonra eski sürüme dönmek yeni bir onay gerektirir.
 - **İşçi, proje talimat özetini ancak bir kişi güvenince görür.** Bir çalışma, Git çalışma hedefinin kökündeki tek bir proje talimat dosyasının
   özetini alır (varsayılan `.deckent/worker-instructions.md`; ya da `AGENTS.md`, ya da hiçbiri; `execution.workerInstructions.source`).
   Yapılandırılmış bir iş hedefi varsa dosya klasörden değil, hedefin temel ref'inin gösterdiği commit'ten okunur (alpha.54): commit
@@ -889,6 +941,22 @@ denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde 
 özel metin koymayın.
 
 ## Kurtarma ve yükseltme
+
+- **beta.2.1’den beta.2’ye dönmeden önce, hâlâ beta.2.1’deyken yeniden kullanılabilir paket izinlerini geri çekin.**
+  Etkilenen her projede onaylı çalışma hedefi ve profil seçiliyken, ilgili kapsam ve görev türüyle aşağıdaki
+  komutları çalıştırın. Geri çekme kartını onaylayın ve her izin için tekrarlayın.
+
+  ```sh
+  deckent config get toolchains.packageAllowances --json
+  deckent coding template --withdraw-dependencies --kind <tür> --scope <id>
+  deckent config get toolchains.packageAllowances --json
+  ```
+
+  Son geri çekme `toolchains.packageAllowances` anahtarını yönetilen proje ayarından kaldırır. Sürümü
+  değiştirmeden önce anahtarın kaldırıldığını doğrulayın. Aynı geri çekmeyi yeniden denemek için
+  `--command-id <uuid>` ile aynı UUID’yi verin. Ayar kalırsa veya asıl hedef ya da profil seçilemiyorsa
+  temizlik tamamlanana kadar beta.2.1’de kalın. beta.2 yeni ayarla açılmaz. Temizlik sonrası açık Run ve
+  geçmiş kanıt korunur, paket girdili Attempt beta.2’de çalıştırılamaz.
 
 - **beta.2’den beta.1.2’ye dönmeden önce, hâlâ beta.2’deyken ücretli kullanım anahtarını kaldırın.** Ayarı yazdığınız her projede çalıştırın:
 

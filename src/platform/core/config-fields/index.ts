@@ -12,5 +12,6 @@ export type { ResourceObservationSettings } from './internal/resource-observatio
 export { CORE_TURN_ASSURANCE_REFERENCE } from './internal/approval-assurance.js';
 
 export { workerImageConsentSchema } from './internal/worker-consent.js';
+export { WORKER_PACKAGE_ALLOWANCE_KEY, WORKER_PACKAGE_CONSENT, workerPackageAllowancesSchema, type WorkerPackageAllowance } from './internal/worker-consent.js';
 export type { WorkerImageConsent } from './internal/worker-consent.js';
 export { freezeConfigDefault } from './internal/field.js';

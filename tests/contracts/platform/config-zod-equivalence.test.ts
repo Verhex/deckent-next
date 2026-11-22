@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CONFIG_FIELDS, getConfigFieldDefault } from '#platform/core/config-fields/index.js';
-import { CORE_SCHEMA, configSections, createDefaultConfig, getConfigMetadata } from '#platform/core/config/index.js';
+import { CORE_SCHEMA, configSections, createDefaultConfig, getConfigMetadata, mergeConfigLayers } from '#platform/core/config/index.js';
 import { registerProviderConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema } from '../../../src/adapters/index.js';
 
 registerProviderConfig();
@@ -29,6 +29,12 @@ const docker = { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memo
   tmpBytes: 1, deadlineMs: 1, controlTimeoutMs: 1, outputBytes: 1 };
 
 describe('config defaults (zod 4 .default/.prefault guard)', () => {
+  it('takes the sealed package store bound only from the installation-wide configuration', () => {
+    const project = { installation: { sealedPackageStoreMaxBytes: 3, profileMaxBytes: 4096 } };
+    expect(mergeConfigLayers({}, project).installation).toMatchObject({ sealedPackageStoreMaxBytes: 2147483648, profileMaxBytes: 4096 });
+    expect(mergeConfigLayers({ installation: { sealedPackageStoreMaxBytes: 1234 } }, project).installation.sealedPackageStoreMaxBytes).toBe(1234);
+  });
+
   it('the fully defaulted config (kernel fields and every registered section) equals the committed golden', async () => {
     await expect(golden(createDefaultConfig())).toMatchFileSnapshot('../../fixtures/config-golden/defaults.json');
   });
@@ -69,6 +75,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.artifacts).toEqual({ maxBytes: 16_777_216, maxInputs: 64, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } });
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
       identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false, uninstallRecoveryRoot: null,
+      sealedPackageStoreMaxBytes: 2_147_483_648,
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
     expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, assuranceProducers: [{ id: 'core.turn-bound', version: 1 }], keyFile: 'authority.key', approverNoteMaxChars: 500 });
     // INIT-D7 (alpha.48 J1a): `cli.agentEnvironment` is a nested array default of the `cli` object; it must apply when `cli` itself defaults.

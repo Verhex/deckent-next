@@ -53,6 +53,9 @@ it('scans after the tree is final and before any connection, supervisor or claim
   const text = files.find(file => file.path === TASK)!.text, at = (needle: string) => { const index = text.indexOf(needle); expect(index, needle).toBeGreaterThan(-1); return index; };
   // R2 (D3a 2026-10-18): the gate runs through scan admission; its scan port is the adapter scan of exactly those views.
   const gate = at('await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv)');
+  expect(at('await openSealedNativeInput(')).toBeLessThan(at('sealedNodeModules.scanView'));
+  expect(at('sealedNodeModules.scanView')).toBeLessThan(gate);
+  expect(at('.concat(sealedViews)')).toBeGreaterThan(gate);
   expect(at('await nativePorts.prepare?.(native!.binding)')).toBeLessThan(at('await inspectNativeCliWorker(native!.binding, nativePorts)'));
   expect(at('if (refusal) return refusal')).toBeLessThan(at('await inspectNativeCliWorker(native!.binding, nativePorts)'));
   expect(text.indexOf('enforceAdmittedWorkerTreeGate(')).toBe(text.lastIndexOf('enforceAdmittedWorkerTreeGate(')); expect(at('scan: async views => scanWorkerTree(views,')).toBeGreaterThan(gate);

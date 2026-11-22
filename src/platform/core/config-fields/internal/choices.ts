@@ -1,3 +1,5 @@
+import { WORKER_PACKAGE_ALLOWANCE_KEY } from './worker-consent.js';
+
 /** Selection metadata is policy data. New settable leaves must be declared here; no free-entry fallback. */
 export type ConfigChoiceSource = 'scopes' | 'models' | 'pools' | 'companies' | 'task-kinds' | 'key-files' | 'branches'
   | 'docker-executables' | 'git-executables' | 'images' | 'identity-profiles' | 'serving-profiles' | 'environment'
@@ -125,6 +127,8 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'installation.identityProbe.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'installation.machineIdentity.source': { kind: 'reference', source: 'machine-files' },
   'installation.uninstallRecoveryRoot': { kind: 'reference', source: 'paths' },
+  'installation.npmPackageCache': { kind: 'reference', source: 'paths' },
+  'installation.sealedPackageStoreMaxBytes': { kind: 'numeric', unit: 'bytes', step: 1073741824, presets: [1073741824, 2147483648, 5368709120] },
   'installation.sharedRegistrationId': { kind: 'hidden' },
   'installation.requireMachineBinding': { kind: 'schema' },
   'installation.imageProbe.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
@@ -216,6 +220,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   // into each consent, so the window shows them read-only.
   'toolchains.image.providers': { kind: 'document' },
   'toolchains.image.consents': { kind: 'document' },
+  [WORKER_PACKAGE_ALLOWANCE_KEY]: { kind: 'document' },
   'toolchains.image.sources': { kind: 'document' },
   'toolchains.image.baseRefreshMs': { kind: 'numeric', unit: 'ms', step: 3600000, presets: [86400000, 259200000, 604800000, 1209600000] },
   'policy.mcp.optInGroups': { kind: 'document' }, // alpha.56 U5-S2: protected availability list, set by an operator, never picked in the window

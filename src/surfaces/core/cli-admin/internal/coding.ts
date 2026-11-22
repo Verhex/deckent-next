@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
-import { isCodedError, ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, NATIVE_NODE_DEPENDENCY_LAYOUT, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { affectedToolchainProfiles, configWriteOperation, configuredInvocationProfiles, modelInvocationProfileDigest } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
@@ -16,7 +16,7 @@ function readFlags(argv: readonly string[], from: number, allowed: readonly stri
   const values = new Map<string, string>(), flags = new Set<string>();
   for (let i = from; i < argv.length; i++) {
     const flag = argv[i]!;
-    if (['--json', '--preview', '--apply', '--docker'].includes(flag) && allowed.includes(flag) && !flags.has(flag)) { flags.add(flag); continue; }
+    if (['--json', '--preview', '--apply', '--docker', '--node-dependencies', '--inspect-dependencies', '--produce-dependencies', '--allow-dependencies', '--withdraw-dependencies'].includes(flag) && allowed.includes(flag) && !flags.has(flag)) { flags.add(flag); continue; }
     if (!allowed.includes(flag) || values.has(flag) || flags.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
     const value = argv[++i];
     if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -110,22 +110,87 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   } });
 }
 
-export type CodingTemplateHandler = (root: string, input: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; apply: boolean },
+export type CodingTemplateHandler = (root: string, input: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; nodeDependencies?: true; apply: boolean },
   options: ConfigLoadOptions) => Promise<{ status: 'preview' | 'applied' | 'unchanged'; profile: ExecutionProfileDefinition; kind: unknown;
     registry: { revision: string }; expect: string | null; connection?: string | null; write: unknown }>;
 type TemplateResult = Awaited<ReturnType<CodingTemplateHandler>>;
+type DependencyDigests = Readonly<{ listDigest: string; lockfileDigest: string }>;
+type PreparedDependencies = { kind: 'prepared'; written?: string; project: string; workTarget: string; platform: string; layout: typeof NATIVE_NODE_DEPENDENCY_LAYOUT;
+  manifest: { entries: readonly Readonly<{ path: string; kind: string; size: number; mode: number; digest: string | null; target?: string; rules?: readonly string[] }>[] } } & DependencyDigests;
+export type CodingDependenciesHandler = (root: string, scopeId: string, options: ConfigLoadOptions, runId?: string) => Promise<PreparedDependencies |
+  { kind: 'run'; rows: readonly (Readonly<{ taskId: string; checkoutMount: string | null;
+    decision?: { person: string; decidedAt: number; decisionId: string; version: number; retirement?: { reason: 'version-changed'; at: number } } }> & DependencyDigests)[] }>;
+export type ProduceCodingDependenciesHandler = (root: string, scopeId: string, options: ConfigLoadOptions, cache?: string) => Promise<PreparedDependencies>;
+
+async function inspectDependencies(root: string, config: DeckentConfig, values: Map<string, string>, flags: Set<string>, context: AdminCommandContext, locale: Locale) {
+  const producing = flags.has('--produce-dependencies'), mode = producing ? '--produce-dependencies' : '--inspect-dependencies';
+  const handler = producing ? context.produceCodingDependencies : context.inspectCodingDependencies, flag = producing ? '--npm-cache' : '--run';
+  if (!handler || [...values.keys()].some(key => !['--scope', flag, '--lang'].includes(key)) || [...flags].some(key => !['--json', mode].includes(key)))
+    throw ErrorRegistry.createError('CLI_USAGE');
+  const scope = values.get('--scope') ?? config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+  if (!scope) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED', { locale });
+  const result = await handler(root, scope, { env: context.env ?? process.env, heal: false }, values.get(flag));
+  emit(result, { ...sinksOf(context), json: flags.has('--json'), render: data => terminalSafeText((data.kind === 'run' ?
+    (data.rows.length ? data.rows.flatMap(({ decision, ...row }) => [t('coding.dependencies.run', { ...row, checkoutMount: row.checkoutMount ?? t('coding.dependencies.mountPending', {}, locale) }, locale),
+      ...(decision ? [t('coding.dependencies.allowance.status', { decisionId: decision.decisionId, person: decision.person, version: decision.version,
+        decidedAt: new Date(decision.decidedAt).toISOString() }, locale)] : []),
+      ...(decision?.retirement ? [t('coding.dependencies.allowance.retired', { at: new Date(decision.retirement.at).toISOString() }, locale)] : [])]) : [t('coding.dependencies.empty', {}, locale)])
+    : [...(data.written ? [t('coding.dependencies.written', { fileList: data.written }, locale)] : []),
+    t('coding.dependencies.reference', { project: data.project, target: data.workTarget, platform: data.platform, layout: data.layout.id,
+      lockfile: data.layout.lockfile, listDigest: data.listDigest, lockfileDigest: data.lockfileDigest, mount: data.layout.mount }, locale),
+    t('coding.dependencies.patternRisk', {}, locale),
+    ...data.manifest.entries.flatMap(({ path, kind, size, mode, digest, target, rules }) => [
+      t('coding.dependencies.entry', { path, kind, size, mode: mode.toString(8), digest: digest ?? '-', target: target ?? '-' }, locale),
+      ...(rules ?? []).map(rule => t('coding.dependencies.pattern', { path, rule, digest: digest ?? '-' }, locale))])]).join('\n')) });
+}
+
+export type CodingAllowanceHandler = (root: string, request: { scopeId: string; kind: string; action: 'grant' | 'withdraw'; locale: Locale; commandId?: string },
+  options: ConfigLoadOptions, confirm: (card: { title: string; lines: readonly string[]; action: 'grant' | 'withdraw' }) => Promise<boolean>) =>
+    Promise<{ status: 'active' | 'withdrawn' | 'historical'; decisionId: string; version: number } | { status: 'declined' | 'absent' }>;
+
+async function changeDependencies(root: string, config: DeckentConfig, values: Map<string, string>, flags: Set<string>, context: AdminCommandContext, locale: Locale) {
+  const operation = flags.has('--allow-dependencies') ? 'grant' : 'withdraw';
+  const kind = values.get('--kind'), scopeId = values.get('--scope') ?? config.service.identity?.scopeId;
+  if (!kind || !scopeId || !context.changeCodingAllowance || flags.size !== 1 || [...values.keys()].some(key => !['--kind', '--scope', '--lang', '--command-id'].includes(key)))
+    throw ErrorRegistry.createError('CLI_USAGE');
+  const env = context.env ?? process.env, io = { locale, env,
+    ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
+    ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) };
+  const commandId = values.get('--command-id'), sinks = sinksOf(context);
+  const result = await context.changeCodingAllowance(root, { scopeId, kind, action: operation, locale, ...(commandId ? { commandId } : {}) }, { env, heal: false }, async ({ title, lines }) => {
+    if (operation === 'grant') emit(lines.join('\n'), sinks);
+    const chosen = await askCliCard({ title, body: operation === 'grant' ? [lines[0]!] : lines, options: [
+      { id: 'yes', role: 'yes', label: operation === 'grant' ? t('coding.dependencies.allowance.grant', {}, locale) : t('coding.dependencies.allowance.withdraw', {}, locale) },
+      { id: 'no', role: 'no', label: t('clisetup.coding.card.cancel', {}, locale) },
+    ] }, io);
+    return chosen === 'yes';
+  });
+  switch (result.status) {
+    case 'active': emit(t('coding.dependencies.allowance.active', result, locale), sinks); break;
+    case 'historical': emit(t('coding.dependencies.allowance.historical', result, locale), sinks); break;
+    case 'withdrawn': emit(t('coding.dependencies.allowance.withdrawn', result, locale), sinks); break;
+    case 'absent': emit(t('coding.dependencies.allowance.absent', {}, locale), sinks); break;
+    case 'declined': emit(t('clisetup.coding.card.cancelled', {}, locale), sinks); break;
+  }
+}
 
 /**
  * `coding template`: on a person's terminal each missing choice is asked (admitted provider → task kind → admitted image), then the preview
  * card, and only "apply" writes; off a terminal a missing `--provider`/`--kind` lists the admitted choices and `--preview`/`--apply` stays required.
  */
 async function codingTemplateCommand(argv: readonly string[], context: AdminCommandContext) {
-  const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--connection', '--docker', '--discovery', '--lang']);
+  const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--connection', '--docker', '--discovery', '--node-dependencies', '--inspect-dependencies', '--produce-dependencies', '--npm-cache', '--scope', '--run', '--lang', '--allow-dependencies', '--withdraw-dependencies', '--command-id']);
   if (flags.has('--preview') && flags.has('--apply') || values.has('--connection') && flags.has('--docker') || !context.configureCodingTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   // alpha.55.1: `--apply` writes the protected `admission.registry` — a person's act at a terminal, refused off one before anything is read.
   if (flags.has('--apply') && cliMode(context, flags.has('--json')).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation('set', 'admission.registry') } });
+  const packageAction = ['--allow-dependencies', '--withdraw-dependencies'].find(flag => flags.has(flag));
+  if (packageAction && cliMode(context, flags.has('--json')).mode !== 'interactive')
+    throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: packageAction } });
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, locale = commandLocale(context, values.get('--lang'));
   const config = await loadConfig(root, { env, heal: false }), pins = affectedToolchainProfiles(config);
+  if (packageAction) return changeDependencies(root, config, values, flags, context, locale);
+  if (flags.has('--inspect-dependencies') || flags.has('--produce-dependencies')) return inspectDependencies(root, config, values, flags, context, locale);
+  if (values.has('--scope') || values.has('--run') || values.has('--npm-cache') || values.has('--command-id')) throw ErrorRegistry.createError('CLI_USAGE');
   const providers = [...new Set(pins.map(pin => pin.provider))];
   const io = { locale, env, ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) };
@@ -155,7 +220,7 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   // Off a terminal the write intent stays explicit: `--preview` or `--apply` (the flag contract AI callers already use).
   if (!person && !flags.has('--preview') && !flags.has('--apply')) throw ErrorRegistry.createError('CLI_USAGE');
   const discovery = values.get('--discovery');
-  const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
+  const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}), ...(flags.has('--node-dependencies') ? { nodeDependencies: true as const } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
   const sinks = { json: flags.has('--json'), ...sinksOf(context) }, show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config, cliOf(context)) });
   if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run(flags.has('--apply'))); return; }
   const preview = await run(false);
@@ -173,7 +238,7 @@ function templateKinds(config: DeckentConfig, pins: Pins, provider: string): str
 const imageLabel = (image: string, pins: Pins, provider: string) =>
   `${shortImage(image)} · ${pins.filter(pin => pin.provider === provider && pin.imageId === image).map(pin => pin.cliVersion).join(', ')}`;
 async function template(context: AdminCommandContext, root: string, env: NodeJS.ProcessEnv, config: DeckentConfig,
-  request: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; discovery?: string; apply: boolean }, locale: Locale): Promise<TemplateResult> {
+  request: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; discovery?: string; nodeDependencies?: true; apply: boolean }, locale: Locale): Promise<TemplateResult> {
   try { return await context.configureCodingTemplate!(root, request, { env, heal: false }); }
   catch (error) { throw unadmittedImage(error, config, request, locale) ?? error; }
 }
@@ -194,6 +259,7 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale, config:
   const worker = workerBinding(value.profile);
   const discovery = parameters.invocation?.discovery?.mode;
   const connection = configuredInvocationProfiles(config).find(row => row.id === value.connection || !!worker && modelInvocationProfileDigest(row) === worker.profileDigest);
+  const dependencies = value.profile.parameters['dependencyLayout'] === NATIVE_NODE_DEPENDENCY_LAYOUT.id;
   return [t('coding.result.runtime', { runtime: runtimeLabel(!!worker, locale), connection: worker ? connectionLabel(cli, connection) : '-' }, locale),
     t('clisetup.coding.result.profile', { profile: `${value.profile.id}@${value.profile.version}` }, locale),
     t('clisetup.coding.result.kind', { kind: String((value.kind as { kind?: unknown } | null)?.kind ?? '-') }, locale),
@@ -201,6 +267,7 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale, config:
       image: shortImage(parameters.docker?.imageId) }, locale),
     ...(discovery === 'disabled' ? [t('clisetup.coding.result.discovery.disabled', {}, locale)]
       : discovery === 'repository' ? [t('clisetup.coding.result.discovery.repository', {}, locale)] : []),
+    ...(dependencies ? [t('coding.dependencies.template', { ...NATIVE_NODE_DEPENDENCY_LAYOUT, target: config.execution?.workTargets?.targets[0]?.path ?? '.' }, locale)] : []),
     t('clisetup.coding.result.registry', { revision: value.registryRevision }, locale)];
 }
 function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf): string {

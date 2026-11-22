@@ -148,6 +148,25 @@ naming it (exit 2); a present but invalid value stays `CLI_USAGE`. Scope rules (
 change never takes a silent default. Without a scope a person on a terminal picks from the valid scopes; a pipe, agent or CI gets
 `CLI_SCOPE_REQUIRED` (exit 2) naming them. Queue and task refusals are typed errors, not raw schema output.
 
+### Reusable native package allowance (owner 177 and 177b)
+
+`deckent coding template --allow-dependencies --kind <kind> --scope <id>` binds one terminal-witnessed
+decision to the exact lockfile and canonical package list, including every rule match. The partition binds the
+installation, company, scope, project, resolved Git target, platform, layout and profile. The managed project
+row under `toolchains.packageAllowances` is usable with its matching sealed publication and original verified
+approval. The native adapter reference carries that decision and version for historical inspection.
+
+The Run and Attempt keep their own policy checks. Use takes package partitions in ascending order, then the
+installation secret custody lock and the managed policy writer lock. Timed scanning precedes the writer
+locks. Fresh authority, Git and sealed-object verification, the use event and the effect share the final
+boundary. A verified change in the current Git source retires the generation when its sealed record is written.
+The existing approval and audit stores carry the decision, publication, retirement and history.
+
+`--withdraw-dependencies` ends reuse and removes the project row through its witnessed writer.
+`--command-id <uuid>` identifies an exact retry. `--inspect-dependencies` reviews the prepared list, and
+`--run <id>` selects recorded evidence. The Terminal setup menu configures worker kinds. Use the coding
+template CLI for package review, grant and withdrawal. See [known limits and rollback](../../../../docs/known-limits.md).
+
 ## alpha.55 switches
 
 alpha.55 adds protected configuration switches for memory automation, Nervous, recovery and the agent statistics pass; no AI principal

@@ -163,6 +163,7 @@
     },
     "profileMaxBytes": 1048576,
     "requireMachineBinding": false,
+    "sealedPackageStoreMaxBytes": 2147483648,
     "uninstallRecoveryRoot": null,
     "writeLockTimeoutMs": 2000
   },

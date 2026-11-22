@@ -55,7 +55,7 @@ export function nativeWorkerAdmission(root: string, scopeId: string, options: Co
           const sibling = await connectedModelProfile((await loadConfiguredScopeContext(root, scopeId, options, 'read')).config, scopeId, resolved.binding, model);
           const binding = sibling ? { ...resolved.binding, ...sibling } : resolved.binding, current = await nativeWorkerResource(root, scopeId, binding, options);
           if (current.profile.reference.providerId !== model.channelId || current.nativeId !== model.modelId) throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH');
-          const profile = createNativeCliWorkerProfile(resolved.base, { ...binding, modelUsePin: immutableJsonObjectSchema.parse(current.pin) });
+          const profile = createNativeCliWorkerProfile(resolved.base, { ...binding, modelUsePin: immutableJsonObjectSchema.parse(current.pin) }, resolved.dependencies);
           tasks.push({ ...task, profile: { ...profile, id: task.profile.id, version: task.profile.version } });
         }
         return { ...execution, tasks, ...(workerMode ? { workerMode } : {}) };

@@ -22,6 +22,7 @@ export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCo
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
+export type PackageApprovalRow = Readonly<{ path: string; rule: string; digest: string }>;
 export interface RunAdmissionContext {
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
   modelUse?: {
@@ -30,6 +31,13 @@ export interface RunAdmissionContext {
   };
   /** General resource bindings, resolved by trusted adapters after model-use authorization; never an ingress field. */
   resources?(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<readonly RunCapacityBinding[]>;
+  /** Trusted input custody prepares the approval basis, then publishes only after authority has been witnessed. */
+  inputs?: {
+    pin(create: RunCreate, principal: VerifiedPrincipal, workspace?: RunWorkspaceCustody): Promise<Readonly<{ execution: RunCreate['execution']; packageRows?: readonly PackageApprovalRow[] }>>;
+    publish(create: RunCreate, principal: VerifiedPrincipal, workspace?: RunWorkspaceCustody): Promise<void>;
+    commit?<T>(create: RunCreate, principal: VerifiedPrincipal, workspace: RunWorkspaceCustody | undefined,
+      work: () => Promise<T>, recheckPolicy: () => Promise<void>): Promise<T>;
+  };
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
   resolve(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
 }
@@ -80,7 +88,7 @@ export class RunAdmissionApplication {
     const workspace = pin ? runWorkspaceCustodySchema.parse(await pin(replay !== null)) : undefined;
     if (workspace && (workspace.scopeId !== command.scopeId || workspace.runId !== command.runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     if (replay) return this.pinned(replay, command, principal, workspace);
-    let create: RunCreate;
+    let create: RunCreate, packageRows: readonly PackageApprovalRow[] | undefined;
     try {
       const resolved = command.branch ? resolveAdmissionBranch(command.graph, command.branch) : undefined;
       const graph = resolved?.graph ?? command.graph;
@@ -89,15 +97,24 @@ export class RunAdmissionApplication {
       const execution = this.context.modelUse ? await this.context.modelUse.pin(context.execution, principal, runWorkerMode(evaluation.policy, principal, command.scopeId)) : context.execution;
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
         identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
+      if (this.context.inputs) {
+        const pinned = await this.context.inputs.pin(create, principal, workspace);
+        create = runCreateSchema.parse({ ...create, execution: pinned.execution });
+        packageRows = pinned.packageRows;
+      }
     } catch (error) {
       this.authorization.recordUnapplied(command, principal, evaluation);
       throw error;
     }
-    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace); create = admitted.create; // R9: without a card, no worker ceiling
+    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace, packageRows); create = admitted.create; // R9: without a card, no worker ceiling
     try {
       await this.context.modelUse?.recheck(create.execution, principal);
       const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;
-      const receipt = await this.store.createRun({ ...create, authority: admitted.authority }, workspace, admitted.assert, resources);
+      await this.context.inputs?.publish({ ...create, authority: admitted.authority }, principal, workspace);
+      const sealed = { ...create, authority: admitted.authority };
+      const persist = () => this.store.createRun(sealed, workspace, admitted.assert, resources);
+      const receipt = this.context.inputs?.commit
+        ? await this.context.inputs.commit(sealed, principal, workspace, persist, admitted.recheckPolicy) : await persist();
       return await this.pinned(receipt, command, principal, workspace);
     } catch (error) {
       // A concurrent identical admission may have won using a different sampled clock/config snapshot.

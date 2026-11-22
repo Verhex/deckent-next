@@ -58,6 +58,7 @@ export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/i
 export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, loadConfigTerminalLaunch, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
+export { WORKER_PACKAGE_ALLOWANCE_KEY, WORKER_PACKAGE_CONSENT, workerPackageAllowancesSchema, type WorkerPackageAllowance } from '#platform/core/config-fields/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';
 export { getConfigMetadata } from '#platform/core/config/index.js';
 export { getConfigValue } from '#platform/core/config/index.js';

@@ -61,3 +61,16 @@ export function workTargetRefFileSource(projectRoot: string, execution: WorkTarg
   return target && execution ? gitRefFileSource(execution.git, target.path, target.baseRef,
     async () => (await resolveGitWorkTarget(resolve(projectRoot), execution, layout)).baseCommit ?? '') : undefined;
 }
+
+/** Select a commit in the actual repository root before reading an input lockfile. */
+export function gitCommittedInputSource(settings: WorkTargetExecution['git'], root: string, ref: string) {
+  return gitRefFileSource(settings, root, ref, async () => {
+    const observed = (await git(settings, root, ['rev-parse', '--show-toplevel'], settings.outputBytes)).toString('utf8').trimEnd();
+    if (observed !== root) throw new Error('unreadable');
+    return (await git(settings, root, ['rev-parse', '--verify', `${ref}^{commit}`], settings.outputBytes)).toString('utf8').trimEnd();
+  });
+}
+
+export async function gitInputMountTracked(settings: WorkTargetExecution['git'], root: string, mount: string) {
+  return (await git(settings, root, ['ls-files', '-z', '--', mount], settings.outputBytes)).length !== 0;
+}

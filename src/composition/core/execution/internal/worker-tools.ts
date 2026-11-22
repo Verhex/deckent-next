@@ -9,6 +9,8 @@ import { projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC,
   keepFullPreview, dropFullPreview, LocalOsSessionAuthority, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, type NativeCliWorkerPorts } from '#adapters/index.js';
 import { chatTurnApprovalPreview, describeAgentCall, createAgentCallApprovals, createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
+import { relative } from 'node:path';
+import { agentWorkspaceDeny, createWorkspaceScope } from '#adapters/index.js';
 
 type OpenTools = NativeCliWorkerPorts['openTools'];
 /** The K1 coordinator owns proposals and durable settlement. The model CLI never receives this workspace. */
@@ -18,7 +20,11 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   const { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
   const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-  const edits = createAgentFileEdits({ area: projectEditArea(workspace.scope), context, sessions, scopeId, turnId, authority, locale: resolveLocale(undefined, options.env ?? process.env, context.config.language),
+  const sealed = resources.sealedNodeModules, editScope = sealed ? await createWorkspaceScope(request.workspace, [
+    ...agentWorkspaceDeny(request.workspace, context.layout, false, env), relative(request.workspace, sealed.lockfile),
+    relative(request.workspace, sealed.target), `${relative(request.workspace, sealed.target)}/**`,
+  ]) : workspace.scope;
+  const edits = createAgentFileEdits({ area: projectEditArea(editScope), context, sessions, scopeId, turnId, authority, locale: resolveLocale(undefined, options.env ?? process.env, context.config.language),
     selfSource: selfSource ? isSelfSourceWriteFloored : () => false });
   const shell = createAgentShell({ worker: true, scope: workspace.scope, context, sessions, scopeId, turnId, config: readTerminalShellConfig(context.config as unknown as Record<string, unknown>),
     channel: { signal, emit() {}, async drained() { return false; }, room: () => context.config.service.responseMaxBytes }, scratch: null, sandboxes, profile: current.profile,
@@ -69,7 +75,8 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     }, now: Date.now,
   };
   const turn = runDurableAgentTurn({ claim: { scopeId, turnId, principalKey: `${context.principal.issuer}\0${context.principal.subject}`,
-    requestDigest: sha256(JSON.stringify({ identity: request.identity, workspace: workspace.scope.root, binding, tools })), claimedAtMs: Date.now() },
+    requestDigest: sha256(JSON.stringify({ identity: request.identity, workspace: workspace.scope.root, binding, tools,
+      ...(sealed ? { packageListDigest: sealed.digest } : {}) })), claimedAtMs: Date.now() },
     messages: [], tools, nativeSession: { schemaVersion: 1, turnId, generation, tools, approvalTtlMs: context.config.approvals.requestTtlMs }, signal,
     admission: { outputReserveTokens: 0, safetyReserveTokens: 0, requestMaxBytes: context.config.service.inputMaxBytes }, emit() {} }, store, ports)
     .then(result => { if (!result.recorded || result.replayed) throw ErrorRegistry.createError('NATIVE_WORKER_EFFECTS_UNKNOWN'); return result; })
