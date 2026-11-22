@@ -692,6 +692,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   Releases are versioned and validated, and a running process keeps its own version. An invalid selection is refused with `NEXT_ENTRY_CURRENT_INVALID`.
   The previous service must stop under its own authority. Verify the replacement against its expected source commit. If the ledger has already advanced, a failed switch can require operator recovery (`DEV_RELEASE_OPERATOR_REQUIRED`).
   Before an upgrade, keep a verified ledger backup. If the old binary cannot read the new ledger, stop the service, review the potential loss and restore the compatible pre-upgrade backup before starting the old version.
+  A restore that can lose data first reports the potential loss, proceeds only with explicit confirmation bound to the reported ledger and backup state, and revalidates that confirmation under the ledger lock, refusing the restore if either has changed since the report.
   After an upgrade, reopen terminal and MCP host sessions. Use the updated terminal for service operations.
 
 ### ACCEPT-EVIDENCE (2026-10-03; lane/accept-evidence, base 9740baae; landed in batch 32, alpha.4 line)
@@ -928,7 +929,7 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
 - **Open.** Delivery/inspect/report surfaces do not repeat the
   classification; real template-worker path unproven in tests (stored-graph stand-in); gitignored files still enter patches (PATCH-IGNORE card).
 
-### CATALOG-V3 (owner 2026-10-02; Sol 2247 bounded PASS on a8a7c9d7; batch 26, on main and live since `dfb1b68f`)
+### CATALOG-V3 (owner 2026-10-02; Sol 2247 bounded PASS on a8a7c9d7; batch 26, on main at `dfb1b68f`)
 
 Channel identity is client × billing/access path. Row key stays (channelId, exact channel model id); aliases are refused, never resolved. Document v3 adds vendorId/canonicalModelId, channel billing/protocol/provenance, limits, reasoning, capabilities and pricing in record; v2 remains readable. Canonical identity links models across channels without resolving an invocation to another channel. No SQL migration is needed for this slice: there is no canonical lookup operation; readers already load records. v13 model_activations remains the chat/profile authority, v43 model_catalog_activations the scoped worker authority. Recommended activation sets are documentation data, never registration effects. Unknown limits remain null and capabilities unknown.
 
@@ -1030,7 +1031,7 @@ Approval decision v4 seals deciderClass (human-tty / ai-policy / system); AI ass
 
 Author proof lives in external MCP-AI-AKTOR-2026-10-15. Targeted checks, real SQLite fixtures and simulated witnesses are separate from host PTY/socket/process acceptance, independent review, packaged binary and live/N1 acceptance.
 
-## Target delivery queue (TESLIM-KUYRUGU, live since alpha.43)
+## Target delivery queue (TESLIM-KUYRUGU, released in alpha.43)
 
 TESLIM-KUYRUGU phase 2 round 2 connects the retained ledger v57 queue to runtime protocol v29. It does not rewrite historical sealed
 integration/delivery/adoption records. Config `targetQueue` supplies bounded policy; `execution.adoption.protectedTargets` extends
@@ -1187,7 +1188,7 @@ turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-e
 ## Working-tree delivery (R9p, owner 2026-11-05; alpha.63 L1)
 
 `execution.deliveryMode` chooses where a person's delivery yes lands. Unset, it is derived: a work target or a non-empty
-`execution.adoption.targets` means `reference` (the Git reference path above, unchanged; live and N1 both stay there), otherwise
+`execution.adoption.targets` means `reference` (the Git reference path above, unchanged), otherwise
 `working-tree`; a work target is always `reference`. In `working-tree` the composition picks `GitWorkingTreeDelivery`, a separate
 `IntegrationDeliveryTarget` (`application: 'working-tree'`): the engine stays generic and only reports the target's result
 (`working-tree-delivered`) and binds every path's before/after digest into the confirmation view (`changes`), which the terminal consent
@@ -1275,7 +1276,7 @@ person saved again meanwhile is PATCH_CONFLICT, as before.
 Company policy can close file delivery: a deny grant or restriction on the attempt action `deliver-working-tree` refuses a working-tree
 Run's delivery at every `deliver-integration` check with the typed `DELIVERY_WORKING_TREE_DENIED` (EN/TR text); nothing is written and
 there is no fall back to a reference. The action needs no grant (default open: it rides on `deliver-integration`), so no template version
-or upgrade step exists for it. Reference mode (work target or adoption targets: live and N1) is unchanged: base HEAD of the person's
+or upgrade step exists for it. Reference mode (work target or adoption targets) is unchanged: base HEAD of the person's
 repository, adapter version 1.
 
 Lifecycle and refusals (alpha.63 L1c). A Run's private base is deckent data (uninstall classifies `workspaces/run-bases`,

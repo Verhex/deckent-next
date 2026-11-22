@@ -35,7 +35,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 [CHANGELOG-alpha.md](../CHANGELOG-alpha.md) preserves those of older alpha releases.
 
 deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The complete four-journey BeUser acceptance and the owner terminal test remain open during the beta line (owner, 2026-11-11). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.61 was released (PR #132) after alpha.60 (PR #131). The complete four-journey BeUser acceptance and the owner terminal test remain open during the beta line (owner, 2026-11-11). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 Alpha.62 integration verification covers valid config versions 4–6 without rewriting authored bytes and shows terminal chat errors as their catalog message without the raw code. This is targeted author evidence; assembled-release, provider and owner acceptance remain separate.
@@ -60,7 +60,7 @@ Alpha.62 integration verification covers valid config versions 4–6 without rew
 - **Model/provider rows appear before their checks finish.** `/model` and `/provider` share one read snapshot per opening and show names with “Checking…”. Those pending rows cannot be selected; wait for the row's check. Closing or reloading discards late results. This changes display loading, not authority for an action.
 - **Timing is opt-in, local and content-free.** Set `DECKENT_TIMING_TRACE=1` for commands you want measured; `deckent doctor timing` summarizes retained samples. The bounded local trace records command names, milestones and read counts, not prompts, command arguments, model output or secrets. It is off by default; these samples are not a performance guarantee for your machine.
 - **Two WSL distributions can collide on one runtime guard.** The guard hashes the endpoint and OS user id without a machine identity. With the same user id and project path in distributions sharing a network namespace, one running service can make the other refuse with `LOCAL_RUNTIME_ALREADY_RUNNING`. Doctor can still say the second installation can start. Use a different project folder in the second distribution; the guard correction remains open.
-- **Worker-image updates can ask for consent that their card cannot save.** With no recorded image consent and old single-image receipts that lack `images[].providers`, `toolchains update --apply` can end with `WORKER_IMAGE_CONSENT_MISSING` after you answer yes. Its card is not a consent writer; the automatic refresh can fail silently for the same reason. The consent-writing path is the `/setup` worker card, which can also select a ready local image. Completing that path on affected live/N1 installations has not been verified; recognition/migration of old receipts and a direct route to the consent card remain open.
+- **Worker-image updates can ask for consent that their card cannot save.** With no recorded image consent and old single-image receipts that lack `images[].providers`, `toolchains update --apply` can end with `WORKER_IMAGE_CONSENT_MISSING` after you answer yes. Its card is not a consent writer; the automatic refresh can fail silently for the same reason. The consent-writing path is the `/setup` worker card, which can also select a ready local image. The recovery path still needs verification on installations with the affected receipts; recognition/migration of old receipts and a direct route to the consent card remain open.
 
 Beta.1 is a candidate. The eight acceptance gates remain open during the beta line; beta acceptance is announced separately.
 
@@ -664,7 +664,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   silence: a call longer than the limit is stopped, and a repeat fails the task as `worker-stalled`. The stopped Attempt's workspace
   clone stays held. *Workaround:* keep `runRuntime.stallRecovery.stopAfterMs` (or a work class's `inactivity`) above your longest
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
-- **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
+- **The target queue is available and awaits beta acceptance.** It was released in 1.0.0-alpha.43. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
   v31 and the current ledger (v75; the queue arrived with ledger v57–v59 and protocol v29) need a rebuilt binary and a verified pre-switch ledger
   backup. Native terminal/socket/crash and N1 load

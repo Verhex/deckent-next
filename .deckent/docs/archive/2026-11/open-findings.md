@@ -21,13 +21,13 @@ Kaynak/Source: PLAN.md @58537c7f lines 335–336, 443–469, 472–474, 480–48
   güvenilir öncü metadata (`tracked: deleted=N overwritten=M; …`; komut çıktısı taklit edemez), sonunda adlı satır ve stderr; biten araç satırı `toolTracked` ekini
   öncü metadata'dan okur. Açık: tipli `tool.finished.trackedChanges` v19 ile (kanca lane docs-delta'da); full-access turunda owner onaylı çağrı ölçülmez (kartı vardı);
   `write_file`/`edit_file` kendi audit'inde, bu satırda değil; SIEM için yol özetleme takip.
-- **Owner terminal oturumu 1d428e9f (canlı, 2026-09-29 akşam; analiz `proof/TERMINAL-SESSION-1d428e9f-2026-09-29/analysis.md`).** Bulgular ve durum:
-  (1) MCP (context7) çağrıları policy'de `mcp.tool.call` / `mcp__*` grant'ı olmadığı için reddedildi (kök neden policy, veri kökü değil) — **owner MCP grant'ını
-  canlıda ekledi**; (2) terminal modeli yanlış teşhisle `src/platform/core/config/internal/layers.ts`'i değiştirdi (build edilseydi canlı ürün durumunu global köke
-  taşırdı) — build edilmedi, **lead geri aldı**; (3) full-access sandbox'ından sert taban adı `.deckent/mcp.json` oluşturuldu — **ajanın oluşturduğu dosya
-  kaldırıldı**, yapısal düzeltme OPEN-SANDBOX (on üçüncü parti, `.deckent` kökü yeni ad almaz); (4) tam erişimde ağ/HOME yoktu — OPEN-SANDBOX; (5) dil ihlali —
-  LANG-CRASH P0 (d) sistem istemi + özet kısmı yapıldı (`dfce9015`); açık: v19 `chatTurn.language` — **lead kararı B**: canlı config `language: tr` bir sonraki
-  canlı yeniden başlatmada, **A** (protokol v19 `chatTurn.language`) bir sonraki protokol paketinde; isteğe bağlı yanıt dili son-kontrolü ayrı kart;
+- **Terminal oturumu — MCP erişimi ve yapılandırma.** Bulgular ve durum:
+  (1) Bir MCP aracı, politikada `mcp.tool.call` yetkisi bulunmadığında reddedilir. Yetkili kişi kuralı politika aracından verir.
+  (2) Yapılandırma katmanında yanlış veri kökü seçimi ürün durumunu yanlış köke yönlendirebilirdi.
+  Hatalı değişiklik derlemeye girmedi. (3) Tam erişim kabuğu, sert tabandaki `.deckent/mcp.json` dosyasını oluşturabildi.
+  Yapısal düzeltme: OPEN-SANDBOX (on üçüncü parti, `.deckent` kökü yeni ad almaz); (4) tam erişimde ağ/HOME yoktu — OPEN-SANDBOX; (5) dil ihlali —
+  LANG-CRASH P0 (d) sistem istemi + özet kısmı yapıldı (`dfce9015`); açık: v19 `chatTurn.language` — **lead kararı B**: servis dili kurulum yapılandırmasından ayarlanır,
+  **A** (protokol v19 `chatTurn.language`) bir sonraki protokol paketinde; isteğe bağlı yanıt dili son-kontrolü ayrı kart;
   (6) içerideki CLI `MANAGED_FILE_UNSAFE` ile çöktü — LANG-CRASH P1 (g) tipli hata yapıldı (`044f7b90`). **Yeni açık bulgu (MCP şeridi):** `mcp remove`/`add` kayıt
   dosyasını denetimden önce yazar; denetim reddederse kayıt değişmiş, `remove`'da güven kaydı kalır (aynı tanım yeniden eklenince sormadan güvenilir
   görünebilir). **Açık P1:** (e) `/policy` + `/permissions` yüzeyi (POLICY-ADMIN P5) — owner kendine yetkiyi ürün içinden verir, güven/araç izni terminalden
@@ -65,7 +65,7 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
 - **SURROGATE-CUT (canlı bulgu 2026-09-30, 16. partide `57016f1c`):** sıkıştırma özeti `cut(argumentsJson,200)` ile bir emojiyi ikiye böldü → tek `\ud83d` → yerel
   sunucu her turu HTTP 400 (`TextEncodeInput…`) ile reddetti, oturum kalıcı bozuldu. Düzeltme: domain `modelTextPrefix`/`wellFormedModelText`, tüm model yönlü kesmeler +
   `parseOpenAiChatTextRequest` sınır temizliği (U+FFFD); owner oturumu oynatıldı: yalnız 1 → 0. OpenRouter ayrıştırıcısı 17. partide kapandı (aşağıda). Açık: model yönlü olmayan kesmeler, sağlayıcı
-  hata mesajının sınırlı gösterimi (`proof/SURROGATE-CUT-2026-09-30/`). Ayrıca canlı terminal ajanı tam erişimde `rm CHANGELOG.md` çalıştırdı (15:27); lead geri yükledi.
+  hata mesajının sınırlı gösterimi (`proof/SURROGATE-CUT-2026-09-30/`).
 - **Açık (dağıtım/SBOM, Astra 2192 teyitli):** `dist-sbom.mjs` ve dist-ajv-stub gömülü kopya tespiti `node_modules/<ad>` yol önekine bakıyor;
   proje dışı/sembolik bağlı `node_modules` (pnpm düzeni, worktree bağı) altında gömülü fast-uri/cf-worker satırları raporlanmıyor. Ürün çalışma
   zamanı kusuru değil; kurulum/düzen bağımsız tespit + negatif test gerekli (kanıt `proof/INTEGRATE-2026-09-30-P-verify-279d22c6-symlinked-node-modules.log`).

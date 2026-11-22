@@ -44,7 +44,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 - **Kabul kanıtı:** kabul satırı kanıt türünü söyler (ör. `process-exit@1` → "kabul: çıkış kodu · içerik bağımsız doğrulanmadı"); Kanun 1.
 - **TTY akışları:** onay kartı (bir kez / bu oturum / her zaman / hayır; sert tabanda "her zaman" yok), değerler yalnız seçimle (owner 10-08; MCP komut/URL istisnası önizleme + onayla), değişiklik öncesi önizleme kartı, terminaldeki slash pencereleriyle tek uygulama.
 
-**Açık sorular (uygulamada kaynakta çözülür):** `inventory` 8 / `workers` 64 kayıt farkı; `coding template --preview` "toolchain yok" ama canlıda profil kullanılıyor; `paths` ve `doctor` farklı soket yolu; `workers`'taki 21 `stale` kaydın gerçek durumu; terminal "bağlam ?" nedeni.
+**Açık sorular (uygulamada kaynakta çözülür):** `inventory` 8 / `workers` 64 kayıt farkı; `coding template --preview` "toolchain yok" ama mevcut bir profil çalışabiliyor; `paths` ve `doctor` farklı soket yolu; `workers`'taki 21 `stale` kaydın gerçek durumu; terminal "bağlam ?" nedeni.
 
 **Ölçülmeyenler:** yazan/etki üreten alt komutlar (her bölümde adıyla), terminal slash komutları, TTY `/doctor` ve `/config` pencereleri, Windows/macOS, gerçek `backup verify` (parola owner'da), canlı `do` isteği (owner atladı).
 
@@ -380,12 +380,12 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## coding
 
-**Ölçüm:** argümansız genel hata. `coding template --provider codex|claude --kind coding --preview` ikisi de TR `CODING_TEMPLATE_TOOLCHAIN_REQUIRED` (çıkış 78): "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok…" — `toolchains` codex'i güncel ve kabul edilmiş gösterirken ve canlıda `native-coding-template-0b47…` profili kullanılırken. Kayıtsız sağlayıcı TR `CODING_TEMPLATE_INPUT_INVALID`, geçerli değerleri listelemez. `coding prepare` `{}` → İngilizce `EXECUTION_PROFILE_INVALID`; JSON biçimi yardımda yok. `--apply` config yazdığı için çalıştırılmadı.
+**Ölçüm:** argümansız genel hata. `coding template --provider codex|claude --kind coding --preview` ikisi de TR `CODING_TEMPLATE_TOOLCHAIN_REQUIRED` (çıkış 78): "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok…" — `toolchains` codex'i güncel ve kabul edilmiş gösterirken ve mevcut bir kodlama profili çalışırken. Kayıtsız sağlayıcı TR `CODING_TEMPLATE_INPUT_INVALID`, geçerli değerleri listelemez. `coding prepare` `{}` → İngilizce `EXECUTION_PROFILE_INVALID`; JSON biçimi yardımda yok. `--apply` config yazdığı için çalıştırılmadı.
 
 **Bulgular:**
 1. Geçerli sağlayıcı, `--kind` ve imaj (`sha256`) hiçbir yerde listelenmez.
 2. Mevcut kodlama profillerini görmenin yolu yok.
-3. **Açık soru:** `--preview` "toolchain yok" der, canlıda profil kullanılır; olası neden `--image` verilmeyince imaj belirsizliği, doğrulanmadı; sonraki adım söylenmez.
+3. **Açık soru:** `--preview` "toolchain yok" der, mevcut profil çalışır; olası neden `--image` verilmeyince imaj belirsizliği, doğrulanmadı; sonraki adım söylenmez.
 4. `prepare` JSON biçimi belgelenmemiş, hata İngilizce.
 
 **Kabul edilen hâl (owner 2026-10-19):**

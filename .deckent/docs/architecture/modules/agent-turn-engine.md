@@ -290,9 +290,9 @@ does not compile). The service resolves the locale as elsewhere (its environment
 'Write every string in <language>' instead of 'the language of the conversation'. Every turn's request digest changes again. Not forced: a
 local model can still drift; no post-check exists (a post-answer language check is a separate card). The terminal's own locale is not on the
 wire: terminal and service differ only for `terminal --lang` or a service started from another environment. Lead decision (2026-09-30): B now —
-the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
+the installation configuration can set `language: tr` for the service; A — `chatTurn.language?` on the wire — needs protocol
 v19 (v18 is released) and ships with the next protocol bundle. (Option A has not been added through protocol v29; the service locale still decides.)
-System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
+System prompt **v6** (PROMPT-POSTURE): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
 (the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, deckent state sealed, the configuration written
 only by an owner-approved call (Astra 2192 R9, historical; superseded by W3 on 2026-10-09: configuration remains read-only in every shell call); closed = no network; host; unavailable), and `Network access: none` stays only when the
 shell has no network. Every turn's request digest changes again.

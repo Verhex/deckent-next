@@ -233,7 +233,7 @@ scratch lane (a 4 MiB write holds it for its write); no proxy, no POST, no cooki
 a private/intranet address is always refused (the on-prem/Enterprise intranet need belongs to the proxy slice).
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
-live since the owner's 2026-09-25 migration, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
+API profiles keep their existing allocations). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
 still apply. The allocation contract of an id is fixed: changing its limits is `MODEL_INVOCATION_ALLOCATION_CONFLICT`, so a profile
 moves to an unbounded allocation under a new id; existing receipts keep verifying against their own allocation. Ledger v36 rebuilds
 `model_invocation_allocations` row for row with a nullable, positive-when-set `max_calls`.

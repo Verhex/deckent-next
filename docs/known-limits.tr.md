@@ -35,7 +35,7 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuğun tam kabulü ve owner terminal testi beta serisinde açık kalır (owner, 2026-11-11). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.61 (PR #132), alpha.60’tan (PR #131) sonra yayımlandı. BeUser dört yolculuğun tam kabulü ve owner terminal testi beta serisinde açık kalır (owner, 2026-11-11). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytlarını yeniden yazmadan okur ve terminal sohbet hatalarını ham kod olmadan katalog mesajıyla gösterir. Bu hedefli yazar kanıtıdır; monte sürüm, sağlayıcı ve owner kabulü ayrıdır.
@@ -60,7 +60,7 @@ Alpha.62 birleşim doğrulaması geçerli config 4–6 sürümlerini dosya baytl
 - **Model/provider satırları kontroller bitmeden görünür.** `/model` ve `/provider` açılış başına ortak okuma görünümü kullanır, adları “Kontrol ediliyor…” ile gösterir. Bekleyen satır seçilemez; satırın kontrolünü bekleyin. Kapatma veya yenileme eski sonuçları geçersiz kılar. Bu, görünümün yüklenmesini değiştirir; eylemin yetkisini değiştirmez.
 - **Süre kaydı isteğe bağlı, yerel ve içeriksizdir.** Ölçmek istediğiniz komutlarda `DECKENT_TIMING_TRACE=1` ayarlayın; `deckent doctor timing` tutulan örnekleri özetler. Sınırlı yerel kayıt komut adını, aşamaları ve okuma sayılarını taşır; istem, komut argümanı, model çıktısı veya sır içermez. Varsayılan kapalıdır; bu örnekler makineniz için performans garantisi değildir.
 - **İki WSL dağıtımı aynı servis kilidinde çakışabilir.** Kilit, makine kimliği olmadan uç nokta ve işletim sistemi kullanıcı kimliğinin özetini kullanır. Ağ ad alanını paylaşan dağıtımlarda aynı kullanıcı kimliği ve proje yolu varsa çalışan servis, diğerini `LOCAL_RUNTIME_ALREADY_RUNNING` ile durdurabilir. Doctor ikinci kurulumun başlayabileceğini söyleyebilir. İkinci dağıtımda farklı proje klasörü kullanın; kilit düzeltmesi açıktır.
-- **İşçi imajı güncellemesi, kendi kartının kaydedemediği izni isteyebilir.** Kayıtlı imaj izni yoksa ve eski tek imaj makbuzlarında `images[].providers` bulunmuyorsa `toolchains update --apply`, evet yanıtından sonra `WORKER_IMAGE_CONSENT_MISSING` verebilir. Bu kart izin yazmaz; otomatik yenileme de aynı nedenle sessizce başarısız olabilir. İzni yazan yol `/setup` işçi kartıdır; hazır yerel imaj da seçilebilir. Bu yolun etkilenen canlı/N1 kurulumlarında tamamlandığı doğrulanmadı; eski makbuzları tanıma/göç ve izin kartına doğrudan yönlendirme açıktır.
+- **İşçi imajı güncellemesi, kendi kartının kaydedemediği izni isteyebilir.** Kayıtlı imaj izni yoksa ve eski tek imaj makbuzlarında `images[].providers` bulunmuyorsa `toolchains update --apply`, evet yanıtından sonra `WORKER_IMAGE_CONSENT_MISSING` verebilir. Bu kart izin yazmaz; otomatik yenileme de aynı nedenle sessizce başarısız olabilir. İzni yazan yol `/setup` işçi kartıdır; hazır yerel imaj da seçilebilir. Etkilenen makbuzları taşıyan kurulumlarda bu kurtarma yolu henüz doğrulanmadı; eski makbuzları tanıma/göç ve izin kartına doğrudan yönlendirme açıktır.
 
 Beta.1 bir adaydır. Sekiz kabul kapısı beta serisinde açık kalır; beta kabulü ayrıca duyurulur.
 
@@ -659,7 +659,7 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   `runRuntime.stallRecovery.stopAfterMs` değerini (ya da iş sınıfının `inactivity` değerini) en uzun araç çağrınızın üstünde tutun;
   süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
   sınırını artırın.
-- **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
+- **Hedef kuyruğu kullanılabilir, beta kabulü açık.** Kuyruk 1.0.0-alpha.43 ile yayımlandı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Servis protocol v31 ve güncel defter (v75; kuyruk
   defter v57–v59 ve protocol v29 ile geldi) yeniden build edilmiş binary ve switch öncesi doğrulanmış defter yedeği gerektirir. Gerçek
   terminal/socket/crash ve N1 yük kabulü ayrı kapılardır; ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar;
