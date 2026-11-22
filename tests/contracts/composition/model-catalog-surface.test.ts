@@ -53,7 +53,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     for (const lang of ['en', 'tr']) {
       const listed = await f.cli('list', '--scope', 's', '--lang', lang);
       expect(listed.code).toBe(0);
-      for (const text of ['openai', 'gpt-6.1-sol', 'subscription', '272000', 'ultra', '0.159.2', '2026-10-14']) expect(listed.stdout).toContain(text);
+      for (const text of ['openai', 'gpt-6.1-sol', 'gpt-6.2-sol', 'gpt-6.2-astra', 'subscription', '272000', '500000', 'ultra', '0.159.2', '0.169.1', '2026-10-14']) expect(listed.stdout).toContain(text);
       expect(listed.stdout).toContain(lang === 'en' ? 'canonical gpt-6.1-sol' : 'kanonik kimlik gpt-6.1-sol');
       expect(listed.stdout).toContain(lang === 'en' ? 'not active' : 'etkin değil');
       expect(listed.stdout).not.toContain('"schemaVersion"');

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "model-roles-2026-11-09",
+  "revision": "model-roles-2026-11-18",
   "roles": [
     {"id": "brain", "minimumTier": "frontier"},
     {"id": "worker", "minimumTier": "worker"},
@@ -19,7 +19,9 @@
     {"channelId": "claude-cli-subscription", "modelId": "claude-sonnet-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},
     {"channelId": "claude-cli-subscription", "modelId": "claude-haiku-5-5", "version": 1, "tier": "worker", "roles": ["worker"]},
     {"channelId": "claude-cli-subscription", "modelId": "claude-haiku-4-5-20251001", "version": 1, "tier": "worker", "roles": ["worker"]},
+    {"channelId": "codex-cli-subscription", "modelId": "gpt-6.2-sol", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
     {"channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "version": 1, "tier": "frontier", "roles": ["brain", "worker", "recovery-decision", "memory-evaluator"]},
+    {"channelId": "codex-cli-subscription", "modelId": "gpt-6.2-astra", "version": 1, "tier": "frontier", "roles": ["worker"]},
     {"channelId": "codex-cli-subscription", "modelId": "gpt-6-astra", "version": 1, "tier": "frontier", "roles": ["worker"]},
     {"channelId": "codex-cli-subscription", "modelId": "gpt-6-sol", "version": 1, "tier": "worker", "roles": ["worker"]},
     {"channelId": "codex-cli-subscription", "modelId": "gpt-6-luna", "version": 1, "tier": "worker", "roles": ["worker"]},
