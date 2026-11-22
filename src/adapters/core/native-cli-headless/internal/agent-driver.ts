@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { headlessEgressReasons, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationProfileDigest, createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
-import { type SameTurnPlanningCall, type SameTurnPlanningPort, type SameTurnPlanningPin, type SameTurnToolSessionPort, type NativeAgentToolResult, nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type ClaudeRateLimit, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, type SameTurnPlanningCall, type SameTurnPlanningPort, type SameTurnPlanningPin, type SameTurnToolSessionPort, type NativeAgentToolResult, nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type ClaudeRateLimit, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
 import { ErrorRegistry, feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { createClaudeAgentDriver } from './claude-agent.js';
 import { codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
@@ -153,7 +153,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
                   : rejection && ('field' in rejection && rejection.field || 'subtype' in rejection && rejection.subtype);
                 if (field) {
                   refusal = finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
-                  refusalCheck = `agent-surface:${field}`.slice(0, 64);
+                  refusalCheck = field === CODEX_TOOL_ITEM_RESERVATION ? field : `agent-surface:${field}`.slice(0, 64);
                 }
                 const reason = cancelled ? 'cancelled' : truncated ? 'output-truncated'
                   : evidence.reason === 'exit' && evidence.exitCode !== 0 || finished?.kind === 'failed' ? 'native-failed' : 'completion-unknown';

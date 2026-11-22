@@ -9,8 +9,8 @@ import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { inspectNativeChat } from '#composition/core/terminal-chat/index.js';
-import { nativeQuotaText, nativeAgentReasonText, type ToolSessionPort } from '#capabilities/index.js';
-import { snapshotKnownSecrets, clockText } from '#platform/index.js';
+import { nativeQuotaText, nativeAgentReasonText, type SameTurnPlanningPort, type SameTurnToolSessionPort, type ToolSessionPort } from '#capabilities/index.js';
+import { snapshotKnownSecrets, clockText, t } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
@@ -30,7 +30,7 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
   const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
-  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host = port, user = 'Read the scoped fixture.') => {
+  const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host: SameTurnToolSessionPort = port, user = 'Read the scoped fixture.') => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
     const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: host, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
     close.push(() => driver.close());
@@ -296,4 +296,38 @@ it('Card 168 stops the Codex chat turn with the reservation reason and accepts t
   const next = await f.start('continue', null, f.port, 'Read the fixture again.');
   expect(await next.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
   expect(f.propose).toHaveBeenCalledTimes(2);
+});
+
+it('Card 168 renders the reservation refusal in both languages during active Codex planning', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const family = families[1]!, name = 'propose_work', args = { request: 'Prepare work' }, entry = nativeCliAgent(family)!;
+  const f = await fixture(family, { hang: true, events: [{ type: 'item.started', item: { id: 'open-item', type: 'mcp_tool_call',
+    server: entry.bridge.serverName, tool: name, arguments: args, status: 'in_progress', result: null, error: null } }] });
+  let active = false;
+  const planning: SameTurnPlanningPort = {
+    get active() { return active; }, pin: null, normalClosed: false, bindDeliveryProjection: vi.fn(), bindNativeSession: vi.fn(),
+    beforeTool: vi.fn(), privateResult: () => null, preparationSettled: vi.fn(), preparationDelivered: vi.fn(),
+    terminalEnvelope: vi.fn(), nativeClosed: vi.fn(), responseBody: vi.fn(), abandon: vi.fn(),
+  };
+  const host: SameTurnToolSessionPort = {
+    ...f.port, planning, session: { ...f.port.session, tools: [{ ...f.port.session.tools[0]!, name }] },
+    propose: (...parameters) => { active = true; return f.propose(...parameters); },
+  };
+  const h = await f.start('continue', null, host), stop = new AbortController();
+  const pending = expect(h.run(stop.signal)).rejects.toMatchObject({ code: 'BRAIN_SAME_TURN_REFUSED' });
+  const propose = (id: string) => h.driver.port.propose({ id, name, argumentsJson: JSON.stringify(args) },
+    { kind: 'codex-mcp', callId: id, itemId: `wire-${id}`, deckentCallId: id }, stop.signal);
+  try {
+    await vi.waitFor(() => expect(h.deltas.map(delta => delta.text).join('')).toContain('K16-WAITING'));
+    expect(await propose('first')).toMatchObject({ deckentCallId: 'first' });
+    expect(planning.active).toBe(true);
+    await expect(propose('second')).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID' });
+    expect(f.propose).toHaveBeenCalledOnce();
+    await pending;
+    const reason = h.driver.refusal();
+    expect(reason).toBe('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+    for (const locale of ['en', 'tr'] as const) {
+      expect.soft(nativeAgentReasonText(reason!, locale, false, true, h.driver.refusalCheck())).toBe(t('headless.agent.toolItemStopped', {}, locale));
+    }
+  } finally { stop.abort(); await pending.catch(() => undefined); }
 });
