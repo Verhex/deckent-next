@@ -153,6 +153,9 @@ const privacyReplacements = new Map([
     ['22:596510b1ce87f0480ad96f8829750b99216a4f3c946cbba8c306959bc3e16150', '25c38d1bfe40a1313d31efc848c2d6412343b8e967747643e72bbb9bc8752b1d'],
   ])],
   ['.deckent/docs/core-memory/law_second_opinion_jev.md', new Map([
+    // Owner order of 2026-11-22 for two further protected lines (base 68a01685a).
+    ['8:8a4d71160539124583a0157297e413aa9fef76c77dec90b84977439eb882ea33', 'f434df5a896e5278c5d0e33072d7f56d7b32319b084a6ed78aaa61436d55729c'],
+    ['13:6c9901996df7d984b61ca779ff01e79921c82452b103f329cf11cd899a645f0f', 'af74da8292f2947178ad50473c3cf57a150ad149e44fb069c8ef50ee6bb30704'],
     // Owner order of 2026-11-22 for four protected lines (base 8b45a20e8).
     ['17:bec389f58bc3541e2df4630c8642f01d42516a01a680f0e69260e2d4f0112057', '3908e8901bcec915cc67fb6591f31215735763238a32c4d4496e2a637587bca4'],
   ])],
