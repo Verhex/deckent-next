@@ -448,7 +448,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   WORKER_OBSERVATION_INVALID: 'error', WORKER_OBSERVATION_UNAVAILABLE: 'error', WORKER_EVENTS_SEAL_FAILED: 'error', PATCH_UNAVAILABLE: 'error',
   NATIVE_CREDENTIAL_UNAVAILABLE: 'error', NATIVE_CONNECTION_UNAVAILABLE: 'error', TASK_EVALUATOR_INVALID: 'error', TASK_KIND_NOT_REGISTERED: 'error',
   TASK_EVALUATOR_NOT_REGISTERED: 'error', EXECUTION_REGISTRY_VALIDATOR_INVALID: 'error', BRAIN_INPUT_INVALID: 'error', BRAIN_TEMPLATE_UNAVAILABLE: 'error',
-  BRAIN_OUTPUT_INVALID: 'error', BRAIN_OUTPUT_TRUNCATED: 'error', BRAIN_CONTEXT_TOO_LARGE: 'error',
+  BRAIN_OUTPUT_INVALID: 'error', BRAIN_OUTPUT_TRUNCATED: 'error', BRAIN_CONTEXT_TOO_LARGE: 'error', BRAIN_SAME_TURN_REFUSED: 'error',
 }), {
   // BeUser D-02: an unregistered task kind names the kinds used and the registered ones, with the person's next step.
   BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: workerKindIssues(p, l)

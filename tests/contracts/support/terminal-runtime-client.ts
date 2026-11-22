@@ -40,9 +40,9 @@ const peers = new WeakMap<ConfiguredRuntimeClient, Promise<LocalPeerIdentity>>()
 const approvalPeers = new Map<string, Promise<LocalPeerIdentity>>();
 afterEach(() => { for (const close of cleanups.splice(0)) close(); approvalPeers.clear(); });
 /** Real interactive peer for existing terminal approval integration cases; no attestation is mocked. */
-export function createTerminalRuntimeClient(project: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
+export function createTerminalRuntimeClient(project: string, options: ConfigLoadOptions = {}, environment = process.env): ConfiguredRuntimeClient {
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-client.mjs'), project, JSON.stringify(options)];
-  const child = spawn('python3', ['-c', DRIVER, JSON.stringify(argv)], { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn('python3', ['-c', DRIVER, JSON.stringify(argv)], { env: environment, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void; args: unknown[]; clear: () => void }>();
   let ready!: (peer: LocalPeerIdentity) => void, unready!: (error: Error) => void, started = false;
   const peer = new Promise<LocalPeerIdentity>((resolve, reject) => { ready = resolve; unready = reject; });

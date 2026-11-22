@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, expect, expectTypeOf, it, vi } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, memoryDistillerPrincipal, parseProviderCatalog, resolveModelBindingDefinition, type RateLimitFact } from '#domain/index.js';
@@ -15,14 +15,15 @@ afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursi
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const actor = { id: 'actor', issuer: 'host', subject: '1000', assurance: 'os-user' } as const;
 
-async function fixture(outcome?: 'responded' | 'rejected' | 'unknown', settings: { path?: string; scope?: string; model?: string; id?: string; plugins?: readonly string[] } = {}) {
+async function fixture(outcome?: 'responded' | 'rejected' | 'unknown', settings: { path?: string; scope?: string; model?: string; id?: string; plugins?: readonly string[]; wal?: boolean } = {}) {
   const scopeId = settings.scope ?? 'scope', invocationId = settings.id ?? 'invocation';
   const commandId = settings.id ?? 'invoke', reference = { providerId: 'provider', providerVersion: 1, modelId: settings.model ?? 'model', modelVersion: 1 };
   const definition = resolveModelBindingDefinition(parseProviderCatalog({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'provider', version: 1,
     models: [{ id: reference.modelId, version: 1, nativeId: 'native/model', protocols: [{ family: 'chat', version: '1', capabilities: [] }] }] }] }), reference)!;
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-inspection-')); roots.push(root);
-  const path = settings.path ?? join(root, 'ledger.db'), activations = await openSqliteModelActivationStore(path, options);
+  const storage = settings.wal ? { ...options, journalMode: 'wal' as const } : options;
+  const path = settings.path ?? join(root, 'ledger.db'), activations = await openSqliteModelActivationStore(path, storage);
   const activated = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: `activate-${scopeId}-${reference.modelId}`, scopeId,
     reference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding }, actor,
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); activations.close();
@@ -31,7 +32,7 @@ async function fixture(outcome?: 'responded' | 'rejected' | 'unknown', settings:
     allocation: { id: 'allocation', maxCalls: outcome ? null : 2, maxInFlight: 2 }, limits: { requestMaxBytes: 1024, responseMaxBytes: 1024, timeoutMs: 1000 } };
   const command = { schemaVersion: 1 as const, commandId, scopeId, reference,
     catalogRevision: 'catalog', expectedBinding: binding, nativeRequest: { prompt: 'private' } };
-  const store = await openSqliteModelInvocationStore(path, options, 'forbid');
+  const store = await openSqliteModelInvocationStore(path, storage, 'forbid');
   const claimed = await store.claim({ command, requestDigest: modelInvocationRequestDigest(command), actor,
     authorization: { revision: 'policy', ruleId: 'invoke' }, definition, activation: activated.receipt.record, profile,
     profileDigest: modelInvocationProfileDigest(profile), invocationId, claimedAtMs: 2 });
@@ -201,4 +202,81 @@ it('keeps the r7 total-count boundary through full/count parsing and sums doctor
   expect(await appFor(path, false).inspectNativePlugins('scope', { pageSize: 1, maxRecords: 3 })).toEqual({
     calls: 3, hiddenCalls: 3, names: [], omitted: '0', complete: true });
   expect(await readFile(path)).toEqual(before);
+});
+
+it('selects the private body only for the exact responded receipt, with permission and live custody', async () => {
+  const { path } = await fixture('responded', { wal: true });
+  await fixture('responded', { path, id: 'absent', wal: true });
+  const readerOptions = { busyTimeoutMs: options.busyTimeoutMs };
+  const reader = await openSqliteModelInvocationReader(path, readerOptions);
+  const { receipt, content } = (await reader.loadInvocation('scope', 'invocation'))!;
+  const { receipt: absent } = (await reader.loadInvocation('scope', 'absent'))!;
+  reader.close();
+  const writer = new DatabaseSync(path);
+  writer.prepare('DELETE FROM model_invocation_contents WHERE invocation_id=?').run(absent.claim.invocationId);
+  expect(writer.prepare('PRAGMA journal_mode').get()?.journal_mode).toBe('wal');
+  const realPrepare = DatabaseSync.prototype.prepare;
+  const selected: string[] = [];
+  const sql = vi.spyOn(DatabaseSync.prototype, 'prepare').mockImplementation(function (this: DatabaseSync, statement) {
+    const prepared = realPrepare.call(this, statement);
+    if (/c\.record AS content_record/iu.test(statement)) {
+      const get = prepared.get.bind(prepared);
+      vi.spyOn(prepared, 'get').mockImplementation((...args: Parameters<typeof prepared.get>) => {
+        selected.push(String(args[1])); return get(...args);
+      });
+    }
+    return prepared;
+  });
+  const order: string[] = [];
+  const app = new ModelInvocationInspectionApplication(verifiedPrincipal({ ...actor, scopeIds: ['scope', 'other'] }),
+    { async authorize(action) { order.push(action); return { revision: 'policy', ruleId: 'inspect' }; } },
+    async () => openSqliteModelInvocationReader(path, readerOptions));
+  const person = vi.fn(async () => { order.push('person'); expect(selected).toEqual([]); });
+  let connected = true, pinned = true;
+  const current = () => connected && pinned;
+  const refused = { code: 'MODEL_INVOCATION_UNAVAILABLE' };
+  try {
+    expect(receipt.outcome?.state).toBe('responded');
+    if (receipt.outcome?.state !== 'responded') throw new Error('expected fixture response');
+    const wrongDigest = 'b'.repeat(64);
+    const otherProfile = { ...receipt.profile, scopeId: 'other' }, otherProfileDigest = modelInvocationProfileDigest(otherProfile);
+    for (const wrong of [
+      { ...receipt, request: { ...receipt.request, scopeId: 'other' }, profile: otherProfile, profileDigest: otherProfileDigest,
+        claim: { ...receipt.claim, scopeId: 'other', profileDigest: otherProfileDigest } },
+      { ...receipt, request: { ...receipt.request, requestDigest: wrongDigest }, claim: { ...receipt.claim, requestDigest: wrongDigest } },
+      { ...receipt, outcome: { ...receipt.outcome, content: { ...receipt.outcome.content, digest: wrongDigest } } },
+      { ...receipt, outcome: { ...receipt.outcome, content: { ...receipt.outcome.content, byteLength: 1 } } },
+      absent,
+    ]) await expect(app.readRetainedTurnResponse(wrong, person, current)).rejects.toMatchObject(refused);
+    expect(person).not.toHaveBeenCalled();
+    await expect(app.readRetainedTurnResponse(receipt, async () => { throw Object.assign(new Error(), { code: 'POLICY_DENIED' }); }, current))
+      .rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    let policyAllowed = true;
+    await expect(app.readRetainedTurnResponse(receipt, async () => {
+      const policyCheck = Promise.resolve().then(() => policyAllowed);
+      policyAllowed = false;
+      if (!await policyCheck) throw Object.assign(new Error(), { code: 'POLICY_DENIED' });
+    }, current)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(app.readRetainedTurnResponse(receipt, async () => { await person(); connected = false; }, current)).rejects.toMatchObject(refused);
+    connected = true;
+    await expect(app.readRetainedTurnResponse(receipt, async () => { await person(); pinned = false; }, current)).rejects.toMatchObject(refused);
+    pinned = true;
+    expect(selected).toEqual([]);
+    order.length = 0;
+    expect(await app.readRetainedTurnResponse(receipt, person, current)).toMatchObject({ receipt, response: (content as { response: unknown }).response });
+    expect(order).toEqual(['inspect', 'person']); expect(selected.splice(0)).toEqual(['invocation']);
+
+    // Corruption keeps the matching metadata but never delivers the selected body.
+    writer.prepare("UPDATE model_invocation_contents SET record=json_set(record,'$.response.native.headless.cliVersion','modified') WHERE invocation_id=?")
+      .run('invocation');
+    await expect(app.readRetainedTurnResponse(receipt, person, current)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+    expect(selected.splice(0)).toEqual(['invocation']);
+
+    // Commit a purge via a second WAL connection while the asynchronous permission gate is open.
+    writer.exec('BEGIN IMMEDIATE');
+    writer.prepare('INSERT INTO model_invocation_content_purges(scope_id,command_id,invocation_id,record) VALUES(?,?,?,?)').run('scope', 'purge', 'invocation', '{}');
+    writer.prepare('UPDATE model_invocation_contents SET record=NULL,purge_command_id=? WHERE invocation_id=?').run('purge', 'invocation');
+    await expect(app.readRetainedTurnResponse(receipt, async () => { await person(); writer.exec('COMMIT'); }, current)).rejects.toMatchObject(refused);
+    expect(selected).toEqual([]);
+  } finally { sql.mockRestore(); writer.close(); }
 });

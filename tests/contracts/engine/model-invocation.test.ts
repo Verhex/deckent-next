@@ -38,7 +38,8 @@ function inspectionReader(f: ReturnType<typeof fixture>) { return { async loadIn
 }, close() { f.store.close(); } }; }
 function fixture(options: { activationState?: 'missing' | 'inactive' | 'digest-conflict'; staleActivation?: boolean; spendingDrift?: boolean; deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
-  permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
+  permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner';
+  claimed?: (receipt: ModelInvocationReceipt) => void } = {}) {
   const controllers = new ModelInvocationControllers(2), registrations: ModelInvocationClaim[] = [];
   let stored: ModelInvocationRecord | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
   if (options.profilePadding) selectedProfile = { ...selectedProfile, adapter: { ...selectedProfile.adapter,
@@ -89,6 +90,7 @@ function fixture(options: { activationState?: 'missing' | 'inactive' | 'digest-c
     async () => ({ async loadRecord() { calls.activations++; return options.activationState === 'missing' ? null : options.activationState === 'inactive' ? { ...activation, state: 'inactive' as const }
       : options.activationState === 'digest-conflict' ? { ...activation, binding: { ...binding, digest: 'e'.repeat(64) } } : options.staleActivation ? { ...activation, catalogRevision: 'old-catalog' } : activation; }, close() {} }),
     { async resolve() { calls.profiles++; return selectedProfile; } }, { resolve() { return {
+      ...(options.claimed ? { claimed: options.claimed } : {}),
       ...(options.responseBound === undefined ? {} : { responseBytesUpperBound: () => options.responseBound! }),
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
       async send(_prepared: unknown, _signal?: AbortSignal, onDelta?: (delta: { kind: 'text' | 'reasoning'; text: string }) => void) { calls.sends++;
@@ -105,6 +107,22 @@ function fixture(options: { activationState?: 'missing' | 'inactive' | 'digest-c
 }
 
 describe('model invocation streamed deltas', () => {
+  it('exposes planning custody only after a fresh claim and verified granted permit, never for register/replay/denial', async () => {
+    const observed: ModelInvocationReceipt[] = [];
+    const f = fixture({ liveControllers: true, claimed: receipt => {
+      expect(f.calls).toMatchObject({ claims: 1, permissions: 1, sends: 0 });
+      expect(receipt.outcome).toBeNull(); expect(f.registrations).toHaveLength(1); observed.push(receipt);
+    } });
+    await f.app.invoke(command); await f.app.invoke(command);
+    expect(observed).toHaveLength(1); expect(f.calls.sends).toBe(1);
+    for (const permission of ['prevented', 'denied', 'pending', 'foreign-owner'] as const) {
+      let calls = 0;
+      const stopped = fixture({ liveControllers: true, permission, claimed: () => { calls++; } });
+      if (permission === 'prevented') expect((await stopped.app.invoke(command)).receipt.outcome?.state).toBe('not-sent');
+      else await expect(stopped.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+      expect(calls).toBe(0); expect(stopped.calls.sends).toBe(0);
+    }
+  });
   it('invocable-now refuses stale activation, unfit delivery, credential revocation and budget drift without claim, send or repair', async () => {
     for (const gate of ['stale', 'delivery', 'credential', 'budget'] as const) {
       let credentials = true, preparations = 0;

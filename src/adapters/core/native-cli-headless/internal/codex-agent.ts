@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { parseCodexExecLine } from '#adapters/core/native-connection/index.js';
-import { nativeAgentItemReason, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
+import { type createClaudeAgentDriver, nativeAgentItemReason, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import { refuse } from './contract.js';
@@ -25,10 +25,12 @@ function toolResult(value: unknown): NativeAgentToolResult | null { const result
   let decoded: unknown; try { decoded = JSON.parse(block['text']); } catch { return null; }
   const parsed = nativeAgentToolResultSchema.safeParse(decoded); if (!parsed.success || result?.['structured_content'] != null && !isDeepStrictEqual(result['structured_content'], parsed.data)) return null; return parsed.data; }
 /** Observes K4 results, never executes: item.id is stream lifecycle; deckentCallId is facade custody. Caller owns bounds and stop-on-refusal. */
-export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS) {
+export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight, session: ToolSession, lookup: CodexAgentResultLookup, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS, wire?: Parameters<typeof createClaudeAgentDriver>[0]['planning']) {
   const entry = prepared.entry.headless.protocolFamily ? nativeCliAgent(prepared.entry.headless.protocolFamily) : null;
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
-  const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
+  const beforeDelivery = new Set<string>();
+  const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
+  let threadId: string | undefined, turnId: string | undefined, conflictingIdentity = false;
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
   return { accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
@@ -39,8 +41,16 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
       if (refusal) return refusal; const line = parseCodexExecLine(raw);
       if (line.kind === 'invalid') return line.reason === 'blank' ? null : fail('json'); if (completed) return fail('after-turn');
       const { type, item, data } = line;
-      if (type === 'thread.started') { if (thread || typeof data.thread_id !== 'string' || !data.thread_id) return fail('thread'); thread = true; }
-      else if (type === 'turn.started') { if (!thread || started) return fail('turn'); started = true; }
+      if (wire) {
+        conflictingIdentity ||= data.thread_id !== undefined && threadId !== undefined && data.thread_id !== threadId
+          || data.turn_id !== undefined && turnId !== undefined && data.turn_id !== turnId;
+        if (wire.active && conflictingIdentity) return fail('planning-identity');
+        if (typeof data.turn_id === 'string' && data.turn_id) turnId ??= data.turn_id;
+      }
+      if (type === 'thread.started') {
+        if (thread || typeof data.thread_id !== 'string' || !data.thread_id) return fail('thread');
+        thread = true; threadId = data.thread_id; wire?.session(threadId);
+      } else if (type === 'turn.started') { if (!thread || started) return fail('turn'); started = true; }
       else if (type.startsWith('item.')) {
         if (nativeAgentItemReason(entry.agent, item)) return fail('item');
         if (item?.type === 'error') { if (!thread || started || type !== 'item.completed' || ++notices > maxNotices) return fail('notice'); return null; }
@@ -49,7 +59,11 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
         if (item.type === 'mcp_tool_call') {
           if (item.server !== entry.bridge.serverName || !session.tools.some(tool => tool.name === item.tool) || !record(item.arguments)) return fail('mcp-tool');
           const identity = { server: item.server, tool: item.tool, arguments: item.arguments }, prior = active.get(item.id);
-          if (type === 'item.started') { if (prior || item.status !== 'in_progress' || item.result != null || item.error != null) return fail('mcp-start'); active.set(item.id, identity); return null; }
+          if (type === 'item.started') {
+            if (wire?.active) return fail('planning-tool');
+            if (prior || item.status !== 'in_progress' || item.result != null || item.error != null) return fail('mcp-start');
+            active.set(item.id, identity); return null;
+          }
           if (!prior || !isDeepStrictEqual(prior, identity)) return fail('mcp-order');
           if (type === 'item.updated') return item.status === 'in_progress' && item.result == null && item.error == null ? null : fail('mcp-update');
           const envelope = toolResult(item.result);
@@ -57,14 +71,27 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
           const recorded = lookup(envelope.deckentCallId); let argumentsValue: unknown;
           try { argumentsValue = recorded ? JSON.parse(recorded.call.argumentsJson) : undefined; } catch { return fail('mcp-correlation'); }
           if (!recorded || recorded.call.name !== item.tool || !isDeepStrictEqual(argumentsValue, item.arguments) || !isDeepStrictEqual(recorded.result, envelope)) return fail('mcp-correlation');
+          if (wire?.active) {
+            const errorFlag = record(item.result)?.isError;
+            if (wire.delivered || envelope.outcome.status !== 'ok' || errorFlag !== undefined && errorFlag !== false) return fail('planning-delivery');
+            wire.delivery(envelope);
+          }
           calls.add(envelope.deckentCallId); seen.add(item.id); active.delete(item.id); return null;
+        }
+        if (wire && item.type === 'agent_message') {
+          if (!wire.delivered) beforeDelivery.add(item.id);
+          else if (beforeDelivery.has(item.id) || data.parent_tool_use_id != null || item.parent_id != null || item.parent_tool_use_id != null || data.parent_id != null
+            || item.role !== undefined && item.role !== 'assistant' || item.finish_reason != null && item.finish_reason !== 'stop') return fail('planning-message');
+          else if (type === 'item.completed') wire.terminal(item.id, item.text as string);
         }
         if (type === 'item.started') { if (pendingText.has(item.id)) return fail('item-order'); pendingText.set(item.id, item.type as string); }
         else if (type === 'item.updated' && !pendingText.has(item.id)) return fail('item-order');
         if (type === 'item.completed') { seen.add(item.id); pendingText.delete(item.id); }
       } else if (type === 'turn.completed') {
+        if (wire?.active && [data.stop_reason, data.finish_reason].some(reason => reason != null && reason !== 'stop')) return fail('planning-finish');
         if (!started || active.size) return fail('pending-tools'); if (pendingText.size) return fail('pending-items'); completed = true;
-      } else if (type !== 'error' && type !== 'turn.failed') return fail('event');
+      } else if (wire?.active && type === 'error') return fail('planning-interrupted');
+      else if (type !== 'error' && type !== 'turn.failed') return fail('event');
       refusal = base.line(raw); return refusal;
     },
     end(exit: Parameters<HeadlessTurn['end']>[0], egress: Parameters<HeadlessTurn['end']>[1]) { return refusal ? { refusal } : completed && !active.size ? base.end(exit, egress) : null; },

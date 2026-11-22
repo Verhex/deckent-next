@@ -113,3 +113,11 @@ it('K3: unsupported login methods, API key and SSO refuse before any realm looku
   await expect(login('device-auth', true)).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'sso' } });
   expect(probes).toBe(0);
 });
+
+it('keeps distinct ordinary Codex message deltas and the final completed answer without a planning candidate', () => {
+  const deltas: string[] = [], driver = codexAgentTurn(prepared, preflight, session, lookup, delta => deltas.push(delta.text));
+  const first = { type: 'item.completed', item: { id: 'first', type: 'agent_message', text: 'Before the tool.\n' } };
+  expect(feed(driver, [thread, turn, first, start(), finish(), answer, done])).toEqual(Array(7).fill(null));
+  expect(deltas).toEqual(['Before the tool.\n', 'answer']);
+  expect(driver.end({ exited: true, exitCode: 0 }, egress)).toMatchObject({ response: { native: { choices: [{ message: { content: 'answer' } }] } } });
+});

@@ -1,4 +1,7 @@
 export { nativeCliHeadlessSchema, type NativeCliHeadless } from './internal/headless.js';
+export { SAME_TURN_PLANNING_POLICY, SAME_TURN_CHALLENGE_PREFIX } from './internal/planning.js';
+export type { SameTurnPlanningPort, SameTurnPlanningPin, SameTurnPlanningCall, SameTurnPlanningCustody, SameTurnPlanningEnvelope,
+  SameTurnPlanningFinish, SameTurnPlanningRefusal, SameTurnToolSessionPort } from './internal/planning.js';
 export { nativeCliAgentSchema, nativeAgentBridgeSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeAgentLoginMethodSchema } from './internal/registry.js';
 export type { NativeCliAgent, NativeAgentBridge, NativeAgentLoginMethod } from './internal/registry.js';
 export { nativeCliHeadlessDefinitionSchema, nativeAgentExecutionSchema, nativeAgentReadinessReasonSchema, nativeAgentReadinessSchema } from './internal/contract.js';

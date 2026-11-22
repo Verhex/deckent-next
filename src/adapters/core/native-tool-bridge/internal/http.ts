@@ -1,6 +1,9 @@
 import { CodedError } from '#platform/index.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { once } from 'node:events';
+
+export interface BridgeDelivery {
+  beforeWrite?(frame: string): (() => void) | undefined;
+}
 
 /** Protocol codes only; person-facing explanations belong to the shared reason catalogs. */
 export function refuseBridge(response: ServerResponse, status: number, reason: string): void {
@@ -26,11 +29,14 @@ export async function bridgeBody(request: IncomingMessage, maxBytes: number, cou
     };
     request.on('data', data); request.once('end', end); request.once('error', error); request.once('aborted', aborted);
   });
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))) as unknown;
+  const body: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
+  // The bridge tracks one delivery per POST. Batch members would bypass that binding.
+  if (Array.isArray(body)) throw new CodedError('NATIVE_BRIDGE_REQUEST_INVALID');
+  return body;
 }
 
 /** Hold a complete SSE frame before forwarding it. Backpressure never grows an unbounded queue. */
-export async function bridgeResponse(source: Response, target: ServerResponse, maxBytes: number, count: (bytes: number) => boolean, project: (text: string) => string): Promise<void> {
+export async function bridgeResponse(source: Response, target: ServerResponse, maxBytes: number, count: (bytes: number) => boolean, project: (text: string) => string, delivery: BridgeDelivery): Promise<void> {
   for (const [name, value] of source.headers) target.setHeader(name, value);
   target.writeHead(source.status); target.flushHeaders();
   if (!source.body) { target.end(); return; }
@@ -39,13 +45,18 @@ export async function bridgeResponse(source: Response, target: ServerResponse, m
   target.once('close', close);
   let pending = Buffer.alloc(0);
   const send = async (bytes: Buffer) => {
-    const projected = Buffer.from(project(bytes.toString('utf8')));
+    if (target.destroyed) return;
+    const frame = bytes.toString('utf8'), projected = Buffer.from(project(frame));
     if (projected.length > maxBytes || !count(projected.length)) throw new Error('NATIVE_BRIDGE_TRAFFIC_LIMIT');
-    if (!target.write(projected)) {
-      const controller = new AbortController(), closed = () => controller.abort(); target.once('close', closed);
-      try { await once(target, 'drain', { signal: controller.signal }); }
-      finally { target.off('close', closed); }
-    }
+    const release = delivery.beforeWrite?.(frame);
+    let closed = () => {};
+    try {
+      await new Promise<void>((resolve, reject) => {
+        closed = () => reject(new Error('NATIVE_BRIDGE_CLOSED'));
+        target.once('close', closed);
+        target.write(projected, error => error ? reject(error) : resolve());
+      });
+    } finally { target.off('close', closed); release?.(); }
   };
   try {
     while (!target.destroyed) {

@@ -14,7 +14,9 @@ import { proposalFixture } from '../support/run-proposal.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import type { PlanServiceRun } from '#composition/core/agent-turn/index.js';
 import { terminalRequest } from '../support/approval-terminal.js';
+import { personEnv } from '../support/person-env.js';
 import { aiProposalRequester, sealApproval } from '#engine/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 // L1 MCP-CORE item 5 (owner 2026-10-07): the model may only PROPOSE an MCP server. The proposal opens its own approval window in every mode —
 // standart, full-auto and a full-access turn alike — and nothing is written without the person's yes; a yes adds the server to the project's
@@ -41,6 +43,12 @@ const V20 = firstRunProposalRules([], me[0]!, ['scope']).wanted as unknown as Re
 const AI_INVOKE = { id: 'ai-invoke', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: [AI], resource: { kind: 'model-invocation', ids: 'all' } };
 const config = (f: { project: string }) => JSON.parse(readFileSync(join(f.project, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>;
 const cardOf = (events: readonly AgentTurnStreamEvent[]) => events.find((event): event is Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }> => event.kind === 'approval.requested');
+// terminalProgram merges the fixture environment over process.env. An undefined override
+// omits the inherited marker in the PTY child while the service and the runner keep theirs.
+function personTerminal(env: NodeJS.ProcessEnv) {
+  const inherited = { ...process.env, ...env }, person = personEnv(inherited);
+  for (const key of Object.keys(inherited)) if (!(key in person)) env[key] = undefined;
+}
 /** The service's plan port for `propose_work` as the real Run proposal application and run admission (a fixed human-source plan instead of a Brain
  * call): the principal is whoever calls it, i.e. the AI actor `propose_work` runs it as. */
 const realPlan: PlanServiceRun = async (root, command, options, _invoke, _signal, observe) => {
@@ -195,13 +203,19 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     // actor and approved by the person. The Brain-source check reads the retained answer as the system (lead option b), never as the AI.
     const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
     const w = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, AI_INVOKE, ...V20], mode: null, planWork: planServiceRun, brain: JSON.stringify({ graph, budgetCeiling, requiredPermissions }) });
+    personTerminal(w.env);
+    const separateCalls = () => w.sent.filter(request => !(request as { stream?: boolean }).stream).length;
     const declinedWork = await w.call('propose_work', { request: 'add a third line to notes.txt' }, 'deny');
     expect(declinedWork, w.evidence(declinedWork)).toMatchObject({ card: true, status: 'error' }); expect(declinedWork.text).toContain('the person declined');
     expect(declinedWork.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
     expect(cardOf(declinedWork.events)).toMatchObject({ summary: expect.stringContaining('Plan · tasks: 1'), preview: expect.stringContaining('Proposed by the AI in this conversation; you decide.') });
     expect(runsOf(w)).toEqual([]);
+    expect(separateCalls()).toBe(1);
+    expect(cardOf(declinedWork.events)?.preview).not.toContain('in the current conversation using your');
+    expect(cardOf(declinedWork.events)?.preview).not.toContain('the subscription sign-in for this chat');
     const admitted = await w.call('propose_work', { request: 'add a third line to notes.txt' }, 'allow');
     expect(admitted, w.evidence(admitted)).toMatchObject({ card: true, status: 'ok' }); expect(admitted.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
+    expect(separateCalls()).toBe(2);
     const [run] = runsOf(w); expect(admitted.text).toContain(`Run ${run!.identity.runId} was admitted`);
     // v31 (/do parity): the turn carries the plan's progress and the admitted Run for the person's /tasks handoff.
     const callId = (cardOf(admitted.events)!).callId;
@@ -306,3 +320,24 @@ describe.skipIf(process.platform !== 'linux')('the proposal window in every mode
     }
   }, 180_000);
 });
+
+it.skipIf(process.platform !== 'linux')('keeps the original command visible if the admission response is lost after commit', async () => {
+  let commandId = '';
+  const f = await modeRuntime({ grants: [AI_SCOPE, ...AI_OBSERVE, ...V20], mode: null, planWork: async (...args) => {
+    const result = await realPlan(...args);
+    if (result.run) {
+      commandId = args[1].commandId;
+      throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
+    }
+    return result;
+  } });
+  personTerminal(f.env);
+  const response = await f.call('propose_work', { request: 'Prepare a purchase' }, 'allow');
+  expect(commandId).not.toBe('');
+  expect(response.status).toBe('error');
+  expect(response.text).toContain(commandId);
+  expect(response.text).toContain('Inspect or replay the same command');
+  expect(response.text).not.toContain('nothing was changed');
+  expect(response.events.filter(event => event.kind === 'approval.requested')).toHaveLength(1);
+  expect(runsOf(f)).toHaveLength(1);
+}, 180_000);

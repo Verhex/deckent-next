@@ -6,7 +6,7 @@ import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
 import { isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
-import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
+import { bridgeBody, bridgeResponse, refuseBridge, type BridgeDelivery } from './http.js';
 
 export interface NativeToolBridgeLimits {
   readonly idleMs: number;
@@ -37,7 +37,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const { Server, WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
   const turnToken = `~${randomBytes(32).toString('base64url')}`, tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken); // '~' head (RFC 6750 b64token): a field ending in a known-secret prefix is masked, and ordinary text practically never ends in '~'
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
-  const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();
+  const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Map<RequestId, BridgeDelivery>();
+  const writing = new Set<() => boolean>();
   let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
   const url = `http://${bridge.sentinelHost}${bridge.path}`, progressIntervalMs = Math.floor(limits.idleMs / 2);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
@@ -63,7 +64,13 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN');
     const key = correlation.data.kind === 'claude-tool-use' ? correlation.data.toolUseId : correlation.data.callId;
     const fingerprint = digest(JSON.stringify(request.params)).toString('hex'), previous = replay.get(key);
-    if (previous) return previous.digest === fingerprint ? serve(previous.result, previous.deckentCallId, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
+    const id = context.mcpReq.id, signal = context.mcpReq.signal, delivery = inFlight.get(id);
+    if (previous) {
+      const repeated = { ...call.data, id: previous.deckentCallId };
+      if (previous.digest === fingerprint) return serve(previous.result, repeated, id, signal, delivery);
+      input.port.checkResultDelivery?.(repeated);
+      return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
+    }
     if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED');
     if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT');
     // Reserve before awaiting K1; duplicates share this promise even during approval. No eviction permits a second effect.
@@ -71,13 +78,29 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     const pending = Promise.resolve().then(() => propose(call.data, correlation.data, context.mcpReq.signal));
     replay.set(key, { digest: fingerprint, deckentCallId: call.data.id, result: pending });
     // The SDK suppresses a cancelled request's response; explicitly end its SSE instead of keeping it alive forever.
-    return serve(pending, call.data.id, context.mcpReq.id, context.mcpReq.signal);
+    return serve(pending, call.data, id, signal, delivery);
   });
-  async function serve(pending: Promise<CallToolResult>, callId: string, id: RequestId, signal: AbortSignal) {
+  async function serve(pending: Promise<CallToolResult>, call: AgentToolCall, id: RequestId, signal: AbortSignal, delivery: BridgeDelivery | undefined) {
     const cancelled = () => transport.closeSSEStream(id);
     signal.addEventListener('abort', cancelled, { once: true });
-    try { const value = await pending; return fits(id, value) ? value : failure(callId, 'NATIVE_BRIDGE_FRAME_LIMIT'); }
-    finally { signal.removeEventListener('abort', cancelled); }
+    try {
+      const value = await pending;
+      const check = () => input.port.checkResultDelivery?.(call) !== false;
+      if (!check()) return failure(call.id, 'BRAIN_SAME_TURN_REFUSED');
+      if (!fits(id, value)) return failure(call.id, 'NATIVE_BRIDGE_FRAME_LIMIT');
+      if (delivery && input.port.checkResultDelivery) delivery.beforeWrite = frame => {
+        const data = frame.split('\n').find(line => line.startsWith('data: '));
+        if (!data) return;
+        const message = object(JSON.parse(data.slice(6)));
+        if (message['id'] !== id || !Object.hasOwn(message, 'result')) return;
+        // A previous write can still be in the HTTP buffer when this preparation tries to leave.
+        if (!check()) throw new Error('BRAIN_SAME_TURN_REFUSED');
+        for (const pending of writing) if (!pending()) throw new Error('BRAIN_SAME_TURN_REFUSED');
+        writing.add(check);
+        return () => { writing.delete(check); };
+      };
+      return value;
+    } finally { signal.removeEventListener('abort', cancelled); }
   }
   async function propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<CallToolResult> {
     const deadline = AbortSignal.timeout(session.approvalTtlMs), combined = AbortSignal.any([lifetime.signal, signal, deadline]);
@@ -108,7 +131,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     if (closed || typeof token !== 'string' || !timingSafeEqual(tokenDigest, digest(token))) { refuseBridge(response, 403, 'NATIVE_BRIDGE_TOKEN_INVALID'); return; }
     if (request.headers.origin !== undefined && request.headers.origin !== `http://${bridge.sentinelHost}`) { refuseBridge(response, 403, 'NATIVE_BRIDGE_ORIGIN_INVALID'); return; }
     if (active >= limits.maxConnections) { refuseBridge(response, 429, 'NATIVE_BRIDGE_CONNECTION_LIMIT'); return; }
-    active++; responses.add(response); let rpcKey: string | undefined;
+    active++; responses.add(response); let rpcKey: RequestId | undefined;
+    const delivery: BridgeDelivery = {};
     try {
       const headers = new Headers(); for (const [name, value] of Object.entries(request.headers)) if (typeof value === 'string') headers.set(name, value);
       let body: unknown;
@@ -122,13 +146,13 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
         refuseBridge(response, 409, 'NATIVE_BRIDGE_SESSION_INVALID'); return;
       }
       if (rpcId !== undefined) {
-        const key = `${typeof rpcId}:${String(rpcId)}`;
+        const key = rpcId as RequestId;
         if (inFlight.has(key)) { refuseBridge(response, 409, 'NATIVE_BRIDGE_REPLAY_CONFLICT'); return; }
-        inFlight.add(key); rpcKey = key;
+        inFlight.set(key, delivery); rpcKey = key;
       }
       if (initialize) initializing = true;
       const source = await transport.handleRequest(new Request(url, { method: request.method ?? 'GET', headers }), body === undefined ? {} : { parsedBody: body });
-      await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe);
+      await bridgeResponse(source, response, bridge.frameMaxBytes, count, safe, delivery);
       if (request.method === 'DELETE' && source.ok) await close();
     } catch (error) {
       if (!response.destroyed) refuseBridge(response, isCodedError(error, 'NATIVE_BRIDGE_BODY_LIMIT') ? 413 : 400,

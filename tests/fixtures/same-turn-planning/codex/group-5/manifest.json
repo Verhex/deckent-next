@@ -1,0 +1,204 @@
+{
+  "cli": "codex",
+  "group": 5,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "deliver-before-write",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "78796ed2294ffbb081ca3cde41f66f90c58f616adcfdc5ad7cfd9df8958a53f3",
+          "replacementBytes": 60
+        }
+      ]
+    },
+    {
+      "case": "token-added-after-record",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "bd349cc78c8f3445d0e0246d42eeb01f0bd2c22e0b961300bc3773782a0ee6e6",
+          "replacementBytes": 73
+        }
+      ]
+    },
+    {
+      "case": "settlement-failed",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "4d8c815066fa86935fede2c1a8e41a054340e349b682f69cfefa5b72bca760ff",
+          "replacementBytes": 58
+        }
+      ]
+    },
+    {
+      "case": "settlement-unknown",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "1d35cd36c890be89604f5bfd4f2a4821b8892a8da70aadc62c085ee3cef787bb",
+          "replacementBytes": 59
+        }
+      ]
+    },
+    {
+      "case": "token-redacted",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "beb06998e9fa24c5c6974065e4d4268a11121198d8d8143c44a1fbb96f8faf70",
+          "replacementBytes": 48
+        }
+      ]
+    },
+    {
+      "case": "D-redacted",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "db0b7238dc00fcc3c6ecb14533fdef6d3a0363a382614f79ed2233ebcd24fae4",
+          "replacementBytes": 42
+        }
+      ]
+    },
+    {
+      "case": "store-readback-changed",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "49eea7578c77beffa9d3f79e8764afeb784a8134e830b1fd885d41ed8a61afc3",
+          "replacementBytes": 42
+        }
+      ]
+    },
+    {
+      "case": "crash-claim-to-P",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "178367f93f64f285c46cbd2a3e42d80cc65de6175cd0eaf3130d3237ca02f9d1",
+          "replacementBytes": 68
+        }
+      ]
+    },
+    {
+      "case": "crash-P-to-settlement",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "3bde61076098c96f6e1c5b8bc4b067359842c40ba48fea9ac044afe05a2923bc",
+          "replacementBytes": 103
+        }
+      ]
+    },
+    {
+      "case": "crash-settlement-to-delivery",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "abcd19a889b6f9e551ffd8aef893b0e4f7ac7ba4a08789c3f7a6c61f71b0976e",
+          "replacementBytes": 127
+        }
+      ]
+    },
+    {
+      "case": "crash-delivery-to-terminal",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "4dc4b4732d06f9b10d2fa58121ff2937b7cebca4e89c5410134a673124244eb2",
+          "replacementBytes": 164
+        }
+      ]
+    },
+    {
+      "case": "crash-terminal-to-retention",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "15c62b9c025b772c2d567fdf0a8da6e1edb35a97f34d455823439235672ed98a",
+          "replacementBytes": 199
+        }
+      ]
+    },
+    {
+      "case": "crash-retention-to-drain",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "e6126a6686f720733790c72b1717e852722d193dc3e985cdd8f99c0a74cb290f",
+          "replacementBytes": 219
+        }
+      ]
+    },
+    {
+      "case": "crash-finalize-to-source",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "244af4349e422d8823618e952a68ace9b18d6febdf71a3f71378d8429061c026",
+          "replacementBytes": 248
+        }
+      ]
+    },
+    {
+      "case": "crash-source-to-card",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "84097bdb33e08b9b6b5e486ddc69a6a11131315dfd5be2ed76b9394fdc54ae49",
+          "replacementBytes": 263
+        }
+      ]
+    },
+    {
+      "case": "admission-unknown-reconcile",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "a30f248db226729404691d7b3909641c05134981a9033016da1ab5d3a230d89a",
+          "replacementBytes": 323
+        }
+      ]
+    },
+    {
+      "case": "persisted-card-replay",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/events",
+          "replacementSha256": "9ee8db41bed4fe5ea7941bc77a1f308f6d439637ed45b926fc4a95fb075c7048",
+          "replacementBytes": 292
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "ad35307dbed263a6e1c21e9b76de7c3a9ded8827ae3f3eccbe59fb48f910e85c",
+      "bytes": 74529,
+      "lines": 17
+    }
+  ]
+}

@@ -1,0 +1,149 @@
+{
+  "cli": "claude",
+  "group": 1,
+  "provenance": "mutation",
+  "source": "DESIGN Rev3 R3.1-R3.7; reviewed source 568e0527f; A0 shapes only, no A0 bytes copied",
+  "recording": false,
+  "changes": [
+    {
+      "case": "stale-valid-draft-without-challenge",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "9a3d82be6b74994d7c3856f956cc1afc779396a64d271d2c36eb4fa97414d541",
+          "replacementBytes": 485
+        }
+      ]
+    },
+    {
+      "case": "wrong-cross-pin-challenge",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/content/0/text",
+          "replacementSha256": "ad35fc0cf5cbe98db822844c0f8dd0795ba686b64c01a4750ac9a8f6ad0f3200",
+          "replacementBytes": 576
+        }
+      ]
+    },
+    {
+      "case": "wrong-pin",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/pin",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-actor",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/actor",
+          "replacementSha256": "5958203be5927b7b5d313e55b1e4790ca5ce6b013a3173eb38db0b226a468cb1",
+          "replacementBytes": 36
+        }
+      ]
+    },
+    {
+      "case": "wrong-scopeId",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/scopeId",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-turnId",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/turnId",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-generation",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/generation",
+          "replacementSha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+          "replacementBytes": 1
+        }
+      ]
+    },
+    {
+      "case": "wrong-deckentCallId",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/deckentCallId",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-argumentsJson",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/argumentsJson",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-contextDigest",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/host/contextDigest",
+          "replacementSha256": "d448c0e0f65da7948e3edb7805b5272b54f75f427c33333157324b626f5ca51f",
+          "replacementBytes": 7
+        }
+      ]
+    },
+    {
+      "case": "wrong-delivered-result",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/3/message/content/0/content/0/text",
+          "replacementSha256": "576269db177f57c63e16b19d0c8a8def887b179ff1c15303baa9358e5a5d6235",
+          "replacementBytes": 162
+        }
+      ]
+    },
+    {
+      "case": "known-old-message-late-text",
+      "base": "../positive/stdout.jsonl + host.json",
+      "bytesChanged": [
+        {
+          "path": "/wire/4/message/id",
+          "replacementSha256": "738123cec32530fb4e99dcaf1a27adfaaddedca59c05832e1a4abd38581cee9d",
+          "replacementBytes": 7
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "cases.jsonl",
+      "sha256": "b81e173f8149d4e6188ec533c88ce4a2cf741da17529ea1e118d1ab90742ddb9",
+      "bytes": 72634,
+      "lines": 12
+    }
+  ]
+}

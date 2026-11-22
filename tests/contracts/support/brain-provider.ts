@@ -26,8 +26,10 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number;
   /** S2 tier/role registry overlay for the fixture Brain (installation layer): a frontier Brain row by default; `null` writes none. */
   modelRoles?: unknown;
+  /** Same-turn capacity counterexample: the connection and allocation start with this fixture-only capacity. */
+  maxInFlight?: number;
   /** S3-4: the Brain model speaks the CLI stream family through a v2 subscription profile of the headless adapter (a fake CLI; no real CLI). */
-  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown; protocolFamily?: string }> } = {}) {
+  headless?: Readonly<{ executable: string; configDir: string; stateDir: string; delegatedUse?: unknown; protocolFamily?: string; nativeModel?: string }> } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
@@ -59,7 +61,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     return parsed.response;
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
-  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: options.headless ? options.headless.protocolFamily ?? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
+  const model = { id: reference.modelId, version: 1, nativeId: options.headless?.nativeModel ?? 'vendor/model', protocols: [{ family: options.headless ? options.headless.protocolFamily ?? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
     capabilities: [...(options.jsonOutput ? [{ id: 'response-format-json-object', version: 1, state: 'supported' }] : []), ...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
       ...(options.thinking && options.thinking !== 'wrong-protocol' ? [{ id: 'chat-template-enable-thinking',
         version: options.thinking === 'wrong-version' ? 2 : 1, state: options.thinking === 'wrong-version' ? 'supported' : options.thinking }] : [])] },
@@ -73,7 +75,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
       definition: { endpoint: 'https://127.0.0.1:1234/chat', authentication: { type: 'none' }, maxOutputTokens: options.maxOutputTokens ?? 8,
         ...(options.tokenCount === undefined ? {} : { tokenizeEndpoint: 'https://127.0.0.1:1234/tokenize' }),
         tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 200,
-          cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
+          cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: options.maxInFlight ?? 2 },
     limits: { requestMaxBytes: 128_000, responseMaxBytes: options.responseMaxBytes ?? 16_384, timeoutMs: 2_000 },
     ...(options.contextWindow ? { contextWindowTokens: options.contextWindow } : {}),
     ...(options.headless ? { schemaVersion: 2, billingAxis: 'subscription', protocol: { family: options.headless.protocolFamily ?? 'claude-code-stream-json', version: 'v1' }, adapter: { id: 'native-cli-headless', version: 1,
