@@ -401,9 +401,16 @@ it('H1 binds title/usage/result to the full attempt identity; another generation
       indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
       readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [evidence(run, [exited('a', { content, evaluationObserved: true })]).run] }),
       observeScope: async () => ({ access: 'admitted', workers: [value], workerStatus: 'available', truncated: false }) });
-    const human = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!.workers[0]!.human!;
-    if (Object.keys(changed).length) expect(human).toMatchObject({ title: null, titleEvidence: 'missing', evaluation: null, transcript: { state: 'missing' }, patch: { fileCount: null } });
-    else expect(human).toMatchObject({ title: 'Düzeltme işi', titleEvidence: 'title', evaluation: 'rejected', transcript: { state: 'sealed' }, patch: { fileCount: 1 } });
+    const install = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!;
+    const human = install.workers[0]!.human!;
+    const observation = install.runs[0]!.tasks[0]!.lastAttempt;
+    if (Object.keys(changed).length) {
+      expect(human).toMatchObject({ title: null, titleEvidence: 'missing', evaluation: null, transcript: { state: 'missing' }, patch: { fileCount: null } });
+      expect(observation).toMatchObject({ workerPhase: null, heartbeatAgeMs: null });
+    } else {
+      expect(human).toMatchObject({ title: 'Düzeltme işi', titleEvidence: 'title', evaluation: 'rejected', transcript: { state: 'sealed' }, patch: { fileCount: 1 } });
+      expect(observation).toMatchObject({ workerPhase: 'editing', heartbeatAgeMs: 50 });
+    }
   }
 });
 

@@ -125,9 +125,16 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i3', intent('r3', {}), null);
     writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'd1', intent('r1', { plan: { commit: c1 } }), 1);
     writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent('r1', { toCommit: c2 }), 0);
-    writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run('s', 'eval-model', JSON.stringify({ action: 'apply-task-evaluation',
-      evaluation: { identity: { attemptId: 'r3-x' }, model: { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
-        verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
+    const receipt = writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)');
+    const model = { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
+      verdict: 'verified', unexpected: [], evidence: 'sealed' };
+    writer.prepare(`UPDATE run_receipts SET command=json_set(command,'$.evaluation.identity',json(?),'$.evaluation.model',json(?))
+      WHERE scope_id=? AND command_id=?`).run(JSON.stringify(identity('s', 'r3', 'x')), JSON.stringify(model), 's', 'evaluate-x');
+    const a = identity('s', 'r1', 'a');
+    for (const [scopeId, attempt, label] of [['s', { attemptId: a.attemptId }, 'incomplete'], ['s2', a, 'wrong-scope']] as const) {
+      receipt.run(scopeId, `eval-${label}`, JSON.stringify({ action: 'apply-task-evaluation', evaluation: { identity: attempt, model } }), '{}');
+      receipt.run(scopeId, `reserve-${label}`, JSON.stringify({ action: 'reserve-run-tasks', now: 9000, identities: [attempt] }), '{}');
+    }
     writer.close();
     const reading = await read(f.path); const runs = Object.fromEntries(reading.runs.map(run => [run.snapshot.identity.runId, run]));
     expect(runs.r1!.delivery).toMatchObject({ state: 'adopting', commit: c2, commandId: 'a1', receipts: [{ state: 'integrated', commandId: 'i1' }, { state: 'delivered', commandId: 'd1' }, { state: 'adopting', commandId: 'a1' }] });
@@ -135,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const exact = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 1, run: { scopeId: 's', runId: 'r1' } });
     expect(exact.runs.map(run => run.snapshot.identity.runId)).toEqual(['r1']);
     expect(runs.r3!.attempts[0]).toMatchObject({ provider: 'claude', model: { usage: ['m-1'], verdict: 'verified', evidence: 'sealed' } });
-    expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null });
+    expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null, reservedAtMs: 2000 });
     expect(reading.map).toMatchObject({ models: [] });
   });
   it('keeps mixed delivery receipts in ledger order with exact scope/Run identity, nulls and frozen results', async () => {

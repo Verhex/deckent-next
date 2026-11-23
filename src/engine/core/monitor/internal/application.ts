@@ -1,8 +1,9 @@
 import { projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
+import type { AttemptIdentity } from '#domain/index.js';
 import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
 import { monitorQuerySchema, type MonitorQuery } from './contract.js';
-import type { MonitorLedgerIndex, MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
+import type { MonitorLedgerAttempt, MonitorLedgerIndex, MonitorLedgerReading, MonitorLedgerRun, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
 import { MONITOR_DISMISSED_READ, projectMonitorRun } from './derive.js';
 
@@ -29,6 +30,11 @@ async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: 
  * Every failure becomes a typed diagnostic; nothing here writes or decides.
  */
 export class MonitorApplication {
+  /** In-memory key shared with the Monitor ledger adapter. */
+  static attemptKey({ scopeId, runId, taskId, attemptId, generation, layoutRevision }: AttemptIdentity): string {
+    return JSON.stringify([scopeId, runId, taskId, attemptId, generation, layoutRevision]);
+  }
+
   constructor(private readonly ports: MonitorPorts) {}
   async inspect(targets: readonly MonitorTarget[], query: MonitorQuery = { schemaVersion: 1 }): Promise<MonitorSnapshot> {
     const { install } = monitorQuerySchema.parse(query);
@@ -89,9 +95,12 @@ export class MonitorApplication {
     catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
     diagnostics.push(...reading.diagnostics, ...scopeNotes);
     for (const scopeId of admitted) if (!summaries.has(scopeId) && reading.approvals.some(value => value.scopeId === scopeId)) diagnostics.push('approvals-denied:' + scopeId);
-    const recency = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`,
-      Math.max(value.sealedAtMs ?? value.observedEndAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
-    const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
+    let ledger = indexBoundAttempts(reading.runs);
+    const initial = ledger;
+    const rank = (value: WorkerObservation) => {
+      const attempt = value.identity && initial.get(MonitorApplication.attemptKey(value.identity))?.attempt;
+      return Math.max(attempt?.sealedAtMs ?? attempt?.observedEndAtMs ?? -1, attempt?.dispatch?.grantedAtMs ?? -1);
+    };
     const finished = workers.filter(value => value.terminal).sort((a, b) => rank(b) - rank(a)); const kept = new Set(finished.slice(0, MONITOR_FINISHED_WORKERS));
     if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
     const shown = workers.filter(value => !value.terminal || kept.has(value)).sort((a, b) => rank(b) - rank(a));
@@ -100,28 +109,27 @@ export class MonitorApplication {
       const failures = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).flatMap(run => run.snapshot.bindings
         .filter(binding => run.snapshot.progress.some(task => task.taskId === binding.identity.taskId && task.phase === 'failed')).map(binding => binding.identity));
       try { reading = await this.ports.readShown(target, shown.flatMap(value => value.identity ? [value.identity] : []), failures);
+        ledger = indexBoundAttempts(reading.runs);
         diagnostics.push(...reading.diagnostics.filter(value => !diagnostics.includes(value))); }
       catch (error) { diagnostics.push('shown-content-unavailable:' + code(error)); }
     }
-    // Ledger-only observations carry no sidecar provider/model: fill them from the ledger attempt (evaluation record, pin, profile adapter).
-    const ledger = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`, value] as const)));
-
-    const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
+    const byAttempt = new Map(workers.flatMap(value => value.identity ? [[MonitorApplication.attemptKey(value.identity), value] as const] : []));
     // The application filters again: an adapter that answered more than it was asked never widens the view.
     const shownPools = reading.pools.filter(pool => visible.has(pool.poolId)), pools = new Map(shownPools.map(pool => [pool.poolId, pool]));
     const dismissed = await this.dismissed(target, reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)), diagnostics);
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
-      const scopeId = run.snapshot.identity.scopeId;
-      const own = new Map(run.attempts.flatMap(attempt => { const worker = byAttempt.get(`${scopeId}/${attempt.attemptId}`); return worker ? [[attempt.attemptId, worker] as const] : []; }));
+      const own = new Map(run.snapshot.bindings.flatMap(({ identity }) => {
+        const key = MonitorApplication.attemptKey(identity);
+        const worker = ledger.get(key)?.attempt && byAttempt.get(key);
+        return worker ? [[identity.attemptId, worker] as const] : [];
+      }));
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt, dismissed });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
     const enrich = (value: WorkerObservation): MonitorWorker => {
       const id = value.identity;
-      const record = id ? reading.runs.find(run => run.snapshot.identity.scopeId === id.scopeId && run.snapshot.identity.runId === id.runId
-        && run.snapshot.identity.layoutRevision === id.layoutRevision && run.snapshot.bindings.some(binding => binding.identity.taskId === id.taskId
-          && binding.identity.attemptId === id.attemptId && binding.identity.generation === id.generation)) : undefined;
-      const known = record ? ledger.get(`${id!.scopeId}/${id!.attemptId}`) : undefined;
-      const task = record?.snapshot.graph.tasks.find(task => task.id === id!.taskId);
+      const bound = id ? ledger.get(MonitorApplication.attemptKey(id)) : undefined;
+      const record = bound?.run, known = bound?.attempt;
+      const task = record?.snapshot.graph.tasks.find(task => task.id === id?.taskId);
       const input = task?.workInput, text = input?.title ?? input?.task ?? input?.acceptance ?? null;
       const title = text ? redactSensitive(terminalSafeText(text)).replace(/\s+/g, ' ').trim() || null : null;
       const projected = runs.find(run => run.scopeId === id?.scopeId && run.runId === id?.runId)?.tasks.find(task => task.taskId === id?.taskId);
@@ -129,11 +137,12 @@ export class MonitorApplication {
       const usageEvidence = value.usageEvidence === 'invalid' || value.usageEvidence === 'unavailable' ? value.usageEvidence : content?.usageEvidence ?? value.usageEvidence;
       const usage = usageEvidence === 'invalid' || usageEvidence === 'unavailable' ? null : content?.usage ?? resolveWorkerUsage(value);
       const { usage: previousUsage, usageEvidence: previousEvidence, ...baseValue } = value; void previousUsage; void previousEvidence;
+      // Ledger-only observations carry no sidecar provider/model: fill them from the matched attempt.
       return { ...baseValue, provider: value.provider === 'unknown' ? known?.provider ?? value.provider : value.provider,
         ...(value.model ? {} : known?.model ? { model: known.model } : {}),
         ...(usage ? { usage } : {}), ...(usageEvidence ? { usageEvidence } : {}),
-        human: { ...(record ? { taskBrief: projectTaskBrief(record.snapshot, id!.taskId),
-          resultBrief: projectResultBrief(id!.attemptId, { verdict: known ? projected?.evaluation.verdict ?? null : null,
+        human: { ...(record && id ? { taskBrief: projectTaskBrief(record.snapshot, id.taskId),
+          resultBrief: projectResultBrief(id.attemptId, { verdict: known ? projected?.evaluation.verdict ?? null : null,
             ...(known && projected?.evaluation.reason ? { reason: projected.evaluation.reason } : {}) }, content?.finalReport ?? null, record.delivery ?? null) } : {}), title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
           evaluation: known ? projected?.evaluation.verdict ?? null : null,
           ...(known && projected?.evaluation.reason ? { evaluationReason: projected.evaluation.reason } : {}),
@@ -177,4 +186,16 @@ export class MonitorApplication {
     if (stored.truncated) notes.push('info:brain-waits-truncated');
     return Object.freeze(shown.map(record => Object.freeze({ ...record })));
   }
+}
+
+function indexBoundAttempts(runs: readonly MonitorLedgerRun[]) {
+  const bound = new Map<string, { run: MonitorLedgerRun; attempt: MonitorLedgerAttempt | undefined }>();
+  for (const run of runs) {
+    const attempts = new Map(run.attempts.map(attempt => [attempt.attemptId, attempt]));
+    for (const { identity } of run.snapshot.bindings) {
+      const attempt = attempts.get(identity.attemptId);
+      bound.set(MonitorApplication.attemptKey(identity), { run, attempt: attempt?.generation === identity.generation ? attempt : undefined });
+    }
+  }
+  return bound;
 }

@@ -313,10 +313,11 @@ describe('inspectMonitor content authorization (security)', () => {
     const first = { scopeId: 's', runId: 'first', taskId: 't', attemptId: 'shared/a', layoutRevision: 'layout', generation: 1 };
     const second = { ...first, scopeId: 's/shared', runId: 'second', attemptId: 'a' };
     const scopes = [first.scopeId, second.scopeId];
-    const current = await project(root, 'collision', scopes, scopes);
+    const current = await project(root, 'collision', scopes, scopes, ['output', 'runs']);
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
-      for (const [identity, observedAt, refusalAuditLoss] of [[first, 40_000, loss], [second, 50_000, undefined]] as const) {
+      for (const [identity, reservedAt, grantedAt, observedAt, refusalAuditLoss] of [[first, 20_800, 30_800, 40_000, loss], [second, 21_800, 31_800, 50_000, undefined]] as const) {
         const { scopeId, runId, layoutRevision } = identity;
         const attemptDir = join(root, runId), workspace = join(attemptDir, 'tree');
         await mkdir(attemptDir, { mode: 0o700 });
@@ -327,11 +328,22 @@ describe('inspectMonitor content authorization (security)', () => {
         await writeFile(join(attemptDir, 'worker.log'), JSON.stringify({ sequence: 1, observedAt, process: 'exited', terminal }) + '\n', { mode: 0o600 });
         await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision }, graph, execution: fixtureExecution(graph),
           now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
-        await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: 20_800, identities: [identity] });
+        await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: reservedAt, identities: [identity] });
         const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace, argv: ['x'] } };
         await store.claimDispatch(dispatchAdmission(claim));
-        await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: 30_800 });
+        await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: grantedAt });
+        const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported',
+          report: { schemaVersion: 1, summary: runId + ' report', changedFiles: [runId + '.txt'], checks: [], openIssues: [] } };
+        await store.retainDispatchOutput(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({
+          schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '',
+        }))));
         await store.finishDispatch(claim, terminal);
+        await store.retainDispatchPatch(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({
+          schemaVersion: 1, kind: 'workspace-patch', identity,
+          source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) },
+          baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions,
+          changes: [{ path: runId + '.txt', before: null, after: patchFile(Buffer.from(runId), '100644') }],
+        }))));
       }
     } finally { store.close(); }
 
@@ -358,6 +370,31 @@ describe('inspectMonitor content authorization (security)', () => {
     expect.soft(attempt(both, first)).toMatchObject({ diagnostics: [loss], observedEndAtMs: 40_000 });
     expect.soft(attempt(both, second).diagnostics ?? []).not.toContain(loss);
     expect.soft(attempt(both, second).observedEndAtMs).toBe(50_000);
+    expect.soft(attempt(both, first).reservedAtMs).toBe(20_800);
+    expect.soft(attempt(both, second).reservedAtMs).toBe(21_800);
+
+    const policyPath = productResourcePath(current.layout, 'policy');
+    const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; scopes: string[] }[] };
+    for (const bothAllowed of [false, true]) {
+      await writeFile(policyPath, JSON.stringify({ ...policy, revision: bothAllowed ? 'both' : 'first-only',
+        grants: policy.grants.map(grant => grant.id === 'output' ? { ...grant, scopes: bothAllowed ? scopes : [first.scopeId] } : grant) }));
+      const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+      const worker = (identity: typeof first) => install.workers.find(row => row.identity?.runId === identity.runId);
+      const lastAttempt = (identity: typeof first) => install.runs.find(row => row.runId === identity.runId)?.tasks[0]?.lastAttempt;
+      expect.soft(worker(second)).toMatchObject({ identity: second, human: { startedAtMs: 31_800, endedAtMs: bothAllowed ? 50_000 : null,
+        endedAtSource: bothAllowed ? 'observed' : null,
+        patch: bothAllowed ? { state: 'recorded', files: ['second.txt'] } : { state: 'denied', files: [] },
+        finalReport: bothAllowed ? { status: 'reported', report: { summary: 'second report' } } : null } });
+      expect.soft(worker(first)).toMatchObject({ identity: first, human: { startedAtMs: 30_800, endedAtMs: 40_000, endedAtSource: 'observed',
+        patch: { state: 'recorded', files: ['first.txt'] }, finalReport: { status: 'reported', report: { summary: 'first report' } } } });
+      expect.soft(worker(first)?.diagnostics).toEqual(['info:ledger-only']);
+      expect.soft(worker(second)?.diagnostics).toEqual(bothAllowed ? ['info:ledger-only'] : ['info:ledger-only', 'output-denied']);
+      expect.soft(lastAttempt(first)).toMatchObject({ endedAtMs: 40_000, diagnostics: [loss] });
+      expect.soft(lastAttempt(second)?.endedAtMs).toBe(bothAllowed ? 50_000 : null);
+      expect.soft(lastAttempt(second)?.diagnostics ?? []).toEqual(bothAllowed ? [] : ['output-denied']);
+      const collidedWorkers = install.workers.filter(row => row.identity?.runId === first.runId || row.identity?.runId === second.runId);
+      expect.soft(collidedWorkers.map(row => row.identity)).toEqual([second, first]);
+    }
   });
 });
 

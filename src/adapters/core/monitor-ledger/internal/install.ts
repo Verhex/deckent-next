@@ -5,7 +5,7 @@ import { CONFIG_FIELDS, resolveLocale, createDefaultConfig, envValue, inspectPro
   resolveProductLayout, type Environment, type Locale, type ResolvedConfig } from '#platform/index.js';
 import { fullAutoGrant, isAiPrincipal, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, type WorkerSidecars, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, MonitorApplication, parseRetainedOutputEnvelope, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, type WorkerSidecars, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
@@ -17,11 +17,9 @@ import limits from './display-limits.json' with { type: 'json' };
 
 /** MONITOR v1.1 bounds: recorded outputs larger than this are not parsed for a first failure; events kept per attempt; live tail bytes. */
 const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MONITOR_EVENT_TAIL_BYTES = 65_536, MONITOR_FAILED_TESTS = limits.maxFailedTests;
-// Content-addressed outputs never change, so a first failure is computed once per (scope, digest) and kept in a small bounded cache.
+// Content-addressed outputs never change, so a first failure is computed once per bound output and kept in a small bounded cache.
 const failures = new Map<string, { readonly line: string | null; readonly failedTests: MonitorFailedTests | null }>();
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
-const attemptContentKey = ({ scopeId, runId, taskId, attemptId, generation, layoutRevision }: AttemptIdentity) =>
-  JSON.stringify([scopeId, runId, taskId, attemptId, generation, layoutRevision]);
 const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[], locale: Locale): readonly MonitorEvent[] =>
   Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorWorkerEvent(event, locale) })));
 
@@ -48,7 +46,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
     const extra = new Map<string, SelectedContent>();
     for (const files of selected) {
-      const key = attemptContentKey(files.identity);
+      const key = MonitorApplication.attemptKey(files.identity);
       try {
         // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
         const needsEnd = files.finished && !files.sealed && !!files.workspace;
@@ -72,7 +70,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     // The ledger reader projects each attempt from the binding at the same index.
     const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map((value, index) => {
       const identity = run.snapshot.bindings[index]?.identity;
-      const found = identity && extra.get(attemptContentKey(identity));
+      const found = identity && extra.get(MonitorApplication.attemptKey(identity));
       return found ? Object.freeze({ ...value, ...found }) : value;
     })) }));
     return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
@@ -104,17 +102,17 @@ const ends = new Map<string, number>();
 /** The host's own exit observation (`worker.log` `exited` event, host clock) in the attempt's sidecar directory, identity-bound through the
  * sidecar result; null when the sidecars are gone (custody released), unreadable or bound to another attempt. */
 function observedEnd(files: MonitorAttemptFiles, sidecars: WorkerSidecars | null): number | null {
-  // Keyed by the sidecar directory too: equal scope/attempt ids of another installation never share an end.
-  const key = `${files.workspace}\0${files.identity.scopeId}/${files.identity.attemptId}`; if (ends.has(key)) return ends.get(key)!;
+  // Include the sidecar workspace so another installation cannot reuse this observation.
+  const key = JSON.stringify([files.workspace, MonitorApplication.attemptKey(files.identity)]); if (ends.has(key)) return ends.get(key)!;
   if (!sidecars || sidecars.result.state !== 'available') return null;
   const exit = sidecars.log.events.filter(event => event.process === 'exited').at(-1)?.observedAt ?? null;
   if (exit !== null) { if (ends.size >= 1024) ends.delete(ends.keys().next().value!); ends.set(key, exit); }
   return exit;
 }
-/** First failing line and failed tests of one recorded output: computed once per (scope, digest) (content-addressed, never changes), bounded by MONITOR_OUTPUT_MAX_BYTES. */
+/** First failing line and failed tests of one bound output, bounded by MONITOR_OUTPUT_MAX_BYTES. */
 async function failureEvidence(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles) {
   const output = files.output; if (!output || output.byteLength > MONITOR_OUTPUT_MAX_BYTES) return { line: null, failedTests: null };
-  const key = `${output.scopeId}/${output.digest}`;
+  const key = JSON.stringify([MonitorApplication.attemptKey(files.identity), output.scopeId, output.digest]);
   const known = failures.get(key); if (known) return known;
   const envelope = parseRetainedOutputEnvelope(await artifacts.read(files.identity.scopeId, output), files.identity);
   const found = { line: extractFirstFailure(envelope.stdout, envelope.stderr), failedTests: extractFailedTests(envelope.stdout, MONITOR_FAILED_TESTS, envelope.completeness === 'complete') };
