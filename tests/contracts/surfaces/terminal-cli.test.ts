@@ -289,7 +289,7 @@ it.skipIf(process.platform === 'win32')('S06 CLI config snapshot protects actual
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', locale], {
       root: f.project, env: { ...f.env, S06_TEST: canary, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream,
       stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity,
-      async completeTerminalChat() { return reply; }, ...(streamed ? { streamTerminalChat: stream } : {}) });
+      async completeTerminalChat() { return { text: reply, truncated: true }; }, ...(streamed ? { streamTerminalChat: stream } : {}) });
     try {
       await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, locale)), 'catalog composer');
       stdin.write('hello\r');

@@ -32,7 +32,7 @@ import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver, BrainPlanProgress } from '#domain/index.js';
-import type { TerminalChatPlanView } from './terminal-chat.js';
+import type { TerminalChatPlanView, TerminalChatTurnResult } from './terminal-chat.js';
 import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
@@ -138,7 +138,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
-async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
+async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<TerminalChatTurnResult>,
   historyMessages: number, interactive: boolean, status: () => Promise<string>, known: Parameters<typeof projectHumanText>[2],
   stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<ExitCode> {
   // The rich view's one projection (B7 record redaction, controls removed, B8 hidden marks) on every model-written line.
@@ -185,9 +185,10 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
         }
         const messages = boundChatHistory(system, [...history, { role: 'user', content: trimmed }], historyMessages);
         try {
-          const reply = await turn(messages, context.signal);
-          history = boundChatHistory(system, [...messages, { role: 'assistant', content: reply }], historyMessages);
-          emit(project(reply, 'prose'), sinks);
+          const { text, truncated } = await turn(messages, context.signal);
+          history = boundChatHistory(system, [...messages, { role: 'assistant', content: text }], historyMessages);
+          emit(project(text, 'prose'), sinks);
+          turnFailed ||= truncated;
         } catch (error) {
           turnFailed = true;
           history = messages;
@@ -352,8 +353,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     const system = { role: 'system' as const, content: t('terminal.chat.systemPrompt', {}, locale) + instructionModelContext(view) };
     return [system, ...messages.filter(message => message.role !== 'system')];
   };
-  const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
-    completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
+  const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal): Promise<TerminalChatTurnResult> => {
+    const reply = await completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
+    return typeof reply === 'string' ? { text: reply, truncated: false } : reply;
+  };
   if (parsed.action === 'session') {
     const serviceLine = service ? (await serviceNotices)[0]?.text ?? null : null;
     for (const notice of accessNotices) emit(notice.text, sinks);
@@ -447,7 +450,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // TERMINAL-SABIT-DUZEN: the full-window layout unless the person keeps the inline one (`terminal.layout: inline`).
     ...(presentation.notify !== 'off' ? { attention: true } : {}),
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
-    completeTurn: turn, errorText: error => errorText(error, locale),
+    completeTurn: async (messages, signal) => (await turn(messages, signal)).text, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { warning: async () => { const warning = await context.gitDeliveryPermission?.(root, options); return warning ? ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-write' }, locale }).message : null; }, planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: async (code: unknown) => await context.localRunOffer?.(root, scopeId, options, code).catch(() => false) ?? false, // K2/K3: the one host answer (profile defaults, held pool)
         chatReady: async () => !context.describeTerminalChatPlan || Boolean(await context.describeTerminalChatPlan(root, options).then(plan => plan.status === 'ready' && plan.reference, () => false)),
         ...(context.workingTreeChanges ? { tree: async () => context.workingTreeChanges!(root, options) } : {}), dirty: { title: t('brain.dirty.title', {}, locale), check: async () => { const families = (await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options))?.observation.families ?? {}; const work = families['work'] as { registry?: boolean; pool?: boolean } | undefined; if ((families['coding'] as { changes?: string } | undefined)?.changes !== 'present' || work?.registry !== true || work.pool !== true) return null; // NF-4: worded for the configured delivery mode

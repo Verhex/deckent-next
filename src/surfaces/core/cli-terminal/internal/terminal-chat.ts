@@ -20,13 +20,14 @@ export type TerminalChatPlanView = Readonly<{
   governedUse?: 'outside-installation';
 }>;
 
-/** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */
+export type TerminalChatTurnResult = Readonly<{ text: string; truncated: boolean }>;
+/** One governed invocation per turn in the caller's scope. A text-only host result carries no truncation signal. */
 export type TerminalChatTurnHandler = (
   root: string,
   input: Readonly<{ scopeId: string; messages: readonly TerminalChatMessage[] }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
-) => Promise<string>;
+) => Promise<TerminalChatTurnResult | string>;
 
 /**
  * Streamed agent turn (runtime `chatTurn`, T-L3): deltas in order (tool lines and history messages included), exactly one `done`
