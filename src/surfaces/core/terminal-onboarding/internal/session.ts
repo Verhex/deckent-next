@@ -3,6 +3,8 @@ import { onboardingMessage } from './message.js';
 import type { OnboardingFocus, OnboardingPort, OnboardingPresentation, OnboardingSnapshot, OnboardingStep } from './contract.js';
 import presentation from './presentation.json' with { type: 'json' };
 const readyIds = new Set(presentation.workerReady.members.filter(id => id !== 'work:kind'));
+export const workerReadyStages = (stages: OnboardingSnapshot['plan']['stages']) =>
+  presentation.workerReady.members.flatMap(id => stages.filter(row => row.id === id));
 /** Projection over the same setup plan: grouping is presentation only; owners still settle every individual operation. */
 export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): readonly OnboardingStep[] {
   const steps: OnboardingStep[] = [], deferred = new Set(revisit ? [] : snapshot.deferred);
@@ -22,7 +24,7 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
     }
     if (stage.id !== presentation.workerReady.after || stage.state !== 'done') add({ id: stage.id, stages: [stage], kind: stage.id === 'work:kind' ? 'work' : 'stage' });
     if (stage.id === presentation.workerReady.after && stage.state === 'done') {
-      const group = presentation.workerReady.members.flatMap(id => snapshot.plan.stages.filter(row => row.id === id));
+      const group = workerReadyStages(snapshot.plan.stages);
       if (group.some(row => row.state !== 'done' && row.state !== 'skipped')) add({ id: presentation.workerReady.id, stages: group, kind: 'ready' });
     }
     if (stage.id === 'core:model') {

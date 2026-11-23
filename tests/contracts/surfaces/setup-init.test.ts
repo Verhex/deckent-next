@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as observe from '#surfaces/core/cli-observe/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
+import { executionSetupFamily, type RuntimeFacts } from '#adapters/core/setup-detect-execution/index.js';
 import { planSetup, SETUP_PERMISSIONS_FAMILY, SetupStageRegistry, WORK_SETUP_FAMILY, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { ErrorRegistry, MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
@@ -287,38 +288,74 @@ it('N2: name the postponed permission step and keep each earlier apply outcome s
 it('N2: the open model and coding-work cards name their own next choices in EN and TR', async () => {
   const question = await import('../../../src/surfaces/core/terminal-onboarding/internal/question.js');
   const { runOnboardingSession } = await loadOnboardingScreens();
+  const docker: RuntimeFacts = { id: 'docker', label: 'Docker', support: 'supported', cli: 'found', path: '/usr/bin/docker', version: null,
+    daemon: 'reachable', serverVersion: null, kind: 'engine', endpoint: 'system', group: null };
+  const worker = { configured: null, receipt: null, image: 'not-run', git: '/usr/bin/git' };
+  const workFacts = { execution: false, registry: false, pool: false, poolMissing: true };
   const observation: SetupObservation = { ...base, folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' },
-    policy: { state: 'current' }, families: { work: { execution: false, registry: false, pool: false, poolMissing: true } } };
-  const plan = planSetup(observation, undefined, new SetupStageRegistry([WORK_SETUP_FAMILY]), { phase: 'onboarding' });
+    policy: { state: 'current' }, families: { execution: { schemaVersion: 1, runtimes: [docker], worker }, work: workFacts } };
+  const setupRegistry = new SetupStageRegistry([executionSetupFamily({ person: true }), WORK_SETUP_FAMILY]);
+  const makePlan = (facts: SetupObservation, values: Readonly<Record<string, unknown>> = {}) =>
+    planSetup(facts, { schemaVersion: 2, values }, setupRegistry, { phase: 'onboarding' });
+  const plan = makePlan(observation);
   const snapshot: OnboardingSnapshot = { observation, plan, configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) },
-    answers: {}, deferred: [], modelUsable: false, folder: '/fixture', folderFacts: { kind: 'coding', entries: [] }, scopeId: 'my-erp',
-    hosts: [{ id: 'codex', cli: 'found', login: 'found' }], budget: { needed: false }, permissions: { state: 'applied', reason: '' }, pending: [] };
-  const port = { observe: async () => snapshot, assertPerson: async () => {}, defer: async () => {} } as unknown as OnboardingPort;
+    answers: {}, deferred: ['onboarding:first-task:done'], modelUsable: false, folder: '/fixture', folderFacts: { kind: 'coding', entries: [] }, scopeId: 'my-erp',
+    hosts: [{ id: 'codex', cli: 'found', login: 'found' }], budget: { needed: false, presetUsd: 10, presetsUsd: [], currentUsd: null },
+    permissions: { state: 'applied', reason: '' }, pending: [] };
+  const image = { provider: 'codex', image: 'present', receipt: { imageId: `sha256:${'a'.repeat(64)}`, imageVersion: 'r5-20261023' } };
+  const chosenCli: SetupObservation = { ...observation, families: { ...observation.families,
+    execution: { schemaVersion: 1, runtimes: [docker], worker: { ...worker, ...image } } } };
+  const connection = { id: 'codex-subscription', provider: 'codex' };
+  const port = { assertPerson: async () => {}, defer: async () => {} };
   const ask = vi.spyOn(question, 'askOnboardingQuestion');
   try {
-    for (const [locale, model, work, outside] of [
+    for (const [locale, model, work, outside, readyTitle, subscription] of [
       ['en', 'Choose “Enter · Continue” here to connect a chat model.', 'Choose “Enter · Continue” to use codex for the first work kind.',
-        'The first worker cannot start because no worker pool is set up. Choose the first work kind in /setup, then set up its pool.'],
+        'The first worker cannot start because no worker pool is set up. Choose the first work kind in /setup, then set up its pool.',
+        'Execution settings', 'Choose a subscription here to confirm the first work kind and set up its worker pool.'],
       ['tr', 'Sohbet modeli bağlamak için bu kartta “Enter · Devam”ı seçin.', 'İlk iş türünde codex kullanmak için “Enter · Devam”ı seçin.',
-        'İşçi havuzu kurulmadığı için ilk işçi başlatılamıyor. /setup içinde ilk iş türünü seçin, ardından havuzunu kurun.'],
+        'İşçi havuzu kurulmadığı için ilk işçi başlatılamıyor. /setup içinde ilk iş türünü seçin, ardından havuzunu kurun.',
+        'Çalıştırma ayarları', 'İlk iş türünü onaylamak ve işçi havuzunu kurmak için bu kartta bir abonelik seçin.'],
     ] as const) {
       const pool = plan.stages.find(stage => stage.id === 'work:pool')!;
       expect(setupMessage(pool.reason.code, pool.reason.params, locale)).toBe(outside);
-      ask.mockReset().mockResolvedValueOnce({ id: 'later' }).mockResolvedValueOnce({ id: 'change' })
-        .mockResolvedValueOnce({ id: 'codex' }).mockResolvedValueOnce({ id: 'exit' });
-      await runOnboardingSession(port, { locale } as never, { locale }, true);
-      const [modelCard, workCard, picker, confirmation] = ask.mock.calls.map(([card]) => card);
+      ask.mockReset().mockResolvedValue({ id: 'exit' }).mockResolvedValueOnce({ id: 'later' }).mockResolvedValueOnce({ id: 'change' })
+        .mockResolvedValueOnce({ id: 'codex' }).mockResolvedValueOnce({ id: 'codex' });
+      await runOnboardingSession({ ...port, observe: async answers => answers['work:kind']
+        ? { ...snapshot, answers, observation: chosenCli, plan: makePlan(chosenCli, answers) } : snapshot } as OnboardingPort, { locale } as never, { locale });
+      const [modelCard, workCard, picker, confirmation, destination] = ask.mock.calls.map(([card]) => card);
       expect(modelCard?.title).toBe(locale === 'en' ? 'Model connection' : 'Model bağlantısı');
       expect(workCard?.title).toBe(locale === 'en' ? 'Use codex for coding work?' : 'Kodlama işlerini codex yapsın mı?');
-      const poolStep = locale === 'en' ? 'Set up its pool at “Confirm worker readiness”.' : 'Havuzu “İşçi hazırlığını onayla” adımında kurun.';
+      expect(destination?.title).toBe(readyTitle);
+      const poolStep = locale === 'en' ? `Set up its pool at “${destination?.title}”.` : `Havuzu “${destination?.title}” adımında kurun.`;
+      const modelPoolStep = locale === 'en' ? `If you choose a coding CLI, set up its pool at “${destination?.title}”.`
+        : `Kodlama CLI seçerseniz havuzu “${destination?.title}” adımında kurun.`;
       expect(modelCard?.body?.join(' ')).toContain(model);
-      expect(modelCard?.body?.join(' ')).toContain(poolStep);
+      expect(modelCard?.body).toContain(modelPoolStep);
       expect(workCard?.body?.join(' ')).toContain(work);
       expect(workCard?.body?.join(' ')).toContain(poolStep);
       expect(picker?.choices.map(choice => choice.id)).toContain('codex');
+      expect(picker?.body?.join(' ')).toContain(poolStep);
       expect(confirmation?.body?.join(' ')).toContain(work);
       expect(confirmation?.body?.join(' ')).toContain(poolStep);
       expect([...(modelCard?.body ?? []), ...(workCard?.body ?? [])].join(' ')).not.toContain('/setup');
+
+      const applied: string[] = [];
+      const offered = { ...snapshot, connections: [connection] };
+      ask.mockReset().mockResolvedValue({ id: 'exit' }).mockResolvedValueOnce({ id: 'later' }).mockResolvedValueOnce({ id: `connection:${connection.id}` });
+      await runOnboardingSession({ ...port, apply: async stage => { applied.push(stage.id); return { status: 'applied' }; }, observe: async answers => {
+        if (!answers['work:kind']) return offered;
+        const execution = applied.includes('execution:worker-settings'), registry = applied.includes('work:kind'), pool = applied.includes('work:pool');
+        const facts = { ...observation, families: { execution: { schemaVersion: 1, runtimes: [docker], worker: { ...worker, connection: execution ? 'configured' : 'pending' } },
+          work: { ...workFacts, execution, registry, pool, connection } } };
+        return { ...offered, answers, observation: facts, plan: makePlan(facts, answers) };
+      } } as OnboardingPort, { locale } as never, { locale });
+      const [subscriptionModel, subscriptionWork] = ask.mock.calls.map(([card]) => card);
+      expect(applied).toEqual(['execution:worker-settings', 'work:kind', 'work:pool']);
+      expect(ask).toHaveBeenCalledTimes(2);
+      expect(subscriptionModel?.body?.join(' ')).toContain(model);
+      expect(subscriptionModel?.body?.join(' ')).not.toMatch(/set up its pool at|havuzu .* adımında kurun/iu);
+      expect(subscriptionWork?.body?.join(' ')).toContain(subscription);
     }
   } finally { ask.mockRestore(); }
 });

@@ -4,7 +4,7 @@ import { onboardingMessage } from './message.js';
 import { headlessGovernedUseText, t, ErrorRegistry } from '#platform/index.js';
 import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingFocus, OnboardingPort, OnboardingUi } from './contract.js';
-import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
+import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE, workerReadyStages } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
 import { welcomeScreen } from './first-task.js';
 import { guideScreen } from './guides.js';
@@ -64,11 +64,13 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         body.push(`${id} · ${limit.text}`, limit.next);
       }
     }
-    const pool = model.snapshot.plan.stages.find(row => row.id === 'work:pool');
+    const stages = model.snapshot.plan.stages, pool = stages.find(row => row.id === 'work:pool');
     const poolNeedsKind = pool?.reason.code === 'setup.work.poolNeedsKind';
-    const poolStep = t('onboarding.ready.title', {}, locale);
+    const readyStage = poolNeedsKind && stages.some(row => row.id === presentation.workerReady.after) ? workerReadyStages(stages)[0] : undefined;
+    const poolStep = readyStage && onboardingMessage(readyStage.title, {}, locale);
     if (poolNeedsKind && stage?.id === 'core:model' && model.steps.some(row => row.kind === 'work')) {
-      body.push(t('setup.work.poolWizardModel', { next: t('onboarding.session.continue', {}, locale), poolStep }, locale));
+      body.push(t('setup.work.poolWizardModel', { next: t('onboarding.session.continue', {}, locale) }, locale));
+      if (poolStep && !model.snapshot.connections?.some(row => !row.governedUse)) body.push(t('setup.work.poolWizardModelCli', { poolStep }, locale));
     }
     if (stage?.id === 'core:model' || step.kind === 'work' || step.kind === 'ready') {
       if (pool?.reason.code === 'setup.work.firstWorkerPool') body.push(t('doctor.firstWorker.pool', {}, locale), ...(pool.cli ? [pool.cli.join(' ')] : []));
@@ -96,7 +98,7 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         row.governedUse || all.findIndex(other => !other.governedUse && other.provider === row.provider) === index);
       const uncertain = model.snapshot.hosts.some(row => row.cli === 'unknown' || row.cli === 'found' && row.login === 'unknown');
       const picker = { title: firstSignedInHost(model.snapshot) ? t('onboarding.work.none', {}, locale) : uncertain ? t('onboarding.work.notReady', {}, locale) : model.snapshot.hosts.some(row => row.cli === 'found') ? t('onboarding.work.unsigned', {}, locale) : t('onboarding.work.missing', {}, locale),
-        body: [...body, t('onboarding.work.explain', {}, locale), ...(poolNeedsKind && provider ? [t('setup.work.poolWizardPicker', { poolStep }, locale)] : [])], choices: rows.map(row => {
+        body: [...body, t('onboarding.work.explain', {}, locale), ...(poolStep && provider ? [t('setup.work.poolWizardPicker', { poolStep }, locale)] : [])], choices: rows.map(row => {
           const ready = row.cli === 'found' && row.login === 'found', guidance = presentation.cliGuidance.find(entry => entry.id === row.id);
           const status = ready ? t('onboarding.work.available', {}, locale) : row.cli === 'absent' ? t('onboarding.work.cliMissing', {}, locale)
             : row.cli === 'found' && row.login === 'absent' ? t('onboarding.work.loginMissing', {}, locale) : t('onboarding.work.unknown', {}, locale);
@@ -107,7 +109,7 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
       const allEligible = connections.every(row => !row.governedUse), consent = t('onboarding.ready.connectionBody', {}, locale);
       const next = t('onboarding.session.continue', {}, locale);
-      const workBody = (cli: string) => poolNeedsKind ? [...body, t('setup.work.poolWizardWork', { cli, next, poolStep }, locale)] : body;
+      const workBody = (cli: string) => poolStep ? [...body, t('setup.work.poolWizardWork', { cli, next, poolStep }, locale)] : body;
       const offer = connections.length ? { title: allEligible ? t('onboarding.work.connection', {}, locale)
         : connections.some(row => !row.governedUse) ? t('setup.work.kindTitle', {}, locale) : t('headless.governedUse.notReady', {}, locale),
         body: [...body, ...(poolNeedsKind && connections.some(row => !row.governedUse) ? [t('setup.work.poolWizardSubscription', {}, locale)] : []),
