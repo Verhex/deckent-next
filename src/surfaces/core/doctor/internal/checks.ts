@@ -195,7 +195,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
     : f.poolStatus === 'ready' && f.workerReadiness?.ready === false ? { ...row('work', 'work.pool', 'warning', workerReadinessText(f.workerReadiness.code, l), workerReadinessNext(f.workerReadiness, l)), needsAttention: true }
-    : f.poolStatus === 'ready' && f.workerReadiness === null ? { ...row('work', 'work.pool', 'untested', t('setup.work.workerUnknown', {}, l), scoped('deckent doctor', f)), needsAttention: true }
+    : f.poolStatus === 'ready' && f.workerReadiness === null ? { ...row('work', 'work.pool', 'untested', t('setup.work.workerUnknown', {}, l), 'deckent doctor'), needsAttention: true }
     : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
@@ -361,7 +361,7 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
   const firstRow = (state: DoctorCheckState, text: string, next?: string) => row('work', 'work.firstWorker', state, text, next);
   const workerRow = worker?.ready === false ? firstRow('warning', workerReadinessText(worker.code, locale), workerReadinessNext(worker, locale)) : null;
   const blocked = (reason: string, next?: string) => firstRow('warning', t('doctor.firstWorker.blocked', { reason }, locale), next);
-  const unknown = (next?: string) => firstRow('untested', t('doctor.firstWorker.unmeasured', {}, locale), next ?? scoped('deckent doctor', f));
+  const unknown = (next?: string) => firstRow('untested', t('doctor.firstWorker.unmeasured', {}, locale), next ?? 'deckent doctor');
   const poolStatus = scoped('deckent pool status', f);
   const poolMissing = f.poolStatus === 'unconfigured' || f.poolStatus === 'missing';
   const setupPool = poolMissing && f.poolStatus === 'missing' && f.firstJob && firstJobStages({ ...f.firstJob, pool: false }, f.scopeId)
@@ -381,16 +381,17 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
     : f.firstWorkerImage && (docker?.state !== 'ok' || (f.firstWorkerImage === 'configured' ? image?.state !== 'ok' : f.firstWorkerImage !== 'kind' || !kind))
       ? unknown(docker?.next ?? image?.next)
     : worker?.ready ? firstRow('ok', t('doctor.firstWorker.ready', {}, locale)) : unknown();
-  const permission = f.executionPermission, scope = terminalSafeText(f.scopeId ?? '-');
+  const permission = f.scopeId ? f.executionPermission : null, scope = terminalSafeText(f.scopeId ?? '-');
   const complete = !!permission && permission.allowed === permission.total && !permission.restricted;
   const params = { scope, actor: terminalSafeText(permission?.actor ?? '-'), allowed: permission?.allowed ?? 0, total: permission?.total ?? 0 };
-  const text = !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
+  const text = !f.scopeId ? t('doctor.aiExecution.noScope', {}, locale)
+    : !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
     : permission.restricted ? t('doctor.aiExecution.restricted', params, locale) : permission.allowed ? t('doctor.aiExecution.partial', params, locale)
     : t('doctor.aiExecution.absent', params, locale);
   const external = new Set(f.headlessLogins?.filter(login => login.governedUse).map(login => login.connection));
   if (first === workerRow && worker?.code === 'HEADLESS_STATE_OUTSIDE_INSTALLATION') external.delete(worker.cli.at(-1));
   return [first, row('work', 'work.aiExecution', complete ? 'ok' : permission ? 'warning' : 'untested', text,
-    complete || !f.scopeId ? undefined : `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview`),
+    complete ? undefined : f.scopeId ? `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview` : 'deckent init'),
   ...[...external].map(connection => { const limit = headlessGovernedUseText(locale, connection); return row('work', 'work.governedSubscription', 'warning', limit.text, limit.next); })];
 }
 

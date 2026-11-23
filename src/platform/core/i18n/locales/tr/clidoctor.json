@@ -140,6 +140,8 @@
   "doctor.aiExecution.partial": "{scope} kapsamında {actor} için yapay zekâ yürütme izni kısmi ({allowed}/{total} kalıcı eylem).",
   "doctor.aiExecution.restricted": "{scope} kapsamında {actor} için yapay zekâ yürütme iznini bir yasak veya onay koşulu sınırlıyor.",
   "doctor.aiExecution.unknown": "{scope} kapsamında yapay zekâ yürütme izni doğrulanamadı.",
+  "doctor.aiExecution.noScope": "Yapay zekâ yürütme izni denetlenmedi: bu klasörün henüz bir deckent kapsamı yok. Klasörü deckent init ile kurun ya da deckent doctor komutunu kurulmuş bir proje klasöründe çalıştırın.",
+  "doctor.usage.scope": "deckent doctor çalıştırıldığı klasörü ve o klasörün kapsamını denetler; bu yüzden --scope almaz. Proje klasörüne geçin ve deckent doctor komutunu orada çalıştırın.",
   "doctor.check.pool.ok": "İşçi havuzu hazır",
   "doctor.check.pool.unconfigured": "Henüz işçi havuzu kurulmamış: işler işçi başlatamaz",
   "doctor.check.pool.drift": "İşçi havuzu kapasitesi yapılandırmadan farklı",
