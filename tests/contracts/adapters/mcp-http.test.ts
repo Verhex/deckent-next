@@ -194,8 +194,8 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     granted = true;
     expect((await open()).offered.size).toBe(2);
     granted = 'missing';
-    const missing = await open(); expect(missing.offered.size).toBe(0); expect(missing.notices.join('')).toContain('deckent secret set GH --main');
-    expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, { ...context, describeNotice: notice => renderMcpStartNotice(notice, 'en') }) as { server: { lastStart: { text: string } } }).server.lastStart.text).toContain('deckent secret set GH --main');
+    const missing = await open(); expect(missing.offered.size).toBe(0); expect(missing.notices.join('')).toContain('the key GH could not be resolved'); expect(missing.notices.join('')).toContain('Add the key to that vault only if you confirm it is absent.');
+    expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, { ...context, describeNotice: notice => renderMcpStartNotice(notice, 'en') }) as { server: { lastStart: { text: string } } }).server.lastStart.text).toContain('the key GH could not be resolved');
     expect((await open()).notices).toEqual([]);
     // Same server definition and code: changing only the unresolved key (detail) must notify, including a change back.
     for (const key of ['AUX', 'GH']) {
