@@ -85,10 +85,10 @@ it('F5: catalog lifecycle agrees with retirement dates and retains deprecation, 
 
 it.each([
   { language: 'en', fallback: 'tr', heading: 'Error: Invalid arguments for deckent models.',
-    declaredScope: '--declared lists the model declarations in the configured provider catalog of this whole installation, so it takes no --scope. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>',
+    declaredScope: '--declared lists the model declarations in the configured provider catalog and takes no --scope. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>',
     action: 'deckent models has no such action. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>. Every form: deckent models --help' },
   { language: 'tr', fallback: 'en', heading: 'Hata: deckent models için argümanlar geçersiz.',
-    declaredScope: '--declared, bu kurulumun tamamı için yapılandırılmış sağlayıcı kataloğundaki model beyanlarını listeler; bu yüzden --scope almaz. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>',
+    declaredScope: '--declared, yapılandırılmış sağlayıcı kataloğundaki model beyanlarını listeler ve --scope almaz. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>',
     action: 'deckent models komutunun böyle bir eylemi yok. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>. Tüm biçimler: deckent models --help' },
 ])('models usage gives working commands in $language', async ({ language, fallback, heading, declaredScope, action }) => {
   const f = await project();
