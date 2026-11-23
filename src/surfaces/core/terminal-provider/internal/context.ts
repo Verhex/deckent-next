@@ -112,6 +112,6 @@ export interface ProviderSubscriptionPort {
 export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort;
   readonly subscriptionReadiness?: SubscriptionReadinessPort;
   readonly locale?: Locale;
-  /** Optional read-only preflight; never delays the choices or grants connection authority. */
-  inspectCustody?(): Promise<Readonly<{ id: string; reason: string }> | null>;
+  /** Optional read-only preflight. A null reason confirms ready custody; a null result leaves custody unknown. */
+  inspectCustody?(): Promise<Readonly<{ id: string; reason: string | null }> | null>;
 };
