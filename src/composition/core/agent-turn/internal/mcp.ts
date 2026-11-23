@@ -19,8 +19,16 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
   if (notice.kind === 'not-decided') {
-    const why = t('mcp.start.notDecided', { name, code: [notice.code, notice.detail].filter(Boolean).join(': ') }, locale);
-    return notice.code === 'secret-unresolved' && notice.detail ? `${why} ${t('mcp.start.secretMissing', { key: notice.detail }, locale)}` : why;
+    const params = { name, code: [notice.code, notice.detail].filter(Boolean).join(': ') };
+    switch (notice.code) {
+      case 'SUBSCRIPTION_HOST_MCP_REFUSED': return t('mcp.start.subscriptionHostRefused', { name }, locale);
+      case 'MCP_TRUST_STORE_UNAVAILABLE': return t('mcp.start.trustStoreUnavailable', params, locale);
+      case 'MCP_SERVER_ENTRY_INVALID': return t('mcp.start.entryInvalid', params, locale);
+      case 'secret-reference-in-project-file': return t('mcp.start.projectSecretReference', { name }, locale);
+      case 'secret-refused': return t('mcp.start.secretUnavailable', { name }, locale);
+      case 'secret-unresolved': return notice.detail ? t('mcp.start.secretMissing', { name, key: notice.detail }, locale) : t('mcp.start.secretMissingKeyUnknown', { name }, locale);
+      default: return t('mcp.start.notDecided', params, locale);
+    }
   }
   if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale); if (notice.kind === 'secret-refused') { const params = { name, key: notice.key, scope: notice.scope }; return notice.code === 'SECRET_PROJECT_MISSING' ? t('mcp.start.secretProjectMissing', params, locale) : notice.code === 'DECK_DECLARATION_REQUIRED' ? t('mcp.start.secretUndeclared', params, locale) : notice.code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('mcp.start.secretNoIdentity', params, locale) : t('mcp.start.secretRefused', params, locale); }
   const { failure } = notice, diagnosis = failure.diagnosis;
@@ -29,17 +37,30 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
       role: diagnosis.role === 'command' ? t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.command', {}, locale) : t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, locale) }, locale)
     : diagnosis?.kind === 'package-runner' ? t('mcp.start.failed.packageRunner', { name, runner: diagnosis.runner }, locale)
     : diagnosis ? t('mcp.start.failed.containerDaemon', { name, runner: diagnosis.runner }, locale)
-    : t('mcp.start.failed.other', { name, code: failure.code, detailSuffix: failure.detail ? `: ${failure.detail}` : '' }, locale);
+    : `${mcpStartFailureText(name, failure.code, locale)} ${t('mcp.start.failed.details', { code: failure.code, detailSuffix: failure.detail ? `: ${failure.detail}` : '' }, locale)}`;
   const next = failure.phase === 'launch' ? t('mcp.start.next.launch', { name }, locale) : t('mcp.start.next.trusted', { name }, locale);
   return `${why} ${next}`;
 }
-/** Why a trusted server's tools got no policy grant (K1), in the owner's words; an unknown code is shown as it is. */
+function mcpStartFailureText(name: string, code: string, locale: Locale): string {
+  switch (code) {
+    case 'MCP_SANDBOX_COMMAND_UNREACHABLE':
+    case 'sandbox-unreachable':
+    case 'MCP_SANDBOX_UNAVAILABLE':
+    case 'sandbox-unavailable': return t('mcp.start.failed.sandbox', { name }, locale);
+    case 'list-failed': return t('mcp.start.failed.list', { name }, locale);
+    case 'too-many-tools': return t('mcp.start.failed.toolLimit', { name }, locale);
+    case 'restart-limit': return t('mcp.start.failed.restartLimit', { name }, locale);
+    default: return t('mcp.start.failed.other', { name }, locale);
+  }
+}
+/** Why a trusted server's tools got no policy grant (K1), in the owner's words. */
 function mcpGrantReasonText(reason: string, locale: Locale): string {
   if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
   if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
   if (reason === 'administer') return t('mcp.grant.reason.administer', {}, locale);
   if (reason === 'principal') return t('mcp.grant.reason.principal', {}, locale);
-  return reason;
+  if (reason === 'POLICY_CHANGE_TOO_LARGE') return t('mcp.grant.reason.tooLarge', { reason }, locale);
+  return t('mcp.grant.reason.other', { reason }, locale);
 }
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;

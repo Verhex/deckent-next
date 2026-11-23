@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
 import { fitStatusRow, openAssistantStream, reasoningPreviewLines, renderAssistantStream, worklineStatusSegments, type AssistantStreamStep, type FooterUnit, AssistantLive, footerText, type AssistantRenderLabels } from '#surfaces/core/terminal-render-ink/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal/index.js';
+import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 // CONVO-PARSERS (A06-A08): `/reasoning off` needs the pinned model's reasoning-off capability (lane precedent: terminal-slash-session-windows).
@@ -157,6 +158,25 @@ describe('live region (D1 + D6)', () => {
 describe('workline (D5 + D6)', () => {
   const mounted: Array<ReturnType<typeof mountWorkline>> = [];
   afterEach(() => { for (const view of mounted.splice(0)) view.instance.unmount(); });
+
+  it.each([
+    ['en', 'context 3%', '21 earlier messages were summarized to keep the chat request within its limits.'],
+    ['tr', 'bağlam %3', 'Sohbet isteğini sınırları içinde tutmak için önceki 21 mesaj özetlendi.'],
+  ] as const)('explains a completed summary when the context reads 3%% (%s)', async (locale, percentage, sentence) => {
+    const streamTurn = async function* (): AsyncGenerator<TurnDelta> {
+      const measured = { kind: 'context', promptTokens: 3_000, windowTokens: 100_000, quality: 'provider-count' } as const;
+      yield { ...measured, compacting: true };
+      yield { kind: 'compacted', replacedMessages: 21, messages: [{ role: 'user', content: 'SUMMARY' }] };
+      yield measured;
+      yield { kind: 'done', finish: 'stop' };
+    };
+    const view = mountWorkline({ streamTurn, labels: { ...WORKLINE_TEST_LABELS, render: terminalRenderLabels(locale) } });
+    mounted.push(view);
+    await settle(20);
+    view.stdin.write('first\r');
+    await until(() => view.stdout.text.includes(percentage), 'low context percentage');
+    expect(view.stdout.text).toContain(sentence);
+  });
 
   it('keeps a finished summary after Esc: the next turn starts from the compacted history, not from the old one', async () => {
     const seen: (readonly { role: string; content: string }[])[] = [];
