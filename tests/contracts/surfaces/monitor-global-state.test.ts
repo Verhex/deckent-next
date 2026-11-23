@@ -103,7 +103,7 @@ for (const locale of ['en', 'tr'] as const) describe(`S2 review corrections ${lo
       expect(taskCell(snapshot, locale, taskId)).toBe(t('monitor.global.running', {}, locale));
       const block = surface.buildMonitorView(snapshot, locale, true).tabs.workers[0]!;
       if (block.kind !== 'table') throw new Error('worker table expected');
-      expect(block.rows.find(row => row.key === `current:attempt-${taskId}`)!.cells[1]!.text).toBe(taskCell(snapshot, locale, taskId));
+      expect(block.rows.find(row => (JSON.parse(row.key) as unknown[]).includes(`attempt-${taskId}`))!.cells[1]!.text).toBe(taskCell(snapshot, locale, taskId));
     }
     expect(JSON.stringify(snapshot)).toBe(before);
   });

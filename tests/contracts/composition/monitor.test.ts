@@ -310,16 +310,18 @@ describe('inspectMonitor content authorization (security)', () => {
   it.skipIf(process.platform !== 'linux')('binds selected Monitor content to each full Attempt identity when the old keys collide', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const loss = 'refusal-audit-loss';
-    const first = { scopeId: 's', runId: 'first', taskId: 't', attemptId: 'shared/a', layoutRevision: 'layout', generation: 1 };
-    const second = { ...first, scopeId: 's/shared', runId: 'second', attemptId: 'a' };
+    const first = { scopeId: 's', runId: 'a/b', taskId: 't', attemptId: 'a/a', layoutRevision: 'layout', generation: 1 };
+    const second = { ...first, scopeId: 's/a', runId: 'b', attemptId: 'a' };
     const scopes = [first.scopeId, second.scopeId];
     const current = await project(root, 'collision', scopes, scopes, ['output', 'runs']);
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
-      for (const [identity, reservedAt, grantedAt, observedAt, refusalAuditLoss] of [[first, 20_800, 30_800, 40_000, loss], [second, 21_800, 31_800, 50_000, undefined]] as const) {
+      for (const [identity, name, createdAt, reservedAt, grantedAt, observedAt, refusalAuditLoss] of [
+        [first, 'first', 10_800, 20_800, 30_800, 40_000, loss], [second, 'second', 11_800, 21_800, 31_800, 50_000, undefined],
+      ] as const) {
         const { scopeId, runId, layoutRevision } = identity;
-        const attemptDir = join(root, runId), workspace = join(attemptDir, 'tree');
+        const attemptDir = join(root, name), workspace = join(attemptDir, 'tree');
         await mkdir(attemptDir, { mode: 0o700 });
         const terminal = { handle: 'h', exitCode: 1, interrupted: false };
         await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity,
@@ -327,13 +329,13 @@ describe('inspectMonitor content authorization (security)', () => {
           terminal, outputRecorded: false, refusalAuditLoss }), { mode: 0o600 });
         await writeFile(join(attemptDir, 'worker.log'), JSON.stringify({ sequence: 1, observedAt, process: 'exited', terminal }) + '\n', { mode: 0o600 });
         await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision }, graph, execution: fixtureExecution(graph),
-          now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+          now: createdAt, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
         await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: reservedAt, identities: [identity] });
         const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace, argv: ['x'] } };
         await store.claimDispatch(dispatchAdmission(claim));
         await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: grantedAt });
         const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported',
-          report: { schemaVersion: 1, summary: runId + ' report', changedFiles: [runId + '.txt'], checks: [], openIssues: [] } };
+          report: { schemaVersion: 1, summary: name + ' report', changedFiles: [name + '.txt'], checks: [], openIssues: [] } };
         await store.retainDispatchOutput(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({
           schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '',
         }))));
@@ -342,8 +344,10 @@ describe('inspectMonitor content authorization (security)', () => {
           schemaVersion: 1, kind: 'workspace-patch', identity,
           source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) },
           baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions,
-          changes: [{ path: runId + '.txt', before: null, after: patchFile(Buffer.from(runId), '100644') }],
+          changes: [{ path: name + '.txt', before: null, after: patchFile(Buffer.from(name), '100644') }],
         }))));
+        await store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId, runId,
+          source: { schemaVersion: 1, adapter: { id: 'git', version: name === 'first' ? 2 : 1 }, sourceFingerprint: 'a'.repeat(64) }, baseRevision: 'b'.repeat(40) });
       }
     } finally { store.close(); }
 
@@ -373,14 +377,31 @@ describe('inspectMonitor content authorization (security)', () => {
     expect.soft(attempt(both, first).reservedAtMs).toBe(20_800);
     expect.soft(attempt(both, second).reservedAtMs).toBe(21_800);
 
+    const firstDelivery = { schemaVersion: 2, application: 'working-tree', commandId: 'deliver-first', state: 'delivered', commit: '1'.repeat(40), targetRef: 'refs/heads/first' };
+    const secondDelivery = { schemaVersion: 2, application: 'reference-only', commandId: 'deliver-second', state: 'delivered', commit: '2'.repeat(40), targetRef: 'refs/heads/second' };
+    const writer = new DatabaseSync(current.ledger);
+    try {
+      const insert = writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,1)');
+      for (const [identity, delivery] of [[first, firstDelivery], [second, secondDelivery]] as const) {
+        insert.run(identity.scopeId, delivery.commandId, JSON.stringify({ command: { identity }, plan: { commit: delivery.commit, ref: delivery.targetRef } }));
+      }
+    } finally { writer.close(); }
+
     const policyPath = productResourcePath(current.layout, 'policy');
     const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; scopes: string[] }[] };
     for (const bothAllowed of [false, true]) {
       await writeFile(policyPath, JSON.stringify({ ...policy, revision: bothAllowed ? 'both' : 'first-only',
         grants: policy.grants.map(grant => grant.id === 'output' ? { ...grant, scopes: bothAllowed ? scopes : [first.scopeId] } : grant) }));
       const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
-      const worker = (identity: typeof first) => install.workers.find(row => row.identity?.runId === identity.runId);
-      const lastAttempt = (identity: typeof first) => install.runs.find(row => row.runId === identity.runId)?.tasks[0]?.lastAttempt;
+      const worker = (identity: typeof first) => install.workers.find(row => row.identity?.scopeId === identity.scopeId && row.identity.runId === identity.runId);
+      const run = (identity: typeof first) => install.runs.find(row => row.scopeId === identity.scopeId && row.runId === identity.runId);
+      const lastAttempt = (identity: typeof first) => run(identity)?.tasks[0]?.lastAttempt;
+      const ownFirst = { ...firstDelivery, receipts: [firstDelivery] };
+      const ownSecond = bothAllowed ? { ...secondDelivery, receipts: [secondDelivery] } : null;
+      expect.soft(run(first)).toMatchObject({ createdAtMs: 10_800, delivery: ownFirst });
+      expect.soft(run(second)).toMatchObject({ createdAtMs: 11_800, delivery: ownSecond });
+      expect.soft(worker(first)?.human?.resultBrief?.runDelivery).toEqual(ownFirst);
+      expect.soft(worker(second)?.human?.resultBrief?.runDelivery).toEqual(ownSecond);
       expect.soft(worker(second)).toMatchObject({ identity: second, human: { startedAtMs: 31_800, endedAtMs: bothAllowed ? 50_000 : null,
         endedAtSource: bothAllowed ? 'observed' : null,
         patch: bothAllowed ? { state: 'recorded', files: ['second.txt'] } : { state: 'denied', files: [] },

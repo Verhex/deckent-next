@@ -33,6 +33,7 @@ const MOVING = new Set(['none', 'worker-running']);
 const blockerRole = (blocker: MonitorBlocker): MonitorRole => blocker.code === 'awaiting-approval' ? 'warning' : MOVING.has(blocker.code) ? 'muted'
   : ['worker-stale-heartbeat', 'unresolved-effect', 'evaluation-unknown', 'worker-exited-unevaluated', 'unknown'].includes(blocker.code) ? 'error' : 'warning';
 const short = (value: string | null | undefined, size: number) => value ? value.slice(0, size) : '—';
+const rowKey = (...fields: (string | number)[]) => JSON.stringify(fields);
 /** Worse first: what needs eyes sorts to the top when the state sort is chosen. */
 const STATE_RANK: Readonly<Record<MonitorRunState, number>> = { parked: 0, incomplete: 0, blocked: 0, waiting: 1, failed: 2, progressing: 3, cancelled: 4, accepted: 5 };
 /** `MonitorAttempt.endedAtSource`: 'observed' = the end is the host's own recorded worker exit in the attempt sidecar, not a sealed log end. */
@@ -96,7 +97,6 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
     stateCell: (run: MonitorRun) => globalRunCell(run, locale),
     blockerText: (blocker: MonitorBlocker) => blocker.detail === 'quota-ask' ? t('quotaask.monitor', {}, locale) : ['quota-exhausted', 'quota-reset-unknown', 'quota-retry-limit'].includes(blocker.detail ?? '') && blocker.deadlineMs !== undefined
       ? quotaWaitText(blocker.deadlineMs, blocker.detail !== 'quota-reset-unknown', locale, blocker.detail === 'quota-retry-limit', now) : `${blockerLabel(blocker.code, locale)}${blocker.detail ? ` (${blockerDetailText(blocker.detail, locale)})` : ''}`,
-    runName: (run: MonitorRun) => `${run.scopeId}/${run.runId}`,
     progress: (run: MonitorRun) => t('monitor.progress', { accepted: run.phaseCounts['accepted'] ?? run.tasks.filter(task => task.phase === 'accepted').length,
       total: run.tasks.length }, locale),
     /**
@@ -257,7 +257,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
 
 function runRow(w: Words, install: MonitorInstall, run: MonitorRun, cells: readonly MonitorSpan[]): MonitorRow {
   const state = [projectHumanState({ kind: 'run', value: run }).state, globalStateLabel(projectHumanState({ kind: 'run', value: run }).state, w.locale), run.state, runStateLabel(run.state, w.locale), run.blocker?.code ?? '', run.blocker ? blockerLabel(run.blocker.code, w.locale) : ''].join(' ').toLowerCase();
-  return { key: `${install.id}:${w.runName(run)}`, detail: runDetail(w, install, run), cells,
+  return { key: rowKey('run', install.id, run.scopeId, run.runId), detail: runDetail(w, install, run), cells,
     facets: { state, install: install.id.toLowerCase(), kind: run.tasks.map(task => task.kind).join(' ').toLowerCase(), run: run.runId.toLowerCase(),
       stateLabel: globalRunCell(run, w.locale).text },
     sort: { age: run.createdAtMs ?? run.lastActivityMs, state: STATE_RANK[run.state], name: run.runId },
@@ -324,7 +324,10 @@ function workersBlock(w: Words, entries: readonly Entry<MonitorWorker>[], empty:
   rows: ordered.map(({ entry: { install, value: worker }, at }): MonitorRow => {
     const own = w.attemptOf(install, worker), phase = worker.files?.activity?.phase ?? (worker.terminal ? null : own?.attempt.workerPhase ?? null);
     const status = projectHumanState({ kind: 'worker', value: worker, ...w.workerSubject(install, worker) });
-    return { key: `${install.id}:${worker.identity?.attemptId ?? worker.taskId}`, detail: workerDetail(w, install, worker),
+    const id = worker.identity;
+    const key = id ? rowKey('worker', install.id, id.scopeId, id.runId, id.taskId, id.attemptId, id.generation, id.layoutRevision)
+      : rowKey('worker', install.id, worker.taskId);
+    return { key, detail: workerDetail(w, install, worker),
       // PRE-5: `--once` is a summary; a worker's full detail is printed with --verbose, a held worker's always (it waits for a person).
       detailInText: status.state === 'held' || (w.verbose && !!worker.human), detailOnVerbose: !!worker.human && status.state !== 'held',
       ...(status.state === 'held' ? { context: [[globalStateCell(status, locale)]] } : {}), cells: [span(worker.human ? w.workTitle(install, worker) : w.workerName(worker)),
@@ -351,7 +354,7 @@ function approvalsBlock(w: Words, entries: readonly Entry<MonitorApproval>[], co
     w.col(t('monitor.col.subject', {}, locale), 0, 24, 60, { sortKey: 'name' }), w.col(t('monitor.col.waiting', {}, locale), 1, 11, 16, { sortKey: 'age' }),
     w.col(t('monitor.col.expires', {}, locale), 2, 16, 26), ...(compact ? [] : [w.col(t('monitor.col.assurance', {}, locale), 3, 9, 20),
       w.col(t('monitor.col.scope', {}, locale), 4, 8, 20)]), ...w.installColumn(5)],
-  rows: entries.map(({ install, value: approval }): MonitorRow => ({ key: `${install.id}:${approval.approvalId}`, detail: detail(install, approval),
+  rows: entries.map(({ install, value: approval }): MonitorRow => ({ key: rowKey('approval', install.id, approval.scopeId, approval.approvalId), detail: detail(install, approval),
     facets: { state: `awaiting-approval ${approval.subjectKind}`.toLowerCase(), install: install.id.toLowerCase() },
     sort: { age: approval.createdAtMs, name: approval.approvalId }, signature: `${approval.expiresAtMs ?? ''}`, cells: [
     span(`${approval.subjectKind}: ${approval.summary || t('monitor.approval.summaryHidden', {}, locale)}`), span(w.age(approval.createdAtMs), 'warning'),
@@ -368,7 +371,7 @@ function poolsBlock(w: Words, entries: readonly Entry<MonitorPool>[]): MonitorBl
     w.col(t('monitor.col.pool', {}, locale), 0, 12, 32, { sortKey: 'name' }), w.col(t('monitor.col.usage', {}, locale), 1, 8, 20),
     w.col(t('monitor.col.held', {}, locale), 2, 10, 40, { sortKey: 'state' }),
     ...w.installColumn(3)],
-  rows: entries.map(({ install, value: pool }): MonitorRow => ({ key: `${install.id}:${pool.poolId}`, facets: { state: pool.held ? 'held' : '', install: install.id.toLowerCase() },
+  rows: entries.map(({ install, value: pool }): MonitorRow => ({ key: rowKey('pool', install.id, pool.poolId), facets: { state: pool.held ? 'held' : '', install: install.id.toLowerCase() },
     sort: { state: pool.held ? 0 : 1, name: pool.poolId }, signature: `${pool.inFlight}|${pool.held}`, cells: [
     span(pool.poolId), span(usage(pool), pool.capacity !== null && pool.inFlight >= pool.capacity ? 'warning' : undefined), held(pool), ...w.installCell(install)],
   detail: () => [[span(t('monitor.detail.pool', { pool: pool.poolId, install: install.id }, locale), 'strong')], [span(usage(pool))], [held(pool)]] })) };
@@ -452,7 +455,8 @@ export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, asci
   const w = wordsFor(snapshot, locale, ascii, verbose), installs = snapshot.installs;
   const runs = each(installs, install => install.runs);
   const stuck = runs.filter(entry => OPEN.includes(entry.value.state) && entry.value.blocker && !MOVING.has(entry.value.blocker.code))
-    .sort((a, b) => (a.value.blocker!.sinceMs ?? Infinity) - (b.value.blocker!.sinceMs ?? Infinity) || w.runName(a.value).localeCompare(w.runName(b.value)));
+    .sort((a, b) => (a.value.blocker!.sinceMs ?? Infinity) - (b.value.blocker!.sinceMs ?? Infinity)
+      || a.value.scopeId.localeCompare(b.value.scopeId) || a.value.runId.localeCompare(b.value.runId));
   const recordedApprovals = each(installs, install => install.approvals);
   const approvals = recordedApprovals.filter(({ value }) => (value.status === undefined || value.status === 'pending')
     && (value.expiresAtMs === null || value.expiresAtMs > snapshot.observedAt)).sort((a, b) => (a.value.createdAtMs ?? Infinity) - (b.value.createdAtMs ?? Infinity));

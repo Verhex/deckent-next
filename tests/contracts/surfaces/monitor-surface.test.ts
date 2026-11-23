@@ -273,6 +273,38 @@ describe('fullscreen monitor', () => {
       await view.instance.waitUntilExit();
     } finally { view.instance.unmount(); }
   });
+  it('opens and retains only the selected Run detail when scope and Run IDs contain slashes', async () => {
+    const seed = fullSnapshot.installs[0]!;
+    const run = seed.runs.find(value => value.runId === 'run-broken')!;
+    const first = { ...run, scopeId: 's', runId: 'a/b', createdAtMs: OBSERVED_AT - 1 };
+    const second = { ...run, scopeId: 's/a', runId: 'b', createdAtMs: OBSERVED_AT - 2 };
+    const install = { ...seed, scopeIds: ['s', 's/a'], workers: [], approvals: [] };
+    let runs = [first, second];
+    const view = mount({ load: async () => ({ ...fullSnapshot, sourcesRead: [install.id], installs: [{ ...install, runs }] }) });
+    const firstDetail = 'Run a/b · scope s ·';
+    const secondDetail = 'Run b · scope s/a ·';
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press('2');
+      expect(view.stdout.frame).toMatch(/› │ a\/b\s/);
+      expect(view.stdout.frame).toMatch(/│ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(secondDetail);
+      await view.press(KEY.esc); await view.press(KEY.down);
+      expect(view.stdout.frame).toMatch(/› │ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(secondDetail);
+      expect(view.stdout.frame).not.toContain(firstDetail);
+
+      runs = [first];
+      await view.press('r');
+      const detailGone = t('monitor.live.detailGone', {}, 'en');
+      await until(() => view.stdout.frame.includes(detailGone), 'selected Run removed');
+      expect(view.stdout.frame).not.toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(secondDetail);
+    } finally { view.instance.unmount(); }
+  });
   it('refreshes in place every interval, single-flight; r refreshes now; p pauses; a failure keeps the last snapshot with a warning', async () => {
     const builds = vi.mocked(surface.buildMonitorView); builds.mockClear();
     let calls = 0, fail = false, release: (() => void) | null = null;
@@ -869,7 +901,9 @@ it.each(['en', 'tr'] as const)('only actionable approvals appear as waiting, whi
   const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, approvals }] };
   const view = surface.buildMonitorView(snapshot, locale, true);
   const rows = view.tabs.approvals.filter(block => block.kind === 'table').flatMap(block => block.rows);
-  expect(rows.map(row => row.key)).toEqual(['current:fresh']);
+  expect(rows.map(row => row.detail()[0]?.[0]?.text)).toEqual([
+    t('monitor.detail.approval', { id: 'fresh', scope: base.scopeId, kind: base.subjectKind, install: 'current' }, locale),
+  ]);
   expect(surface.renderMonitorText(snapshot, { locale, width: 160, ascii: true })).toContain(t('monitor.approval.expiredCount', { count: 2 }, locale));
   expect(snapshot.installs[0]!.approvals).toHaveLength(5);
 });
