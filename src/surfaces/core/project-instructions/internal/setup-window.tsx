@@ -13,7 +13,7 @@ import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
  * An option's yes/no `role` makes the shared question contract show and take (y)/(n) on it. While an answer is applied the hint row says
  * `applying` (with `busyKey` once a key was pressed then): keys are visibly not used, and the next step's window re-arms (walk19R). */
 export type SetupWindowModel = Readonly<{ title: string; rows: readonly string[]; heights?: readonly number[]; options: readonly QuestionOption[];
-  wrapNotice?: boolean; optionRows: number; initial: number; hints: string; decisionArm: DecisionArmLabels; applying: string; busyKey: string; position: string; reveal: number }>;
+  wrapNotice?: boolean; optionRows: number; initial: number; hints: string; scrollHint?: string; decisionArm: DecisionArmLabels; applying: string; busyKey: string; position: string; reveal: number }>;
 /** A text row in at least `rows` display rows: wrapped by words and never cut (FIX9: a narrower terminal shows the whole reason, the window scrolls),
  * blank rows after a short one; a one-row line (a stage, the command) is cut with "…". */
 const fitRows = (text: string, rows: number, width: number): readonly string[] => {
@@ -42,7 +42,8 @@ function SetupWindow({ initial, step, failed }: Readonly<{ initial: SetupWindowM
   // Re-arm each question without discarding text typed while its predecessor was being applied (owner 107/108).
   if (closing) return null;
   return <DecisionArmLabelsContext.Provider value={model.decisionArm}><Window inputRevision={turn} title={[span(model.title)]} body={lines.map(text => ({ spans: [span(text)], exact: true }))} reveal={model.reveal}
-    hints={applying ? `${spinner} ${model.applying}${refused ? ` · ${model.busyKey}` : ''}` : model.hints} position={model.position} footerRows={model.options.length + padding} decision
+    hints={applying ? `${spinner} ${model.applying}${refused ? ` · ${model.busyKey}` : ''}` : model.hints} scrollHint={applying ? undefined : model.scrollHint}
+    position={model.position} footerRows={model.options.length + padding} decision
     footer={owns => <><QuestionRows kind="single" options={model.options} state={choice} focused={owns} />{Array.from({ length: padding }, (_, index) => <Text key={index}> </Text>)}</>}
     onInput={(input, key, meta) => {
       // An answer being applied takes no second one, and says so; a burst read is never an answer.
