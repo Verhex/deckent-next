@@ -31,7 +31,7 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
   const beforeDelivery = new Set<string>();
   const base = codexTurn(prepared, preflight, '', undefined, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
   let threadId: string | undefined, turnId: string | undefined, conflictingIdentity = false;
-  let proseEndsWithWhitespace = true;
+  let proseEndsWithWhitespace = true, toolBetweenProse = false;
   // Reserve synchronously before either driver can delegate to its tool session.
   const reserved = new WeakMap<object, string>();
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
@@ -99,6 +99,7 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
             if (wire.delivered || envelope.outcome.status !== 'ok' || errorFlag !== undefined && errorFlag !== false) return fail('planning-delivery');
             wire.delivery(envelope);
           }
+          toolBetweenProse = true;
           calls.add(envelope.deckentCallId); seen.add(item.id); active.delete(item.id); return null;
         }
         if (wire && item.type === 'agent_message') {
@@ -118,7 +119,8 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
       refusal = base.line(raw);
       if (!refusal && type === 'item.completed' && item?.type === 'agent_message' && typeof item.text === 'string' && item.text) {
         const text = item.text;
-        emitDelta(onDelta, proseEndsWithWhitespace || /^\s/u.test(text) ? text : '\n\n' + text);
+        emitDelta(onDelta, toolBetweenProse && !proseEndsWithWhitespace && !/^\s/u.test(text) ? '\n\n' + text : text);
+        toolBetweenProse = false;
         proseEndsWithWhitespace = /\s$/u.test(text);
       }
       return refusal;

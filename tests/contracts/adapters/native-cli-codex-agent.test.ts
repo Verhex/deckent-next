@@ -181,3 +181,12 @@ it('separates consecutive completed Codex prose items across a correlated tool c
   expect(deltas.join('')).toBe(`${first.item.text}\n\n${longText}`);
   expect(driver.end({ exited: true, exitCode: 0 }, egress)).toMatchObject({ response: { native: { choices: [{ message: { content: longText } }] } } });
 });
+
+it('leaves Codex prose byte-identical without a completed tool exchange at the boundary', () => {
+  const deltas: string[] = [], driver = codexAgentTurn(prepared, preflight, session, lookup, delta => deltas.push(delta.text));
+  const prose = (id: string, text: string) => ({ ...answer, item: { ...answer.item, id, text } });
+  const lines = [thread, turn, prose('first', 'First.'), prose('second', 'Second.'), start(), prose('third', 'Third.'),
+    finish(), prose('fourth', ' Fourth.'), prose('fifth', 'Fifth.'), done];
+  expect(feed(driver, lines)).toEqual(Array(lines.length).fill(null));
+  expect(deltas).toEqual(['First.', 'Second.', 'Third.', ' Fourth.', 'Fifth.']);
+});
