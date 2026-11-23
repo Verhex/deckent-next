@@ -229,7 +229,9 @@ export class PolicyTemplateUpgrade {
     const plan = firstRun.status === 'unavailable' && firstRun.reason === 'not-first-run' ? namedPersonPolicyAdditions(files.policy, names) : firstRun;
     if (this.reviewedRules && (plan.status !== 'plan' || effectInputDigest(plan.change) !== effectInputDigest({
       schemaVersion: 1, changes: this.reviewedRules.map(grant => ({ kind: 'grant.add', grant })) }))) return result('conflict', { reason: 'plan-changed' });
-    const held = input.only === 'ai-proposals' /* the delta rules held now (what a rollback removes) and those an allow covers: /policy's row and its cards */ ? { held: FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS.filter(id => policy.grants.some(rule => rule.id === id)), ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) } : { ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) };
+    const deltaIds = input.only === 'ai-proposals' ? FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS : input.only === 'ai-execution' && input.mode === 'preview' ? FIRST_RUN_CURRENT_UPGRADE_RULE_IDS : undefined;
+    const held = { ...optionalField('held', deltaIds?.filter(id => policy.grants.some(rule => rule.id === id))),
+      ...(plan.status !== 'unavailable' && plan.covered ? { covered: plan.covered } : {}) };
     if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason, ...held });
     if (plan.status === 'current') return result('current', { conflicts: plan.conflicts, ...held });
     const summary = describePolicyChange(files, plan.change), executionContext = principalGrants(policy, mcpPrincipalRef(input.principal)), executionScopes = plan.executionScopes;

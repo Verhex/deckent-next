@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +11,7 @@ import * as platform from '#platform/index.js';
 import { verifiedFirstPublicationPolicy, openPermissionModesInstallation } from '#composition/core/installation/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { loadConfigLanguage, observeBootstrapState, encodeBootstrapJournal, productResourcePath, resolveProductLayout } from '#platform/index.js';
-import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
+import { firstRunExecutionRules, OWNER_BASELINE_DEFAULT_FAMILIES, policyFileSchema } from '#domain/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
 import { createSetupController, setupInitCommand, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 
@@ -249,6 +249,35 @@ describe('I-S3 surface: refusals are typed and name the stage; the window never 
   });
 });
 
+
+describe.skipIf(process.platform !== 'linux')('119-C2 setup execution permission notice', () => {
+  it('names each managed execution rule once in English and Turkish and marks the notice for wrapping', async () => {
+    const f = await fixture();
+    const scope = 'erp-demo';
+    const initialized = await f.run(['init', '--yes', '--scope', scope, '--lang', 'en', '--json']);
+    expect(initialized.code, initialized.stderr).toBe(0);
+    const path = productResourcePath(resolveProductLayout({ projectRoot: f.root }), 'policy');
+    const policy = policyFileSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+    const { wanted } = firstRunExecutionRules([], { issuer: hostname(), subject: String(userInfo().uid) }, [scope]);
+    await writeFile(path, JSON.stringify({ ...policy, grants: [...policy.grants, ...wanted] }), { mode: 0o600 });
+
+    const previewSetupExecutionPermission: NonNullable<SetupCommandContext['previewSetupExecutionPermission']> = async (root, scopeId, options) =>
+      configuredPolicyTemplateUpgrade(root, scopeId, options, { mode: 'preview', only: 'ai-execution', reason: 'observe' }, undefined,
+        await verifiedFirstPublicationPolicy(root, scopeId, options));
+    const upgradePolicyTemplate = vi.fn<NonNullable<SetupCommandContext['upgradePolicyTemplate']>>();
+    const en = 'Execution permissions are already covered: first-run-mcp-progress-run-reserve, first-run-mcp-progress-run-cancel, first-run-mcp-progress-attempts. Managed rollback leaves custom or role permissions in place.';
+    const tr = 'Yürütme izinleri zaten karşılanıyor: first-run-mcp-progress-run-reserve, first-run-mcp-progress-run-cancel, first-run-mcp-progress-attempts. Yönetilen izinleri geri almak, özel veya rol üzerinden verilen izinleri kaldırmaz.';
+    for (const [locale, notice] of [['en', en], ['tr', tr]] as const) {
+      const run = surface(() => 'refused');
+      const context = { ...run.context, env: f.env, upgradePolicyTemplate, previewSetupExecutionPermission };
+      const controller = createSetupController({ context, root: f.root, locale, observed: { observation: base, registry }, flags: { json: false, yes: false } });
+      expect(await controller.offerExecution()).toBe(true);
+      expect(run.out()).toBe(`${notice}\n`);
+      expect(controller.model()).toMatchObject({ rows: expect.arrayContaining([notice]), wrapNotice: true });
+    }
+    expect(upgradePolicyTemplate).not.toHaveBeenCalled();
+  }, 120_000);
+});
 
 describe.skipIf(process.platform !== 'linux')('119 verified first-publication root', () => {
   it('proves a fresh origin across non-execution writes; rejects unproved journals and changes no bytes', async () => {
