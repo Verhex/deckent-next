@@ -140,6 +140,8 @@
   "doctor.aiExecution.partial": "AI execution permission for {actor} in {scope}: partial ({allowed}/{total} standing actions).",
   "doctor.aiExecution.restricted": "AI execution permission for {actor} in {scope}: limited by a denial or an approval requirement.",
   "doctor.aiExecution.unknown": "AI execution permission in {scope} could not be verified.",
+  "doctor.aiExecution.noScope": "AI execution permission was not checked: this folder has no deckent scope yet. Set the folder up with deckent init, or run deckent doctor inside a project that is already set up.",
+  "doctor.usage.scope": "deckent doctor checks the folder it is run in and that folder's scope, so it takes no --scope. Go to the project folder and run deckent doctor there.",
   "doctor.check.pool.ok": "Worker pool is ready",
   "doctor.check.pool.unconfigured": "No worker pool is set up yet: Runs cannot start workers",
   "doctor.check.pool.drift": "Worker pool capacity differs from the configuration",

@@ -20,7 +20,7 @@ import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import { EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-kit/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, doctorReadinessChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
 // the schema-2 --json report with additive health counts, and the interactive fix offer only on a person's terminal through an existing operation.
@@ -416,6 +416,33 @@ it('3358 doctor reports full, available and unknown effective pool capacity in t
 });
 
 describe('deckent doctor (command)', () => {
+  it('explains folder scope in the selected language without echoing a flag value or an unknown flag', async () => {
+    const root = await project();
+    const env = { HOME: join(root, 'h') };
+    for (const [lang, heading, usage] of [
+      ['en', 'Invalid --scope for deckent doctor.', 'deckent doctor checks the folder it is run in and that folder\'s scope, so it takes no --scope. Go to the project folder and run deckent doctor there.'],
+      ['tr', 'deckent doctor için --scope geçersiz.', 'deckent doctor çalıştırıldığı klasörü ve o klasörün kapsamını denetler; bu yüzden --scope almaz. Proje klasörüne geçin ve deckent doctor komutunu orada çalıştırın.'],
+    ] as const) {
+      const args = ['doctor', '--scope', 'x', '--lang', lang];
+      await expect.soft(runKernelCommand(args, { root, env })).rejects.toMatchObject({
+        code: 'CLI_USAGE', params: { command: 'deckent doctor', flag: '--scope', usage },
+      });
+      for (const [flags, scoped] of [[['--scope', 'SECRETVALUE'], true], [['--not-a-flag-SECRETVALUE'], false]] as const) {
+        let output = '';
+        const writer = { write: (text: string) => { output += text; } };
+        expect(await main(['doctor', ...flags, '--lang', lang], { root, env, stdout: writer, stderr: writer })).toBe(2);
+        expect(output).toContain('[CLI_USAGE]');
+        expect(output).not.toContain('SECRETVALUE');
+        if (scoped) {
+          expect.soft(output).toContain(heading);
+          expect.soft(output).toContain(usage);
+        } else {
+          expect(output).not.toContain(usage);
+        }
+      }
+    }
+  });
+
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     registerProviderConfig();
     const root = await project({ terminal: { scopeId: 'fixture' } });
@@ -827,5 +854,27 @@ it('D2 a recorded pool does not mean the small worker is ready (EN/TR)', () => {
     const pool = rows.find(row => row.id === 'work.pool')!;
     expect(pool.state).toBe('warning'); expect(pool.next).toBe(workerReadiness.cli.join(' '));
     expect(pool.text).toContain(locale === 'en' ? 'Small worker is not ready' : 'Küçük iş çalışanı hazır değil');
+  }
+});
+
+it('recommends plain deckent doctor in both unmeasured worker rows for a configured scope', () => {
+  const scoped = facts({ workerReadiness: null, poolHeld: false, poolHasRoom: true });
+  const checks = doctorChecks(report, scoped, 'en');
+  expect.soft(checks.find(row => row.id === 'work.pool')).toMatchObject({ state: 'untested', next: 'deckent doctor' });
+  expect(doctorReadinessChecks(scoped, checks, 'en').find(row => row.id === 'work.firstWorker'))
+    .toMatchObject({ state: 'untested', next: 'deckent doctor' });
+});
+
+it('guides setup without a scope and keeps the permission preview for an unreadable configured scope (EN/TR)', () => {
+  for (const [locale, text] of [
+    ['en', 'AI execution permission was not checked: this folder has no deckent scope yet. Set the folder up with deckent init, or run deckent doctor inside a project that is already set up.'],
+    ['tr', 'Yapay zekâ yürütme izni denetlenmedi: bu klasörün henüz bir deckent kapsamı yok. Klasörü deckent init ile kurun ya da deckent doctor komutunu kurulmuş bir proje klasöründe çalıştırın.'],
+  ] as const) {
+    const noScope = facts({ scopeId: null, executionPermission: null });
+    const configured = facts({ executionPermission: null });
+    expect.soft(doctorReadinessChecks(noScope, doctorChecks(report, noScope, locale), locale).find(row => row.id === 'work.aiExecution'))
+      .toMatchObject({ state: 'untested', text, next: 'deckent init' });
+    expect(doctorReadinessChecks(configured, doctorChecks(report, configured, locale), locale).find(row => row.id === 'work.aiExecution'))
+      .toMatchObject({ state: 'untested', text: t('doctor.aiExecution.unknown', { scope: 'live' }, locale), next: 'deckent policy upgrade --template current --only ai-execution --scope live --preview' });
   }
 });

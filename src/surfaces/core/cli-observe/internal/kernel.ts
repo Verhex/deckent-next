@@ -1,6 +1,6 @@
 import { timingCommand } from './timing.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { ErrorRegistry, emit, getConfigFieldDefault, type ConfigLoadOptions, type Locale, type OutputMode } from '#platform/index.js';
+import { ErrorRegistry, PACKAGE_NAME, emit, getConfigFieldDefault, t, type ConfigLoadOptions, type Locale, type OutputMode } from '#platform/index.js';
 import type { KernelCommandContext } from './context.js';
 import { doctorCommand } from './doctor.js';
 import { pathsCommand } from './paths.js';
@@ -13,7 +13,7 @@ export interface KernelCall {
   locale: Locale; mode: OutputMode;
   output<T>(data: T, render: (data: T) => string, level?: 'info' | 'warning'): void;
 }
-function parse(argv: readonly string[]): KernelArgs {
+function parse(argv: readonly string[], context: KernelCommandContext): KernelArgs {
   const result: KernelArgs = { positionals: [], json: false, global: false, dryRun: false, toolchains: false, verbose: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -27,13 +27,17 @@ function parse(argv: readonly string[]): KernelArgs {
       const language = argv[++i];
       if (!language || language.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       result.language = language;
+    } else if (arg === '--scope' && result.positionals[0] === 'doctor') {
+      const languageAt = argv.indexOf('--lang');
+      const locale = commandLocale(context, languageAt < 0 ? undefined : argv[languageAt + 1]);
+      throw ErrorRegistry.createError('CLI_USAGE', { locale, params: { command: `${PACKAGE_NAME} ${result.positionals[0]}`, flag: '--scope', usage: t('doctor.usage.scope', {}, locale) } });
     } else if (arg.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
     else result.positionals.push(arg);
   }
   return result;
 }
 export async function runKernelCommand(argv: readonly string[], context: KernelCommandContext = {}): Promise<void> {
-  const args = parse(argv), root = context.root ?? process.cwd(), env = context.env ?? process.env;
+  const args = parse(argv, context), root = context.root ?? process.cwd(), env = context.env ?? process.env;
   const [command, action] = args.positionals;
   if ((args.toolchains || args.verbose) && command !== 'doctor') throw ErrorRegistry.createError('CLI_USAGE');
   const call: KernelCall = {
