@@ -26,15 +26,22 @@ const argumentsSchema = z.array(argument).readonly();
   eventStream: z.enum(['claude-code-stream-json', 'codex-exec-json', 'cursor-agent-stream-json']),
 }).readonly();
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
+const packagePath = z.string().max(240).regex(/^[A-Za-z0-9@_-]+(?:[.][A-Za-z0-9_-]+)*(?:\/[A-Za-z0-9@_-]+(?:[.][A-Za-z0-9_-]+)*)*$/u);
+const npmLauncherSchema = z.strictObject({ schemaVersion: z.literal(1), source: argument,
+  packageName: packagePath, command: packagePath, packagePath, linkPath: packagePath, launcherPath: packagePath,
+  platform: z.string().regex(/^[a-z0-9]+$/u), arch: z.string().regex(/^[a-z0-9]+$/u),
+  platformPackage: packagePath, platformPackagePath: packagePath, payloadPath: packagePath,
+}).refine(rule => rule.platformPackagePath === `node_modules/${rule.platformPackage}` && rule.linkPath === `bin/${rule.command}`).readonly();
 const commandSchema = z.strictObject({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
-  capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional(), agent: nativeCliAgentSchema.optional(),
+  npmLauncher: npmLauncherSchema.optional(), capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional(), agent: nativeCliAgentSchema.optional(),
   /** U9-6: the CLI's app-server subcommand that runs embedded in the isolated worker (one source for worker commands; transport data stays with the relay). */
   appServer: z.strictObject({ args: argumentsSchema.refine(value => value.length > 0), source: persistedUrl(), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
     support: z.literal('experimental') }).readonly().optional() }).refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
     // A headless step is one bounded turn: by the CLI's turn flag, or (no such flag) by its line guard.
     && (!value.headless || value.headless.turnBound === 'stream' || value.capabilities.maxTurns !== null)
     && (!value.agent || value.headless !== undefined)
+    && (!value.npmLauncher || value.headless !== undefined && value.npmLauncher.command === value.executable)
     && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.strictObject({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly(), instructionSurface: z.strictObject({ hiddenPaths: workspaceHiddenPathsSchema }).readonly(),

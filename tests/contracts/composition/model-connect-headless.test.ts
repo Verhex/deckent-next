@@ -7,7 +7,7 @@ import { DRIVER } from '../support/pty-steps.js';
 import * as adapters from '#adapters/index.js';
 import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
@@ -39,7 +39,7 @@ import seed from '../../../assets/model-catalog/claude-cli-subscription.json' wi
 import workClasses from '../../../assets/native-coding/work-classes.json' with { type: 'json' };
 import codexSeed from '../../../assets/model-catalog/codex-cli-subscription.json' with { type: 'json' };
 import { textOnlyModelInvocationRequest, roleModelInvocationReference, planSetup } from '#engine/index.js';
-import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
+import { CODEX_FAMILY, fakeCodexNpm, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
 import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -103,6 +103,18 @@ afterEach(() => vi.restoreAllMocks());
 const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
+  it.skipIf(process.arch !== 'x64')('G3 connects the Codex npm launcher from PATH and preserves the chosen path', async () => {
+    const h = await harness(null), configDir = join(h.f.data, 'codex-g3'), logPath = join(configDir, 'config.toml');
+    const { chosen, payload } = await fakeCodexNpm(h.f.data, { logPath }, true);
+    await mkdir(configDir, { mode: 0o700 });
+    await connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId: 'codex-g3', scopeId: 'scope', connection: 'codex-cli-subscription',
+      model: { nativeId: codexSeed.recommendedActivations[0]!.modelIds[0]! }, cli: { configDir } }, { env: { ...h.f.env, PATH: dirname(chosen) } });
+    expect((await h.profile())?.adapter.definition.executable).toBe(chosen);
+    const probes = (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    expect(probes.map(row => [row.mode, row.program])).toEqual([['version', payload], ['help', payload], ['auth', payload]]);
+    expect(probes[0]).toMatchObject({ visibility: [false, false, false, false], writeAccess: 'EROFS' });
+  });
+
   it('K29: connected profile authors v2 through governed config, lists its connection and returns the same kind to Docker', async () => {
     const h = await harness(null); await h.connect('k29-connect');
     const path = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));

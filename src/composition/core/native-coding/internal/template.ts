@@ -11,7 +11,7 @@ function ports(root: string, options: ConfigLoadOptions, dependencies: Dependenc
     connection: (snapshot, id, provider) => resolveNativeTemplateConnection(root, snapshot.effective, id, provider, modelUseReadPorts(options), nativeCliAgent, async (context, definition) => {
       const reader = await openSqliteInventoryReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
       try { return await reader.findCapacityResource(headlessCapacityBinding(definition)); } finally { reader.close(); }
-    }), observed: worker => readHeadlessSealedVersion(worker.definition), detect: dependencies.detect ?? detectNativeCliVersion, witness: configPersonWitness(dependencies.witness),
+    }), observed: worker => readHeadlessSealedVersion(worker.definition, worker.protocolFamily), detect: dependencies.detect ?? detectNativeCliVersion, witness: configPersonWitness(dependencies.witness),
     ...(dependencies.beforeWrite ? { beforeWrite: dependencies.beforeWrite } : {}) };
 }
 /** Owner 2026-11-08: a Docker request for a CLI without a Docker subscription path names that reason, not a missing toolchain pin. */

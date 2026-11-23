@@ -1,5 +1,6 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
+import { localHeadlessPathDetail, retainHeadlessPaths } from './headless-paths.js';
 import { DeckentError } from './error.js';
 import { errorTable, plainErrors, type AuthorizationRefusal, type ErrorDefinition, type ErrorDefinitions, type ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
@@ -698,6 +699,7 @@ export const isAuthorizationRefusal = (code: unknown, options: { readonly includ
 /** S2-e4: the launch disposition a registered code carries; null = transient, an unregistered code included. */
 export const launchRefusal = (code: unknown): 'permanent' | 'held' | null => registered(code)?.launch ?? null;
 export const ErrorRegistry = Object.freeze({
+  retainHeadlessPaths, localHeadlessPathDetail,
   has(code: string): boolean { return Object.hasOwn(definitions, code); },
   get(code: string, locale: Locale = resolveLocale(), params: Params = {}): Readonly<ErrorEntry> | undefined {
     const definition = Object.hasOwn(definitions, code) ? definitions[code] : undefined;

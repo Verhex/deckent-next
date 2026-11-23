@@ -1,12 +1,16 @@
 import type { ModelInvocationProfile } from '#domain/index.js';
-import { realpath } from 'node:fs/promises';
+import { nativeCliAgent, resolveHeadlessExecutable } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution } from '#capabilities/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 
-/** Chat compares the seal with the profile's resolved executable only (never its recorded path). */
+/** Compare the chat seal with the same verified program used to create it. */
 async function sealedForProfile(profile: ModelInvocationProfile, execution: NativeAgentExecution) {
   const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
-  return definition.success && await sealMatchesDefinition(execution, definition.data, () => realpath(definition.data.executable).catch(() => null));
+  const entry = nativeCliAgent(profile.protocol.family);
+  if (!definition.success || !entry) return false;
+  const { executable, ownerUid } = definition.data;
+  return sealMatchesDefinition(execution, definition.data,
+    () => resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable, () => null));
 }
 
 export async function inspectNativeChat(profile: ModelInvocationProfile, runtime?: { readonly readiness: SubscriptionReadinessReader }) {

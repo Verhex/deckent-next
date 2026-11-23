@@ -10,6 +10,7 @@ import { headless, initLine, resultLine } from '../../fixtures/native-headless/s
 import { cleanupConnections, connection } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { acquireLedgerLock, nativeCliHeadless, runHeadlessIsolated } from '#adapters/index.js';
+import { resolveHeadlessExecutable } from '#adapters/core/native-cli-headless/index.js';
 
 const state = vi.hoisted(() => ({ limiter: null as string | null, waitMs: null as number | null }));
 vi.mock('#adapters/core/native-cli-registry/index.js', async importOriginal => {
@@ -56,10 +57,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('f5 the realm bounds a
     const c = await connection({ steps: [{ line: initLine() }, { line: resultLine('{}') }] });
     const dir = join(c.root, 'login-locks'), path = join(dir, `${createHash('sha256').update(c.configDir).digest('hex').slice(0, 32)}.lock`);
     await mkdir(dir, { mode: 0o700 });
+    const entry = nativeCliHeadless(c.profile.protocol.family)!;
+    const program = await resolveHeadlessExecutable(entry, process.execPath, process.getuid!());
+    const spawn = { executable: program.executable, program, args: [], env: {}, configDir: c.configDir,
+      stateDir: join(c.root, 'state'), runDir: c.root, now: Date.now };
     const held = acquireLedgerLock(`${path}.guard`), cancel = new AbortController(), isolation = vi.fn();
     try {
-      const pending = runHeadlessIsolated(nativeCliHeadless(c.profile.protocol.family)!, isolation,
-        { executable: process.execPath, args: [], env: {}, configDir: c.configDir, stateDir: join(c.root, 'state'), runDir: c.root, now: Date.now },
+      const pending = runHeadlessIsolated(entry, isolation, spawn,
         { timeoutMs: 1000, outputBytes: 4096 }, cancel.signal);
       const result = expect(pending).resolves.toMatchObject({ started: false, reason: 'cancelled', limit: null,
         egress: { connected: 0, refused: 0, hosts: {}, other: 0 } });
@@ -69,8 +73,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('f5 the realm bounds a
     } finally { held.release(); }
     const failure = new Error('fixture-isolation-failure'), later = new AbortController();
     isolation.mockImplementation(async () => { later.abort(); throw failure; });
-    await expect(runHeadlessIsolated(nativeCliHeadless(c.profile.protocol.family)!, isolation,
-      { executable: process.execPath, args: [], env: {}, configDir: c.configDir, stateDir: join(c.root, 'state'), runDir: c.root, now: Date.now },
+    await expect(runHeadlessIsolated(entry, isolation, spawn,
       { timeoutMs: 1000, outputBytes: 4096 }, later.signal)).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE', params: { check: 'launcher' } });
     expect(isolation).toHaveBeenCalledOnce(); expect(later.signal.aborted).toBe(true);
     await writeFile(path, JSON.stringify({ pid: process.pid, atMs: Date.now(), token: 'other' }), { mode: 0o600 });

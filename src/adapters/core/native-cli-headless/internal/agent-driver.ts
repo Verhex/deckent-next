@@ -137,7 +137,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             const launch = await nativeAgentLaunch(entry, { session: port.session, runDir, configDir: definition.configDir, model: prepared.model, system: prepared.system,
               user: prepared.user, effortArgs: prepared.effortArgs, turnToken: bridge.turnToken, bridgeUrl: bridge.url, timeoutMs: profile.limits.timeoutMs,
               outputMaxBytes: profile.limits.responseMaxBytes }); dispose = launch.dispose;
-            const evidence = await runHeadlessIsolated(entry, input.isolation, { ...launch.spawn, executable: preflight.executable, stateDir: definition.stateDir,
+            const evidence = await runHeadlessIsolated(entry, input.isolation, { ...launch.spawn, executable: preflight.executable, program: preflight.program, stateDir: definition.stateDir,
               mcp: bridge, now: input.now }, launch.bounds, claude ? AbortSignal.any([combined, claude.signal]) : combined,
             (raw, lineSignal) => { if (claude) return claude.line(raw, lineSignal); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);

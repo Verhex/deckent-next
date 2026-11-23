@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -13,6 +13,7 @@ import { nativeAgentFlagSetDigest, headlessRequiredFlags } from './env.js';
 import { headlessPreflight, type HeadlessPreflight } from './preflight.js';
 import type { HeadlessIsolation } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
+import { resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
 
 export function agentTarget(input: ModelInvocationProfile) {
   const profile = modelInvocationProfileSchema.parse(input), definition = nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition);
@@ -36,24 +37,25 @@ const recordSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.st
   identity: z.string(), observed: observedSchema });
 const targetPath = (profile: ModelInvocationProfile, stateDir: string) => join(stateDir, `agent-${modelInvocationProfileDigest(profile)}.json`);
 /** Metadata only: no login-file contents. An executable/config/login-marker replacement makes the retained observation stale. */
-async function identity(profile: ModelInvocationProfile) {
-  const { definition, entry } = agentTarget(profile), executable = await realpath(definition.executable);
+async function identity(profile: ModelInvocationProfile, program: HeadlessExecutable) {
+  const { definition, entry } = agentTarget(profile);
   const stamp = async (path: string) => stat(path).then(s => [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs, s.uid, s.mode], () => null);
-  return JSON.stringify([executable, await stamp(executable), await stamp(definition.configDir),
+  return JSON.stringify([program.identity, await stamp(definition.configDir),
     await Promise.all(entry.headless.isolation.configVisible.map(name => stamp(join(definition.configDir, name)))),
     await stamp(loginRecordPath(definition.configDir, definition.stateDir))]);
 }
 export async function recordNativeAgentObservation(profile: ModelInvocationProfile, preflight: HeadlessPreflight,
   execution: z.infer<typeof nativeAgentExecutionSchema>, now: () => number, surface?: true | NativeAgentReadinessReason): Promise<void> {
-  const { definition } = agentTarget(profile), current = await identity(profile);
+  const { definition, entry } = agentTarget(profile);
+  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid);
   const observed = { cli: true, login: true, environment: true, execution,
     ...(surface === true ? { toolSurface: true, plugins: true, bridge: true } : surface ? {
       ...(surface === 'NATIVE_AGENT_PLUGIN_UNEXPECTED' ? { plugins: false } : { toolSurface: false }) } : {}) };
-  if (preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
+  if (preflight.program.identity !== program.identity || preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const path = targetPath(profile, definition.stateDir), temporary = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, JSON.stringify(recordSchema.parse({ schemaVersion: 1, scopeId: profile.scopeId, reference: profile.reference,
-      checkedAtMs: now(), identity: current, observed })), { mode: 0o600, flag: 'wx' });
+      checkedAtMs: now(), identity: await identity(profile, program), observed })), { mode: 0o600, flag: 'wx' });
     await rename(temporary, path);
   } finally { await rm(temporary, { force: true }); }
 }
@@ -75,11 +77,13 @@ export async function readNativeAgentObservation(profile: ModelInvocationProfile
     } finally { await file.close(); }
     const record = recordSchema.parse(value), execution = record.observed.execution;
     const age = now() - record.checkedAtMs;
+    const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid);
+    const [recordedProgram] = JSON.parse(record.identity) as [unknown];
     if (!entry.agent.observationMaxAgeMs || age < 0 || !display && age > entry.agent.observationMaxAgeMs
       || record.scopeId !== profile.scopeId || !isDeepStrictEqual(record.reference, profile.reference)
       || execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
-      || execution.ownerUid !== definition.ownerUid || execution.executable !== await realpath(definition.executable)
-      || !display && record.identity !== await identity(profile)) return null;
+      || execution.ownerUid !== definition.ownerUid || execution.executable !== program.executable || recordedProgram !== program.identity
+      || !display && record.identity !== await identity(profile, program)) return null;
     return Object.freeze({ ...record.observed, toolSurface: record.observed.toolSurface ?? null,
       plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null, ...(display ? { checkedAtMs: record.checkedAtMs } : {}) }); // NF-7: display says when
   } catch { return null; }

@@ -625,6 +625,27 @@ it('U1 provider port blocks unknown/grantless keys and renders custody refusal o
   } finally { draw.mockRestore(); stdin.destroy(); }
 });
 
+it('G3 shows the local executable paths and verified version reason in the provider refusal', async () => {
+  const { root, options } = await project({});
+  const kind = { ...connectHost('ok').kinds[2]!, id: 'codex-cli-subscription', available: true, pull: 'available' as const, connectFamily: 'codex-jsonl', secretName: null };
+  const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
+  const failure = ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'version', reason: 'exit', exitCode: '91' } });
+  ErrorRegistry.retainHeadlessPaths(failure, '/g3-fixture/bin/codex', '/g3-fixture/payload/codex');
+  const wrapped = ErrorRegistry.createError(failure.code, { cause: failure, params: { ...failure.params, connectPhase: 'before-profile-write' } });
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [kind], probe: async () => {
+      throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE');
+    } }, connectModel: async () => { throw wrapped; } }, options, locale, error => (error as typeof failure).localize!(locale).message);
+    const view = await port.connect({ kind: kind.id, endpoint: null, key: null });
+    expect(view.stored).toBe(false);
+    const text = view.lines.map(row => row.text).join('\n');
+    expect(text).toContain(locale === 'en' ? 'version command exited with code 91' : 'sürüm komutu 91 koduyla çıktı');
+    expect(text).toContain(locale === 'en' ? 'Chosen file: /g3-fixture/bin/codex · Checked file: /g3-fixture/payload/codex'
+      : 'Seçilen dosya: /g3-fixture/bin/codex · Denetlenen dosya: /g3-fixture/payload/codex');
+    expect(JSON.stringify(wrapped)).not.toContain('/g3-fixture/');
+  }
+});
+
 it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothing usable says so and never leaks an internal id', async () => {
   const { root, options } = await project({});
   const local = { ...connectHost('ok').kinds[1]!, pull: 'available' as const, connectFamily: 'openai-chat-completions' };

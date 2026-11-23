@@ -3,7 +3,22 @@ import { errorTable, plainErrors, type ErrorDefinitions } from '../definition.js
 /** The failed preflight check selects the sentence; a check this release does not know keeps the generic one. */
 const preflight = (p: Params, l: Locale) => {
   switch (p['check']) {
-    case 'version': return t('error.HEADLESS_PREFLIGHT_FAILED.version', p, l);
+    case 'version': {
+      const exit = p['exitCode'], version = p['version'], minimum = p['minimum'];
+      if (p['reason'] === 'exit' && typeof exit === 'string' && /^(?:[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])$/u.test(exit))
+        return t('error.HEADLESS_PREFLIGHT_FAILED.version-exit', { exit }, l);
+      if (p['reason'] === 'unreadable') return t('error.HEADLESS_PREFLIGHT_FAILED.version-unreadable', {}, l);
+      const versionPattern = /^\d{1,9}\.\d{1,9}\.\d{1,9}$/u;
+      if (p['reason'] === 'too-old' && typeof version === 'string' && typeof minimum === 'string' && versionPattern.test(version) && versionPattern.test(minimum))
+        return t('error.HEADLESS_PREFLIGHT_FAILED.version-too-old', { version, minimum }, l);
+      return t('error.HEADLESS_PREFLIGHT_FAILED.version', {}, l);
+    }
+    case 'npm-layout-unknown': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-layout-unknown', {}, l);
+    case 'npm-payload-missing': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-missing', {}, l);
+    case 'signal': return t('error.HEADLESS_PREFLIGHT_FAILED.signal', {}, l);
+    case 'cancelled': return t('error.HEADLESS_PREFLIGHT_FAILED.cancelled', {}, l);
+    case 'npm-payload-unverified': return t('error.HEADLESS_PREFLIGHT_FAILED.npm-payload-unverified', {}, l);
+    case 'executable-changed': return t('error.HEADLESS_PREFLIGHT_FAILED.executable-changed', {}, l);
     case 'flags': return t('error.HEADLESS_PREFLIGHT_FAILED.flags', p, l);
     case 'auth-status': return t('error.HEADLESS_PREFLIGHT_FAILED.auth-status', p, l);
     case 'config-dir': return t('error.HEADLESS_PREFLIGHT_FAILED.config-dir', p, l);

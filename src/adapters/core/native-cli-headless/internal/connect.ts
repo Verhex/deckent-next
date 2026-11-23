@@ -5,7 +5,8 @@ import {  headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
-import { headlessPreflight } from './preflight.js';
+import { headlessExecutableRevision, headlessPreflight, verifiedCliVersion } from './preflight.js';
+import { resolveHeadlessExecutable } from './executable.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
 type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
@@ -59,12 +60,23 @@ async function readEgress(stateDir: string) {
   return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
     ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
 }
-/** R8 (owner 2026-11-05/08): the CLI version the connection's last passing preflight proved (read only, no spawn); the connection's floor is only the
- * minimum. Null: none recorded, closed, recorded for another executable than the one the connection names, or below the floor. */
-export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDefinition): Promise<string | null> {
-  const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; executable?: unknown }, () => null);
-  const executable = await realpath(definition.executable).catch(() => null), version = typeof record?.version === 'string' && /^\d+\.\d+\.\d+$/u.test(record.version) ? record.version : null;
-  return record?.state === 'open' && executable !== null && record.executable === executable && version !== null
+type PreflightRecord = { state?: unknown; refusal?: unknown; version?: unknown; updatedFrom?: unknown; executable?: unknown; revision?: unknown; size?: unknown; mtimeMs?: unknown;
+  auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } };
+const readPreflight = (definition: NativeCliHeadlessDefinition) => readFile(join(definition.stateDir, 'preflight.json'), 'utf8')
+  .then(raw => JSON.parse(raw) as PreflightRecord).catch(() => null);
+async function currentPreflight(record: PreflightRecord, family: string, definition: NativeCliHeadlessDefinition) {
+  const entry = nativeCliHeadless(family);
+  if (!entry || process.getuid?.() !== definition.ownerUid) return false;
+  const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid).catch(() => null);
+  if (!program) return false;
+  return record.revision === headlessExecutableRevision(entry, program)
+    || !program.packageRoot && record.executable === program.executable && record.revision === entry.headless.revision
+      && record.size === program.size && typeof record.mtimeMs === 'number' && Math.trunc(record.mtimeMs) === program.mtimeMs;
+}
+/** R8: verified version for this executable and registry revision, read without a spawn. */
+export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDefinition, family: string): Promise<string | null> {
+  const record = await readPreflight(definition), version = verifiedCliVersion(record?.version);
+  return record?.state === 'open' && version !== null && await currentPreflight(record, family, definition)
     && compareToolchainVersions(version, definition.minCliVersion) >= 0 ? version : null;
 }
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
@@ -76,8 +88,9 @@ export async function readHeadlessLogins<T extends object = Record<never, never>
   const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
   return Promise.all(profiles.flatMap(profile => { const definition = profile.scopeId === scopeId && profile.adapter && isNativeCliHeadlessAdapter(profile.adapter)
     ? nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition) : null; return definition?.success ? [{ definition: definition.data, family: profile.protocol?.family, profileId: profile.id }] : []; }).map(async ({ definition, family, profileId }) => {
-    const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; refusal?: unknown; version?: unknown; updatedFrom?: unknown;
-      auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } }, () => null);
+    const prior = await readPreflight(definition);
+    const identified = prior?.state === 'open' && (typeof prior.revision === 'string' || typeof prior.executable === 'string');
+    const record = identified && (!family || !await currentPreflight(prior, family, definition)) ? null : prior;
     const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
       : record?.refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
     return Object.freeze({ state: !record ? 'unknown' as const : record.state === 'open' ? 'open' as const : 'closed' as const, authMethod: text(record?.auth?.authMethod),

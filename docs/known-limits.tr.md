@@ -371,6 +371,12 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   açıktır; bağlı MCP istemcileri aynı AI kimliğini kullanır. Yalnız kendinize daraltabilirsiniz; arka plan/system ayrı onay ister.
   **API anahtarıyla bağlan** gizli giriş, depo, izin ve ücretli çağrı bütçesini korur. Gerçek hesap girişi ve Windows Terminal
   kabulü birleşik sürüm yürüyüşünü bekler.
+- **npm ile kurulan Codex CLI (beta.2.1):** Linux x64'te doğrulanan global `@openai/codex` yerleşimi,
+  `<prefix>/bin/codex`, paketteki `bin/codex.js` başlatıcısı ve platform paketindeki
+  `vendor/x86_64-unknown-linux-musl/bin/codex` dosyasını kullanır. Bağlantı seçilen yolu saklar ve yerel programı
+  kullanmadan önce yeniden doğrular. Yalıtılmış CLI süreci paketten yalnız bu programı görür. Yerleşiminiz farklıysa
+  paket içindeki yerel program dahil, doğruladığınız bir Linux x64 ELF çalıştırılabilir dosyasını
+  `deckent models connect --connection codex-cli-subscription --executable <yol>` ile doğrudan seçebilirsiniz.
 - **Codex CLI aboneliği (alpha.60):** Brain, yalıtılmış `codex-cli-subscription` bağlantısıyla kendi Codex CLI'nizle (ChatGPT planı)
   da planlayabilir; her seferinde tek `codex exec` turu. Giriş: `deckent models login --connection codex-cli-subscription` (`codex login`'i
   deckent'e ait kendi dizinine, `headless/logins/codex`, çalıştırır; `--config-dir` ve `--executable` başka bir giriş dizini ya da ikili

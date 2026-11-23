@@ -1,3 +1,5 @@
+import { realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS } from './arguments.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
@@ -12,6 +14,8 @@ export interface IsolatedProcessView {
   readonly workFiles: readonly string[];
   /** Host files shown read-only at their own path: the executables the realm runs. */
   readonly executables: readonly string[];
+  /** The verified provider file and, for a launcher package, the directory hidden even under a system mount. */
+  readonly pinnedExecutable?: Readonly<{ fd: number; target: string; hideDirectory?: string }>;
   /** The one host directory bound read-write at its own path (the person's owner-approved CLI login dir); null: none. */
   readonly stateDir: string | null;
   /** Existing entries of `stateDir` the process must not see: each directory becomes an empty sized tmpfs, each file `/dev/null` read-only. */
@@ -22,6 +26,19 @@ export interface IsolatedProcessView {
   readonly sockets: readonly Readonly<{ source: string; target: string }>[];
   /** Size of every tmpfs (`/tmp`, `workDir`, each masked directory). */
   readonly tmpfsBytes: number;
+}
+
+function packageMountPaths(root: string): readonly string[] {
+  const paths = new Set([root]);
+  for (const system of BUBBLEWRAP_SYSTEM_PATHS) {
+    // System binds follow source symlinks. Hide the package at their alias mount points as well as its real path.
+    let source: string;
+    try { source = realpathSync(system); } catch { continue; }
+    if (source === system) continue;
+    const rest = relative(source, root);
+    if (!isAbsolute(rest) && rest !== '..' && !rest.startsWith('..' + sep)) paths.add(join(system, rest));
+  }
+  return [...paths];
 }
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
@@ -35,6 +52,11 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
   const size = String(view.tmpfsBytes);
   const args = ['--unshare-all', '--unshare-user', '--disable-userns', '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--size', size, '--tmpfs', '/tmp'];
   for (const path of BUBBLEWRAP_SYSTEM_PATHS) args.push('--ro-bind-try', path, path);
+  const pinned = view.pinnedExecutable;
+  const hidden = pinned?.hideDirectory ? packageMountPaths(pinned.hideDirectory) : [];
+  for (const path of hidden) args.push('--perms', '0755', '--size', size, '--tmpfs', path);
+  if (pinned) args.push('--ro-bind-fd', String(pinned.fd), pinned.target);
+  for (const path of hidden) args.push('--remount-ro', path);
   for (const path of view.executables) args.push('--ro-bind', path, path);
   args.push('--perms', '0700', '--size', size, '--tmpfs', view.workDir);
   if (view.stateDir) {

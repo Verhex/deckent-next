@@ -6,7 +6,7 @@ export type ProcessLineConsumer = (line: string, signal?: AbortSignal) => 'stop'
 /** Linux comparison profile: explicit environment, closed (v1) or bounded (v2) stdin, owned process group, raw bounded output.
  * This reports the command process, never the Docker container or a Task's success.
  */
-async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, onLine?: ProcessLineConsumer): Promise<ProcessEvidence> {
+async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, onLine?: ProcessLineConsumer, bindFd?: number): Promise<ProcessEvidence> {
   const parsed = processCommandSchema.safeParse(input);
   if (!parsed.success) throw new ProcessRunnerError('PROCESS_RUNNER_INVALID');
   if (process.platform !== 'linux') throw new ProcessRunnerError('PROCESS_RUNNER_UNSUPPORTED');
@@ -19,7 +19,7 @@ async function runNodeProcessInner(input: ProcessCommand, signal?: AbortSignal, 
   if (signal?.aborted) return validateProcessEvidence(command, evidence({ reason: 'cancelled' }));
   const result = await new Promise<ProcessEvidence>(resolve => {
     let child;
-    try { child = spawn(command.executable, [...command.args], { cwd: command.cwd, env: { ...command.env }, detached: true, shell: false, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'] }); }
+    try { child = spawn(command.executable, [...command.args], { cwd: command.cwd, env: { ...command.env }, detached: true, shell: false, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe', ...(bindFd === undefined ? [] : [bindFd])] }); }
     catch { resolve(evidence({})); return; }
     const out = child.stdout!, err = child.stderr!;
     const stdout: Buffer[] = []; const stderr: Buffer[] = []; let outBytes = 0; let errBytes = 0; let pending = Buffer.alloc(0);

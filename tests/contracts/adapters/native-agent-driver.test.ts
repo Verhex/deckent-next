@@ -1,27 +1,31 @@
 import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
-import { mkdir, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { parseModelBindingDefinition, modelInvocationProfileSchema, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
-import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservation, headlessFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
+import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservation, headlessFlagSetDigest, nativeCliHeadlessDefinitionSchema } from '#adapters/core/native-cli-headless/index.js';
+import { inspectNativeCliWorker } from '#adapters/core/native-cli-worker/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
-import { inspectNativeChat } from '#composition/core/terminal-chat/index.js';
+import { inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
 import { nativeQuotaText, nativeAgentReasonText, type SameTurnPlanningPort, type SameTurnToolSessionPort, type ToolSessionPort } from '#capabilities/index.js';
 import { snapshotKnownSecrets, clockText, t } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
+import { fakeCodexNpm } from '../../fixtures/native-headless/codex.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 const close: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const fn of close.splice(0).reverse()) await fn(); await cleanupConnections(); });
 const families = [registry.adapters.claude.capabilities.eventStream, registry.adapters.codex.headless.protocolFamily];
-async function fixture(family: string, scenario: FakeAgentScenario = {}) {
+async function fixture(family: string, scenario: FakeAgentScenario = {}, npm = false) {
   const c = await connection(), bin = join(c.root, 'agent-bin'); await mkdir(bin);
   const executable = await writeFakeAgentCli(bin, family, scenario), entry = nativeCliAgent(family)!;
-  const connectedPath = join(bin, 'connected-cli'); await symlink(executable, connectedPath);
+  const installation = npm ? await fakeCodexNpm(c.root, { logPath: join(c.configDir, 'config.toml') }) : null;
+  const connectedPath = installation?.chosen ?? join(bin, 'connected-cli');
+  if (installation) await rename(executable, installation.payload); else await symlink(executable, connectedPath);
   const profile = modelInvocationProfileSchema.parse({ ...c.profile, protocol: { family, version: 'v1' },
     adapter: { ...c.profile.adapter, definition: { ...c.profile.adapter.definition, executable: connectedPath } } });
   const session = { schemaVersion: 1 as const, turnId: 'agent-fixture', generation: 1, approvalTtlMs: 120_000,
@@ -49,7 +53,7 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}) {
     const deltas: ModelInvocationDelta[] = [];
     return { ...sealed, driver, bridge, native, prepared, deltas, run: (signal?: AbortSignal) => native.send(prepared, signal, delta => deltas.push(delta)) };
   };
-  return { c, profile, entry, start, propose, port };
+  return { c, profile, entry, start, propose, port, program: installation?.payload ?? executable };
 }
 
 /** Owner 2026-11-05: a refused turn writes no negative observation, so the next turn is not paused. */
@@ -111,6 +115,32 @@ it('WER-A chat continues after synthetic nonzero and sealed NO, and stops sessio
     });
   }
 });
+it.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('uses the native program for governed chat and worker readiness, then discards the old observation after a payload update', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(families[1]!, {}, true), h = await f.start();
+  expect(h.execution.executable).toBe(f.program);
+  const read = () => readNativeAgentObservation(f.profile), runtime = { readiness: { read } };
+  expect(await read()).toMatchObject({ toolSurface: null, plugins: null, bridge: null });
+  expect(await nativeChatVerificationExecution(f.profile, runtime)).toEqual(h.execution);
+  expect(await h.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+  expect(await read()).toMatchObject({ toolSurface: true, execution: { executable: f.program } });
+  expect(await inspectNativeChat(f.profile, runtime)).toEqual({ state: 'ready', execution: h.execution });
+  const binding = { schemaVersion: 1 as const, connectionId: '00000000-0000-4000-8000-000000000001', resourceKey: 'npm-fixture',
+    profileDigest: h.execution.profileDigest, protocolFamily: f.profile.protocol.family,
+    definition: nativeCliHeadlessDefinitionSchema.parse(f.profile.adapter.definition) };
+  const readiness = () => inspectNativeCliWorker(binding, { async readiness() {
+    const current = await read();
+    return current ? { state: 'ready', execution: current.execution } : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' };
+  }, f08: async () => h.execution });
+  expect(await readiness()).toMatchObject({ state: 'ready', execution: { executable: f.program } });
+  await writeFile(f.program, '\n// updated native program\n', { flag: 'a' });
+  expect(await read()).toBeNull();
+  expect(await readNativeAgentObservation(f.profile, Date.now, true)).toBeNull();
+  expect(await nativeChatVerificationExecution(f.profile, runtime)).toBeNull();
+  expect(await inspectNativeChat(f.profile, runtime)).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' });
+  expect(await readiness()).toMatchObject({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+});
+
 it('stops unexpected Claude plugins and Codex native items before accepting tools; the refusal stops only that turn', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
