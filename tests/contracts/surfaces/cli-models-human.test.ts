@@ -85,11 +85,11 @@ it('F5: catalog lifecycle agrees with retirement dates and retains deprecation, 
 
 it.each([
   { language: 'en', fallback: 'tr', heading: 'Error: Invalid arguments for deckent models.',
-    declaredScope: '--declared lists the chat models the connected providers declare for this whole installation, so it takes no --scope. Chat models: deckent models --declared. The models workers may use in one scope: deckent models --scope <id>',
-    action: 'deckent models has no such action. Chat models: deckent models --declared. The models workers may use in one scope: deckent models --scope <id>. Every form: deckent models --help' },
+    declaredScope: '--declared lists the model declarations in the configured provider catalog of this whole installation, so it takes no --scope. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>',
+    action: 'deckent models has no such action. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>. Every form: deckent models --help' },
   { language: 'tr', fallback: 'en', heading: 'Hata: deckent models için argümanlar geçersiz.',
-    declaredScope: '--declared, bağlı sağlayıcıların bu kurulumun tamamı için bildirdiği sohbet modellerini listeler; bu yüzden --scope almaz. Sohbet modelleri: deckent models --declared. Bir kapsamda işçilerin kullanabileceği modeller: deckent models --scope <id>',
-    action: 'deckent models komutunun böyle bir eylemi yok. Sohbet modelleri: deckent models --declared. Bir kapsamda işçilerin kullanabileceği modeller: deckent models --scope <id>. Tüm biçimler: deckent models --help' },
+    declaredScope: '--declared, bu kurulumun tamamı için yapılandırılmış sağlayıcı kataloğundaki model beyanlarını listeler; bu yüzden --scope almaz. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>',
+    action: 'deckent models komutunun böyle bir eylemi yok. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>. Tüm biçimler: deckent models --help' },
 ])('models usage gives working commands in $language', async ({ language, fallback, heading, declaredScope, action }) => {
   const f = await project();
   for (const [args, usage] of [
