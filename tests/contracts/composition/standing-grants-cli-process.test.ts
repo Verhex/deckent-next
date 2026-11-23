@@ -39,8 +39,10 @@ async function fixture() {
   return { project, data, env, ledger: opened.path };
 }
 async function cli(f: { project: string; env: NodeJS.ProcessEnv }, args: readonly string[]) {
-  try { return { exit: 0, value: JSON.parse((await exec(process.execPath, [binary, ...args, '--json'], { cwd: f.project, env: f.env })).stdout) }; }
-  catch (error) { const failure = error as { code: number; stderr: string }; return { exit: failure.code, stderr: failure.stderr }; }
+  const result = await exec(process.execPath, [binary, ...args, '--json'], { cwd: f.project, env: f.env })
+    .catch((failure: { code: number; stdout?: string; stderr: string }) => failure);
+  if ('code' in result) return { exit: result.code, stderr: result.stderr, value: result.stdout?.trim() ? JSON.parse(result.stdout) : undefined };
+  return { exit: 0, value: JSON.parse(result.stdout) };
 }
 
 describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G6)', () => {
@@ -50,10 +52,13 @@ describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G
     expect(listed).toEqual({ exit: 0, value: [{ id: 'standing-mine', key: KEY, tool: 'run_shell', kind: 'command', text: 'npm test' }] });
     // Without --yes and without a terminal the person is not asked: the grant is kept.
     const kept = await cli(f, ['policy', 'revoke', 'standing-mine', '--scope', 'proj']);
+    expect(kept.exit).toBe(1);
     expect(kept.value).toMatchObject({ revoked: false, grant: { id: 'standing-mine' } });
     expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants).toHaveLength(2);
     // Someone else's grant is not the caller's to revoke.
-    expect((await cli(f, ['policy', 'revoke', 'standing-theirs', '--scope', 'proj', '--yes'])).value).toEqual({ revoked: false, grant: null });
+    const missing = await cli(f, ['policy', 'revoke', 'standing-theirs', '--scope', 'proj', '--yes']);
+    expect(missing.exit).toBe(1);
+    expect(missing.value).toEqual({ revoked: false, grant: null });
     // --yes confirms the choice; it does not replace the terminal required to decide the governed approval.
     const refused = await cli(f, ['policy', 'revoke', 'standing-mine', '--scope', 'proj', '--yes']);
     expect(refused).toMatchObject({ exit: 1, stderr: expect.stringContaining('APPROVAL_INTERACTIVE_REQUIRED') });
@@ -63,7 +68,7 @@ describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G
     expect(JSON.parse(revoked.output.trim())).toMatchObject({ revoked: true, grant: { id: 'standing-mine' } });
     const after = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'));
     expect(after.grants.map((grant: { id: string }) => grant.id)).toEqual(['standing-theirs']);
-    expect((await cli(f, ['policy', 'grants', '--mine', '--scope', 'proj'])).value).toEqual([]);
+    expect(await cli(f, ['policy', 'grants', '--mine', '--scope', 'proj'])).toEqual({ exit: 0, value: [] });
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
       const events = db.prepare("SELECT record FROM audit_events WHERE kind <> 'approval-assurance-registration' ORDER BY sequence").all() /* D1 inventory events (documented) */.map(row => (JSON.parse(String(row['record'])) as { event: { subject: { kind: string; counts?: unknown } } }).event.subject);

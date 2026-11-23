@@ -47,22 +47,31 @@ it('lists only the caller\'s standing approvals (own by default, --mine kept), a
 
 it('revoke: --yes confirms, no terminal and no --yes keeps the grant, an unknown id changes nothing; the handler receives the exact id and scope', async () => {
   const f = await fixture(), calls: { id: string; scopeId: string; confirmed: boolean | null }[] = [];
+  const removed: string[] = [];
   const revokeStandingGrant = async (_root: string, input: { scopeId: string; id: string; confirm: (row: typeof grant) => Promise<boolean> }) => {
     if (input.id !== grant.id) { calls.push({ id: input.id, scopeId: input.scopeId, confirmed: null }); return { revoked: false, grant: null }; }
     const confirmed = await input.confirm(grant);
     calls.push({ id: input.id, scopeId: input.scopeId, confirmed });
+    if (confirmed) removed.push(input.id);
     return { revoked: confirmed, grant };
   };
+  const kept = sink();
+  // The test process has no TTY on stdin: without --yes the person is not asked, so nothing is confirmed.
+  const stdin = Object.assign(new (await import('node:stream')).PassThrough(), { isTTY: false }) as never;
+  expect(await main(['policy', 'revoke', 'standing-abc', '--scope', 'scope-a', '--lang', 'en'], { ...f, stdin, stdout: kept.stdout, revokeStandingGrant })).toBe(1);
+  expect(kept.out.text).toContain('kept');
+  const json = sink();
+  expect(await main(['policy', 'revoke', 'standing-abc', '--scope', 'scope-a', '--json'], { ...f, stdin, stdout: json.stdout, revokeStandingGrant })).toBe(1);
+  expect(JSON.parse(json.out.text)).toEqual({ revoked: false, grant });
+  const missing = sink();
+  expect(await main(['policy', 'revoke', 'standing-zzz', '--scope', 'scope-a', '--yes', '--lang', 'en'], { ...f, stdout: missing.stdout, revokeStandingGrant })).toBe(1);
+  expect(missing.out.text).toContain('nothing changed');
+  expect(removed).toEqual([]);
   const yes = sink();
   expect(await main(['policy', 'revoke', 'standing-abc', '--scope', 'scope-a', '--yes', '--lang', 'en'], { ...f, stdout: yes.stdout, revokeStandingGrant })).toBe(0);
   expect(yes.out.text).toContain('revoked');
-  const kept = sink();
-  // The test process has no TTY on stdin: without --yes the person is not asked, so nothing is confirmed.
-  expect(await main(['policy', 'revoke', 'standing-abc', '--scope', 'scope-a', '--lang', 'en'], { ...f, stdin: Object.assign(new (await import('node:stream')).PassThrough(), { isTTY: false }) as never, stdout: kept.stdout, revokeStandingGrant })).toBe(0);
-  expect(kept.out.text).toContain('kept');
-  const missing = sink();
-  expect(await main(['policy', 'revoke', 'standing-zzz', '--scope', 'scope-a', '--yes', '--lang', 'en'], { ...f, stdout: missing.stdout, revokeStandingGrant })).toBe(0);
-  expect(missing.out.text).toContain('nothing changed');
-  expect(calls).toEqual([{ id: 'standing-abc', scopeId: 'scope-a', confirmed: true }, { id: 'standing-abc', scopeId: 'scope-a', confirmed: false }, { id: 'standing-zzz', scopeId: 'scope-a', confirmed: null }]);
+  expect(removed).toEqual(['standing-abc']);
+  expect(calls).toEqual([{ id: 'standing-abc', scopeId: 'scope-a', confirmed: false }, { id: 'standing-abc', scopeId: 'scope-a', confirmed: false },
+    { id: 'standing-zzz', scopeId: 'scope-a', confirmed: null }, { id: 'standing-abc', scopeId: 'scope-a', confirmed: true }]);
   expect(await main(['policy', 'revoke', '--scope', 'scope-a', '--yes'], { ...f, stdout: sink().stdout, stderr: sink().stdout, revokeStandingGrant })).not.toBe(0);
 });
