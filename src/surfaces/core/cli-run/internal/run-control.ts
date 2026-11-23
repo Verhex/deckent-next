@@ -35,17 +35,18 @@ export type RunControlInput = Readonly<{ scopeId?: string | undefined; runId?: s
  * A Run control for a person on a terminal (CLI review §run, owner 10-08 "değerler yalnız seçimle"): the scope (a change never takes a silent
  * default: picked, the configured one preselected), the Run (picked among the Runs whose state offers the control), the revision read just before
  * the card, a card naming scope, Run and consequence, and a command id from the system. `n`, Esc or silence write nothing. A Run that changed
- * meanwhile is read again and asked again (bounded). The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
+ * meanwhile is read again and asked again if the action remains available (bounded). The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
  */
 export async function runControlFlow(action: RunControl, context: RunCommandContext, io: RunHumanIo, input: RunControlInput): Promise<void> {
   const { locale, print } = io;
   const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: input.scopeId, mutating: true, interactive: true, ask: io.ask });
   if (!scope) { print(t('cli.run.control.nothing', {}, locale)); return; }
   const scopeId = scope.scopeId;
+  const answering = input.answer !== undefined || input.quota !== undefined;
   let runId = input.runId ? await resolveRunId(context, scopeId, input.runId) : undefined;
   if (!runId) {
     // An answer goes to a Run that waits (the service checks which task asked); every other control to the Runs whose state offers it.
-    const runs = (await readScopeRuns(context, scopeId)).filter(run => input.answer !== undefined || input.quota !== undefined ? run.state.kind === 'parked' : runControls(run).includes(action));
+    const runs = (await readScopeRuns(context, scopeId)).filter(run => answering ? run.state.kind === 'parked' : runControls(run).includes(action));
     if (!runs.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return; }
     const picked = await pickRun(io, scopeId, runs, t('cli.run.control.pick', { scope: scopeId, action }, locale));
     if (!picked) { print(t('cli.run.control.nothing', {}, locale)); return; }
@@ -56,6 +57,10 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   for (let round = 0; ; round++) {
     const run = (await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options)).run;
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
+    if (!answering && !runControls(run).includes(action)) {
+      print(terminalSafeText(t('run.control.noActionInState', { run: shownId(run.runId), state: runStateWord(run, locale) }, locale)));
+      return;
+    }
     // S6R-6: a held Run's card says why it is held, in words (a system hold's catalog text, never its raw code).
     const held = action === 'hold' ? null : runHoldReasonText(run.state, locale);
     const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []), ...(held ? [t('recovery.hold.cardReason', { reason: held }, locale)] : []),

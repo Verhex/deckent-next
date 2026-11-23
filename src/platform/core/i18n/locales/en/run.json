@@ -487,6 +487,7 @@
   "error.RUN_PROGRESSION_SESSION_UNVERIFIED": "This Run's automatic start record could not be verified. Resolve the reported read or reconciliation errors; the service will recheck the same record before starting work.",
   "run.sessionCapacity.proposalNextStep": "Try the proposal again after capacity becomes available.",
   "run.sessionCapacity.approvalNextStep": "Answer the same card again if it is still valid; if it expired, propose again.",
+  "run.control.noActionInState": "Run {run} is {state}. No action was sent.",
   "run.progression.eligible": "Eligible for automatic progression in this service session; this is not proof of a start.",
   "run.progression.blocked": "AI execution permission is missing",
   "run.progression.repropose": "Propose again: no automatic start record exists in this service session.",

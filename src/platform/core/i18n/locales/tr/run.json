@@ -487,6 +487,7 @@
   "error.RUN_PROGRESSION_SESSION_UNVERIFIED": "Bu işin otomatik başlangıç kaydı doğrulanamadı. Bildirilen okuma veya uzlaştırma hatalarını giderin; servis işe başlamadan önce aynı kaydı yeniden denetleyecek.",
   "run.sessionCapacity.proposalNextStep": "Yer açıldıktan sonra öneriyi yeniden deneyin.",
   "run.sessionCapacity.approvalNextStep": "Kart hâlâ geçerliyse aynı kartı yeniden cevaplayın; süresi dolduysa yeniden önerin.",
+  "run.control.noActionInState": "{run} işinin durumu: {state}. İşlem gönderilmedi.",
   "run.progression.eligible": "Bu servis oturumunda otomatik ilerletmeye uygun; bu, başlamış olduğunun kanıtı değildir.",
   "run.progression.blocked": "Yapay zekâ yürütme izni eksik",
   "run.progression.repropose": "Yeniden önerin: bu servis oturumunun otomatik başlangıç kaydı yok.",
