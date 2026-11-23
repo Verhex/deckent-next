@@ -631,7 +631,7 @@
     },
     "cli.mcp.grant.granted": {
       "before": "Policy grant written: this server is yours to call (standart asks every call; full-auto runs it, audited).",
-      "after": "Policy grant written: this server is yours to call; standart asks every call, and tools marked \"always ask\" ask in every mode; every call is audited."
+      "after": "Policy grant written: this server is yours to call; standard asks every call, and tools marked \"always ask\" ask in every mode; every call is audited."
     },
     "error.POLICY_DENIED": {
       "before": "Policy does not permit the requested operation on this resource.",

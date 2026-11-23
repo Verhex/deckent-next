@@ -1,5 +1,5 @@
 {
-  "cli.mcp.grant.granted": "Policy grant written: this server is yours to call; standart asks every call, and tools marked \"always ask\" ask in every mode; every call is audited.",
+  "cli.mcp.grant.granted": "Policy grant written: this server is yours to call; standard asks every call, and tools marked \"always ask\" ask in every mode; every call is audited.",
   "cli.mcp.grant.revoked": "Policy grant removed: calls to this server follow your company policy again.",
   "cli.mcp.grant.refused": "Trusted, but no policy grant was written: {reason}.",
   "models.notConfigured": "Model catalog is not configured; availability was not observed.",
@@ -126,7 +126,7 @@
   "climodels.mcp.import.claudeCode": "Claude Code",
   "climodels.mcp.import.claudeDesktop": "Claude Desktop",
   "climodels.mcp.result.added.trusted": "Added {name} ({scope}) and trusted it; {tools} tools pinned.",
-  "climodels.mcp.result.added.pending": "Added {name} ({scope}); it asks for trust on first use.",
+  "climodels.mcp.result.added.pending": "Added {name} ({scope}). It asks for trust on first use. Run deckent mcp approve {name} to approve it now.",
   "climodels.mcp.result.added.declined": "Added {name} ({scope}); you declined its trust, so it does not start.",
   "climodels.mcp.result.added.shadowed": "Added {name} ({scope}); a server of the same name in a closer scope is used instead.",
   "climodels.mcp.result.approved": "{name} ({scope}) is trusted; {tools} tools pinned.",
