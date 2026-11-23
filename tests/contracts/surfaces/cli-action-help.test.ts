@@ -39,6 +39,23 @@ it('uses the environment locale for scoped Turkish help', async () => {
 });
 
 it.each([
+  ['en', 'This command has no option to work directly in the current folder.',
+    'It refuses a new request when there is neither a configured worker nor a worker setup record.',
+    'While worker setup is in progress, it can save the request as a waiting intent.'],
+  ['tr', 'Bu komutta geçerli klasörde doğrudan çalışma seçeneği yoktur.',
+    'Yapılandırılmış işçi ve işçi kurulum kaydı yoksa yeni isteği reddeder.',
+    'İşçi kurulumu sürüyorsa isteği bekleyen niyet olarak kaydedebilir.'],
+] as const)('explains when do refuses or saves a request during worker setup (%s)', async (language, directWork, refusal, waiting) => {
+  const f = context();
+  expect(await main(['do', '--help', '--lang', language], f.context)).toBe(0);
+  const output = outputs.join('').replace(/\s+/g, ' ');
+  expect.soft(output).toContain(directWork);
+  expect.soft(output).toContain(refusal);
+  expect.soft(output).toContain(waiting);
+  expect(f.initialized()).toBe(0);
+});
+
+it.each([
   [['run', '--help', '--lang', 'tr'], 'Kullanım: deckent run'],
   [['run', 'create', '--help'], 'Usage: deckent run <action>'],
   [['task', 'execute', '--help', '--lang', 'tr'], 'Kullanım: deckent task <eylem>'],

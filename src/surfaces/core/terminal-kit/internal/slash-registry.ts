@@ -25,7 +25,7 @@ type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'hub', group: 'settings', descriptionKey: 'hub.window.slash' },
-  { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do', argumentKey: 'terminal.slash.doArgument', typedArgument: true },
+  { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do.execution', argumentKey: 'terminal.slash.doArgument', typedArgument: true },
   { name: 'status', group: 'info', descriptionKey: 'terminal.slash.status' },
   { name: 'workers', group: 'work', descriptionKey: 'terminal.slash.workers' },
   // T3 L5: one window over the observed workers and runs (read-only; stopping a Run stays `/cancel`'s confirmation window).
