@@ -120,7 +120,7 @@
   "headless.agent.resource.waiting": "Paylaşılan abonelik kaynağı bekleniyor. Yeni işçi başlamadı; doğrulanmış serbest bırakmayı bekleyin veya bu görevi iptal edin.",
   "headless.agent.resource.legacy": "Önceki yürütme yolu: kabul edilmiş bu görev kayıtlı profilini korur. Yeni iş için denetimli native işçi bağlantısı gerekir.",
   "headless.agent.agents.action": "bir görev için ajanı ve sabit beceri sürümlerini hazırla (salt okunur)",
-  "headless.agent.readiness.verifying": "Bu ilk denetimli turda CLI araç yüzeyi doğrulanıyor.",
+  "headless.agent.readiness.verifying": "Bu tur için CLI araç yüzeyi doğrulanıyor.",
   "headless.agent.worker.NATIVE_WORKER_VERIFICATION_WAIT": "Aynı bağlantı ve mühür için başka bir doğrulama denemesi var. Kalıcı sonuç veya sorumluluk uzlaştırması bekleniyor; ikinci CLI açılmaz.",
   "headless.agent.worker.NATIVE_WORKER_F08_INVALID": "Kalıcı işçi doğrulama kaydı güvenle okunamadı. Kayıt uzlaştırılana kadar yürütme durur.",
   "headless.agent.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "İşçi CLI araç guard’ı doğrulanmadı. Deneme sonlandı; aynı bağlantı ve mühür yeniden denenmez.",

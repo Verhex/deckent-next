@@ -104,7 +104,9 @@ it.each(['claude-tool-use', 'codex-mcp'] as const)('replays pending and complete
   let release!: () => void; const wait = new Promise<void>(resolve => { release = resolve; });
   const call = (id: number, args = {}) => correlationKind === 'claude-tool-use' ? rpc(id, tool.name, args)
     : rpc(id, tool.name, args, { callId: `call-${id}`, itemId: `item-${id}` });
-  const f = await fixture({ correlationKind, limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } }, async (call) => {
+  const entryLimited = correlationKind === 'claude-tool-use';
+  const f = await fixture({ correlationKind, limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: entryLimited ? 1 : 2,
+    replayMaxBytes: registry.bridge.frameMaxBytes * (entryLimited ? 2 : 1) } }, async (call) => {
     await wait; return { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, deckentCallId: call.id, outcome: { status: 'ok', text: 'once' } };
   });
   const headers = await f.initialize(), first = f.send(call(2), { headers });
@@ -116,7 +118,48 @@ it.each(['claude-tool-use', 'codex-mcp'] as const)('replays pending and complete
   const [a, b] = await Promise.all([first, duplicate]); expect(resultEnvelope(a)).toEqual(resultEnvelope(b));
   expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
   expect(resultEnvelope(await f.send(call(2, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
+  expect.soft(f.bridge.replayLimitReached).toBe(false);
   expect(resultEnvelope(await f.send(call(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
+  expect.soft(f.bridge.replayLimitReached).toBe(true);
+  expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
+  expect(f.submit).toHaveBeenCalledOnce();
+  await f.bridge.close();
+  expect.soft(f.bridge.replayLimitReached).toBe(true);
+});
+
+it.each([
+  { exit: 'guard', finish: 'error', note: 'This turn reached its tool-call limit. The remaining calls did not run. The answer is incomplete.' },
+  { exit: 'cancel', finish: 'cancelled', note: /^Cancelled\./u },
+  { exit: 'service', finish: 'error', note: /^The runtime service stopped during this turn/u },
+  { exit: 'revoke', finish: 'cancelled', note: /^Cancelled\./u },
+  { exit: 'uncertain', finish: 'error', note: /\(unknown\)/u },
+])('keeps the $exit outcome truthful when the native bridge refuses a call at capacity', async ({ exit, finish, note }) => {
+  const edit = { ...tool, name: 'write_file', toolClass: 'edit' as const }, tools = [edit];
+  const parent = new AbortController(), execute = vi.fn(async () => exit === 'uncertain'
+    ? { status: 'error' as const, text: 'fixture effect unresolved' } : { status: 'ok' as const, text: 'written' });
+  const settled = vi.fn(async () => {});
+  const result = await runAgentTurn({ nativeSession: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, approvalTtlMs: 5000, tools },
+    messages: [{ role: 'user', content: 'fixture' }], tools, emit: vi.fn(), signal: parent.signal, language: 'en' }, {
+    now: Date.now, describe: () => null, authorize: async () => 'allow', execute, settled, serviceStopping: () => exit === 'service',
+    invokeRound: async () => { throw new Error('unexpected model round'); },
+    invokeAgent: async ({ session, markToolLimitReached }) => {
+      const f = await fixture({ port: session, limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 1, replayMaxBytes: registry.bridge.frameMaxBytes } });
+      try {
+        const headers = await f.initialize();
+        const admitted = resultEnvelope(await f.send(rpc(2, edit.name), { headers }));
+        expect(admitted.outcome.status).toBe(exit === 'uncertain' ? 'error' : 'ok');
+        expect(resultEnvelope(await f.send(rpc(3, edit.name), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT');
+        if (f.bridge.replayLimitReached) markToolLimitReached();
+        if (exit === 'cancel' || exit === 'service') parent.abort();
+        if (exit === 'revoke') await session.revoke();
+        // A CLI guard can stop the model round without the person cancelling.
+        return { status: 'failed', state: 'cancelled' };
+      } finally { await f.bridge.close(); }
+    },
+  });
+  expect(execute).toHaveBeenCalledOnce();
+  expect(settled).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ finish, note: typeof note === 'string' ? note : expect.stringMatching(note), toolCalls: 1 });
 });
 
 it('selects pending results against the live K1 session and preserves ordinary chat replay', async () => {

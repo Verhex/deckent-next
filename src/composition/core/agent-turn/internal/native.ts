@@ -38,7 +38,8 @@ export interface NativeChatRuntime {
 /** Bridge lifetime is inside the governed invocation; K1 alone authorizes, executes and settles proposals. */
 export async function withNativeChatInvocation<T>(input: { readonly runtime: NativeChatRuntime; readonly profile: ModelInvocationProfile;
   readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly signal: AbortSignal;
-  readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit'; recheck(): Promise<void> },
+  readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit';
+  recheck(): Promise<void>; markToolLimitReached(): void },
   invoke: (binding: { readonly profileDigest: string; readonly port: ModelInvocationNativePort; admit(signal?: AbortSignal): Promise<void>;
     recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<T>): Promise<T> {
   const entry = nativeCliAgent(input.profile.protocol.family);
@@ -57,7 +58,12 @@ export async function withNativeChatInvocation<T>(input: { readonly runtime: Nat
     const port = driver.native(bridge, { configured: input.knownSecrets, turn: bridge.known });
     return await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
       recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
-  } finally { try { await bridge?.close(); } finally { await driver.close(); } }
+  } finally {
+    try {
+      if (bridge?.replayLimitReached) input.markToolLimitReached();
+      await bridge?.close();
+    } finally { await driver.close(); }
+  }
 }
 
 /** The readiness and current driver's refusal use the same catalog renderer; a stream refusal stops only its own turn (owner 2026-11-05). */

@@ -385,7 +385,8 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       ...(sameTurn && agentProposals ? { planning: sameTurn.planning, finishPlanning: agentProposals.finishSameTurn } : {}),
       ...(native && runtime ? { invokeAgent: (input: Parameters<NonNullable<AgentTurnPorts['invokeAgent']>>[0],
         onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], agentSignal: AbortSignal) => withNativeChatInvocation({ runtime, profile: native.profile, onPaidUsage, paidExtraUsage: config.models.headless.paidExtraUsage,
-          execution: native.execution, session: input.session, signal: agentSignal, knownSecrets: getConfigKnownSecrets(context.config), recheck: recheckNative },
+          execution: native.execution, session: input.session, signal: agentSignal, knownSecrets: getConfigKnownSecrets(context.config), recheck: recheckNative,
+          markToolLimitReached: input.markToolLimitReached },
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10

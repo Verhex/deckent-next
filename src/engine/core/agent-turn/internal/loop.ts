@@ -44,7 +44,7 @@ export interface AgentTurnPorts {
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Native driver owns model transport only; every proposal goes through this turn's single call coordinator. */
   invokeAgent?(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[];
-    readonly session: SameTurnToolSessionPort }, onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void,
+    readonly session: SameTurnToolSessionPort; markToolLimitReached(): void }, onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void,
     signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
    * call's position in the turn (the identity the turn's decision record names; never used for authority). */
@@ -554,6 +554,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       return finish('error', agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language));
     }
     let outcome: AgentRoundOutcome;
+    let toolLimitReached = false;
     let streamed = '';
     // NATIVE-BAGLAM: a leading inline `<think>` block in the answer text goes to the reasoning channel, streamed and settled alike.
     const routed = createInlineReasoningRouter(), show = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { if (delta.kind === 'text') streamed += delta.text; emit(delta); };
@@ -563,7 +564,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     };
     try {
       if (native) {
-        try { outcome = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port }, onDelta, native.signal)
+        try { outcome = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port,
+          markToolLimitReached: () => { toolLimitReached = true; } }, onDelta, native.signal)
           : { status: 'failed', state: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' }; }
         finally { native.close(); await native.drain(); }
         if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown' };
@@ -574,9 +576,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         if (ports.planning?.active && outcome.status === 'responded') {
           // Reaching the chat's token threshold does not prove that a tool-less answer was cut short.
           const truncated = outcome.finish === 'length';
-          if (signal.aborted || outcome.providerStop || outcome.finish !== 'stop' || truncated || !ports.planning.normalClosed) {
+          if (signal.aborted || toolLimitReached || outcome.providerStop || outcome.finish !== 'stop' || truncated || !ports.planning.normalClosed) {
             if (ports.planning.pin) ports.planning.abandon(ports.planning.pin, signal.aborted ? 'cancelled'
-              : truncated ? 'output-truncated' : outcome.providerStop ? 'native-failed' : 'completion-unknown');
+              : truncated ? 'output-truncated' : toolLimitReached || outcome.providerStop ? 'native-failed' : 'completion-unknown');
             outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           } else if (!ports.finishPlanning) outcome = { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           else {
@@ -599,6 +601,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         }
       } else outcome = await ports.invokeRound({ round: rounds, messages, tools }, onDelta, signal);
     } catch { outcome = { status: 'failed', state: native?.failedSettlement ? 'unknown' : signal.aborted || native?.interrupted ? 'cancelled' : 'unavailable' }; }
+    // Consult the bridge fact after draining proposals, with interruption, planning and uncertain effects taking precedence.
+    if (toolLimitReached && native && !signal.aborted && !native.interrupted && !native.planningRefused && !ports.planning?.active) {
+      if (!native.failedSettlement && !coordinator.effectsUnknown) return finish('error', t('agent.turn.outcome.toolCallLimit', {}, input.language));
+      outcome = { status: 'failed', state: 'unknown' };
+    }
     if (outcome.status === 'responded') {
       for (const part of routed.finish()) show(part);
       const split = splitInlineReasoning(outcome.content);

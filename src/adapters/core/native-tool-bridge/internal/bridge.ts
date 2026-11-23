@@ -39,7 +39,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
   const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Map<RequestId, BridgeDelivery>();
   const writing = new Set<() => boolean>();
-  let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
+  let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0, replayLimitReached = false;
   const url = `http://${bridge.sentinelHost}${bridge.path}`, progressIntervalMs = Math.floor(limits.idleMs / 2);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
     onsessioninitialized: id => { sessionId = id; }, keepAliveMs: progressIntervalMs, maxRequestBodySize: bridge.bodyMaxBytes });
@@ -72,7 +72,10 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
       return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT', 'session');
     }
     if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED', 'session');
-    if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT', 'limit');
+    if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) {
+      replayLimitReached = true;
+      return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT', 'limit');
+    }
     // Reserve before awaiting K1; duplicates share this promise even during approval. No eviction permits a second effect.
     replayBytes += bridge.frameMaxBytes;
     const pending = Promise.resolve().then(() => propose(call.data, correlation.data, context.mcpReq.signal));
@@ -179,6 +182,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     finally { active--; responses.delete(response); if (rpcKey !== undefined) inFlight.delete(rpcKey); }
   }
   return Object.freeze({ sentinelHost: bridge.sentinelHost, path: bridge.path, maxConnections: limits.maxConnections, url,
+    get replayLimitReached() { return replayLimitReached; },
     toJSON: () => ({ url, turnId: session.turnId, generation: session.generation }),
     /** Only put these into the private Claude MCP file or the explicitly built Codex environment. Never log this object. */
     turnToken, tokenHeader, tokenEnvName: bridge.tokenEnvName, known, project: safe, progressIntervalMs, handle, close,
