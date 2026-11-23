@@ -299,6 +299,24 @@ describe.skipIf(process.platform !== 'linux')('R4a fresh-install withdraw (owner
   }, 120_000);
 });
 
+describe.skipIf(process.platform !== 'linux')('119-C2 execution permission coverage', () => {
+  it('reports managed execution rules as held and a replacement allow as covered', async () => {
+    const { f } = await project('pure');
+    const path = join(f.data, 'policy.json');
+    const fresh = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, ...FIRST_RUN_TOOL_NAMES });
+    const execution = firstRunExecutionRules([], me[0]!, ['scope']).wanted;
+    const seed = (rules: typeof execution) => writeFileSync(path, JSON.stringify({ ...fresh.policy, grants: [...fresh.policy.grants, ...rules] }), { mode: 0o600 });
+    const preview = () => configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'preview', only: 'ai-execution', reason: 'observe' });
+
+    seed(execution);
+    expect(await preview()).toMatchObject({ status: 'current', held: ['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-run-cancel', 'first-run-mcp-progress-attempts'] });
+
+    seed(execution.map(rule => rule.id === 'first-run-mcp-progress-run-cancel' ? { ...rule, id: 'custom-cancel' } : rule));
+    expect(await preview()).toMatchObject({ status: 'current', held: ['first-run-mcp-progress-run-reserve', 'first-run-mcp-progress-attempts'],
+      covered: [{ ruleId: 'first-run-mcp-progress-run-cancel', heldBy: 'custom-cancel' }] });
+  });
+});
+
 describe.skipIf(process.platform !== 'linux')('Astra 2596: the governed upgrade names the configured runtime service', () => {
   const configure = (f: Awaited<ReturnType<typeof modeRuntime>>, serviceId: string) => {
     const path = join(f.project, '.deckent', 'config.json'), config = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
