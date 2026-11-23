@@ -1184,13 +1184,19 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     expect(attempts).toBe(refusedAttempts);
   }
 
-  let read = 0, complete: ((value: Awaited<ReturnType<NonNullable<ProviderWindowPort['inspectCustody']>>>) => void) | undefined;
+  let read = 0, custodyStatus: 'refused' | 'ready' | 'failed' = 'refused';
+  let complete: ((value: Awaited<ReturnType<NonNullable<ProviderWindowPort['inspectCustody']>>>) => void) | undefined;
   const preflight = providerPanelPort('/fixture', 'scope', {
     providerConnect: { kinds: [{ id: 'fixture-plan', labelKey: 'siwc.card.title', available: true, endpointDefault: null,
       endpointEditable: false, keyRequired: false, secretName: null, probePath: null, endpointChoices: [] }],
       endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('must not probe'); } },
     siwc: { connection: 'fixture-plan', execute: async () => { throw new Error('must not sign in'); } },
-    inspectSecretStore: async () => { read++; return { schemaVersion: 1, backend: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true, status: 'ready', code: null, personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }; },
+    inspectSecretStore: async () => {
+      read++;
+      if (custodyStatus === 'failed') throw new Error('custody read failed');
+      return { schemaVersion: 1, backend: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true, status: 'ready', code: null,
+        personalCustody: { status: custodyStatus, reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } };
+    },
   }, {}, 'en', error => String(error));
   const known = await preflight.inspect();
   expect(read).toBe(0); expect(known.kinds[0]?.blocked).toBeNull();
@@ -1207,6 +1213,55 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     inspectSecretStore: () => new Promise(() => undefined) }, {}, 'en', String);
   expect(await stalled.inspectCustody!()).toBeNull();
 
+  custodyStatus = 'failed';
+  expect(await preflight.inspectCustody!()).toBeNull();
+  custodyStatus = 'ready';
+  expect(await preflight.inspectCustody!()).toEqual({ id: 'fixture-plan', reason: null });
+});
+
+it('N3-4: custody follows its provider and only the latest affirmative inspection clears its refusal', async () => {
+  const [apiKind, , planKind] = KINDS.kinds, reason = '/tmp (mode 1777) can be changed by other users';
+  const refusal = { id: planKind!.id, reason }, clear = { id: planKind!.id, reason: null };
+  const reads: Array<(result: Awaited<ReturnType<NonNullable<ProviderWindowPort['inspectCustody']>>>) => void> = [];
+  const { port } = providerPort();
+  const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [{ ...planKind!, blocked: null }, apiKind!] }),
+    siwc: { locale: 'en', connection: planKind!.id, execute: async () => { throw new Error('must not sign in'); } },
+    inspectCustody: () => new Promise(resolve => { reads.push(resolve); }) };
+  const { element, calls } = panel('provider', { provider });
+  const ui = mount(element);
+  await until(() => reads.length === 1 && ui.frame().includes(planKind!.label), 'provider choices and preflight');
+  reads[0]!(refusal);
+  await until(() => ui.frame().includes(reason), 'refusal on ChatGPT');
+  expect(ui.frame()).toMatch(/ChatGPT sign-in .*\[blocked\]/u);
+  const apiLabel = t('siwc.card.apiKey', {}, 'en'), apiTitle = t('tui.provider.apiTitle', {}, 'en');
+  const openApi = async () => {
+    await ui.raw(`${apiLabel}\r`);
+    await until(() => ui.frame().includes(apiTitle), 'API provider list');
+    expect(ui.frame()).toContain(apiKind!.label);
+    expect(ui.frame()).not.toContain(planKind!.label);
+    expect(ui.frame()).not.toContain(reason);
+  };
+  await openApi();
+  await ui.press(ESC);
+  await until(() => reads.length === 2 && ui.frame().includes(reason), 'return rereads custody and keeps the refusal while waiting');
+  reads[1]!(null);
+  await settle();
+  expect(ui.frame()).toContain(reason);
+
+  await openApi();
+  await ui.press(ESC);
+  await until(() => reads.length === 3 && ui.frame().includes(reason), 'older preflight pending');
+  await openApi();
+  await ui.press(ESC);
+  await until(() => reads.length === 4 && ui.frame().includes(reason), 'newer preflight pending');
+  reads[3]!(clear);
+  await until(() => !ui.frame().includes(reason), 'fresh clearance removes the notice');
+  expect(ui.frame()).not.toContain('[blocked]');
+  reads[2]!(refusal);
+  await settle();
+  expect(ui.frame()).not.toContain(reason);
+  expect(ui.frame()).not.toContain('[blocked]');
+  expect(calls.errors).toEqual([]);
 });
 
 it('K13: the provider and onboarding subscription window offers the registry methods, Esc starts nothing and device choice preserves the typed command in EN/TR', async () => {

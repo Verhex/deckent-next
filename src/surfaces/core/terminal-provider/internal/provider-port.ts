@@ -198,6 +198,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           timer = setTimeout(() => resolve(null), presentation.custodyInspectionMs); timer.unref();
         })]);
         const custody = store?.personalCustody;
+        if (custody?.status === 'ready') return { id: host.siwc!.connection, reason: null };
         if (custody?.status !== 'refused' && custody?.status !== 'store') return null;
         const { status, ...params } = custody;
         return { id: host.siwc!.connection, reason: ErrorRegistry.createError(status === 'store' ? 'OAUTH_CONNECTION_STORE_REQUIRED' : 'SIWC_STORE_NOT_PERSONAL', { locale, params }).message };

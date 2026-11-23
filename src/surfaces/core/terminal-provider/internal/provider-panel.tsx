@@ -67,7 +67,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
-  const [problem, setProblem] = useState<string | null>(null), [refusals, setRefusals] = useState<Readonly<Record<string, string>>>({});
+  const [refusals, setRefusals] = useState<Readonly<Record<string, string>>>({});
   const [custody, setCustody] = useState<Readonly<{ id: string; reason: string }> | null>(null);
   const connecting = useRef<string | null>(null);
   // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
@@ -78,6 +78,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const reload = useCallback(async (closeOnError = false) => { const generation = ++inspection.current; inspectionAbort.current?.abort(); const abort = new AbortController(); inspectionAbort.current = abort; setChecked(false);
     const active = () => mounted.current && inspection.current === generation && !abort.signal.aborted;
     const publish = (view: ProviderPanelView) => { if (active()) { setView(view); return timing.frame(); } };
+    void timing.run(() => port.inspectCustody?.()).then(result => {
+      if (!active() || !result) return;
+      const { id, reason } = result;
+      setCustody(previous => reason !== null ? { id, reason } : previous?.id === id ? null : previous);
+    }).catch(() => {});
     try {
       const result = await port.inspect(publish, abort.signal);
       if (!active()) return;
@@ -93,20 +98,16 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   exits.current = { onError, onClose };
   useEffect(() => { mounted.current = true; void timing.run(() => reload(true));
     return () => { mounted.current = false; inspection.current++; inspectionAbort.current?.abort(); }; }, [reload]);
-  useEffect(() => {
-    let active = true;
-    timing.run(() => port.inspectCustody?.()).then(result => { if (active) setCustody(result ?? null); }).catch(() => {});
-    return () => { active = false; };
-  }, [port]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); void reload(); };
   // A refused connection belongs beside the alternatives, not in the onboarding host's fatal-error path.
   const failed = (error: unknown) => {
     const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.locale ?? port.siwc?.locale;
     const entry = typed?.code ? ErrorRegistry.get(typed.code, locale, typed.params) : undefined;
     const message = [errorText?.(error) ?? entry?.message ?? (error instanceof Error ? error.message : String(error)), entry?.suggestion].filter(Boolean).join('\n');
-    setProblem(message);
     const id = connecting.current;
-    if (id) setRefusals(previous => ({ ...previous, [id]: message }));
+    if (id && id === port.siwc?.connection && (typed?.code === 'SIWC_STORE_NOT_PERSONAL' || typed?.code === 'OAUTH_CONNECTION_STORE_REQUIRED')) {
+      setCustody({ id, reason: message });
+    } else if (id) setRefusals(previous => ({ ...previous, [id]: message }));
     back();
   };
   /**
@@ -272,7 +273,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     }
     if (target.endpointEditable) setStep({ kind: 'endpoint', target }); else beginConnection(target, null);
   };
-  const body = [...(problem ? [{ spans: [span(problem, { role: 'warning' as const })] }] : []), ...(custody ? [{ spans: [span(custody.reason, { role: 'warning' as const })] }] : []), ...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
+  const body = [...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
@@ -280,7 +281,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const apiLabel = t('siwc.card.apiKey', {}, port.locale ?? port.siwc?.locale);
   const listTitle = apiOnly ? t('tui.provider.apiTitle', {}, port.locale ?? port.siwc?.locale) : view.title;
   const shownKinds = apiOnly ? view.kinds.filter(kind => kind.billing === 'metered' || kind.billing === undefined && (kind.keyRequired || kind.keyName !== null)) : view.kinds;
-  const tree = withRows(providerPanelTree({ ...view, title: listTitle, kinds: shownKinds.map(kind => refusals[kind.id] || custody?.id === kind.id ? { ...kind, blocked: refusals[kind.id] ?? custody!.reason } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
+  const kinds = shownKinds.map(kind => {
+    const reason = custody?.id === kind.id ? custody.reason : refusals[kind.id];
+    return reason ? { ...kind, blocked: reason } : kind;
+  });
+  const tree = withRows(providerPanelTree({ ...view, title: listTitle, kinds }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
     budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache));
   // PV 2a: Enter on a CLI subscription this host cannot run opens its refusal card, which lists the rows that can be used here.
   const refused = (outcome: PickerOutcome) => {
@@ -288,7 +293,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow submitFilter title={title(listTitle)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
+  return <PickerWindow submitFilter title={title(listTitle)} body={body} bodyRows={view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={apiOnly ? 'api-list' : generation} initial={state} onState={setState}
     tree={{ ...tree, items: [...(laterLabel ? [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] : tree.items), ...(!apiOnly ? [{ id: API, label: apiLabel }] : [])] }} onClose={apiOnly ? back : onClose} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
