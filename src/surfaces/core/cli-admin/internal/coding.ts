@@ -140,7 +140,7 @@ type TemplateResult = Awaited<ReturnType<CodingTemplateHandler>>;
  * `coding template`: on a person's terminal each missing choice is asked (admitted provider → task kind → admitted image), then the preview
  * card, and only "apply" writes; off a terminal a missing `--provider`/`--kind` lists the admitted choices and `--preview`/`--apply` stays required.
  */
-async function codingTemplateCommand(argv: readonly string[], context: AdminCommandContext) {
+async function codingTemplateCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--connection', '--docker', '--discovery', '--lang']);
   if (flags.has('--preview') && flags.has('--apply') || values.has('--connection') && flags.has('--docker') || !context.configureCodingTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   // alpha.55.1: `--apply` writes the protected `admission.registry` — a person's act at a terminal, refused off one before anything is read.
@@ -152,6 +152,11 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) };
   const person = cliMode(context, flags.has('--json')).mode === 'interactive';
   const ask = async (title: string, options: readonly CliCardOption[]) => options.length === 1 ? options[0]!.id : await askCliCard({ title, options }, io) ?? undefined;
+  const sinks = { json: flags.has('--json'), ...sinksOf(context) };
+  const cancelled = (): ExitCode => {
+    emit(t('clisetup.coding.card.cancelled', {}, locale), { ...sinks, json: false });
+    return 1;
+  };
   const missing = (flag: string, choices: readonly string[]) => ErrorRegistry.createError('CLI_CODING_TEMPLATE_CHOICE_MISSING',
     { params: { flag, values: choices.length ? choices.join(', ') : t('clisetup.coding.noChoices', {}, locale) }, locale });
   const connected = values.has('--connection') ? configuredInvocationProfiles(config).find(row => row.id === values.get('--connection')) : undefined;
@@ -160,30 +165,30 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   if (!provider) {
     if (!providers.length) throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale });
     provider = await ask(t('clisetup.coding.ask.provider', {}, locale), providers.map(id => ({ id, label: id })));
-    if (!provider) return;
+    if (!provider) return cancelled();
   }
   const kinds = templateKinds(config, pins, provider);
   let kind = values.get('--kind');
   if (!kind && !person) throw missing('--kind <id>', kinds);
-  if (!kind) { kind = await ask(t('clisetup.coding.ask.kind', { provider }, locale), kinds.map(id => ({ id, label: id }))); if (!kind) return; }
+  if (!kind) { kind = await ask(t('clisetup.coding.ask.kind', { provider }, locale), kinds.map(id => ({ id, label: id }))); if (!kind) return cancelled(); }
   let image = values.get('--image');
   const images = [...new Set(pins.filter(pin => pin.provider === provider && pin.imageId).map(pin => pin.imageId!))];
   if (!image && person && images.length && !values.has('--connection')) {
     const chosen = provider;
     image = await ask(t('clisetup.coding.ask.image', { provider }, locale), images.map(id => ({ id, label: imageLabel(id, pins, chosen) })));
-    if (!image) return;
+    if (!image) return cancelled();
   }
   // Off a terminal the write intent stays explicit: `--preview` or `--apply` (the flag contract AI callers already use).
   if (!person && !flags.has('--preview') && !flags.has('--apply')) throw ErrorRegistry.createError('CLI_USAGE');
   const discovery = values.get('--discovery');
   const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
-  const sinks = { json: flags.has('--json'), ...sinksOf(context) }, show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config, cliOf(context)) });
+  const show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config, cliOf(context)) });
   if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run(flags.has('--apply'))); return; }
   const preview = await run(false);
   if (preview.status !== 'preview') { show(preview); return; }
   const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale, config, cliOf(context)),
     options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), role: 'no' }] }, io);
-  if (answer !== 'apply') { emit(t('clisetup.coding.card.cancelled', {}, locale), { ...sinks, json: false }); return; }
+  if (answer !== 'apply') return cancelled();
   show(await run(true));
 }
 /** Kinds a template can bind for `provider`: the kinds already on its admitted profiles, then the conventional new ones still free. */

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
@@ -208,6 +208,49 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
       criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } }, f.options);
     expect(result.admission.run.runId).toBe('typed-input'); expect(result.admission.run.tasks).toHaveLength(1);
   });
+});
+
+it.skipIf(process.platform === 'win32')('returns failure without applying when the template card or a guided picker is cancelled', async () => {
+  const f = await setup(), before = await readFile(f.path, 'utf8');
+  const configureCodingTemplate = vi.fn((root: string, input: Parameters<typeof configureNativeCodingTemplate>[1], options: object) =>
+    configureNativeCodingTemplate(root, input, options, person));
+  const context = { root: f.root, env: f.options.env, configureCodingTemplate, stdin: { isTTY: true, setRawMode() {} },
+    stdout: { isTTY: true, write() {} }, stderr: { write() {} } };
+  const cliHuman = await import('#surfaces/core/cli-human/index.js');
+  const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValueOnce('no').mockResolvedValue(null);
+  const base = ['coding', 'template'], provider = ['--provider', 'codex'], kind = ['--kind', 'feature'];
+  try {
+    const declined = await main([...base, ...provider, ...kind], context);
+    expect(ask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ options: [
+      expect.objectContaining({ id: 'apply', role: 'yes' }), expect.objectContaining({ id: 'no', role: 'no' }),
+    ] }), expect.anything());
+    expect(configureCodingTemplate).toHaveBeenCalledExactlyOnceWith(f.root, expect.objectContaining({ apply: false }), expect.anything());
+    expect(await readFile(f.path, 'utf8')).toBe(before);
+    expect(declined).toBe(1);
+
+    const otherImage = `sha256:${'b'.repeat(64)}`;
+    await f.mutate(config => {
+      config.admission.registry.profiles.push(
+        { ...pin, id: 'other-image', parameters: { ...pin.parameters, imageId: otherImage } },
+        { ...pin, id: 'other-provider', parameters: { ...pin.parameters,
+          nativeSubscription: { ...(pin.parameters['nativeSubscription'] as object), provider: 'cursor' } } },
+      );
+      for (const id of ['other-image', 'other-provider']) config.admission.registry.kinds.push({ kind: id, profile: { id, version: 1 } });
+    });
+    configureCodingTemplate.mockClear();
+    const pickerConfig = await readFile(f.path, 'utf8');
+    for (const [flags, choices] of [
+      [[], ['codex', 'cursor']], [provider, ['prepared', 'other-image', 'coding', 'codex-coding']], [[...provider, ...kind], [imageId, otherImage]],
+    ] as const) {
+      ask.mockClear();
+      const cancelled = await main([...base, ...flags], context);
+      expect(ask).toHaveBeenCalledOnce();
+      expect(ask.mock.calls[0]![0].options.map(option => option.id)).toEqual(choices);
+      expect(cancelled, choices.join(', ')).toBe(1);
+    }
+    expect(configureCodingTemplate).not.toHaveBeenCalled();
+    expect(await readFile(f.path, 'utf8')).toBe(pickerConfig);
+  } finally { ask.mockRestore(); }
 });
 
 // C1 (owner 2026-10-23 Q2): own describe so the main block stays within the function size limit.
