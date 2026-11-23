@@ -143,6 +143,7 @@
   "cli.help.examples": "Examples: deckent doctor; deckent config get",
   "cli.help.output": "--json: one result on stdout; errors on stderr. Exit: 0 OK, 1 error,\n2 usage, 78 configuration. Common flags apply where supported.",
   "cli.help.terminal.examples": "Examples: deckent terminal status; deckent terminal workline",
+  "headless.help.login.examples": "Sign in to Codex with a device code: `deckent models login \\\n  --connection codex-cli-subscription --login-method device-auth`.",
   "cli.help.action.close": "Close a parked Run with a terminal outcome",
   "cli.help.action.accept": "Accept a Task awaiting a decision",
   "cli.help.action.reject": "Reject a Task awaiting a decision",
