@@ -37,6 +37,7 @@ export function createChatSameTurnPlanning(input: {
   root: string; options: ConfigLoadOptions; actor: Witness; witness: Witness; peer: LocalPeerIdentity;
   profile: ModelInvocationProfile; signal: AbortSignal; locale: Locale; turnId: string; bridgeMaxBytes: number;
   create: CreateServiceSameTurnPlanning; recheck(): Promise<void>;
+  observe?(receipt: ModelInvocationReceipt, policyRevision: string): void;
 }) {
   const { root, options, actor, witness, peer, profile, signal, locale } = input;
   const entry = nativeCliAgent(profile.protocol.family);
@@ -47,7 +48,7 @@ export function createChatSameTurnPlanning(input: {
     sharesLogin: other => isDeepStrictEqual(headlessCapacityBinding(other.adapter.definition), headlessCapacityBinding(profile.adapter.definition)),
     randomBytes, toolResultDigest: agentTurnResultDigest, publicText: t('brain.sameTurn.prepared', {}, locale),
     async readResult(receipt, isCurrent) {
-      reader ??= bindRetainedTurnResponse(root, options, peer, profile.scopeId, witness, signal);
+      reader ??= bindRetainedTurnResponse(root, options, peer, profile.scopeId, witness, signal, input.observe);
       try { return await reader.read(receipt, isCurrent); }
       catch { throw ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED', { params: { reason: 'read-refused' } }); }
     },

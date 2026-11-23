@@ -54,6 +54,31 @@ describe.skipIf(process.platform !== 'linux')('https fetch adapter (FETCH S6)', 
       transport: SYSTEM_FETCH_TRANSPORT })).toMatchObject({ outcome: 'refused', reason: 'address-not-public' });
   }, 30_000);
 
+  it('carries only verified local refusals in host memory, without changing the ordinary fetch result or sends', async () => {
+    const f = await fixture(), url = 'https://docs.example/decision';
+    f.answers.set('docs.example', []);
+    const empty = await run(f, url);
+    f.answers.set('docs.example', ['10.0.0.7']);
+    const blocked = await run(f, url);
+    expect(empty).toMatchObject({ outcome: 'refused', reason: 'address-not-public', redirects: 0, finalUrl: url, httpStatus: null });
+    expect(JSON.stringify(blocked)).toBe(JSON.stringify(empty));
+    expect(f.dialed).toEqual([]);
+    expect(empty).not.toHaveProperty('localDecision');
+    expect(blocked).toHaveProperty('localDecision', 'fetch-address-policy');
+
+    f.answers.set('docs.example', ['93.184.215.14']);
+    const malformed = 'https://[', outside = 'https://other.example/path';
+    for (const location of [malformed, outside]) {
+      f.routes.set('/decision', (_request, response) => response.writeHead(302, { location }).end());
+      const result = await run(f, url);
+      expect(result).toMatchObject({ outcome: 'stopped', reason: 'redirect-refused', location, redirects: 0, finalUrl: url, httpStatus: 302 });
+      expect(JSON.stringify(result)).not.toContain('localDecision');
+      if (location === malformed) expect(result).not.toHaveProperty('localDecision');
+      else expect(result).toHaveProperty('localDecision', 'fetch-redirect-policy');
+    }
+    expect(f.seen.map(row => row.path)).toEqual(['/decision', '/decision']);
+  }, 30_000);
+
   it('the shared public-address check covers IPv6 and keeps IPv4 as before', () => {
     for (const address of ['1.1.1.1', '93.184.215.14', '2606:4700:4700::1111', '2a00:1450:4001:80b::200e']) expect(isPublicNativeAddress(address)).toBe(true);
     for (const address of ['10.0.0.1', '127.0.0.1', '100.64.0.1', '169.254.1.1', '192.0.2.1', '::', '::1', 'fe80::1', 'fc00::1', 'fd12:3456::1',

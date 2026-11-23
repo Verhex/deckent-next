@@ -61,9 +61,11 @@ custodyIt('[requires Linux /proc/self/fd custody] keeps every read inside the wo
   for (const [path, error] of [['../outside.txt', 'path-outside-workspace'], [join(base, 'outside.txt'), 'path-outside-workspace'], ['link.txt', 'path-outside-workspace'],
     ['.env', 'path-denied'], ['env-link', 'path-denied'], ['keys/server.pem', 'path-denied'], ['.git/config', 'path-denied'],
     ['.claude/.credentials.json', 'path-denied'], ['.config/cursor/auth.json', 'path-denied'], ['missing.ts', 'not-found']] as const) {
-    const result = await tools.execute('read_file', { path });
+    const observed: unknown[] = [];
+    const result = await tools.execute('read_file', { path }, undefined, (decision: unknown) => observed.push(decision));
     expect(result, path).toMatchObject({ status: 'error' }); expect(result.text, path).toContain(`error=${error}`);
     expect(result.text).not.toContain('secret');
+    expect(observed, path).toEqual(error === 'not-found' ? [] : [error]);
   }
   for (const path of ['.claude/settings.json', '.config/cursor/cli-config.json'])
     expect(await tools.execute('read_file', { path }), path).toMatchObject({ status: 'ok', text: expect.stringContaining('ordinary settings') });

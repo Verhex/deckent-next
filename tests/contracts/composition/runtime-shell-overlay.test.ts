@@ -130,8 +130,9 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     const f = await runtime();
     await mkdir(join(f.project, 'sub', 'deep'), { recursive: true });
     await writeFile(join(f.project, 'sub', 'deep', 'f'), 'f\n'); await writeFile(join(f.project, 'src', 'gone.ts'), 'gone\n');
-    const result = await f.call('run_shell', { command: 'f=pack; echo \'{"name":"x"}\' >> src/${f}age.json; echo new >> src/x.ts; chmod +x src/x.ts; '
-      + 'cp src/gone.ts src/moved.ts && rm src/gone.ts; d=deep; cp -r sub/$d sub/old && rm sub/$d/f && echo z >> sub/$d/z; g=.en; echo SECRET=1 >> ${g}v; echo done' });
+    const command = 'f=pack; echo \'{"name":"x"}\' >> src/${f}age.json; echo new >> src/x.ts; chmod +x src/x.ts; '
+      + 'cp src/gone.ts src/moved.ts && rm src/gone.ts; d=deep; cp -r sub/$d sub/old && rm sub/$d/f && echo z >> sub/$d/z; g=.en; echo SECRET=1 >> ${g}v; echo done';
+    const result = await f.call('run_shell', { command });
     expect(result).toMatchObject({ card: false, status: 'error' });
     expect(result.text).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0/u);
     // C5: the floor name the classifier could not see never reaches the project, and the model is told how it can.
@@ -146,13 +147,24 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     expect(await readdir(join(f.project, 'sub', 'deep'))).toEqual(['z']);
     expect(await readFile(join(f.project, 'sub', 'old', 'f'), 'utf8')).toBe('f\n');
     expect(result.text).toMatch(/write set: applied 6 \(/u);
-    const events = f.audit().map(record => record.event.subject);
+    const subjects = f.audit().map(record => record.event.subject);
+    const events = subjects.filter(subject => subject.kind !== 'access-refusal-summary');
     expect(events[0]).toMatchObject({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify' });
     const edits = events.slice(1);
     expect(edits.every(event => event.kind === 'permission-mode' && event.cell === 'edit-non-floor' && (event.tool as { name: string }).name === 'run_shell')).toBe(true);
     // A copied directory is a new overlay entry: decided (and audited)
     // like an entry, shown as `sub/old/`, made before its file; it is not an effect of its own.
     expect(edits.map(event => (event.summary as { path: string }).path).sort()).toEqual(['src/gone.ts', 'src/moved.ts', 'src/x.ts', 'sub/deep/f', 'sub/deep/z', 'sub/old/', 'sub/old/f']);
+    const refusals = subjects.filter(subject => subject.kind === 'access-refusal-summary');
+    expect(refusals).toEqual([expect.objectContaining({
+      turnId: result.turnId, decisionSource: 'deckent-decision', evidenceBasis: 'shell-write-set',
+      reasonCode: 'AGENT_TOOL_APPROVAL_REQUIRED', operationClass: 'write', count: 1,
+      target: { role: 'workspace-file', identity: null },
+    })]);
+    const serializedRefusals = JSON.stringify(refusals);
+    for (const privateText of [command, 'SECRET=1', 'src/package.json', '.env', 'src/gone.ts', 'src/moved.ts', 'src/x.ts', 'sub/deep/', 'sub/old/']) {
+      expect(serializedRefusals).not.toContain(JSON.stringify(privateText).slice(1, -1));
+    }
     expect(result.text).toContain('[deckent] write set: new directories created: sub/old/.');
     // Each applied entry is its own settled C11 record of the project write operation; nothing is left in the private directory.
     const records = f.rows("SELECT target_id, state FROM effect_intents WHERE target_kind = 'workspace-file'") as { target_id: string; state: string }[];

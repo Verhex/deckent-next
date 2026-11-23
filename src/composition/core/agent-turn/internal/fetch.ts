@@ -5,6 +5,7 @@ import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type Eff
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentToolCallCell, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { agentFetchEffectCommandId, createLocalPeerSession, describeFetchApproval, describeFetchRefusal, describeFetchResult, NETWORK_FETCH_OPERATION, NETWORK_FETCH_TARGET_KIND, NetworkFetchTarget, planFetchCall, type FetchPlan, type FetchRun, type HttpFetchTransport, type LocalPeerIdentity, type ScratchSession, type TerminalFetchConfig } from '#adapters/index.js';
+import type { LocalRefusal } from './refusal-audit.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 /**
@@ -17,7 +18,12 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
   readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string }) {
   const { settings, context, scopeId, turnId } = input, plans = new Map<string, FetchPlan>();
   const key = (args: Record<string, unknown>) => agentToolArgumentsDigest('fetch_url', args);
-  const plan = (args: Record<string, unknown>) => { const planned = planFetchCall(settings, args); plans.set(key(args), planned); return planned; };
+  const plan = (args: Record<string, unknown>, observe?: (decision: LocalRefusal) => void) => {
+    const planned = planFetchCall(settings, args); plans.set(key(args), planned);
+    if (!planned.ok && ['network-disabled', 'not-https', 'credentials-in-url', 'port-not-allowed', 'ip-literal-host', 'host-not-allowed'].includes(planned.error))
+      observe?.({ basis: 'fetch-preflight-policy', reason: planned.error, role: 'network-destination', operationClass: 'connect', operation: NETWORK_FETCH_OPERATION.operation });
+    return planned;
+  };
   return {
     plan,
     cell(args: Record<string, unknown>): AgentToolCallCell | null { const planned = plans.get(key(args)); return planned?.ok ? planned.listed ? 'fetch-listed' : 'fetch-unlisted' : null; },
@@ -26,7 +32,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
     cardCall(args: Record<string, unknown>): { readonly kind: 'fetch'; readonly url: string; readonly host: string; readonly listed: boolean } | undefined {
       const planned = plans.get(key(args)); return planned?.ok ? { kind: 'fetch', url: planned.url, host: planned.host, listed: planned.listed } : undefined;
     },
-    async apply(args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
+    async apply(args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, observe?: (decision: LocalRefusal) => void): Promise<AgentToolOutcome> {
       const planned = plans.get(key(args)) ?? plan(args);
       if (!planned.ok) return agentToolResult({ status: 'error' as const, text: `[deckent] fetch_url: error=${planned.error}` }, planned);
       const commandId = agentFetchEffectCommandId(scopeId, turnId, execution, key(args)), clock = new SystemTrustedClock();
@@ -36,7 +42,13 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
       let ran: FetchRun | null = null;
       // A redirect stays inside the allowlist or the host the call named (and, when asked, the owner approved); anything else stops.
       const target = new NetworkFetchTarget({ settings, transport: input.transport, signal, deposit: (rel, data, wait) => input.scratch.deposit(rel, data, wait),
-        redirectAllowed: host => host === planned.host || settings.allowedHosts.includes(host), onResult: value => { ran = value; } });
+        redirectAllowed: host => host === planned.host || settings.allowedHosts.includes(host), onResult: value => {
+          ran = value;
+          const basis = value.result.localDecision;
+          if (basis) observe?.({ basis, reason: basis === 'fetch-address-policy' ? 'address-not-public' : 'redirect-refused',
+            role: basis === 'fetch-address-policy' ? 'network-destination' : 'network-redirect',
+            operationClass: 'connect', operation: NETWORK_FETCH_OPERATION.operation, commandId });
+        } });
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       const store = await openConfiguredLedger(context, { migration: 'forbid' });
       try {

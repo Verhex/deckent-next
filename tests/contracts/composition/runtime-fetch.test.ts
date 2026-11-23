@@ -1,5 +1,6 @@
 import { failEffectRecordWrite, observeToolOutcomes } from '../support/tool-producer.js';
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,6 +69,69 @@ it.skipIf(process.platform !== 'linux')('fetch producer requires a recorded outc
 });
 
 describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime service (FETCH S7)', () => {
+  it('seals only the two verified egress decisions and preserves the ordinary result, effect and sends', async () => {
+    const t = await tlsFixture();
+    const f = await runtime({ extraGrants: fetchGrants(), fetch: fetchSection('allowlist'), fetchTransport: t.transport }); await f.start();
+    const url = 'https://docs.example/decision';
+    f.state.script = Array.from({ length: 4 }, () => [call('fetch_url', { url }), { content: 'Done.' }]).flat();
+    t.answers.set('docs.example', []);
+    const empty = await answered(f, 'empty-dns', null);
+    t.answers.set('docs.example', ['10.0.0.7']);
+    const privateAddress = await answered(f, 'private-address', null);
+    t.answers.set('docs.example', ['93.184.215.14']);
+    t.routes.set('/decision', (_request, response) => response.writeHead(302, { location: 'https://[' }).end());
+    const malformed = await answered(f, 'malformed-redirect', null);
+    t.routes.set('/decision', (_request, response) => response.writeHead(302, { location: 'https://other.example/private' }).end());
+    const blocked = await answered(f, 'blocked-redirect', null);
+    expect(toolTexts(empty.events)).toEqual(toolTexts(privateAddress.events));
+    expect(toolTexts(malformed.events)[0]).toContain('error=redirect-refused');
+    expect(toolTexts(blocked.events)[0]).toContain('error=redirect-refused');
+    expect(t.seen.map(row => row.path)).toEqual(['/decision', '/decision']);
+    expect(f.state.requests).toHaveLength(8);
+    expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual(['refused', 'refused', 'settled', 'settled'].map(state => ({ state })));
+    const rows = f.rows("SELECT record FROM audit_events WHERE kind='access-refusal-summary' ORDER BY sequence").map(row => JSON.parse(String(row['record'])));
+    expect(rows.map(row => row.event)).toEqual([
+      expect.objectContaining({ scopeId: 'scope', principal: me[0], subject: expect.objectContaining({
+        decisionSource: 'deckent-decision', evidenceBasis: 'fetch-address-policy', turnId: 'private-address', count: 1,
+        target: { role: 'network-destination', identity: null }, call: { turnId: 'private-address', callId: 'call_1', round: 1, index: 0 },
+        commandId: expect.any(String),
+      }) }),
+      expect.objectContaining({ scopeId: 'scope', principal: me[0], subject: expect.objectContaining({
+        decisionSource: 'deckent-decision', evidenceBasis: 'fetch-redirect-policy', turnId: 'blocked-redirect', count: 1,
+        target: { role: 'network-redirect', identity: null }, call: { turnId: 'blocked-redirect', callId: 'call_1', round: 1, index: 0 },
+        commandId: expect.any(String),
+      }) }),
+    ]);
+    expect(JSON.stringify(rows)).not.toMatch(/other\.example|docs\.example|10\.0\.0\.7/u);
+  }, 60_000);
+
+  it('publishes an eligible refusal-write loss only in the original authenticated result', async () => {
+    const t = await tlsFixture();
+    t.routes.set('/ok', (_req, response) => response.writeHead(200).end('ok'));
+    t.answers.set('mirror.example', ['10.0.0.7']);
+    const f = await runtime({ extraGrants: fetchGrants(), fetch: fetchSection('allowlist', { allowedHosts: ['docs.example', 'mirror.example'] }),
+      fetchTransport: t.transport }); await f.start();
+    const script = [call('fetch_url', { url: 'https://docs.example/ok' }), call('fetch_url', { url: 'https://mirror.example/private' }), { status: 400 }];
+    f.state.script = [...script, ...script];
+    const control = await answered(f, 'audit-control', null);
+    const db = new DatabaseSync(f.ledger);
+    try { db.exec("CREATE TRIGGER refuse_summary BEFORE INSERT ON audit_events WHEN NEW.kind='access-refusal-summary' BEGIN SELECT RAISE(ABORT,'unavailable'); END;"); }
+    finally { db.close(); }
+    const lost = await answered(f, 'audit-lost', null);
+    const repeated = await answered(f, 'audit-lost', null);
+    expect(control.result.note).toBeTruthy();
+    expect(lost.result).toEqual({ ...control.result, turnId: 'audit-lost',
+      note: `${control.result.note} This turn’s access-refusal audit summary could not be saved.` });
+    expect(repeated.result).toEqual({ ...control.result, turnId: 'audit-lost', replayed: true });
+    expect(finished(lost.events)).toEqual(finished(control.events));
+    expect(JSON.stringify(lost.events)).not.toContain('access-refusal audit summary');
+    expect(t.seen.map(row => row.path)).toEqual(['/ok', '/ok']);
+    expect(f.state.requests).toHaveLength(6);
+    expect(f.rows('SELECT state FROM effect_intents ORDER BY rowid')).toEqual(['settled', 'refused', 'settled', 'refused'].map(state => ({ state })));
+    expect(f.rows("SELECT kind FROM audit_events WHERE kind IN ('policy-turn','access-refusal-summary') ORDER BY sequence"))
+      .toEqual(['policy-turn', 'access-refusal-summary', 'policy-turn'].map(kind => ({ kind })));
+  }, 60_000);
+
   it('an allowlisted host runs without a card: one real HTTPS GET, the body lands in the scratch area, the model gets a redacted head', async () => {
     const t = await tlsFixture();
     t.routes.set('/guide', (_request, response) => response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
@@ -129,6 +193,11 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
     expect(outside).toContain('error=host-not-allowed'); expect(plain).toContain('error=not-https');
     expect(t.resolved).toEqual([]); expect(t.dialed).toEqual([]);
     expect(f.rows('SELECT state FROM effect_intents')).toEqual([]);
+    const recorded = f.rows("SELECT record FROM audit_events WHERE kind='access-refusal-summary' ORDER BY sequence")
+      .map(row => JSON.parse(String(row['record'])).event.subject);
+    expect(recorded).toEqual(['host-not-allowed', 'not-https'].map(reasonCode => expect.objectContaining({
+      reasonCode, evidenceBasis: 'fetch-preflight-policy', target: { role: 'network-destination', identity: null },
+    })));
   }, 60_000);
 
   it('a private answer is refused by the service (nothing dialed, effect refused); a 5 MiB body is kept cut at 4 MiB', async () => {

@@ -81,6 +81,10 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(stale.finished).toEqual([['mcp__fx__echo', 'error']]);
     expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
     expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    const refusal = f.rows("SELECT record FROM audit_events WHERE kind='access-refusal-summary'").map(row => JSON.parse(String(row['record'])).event.subject);
+    expect(refusal).toContainEqual(expect.objectContaining({ evidenceBasis: 'mcp-send-trust', reasonCode: 'trust-revoked', turnId: 'reset',
+      commandId: expect.any(String), call: { turnId: 'reset', callId: 'call_1', round: 1, index: 0 },
+      target: { role: 'mcp-server', identity: null } }));
     // The service's process of the revoked server (the one started for this turn) does not keep running.
     // (A stdio start may add the SDK's short-lived version probe: every process started for this turn is checked.)
     const served = m.starts().slice(before);
@@ -152,5 +156,18 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(m.calls()).toEqual([]);
     expect(reapproved.tool.join('\n')).toContain('error=definition-changed; nothing was sent');
     expect(effects(f).map(row => (row as { state: string }).state)).toEqual(['refused', 'refused']);
+  }, 60_000);
+
+  it('keeps HEADER_MISMATCH, an ordinary failure and an uncertain send out of the refusal audit', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+    writeRegistry(f.project, m.entry()); await approve(f);
+    for (const behavior of ['header-mismatch', 'fail', 'crash']) {
+      m.setTools([{ ...echo, behavior }]);
+      const result = await turn(f, `mcp-${behavior}`);
+      expect(result.finished).toEqual([['mcp__fx__echo', 'error']]);
+    }
+    expect(m.calls()).toHaveLength(3);
+    expect(effects(f)).toMatchObject([{ state: 'settled' }, { state: 'settled' }, { state: 'unknown' }]);
+    expect(f.rows("SELECT sequence FROM audit_events WHERE kind='access-refusal-summary'")).toEqual([]);
   }, 60_000);
 });

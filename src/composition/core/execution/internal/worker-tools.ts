@@ -14,8 +14,9 @@ import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 type OpenTools = NativeCliWorkerPorts['openTools'];
 /** The K1 coordinator owns proposals and durable settlement. The model CLI never receives this workspace. */
 export async function openConfiguredNativeWorkerTools(root: string, request: Parameters<OpenTools>[0], binding: Parameters<OpenTools>[1],
-  signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions, plan: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null = null): Promise<ToolSessionPort> {
-  const { scopeId, generation } = request.identity, turnId = sha256(JSON.stringify(request.identity));
+  signal: AbortSignal, resources: Parameters<OpenTools>[3], options: ConfigLoadOptions, plan: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null = null,
+  onRefusalAuditLoss?: (loss: 'refusal-audit-loss') => void): Promise<ToolSessionPort> {
+  const { scopeId, generation, runId, taskId, attemptId } = request.identity, turnId = sha256(JSON.stringify(request.identity));
   const { current, context, person, env, known, workspace, inputs, authority, selfSource, writeFloor, sandbox, sandboxes } = await nativeWorkerToolFloor(root, request, binding, resources, options);
   const clock = new SystemTrustedClock();
   const sessions = () => LocalOsSessionAuthority.create(context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
@@ -27,7 +28,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     selfSource, writeFloor, writeSetRoot: () => sandboxWriteSetRoot(request.workspace, context.layout, env), sealed: sealedRootEntryRefused(request.workspace, sandbox.hardFloor) });
   const tools = [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC], describe = describeAgentCall;
   const approvals = createAgentCallApprovals({ context, clock, scopeId, turnId, describe });
-  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null, person, origin: { kind: 'run', ceiling: plan } });
+  const decisions = createAgentCallDecisions({ context, clock, scopeId, turnId, edits: () => edits, shell, approvals, fetch: null, person, origin: { kind: 'run', ceiling: plan }, attempt: { runId, taskId, attemptId, generation } });
   const store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
   const lifetime = nativeWorkerToolLifetime();
   let failure: 'approval-expired' | null = null;
@@ -36,6 +37,7 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     async invokeAgent(input) { lifetime.ready(input.session); await lifetime.finished;
       return { status: 'responded', content: '', reasoning: '', toolCalls: [], finish: 'stop', usage: null }; },
     authorize: (tool, args, call) => decisions.authorize(tool, args, call),
+    refusal: decisions.coordinatorRefusal,
     prepare: async (tool, args) => tool.toolClass === 'shell' || tool.toolClass === 'edit' ? decisions.prepare(tool, args) : Promise.resolve({ ok: true }), describe,
     async requestApproval(input, callSignal) {
       const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
@@ -65,7 +67,8 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
       const result = tool.toolClass === 'edit' || tool.toolClass === 'shell'
         ? await decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'
           ? edits.apply(tool.name, args, execution, gate) : shell.apply(tool.name, args, callSignal, callId, execution, gate, authority, writes, track))
-        : await inputs.read(tool.name, args, callSignal) ?? await workspace.execute(tool.name, args, callSignal);
+        : await inputs.read(tool.name, args, callSignal) ?? await workspace.execute(tool.name, args, callSignal,
+          reason => decisions.observeCall(tool, args, { ...execution, callId }, { basis: 'workspace-read-guard', reason, role: 'workspace-path', operationClass: 'read' }));
       return agentToolResult({ ...result, text: redactForRecord(result.text, known) }, result);
     }, now: Date.now,
   };
@@ -74,7 +77,11 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
     messages: [], tools, nativeSession: { schemaVersion: 1, turnId, generation, tools, approvalTtlMs: context.config.approvals.requestTtlMs }, signal,
     admission: { outputReserveTokens: 0, safetyReserveTokens: 0, requestMaxBytes: context.config.service.inputMaxBytes }, emit() {} }, store, ports)
     .then(result => { if (!result.recorded || result.replayed) throw ErrorRegistry.createError('NATIVE_WORKER_EFFECTS_UNKNOWN'); return result; })
-    .finally(async () => { try { if (!await decisions.flush()) throw ErrorRegistry.createError('NATIVE_WORKER_EFFECTS_UNKNOWN'); } finally { store.close(); } });
+    .finally(async () => { try {
+      const policyRecorded = await decisions.flush();
+      const loss = await decisions.flushRefusals();
+      if (loss) try { onRefusalAuditLoss?.(loss); } catch { /* diagnostic delivery is best effort */ }
+      if (!policyRecorded) throw ErrorRegistry.createError('NATIVE_WORKER_EFFECTS_UNKNOWN'); } finally { store.close(); } });
   // Cancellation before K1 reaches invokeAgent must not leave an unresolved openTools promise.
   void turn.then(() => lifetime.failed(ErrorRegistry.createError('NATIVE_AGENT_BRIDGE_UNAVAILABLE')), lifetime.failed);
   const session = await lifetime.opened;

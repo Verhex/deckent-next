@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
-import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
+import { runAgentTurn, SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { loadConfig, configDisplayView, getConfigKnownSecrets, registerConfigSection, redactForDecision, resolveGlobalConfigPaths, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { z } from 'zod';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
@@ -45,7 +45,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
   let loaded = 0;
-  let config: object = { storage: { sqlite }, approvals: { keyFile: 'authority.key' } };
+  let config: object = { company: { id: 'fixture-company' }, storage: { sqlite }, approvals: { keyFile: 'authority.key' } };
   if (options.knownSecret) {
     await mkdir(join(root, '.deckent'), { recursive: true });
     // SEC-3: only the installation (global) layer may hold a $DECK reference.
@@ -59,7 +59,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
     expect(config).not.toHaveProperty('knownSecrets');
     expect(JSON.stringify(getConfigKnownSecrets(config))).toBe('{}');
   }
-  const context = { principal, policy: { async load() { await options.onPolicy?.(loaded + 1); return loads[Math.min(loaded++, loads.length - 1)]; } },
+  const context = { principal, installationId: 'fixture-installation', document: loads[0], policy: { async load() { await options.onPolicy?.(loaded + 1); return loads[Math.min(loaded++, loads.length - 1)]; } },
     path: async () => { options.auditStarted?.(); await options.auditWait; return ledger; },
     layout: resolveProductLayout({ projectRoot: root, root: data, platform: process.platform === 'win32' ? 'win32' : 'posix' }), config };
   let plans = 0;
@@ -90,7 +90,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
       lastAuthority = authority;
       seen.eventsAtRun = events();
       for (let pass = 0; pass < 2; pass++) {
-        try { await gate.admit({ approval: 'policy' } as never, 'require-approval', {} as never, principal as never, { record: null } as never); seen.admissions.push('admitted'); }
+        try { await gate.admit({ approval: 'policy' } as never, 'require-approval', { commandId: 'effect-1' } as never, principal as never, { record: null } as never); seen.admissions.push('admitted'); }
         catch (error) { seen.admissions.push((error as { code: string }).code); return { status: 'error', text: (error as { code: string }).code }; }
       }
       return { status: 'ok', text: 'ran' };
@@ -121,9 +121,19 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     const denied = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('deny', 'auto-edit')]);
     expect(await denied.decisions.authorize(edit, args)).toBe('allow');
     expect(await denied.execute()).toMatchObject({ outcome: { status: 'error', text: 'POLICY_DENIED' }, admissions: ['admitted', 'POLICY_DENIED'] });
+    const original = denied.auditRecords()[0];
+    expect(await denied.decisions.flushRefusals()).toBeNull();
+    expect(denied.auditRecords()).toEqual([original, expect.objectContaining({ event: expect.objectContaining({ policyRevision: 'p-deny-auto-edit+b',
+      subject: expect.objectContaining({ kind: 'access-refusal-summary', decisionSource: 'deckent-decision', evidenceBasis: 'agent-tool-policy',
+        reasonCode: 'AGENT_TOOL_POLICY_DENIED', operationClass: 'invoke', commandId: 'effect-1', count: 1,
+        target: { role: 'tool', identity: null }, call: { turnId: 'turn', callId: 'call_1', round: 1, index: 0 } }) }) })]);
     const lost = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'ask')]);
     expect(await lost.decisions.authorize(edit, args)).toBe('allow');
     expect(await lost.execute()).toMatchObject({ outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, admissions: ['EFFECT_APPROVAL_REQUIRED'] });
+    expect(await lost.decisions.flushRefusals()).toBeNull();
+    expect(lost.auditRecords().map(row => row.event.subject.kind)).toEqual(['permission-mode', 'access-refusal-summary']);
+    expect(lost.auditRecords()[1]?.event).toMatchObject({ policyRevision: 'p-require-approval-ask+b',
+      subject: { evidenceBasis: 'agent-tool-policy', reasonCode: 'AGENT_TOOL_APPROVAL_REQUIRED', commandId: 'effect-1' } });
     for (const [changed, text] of [[snapshot('deny', 'auto-edit'), 'denied-by-policy'], [snapshot('require-approval', 'ask'), 'approval-required']] as const) {
       const before = await fixture([snapshot('require-approval', 'auto-edit'), changed]);
       expect(await before.decisions.authorize(edit, args)).toBe('allow');
@@ -451,6 +461,13 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     const turn = f.auditRecords().find(record => record.event.subject.kind === 'policy-turn')!.event.subject as unknown as { refused: { calls: { cell: string; decision: string; stage: string; call: unknown }[] } };
     expect(turn.refused.calls).toEqual([expect.objectContaining({ cell: 'edit-self-source', decision: 'require-approval', stage: 'effect', call: { round: 1, index: 0, callId: 'shell-call' } }),
       expect.objectContaining({ cell: 'edit-authority', decision: 'require-approval', stage: 'effect' })]);
+    expect(await f.decisions.flushRefusals()).toBeNull();
+    const refusals = f.auditRecords().map(row => row.event.subject).filter(subject => subject.kind === 'access-refusal-summary');
+    expect(refusals).toEqual([expect.objectContaining({ decisionSource: 'deckent-decision', evidenceBasis: 'shell-write-set',
+      reasonCode: 'AGENT_TOOL_APPROVAL_REQUIRED', operationClass: 'write', operation: { id: 'workspace.file.write', version: 1 },
+      target: { role: 'workspace-file', identity: null }, count: 2 })]);
+    expect(refusals[0]?.samples).toEqual(Array.from({ length: 2 }, () => ({ turnId: 'turn', callId: 'shell-call', round: 1, index: 0 })));
+    expect(JSON.stringify(refusals)).not.toMatch(/dist\/a\.js|deckent\.json|docs\/a\.md/u);
   });
 
   it('requires POSIX private audit keyring — a session-lowered self-source shell write-set entry records its sealed use before its effect', async context => { privateAudit(context);
@@ -696,6 +713,56 @@ describe('policy-turn record of refused and silently allowed calls (S5 D1)', () 
     broken.failAudit();
     expect(await broken.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'c0' })).toBe('deny');
     expect(await broken.decisions.flush()).toBe(false);
+  });
+
+  it('keeps bounded call samples for exact refusal counts and reports an unavailable key only for an owed refusal', async context => {
+    privateAudit(context);
+    const f = await fixture([snapshot('deny', null)]), broken = await fixture([snapshot('deny', null)]);
+    broken.failAudit();
+    for (const [i, fixture] of [f, broken].entries()) {
+      const count = i === 0 ? 66 : 1;
+      for (let index = 0; index < count; index++)
+        expect(await fixture.decisions.authorize(edit, args, { round: 1, index, callId: `denied-${index}` })).toBe('deny');
+      expect(await fixture.decisions.flushRefusals()).toBe(i === 0 ? null : 'refusal-audit-loss');
+      expect(await fixture.decisions.flushRefusals()).toBe(i === 0 ? null : 'refusal-audit-loss');
+    }
+    const [group] = f.auditRecords(), subject = group?.event.subject;
+    expect(subject).toMatchObject({ kind: 'access-refusal-summary', count: 66, countBasis: 'exact', overflow: true });
+    expect(subject?.['samples']).toHaveLength(64);
+    expect(f.events()).toBe(1);
+    expect(broken.events()).toBe(0);
+  });
+
+  it('seals a coordinator refusal for an unoffered tool without disclosing its name or executing it', async context => {
+    privateAudit(context);
+    const f = await fixture([snapshot('allow', null)]);
+    const result = await runAgentTurn({ messages: [{ role: 'user', content: 'try the tool' }], tools: [edit], signal: new AbortController().signal, emit() {} }, {
+      async invokeRound({ round }) {
+        return { status: 'responded', content: '', reasoning: '', usage: null, finish: round === 1 ? 'tool_calls' : 'stop',
+          toolCalls: round === 1 ? [
+            { id: 'offer-boundary', name: 'private_tool', argumentsJson: '{}' },
+            { id: 'malformed', name: edit.name, argumentsJson: '[' },
+            { id: 'quarantined', name: edit.name, argumentsJson: JSON.stringify({ path: `private-target${String.fromCodePoint(0xe0041)}` }) },
+          ] : [] };
+      },
+      authorize: f.decisions.authorize,
+      refusal: f.decisions.coordinatorRefusal,
+      describe: () => null,
+      async execute() { throw new Error('UNEXPECTED_TOOL_EXECUTION'); },
+      now: Date.now,
+    });
+    expect(result.toolCalls).toBe(0);
+    expect(await f.decisions.flushRefusals()).toBeNull();
+    const rows = f.auditRecords();
+    const [row] = rows;
+    expect(row?.event.subject).toMatchObject({ evidenceBasis: 'tool-offer', reasonCode: 'AGENT_TOOL_NOT_OFFERED',
+      call: { turnId: 'turn', callId: 'offer-boundary', round: 1, index: 0 }, target: { role: 'tool-surface', identity: null } });
+    expect(JSON.stringify(row)).not.toContain('private_tool');
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.event.subject).toMatchObject({ decisionSource: 'deckent-decision', evidenceBasis: 'model-ingress-quarantine',
+      reasonCode: 'AGENT_TOOL_ARGUMENT_QUARANTINED', operationClass: 'invoke', count: 1,
+      call: { turnId: 'turn', callId: 'quarantined', round: 1, index: 2 }, target: { role: 'tool-input', identity: null } });
+    expect(JSON.stringify(rows[1])).not.toContain('private-target');
   });
 });
 

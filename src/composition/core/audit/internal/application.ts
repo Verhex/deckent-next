@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { hostname, userInfo } from 'node:os';
 import { type Policy, AuditError, auditListQuerySchema, auditRebaselineCommandSchema, auditVerifyQuerySchema, type AuditListView, type AuditVerification } from '#domain/index.js';
 import { AuditApplication, relatedAuditRecords, AuditCheckpointCycleError, AuditCheckpointApplication, approvalAssuranceProducerInventory, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
@@ -5,6 +6,7 @@ import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPe
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
+import { verifyRefusalTarget, type RefusalCandidate, type VerifiedRefusalCandidate } from './refusal-target.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 const unavailable = (scopeId: string, reason: AuditVerification['reason'] = 'unavailable'): AuditVerification => Object.freeze({ schemaVersion: 1, scopeId, status: 'unknown', reason, head: null, checkpoint: null });
@@ -39,6 +41,41 @@ export async function listConfiguredAudit(root: string, input: unknown, options:
         next: records.length === limit ? records.at(-1)!.sequence : null, ...(audit ? relatedAuditRecords(audit, records, context.config.audit) : {}) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); } }
+/** The Model Invocation owner supplies this port using the same bound person and snapshot and both inspect permissions. */
+export type InspectRefusalCandidate = (context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, scopeId: string, candidate: RefusalCandidate)
+  => Promise<VerifiedRefusalCandidate | null>;
+
+export async function showConfiguredAuditCandidate(root: string, input: { readonly sequence: number; readonly scopeId: string; readonly candidate: RefusalCandidate },
+  options: ConfigLoadOptions, inspect: InspectRefusalCandidate) {
+  try {
+    const { scopeId } = auditListQuerySchema.parse({ schemaVersion: 1, scopeId: input.scopeId });
+    if (!Number.isSafeInteger(input.sequence) || input.sequence <= 0) throw new AuditError('AUDIT_INVALID');
+    const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
+    authorizeApproval(context.document, 'inspect', scopeId, scopeId, context.principal);
+    const path = await context.path(), store = await openReadOnlyAuditStore(path, context.config.storage.sqlite);
+    try {
+      if (!auditScopeRecorded(store, scopeId)) return null;
+      const key = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile);
+      const row = new AuditApplication(store, key).atSequence(scopeId, input.sequence);
+      if (row?.sequence !== input.sequence) return null;
+      const { subject } = row.event;
+      const result = { sequence: row.sequence, event: row.event, targetResolution: 'not-resolvable' as 'verified-match' | 'not-resolvable' };
+      if (subject.kind !== 'access-refusal-summary' || !subject.target.identity || subject.invocationId !== input.candidate.invocationId
+        || !context.installationId || context.principal.assurance !== 'os-user') return result;
+      try {
+        const candidate = await inspect(context, scopeId, input.candidate);
+        if (!candidate || candidate.scopeId !== scopeId || candidate.installationId !== context.installationId
+          || candidate.companyId !== context.config.company.id || !isDeepStrictEqual(candidate.reference, input.candidate.reference)
+          || !verifyRefusalTarget(subject, candidate, key)) return result;
+        const current = await loadComposedConfig(root, { ...options, heal: false });
+        const policy = await contextPolicySource(context).load();
+        if (isDeepStrictEqual(current.productLayout, context.layout) && current.company.id === context.config.company.id
+          && isDeepStrictEqual(policy, context.document) && await context.path() === path) result.targetResolution = 'verified-match';
+        return result;
+      } catch { return result; }
+    } finally { store.close(); }
+  } catch (error) { throw queryFailure(error); }
+}
 /** Trusted service-only writer. This function is not an SDK/MCP mutation and never invents scope identities. */
 export async function checkpointConfiguredAudit(root: string, installationId: string | null, options: ConfigLoadOptions = {}): Promise<readonly AuditVerification[]> {
   let store: Awaited<ReturnType<typeof openSqliteAuditStore>> | undefined;

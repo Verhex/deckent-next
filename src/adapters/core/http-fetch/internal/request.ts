@@ -37,6 +37,8 @@ export interface HttpFetchResult {
   readonly finalUrl: string;
   readonly redirects: number;
   readonly location?: string;
+  /** Non-enumerable host decision, consumed only at the effect's composition boundary. */
+  readonly localDecision?: 'fetch-address-policy' | 'fetch-redirect-policy';
 }
 
 /** A URL a hop may request: https on the default port, no credentials, a host name (never an IP literal: SNI names the host). */
@@ -107,12 +109,16 @@ export async function fetchHttps(input: { readonly url: string; readonly maxByte
   let url: URL, redirects = 0, sent = false;
   try { url = new URL(input.url); } catch { return end('refused', 'invalid-url', input.url); }
   url.hash = '';
-  function end(outcome: HttpFetchResult['outcome'], reason: string | null, finalUrl: string, extra: Partial<HttpFetchResult> = {}): HttpFetchResult {
-    return Object.freeze({ outcome, reason, httpStatus: null, contentType: null, body: Buffer.alloc(0), truncated: false, finalUrl, redirects, ...extra });
+  function end(outcome: HttpFetchResult['outcome'], reason: string | null, finalUrl: string,
+    extra: Omit<Partial<HttpFetchResult>, 'localDecision'> = {}, localDecision?: HttpFetchResult['localDecision']): HttpFetchResult {
+    const result = { outcome, reason, httpStatus: null, contentType: null, body: Buffer.alloc(0), truncated: false, finalUrl, redirects, ...extra };
+    if (localDecision) Object.defineProperty(result, 'localDecision', { value: localDecision });
+    return Object.freeze(result);
   }
   // Before the first request is sent nothing happened (refused); after it, a stop keeps what was answered and an interruption is unknown.
   const interrupted = () => end(sent ? 'unknown' : 'refused', deadline.aborted ? 'timed-out' : 'cancelled', url.href);
-  const failed = (reason: string, extra: Partial<HttpFetchResult> = {}) => end(sent ? 'stopped' : 'refused', reason, url.href, extra);
+  const failed = (reason: string, extra?: Omit<Partial<HttpFetchResult>, 'localDecision'>, localDecision?: HttpFetchResult['localDecision']) =>
+    end(sent ? 'stopped' : 'refused', reason, url.href, extra, localDecision);
   const invalid = fetchableUrlError(url);
   if (invalid) return failed(invalid);
   for (;;) {
@@ -124,7 +130,8 @@ export async function fetchHttps(input: { readonly url: string; readonly maxByte
       })]);
     } catch { return signal.aborted ? interrupted() : failed('dns-failed'); }
     if (signal.aborted) return interrupted();
-    if (!addresses.length || addresses.some(address => !isPublicNativeAddress(address))) return failed('address-not-public');
+    if (!addresses.length) return failed('address-not-public');
+    if (addresses.some(address => !isPublicNativeAddress(address))) return failed('address-not-public', undefined, 'fetch-address-policy');
     let answer: Exchange;
     try { answer = await exchange(input.transport, host, addresses[0]!, `${url.pathname}${url.search}`, input.maxBytes, signal, () => { sent = true; }); }
     catch (error) {
@@ -140,7 +147,8 @@ export async function fetchHttps(input: { readonly url: string; readonly maxByte
     let next: URL;
     try { next = new URL(answer.location, url); } catch { return failed('redirect-refused', { httpStatus: answer.status, location: answer.location }); }
     next.hash = '';
-    if (fetchableUrlError(next) !== null || !input.redirectAllowed(next.hostname)) return failed('redirect-refused', { httpStatus: answer.status, location: next.href });
+    if (fetchableUrlError(next) !== null || !input.redirectAllowed(next.hostname))
+      return failed('redirect-refused', { httpStatus: answer.status, location: next.href }, 'fetch-redirect-policy');
     url = next; redirects++;
   }
 }

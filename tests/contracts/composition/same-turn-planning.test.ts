@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rmdir, writeFile } from 'node:fs/promises';
+import * as auditComposition from '#composition/core/audit/index.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
@@ -11,7 +12,7 @@ import { brainPlannerConfigSchema, type NativeAgentCorrelation } from '#capabili
 import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, agentTurnResultDigest, modelInvocationProfileDigest } from '#engine/index.js';
 import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, runPeerConfiguredChatTurn, type NativeChatRuntime } from '#composition/core/agent-turn/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
-import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, inspectionApplication } from '#composition/core/model-invocation/index.js';
 import { createServiceSameTurnPlanning, planServiceRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadProposalViews } from '#surfaces/index.js';
@@ -241,7 +242,7 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
         catch (error) { trace.push({ event: 'prepare-refused', ...code(error) }); throw error; }
       } };
     });
-  const host = createHost();
+  const host = { ...createHost(), signRefusalTarget: auditComposition.signRefusalTarget };
   const turnId = 'same-turn', command = { schemaVersion: 1 as const, scopeId: 's', turnId, messages: [{ role: 'user' as const, content: 'prepare a purchase' }] };
   const proofDir = process.env['DECKENT_K3C_PROOF_DIR'];
   async function retain(phase: string, event: Card) {
@@ -312,6 +313,17 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     const { response: stored } = JSON.parse(String(response?.record));
     expect(stored.native.choices[0].message.content).toBe(draft);
     expect(stored.native.fixtureWitness).toBe(decision === 'corrupt' ? 'altered' : RAW);
+    const readRefusals = db.prepare("SELECT record FROM audit_events WHERE kind='access-refusal-summary'").all()
+      .map(row => JSON.parse(String(row.record)).event.subject)
+      .filter(subject => subject.evidenceBasis === 'retained-response-authority');
+    if (decision === 'refuse') {
+      expect(readRefusals).toEqual([expect.objectContaining({ turnId, count: 1, samples: [],
+        invocationId: db.prepare('SELECT invocation_id FROM model_invocations').get()?.invocation_id,
+        target: { role: 'stored-invocation-response', identity: { keyId: expect.any(String), digest: expect.stringMatching(/^[a-f0-9]{64}$/u) } },
+      })]);
+      expect(readRefusals[0]).not.toHaveProperty('call');
+      expect(JSON.stringify(readRefusals)).not.toContain(RAW);
+    } else expect(readRefusals).toEqual([]);
     const turn = JSON.parse(String(db.prepare('SELECT record FROM agent_turns WHERE turn_id=?').get(turnId)?.record));
     const history = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
     expect(turn.outcome.appendedDigest).toBe(sha256('agent-turn-appended:1\0' + JSON.stringify(history)));
@@ -359,6 +371,34 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     await expect(withMcpPrincipal(() => inspectConfiguredModelInvocation(f.project, { schemaVersion: 2, scopeId: 's',
       reference: profile.reference, invocationId, includeResponseContent: true }, f.options))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(selected).toBe(shouldCard ? 1 : 0);
+  }
+  if (decision === 'refuse') {
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    let row: { sequence: number; invocationId: string };
+    try {
+      row = db.prepare("SELECT sequence, json_extract(record,'$.event.subject.invocationId') AS invocationId FROM audit_events WHERE kind='access-refusal-summary'").get() as typeof row;
+    } finally { db.close(); }
+    const inspect: auditComposition.InspectRefusalCandidate = async (context, scopeId, candidate) => {
+      expect(context.principal).toMatchObject({ issuer: owner.issuer, subject: owner.subject, assurance: 'os-user' });
+      const result = await inspectionApplication({ ...context, policy: { async load() { return context.document; } },
+        freshConfig: async () => context.config }).inspect({ schemaVersion: 2, scopeId, ...candidate, includeResponseContent: true });
+      if (!context.installationId || result.contentStatus !== 'retained' || result.purge || result.invocation?.outcome?.state !== 'responded') return null;
+      return { ...candidate, scopeId, installationId: context.installationId, companyId: context.config.company.id, descriptor: result.invocation.outcome.content };
+    };
+    const query = { sequence: row.sequence, scopeId: 's', candidate: { invocationId: row.invocationId, reference: profile.reference } };
+    const show = (candidate = query.candidate, lookup = inspect) => auditComposition.showConfiguredAuditCandidate(f.project, { ...query, candidate }, f.options, lookup);
+    expect(await show()).toMatchObject({ targetResolution: 'not-resolvable' });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...first.policy, revision: 'refusal-reader' }), { mode: 0o600 });
+    const matched = await show();
+    expect(matched).toMatchObject({ sequence: query.sequence, targetResolution: 'verified-match' });
+    expect(JSON.stringify(matched)).not.toContain(RAW);
+    expect(await show({ ...query.candidate, invocationId: 'different-invocation' })).toMatchObject({ targetResolution: 'not-resolvable' });
+    for (const update of [{ companyId: 'foreign-company' }, { installationId: 'foreign-installation' }, { scopeId: 'foreign-scope' }]) {
+      expect(await show(query.candidate, async (...input) => {
+        const verified = await inspect(...input);
+        return verified ? { ...verified, ...update } : null;
+      })).toMatchObject({ targetResolution: 'not-resolvable' });
+    }
   }
 }
 

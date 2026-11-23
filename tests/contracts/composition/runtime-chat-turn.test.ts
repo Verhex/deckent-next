@@ -1,4 +1,4 @@
-import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
+import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
@@ -11,14 +11,14 @@ import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 import { agentFileEffectCommandId, agentShellEffectCommandId, landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
-import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
+import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationTargetId } from '#engine/index.js';
 import * as engine from '#engine/index.js';
 import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, runRuntimeChatTurn,
   startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
-import { chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
+import { chatTurnCompactionCommandId, chatTurnRoundCommandId, createRuntimeChatTurnHost, runPeerConfiguredChatTurn } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
@@ -152,6 +152,35 @@ const shellGrants = (toolEffect: 'allow' | 'require-approval') => [
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const toolText = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
 const ask = (turnId: string, content = 'what does src/a.ts export?') => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content }] });
+
+it.skipIf(process.platform !== 'linux')('keeps the complete ordinary fitted result when a loss diagnosis would displace its answer or note', async () => {
+  const f = await runtime();
+  await f.start();
+  const peer = await terminalRuntimePeer(f.client()), { signal } = new AbortController();
+  const host = createRuntimeChatTurnHost({ ownerId: 'r4-fit', controllers: new ModelInvocationControllers(2) }, signal);
+  const exec = (sql: string) => { const db = new DatabaseSync(f.ledger); try { db.exec(sql); } finally { db.close(); } };
+  const rejectedRound = { toolCall: { name: 'unoffered_name', arguments: '{}' } };
+  const run = (turnId: string, maxResultBytes = 65_536, last: Script = rejectedRound, language: 'en' | 'tr' = 'tr') => {
+    f.state.script.push({ toolCall: { name: 'read_file', arguments: '{"path":".env"}' } }, last);
+    return runPeerConfiguredChatTurn(f.project, ask(turnId), peer, { env: { ...f.env, DECKENT_LANGUAGE: language } }, { maxResultBytes }, host,
+      { signal, room: () => 65_536, drained: async () => true, emit() {} });
+  };
+  try {
+    const base = await run('r4-a');
+    expect(base).toMatchObject({ note: expect.any(String), finish: 'error', toolCalls: 1 });
+    exec("CREATE TRIGGER r4_loss BEFORE INSERT ON audit_events WHEN NEW.kind='access-refusal-summary' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+    const note = `${base.note} Bu turun erişim reddi denetim özeti yazılamadı.`;
+    const bytes = Buffer.byteLength(JSON.stringify({ ...base, note }));
+    expect(await run('r4-b', bytes - 1)).toEqual({ ...base, turnId: 'r4-b' });
+    expect(await run('r4-c', bytes)).toEqual({ ...base, turnId: 'r4-c', note });
+    expect(await run('r4-d', undefined, { content: 'Yarı cevap.' })).toMatchObject({ note: null, answer: 'Yarı cevap.', finish: 'stop' });
+    exec("CREATE TRIGGER policy_loss BEFORE INSERT ON audit_events WHEN NEW.kind='policy-turn' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+    const both = await run('r4-e', undefined, rejectedRound, 'en');
+    expect(both.note).toMatch(/^This turn’s policy audit record and access-refusal audit summary could not be saved\. .+/u);
+    expect(both.note).not.toContain('(policy-turn)');
+    expect(f.state.requests).toHaveLength(10);
+  } finally { await host.mcp.close(); }
+}, 60_000);
 
 describe.skipIf(process.platform !== 'linux')('agent chat turn through the runtime service', () => {
   it('runs a governed tool round and answers, streaming the history as events, and replays the finished turn without a model call', async () => {
@@ -374,6 +403,19 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(results.join('\n')).not.toContain('owner-only other conversation');
     expect(results[3]).toContain('ordinary data file'); expect(results[7]).toContain('"provider_catalog"');
     for (const index of [4, 5, 6]) expect(results[index]).toContain('error=path-denied');
+    const sealed = (kind: string) => f.rows(`SELECT record FROM audit_events WHERE kind='${kind}' ORDER BY sequence`)
+      .map(row => JSON.parse(String(row['record'])));
+    const refusals = sealed('access-refusal-summary');
+    expect(refusals.flatMap(row => row.event.subject.samples.map((sample: { round: number }) => sample.round)).sort((a, b) => a - b)).toEqual([1, 2, 5, 6, 7]);
+    const policy = sealed('policy-turn')[0].event;
+    for (const { event } of refusals) {
+      expect(event).toMatchObject({ scopeId: 'scope', principal: policy.principal, policyRevision: policy.policyRevision,
+        subject: { decisionSource: 'deckent-decision', evidenceBasis: 'workspace-read-guard', turnId: 'turn-deny',
+          target: { identity: null }, countBasis: 'exact', overflow: false } });
+      for (const { round, index, callId } of event.subject.samples)
+        expect(policy.subject.allowed.calls).toContainEqual(expect.objectContaining({ call: { round, index, callId } }));
+    }
+    expect(JSON.stringify(refusals)).not.toMatch(/diff\.txt|held\.txt|other\.json|ledger\.db/u);
   }, 30_000);
 
   // TL-C (D8): the compaction call runs without thinking when (and only when) the catalog declares the switch.
