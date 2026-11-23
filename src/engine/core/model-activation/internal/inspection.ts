@@ -9,7 +9,7 @@ export interface ModelActivationReader {
   close(): void;
 }
 export type ModelActivationInspection = Readonly<{ schemaVersion: 1; scopeId: string;
-  reference: ModelActivationQuery['reference']; activation: ModelActivationRecord | null; availability: 'not-observed' }>;
+  reference: ModelActivationQuery['reference']; activation: ModelActivationRecord | null; availability: 'not-observed'; governedUse?: 'outside-installation' }>;
 
 export class ModelActivationInspectionApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelActivationAuthorizer,

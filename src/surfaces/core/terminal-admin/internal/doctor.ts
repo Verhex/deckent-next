@@ -1,6 +1,6 @@
 import { messageText, t, type Locale, type OutputSink } from '#platform/index.js';
 import type { InfoChip, InfoChipState, InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
-import { filesystemIdentityText, type InstallationBindingReport } from '#surfaces/core/doctor/index.js';
+import { doctorHealthText, filesystemIdentityText, type InstallationBindingReport } from '#surfaces/core/doctor/index.js';
 
 /** `/doctor`: the very report `deckent doctor` prints, captured as lines (`run` is the CLI's own doctor command writing to this sink). */
 export async function doctorLines(run: (sink: OutputSink) => Promise<void>): Promise<readonly string[]> {
@@ -19,7 +19,7 @@ async function capture(run: (sink: OutputSink) => Promise<void>): Promise<string
 
 /** The fields of `deckent doctor --json` (schema 2) the window reads; every field is optional here and checked before use. */
 type DoctorJson = Partial<Readonly<{ schemaVersion: number; scope: string; platform: string; status: string;
-  summary: Readonly<{ ok: number; check: number; failed: number; untested: number; checks?: readonly { text: string; next?: string }[] }>;
+  summary: Readonly<{ ok: number; check: number; failed: number; untested: number; checks?: readonly { id?: string; text: string; next?: string }[] }>;
   host: Readonly<{ cpuCores: number; totalMemMB: number; recommendedMaxWorkers: number }>; company: Readonly<{ companyId: string }>; principal: Readonly<{ id: string }>;
   secretStore: Readonly<{ backend: string; status: string; code?: string | null }> | null; serviceConfig: string | null;
   imageRefresh: Readonly<{ status: string; reason: string | null; imageVersion: string | null }> | null;
@@ -123,10 +123,13 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
   }
   const totals = data?.summary;
   const hasTotals = totals && [totals.ok, totals.check, totals.failed, totals.untested].every(value => Number.isSafeInteger(value) && value >= 0);
-  const verdict = data?.status === 'degraded' ? t('doctor.summary.attention', {}, locale)
-    : data?.status === 'ready' ? t('doctor.summary.ready', {}, locale) : null;
+  const noPool = data?.poolReadiness?.status === 'unconfigured' || data?.poolReadiness?.status === 'missing';
+  const nameInstallation = noPool && Boolean(totals?.checks?.some(check => check.id === 'work.firstWorker'));
+  const verdict = data?.status === 'ready' || data?.status === 'degraded' ? doctorHealthText(data.status === 'degraded', locale, nameInstallation) : null;
   const untested = hasTotals && totals.untested ? t('doctor.summary.untested', { n: totals.untested }, locale) : null;
-  if (verdict || untested) sections.unshift({ notes: [[verdict, untested].filter(Boolean).join(' · '), ...(totals?.checks ?? []).map(check => [check.text, check.next].filter(Boolean).join(' · '))] });
+  if (verdict || untested) sections.unshift({ notes: [[verdict, untested].filter(Boolean).join(' · '), ...(totals?.checks ?? []).flatMap(check =>
+    (noPool && check.id === 'work.firstWorker' || check.id === 'work.governedSubscription') && check.next ? [check.text, check.next] :
+      [[check.text, check.next].filter(Boolean).join(' · ')])] });
   return { model: { title: t('terminal.info.doctor.title', {}, locale),
     chips: hasTotals ? [chip('ok'), chip('warn'), chip('fail')].map((value, index) => ({ ...value, text: `${[totals.ok, totals.check, totals.failed][index]} ${value.text}` })) : [chip('neutral')],
     summary: [...(verdict ? [verdict] : []), hasTotals ? t('terminal.info.doctor.summary', { ok: totals.ok, check: totals.check, failed: totals.failed, untested: totals.untested }, locale) : t('terminal.info.chip.unknown', {}, locale),

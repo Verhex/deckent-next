@@ -401,6 +401,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers); without it `/provider` shows the Claude
   sign-in row disabled with that reason and lists the providers usable instead. Alpha.62 added text chat; since alpha.63
   subscription chat uses deckent tools under policy and approval. The CLI's built-in tools stay disabled; the deckent MCP bridge is available after verification. *Workaround where the sandbox is missing:* use an Anthropic API key.
+- **A subscription sign-in folder outside deckent’s state can serve isolated one-shot model calls.** `deckent models connect --config-dir`
+  accepts the folder after its usual preflight. Governed chat with tools and workers require a sign-in folder inside deckent’s state.
+  From the owning person’s terminal, run `deckent models login --connection <connection>` without `--config-dir`, then reconnect the same
+  model with `deckent models connect` without `--config-dir`.
 - **Terminal chat needs a model connection and, for a paid API, a budget.** Claude and ChatGPT (Codex CLI) subscriptions support deckent tool chat;
   a paid API turn without a scope budget is refused. *Workaround:* sign in with Claude or ChatGPT in `/provider`, or
   connect an API key there, set a budget and choose `/model`.
@@ -1250,6 +1254,9 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   warning; no answer within the detection deadline reads "not tested". `deckent init`'s own final check does not repeat this probe.
   The interactive doctor offers only fixes that an existing product command applies (today: the worker tool update); making the
   installation folder private waits for its policy action, so that row shows the `chmod 700 <folder>` step to run yourself.
+  The opening summary in text, JSON and `/doctor` reports installation health and first-worker readiness separately. When there is
+  no worker pool, run `deckent` and open `/setup`. If the registry already names a pool, preview its setup with
+  `deckent init pool --scope <scope> --preview` and follow the apply step it prints.
 - **Commands that read the installation start in about 0.45–0.6 s** (`doctor`, `config`, `operation`, `approval`, `run`, the terminal)
   on a 16-core host, because Node loads ~1400 modules; `--version` and help start in about 0.12 s. Faster starts for the other
   commands are an open owner decision after beta (bundling or a module-boundary change).

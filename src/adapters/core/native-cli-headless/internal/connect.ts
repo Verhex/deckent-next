@@ -70,11 +70,12 @@ export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDef
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
  * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet), f5 its gateway refusals and s3c whether
  * its login dir is one of `ownedRoot` (the Brain's own login dirs, by realpath; null: none exists). */
-export async function readHeadlessLogins(section: unknown, scopeId: string, ownedRoot: string | null = null) {
-  const profiles = ((section as { profiles?: unknown } | undefined)?.profiles as { scopeId?: unknown; adapter?: { id: string; version: number; definition?: unknown } }[] | undefined) ?? [];
+export async function readHeadlessLogins<T extends object = Record<never, never>>(section: unknown, scopeId: string, ownedRoot: string | null = null,
+  describe?: (definition: NativeCliHeadlessDefinition, family: string | undefined) => Promise<T>) {
+  const profiles = ((section as { profiles?: unknown } | undefined)?.profiles as { id?: string; scopeId?: unknown; protocol?: { family?: string }; adapter?: { id: string; version: number; definition?: unknown } }[] | undefined) ?? [];
   const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
   return Promise.all(profiles.flatMap(profile => { const definition = profile.scopeId === scopeId && profile.adapter && isNativeCliHeadlessAdapter(profile.adapter)
-    ? nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition) : null; return definition?.success ? [definition.data] : []; }).map(async definition => {
+    ? nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition) : null; return definition?.success ? [{ definition: definition.data, family: profile.protocol?.family, profileId: profile.id }] : []; }).map(async ({ definition, family, profileId }) => {
     const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; refusal?: unknown; version?: unknown; updatedFrom?: unknown;
       auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } }, () => null);
     const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
@@ -85,6 +86,6 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
       consent: definition.delegatedUse?.classes ?? [], isolation,
       // S7: the CLI behind the connected path changed version since an earlier passing check (`doctor.headless.updated`).
       cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { cli: basename(definition.executable), from: text(record.updatedFrom)!, to: text(record.version)! } : null,
-      egress: await readEgress(definition.stateDir) });
+      egress: await readEgress(definition.stateDir), ...(profileId ? { profileId } : {}), ...await describe?.(definition, family) });
   }));
 }

@@ -5,7 +5,9 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { doctorChecks, firstJobStages, firstJobSteps, onboardingNext, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { planSetup, SetupStageRegistry, type SetupObservation } from '#engine/core/setup/index.js';
 import { WORK_SETUP_FAMILY, workerSetupStages } from '#engine/core/worker-setup/index.js';
+import { setupMessage } from '#surfaces/core/setup/index.js';
 
 // The work family's actual stage decisions replace the old parallel first-job registry.
 describe('U3-1a first-job states', () => {
@@ -24,6 +26,25 @@ describe('U3-1a first-job states', () => {
     const pool = doctorChecks(report, facts, 'en').find(row => row.id === 'work.pool');
     expect(pool).toMatchObject({ state: 'warning' });
     expect(pool?.next).toContain('/setup'); expect(pool?.next).not.toContain('deckent init');
+    const observation: SetupObservation = { schemaVersion: 2, environment: { platform: 'linux', node: 'supported' },
+      language: { configured: 'en', requested: null, system: null }, folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: null },
+      profile: { available: [], selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' }, sandbox: { realm: 'none', selfTest: 'not-run', usernsRestricted: false },
+      model: { connections: 1, selection: null }, check: { state: 'not-run' } };
+    const plan = (work: unknown) => planSetup({ ...observation, families: { work } }, { schemaVersion: 2 }, new SetupStageRegistry([WORK_SETUP_FAMILY]), { phase: 'onboarding' });
+    const configured = { execution: true, registry: true, pool: false, poolMissing: true };
+    const setupPool = plan(configured).stages.find(stage => stage.id === 'work:pool')!;
+    expect(setupPool).toMatchObject({ reason: { code: 'setup.work.firstWorkerPool' }, cli: ['deckent', 'init', 'pool', '--scope', 'erp-demo', '--preview'] });
+    expect(setupMessage(setupPool.reason.code, setupPool.reason.params, 'en')).toBe('The first worker cannot start because no worker pool is set up.');
+    expect(setupMessage(setupPool.reason.code, setupPool.reason.params, 'tr')).toBe('İşçi havuzu kurulmadığı için ilk işçi başlatılamıyor.');
+    const cli = ['deckent', 'models', 'login', '--connection', 'claude-cli-subscription'];
+    const blockedKind = plan({ ...configured, workerReadiness: { ready: false, code: 'HEADLESS_STATE_OUTSIDE_INSTALLATION', cli } }).stages.find(stage => stage.id === 'work:kind')!;
+    expect(blockedKind).toMatchObject({ state: 'blocked', reason: { code: 'setup.work.governedUseBlocked' }, cli });
+    expect(setupMessage(blockedKind.reason.code, blockedKind.reason.params, 'en')).toContain('Governed chat and workers are not ready');
+    expect(setupMessage(blockedKind.reason.code, blockedKind.reason.params, 'tr')).toContain(cli.join(' '));
+    const models = Array.from({ length: 20 }, (_, index) => `claude-cli-subscription/fixture-model-on-this-channel-${index}`);
+    const readyKind = plan({ ...configured, pool: true, workerTemplate: 'subscription-template', activeWorkerModels: models }).stages.find(stage => stage.id === 'work:kind')!;
+    expect(readyKind).toMatchObject({ state: 'done', reason: { code: 'setup.work.kindSubscription', params: { template: 'subscription-template' } } });
+    expect(readyKind.reason.params['active']).toEqual(expect.stringMatching(new RegExp(`^${models[0]}, .+, …$`, 'u')));
     // R8b (owner D1): a chosen subscription connection declares the first kind without an image; its execution stages need only the Git found here.
     const connection = { id: 'claude-subscription', provider: 'claude' }, work = { execution: true, registry: false, pool: false, connection }, kind = WORK_SETUP_FAMILY.stages[0]!;
     const answer = { connection: connection.id }, at = (facts: unknown) => ({ facts, scopeId: 'erp-demo', answer, states: new Map() });

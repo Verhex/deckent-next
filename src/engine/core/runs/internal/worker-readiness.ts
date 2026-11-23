@@ -6,7 +6,7 @@ type Template = Readonly<{ profile: ExecutionProfileDefinition; provider: string
 /** Same small assignment and model admission as a Run, followed by its existing same-login binding check. Reads only. */
 export async function inspectWorkerReadiness(registry: ExecutionRegistry, templates: readonly Template[], reader: ModelCatalogReader, context: WorkerAssignmentContext,
   compile: (template: ExecutionProfileDefinition, input: WorkInput, evidence?: CatalogPinModelEvidence) => ExecutionProfileDefinition,
-  connected: (template: ExecutionProfileDefinition, model: NonNullable<WorkInput['model']>) => Promise<boolean>, targetKind: string): Promise<WorkerReadiness | null> {
+  connected: (template: ExecutionProfileDefinition, model: NonNullable<WorkInput['model']>) => Promise<boolean | WorkerReadiness>, targetKind: string): Promise<WorkerReadiness | null> {
   const missing = (code: string, cli: readonly string[]): WorkerReadiness => ({ ready: false, code, cli });
   const { policy, workClass } = resolveTaskWorkClass('small', undefined, registry.workClasses), scopeId = context.scopeId;
   const candidates = workClass && resolveWorkClassCandidates(policy, workClass), channels = await reader.channels();
@@ -22,7 +22,9 @@ export async function inspectWorkerReadiness(registry: ExecutionRegistry, templa
   try {
     const assigned = await assignTaskWorker({ id: kind.kind, kind: kind.kind, workClass: workClass?.id }, input, template, registry.workClasses, reader, compile, context, row => skipped.push(row));
     const model = assigned.input.model!;
-    if (!await connected(template, model)) return missing('WORKER_MODEL_BINDING_MISMATCH', ['deckent', 'models', 'connect', '--scope', scopeId, '--connection', model.channelId, '--model', model.modelId]);
+    const connection = await connected(template, model);
+    if (typeof connection !== 'boolean') return connection;
+    if (!connection) return missing('WORKER_MODEL_BINDING_MISMATCH', ['deckent', 'models', 'connect', '--scope', scopeId, '--connection', model.channelId, '--model', model.modelId]);
     return { ready: true, code: '', cli: [] };
   } catch (error) {
     if (!(error instanceof WorkerModelAdmissionError)) throw error;

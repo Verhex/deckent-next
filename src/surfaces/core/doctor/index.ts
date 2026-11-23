@@ -1,6 +1,6 @@
 export { renderAuditStatus, renderAuditReason } from './internal/audit.js';
 export { renderDoctorReport } from './internal/report.js';
-export { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks } from './internal/checks.js';
+export { DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorHealthText, doctorNeedsAttention, renderDoctorChecks } from './internal/checks.js';
 export { workerReadinessText, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext, poolProvisioned, type FirstJobFacts } from './internal/first-job.js';
 export type { DoctorCheck, DoctorCheckFacts, ExecutionEnvironmentDoctorView } from './internal/checks.js';
 export type { DoctorRenderInput, InstallationBindingReport, RecoveryFilesDoctorView, ShellRealmDoctorView } from './internal/report.js';

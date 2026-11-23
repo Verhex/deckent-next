@@ -57,7 +57,7 @@ export async function statusView(call: TerminalAdminCall, report: () => Promise<
   const modelRow: InfoRow = !facts.model ? { key: t('terminal.info.status.key.model', {}, locale), value: t('terminal.admin.status.modelUnread', {}, locale), chip: { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) } }
     : !model ? { key: t('terminal.info.status.key.model', {}, locale), value: t('terminal.admin.status.noModel', {}, locale), chip: { state: 'warn', text: t('terminal.info.chip.check', {}, locale) } }
       : { key: t('terminal.info.status.key.model', {}, locale), value: model.short, chip: model.status === 'ready' ? { state: 'ok', text: t('terminal.info.status.chip.ready', {}, locale) }
-        : { state: 'warn', text: t('terminal.info.status.chip.notDeclared', {}, locale) } };
+        : { state: 'warn', text: model.status === 'outside-installation' ? t('headless.governedUse.notReady', {}, locale) : t('terminal.info.status.chip.notDeclared', {}, locale) } };
   const service = facts.service;
   const serviceSection: InfoSection = 'note' in service ? { title: t('terminal.info.status.section.service', {}, locale), chip: stateChip, notes: [service.note] }
     : { title: t('terminal.info.status.section.service', {}, locale), chip: stateChip, rows: [

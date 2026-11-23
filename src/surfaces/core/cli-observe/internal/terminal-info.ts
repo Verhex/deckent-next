@@ -1,32 +1,33 @@
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, headlessGovernedUseText, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { readInferenceServingProfile } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 
-/** The chat plan the terminal reports (the `cli-terminal` view, read structurally; no field is added to it). */
+/** The chat plan the terminal reports, read structurally from the `cli-terminal` view. */
 type ChatPlan = Readonly<{ status: string; reference: Readonly<{ providerId: string; modelId: string; modelVersion: number }> | null;
-  tools?: 'available' | 'none' | 'unknown' | 'unverified'; source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
+  tools?: 'available' | 'none' | 'unknown' | 'unverified'; governedUse?: 'outside-installation'; source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
 export interface TerminalInfoContext extends CliBaseContext {
-  describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<ChatPlan>;
+  describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions, scopeId?: string) => Promise<ChatPlan>;
 }
 const ACTIONS = new Set(['status', 'chat-plan', 'snapshot']);
 
 /** Flags these three actions accept (the terminal parser's own set for them); anything else is left to that parser to refuse. */
-function scan(argv: readonly string[]): Readonly<{ json: boolean; help: boolean; language?: string }> | null {
-  let json = false, help = false, language: string | undefined;
+function scan(argv: readonly string[]): Readonly<{ json: boolean; help: boolean; language: string | undefined; scopeId: string | undefined }> | null {
+  let json = false, help = false, language: string | undefined, scopeId: string | undefined;
   for (let index = 2; index < argv.length; index++) {
     const key = argv[index]!;
     if (key === '--json') json = true;
     else if (key === '--help' || key === '-h') help = true;
     else if (key === '--no-color') continue;
-    else if (key === '--lang' || key === '--scope') { const value = argv[++index]; if (!value || value.startsWith('-')) return null; if (key === '--lang') language = value; }
+    else if (key === '--lang' || key === '--scope') { const value = argv[++index]; if (!value || value.startsWith('-')) return null; if (key === '--lang') language = value; else scopeId = value; }
     else return null;
   }
-  return { json, help, ...(language ? { language } : {}) };
+  return { json, help, language, scopeId };
 }
 
 function chatPlanText(plan: ChatPlan, locale: Locale): string {
   const model = plan.reference ? `${plan.reference.providerId}/${plan.reference.modelId}@${plan.reference.modelVersion}` : null;
-  const status = plan.status === 'ready' ? t('cli.terminalInfo.chat.ready', {}, locale) : plan.status === 'model-not-declared'
+  const limit = plan.governedUse ? headlessGovernedUseText(locale, plan.reference?.providerId) : null;
+  const status = limit ? t('headless.governedUse.notReady', {}, locale) : plan.status === 'ready' ? t('cli.terminalInfo.chat.ready', {}, locale) : plan.status === 'model-not-declared'
     ? t('cli.terminalInfo.chat.notDeclared', {}, locale) : t('cli.terminalInfo.chat.notConfigured', {}, locale);
   const source = plan.source === 'session' ? t('cli.terminalInfo.source.session', {}, locale) : plan.source === 'project' ? t('cli.terminalInfo.source.project', {}, locale)
     : plan.source === 'user-default' ? t('cli.terminalInfo.source.userDefault', {}, locale) : plan.source === 'user' ? t('cli.terminalInfo.source.user', {}, locale) : plan.source === 'connected' ? t('cli.terminalInfo.source.connected', {}, locale)
@@ -36,7 +37,7 @@ function chatPlanText(plan: ChatPlan, locale: Locale): string {
     ...(model ? [t('cli.terminalInfo.chat.model', { model, source }, locale)] : [t('cli.terminalInfo.chat.next', {}, locale)]),
     ...(plan.maxCompletionTokens === null && plan.historyMessages === null ? []
       : [t('cli.terminalInfo.chat.limits', { tokens: value(plan.maxCompletionTokens), history: value(plan.historyMessages) }, locale)]),
-    plan.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : plan.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale),
+    ...(limit ? [limit.text, limit.next] : [plan.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : plan.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale)]),
     t('cli.terminalInfo.reachability', {}, locale)].join('\n'));
 }
 
@@ -68,5 +69,5 @@ export async function terminalInfoCommand(argv: readonly string[], context: Term
   const locale = resolveLocale(flags.language, env, config.language);
   context.onLocale?.(locale);
   if (!context.describeTerminalChatPlan) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  emit(chatPlanText(await context.describeTerminalChatPlan(root, options), locale), { ...(context.stdout ? { stdout: context.stdout } : {}) });
+  emit(chatPlanText(await context.describeTerminalChatPlan(root, options, flags.scopeId), locale), { ...(context.stdout ? { stdout: context.stdout } : {}) });
 }

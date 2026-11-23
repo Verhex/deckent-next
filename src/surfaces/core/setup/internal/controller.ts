@@ -130,5 +130,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     await offerExecution();
     return !executionNotice?.interrupted;
   };
-  return { model, step, runPending, offerExecution, interrupted: () => executionNotice?.interrupted, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
+  return { model, step, runPending, offerExecution, interrupted: () => executionNotice?.interrupted, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results],
+    ...(observed.firstJob ? { firstJob: observed.firstJob } : {}),
+    model: observed.observation.model }) };
 }

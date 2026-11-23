@@ -1,11 +1,11 @@
-import { ErrorRegistry, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
-import { workerReadinessText, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
+import { workerReadinessText, workerReadinessNext, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
@@ -51,7 +51,7 @@ export interface DoctorCheckFacts {
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
     cliUpdated?: Readonly<{ cli: string; from: string; to: string }> | null;
-    owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
+    owned?: boolean; connection?: string; profileId?: string; governedUse?: 'outside-installation'; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
     /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
     egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
@@ -194,7 +194,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
-    : f.poolStatus === 'ready' && f.workerReadiness?.ready === false ? { ...row('work', 'work.pool', 'warning', workerReadinessText(f.workerReadiness.code, l), f.workerReadiness.cli.join(' ')), needsAttention: true }
+    : f.poolStatus === 'ready' && f.workerReadiness?.ready === false ? { ...row('work', 'work.pool', 'warning', workerReadinessText(f.workerReadiness.code, l), workerReadinessNext(f.workerReadiness, l)), needsAttention: true }
     : f.poolStatus === 'ready' && f.workerReadiness === null ? { ...row('work', 'work.pool', 'untested', t('setup.work.workerUnknown', {}, l), scoped('deckent doctor', f)), needsAttention: true }
     : f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
@@ -267,11 +267,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
-    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? t('doctor.headless.notOwned', {}, l) : '';
-    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect', f);
-    rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own, login.owned === false ? next : undefined)
-      : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
-        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused,
+    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false && !login.governedUse ? t('doctor.headless.notOwned', {}, l) : '';
+    const limit = login.governedUse ? headlessGovernedUseText(l, login.connection) : null;
+    const next = limit?.next ?? (login.owned === false && login.connection ? `deckent models login --connection ${login.connection}` : login.state === 'open' ? undefined : scoped('deckent models connect', f));
+    rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', limit ? 'warning' : 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own + (limit ? ` · ${limit.text}` : ''), limit || login.owned === false ? next : undefined)
+      : row('work', 'work.brainLogin', login.state === 'open' && !limit ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
+        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused + (limit ? ` · ${limit.text}` : ''),
       next));
   }
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
@@ -358,13 +359,15 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
   const docker = f.firstWorkerImage ? checks.find(check => check.id === 'work.docker') : undefined;
   const image = f.firstWorkerImage === 'configured' ? checks.find(check => check.id === 'work.workerImage') : undefined;
   const firstRow = (state: DoctorCheckState, text: string, next?: string) => row('work', 'work.firstWorker', state, text, next);
+  const workerRow = worker?.ready === false ? firstRow('warning', workerReadinessText(worker.code, locale), workerReadinessNext(worker, locale)) : null;
   const blocked = (reason: string, next?: string) => firstRow('warning', t('doctor.firstWorker.blocked', { reason }, locale), next);
   const unknown = (next?: string) => firstRow('untested', t('doctor.firstWorker.unmeasured', {}, locale), next ?? scoped('deckent doctor', f));
   const poolStatus = scoped('deckent pool status', f);
   const poolMissing = f.poolStatus === 'unconfigured' || f.poolStatus === 'missing';
-  const first = poolMissing ? firstRow('warning',
-    t('doctor.firstWorker.pool', { state: f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, locale) : t('doctor.check.pool.unconfigured', {}, locale) }, locale),
-    pool?.next ?? onboardingNext(t('doctor.firstJob.pool', {}, locale), locale))
+  const setupPool = poolMissing && f.poolStatus === 'missing' && f.firstJob && firstJobStages({ ...f.firstJob, pool: false }, f.scopeId)
+    .find(step => step.id === 'work:pool' && step.state === 'ready')?.cli;
+  const first = poolMissing ? firstRow('warning', t('doctor.firstWorker.pool', {}, locale),
+    setupPool ? setupPool.join(' ') : t('doctor.firstWorker.poolNext', {}, locale))
     : f.poolHeld ? blocked(t('monitor.blocker.poolHeld', {}, locale), poolStatus)
     : f.poolStatus === 'drift' && pool ? blocked(pool.text, pool.next)
     : f.poolHasRoom === false ? blocked(t('monitor.blocker.waitingPoolSlot', {}, locale), poolStatus)
@@ -372,7 +375,7 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
     : kind?.reason === 'image-missing' && kindCheck ? blocked(kindCheck.text, kindCheck.next)
     : docker && (docker.state === 'error' || docker.state === 'warning') ? blocked(docker.text, docker.next)
     : startupBlock ? blocked(startupBlock.text, startupBlock.next)
-    : worker?.ready === false ? firstRow('warning', workerReadinessText(worker.code, locale), worker.cli.join(' '))
+    : workerRow ? workerRow
     : f.poolStatus !== 'ready' || f.poolHeld !== false || f.poolHasRoom !== true ? unknown(poolStatus)
     : kindCheck ? firstRow('untested', kindCheck.text, kindCheck.next)
     : f.firstWorkerImage && (docker?.state !== 'ok' || (f.firstWorkerImage === 'configured' ? image?.state !== 'ok' : f.firstWorkerImage !== 'kind' || !kind))
@@ -384,8 +387,11 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
   const text = !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
     : permission.restricted ? t('doctor.aiExecution.restricted', params, locale) : permission.allowed ? t('doctor.aiExecution.partial', params, locale)
     : t('doctor.aiExecution.absent', params, locale);
+  const external = new Set(f.headlessLogins?.filter(login => login.governedUse).map(login => login.connection));
+  if (first === workerRow && worker?.code === 'HEADLESS_STATE_OUTSIDE_INSTALLATION') external.delete(worker.cli.at(-1));
   return [first, row('work', 'work.aiExecution', complete ? 'ok' : permission ? 'warning' : 'untested', text,
-    complete || !f.scopeId ? undefined : `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview`)];
+    complete || !f.scopeId ? undefined : `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview`),
+  ...[...external].map(connection => { const limit = headlessGovernedUseText(locale, connection); return row('work', 'work.governedSubscription', 'warning', limit.text, limit.next); })];
 }
 
 /** One health verdict for JSON and the human summary; unverified health is never ready. */
@@ -399,18 +405,23 @@ export function doctorCounts(checks: readonly DoctorCheck[]) {
   return { ok: count('ok'), check: count('warning'), failed: count('error'), untested: count('untested') };
 }
 
-export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale): string {
+export function doctorHealthText(attention: boolean, locale: Locale, nameInstallation = false): string {
+  if (nameInstallation) return attention ? t('doctor.summary.installationAttention', {}, locale) : t('doctor.summary.installationReady', {}, locale);
+  return attention ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale);
+}
+
+export function doctorSummary(checks: readonly DoctorCheck[], locale: Locale, nameInstallation = false): string {
   const { failed: errors, check: warnings, untested } = doctorCounts(checks);
-  return [doctorNeedsAttention(checks) ? t('doctor.summary.attention', {}, locale) : t('doctor.summary.ready', {}, locale),
+  return [doctorHealthText(doctorNeedsAttention(checks), locale, nameInstallation),
     ...(errors ? [t('doctor.summary.errors', { n: errors }, locale)] : []), ...(warnings ? [t('doctor.summary.warnings', { n: warnings }, locale)] : []),
     ...(untested ? [t('doctor.summary.untested', { n: untested }, locale)] : []), ...(!errors && !warnings ? [t('doctor.summary.clean', {}, locale)] : [])].join(' · ');
 }
 
 /** The grouped human view: summary, then each group with a word marker per row and its next step on the line below. */
-export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale, readiness: readonly DoctorCheck[] = []): string {
+export function renderDoctorChecks(checks: readonly DoctorCheck[], locale: Locale, readiness: readonly DoctorCheck[] = [], nameInstallation = false): string {
   const marks = { ok: markWord('ok', locale), warning: markWord('warning', locale), error: markWord('error', locale), untested: markWord('untested', locale) };
   const width = Math.max(...Object.values(marks).map(mark => mark.length));
-  const lines = [doctorSummary(checks, locale), ...readiness.map(check => [check.text, check.next].filter(Boolean).join(' · '))];
+  const lines = [doctorSummary(checks, locale, nameInstallation), ...readiness.map(check => [check.text, check.next].filter(Boolean).join(' · '))];
   for (const group of registry.groups as DoctorGroup[]) {
     const rows = checks.filter(check => check.group === group);
     if (!rows.length) continue;

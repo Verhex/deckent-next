@@ -201,12 +201,21 @@ describe('information windows on the real workline (SW-1)', () => {
       const report = JSON.parse(json.trim().split('\n').at(-1)!);
       expect(report.poolReadiness.status).toBe('unconfigured');
       expect(report.summary.check).toBeGreaterThan(0);
+      const firstWorker = locale === 'en' ? 'The first worker cannot start because no worker pool is set up.'
+        : 'İşçi havuzu kurulmadığı için ilk işçi başlatılamıyor.';
+      const next = locale === 'en' ? 'Run deckent, then open /setup.' : 'deckent komutunu çalıştırın, ardından /setup açın.';
+      expect(report.summary.checks[0]).toMatchObject({ id: 'work.firstWorker', state: 'warning', text: firstWorker, next });
       await runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: { write: chunk => { human += chunk; } } });
       expect(human).toContain(t('doctor.summary.warnings', { n: report.summary.check }, locale));
       const ports = admin(root, {}, { locale, doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) });
       const model = (await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
-      expect(model.summary).toBe(`${t('doctor.summary.ready', {}, locale)} · ${t('terminal.info.doctor.summary', report.summary, locale)} · ${t('doctor.summary.untested', { n: report.summary.untested }, locale)}`);
+      const health = locale === 'en' ? 'Installation health: ready' : 'Kurulum sağlığı: hazır';
+      expect(report.status).toBe('ready');
+      expect(human.split('\n')[0]).toContain(health);
+      expect(model.summary).toBe(`${health} · ${t('terminal.info.doctor.summary', report.summary, locale)} · ${t('doctor.summary.untested', { n: report.summary.untested }, locale)}`);
       expect(model.sections.find(section => section.title === t('terminal.info.doctor.section.pools', {}, locale))?.chip?.state).toBe('warn');
+      expect(human.split('\n').slice(0, 4).join('\n')).toContain(firstWorker);
+      expect(infoModelText(model).slice(0, 7)).toEqual(expect.arrayContaining([firstWorker, next]));
       expect(infoModelText(model).join('\n')).not.toContain('could not be read');
     }
   });

@@ -103,8 +103,8 @@ describe('K1 real binary journeys', () => {
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
     // F12: the human text carries the same overall verdict as the JSON (here degraded: startability is blocked).
-    // (J3 d082a9a7: --verbose states the status once, in the grouped summary's words; degraded JSON = "needs attention" with its errors.)
-    expect((await f.run(['doctor', '--verbose']).catch(error => error)).stdout).toMatch(/^Status: needs attention · \d+ error\(s\)/u);
+    // The no-pool summary names installation health and gives the worker blocker separately.
+    expect((await f.run(['doctor', '--verbose']).catch(error => error)).stdout).toMatch(/^Installation health: needs attention · \d+ error\(s\)[^\n]*\nThe first worker cannot start because no worker pool is set up\. · Run deckent, then open \/setup\./u);
     expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
     expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen işçi');
     expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');

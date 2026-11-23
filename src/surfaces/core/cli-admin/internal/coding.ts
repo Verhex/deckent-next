@@ -1,11 +1,12 @@
 import { resolve } from 'node:path';
-import { isCodedError, ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, headlessGovernedUseText, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, NATIVE_CLI_WORKER_ADAPTER_ID, nativeCliWorkerWrapperSchema, executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { affectedToolchainProfiles, configWriteOperation, configuredInvocationProfiles, modelInvocationProfileDigest } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { codingInstructionsCommand } from './worker-instructions.js';
+import { assessPoolReadiness } from './pool.js';
 
 export type CodingProfilePreparationHandler = (input: unknown) => Readonly<{
   schemaVersion: 1; profile: ExecutionProfileDefinition; activation: 'not-activated';
@@ -89,16 +90,36 @@ function codingProfiles(config: DeckentConfig, pins: Pins, connections: readonly
 async function codingList(argv: readonly string[], context: AdminCommandContext): Promise<void> {
   const { values, flags } = readFlags(argv, 1, ['--json', '--lang']);
   const locale = commandLocale(context, values.get('--lang'));
-  const config = await loadConfig(context.root ?? process.cwd(), { env: context.env ?? process.env, heal: false });
-  const workerKinds = await context.inspectWorkerKinds?.(context.root ?? process.cwd(), { env: context.env ?? process.env, heal: false });
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false };
+  const config = await loadConfig(root, options);
+  const workerKinds = await context.inspectWorkerKinds?.(root, options);
   const all = configuredInvocationProfiles(config), profiles = codingProfiles(config, affectedToolchainProfiles(config), all), configured = config.execution?.docker?.imageId ?? null;
+  const scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+  const pool = await assessPoolReadiness(root, context, options, config.admission, scopeId);
   // The configured image runs none of the admitted CLIs: `coding template` without `--image` would find no toolchain there.
-  const connections = all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID).map(row => ({ id: row.id, scopeId: row.scopeId, protocolFamily: row.protocol.family }));
+  const subscriptions: { profile: Connection; governedUse: 'outside-installation' | 'unverified' | undefined }[] = [];
+  for (const profile of all.filter(row => row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)) {
+    const { scopeId, reference } = profile;
+    const observed = await context.inspectModelActivation?.(root, { schemaVersion: 1, scopeId, reference }, options).catch(() => null);
+    subscriptions.push({ profile, governedUse: observed ? observed.governedUse : 'unverified' });
+  }
+  const connections = subscriptions.map(({ profile, governedUse }) => ({ id: profile.id, scopeId: profile.scopeId, protocolFamily: profile.protocol.family,
+    ...(governedUse ? { governedUse } : {}) }));
+  const missingPool = pool.status === 'missing' || pool.status === 'unconfigured';
   const unused = configured !== null && profiles.some(row => row.runtime === 'container' && row.provider) && !profiles.some(row => row.imageId === configured);
-  emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured, workerKinds: workerKinds ?? null }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
+  emit({ schemaVersion: 1 as const, profiles, connections, configuredImageId: configured, workerKinds: workerKinds ?? null,
+    ...(missingPool ? { poolStatus: pool.status } : {}) }, { ...sinksOf(context), json: flags.has('--json'), render: data => {
     const label = (id: string | null) => connectionLabel(cliOf(context), all.find(row => row.id === id));
-    const available = t('coding.connections', { connections: data.connections.map(row => label(row.id)).join(', ') || '-' }, locale);
-    if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available].join('\n');
+    const available = t('coding.connections', { connections: subscriptions.map(({ profile }) => connectionLabel(cliOf(context), profile)).join(', ') || '-' }, locale);
+    const limits = subscriptions.flatMap(({ profile, governedUse }) => {
+      if (!governedUse) return [];
+      const connection = connectionLabel(cliOf(context), profile);
+      if (governedUse === 'unverified') return [`${connection} · ${t('coding.connections.unverified', { scope: profile.scopeId }, locale)}`];
+      const limit = headlessGovernedUseText(locale, profile.reference.providerId);
+      return [`${connection} (${profile.scopeId}) · ${limit.text}`, limit.next];
+    });
+    if (missingPool) limits.push(t('doctor.firstWorker.pool', {}, locale), pool.status === 'missing' ? `deckent init pool --scope ${scopeId} --preview` : t('doctor.firstWorker.poolNext', {}, locale));
+    if (!data.profiles.length) return [t('clisetup.coding.none', {}, locale), available, ...limits].join('\n');
     const columns = t('coding.columns', {}, locale).split('|').map((header, index) => ({ header, shrink: index === 1 }));
     return [t('clisetup.coding.title', { count: data.profiles.length }, locale),
       renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
@@ -106,7 +127,7 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
       t('clisetup.coding.configuredImage', { image: shortImage(configured) }, locale), ...(unused ? [t('clisetup.coding.imageUnused', {}, locale)] : []),
       ...(data.workerKinds ?? []).flatMap(row => row.reason ? [row.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: row.kind }, locale) : t('worker.kind.image-unverified', { kind: row.kind }, locale),
         row.rebind ? t('worker.kind.rebind', { kind: row.kind }, locale) : t('worker.kind.restore', { kind: row.kind }, locale)] : []),
-      available, t('clisetup.coding.next', {}, locale)].join('\n');
+      available, ...limits, t('clisetup.coding.next', {}, locale)].join('\n');
   } });
 }
 

@@ -59,7 +59,7 @@ export type ModelConnectResult = Readonly<{
    * (Budget: 0 USD; priced turns stay refused until the person sets one) or `unknown` (not readable for this caller, with the typed code). */
   budget?: Readonly<{ state: 'present' | 'missing' | 'unknown'; code?: string }>;
   /** S3-3, a CLI kind only: the connected login directory (s3c `owned`: the Brain's own) and who besides the person may spend it (empty: nobody). */
-  cli?: Readonly<{ configDir: string; owned?: boolean; delegate: readonly ('ai' | 'system')[] }>;
+  cli?: Readonly<{ configDir: string; owned?: boolean; delegate: readonly ('ai' | 'system')[]; governedUse?: 'outside-installation' }>;
   /** Owner 2026-10-31, a headless worker kind only (additive): the worker model activation; `image-required` = no admitted worker image for at least one
    * connected model, so it was connected for one-shot model calls only. */
   worker?: 'written' | 'present' | 'image-required';

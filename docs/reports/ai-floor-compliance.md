@@ -2395,7 +2395,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/attempt/internal/reduce.ts`: `c658466002047df6178eabff46ae069c9dbee9d075a4fa95181ba191a754d98c`
 - `src/domain/core/model-activation/index.ts`: `5fc222f01d12f2f6b687a8a21c9138d85ecac49ae65b58f87050ea3bc4ba65c7`
 - `src/domain/core/model-activation/internal/catalog.ts`: `1a0843d848f19a65eaa12664a3fa128be0f94952558580971ea127716e73e1c1`
-- `src/domain/core/model-activation/internal/connect.ts`: `e1b91f8a68c52e31abd3ab96e96e560cc04f6ed6601f76396b4ff64ec53e983c`
+- `src/domain/core/model-activation/internal/connect.ts`: `cec76cf4f2b0dc0e809f422e6d37ed13d6190a67317e0f017b5a3e864f49dc61`
 - `src/domain/core/model-activation/internal/contract.ts`: `7dc2207f6f75c5f258c474865bf37b6ba8167c79a2400a80368f0c8bf83fdf68`
 - `src/domain/core/model-activation/internal/query.ts`: `0bb322eac9c158a10361d080b3d226b201a86e8ec3f1ea9dafc45e2b301f5386`
 - `src/domain/core/model-activation/internal/transition.ts`: `e59b1cee0249011fae07d8bbba9fe147dc92b389d9481433b51a1a5c84c6e8c4`

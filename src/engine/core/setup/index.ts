@@ -2,7 +2,7 @@ export { planSetup } from './internal/plan.js';
 export { SetupStageRegistry } from './internal/registry.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SetupFamilyEntry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SetupFamilyStage } from './internal/registry.js';
 export { CORE_SETUP_STAGES, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SETUP_STAGE_STATES, setupObservationSchema, setupAnswersSchema, setupDecisionSchema,
-  setupProfileRefSchema } from './internal/contract.js';
+  setupProfileRefSchema, SETUP_MESSAGE_PARAMETER_MAX_LENGTH } from './internal/contract.js';
 export type { CoreSetupStageId, SetupAnswers, SetupDecision, SetupFamilyPackage, SetupObservation, SetupOperation, SetupPlan, SetupStage, SetupStageContext,
   SetupStageState, SetupPhase } from './internal/contract.js';
 export { ExecutionEnvironmentInstallApplication, policyExecutionInstallAuthorization } from './internal/install.js';

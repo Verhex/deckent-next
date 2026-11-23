@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, messageText, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, messageText, emit, headlessGovernedUseText, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { askModelsCard, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
@@ -57,6 +57,10 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
   // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote), in the consent card's words (R1b).
   if (result.cli) lines.push(result.cli.owned ? t('headless.connect.loginOwned', { dir: result.cli.configDir }, locale) : t('headless.connect.login', { dir: result.cli.configDir }, locale), result.cli.delegate.length
     ? t('headless.connect.delegated', { classes: result.cli.delegate.map(id => id === 'ai' ? t('tui.provider.login.ai', {}, locale) : t('tui.provider.login.system', {}, locale)).join('; ') }, locale) : t('headless.connect.personOnly', {}, locale));
+  if (result.status === 'connected' && result.cli?.governedUse) {
+    const { text, next } = headlessGovernedUseText(locale, result.connection);
+    lines.push(t('headless.connect.oneShot', {}, locale), text, next);
+  }
   return lines.join('\n');
 }
 
