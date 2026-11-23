@@ -16,7 +16,6 @@ import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { plainText, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { WORKER_LINE_EN } from '../support/worker-line-labels.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
@@ -24,7 +23,7 @@ import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
 /** T3 L5: `/monitor` and `/tasks` as bounded modal windows. */
 const ESC = '\u001B';
 const EN = workSurfaceLabels('en'), TR = workSurfaceLabels('tr');
-const labelsOf = (work: typeof EN): LiveWindowRenderLabels => ({ live: work.live!, panel: work.panel, workerLine: WORKER_LINE_EN });
+const labelsOf = (work: typeof EN): LiveWindowRenderLabels => ({ live: work.live!, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs });
 const worker = (index: number): WorkLedgerWorkerEntry => ({ schemaVersion: 1, kind: 'worker', id: `w-${index}`, scopeId: 'scope-a', taskId: `task-${index}`, process: 'running',
   provider: 'docker', authority: 'next-ledger', ordinal: index + 1 });
 const run = (index: number, extra: Partial<WorkLedgerRunEntry> = {}): WorkLedgerRunEntry => ({ schemaVersion: 1, kind: 'run', id: `r-${index}`, runId: `run-${index}`, scopeId: 'scope-a',
@@ -36,14 +35,15 @@ describe('live window content (pure)', () => {
       const labels = labelsOf(work);
       const rows = (kind: 'workers' | 'tasks', data: { workers: WorkLedgerWorkerEntry[]; runs: WorkLedgerRunEntry[] }) => liveWindowLines(kind, data, labels).map(line => plainText(line.spans));
       expect(rows('workers', { workers: [], runs: [] }), locale).toEqual([work.live!.empty]);
-      expect(rows('workers', { workers: [worker(0)], runs: [] })[0]).toContain('Task 1');
+      expect(rows('workers', { workers: [worker(0)], runs: [] })[0]).toContain(locale === 'en' ? 'Task 1' : 'Görev 1');
       const tasks = rows('tasks', { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] });
       expect(tasks[0]).toBe(work.panel.title); expect(tasks).toContain(work.live!.runsTitle); expect(tasks).toContain('');
       expect(tasks.at(-1)).toContain(shortId('run-0'));
       // F2-3: a generated 64-hex Run id shows its 8-character head; a human id stays whole (F2-6 `notlar-s`).
       expect([shortId('0ab01bb5'.padEnd(64, 'c')), shortId('notlar-satiri-ekle')]).toEqual(['0ab01bb5', 'notlar-satiri-ekle']);
       expect(rows('tasks', { workers: [], runs: [] }), locale).toEqual([work.panel.title, work.live!.empty, '', work.live!.runsTitle, work.live!.empty]);
-      expect(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
+      expect.soft(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 observed worker(s) · 2 listed Run(s)' : '1 gözlemlenen işçi · 2 listelenen iş');
+      expect.soft(liveWindowStatus({ workers: [], runs: [run(0)] }, labels)).toBe(locale === 'en' ? '0 observed worker(s) · 1 listed Run(s)' : '0 gözlemlenen işçi · 1 listelenen iş');
       expect(liveWindowClosedText({ workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');
     }
   });
@@ -84,18 +84,32 @@ describe('live windows in the workline', () => {
   const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
 
   it('/tasks shows workers and runs together, updates in place, and Esc closes it, stops the feed and leaves the summary', async () => {
-    let count = 1, calls = 0;
-    const inspected = vi.fn(async (runId: string) => ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ phase: 'active' }] }) as never);
-    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async listRunIds() { return ['run-a']; }, inspectRun: inspected } }); mounted.push(view.instance);
-    await settle(20); view.stdin.write('/tasks\r');
-    await until(() => view.stdout.frame.includes(EN.live!.tasksTitle) && view.stdout.frame.includes('Task 1') && view.stdout.frame.includes('rev 3'), 'both lists in one window');
-    expect(view.stdout.frame).toContain(EN.live!.runsTitle); expect(view.stdout.frame).toContain('1 workers · 1 runs');
-    count = 2; await until(() => view.stdout.frame.includes('Task 2 · docker'), 'the second worker appears in the open window');
-    // In place: one row each, no card appended to the scrollback.
-    expect(occurrences(view.stdout.frame, 'Task 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'Task 2 · docker')).toBe(1);
-    view.stdin.write(ESC);
-    await until(() => !view.stdout.frame.includes(EN.live!.tasksHints!) && view.stdout.frame.includes('2 workers and 1 runs at the last read'), 'closed with the summary');
-    const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
+    for (const [locale, work] of [['en', EN], ['tr', TR]] as const) {
+      let count = 0, calls = 0;
+      const inspected = vi.fn(async (runId: string) => ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false,
+        state: { kind: 'parked', reason: 'environment-not-ready', since: 1, failureCode: 'NOT_READY' }, tasks: [{ phase: 'active' }] }) as never);
+      const labels = { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, live: work.live, jobs: work.jobs, workerLine: work.workerLine } };
+      const view = mountWorkline({ labels, pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async listRunIds() { return ['run-a']; }, inspectRun: inspected } }); mounted.push(view.instance);
+      const task = locale === 'en' ? 'Task' : 'Görev';
+      await settle(20); view.stdin.write('/tasks\r');
+      await until(() => view.stdout.frame.includes(work.live!.tasksTitle) && view.stdout.frame.includes('run-a'), 'parked Run in the tasks window');
+      expect(view.stdout.frame).toContain(work.live!.runsTitle);
+      expect(view.stdout.frame).toContain(locale === 'en' ? '[parked]' : '[bekletildi]');
+      expect(view.stdout.frame).not.toContain(`${task} 1 · docker`);
+      expect.soft(view.stdout.frame).toContain(locale === 'en' ? '0 observed worker(s) · 1 listed Run(s)' : '0 gözlemlenen işçi · 1 listelenen iş');
+      expect.soft(view.stdout.frame).toContain(locale === 'en' ? 'Recorded task phases: 1 active in the Run record.' : 'Kayıtlı görev durumları: iş kaydında 1 etkin görev.');
+      expect.soft(view.stdout.frame).not.toContain(locale === 'en' ? '1 running' : '1 çalışıyor');
+      count = 1; await until(() => view.stdout.frame.includes(`${task} 1 · docker`), 'the first observed worker appears');
+      expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1 observed worker(s) · 1 listed Run(s)' : '1 gözlemlenen işçi · 1 listelenen iş');
+      count = 2; await until(() => view.stdout.frame.includes(`${task} 2 · docker`), 'the second worker appears in the open window');
+      // In place: one row each, no card appended to the scrollback.
+      expect(occurrences(view.stdout.frame, `${task} 1 · docker`)).toBe(1); expect(occurrences(view.stdout.frame, `${task} 2 · docker`)).toBe(1);
+      view.stdin.write(ESC);
+      const summary = locale === 'en' ? '2 workers and 1 runs at the last read' : 'son okumada 2 işçi ve 1 iş';
+      await until(() => !view.stdout.frame.includes(work.live!.tasksHints!) && view.stdout.frame.includes(summary), 'closed with the summary');
+      const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
+      mounted.pop()!.unmount();
+    }
   });
 
   it('/tasks Enter opens the selected transcript and x uses the refreshed run cancellation approval; opening a card never cancels', async () => {

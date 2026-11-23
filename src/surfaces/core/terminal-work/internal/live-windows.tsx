@@ -1,10 +1,11 @@
 import type { RunView } from '#engine/index.js';
 import type { JobWindowLabels } from './job-windows.js';
-import { runViewToLedgerEntry, LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import { runViewToLedgerEntry, LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { useState, type ReactElement } from 'react';
-import { useWindowSize } from 'ink';
+import { Text, useWindowSize } from 'ink';
 import { shortId } from '#platform/index.js';
-import { span, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
+import { span, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { SpanText } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, WINDOW_RESERVED_ROWS, useWindowReserve, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 
 /** What a live window shows: `tasks` follows workers and runs together (T3 L5), `monitor` the monitor's own body. */
@@ -21,7 +22,11 @@ export interface LiveWindowLabels {
   readonly monitorTitle: string; readonly runsTitle: string; readonly tasksTitle: string;
   readonly hints: string; readonly monitorHints: string;
   /** `{workers}` `{runs}` */
-  readonly statusTasks: string;
+  readonly observedCounts: string;
+  /** `{phases}` */
+  readonly recordedTaskPhases: string;
+  /** `{count}` */
+  readonly phaseActive: string;
   readonly empty: string;
   /** `+{count} more (/runs lists all)` */
   readonly runsMore: string;
@@ -67,10 +72,12 @@ function workerLines(workers: readonly WorkLedgerWorkerEntry[], labels: LiveWind
 }
 
 function runLines(runs: readonly WorkLedgerRunEntry[], labels: LiveWindowRenderLabels, limit: number): WindowLine[] {
-  const card: LedgerCardLabels | undefined = labels.workerLine.card;
+  const card = labels.workerLine.card;
+  const recordedCard = card && { ...card, runPhases: { ...card.runPhases, active: labels.live.phaseActive } };
   const rows: WindowLine[] = runs.slice(0, limit).map((entry, index) => {
     const run = entry as LiveRunEntry;
-    const text = card ? formatRunCardLines(run, card).slice(1).join(' · ') : `${run.revision} · ${run.taskPhases}`;
+    const [revision, phases] = recordedCard ? formatRunCardLines(run, recordedCard).slice(1) : [run.revision, run.taskPhases];
+    const text = `${revision} · ${fillTemplate(labels.live.recordedTaskPhases, { phases })}`;
     return { spans: [span(run.title ?? `${labels.live.runsTitle} ${index + 1}`, { bold: true }),
       ...(run.state ? [span(` [${labels.jobs?.runStates[run.state] ?? run.state}]`, { role: run.cancellationRequested ? 'warning' : 'accent' })] : []),
       span(` · ${text}`), span(` · ${shortId(run.runId)}`, { role: 'muted' })] };
@@ -89,7 +96,7 @@ export function liveWindowLines(kind: 'workers' | 'tasks', data: LiveWindowData,
 }
 
 export function liveWindowStatus(data: LiveWindowData, labels: LiveWindowRenderLabels): string {
-  return fillTemplate(labels.live.statusTasks, { workers: data.workers.length, runs: data.runs.length });
+  return fillTemplate(labels.live.observedCounts, { workers: data.workers.length, runs: data.runs.length });
 }
 /** The scrollback line left behind when the `/tasks` window closes: what it showed at its last read. */
 export function liveWindowClosedText(data: LiveWindowData, labels: LiveWindowLabels): string {
@@ -112,14 +119,14 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
   const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
     : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
   const selected = Math.max(0, targets.findIndex(target => keyOf(target) === selectedId));
-  const status: readonly Span[] = [span([liveWindowStatus(data, labels), statusText].filter(Boolean).join(' · '))];
   const notes = (statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] }));
   const taskRows = targets.map((target, index) => ({ spans: [span(`${index === selected ? '>' : ' '} `),
     ...(target.kind === 'worker' ? workerLines([target], labels, 1)[0]!.spans : runLines([target], labels, 1)[0]!.spans)] }));
   const taskBody = [{ spans: [span(labels.panel.title, { bold: true })] }, ...taskRows.slice(0, data.workers.length),
     { spans: [] }, { spans: [span(labels.live.runsTitle, { bold: true })] }, ...taskRows.slice(data.workers.length)];
-  return <Window title={[span(labels.live.tasksTitle)]} status={status}
+  return <Window title={[span(labels.live.tasksTitle)]} status={statusText ? [span(statusText)] : []}
     body={[...notes, ...(targets.length ? taskBody : liveWindowLines('tasks', data, labels))]}
+    footerRows={1} footer={() => <Text wrap="truncate-end"><SpanText spans={[span(liveWindowStatus(data, labels), { role: 'muted' })]} /></Text>}
     hints={labels.live.tasksHints ?? labels.live.hints} position={position} onClose={onClose}
     reveal={notes.length + selected + (selected >= data.workers.length ? 3 : 1)} onInput={(input, key) => {
       if (key.ctrl || key.meta || key.shift) return false;
