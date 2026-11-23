@@ -28,6 +28,8 @@ export interface DoctorCheckFacts {
     observations: Parameters<typeof countMismatchedAttachments>[2] }> | null;
   readonly nativePlugins?: Awaited<ReturnType<import('#engine/index.js').ModelInvocationInspectionApplication['inspectNativePlugins']>> | null;
   readonly executionPermission?: Readonly<{ actor: string; total: number; allowed: number; restricted: boolean }> | null;
+  /** True only when the configured policy path was observed missing. */
+  readonly policyFileAbsent?: boolean;
   readonly workerReadiness?: import('#domain/index.js').WorkerReadiness | null;
   readonly workerKinds?: readonly import('#engine/index.js').WorkerKindAvailability[] | null;
   readonly codingRepository?: ExecutionEnvironmentDoctorView | null;
@@ -384,14 +386,15 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
   const permission = f.scopeId ? f.executionPermission : null, scope = terminalSafeText(f.scopeId ?? '-');
   const complete = !!permission && permission.allowed === permission.total && !permission.restricted;
   const params = { scope, actor: terminalSafeText(permission?.actor ?? '-'), allowed: permission?.allowed ?? 0, total: permission?.total ?? 0 };
-  const text = !f.scopeId ? t('doctor.aiExecution.noScope', {}, locale)
+  const text = !f.scopeId
+    ? f.policyFileAbsent ? t('doctor.aiExecution.noScope', {}, locale) : t('doctor.aiExecution.noDefaultScope', {}, locale)
     : !permission ? t('doctor.aiExecution.unknown', { scope }, locale) : complete ? t('doctor.aiExecution.present', params, locale)
     : permission.restricted ? t('doctor.aiExecution.restricted', params, locale) : permission.allowed ? t('doctor.aiExecution.partial', params, locale)
     : t('doctor.aiExecution.absent', params, locale);
   const external = new Set(f.headlessLogins?.filter(login => login.governedUse).map(login => login.connection));
   if (first === workerRow && worker?.code === 'HEADLESS_STATE_OUTSIDE_INSTALLATION') external.delete(worker.cli.at(-1));
   return [first, row('work', 'work.aiExecution', complete ? 'ok' : permission ? 'warning' : 'untested', text,
-    complete ? undefined : f.scopeId ? `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview` : 'deckent init'),
+    complete ? undefined : f.scopeId ? `deckent policy upgrade --template current --only ai-execution --scope ${scope} --preview` : f.policyFileAbsent ? 'deckent init' : undefined),
   ...[...external].map(connection => { const limit = headlessGovernedUseText(locale, connection); return row('work', 'work.governedSubscription', 'warning', limit.text, limit.next); })];
 }
 

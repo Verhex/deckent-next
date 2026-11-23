@@ -1,12 +1,14 @@
+import fs from 'node:fs/promises';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as surface from '#surfaces/index.js';
 import { main } from '#surfaces/core/cli/index.js';
-import { ErrorRegistry, t, clearConfigCache, productResourcePath, serializeJsonDocument } from '#platform/index.js';
+import { ErrorRegistry, t, clearConfigCache, loadConfig, productResourcePath, serializeJsonDocument } from '#platform/index.js';
 import { registerProviderConfig, captureAttachmentLocation } from '#adapters/index.js';
 import { evaluatePolicy, firstRunExecutionRules, mcpPrincipalRef, readableInstallationRegistrationSchema, resolvePolicyBindings } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -870,11 +872,60 @@ it('guides setup without a scope and keeps the permission preview for an unreada
     ['en', 'AI execution permission was not checked: this folder has no deckent scope yet. Set the folder up with deckent init, or run deckent doctor inside a project that is already set up.'],
     ['tr', 'Yapay zekâ yürütme izni denetlenmedi: bu klasörün henüz bir deckent kapsamı yok. Klasörü deckent init ile kurun ya da deckent doctor komutunu kurulmuş bir proje klasöründe çalıştırın.'],
   ] as const) {
-    const noScope = facts({ scopeId: null, executionPermission: null });
+    const noScope = facts({ scopeId: null, executionPermission: null, policyFileAbsent: true });
     const configured = facts({ executionPermission: null });
     expect.soft(doctorReadinessChecks(noScope, doctorChecks(report, noScope, locale), locale).find(row => row.id === 'work.aiExecution'))
       .toMatchObject({ state: 'untested', text, next: 'deckent init' });
     expect(doctorReadinessChecks(configured, doctorChecks(report, configured, locale), locale).find(row => row.id === 'work.aiExecution'))
       .toMatchObject({ state: 'untested', text: t('doctor.aiExecution.unknown', { scope: 'live' }, locale), next: 'deckent policy upgrade --template current --only ai-execution --scope live --preview' });
+  }
+});
+
+it('suggests setup only when the policy file is known to be absent (EN/TR)', async () => {
+  const root = await project();
+  const home = join(root, 'home'), env = { HOME: home, USERPROFILE: home };
+  const { productLayout } = await loadConfig(root, { env, heal: false });
+  const policyPath = productResourcePath(productLayout, 'policy');
+  const locales = [
+    ['en', 'AI execution permission was not checked because no default scope could be selected. Check which scope to use for this project, or run deckent doctor in the folder for that scope.'],
+    ['tr', 'Varsayılan kapsam seçilemediği için yapay zekâ yürütme izni denetlenmedi. Bu proje için hangi kapsamı kullanacağınızı kontrol edin ya da deckent doctor komutunu o kapsama ait klasörde çalıştırın.'],
+  ] as const;
+  const run = async (locale: 'en' | 'tr', json = true) => {
+    let output = '';
+    await runKernelCommand(['doctor', '--lang', locale, ...(json ? ['--json'] : [])], {
+      root, env, inspectPolicyTemplate: async () => null, stdout: { write: text => { output += text; } },
+    });
+    return output;
+  };
+  const permission = (output: string) => JSON.parse(output).summary.checks.find((row: { id: string }) => row.id === 'work.aiExecution');
+  for (const [locale] of locales) {
+    expect(permission(await run(locale))).toMatchObject({ state: 'untested', next: 'deckent init' });
+  }
+
+  await mkdir(dirname(policyPath), { recursive: true });
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 2, revision: 'custom', roles: [], grants: [], restrictions: [], separationOfDuties: [] }));
+  for (const [locale, text] of locales) {
+    const row = permission(await run(locale));
+    expect.soft(row, `custom policy (${locale})`).toMatchObject({ state: 'untested', text });
+    expect.soft(row, `custom policy (${locale})`).not.toHaveProperty('next');
+    expect.soft(await run(locale, false)).toContain(text);
+  }
+
+  const original = fs.lstat;
+  const lstat = vi.spyOn(fs, 'lstat').mockImplementation(async (...args: Parameters<typeof fs.lstat>) => {
+    if (args[0] === policyPath) throw Object.assign(new Error('policy metadata unreadable'), { code: 'EACCES' });
+    return original(...args);
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const [locale, text] of locales) {
+      const row = permission(await run(locale));
+      expect.soft(row, `unreadable policy (${locale})`).toMatchObject({ state: 'untested', text });
+      expect.soft(row, `unreadable policy (${locale})`).not.toHaveProperty('next');
+    }
+    expect(lstat).toHaveBeenCalledWith(policyPath);
+  } finally {
+    lstat.mockRestore();
+    syncBuiltinESMExports();
   }
 });

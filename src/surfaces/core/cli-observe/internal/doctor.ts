@@ -1,5 +1,6 @@
+import { lstat } from 'node:fs/promises';
 import {
-  ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
+  ErrorRegistry, loadConfig, productResourcePath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
@@ -70,6 +71,8 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
         { execution: observedPool.executing, inFlight: observedPool.inFlight })
       : undefined,
     firstWorkerImage,
+    policyFileAbsent: !scopeId && await lstat(productResourcePath(config.productLayout, 'policy'))
+      .then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT'),
     executionPermission: scopeId ? await context.inspectExecutionPermission?.(root, scopeId, options).catch(() => null) ?? null : null,
     workerReadiness: context.inspectWorkerReadiness && scopeId ? await context.inspectWorkerReadiness(root, scopeId, options, firstJobKind).catch(() => null) : null,
     workerKinds: context.inspectWorkerKinds ? await context.inspectWorkerKinds(root, options).catch(() => null) : null,
