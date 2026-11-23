@@ -89,8 +89,10 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
       // Trust withdrawal already settled. Check the witness before policy administration can submit a card.
       try {
         const config = await loadComposedConfig(root, { ...options, heal: false }), peer = localPrincipalPeer();
+        const markers = config.cli.agentEnvironment;
         await assertAuthorityWitness('mcpToolGrantRevoke', localPrincipalChannel(), { attest: async () =>
-          automationMarker(options.env ?? process.env, config.cli.agentEnvironment) === null && await attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
+          automationMarker(process.env, markers) !== 'agent' && automationMarker(options.env ?? process.env, markers) !== 'agent'
+          && await attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
       } catch (error) { return refuse(error); }
       return run((grants, person) => grants.revoke({ scopeId, principal: person, server, reason: `MCP trust of ${server.name} withdrawn` }));
     },

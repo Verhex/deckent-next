@@ -4,7 +4,7 @@
   "cli.mcp.grant.refused": "Güvenildi ama politika izni yazılmadı: {reason}.",
   "cli.mcp.revoke.trustRemoved": "{name} için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.",
   "cli.mcp.revoke.grantUnchanged": "Politika izni kaldırma işlemi kaydedilmedi.",
-  "cli.mcp.revoke.grantWitness": "Politika izni kaldı. İzni sahibinin terminalinden kaldırın.",
+  "cli.mcp.revoke.grantWitness": "Bu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.",
   "cli.mcp.revoke.grantRefused": "Politika izni kaldırılamadı. Yeniden denemeden önce kapsamın politikasını inceleyin.",
   "models.notConfigured": "Model kataloğu yapılandırılmamış; kullanılabilirlik gözlemlenmedi.",
   "climodels.usage.declaredScope": "--declared, yapılandırılmış sağlayıcı kataloğundaki model beyanlarını listeler ve --scope almaz. Sağlayıcı kataloğu: deckent models --declared. Bir kapsamın işçi model kataloğu ve her modelin etkinlik durumu: deckent models --scope <id>",

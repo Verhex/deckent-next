@@ -88,6 +88,7 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(f.authorityChanges()).toHaveLength(1);
     expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
     const before = f.policyRecords();
+    expect(process.env[agentMarker]).toBeUndefined();
     f.env[agentMarker] = '1';
     const refused = { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' };
     expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
@@ -103,6 +104,10 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [] });
     expect.soft(f.policyRecords()).toEqual(before);
     expect(await f.run({ verb: 'add', name: 'fx', scope: 'local', entry: f.entry, approve: false })).toMatchObject({ trust: 'pending' });
+    expect(await attestLocalInteractiveTerminal()).toBe(false);
+    expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
+      .toMatchObject({ revoked: { name: 'fx' }, grant: refused });
+    expect(f.policyRecords()).toEqual(before);
     delete f.env[agentMarker];
     expect.soft(await f.run({ verb: 'revoke', name: 'fx' }, true, 'mcp')).toMatchObject({ revoked: { name: 'fx' }, grant: refused });
     expect.soft(f.policyRecords()).toEqual(before);
@@ -111,10 +116,43 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+    const withoutGrant = f.policyRecords();
+    f.env[agentMarker] = '1';
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(f.policyRecords()).toEqual(withoutGrant);
+    delete f.env[agentMarker];
     // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
     expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, grant: { status: 'granted' } });
     expect(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
     expect(f.mcpGrants()).toEqual([]);
+  }, 90_000);
+
+  it('lets a witnessed owner in a CI-only shell remove the grant as in the parent contract', async () => {
+    const f = await fixture();
+    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+    expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
+    expect(process.env[agentMarker]).toBeUndefined();
+    f.env['CI'] = 'true';
+    // Same receipt, grant state and audit outcome as the unmarked owner in the parent test.
+    expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toMatchObject({ revoked: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
+    expect.soft(f.mcpGrants()).toEqual([]);
+    expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
+    expect(f.authorityChanges()).toHaveLength(2);
+  }, 90_000);
+
+  it('refuses grant removal before policy writes when only the process environment is AI-marked', async () => {
+    const f = await fixture();
+    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+    expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
+    expect(f.env[agentMarker]).toBeUndefined();
+    const before = f.policyRecords();
+    vi.stubEnv(agentMarker, '1');
+    try {
+      expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({
+        schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' },
+      });
+    } finally { vi.unstubAllEnvs(); }
+    expect(f.policyRecords()).toEqual(before);
   }, 90_000);
 
   it('stops before the grant port when trust evidence fails and keeps the grant for a mismatched principal', async () => {

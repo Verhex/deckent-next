@@ -54,10 +54,10 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
     return out.join('').trimEnd();
   };
   const enTrust = 'Trust for fx was revoked. Approve it again before starting the server.';
-  const enWitness = `${enTrust}\nThe policy grant was kept. Revoke it from the owning person’s terminal.`;
+  const enWitness = `${enTrust}\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.`;
   expect.soft(await revoke('en', receipt)).toBe(enWitness);
-  expect(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'APPROVAL_INTERACTIVE_REQUIRED' } })).toBe(enWitness);
-  expect.soft(await revoke('tr', receipt)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.\nPolitika izni kaldı. İzni sahibinin terminalinden kaldırın.');
+  expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'APPROVAL_INTERACTIVE_REQUIRED' } })).toBe(enWitness);
+  expect.soft(await revoke('tr', receipt)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.\nBu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.');
   const enJson = await revoke('en', receipt, true), trJson = await revoke('tr', receipt, true);
   expect(trJson).toBe(enJson);
   expect(JSON.parse(enJson)).toEqual(receipt);

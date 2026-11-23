@@ -4,7 +4,7 @@
   "cli.mcp.grant.refused": "Trusted, but no policy grant was written: {reason}.",
   "cli.mcp.revoke.trustRemoved": "Trust for {name} was revoked. Approve it again before starting the server.",
   "cli.mcp.revoke.grantUnchanged": "No policy grant removal was recorded.",
-  "cli.mcp.revoke.grantWitness": "The policy grant was kept. Revoke it from the owning person’s terminal.",
+  "cli.mcp.revoke.grantWitness": "This operation removed no policy grant. Removing one needs the grant owner's terminal.",
   "cli.mcp.revoke.grantRefused": "The policy grant could not be removed. Review the scope’s policy before trying again.",
   "models.notConfigured": "Model catalog is not configured; availability was not observed.",
   "climodels.usage.declaredScope": "--declared lists the model declarations in the configured provider catalog and takes no --scope. Provider catalog: deckent models --declared. The worker model catalog of one scope, with the activation state of each model: deckent models --scope <id>",

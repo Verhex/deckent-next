@@ -97,7 +97,7 @@ describe('/mcp window port', () => {
     expect(await port.add({ transport: 'http', name: 'remote', target: 'https://mcp.example.com/mcp', args: [], env: {}, headers: { Authorization: 'Bearer $DECK:GH' }, realm: '',
       scope: 'local' }, async () => true)).toEqual(['Added remote (local): /p/.deckent/mcp.local.json', 'remote is trusted; 2 tools pinned.']);
     expect(port.transports.find(choice => choice.id === 'http')!.blocked).toBeUndefined();
-    expect(await port.revoke('fx')).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'The policy grant was kept. Revoke it from the owning person’s terminal.']);
+    expect(await port.revoke('fx')).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
     await port.reconnect('files'); expect(await port.remove('files')).toEqual(['Removed files (project)']);
     expect(requests).toEqual([{ verb: 'add', scope: 'local', name: 'remote', approve: true, entry: { type: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GH' } } },
       { verb: 'revoke', name: 'fx' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
