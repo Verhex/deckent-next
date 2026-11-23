@@ -27,6 +27,10 @@ afterEach(async () => { await closeModeRuntimes(); await Promise.all(roots.splic
 const echo: McpLiveTool = { name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } };
 const slow = { name: 'slow', description: 'Never answers in time', inputSchema: { type: 'object', properties: {} }, behavior: 'slow' };
 const extra = { name: 'extra', description: 'Not pinned', inputSchema: { type: 'object', properties: {} } };
+const unresolvedKeyNotice = {
+  en: 'the key SERVICE_API_TOKEN could not be resolved. Check the selected vault and the project’s access to the key. Add the key to that vault only if you confirm it is absent.',
+  tr: 'SERVICE_API_TOKEN anahtarı çözümlenemedi. Seçilen kasayı ve projenin anahtara erişimini kontrol edin. Anahtarı o kasaya yalnızca orada olmadığını doğrularsanız ekleyin.',
+};
 function mcpFixture(mode: 'legacy' | 'dual' = 'dual', tools: unknown[] = [echo, slow]) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-turn-')); roots.push(root);
   const toolsFile = join(root, 'tools.json'), logFile = join(root, 'log.jsonl');
@@ -131,7 +135,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     const expected = { kind: 'not-decided', name: 'missing', code: 'secret-unresolved', detail: 'SERVICE_API_TOKEN' };
     expect(missing.result.notices).toEqual([expected]); expect(requested(missing.events)).toEqual([]);
     expect(mcpStartNoticeSchema.parse(expected)).toEqual(expected);
-    for (const locale of ['en', 'tr'] as const) expect(renderMcpStartNotice(missing.result.notices[0]!, locale)).toContain('deckent secret set SERVICE_API_TOKEN --main');
+    for (const locale of ['en', 'tr'] as const) expect.soft(renderMcpStartNotice(missing.result.notices[0]!, locale)).toContain(unresolvedKeyNotice[locale]);
     const counts = [missing.result.notices.length];
     for (const [sessionId, suffix, expectedNotices] of [[sessionA, 'a2', []], [sessionB, 'b1', [expected]], [sessionB, 'b2', []]] as const) {
       f.state.script = [{ content: 'Same missing key.' }];
@@ -140,7 +144,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
       counts.push(next.result.notices.length);
       for (const locale of ['en', 'tr'] as const) {
         const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);
-        expect(lines.join('\n')).toContain('deckent secret set SERVICE_API_TOKEN --main');
+        expect.soft(lines.join('\n')).toContain(unresolvedKeyNotice[locale]);
       }
     }
     expect(counts).toEqual([1, 0, 1, 0]);
@@ -582,15 +586,18 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(mcpStartNoticeSchema.safeParse({ ...missing, code: 'A'.repeat(65) }).success).toBe(false);
     expect(mcpStartNoticeSchema.safeParse({ ...missing, command: 'anything' }).success).toBe(false);
     expect(mcpStartNoticeSchema.safeParse(notice(null, 'trusted', { phase: 'decision' })).success).toBe(true);
-    for (const locale of ['en', 'tr'] as const) expect(renderMcpStartNotice(missing, locale)).toContain('deckent secret set SERVICE_API_TOKEN --main');
+    expect([renderMcpStartNotice(missing, 'en'), renderMcpStartNotice(missing, 'tr')]).toEqual([
+      `MCP server fx could not start because ${unresolvedKeyNotice.en}`,
+      `fx adlı MCP sunucusu başlatılamadı çünkü ${unresolvedKeyNotice.tr}`,
+    ]);
   });
   it.each([
     ['SUBSCRIPTION_HOST_MCP_REFUSED',
-      'The tools from MCP server fx were withheld because this subscription chat requires a sandbox that enforces read-only access to the project. If the server supports running locally in a sandbox, review its entry in /mcp, set its realm to require-sandbox, and follow the usual trust approval steps.',
-      'Bu abonelik sohbeti, projeye yalnızca okuma erişimi sağlayan bir yalıtım alanı gerektirdiği için fx adlı MCP sunucusunun araçları sohbete sunulmadı. Sunucu yerel bir yalıtım alanında çalışabiliyorsa /mcp üzerinden kaydını inceleyin, çalışma ortamını require-sandbox olarak ayarlayın ve normal güven onayı adımlarını izleyin.'],
+      'The tools from MCP server fx were withheld because this subscription chat requires a sandbox that enforces read-only access to the project. If a local stdio version and a usable sandbox are available, add it as a separate local entry with a different name in /mcp, choose “sandbox only”, and follow the usual trust approval steps. Tools from remote HTTP servers stay withheld in subscription chat.',
+      'Bu abonelik sohbeti, projeye yalnızca okuma erişimi sağlayan bir yalıtım alanı gerektirdiği için fx adlı MCP sunucusunun araçları sohbete sunulmadı. Sunucunun yerel bir stdio sürümü ve kullanılabilir bir yalıtım alanı varsa /mcp üzerinden farklı bir adla ayrı bir yerel kayıt ekleyin, “yalnız yalıtım alanı” seçeneğini seçin ve olağan güven onayı adımlarını izleyin. Uzak HTTP sunucularının araçları abonelik sohbetinde sunulmaz.'],
     ['MCP_TRUST_STORE_UNAVAILABLE',
-      'Trust for MCP server fx could not be decided because its trust record could not be read. Ask the installation administrator to check access to the record. Details: MCP_TRUST_STORE_UNAVAILABLE.',
-      'Güven kaydı okunamadığı için fx adlı MCP sunucusu hakkında güven kararı verilemedi. Kurulum yöneticisinden kayda erişimi kontrol etmesini isteyin. Ayrıntı: MCP_TRUST_STORE_UNAVAILABLE.'],
+      'Trust for MCP server fx could not be decided because its trust record could not be used. Ask the installation administrator to investigate. Details: MCP_TRUST_STORE_UNAVAILABLE.',
+      'Güven kaydı kullanılamadığı için fx adlı MCP sunucusu hakkında güven kararı verilemedi. Kurulum yöneticisinden sorunu incelemesini isteyin. Ayrıntı: MCP_TRUST_STORE_UNAVAILABLE.'],
     ['MCP_SERVER_ENTRY_INVALID',
       'The entry for MCP server fx is invalid. Review it in /mcp and correct its configuration. Details: MCP_SERVER_ENTRY_INVALID.',
       'fx adlı MCP sunucusunun kaydı geçersiz. /mcp üzerinden kaydı inceleyin ve yapılandırmasını düzeltin. Ayrıntı: MCP_SERVER_ENTRY_INVALID.'],
@@ -601,15 +608,14 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
       'MCP server fx could not start because a required secret was unavailable to this project. Check the selected vault and the project’s access to the key.',
       'Gerekli bir kasa anahtarı bu proje için kullanılamadığından fx adlı MCP sunucusu başlatılamadı. Seçilen kasayı ve projenin anahtara erişimini kontrol edin.'],
     ['secret-unresolved',
-      'MCP server fx could not start because a required secret is missing. Review the key named in its /mcp entry.',
-      'Gerekli bir kasa anahtarı eksik olduğu için fx adlı MCP sunucusu başlatılamadı. /mcp kaydında belirtilen anahtarı kontrol edin.'],
+      'MCP server fx could not start because a required key could not be resolved. Find the key in its /mcp entry, then check the selected vault and the project’s access to the key. Add the key to that vault only if you confirm it is absent.',
+      'Gerekli bir kasa anahtarı çözümlenemediği için fx adlı MCP sunucusu başlatılamadı. Anahtarı sunucunun /mcp kaydında bulun, ardından seçilen kasayı ve projenin anahtara erişimini kontrol edin. Anahtarı o kasaya yalnızca orada olmadığını doğrularsanız ekleyin.'],
     ['failed',
       'Trust for MCP server fx could not be decided. Review its entry in /mcp. If the problem persists, ask the installation administrator to check the cause. Details: failed.',
       'fx adlı MCP sunucusu hakkında güven kararı tamamlanamadı. /mcp üzerinden kaydını inceleyin. Sorun sürerse kurulum yöneticisinden nedenini kontrol etmesini isteyin. Ayrıntı: failed.'],
   ] as const)('explains the decision notice %s in both languages', (code, en, tr) => {
     const notice = { kind: 'not-decided' as const, name: 'fx', code };
-    expect(renderMcpStartNotice(notice, 'en')).toBe(en);
-    expect(renderMcpStartNotice(notice, 'tr')).toBe(tr);
+    expect([renderMcpStartNotice(notice, 'en'), renderMcpStartNotice(notice, 'tr')]).toEqual([en, tr]);
   });
   it.each([
     ['POLICY_CHANGE_TOO_LARGE', 'The policy change exceeds the size deckent can check. Ask an administrator to review the tool permissions.',

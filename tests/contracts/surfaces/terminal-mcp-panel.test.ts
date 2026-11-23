@@ -56,7 +56,10 @@ describe('/mcp window port', () => {
       expect(received).toBe(controller.signal);
       expect(checked.servers.map(server => server.state)).toEqual(states.map(item => item.expected));
       expect(checked.servers.find(server => server.state === 'failed')!.status).toContain('ENOENT (PATH)');
-      for (const state of ['secret-project-missing', 'secret-unresolved']) expect(checked.servers.find(server => server.state === state)!.status).toContain('KEY');
+      expect(checked.servers.find(server => server.state === 'secret-project-missing')!.status).toContain('KEY');
+      expect.soft(checked.servers.find(server => server.state === 'secret-unresolved')!.status).toBe(locale === 'tr'
+        ? 'bağlı değil — KEY anahtarı çözümlenemediği için başlatılamıyor. Seçilen kasayı ve projenin anahtara erişimini kontrol edin. Anahtarı o kasaya yalnızca orada olmadığını doğrularsanız ekleyin.'
+        : 'not connected — cannot start because the key KEY could not be resolved. Check the selected vault and the project’s access to the key. Add the key to that vault only if you confirm it is absent.');
       expect(checked.servers.find(server => server.state === 'timed-out')!.status).toContain(locale === 'tr' ? 'bilinmiyor' : 'unknown');
       controller.abort(); await expect(check.list({ health: true, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
       const waiting = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'trusted' }] } }).run, {}, locale).list({ checking: true });
