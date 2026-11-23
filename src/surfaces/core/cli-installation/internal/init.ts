@@ -3,7 +3,7 @@ import { ownerBaselineCommand, parseBaseline } from './owner-baseline.js';
 import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
-import { optionalField, ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale, type ConfigLoadOptions } from '#platform/index.js';
+import { optionalField, ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type ExitCode, type Locale, type ConfigLoadOptions } from '#platform/index.js';
 import { policyPreviewText } from './policy-preview.js';
 import { parseModes, policyModesCommand, typedMode } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
@@ -48,7 +48,7 @@ function parsePerson(value: string | undefined): Person {
 }
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
-export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
+export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void | ExitCode> {
   if (argv[1] === 'registry') return initRegistryCommand(argv, context);
   // Bare init and its flags render the setup plan (I-S4), where the bridges are one stage; `--preview` keeps the bridges preview JSON.
   if (argv[1] === undefined || (argv[1].startsWith('--') && argv[1] !== '--help')) {

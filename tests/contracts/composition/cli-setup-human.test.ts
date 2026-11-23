@@ -44,7 +44,7 @@ async function run(f: { projectRoot: string; env: Record<string, string> }, args
   return { code, stdout: stdout.join(''), stderr: stderr.join('') };
 }
 /** A bare family reaches its handler once the catalog marks it `bare: 'handler'` (lead delta); the handler's own read is tested here. */
-async function bare(handler: (argv: readonly string[], context: never) => Promise<void>, f: { projectRoot: string; env: Record<string, string> }, args: readonly string[], extra: Record<string, unknown> = {}) {
+async function bare(handler: (argv: readonly string[], context: never) => Promise<unknown>, f: { projectRoot: string; env: Record<string, string> }, args: readonly string[], extra: Record<string, unknown> = {}) {
   const stdout: string[] = [];
   await handler(args, { root: f.projectRoot, env: f.env, stdout: { write(value: string) { stdout.push(value); } }, ...extra } as never);
   return stdout.join('');

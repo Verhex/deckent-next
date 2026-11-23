@@ -107,6 +107,18 @@ async function fixture(name = 'erp-demo') {
 }
 const screen = (output: string) => terminalBuffers(output, COLUMNS, ROWS).text;
 
+it.skipIf(process.platform !== 'linux')('owner 155: declining to narrow the folder permissions leaves init unfinished', async () => {
+  await access(cli);
+  const f = await fixture();
+  await chmod(f.root, 0o775);
+  const run = await f.pty('declined-folder', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'],
+    ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['narrow the permission?', 'n'], ['Setup did not continue.', '\u001b']]);
+  expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+  expect(run.output).toContain('Setup did not continue.');
+  expect(run.output).toContain('Nothing was applied.');
+  expect(run.status).toBe(1);
+}, 240_000);
+
 describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (compiled CLI)', () => {
   it('sets up only installation stages; answers language and profile before permissions; re-observes every write and a re-run reads done', async () => {
     await access(cli);
@@ -172,7 +184,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
       ['No (n)', 'y'], ['Apply now (y)', 'y'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('Yes (y)'); expect(run.output).toContain('Not now (n)');
-    expect(run.status).toBe(0);
+    expect(run.status).toBe(1);
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured',
       'core:language': 'needs-answer:setup.reason.languageDetected' });
     expect(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8').catch(() => '')).not.toContain('core:solo');
@@ -199,7 +211,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const run = await f.pty('resume-pending', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
-    expect(run.status).toBe(0);
+    expect(run.status).toBe(1);
     expect(run.output).toContain('An earlier install stopped midway; what it wrote is unknown');
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured' });
     expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8').catch(() => '')).not.toContain('"pending"');
@@ -229,7 +241,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Add these rules', 'y'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
-    expect(run.status).toBe(0);
+    expect(run.status).toBe(1);
     const card = run.output.indexOf('Upgrade the permissions'), reopened = run.output.indexOf('Permissions: applied', card);
     expect(card).toBeGreaterThan(0); expect(reopened).toBeGreaterThan(card);
     for (const id of delta) expect(run.output.slice(card, reopened)).toContain(id);

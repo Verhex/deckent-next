@@ -2,7 +2,7 @@ import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, policyGrantSchema } from '#domain/i
 import { policyExecutionLines, policyExecutionScopeList } from '#engine/index.js';
 import { createInterface } from 'node:readline/promises';
 import type { PolicyTemplateUpgradePort, PolicyUpgradeView } from '#surfaces/core/cli-terminal/index.js';
-import { optionalField, ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
+import { optionalField, ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ExitCode, type Locale } from '#platform/index.js';
 import { askCliCard, cliMode, executionGrantDecision } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -26,7 +26,7 @@ export type PolicyUpgradeHandler = (...args: [...Parameters<PolicyTemplateUpgrad
  * `deckent policy revoke <id> [--scope <id>] [--yes]` removes one through the same `policy.administer@1` operation that created it.
  * A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
  */
-export async function policyGrantsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function policyGrantsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   if (['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '')) return policyDelegationsCommand(argv, context);
   if (argv[1] === 'status' || argv[1] === 'show') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
@@ -81,7 +81,7 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
  * `deckent policy upgrade --template current`: preview writes nothing; apply and rollback use
  * `policy.administer@1` (I2, audit, archive). The deprecated `v5` selector uses the same current plan.
  */
-async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<ExitCode> {
   let json = false, template: string | undefined, scope: string | undefined, language: string | undefined, expect: string | undefined, mode: 'preview' | 'apply' | 'rollback' | undefined, previewRollback = false, only: string | undefined;
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!;
@@ -173,6 +173,10 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
     return [head, ...((view.status === 'rolled-back' || previewRollback) && view.executionScopes ? [policyExecutionScopeList(view.executionScopeSelection?.ids ?? view.executionScopes, view.executionScopeSelection?.all === true, locale)] : []), ...(previewRollback ? [] : policyExecutionLines(view.rules ?? [], scopeId, locale, view.executionContext, 'full', view.executionScopes)), ...(view.covered?.length ? [t('policy.aiExecution.covered', { grants: [...new Set(view.covered.map(item => item.heldBy))].join(', ') }, locale)] : []), ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
   } });
+  if ((mode === 'apply' || mode === 'rollback') && ['conflict', 'refused', 'cancelled', 'unavailable'].includes(result.status)) {
+    return EXIT_CODES.error;
+  }
+  return EXIT_CODES.success;
 }
 
 /** The engine's reason id for an unavailable first-run upgrade, in words (`not-first-run` → "elle kurulmuş politika"); an unknown id stays visible. */
