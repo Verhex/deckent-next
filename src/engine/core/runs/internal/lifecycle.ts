@@ -3,10 +3,11 @@ import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerRunQuotaWrite, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
-  deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, parseRun, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal,
+  deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, parseRun, runSnapshotSchema, RunError, type AttemptIdentity, type VerifiedPrincipal,
   type TaskProgress, type RunSnapshot, type SafetyHoldSource, type RunQuotaAskPolicy } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
+import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 interface TaskDecisionAuthorization { authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void> }
 import { runQuerySchema, type RunQuery, type RunAuthorization } from './application.js';
 import { RunStoreError, type RunReceipt, type RunStore } from './store.js';
@@ -71,7 +72,8 @@ export interface RunLifecycleStore extends Pick<RunStore, 'loadRun'> {
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
 export class RunLifecycleError extends CodedError {
-  constructor(override readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED' | 'RUN_QUOTA_PERSON_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
+  constructor(override readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED' | 'RUN_QUOTA_PERSON_REQUIRED' | 'RUN_NOT_FOUND', readonly approvalId?: string,
+    readonly runId?: string) { super(code); this.name = 'RunLifecycleError'; }
 }
 export type RunDecisionEvidence = NonNullable<RunLifecycleWrite['decision']>;
 export interface RunDecisionAuthorization {
@@ -169,7 +171,7 @@ export class RunLifecycleApplication {
     if (readRunHold(run.state)?.source === source) return null;
     return this.holdFrom(source, { ...command, expectedRevision: run.revision }, credential);
   }
-  async execute(input: unknown, credential?: unknown) {
+  async execute(input: unknown, credential?: unknown, channel?: 'mcp') {
     const command = runLifecycleCommandSchema.parse(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     if (!this.decisions && isAiPrincipal(principal) && command.action !== 'hold' && command.action !== 'resume') throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
@@ -183,26 +185,53 @@ export class RunLifecycleApplication {
     } else {
       await this.runAuthorization.authorize(command.action === 'close' || command.action === 'hold' ? 'cancel' : 'reserve', command, principal);
     }
-    const run = parseRun(await this.store.loadRun(command.scopeId, command.runId));
-    const receipt = await this.store.loadRunReceipt?.(command.scopeId, command.commandId);
-    let replay: RunLifecycleWrite | undefined;
-    if (receipt) { const payload = JSON.parse(receipt.command); delete payload.operation; replay = runLifecycleWriteSchema.parse(payload); }
-    if (!this.decisions && command.action !== 'hold' && !(command.action === 'resume' && run.state.kind === 'parked' && run.state.reason === 'operator-hold'))
-      throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
-    const decision = this.decisions ? await this.decisions.authorize(command, principal, run, replay) : undefined;
-    if (!decision && command.action === 'resume' && isAiPrincipal(principal)) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
-    const lifted = command.action === 'resume' ? readRunHold(run.state)?.source : undefined;
-    const now = counterSchema.parse(this.now());
-    return this.store.commitRunLifecycle({ ...withQuotaAnswer(command as typeof command & { choice?: 'wait' | 'next-candidate' }, this.quota), ...(decision ? { decision } : {}), actor: { id: principal.id, issuer: principal.issuer,
-      subject: principal.subject, assurance: principal.assurance }, now, timeoutMs: this.timeoutMs }, (store, snapshot) => {
-      this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
-        principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: decision?.policyRevision ?? this.policyRevision, atMs: now,
-        subject: { kind: 'run-lifecycle', action: command.action, deciderClass: decision?.deciderClass ?? 'system',
-          ...(decision?.ruleId ? { decisionRuleId: decision.ruleId } : {}), ...(decision?.approvalId ? { approvalId: decision.approvalId } : {}),
-          ...(lifted && lifted !== 'operator' ? { holdSource: lifted } : {}), runId: command.runId, commandId: command.commandId,
-          ...(command.action === 'hold' || command.action === 'answer' ? { inputDigest: createHash('sha256').update(command.action === 'hold' ? command.holdReason : command.answer).digest('hex') } : {}),
-          taskId: 'taskId' in command ? command.taskId : null, revision: snapshot.revision,
-          evidence: command.action === 'accept' ? 'model-unverified' : null } });
-    });
+    const control = channel === 'mcp' && (command.action === 'hold' || command.action === 'resume');
+    const { schemaVersion, scopeId, runId } = command, target = await this.store.loadRun(scopeId, runId);
+    try {
+      if (control && target === null) throw new RunLifecycleError('RUN_NOT_FOUND', undefined, runId);
+      const run = parseRun(target);
+      const receipt = await this.store.loadRunReceipt?.(scopeId, command.commandId);
+      const { operation, ...payload } = receipt ? JSON.parse(receipt.command) : {};
+      const replay = receipt && (!control || operation === 'run-lifecycle') ? runLifecycleWriteSchema.parse(payload) : undefined;
+      if (!this.decisions && command.action !== 'hold' && !(command.action === 'resume' && run.state.kind === 'parked' && run.state.reason === 'operator-hold'))
+        throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+      const decision = this.decisions ? await this.decisions.authorize(command, principal, run, replay) : undefined;
+      if (!decision && command.action === 'resume' && isAiPrincipal(principal)) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+      const lifted = command.action === 'resume' ? readRunHold(run.state)?.source : undefined;
+      const now = counterSchema.parse(this.now());
+      const write = { ...withQuotaAnswer(command as typeof command & { choice?: 'wait' | 'next-candidate' }, this.quota), ...(decision ? { decision } : {}), actor: { id: principal.id, issuer: principal.issuer,
+        subject: principal.subject, assurance: principal.assurance }, now, timeoutMs: this.timeoutMs };
+      if (control) {
+        if (receipt) {
+          if (!replay || !matchRunLifecycleCommand(receipt.command, JSON.stringify({ operation: 'run-lifecycle', ...runLifecycleWriteSchema.parse(write) }))) throw new RunStoreError('RUN_COMMAND_CONFLICT');
+          if (receipt.snapshot.identity.runId !== runId) throw new RunStoreError('RUN_STORE_CORRUPT');
+          return receipt;
+        }
+        // Check the same transition before write admission. The ledger rechecks current state and revision.
+        proposeRunLifecycleWrite(run, write, true);
+      }
+      return await this.store.commitRunLifecycle(write, (store, snapshot) => {
+        this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
+          principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: decision?.policyRevision ?? this.policyRevision, atMs: now,
+          subject: { kind: 'run-lifecycle', action: command.action, deciderClass: decision?.deciderClass ?? 'system',
+            ...(decision?.ruleId ? { decisionRuleId: decision.ruleId } : {}), ...(decision?.approvalId ? { approvalId: decision.approvalId } : {}),
+            ...(lifted && lifted !== 'operator' ? { holdSource: lifted } : {}), runId: command.runId, commandId: command.commandId,
+            ...(command.action === 'hold' || command.action === 'answer' ? { inputDigest: createHash('sha256').update(command.action === 'hold' ? command.holdReason : command.answer).digest('hex') } : {}),
+            taskId: 'taskId' in command ? command.taskId : null, revision: snapshot.revision,
+            evidence: command.action === 'accept' ? 'model-unverified' : null } });
+      });
+    } catch (error) {
+      if (control && (error instanceof RunLifecycleError && ['RUN_NOT_FOUND', 'RUN_HOLD_PERSON_REQUIRED', 'TASK_DECISION_HUMAN_REQUIRED'].includes(error.code)
+        || error instanceof RunError && ['RUN_REVISION_CONFLICT', 'RUN_PARKED', 'RUN_TERMINAL', 'RUN_NOT_PARKED', 'RUN_DECISION_NOT_READY'].includes(error.code)
+        || error instanceof RunStoreError && ['RUN_STORE_CONFLICT', 'RUN_COMMAND_CONFLICT'].includes(error.code)
+        || error instanceof PolicyAuthorizationError && error.code === 'POLICY_APPROVAL_UNSUPPORTED')) {
+        try { await this.runAuthorization.authorize('inspect', { schemaVersion, scopeId, runId }, principal); }
+        catch (refusal) {
+          if (refusal instanceof PolicyAuthorizationError && refusal.code === 'POLICY_APPROVAL_UNSUPPORTED') throw new PolicyAuthorizationError('POLICY_DENIED');
+          throw refusal;
+        }
+      }
+      throw error;
+    }
   }
 }

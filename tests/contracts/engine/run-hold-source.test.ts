@@ -5,7 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteApprovalStore } from '#adapters/index.js';
 import { createRun, holdRun, parkRunProgression, releaseRunQuota, runSnapshotSchema, policySchema, aiAuthorityFloor, evaluatePolicy, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
-import { RunLifecycleApplication, RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, AuditApplication, proposeRunLifecycleWrite } from '#engine/index.js';
+import { RunLifecycleApplication, RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, AuditApplication, proposeRunLifecycleWrite,
+  type RunLifecycleStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
@@ -16,6 +17,7 @@ const roots: string[] = [], closers: (() => void)[] = [];
 afterEach(async () => { closers.splice(0).forEach(close => close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const human: VerifiedPrincipal = { id: 'owner', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['s'] };
 const ai: VerifiedPrincipal = { ...human, id: 'ai', issuer: 'host/mcp', assurance: 'workload-verified' };
+const otherAi: VerifiedPrincipal = { ...ai, id: 'other-ai', subject: 'other' };
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['ok'] }],
   criterionDefinitions: [{ id: 'ok', version: 1, description: 'ok', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const };
@@ -40,19 +42,39 @@ async function fixture(snapshot: RunSnapshot) {
   const db = new DatabaseSync(path);
   try { db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=?').run(snapshot.revision, JSON.stringify(snapshot), 's', 'r'); } finally { db.close(); }
   const approvals = openSqliteApprovalStore(path, options); closers.push(() => approvals.close());
-  let person = human, witness = true, delegated = false;
-  // Every actor holds the ordinary Run control grants; `delegate()` adds the explicit `run-decision resume` cell (the strongest AI policy there is).
-  const source = { async load() { return policySchema.parse({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [human, ai].flatMap(actor => [
-    grant('run', ['reserve', 'cancel', 'inspect'], actor), ...(delegated ? [grant('run-decision', ['resume', 'close'], actor)] : [])]) }); } };
-  const verifier = { async verify() { return person; } }, integrity = createHmacIntegrity('test', new Uint8Array(32).fill(1)), audits: unknown[] = [];
+  let person = human, witness = true, delegated = false, inspect = true, controls = true;
+  const sequence: string[] = [];
+  // `delegate()` adds the explicit `run-decision resume` cell (the strongest AI policy there is).
+  const source = { async load() {
+    sequence.push('policy');
+    return policySchema.parse({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [human, ai, otherAi].flatMap(actor => [
+      ...(controls ? [grant('run', inspect ? ['reserve', 'cancel', 'inspect'] : ['reserve', 'cancel'], actor)] : []),
+      ...(delegated ? [grant('run-decision', ['resume', 'close'], actor)] : [])]) });
+  } };
+  const verifier = { async verify() { sequence.push('authenticate'); return person; } };
+  const integrity = createHmacIntegrity('test', new Uint8Array(32).fill(1)), audits: unknown[] = [];
   const broker = new RunDecisionApprovalBroker(approvals.store, integrity, source, async principal => witness && principal.assurance === 'os-user', () => 100, 1000, 1000, 'en');
-  const lifecycle = new RunLifecycleApplication(store, verifier, new RunPolicyAuthorization(source),
+  const ports: RunLifecycleStore = {
+    loadRun(...args) { sequence.push('run'); return store.loadRun(...args); },
+    loadRunReceipt(...args) { sequence.push('receipt'); return store.loadRunReceipt(...args); },
+    commitRunLifecycle(...args) { sequence.push('commit'); return store.commitRunLifecycle(...args); },
+  };
+  const policy = new RunPolicyAuthorization(source);
+  const lifecycle = new RunLifecycleApplication(ports, verifier,
+    { authorize(action, ...args) { sequence.push(action); return policy.authorize(action, ...args); } },
     { authorize: (identity, principal) => new DispatchPolicyAuthorization(source).authorizeIdentity('evaluate', identity, principal) },
-    audit => ({ record(event) { audits.push(event); return new AuditApplication(audit, integrity).record(event); } }), () => 100, 1000, 'p', broker);
+    audit => ({ record(event) { audits.push(event); return new AuditApplication(audit, integrity).record(event); } }), () => 100, 1000, 'p',
+    { authorize(...args) { sequence.push('decision'); return broker.authorize(...args); } });
   const raw = () => { const read = new DatabaseSync(path, { readOnly: true }); try { return String(read.prepare('SELECT snapshot FROM runs WHERE run_id=?').get('r')!.snapshot); } finally { read.close(); } };
   const read = async () => (await store.loadRun('s', 'r'))!;
-  return { lifecycle, store, audits, raw, read,
-    as(value: VerifiedPrincipal, tty = true) { person = value; witness = tty; }, delegate() { delegated = true; } };
+  const durable = () => {
+    const db = new DatabaseSync(path, { readOnly: true });
+    try { return ['runs', 'run_receipts', 'approvals', 'approval_receipts', 'approval_outbox', 'audit_events']
+      .map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()); } finally { db.close(); }
+  };
+  return { lifecycle, store, audits, raw, read, durable, sequence, integrity,
+    as(value: VerifiedPrincipal, tty = true) { person = value; witness = tty; }, delegate(enabled = true) { delegated = enabled; },
+    noInspect() { inspect = false; }, denyControl() { controls = false; } };
 }
 
 it.each(['nervous', 'auditor'] as const)('a %s hold is resumed only by a person at a terminal; AI, MCP and scripts are refused even with the resume cell', async holdSource => {
@@ -106,6 +128,55 @@ it('an operator hold keeps the earlier stored shape and resumes by a decision: A
   expect(resumed.snapshot.state).toEqual({ kind: 'running' });
   expect(f.audits[1]).toMatchObject({ subject: { action: 'resume', deciderClass: 'ai-policy', decisionRuleId: 'run-decision-resume-close-ai' } });
   expect((f.audits[1] as { subject: object }).subject).not.toHaveProperty('holdSource');
+});
+
+it('MCP hold and delegated resume succeed without inspect, and legacy replay retains its original actor and decision', async () => {
+  const f = await fixture(baseRun()); f.as(ai); f.noInspect(); f.delegate();
+  const execute = (input: unknown) => { f.sequence.length = 0; return f.lifecycle.execute(input, undefined, 'mcp'); };
+  const sequence = (action: string) => ['authenticate', action, 'policy', 'run', 'receipt', 'decision', 'policy'];
+  const held = await execute(command('hold', 0, { holdReason: 'Release window' }));
+  expect(f.sequence).toEqual([...sequence('cancel'), 'commit']);
+  expect(JSON.parse(held.command).decision).toEqual({ schemaVersion: 1, deciderClass: 'ai-policy', step: 'operator-control',
+    policyRevision: 'p', ruleId: 'run-reserve-cancel-ai' });
+  const resumed = await execute(command('resume', held.snapshot.revision));
+  expect(f.sequence).toEqual([...sequence('reserve'), 'commit']);
+  expect(JSON.parse(resumed.command).decision).toEqual({ schemaVersion: 1, deciderClass: 'ai-policy', step: 'human-step',
+    policyRevision: 'p', ruleId: 'run-decision-resume-close-ai' });
+
+  const safety = await f.lifecycle.holdFrom('auditor', { schemaVersion: 1, scopeId: 's', runId: 'r', expectedRevision: resumed.snapshot.revision,
+    holdReason: 'Safety check', commandId: 'auditor' });
+  const safetyBaseline = f.durable();
+  await expect(execute(command('resume', safety.snapshot.revision, { commandId: 'safety-resume' }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(f.sequence).toEqual([...sequence('reserve'), 'inspect', 'policy']);
+  expect(f.durable()).toEqual(safetyBaseline);
+
+  const old = await fixture(holdRun(baseRun(), 0, 'Legacy operator hold', 0, 1000)); old.as(ai); old.noInspect();
+  const legacy = { schemaVersion: 1 as const, scopeId: 's', runId: 'r', action: 'resume' as const, expectedRevision: 1, commandId: 'legacy-resume' };
+  const decision = { schemaVersion: 1 as const, deciderClass: 'ai-policy' as const, step: 'operator-control' as const, policyRevision: 'old', ruleId: 'old-operator-rule' };
+  const original = await old.store.commitRunLifecycle({ ...legacy, actor: { id: ai.id, issuer: ai.issuer, subject: ai.subject, assurance: ai.assurance },
+    decision, now: 50, timeoutMs: 1000 }, (audit, snapshot) => new AuditApplication(audit, old.integrity).record({
+    schemaVersion: 1, eventId: 'legacy-audit', scopeId: 's', principal: { issuer: ai.issuer, subject: ai.subject }, policyRevision: 'old', atMs: 50,
+    subject: { kind: 'run-lifecycle', action: 'resume', deciderClass: 'ai-policy', decisionRuleId: decision.ruleId, runId: 'r',
+      commandId: legacy.commandId, taskId: null, revision: snapshot.revision, evidence: null },
+  }));
+  const baseline = old.durable();
+  const replay = () => { old.sequence.length = 0; return old.lifecycle.execute(legacy, undefined, 'mcp'); };
+  expect(await replay()).toEqual(original);
+  expect(old.sequence).toEqual(sequence('reserve'));
+  expect(JSON.parse(original.command).decision).toEqual(decision);
+  expect(old.durable()).toEqual(baseline);
+  old.as(otherAi);
+  await expect(replay()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(old.sequence).toEqual([...sequence('reserve'), 'inspect', 'policy']);
+  expect(old.durable()).toEqual(baseline);
+  old.delegate();
+  await expect(replay()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(old.sequence).toEqual([...sequence('reserve'), 'inspect', 'policy']);
+  expect(old.durable()).toEqual(baseline);
+  old.as(ai); old.denyControl();
+  await expect(replay()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(old.sequence).toEqual(['authenticate', 'reserve', 'policy']);
+  expect(old.durable()).toEqual(baseline);
 });
 
 it('a safety hold upgrades an operator hold, survives an overlay round trip, and its overlay is lifted only by a person', async () => {

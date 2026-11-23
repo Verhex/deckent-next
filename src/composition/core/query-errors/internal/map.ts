@@ -41,6 +41,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof AuthorityChangeError && error.refusal) return registeredFailure(error.code, { params: delegationRefusalParams(error.refusal) });
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });
+  if (error instanceof RunLifecycleError && error.code === 'RUN_NOT_FOUND' && error.runId) return registeredFailure(error.code, { params: { run: error.runId } });
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
   if (error instanceof DeckentError) return error.code === 'QUERY_UNEXPECTED_FAILURE' ? sanitizeQueryFailure(error) : ErrorRegistry.has(error.code) ? error : registeredFailure(error.code);
   if (error instanceof ProviderSpendError) return registeredFailure(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, { params: {
