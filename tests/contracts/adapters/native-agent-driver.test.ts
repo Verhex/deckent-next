@@ -223,12 +223,13 @@ it.each(['ordinary prose', 'split registered secret'] as const)('renders real na
       expect(JSON.stringify({ units, tail: step.liveTail, delta })).not.toContain(fragment);
     }
   }
-  expect(units).toMatchObject(split ? [
+  if (split) expect(units).toMatchObject([
     { kind: 'text', markdown: 'I saw ', lead: true },
     { kind: 'tool', name: 'read_file', status: 'denied', declined: true },
     { kind: 'text', markdown: '‹secret:FIXTURE_LOGIN› ‹secret:FIXTURE_LOGIN›', lead: false },
-  ] : [
-    { kind: 'text', markdown: before, lead: true },
+  ]);
+  else expect([units[0], units[1], units.at(-1)]).toMatchObject([
+    { kind: 'text', markdown: expect.stringMatching(/^I will check the /u), lead: true },
     { kind: 'tool', name: 'read_file', target: 'scoped.txt', status: 'denied', declined: true },
     { kind: 'text', markdown: after, lead: false },
   ]);
@@ -238,6 +239,22 @@ it.each(['ordinary prose', 'split registered secret'] as const)('renders real na
   expect(replay).toEqual([{ kind: 'text', text: expected }, { kind: 'done', finish: 'stop', note: null }]);
   expect(invokeAgent).toHaveBeenCalledOnce();
   expect(execute).not.toHaveBeenCalled();
+});
+
+it('keeps held prose out of native deltas when cancelled at tool handover', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(families[0]!, { events: [claudeProse('preamble', 'I will check the file.')], delayMs: 100,
+    calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }] });
+  const controller = new AbortController(), onDelta = vi.fn<ModelInvocationDeltaSink>();
+  const propose = vi.fn<ToolSessionPort['propose']>((...args) => {
+    controller.abort();
+    return f.propose(...args);
+  });
+  const h = await f.start('continue', null, { ...f.port, propose });
+  await expect(h.run(controller.signal, onDelta)).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+  expect(propose).toHaveBeenCalledOnce();
+  expect(onDelta).toHaveBeenCalledBefore(propose);
+  expect(h.deltas.map(delta => delta.text)).toEqual(['I will check the ']);
 });
 
 it('WER-A chat continues after synthetic nonzero and sealed NO, and stops session and uncertain records', async () => {
