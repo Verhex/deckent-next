@@ -219,7 +219,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     expect(out).toMatch(/Working… · Esc cancels/u);
     // D5: the stopped summary is explained; the finished one replaced the history once.
     expect(out).toContain('Summarizing was cancelled before it finished');
-    expect(out).toContain('earlier messages were summarized to fit the context window');
+    expect(out).toContain('earlier messages were summarized to keep the chat request within its limits.');
     // Summary calls: the one Esc stopped, the one that landed; q7 and q8 start from the compacted history and never summarize again.
     expect(f.calls.summary).toBe(2);
     expect(f.calls.rounds).toEqual(['q1', 'q2', 'q3', 'q4', 'q6', 'q7', 'q8']);

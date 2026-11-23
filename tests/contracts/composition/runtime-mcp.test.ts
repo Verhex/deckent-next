@@ -572,10 +572,9 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
       .toBe('MCP server fx did not start: docker needs its daemon socket, which is outside its sandbox; re-add the server with --realm host (it then runs unsandboxed). '
         + 'Its first-use card is not asked again until you run /mcp approve fx.');
     expect(renderMcpStartNotice(notice(null, 'trusted', { code: 'start-failed', detail: 'spawn ENOENT' }), 'en'))
-      .toBe('MCP server fx did not start: start-failed: spawn ENOENT. Its tools are not offered; /mcp reconnect fx tries it again.');
-    expect(renderMcpStartNotice(notice(null, 'launch', { code: 'start-failed' }), 'tr')).toBe('MCP sunucusu fx başlamadı: start-failed. İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
+      .toBe('MCP server fx could not start or make its tools available. Check its configuration in /mcp. Details: start-failed: spawn ENOENT. Its tools are not offered; /mcp reconnect fx tries it again.');
+    expect(renderMcpStartNotice(notice(null, 'launch', { code: 'start-failed' }), 'tr')).toBe('MCP sunucusu fx başlatılamadı veya araçlarını sunamadı. /mcp üzerinden yapılandırmasını kontrol edin. Ayrıntı: start-failed. İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
     expect(renderMcpStartNotice({ kind: 'not-recorded', name: 'fx' }, 'tr')).toBe('MCP sunucusu fx: bu hata kaydedilemedi; kartı yeniden sorulabilir.');
-    expect(renderMcpStartNotice({ kind: 'not-decided', name: 'fx', code: 'MCP_TRUST_STORE_UNAVAILABLE' }, 'en')).toBe('MCP server fx was not decided: MCP_TRUST_STORE_UNAVAILABLE.');
     const missing = { kind: 'not-decided' as const, name: 'fx', code: 'secret-unresolved', detail: 'SERVICE_API_TOKEN' };
     expect(mcpStartNoticeSchema.parse(missing)).toEqual(missing);
     expect(mcpStartNoticeSchema.safeParse({ ...missing, detail: 'SERVICE_API_TOKEN; injected command' }).success).toBe(false);
@@ -584,6 +583,59 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(mcpStartNoticeSchema.safeParse({ ...missing, command: 'anything' }).success).toBe(false);
     expect(mcpStartNoticeSchema.safeParse(notice(null, 'trusted', { phase: 'decision' })).success).toBe(true);
     for (const locale of ['en', 'tr'] as const) expect(renderMcpStartNotice(missing, locale)).toContain('deckent secret set SERVICE_API_TOKEN --main');
+  });
+  it.each([
+    ['SUBSCRIPTION_HOST_MCP_REFUSED',
+      'The tools from MCP server fx were withheld because this subscription chat requires a sandbox that enforces read-only access to the project. If the server supports running locally in a sandbox, review its entry in /mcp, set its realm to require-sandbox, and follow the usual trust approval steps.',
+      'Bu abonelik sohbeti, projeye yalnızca okuma erişimi sağlayan bir yalıtım alanı gerektirdiği için fx adlı MCP sunucusunun araçları sohbete sunulmadı. Sunucu yerel bir yalıtım alanında çalışabiliyorsa /mcp üzerinden kaydını inceleyin, çalışma ortamını require-sandbox olarak ayarlayın ve normal güven onayı adımlarını izleyin.'],
+    ['MCP_TRUST_STORE_UNAVAILABLE',
+      'Trust for MCP server fx could not be decided because its trust record could not be read. Ask the installation administrator to check access to the record. Details: MCP_TRUST_STORE_UNAVAILABLE.',
+      'Güven kaydı okunamadığı için fx adlı MCP sunucusu hakkında güven kararı verilemedi. Kurulum yöneticisinden kayda erişimi kontrol etmesini isteyin. Ayrıntı: MCP_TRUST_STORE_UNAVAILABLE.'],
+    ['MCP_SERVER_ENTRY_INVALID',
+      'The entry for MCP server fx is invalid. Review it in /mcp and correct its configuration. Details: MCP_SERVER_ENTRY_INVALID.',
+      'fx adlı MCP sunucusunun kaydı geçersiz. /mcp üzerinden kaydı inceleyin ve yapılandırmasını düzeltin. Ayrıntı: MCP_SERVER_ENTRY_INVALID.'],
+    ['secret-reference-in-project-file',
+      'MCP server fx could not start because shared project entries cannot reference secrets. Remove the reference from the shared entry and use a personal entry if the server needs a secret.',
+      'Paylaşılan proje kayıtları kasa anahtarlarına başvuramadığı için fx adlı MCP sunucusu başlatılamadı. Başvuruyu paylaşılan kayıttan kaldırın. Sunucunun kasa anahtarına ihtiyacı varsa kişisel bir kayıt kullanın.'],
+    ['secret-refused',
+      'MCP server fx could not start because a required secret was unavailable to this project. Check the selected vault and the project’s access to the key.',
+      'Gerekli bir kasa anahtarı bu proje için kullanılamadığından fx adlı MCP sunucusu başlatılamadı. Seçilen kasayı ve projenin anahtara erişimini kontrol edin.'],
+    ['secret-unresolved',
+      'MCP server fx could not start because a required secret is missing. Review the key named in its /mcp entry.',
+      'Gerekli bir kasa anahtarı eksik olduğu için fx adlı MCP sunucusu başlatılamadı. /mcp kaydında belirtilen anahtarı kontrol edin.'],
+    ['failed',
+      'Trust for MCP server fx could not be decided. Review its entry in /mcp. If the problem persists, ask the installation administrator to check the cause. Details: failed.',
+      'fx adlı MCP sunucusu hakkında güven kararı tamamlanamadı. /mcp üzerinden kaydını inceleyin. Sorun sürerse kurulum yöneticisinden nedenini kontrol etmesini isteyin. Ayrıntı: failed.'],
+  ] as const)('explains the decision notice %s in both languages', (code, en, tr) => {
+    const notice = { kind: 'not-decided' as const, name: 'fx', code };
+    expect(renderMcpStartNotice(notice, 'en')).toBe(en);
+    expect(renderMcpStartNotice(notice, 'tr')).toBe(tr);
+  });
+  it.each([
+    ['POLICY_CHANGE_TOO_LARGE', 'The policy change exceeds the size deckent can check. Ask an administrator to review the tool permissions.',
+      'Politika değişikliği deckent’ın denetleyebileceği boyutu aşıyor. Bir yöneticiden araç izinlerini incelemesini isteyin.'],
+    ['failed', 'The automatic tool grant could not be completed. Ask an administrator to review the policy.',
+      'Araçlara otomatik izin verilemedi. Bir yöneticiden politikayı incelemesini isteyin.'],
+  ] as const)('explains a refused automatic grant with reason %s', (reason, en, tr) => {
+    const notice = { kind: 'grant-refused' as const, name: 'fx', reason };
+    expect(renderMcpStartNotice(notice, 'en')).toBe(`MCP server fx is trusted, but its tools were not allowed: ${reason}. ${en} Calls to them are denied by policy.`);
+    expect(renderMcpStartNotice(notice, 'tr')).toBe(`MCP sunucusu fx güvenilir, ama araçlarına izin verilmedi: ${reason}. ${tr} Bu araçlara yapılan çağrılar politika tarafından reddedilir.`);
+  });
+  it.each([
+    ['sandbox-unavailable', 'MCP server fx could not start inside its sandbox. Check its sandbox configuration in /mcp.',
+      'MCP sunucusu fx yalıtım alanında başlatılamadı. /mcp üzerinden yalıtım ayarlarını kontrol edin.'],
+    ['MCP_SANDBOX_UNAVAILABLE', 'MCP server fx could not start inside its sandbox. Check its sandbox configuration in /mcp.',
+      'MCP sunucusu fx yalıtım alanında başlatılamadı. /mcp üzerinden yalıtım ayarlarını kontrol edin.'],
+    ['list-failed', 'deckent could not read the tool list from MCP server fx. Check that the server is responding in /mcp.',
+      'deckent, fx adlı MCP sunucusunun araç listesini okuyamadı. Sunucunun yanıt verip vermediğini /mcp üzerinden kontrol edin.'],
+    ['too-many-tools', 'The tool list for MCP server fx exceeded the limit deckent can read. Check the number of tools and how the server lists them before retrying.',
+      'fx adlı MCP sunucusunun araç listesi, deckent’ın okuyabileceği sınırı aştı. Yeniden denemeden önce araç sayısını ve sunucunun araçları nasıl listelediğini kontrol edin.'],
+    ['restart-limit', 'MCP server fx reached its restart limit. Check why it stops before retrying.',
+      'MCP sunucusu fx yeniden başlatma sınırına ulaştı. Yeniden denemeden önce neden durduğunu kontrol edin.'],
+  ] as const)('explains the undiagnosed start failure %s in both languages', (code, en, tr) => {
+    const notice = { kind: 'start-failed' as const, name: 'fx', failure: { phase: 'trusted' as const, code } };
+    expect(renderMcpStartNotice(notice, 'en')).toBe(`${en} Details: ${code}. Its tools are not offered; /mcp reconnect fx tries it again.`);
+    expect(renderMcpStartNotice(notice, 'tr')).toBe(`${tr} Ayrıntı: ${code}. Araçları sunulmuyor; /mcp reconnect fx yeniden dener.`);
   });
   it('MCP_SANDBOX_COMMAND_UNREACHABLE picks its sentence by diagnosis kind (role label and link target included)', () => {
     const message = (params: Record<string, string>, locale: Locale) => ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', locale, { name: 'fx', ...params })!.message;
