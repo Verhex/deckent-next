@@ -7,18 +7,19 @@ import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
+type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
+type Person = ScopeContext['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
 function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write', use: (standing: PersistentStanding, person: Person) => Promise<T>): Promise<T> {
   return withPolicyAdministration(root, scopeId, options, access, (deps, person) => use(new PersistentStanding(deps), person));
 }
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
-  use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore; readonly serviceIdentity?: { readonly scopeId: string; readonly serviceId: string } | null }, person: Person) => Promise<T>): Promise<T> {
+  use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore; readonly serviceIdentity?: { readonly scopeId: string; readonly serviceId: string } | null }, person: Person, document: ScopeContext['document']) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const source = contextPolicySource({ layout, config });
     const denied = () => Promise.reject(new Error('read-only'));
-    if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal);
+    if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal, document);
     const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), ledger = await path();
     const effects = await openConfiguredLedger({ config, path: async () => ledger }, { migration: 'forbid' }), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
@@ -36,7 +37,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         verifiedPrincipal(principal), sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
-      return await use({ administration, approve, policy: source, effects, serviceIdentity: config.service.identity }, principal);
+      return await use({ administration, approve, policy: source, effects, serviceIdentity: config.service.identity }, principal, document);
     } finally { journal.close(); effects.close(); auditStore.close(); }
   } catch (error) { throw queryFailure(error); }
 }
@@ -75,15 +76,40 @@ export function revokeConfiguredStandingGrant(root: string, input: { readonly sc
 export function configuredMcpToolGrants(root: string, scopeId: string, options: ConfigLoadOptions, approver: { readonly issuer: string; readonly subject: string }):
   { grant(server: McpToolGrantTarget, tools: readonly string[]): Promise<McpToolGrantOutcome>; revoke(server: McpToolGrantTarget): Promise<McpToolGrantOutcome>;
     inspect(server: McpToolGrantTarget): Promise<{ readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' }> } {
+  const refuse = (error: unknown): McpToolGrantOutcome => {
+    const code = (error as { code?: unknown })?.code;
+    return { status: 'refused', reason: code === 'POLICY_DENIED' ? 'delegation' : String(code ?? 'failed') };
+  };
+  const isApprover = (person: Person) => person.issuer === approver.issuer && person.subject === approver.subject;
   const run = (work: (grants: McpToolGrants, person: Person) => Promise<McpToolGrantOutcome>) => withPolicyAdministration(root, scopeId, options, 'write', (deps, person) =>
-    person.issuer === approver.issuer && person.subject === approver.subject ? work(new McpToolGrants(deps), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
+    isApprover(person) ? work(new McpToolGrants(deps), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
     // A person refused write access to this scope holds no authority to grant there either (the same reason as the delegation bound's).
-    .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; return { status: 'refused' as const, reason: code === 'POLICY_DENIED' ? 'delegation' : String(code ?? 'failed') }; });
+    .catch(refuse);
   return {
     grant: (server, tools) => run((grants, person) => grants.grant({ scopeId, principal: person, server, tools, reason: `MCP trust approval of ${server.name}` })),
-    revoke: server => run((grants, person) => grants.revoke({ scopeId, principal: person, server, reason: `MCP trust of ${server.name} withdrawn` })),
+    async revoke(server) {
+      // Trust withdrawal already settled. Check the witness before policy administration can submit a card.
+      try {
+        const config = await loadComposedConfig(root, { ...options, heal: false }), peer = localPrincipalPeer();
+        const markers = config.cli.agentEnvironment, channel = localPrincipalChannel();
+        const aiMarked = automationMarker(process.env, markers) === 'agent' || automationMarker(options.env ?? process.env, markers) === 'agent';
+        const localPerson = channel === undefined && !aiMarked;
+        const witnessed = localPerson && await attestLocalInteractiveTerminal(peer?.pid, peer?.uid);
+        if (localPerson && !witnessed) {
+          // Use the validated read snapshot so a failed policy read cannot be mistaken for absence.
+          const absent = await withPolicyAdministration(root, scopeId, options, 'read', async (deps, person, document) => {
+            if (!isApprover(person)) return false;
+            const grants = new McpToolGrants({ ...deps, policy: { load: async () => document } });
+            return (await grants.inspect({ scopeId, principal: person, server })).status === 'none';
+          }).catch(() => false);
+          if (absent) return { status: 'none' };
+        }
+        await assertAuthorityWitness('mcpToolGrantRevoke', channel, { attest: async () => witnessed });
+      } catch (error) { return refuse(error); }
+      return run((grants, person) => grants.revoke({ scopeId, principal: person, server, reason: `MCP trust of ${server.name} withdrawn` }));
+    },
     // Read only (no administration opened): the same person's grant of the server, for `/mcp` detail and `deckent mcp get`.
-    inspect: server => withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => person.issuer === approver.issuer && person.subject === approver.subject
+    inspect: server => withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => isApprover(person)
       ? new McpToolGrants(deps).inspect({ scopeId, principal: person, server }) : Promise.resolve({ status: 'none' as const })),
   };
 }

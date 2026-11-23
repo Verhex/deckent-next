@@ -3,10 +3,13 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { FilePolicySource, registerProviderConfig, withLocalPrincipalChannel } from '#adapters/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { attestLocalInteractiveTerminal, FilePolicySource, registerProviderConfig, withLocalPrincipalChannel } from '#adapters/index.js';
+import { mcpTrustDirectory, recordMcpTrust } from '#adapters/core/mcp-client/index.js';
+import { MCP_TRUST_FILE } from '#adapters/core/mcp-trust/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, policySchema } from '#domain/index.js';
 import { decideAgentToolCall, McpToolGrants } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -23,6 +26,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const me = { issuer: hostname(), subject: String(userInfo().uid) };
 const principal = { id: `${userInfo().username}@${hostname()}`, ...me, assurance: 'os-user' as const, scopeIds: ['proj'] };
 const echo = { name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } };
+const agentMarker = 'MCP_FIXTURE_AGENT';
 
 /** W3-AUTHORITY: the trust decision chain needs a service-attested interactive terminal. `headless` keeps the vitest worker (no TTY) as the
  * deciding process; otherwise the composition is pointed at a real PTY process (the existing terminal fixture), never a client isTTY flag. */
@@ -31,7 +35,8 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
   const project = join(base, 'project'), home = join(base, 'home'), data = join(project, 'data');
   mkdirSync(join(project, '.deckent'), { recursive: true, mode: 0o700 }); mkdirSync(home, { mode: 0o700 });
   const env: NodeJS.ProcessEnv = { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', DECKENT_LANGUAGE: 'en' };
-  writeFileSync(join(project, '.deckent', 'config.json'), JSON.stringify({ layout: { root: data }, terminal: { scopeId: 'proj' }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 } }));
+  writeFileSync(join(project, '.deckent', 'config.json'), JSON.stringify({ layout: { root: data }, terminal: { scopeId: 'proj' },
+    cli: { agentEnvironment: [agentMarker] }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   const db = new DatabaseSync(opened.path);
   try { db.exec("INSERT OR IGNORE INTO companies(company_id) VALUES('default'); INSERT INTO scope_registry(scope_id,company_id,origin) VALUES('proj','default','start');"); }
@@ -47,7 +52,7 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
   const args = ['--realm', 'host', '--', process.execPath, FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log];
   const entry = { command: process.execPath, args: args.slice(4), realm: 'host' };
   const peer = options.headless ? undefined : await terminalRuntimePeer(createTerminalRuntimeClient(project, { env }));
-  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1], answer = true) => withLocalPrincipalChannel(undefined,
+  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1], answer = true, channel?: 'mcp') => withLocalPrincipalChannel(channel,
     () => runConfiguredMcpCommand(project, request, { env }, async () => answer), peer) as Promise<Record<string, unknown>>;
   const policy = () => JSON.parse(readFileSync(join(data, 'policy.json'), 'utf8')) as { revision: string; grants: { id: string; scopes: unknown; principals: unknown; resource: { kind: string; ids: string[] } }[] };
   const mcpGrants = () => policy().grants.filter(grant => grant.id.startsWith('mcp-'));
@@ -55,17 +60,21 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
     ownerUid: userInfo().uid, maxBytes: 65_536 });
   const decide = async (tool: string) => decideAgentToolCall(await source.load(), { principal, scopeId: 'proj', tool: { name: tool }, operation: { id: 'mcp.tool.call' }, cell: 'mcp-call',
     mcpServer: tool.split('__')[1]! }).decision;
-  const authorityChanges = () => {
+  const ledgerRows = (sql: string) => {
     const ledger = new DatabaseSync(opened.path, { readOnly: true });
-    try { return ledger.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String(row['record'])) as { event: { subject: { kind: string } } }).event.subject)
-      .filter(subject => subject.kind === 'authority-change'); }
+    try { return ledger.prepare(sql).all(); }
     finally { ledger.close(); }
   };
-  return { project, env, run, entry, setTools, mcpGrants, decide, authorityChanges };
+  const auditSubjects = () => ledgerRows('SELECT record FROM audit_events ORDER BY sequence').map(row => (JSON.parse(String(row['record'])) as
+    { event: { subject: { kind: string; action?: string; server?: string } } }).event.subject);
+  const authorityChanges = () => auditSubjects().filter(subject => subject.kind === 'authority-change');
+  const policyRecords = () => ({ policy: policy(), approvals: ledgerRows('SELECT * FROM approvals ORDER BY scope_id, approval_id'),
+    effects: ledgerRows('SELECT * FROM effect_intents ORDER BY scope_id, command_id'), authorityChanges: authorityChanges() });
+  return { project, env, peer, run, entry, setTools, mcpGrants, decide, auditSubjects, authorityChanges, policyRecords };
 }
 
 describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s tool grant (K1)', () => {
-  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke (and reset) takes trust and grant together', async () => {
+  it('withdraws audited trust from a marked shell and reserves policy-grant removal for its witnessed owner', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', pinnedTools: 1, grant: { status: 'granted' } });
     const grants = f.mcpGrants();
@@ -77,14 +86,129 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     // `get` (and the /mcp detail) reads the person's grant without writing anything.
     expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { grant: { status: 'granted', scopes: ['proj'] } } });
     expect(f.authorityChanges()).toHaveLength(1);
+    expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
+    const before = f.policyRecords();
+    expect(process.env[agentMarker]).toBeUndefined();
+    f.env[agentMarker] = '1';
+    const refused = { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' };
+    expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', trust: null, pinnedTools: 0, grant: { status: 'granted' } } });
+    expect(f.auditSubjects().filter(subject => subject.kind === 'mcp-trust' && subject.action === 'revoke')).toEqual([
+      expect.objectContaining({ action: 'revoke', scope: 'local', server: 'fx' }),
+    ]);
+    expect.soft(f.policyRecords()).toEqual(before);
+    expect.soft(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false });
+    expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'declined' } });
+    expect.soft(await f.run({ verb: 'remove', name: 'fx' })).toMatchObject({ removed: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [] });
+    expect.soft(f.policyRecords()).toEqual(before);
+    expect(await f.run({ verb: 'add', name: 'fx', scope: 'local', entry: f.entry, approve: false })).toMatchObject({ trust: 'pending' });
+    expect(await attestLocalInteractiveTerminal()).toBe(false);
+    expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
+      .toMatchObject({ revoked: { name: 'fx' }, grant: refused });
+    expect(f.policyRecords()).toEqual(before);
+    delete f.env[agentMarker];
+    expect.soft(await f.run({ verb: 'revoke', name: 'fx' }, true, 'mcp')).toMatchObject({ revoked: { name: 'fx' }, grant: refused });
+    expect.soft(f.policyRecords()).toEqual(before);
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toMatchObject({ revoked: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
     expect(f.mcpGrants()).toEqual([]);
     expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+    const withoutGrant = f.policyRecords();
+    f.env[agentMarker] = '1';
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
+      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(f.policyRecords()).toEqual(withoutGrant);
+    delete f.env[agentMarker];
     // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
     expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, grant: { status: 'granted' } });
     expect(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
     expect(f.mcpGrants()).toEqual([]);
+  }, 90_000);
+
+  it('lets a witnessed owner in a CI-only shell remove the grant as in the parent contract', async () => {
+    const f = await fixture();
+    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+    expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
+    expect(process.env[agentMarker]).toBeUndefined();
+    f.env['CI'] = 'true';
+    // Same receipt, grant state and audit outcome as the unmarked owner in the parent test.
+    expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toMatchObject({ revoked: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
+    expect.soft(f.mcpGrants()).toEqual([]);
+    expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
+    expect(f.authorityChanges()).toHaveLength(2);
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+  }, 90_000);
+
+  it('keeps the parent receipt for headless CI-only and unmarked calls with no grant, and refuses removal of an existing grant', async () => {
+    const f = await fixture();
+    const request = { verb: 'revoke', name: 'fx' } as const;
+    const receipt = { schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } };
+    const headlessRevoke = () => runConfiguredMcpCommand(f.project, request, { env: f.env }, async () => true);
+    expect(await attestLocalInteractiveTerminal()).toBe(false);
+    expect(process.env[agentMarker]).toBeUndefined();
+
+    for (const ci of [undefined, 'true']) {
+      vi.stubEnv('CI', ci);
+      if (ci === undefined) delete f.env['CI'];
+      else f.env['CI'] = ci;
+      try {
+        expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+        const withGrant = f.policyRecords();
+        expect(await headlessRevoke()).toEqual({ ...receipt, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } });
+        expect(f.policyRecords()).toEqual(withGrant);
+        expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', trust: null } });
+        expect(await f.run(request)).toEqual({ ...receipt, grant: { status: 'revoked' } });
+
+        const withoutGrant = f.policyRecords();
+        expect.soft(await headlessRevoke(), ci === undefined ? 'unmarked' : 'CI only').toEqual(receipt);
+        expect(f.policyRecords()).toEqual(withoutGrant);
+        expect(await f.run({ verb: 'remove', name: 'fx' })).not.toHaveProperty('grant');
+      } finally { vi.unstubAllEnvs(); }
+    }
+  }, 90_000);
+
+  it('refuses grant removal before policy writes when only the process environment is AI-marked', async () => {
+    const f = await fixture();
+    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+    expect(await attestLocalInteractiveTerminal(f.peer?.pid, f.peer?.uid)).toBe(true);
+    expect(f.env[agentMarker]).toBeUndefined();
+    const before = f.policyRecords();
+    vi.stubEnv(agentMarker, '1');
+    try {
+      expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({
+        schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' },
+      });
+    } finally { vi.unstubAllEnvs(); }
+    expect(f.policyRecords()).toEqual(before);
+  }, 90_000);
+
+  it('stops before the grant port when trust evidence fails and keeps the grant for a mismatched principal', async () => {
+    const f = await fixture();
+    await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry });
+    const before = f.policyRecords(), target = { scope: 'local' as const, name: 'fx' };
+    const { server } = await f.run({ verb: 'get', name: 'fx' }) as { server: { definitionDigest: string } };
+    const options = { env: f.env }, grants = configuredMcpToolGrants(f.project, 'proj', options, me);
+    const revoke = vi.fn(grants.revoke), audit = vi.fn(async () => { throw new Error('fixture audit failed'); });
+    const runRevoke = () => recordMcpTrust({ ...target, definitionDigest: server.definitionDigest }, {
+      cwd: f.project, environment: f.env, principal: me, sandboxes: [], secret: async () => undefined,
+      directory: scope => mcpTrustDirectory(scope, { projectRoot: f.project, environment: f.env }),
+      audit, grants: { ...grants, revoke },
+    }, 'revoke', () => null);
+    await expect(runRevoke()).rejects.toThrow('fixture audit failed');
+    expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'trusted', grant: { status: 'granted' } } });
+    const trust = join(await mcpTrustDirectory('local', { projectRoot: f.project, environment: f.env }), MCP_TRUST_FILE);
+    writeFileSync(trust, '{');
+    await expect(runRevoke()).rejects.toMatchObject({ code: 'MCP_TRUST_STORE_UNAVAILABLE' });
+    expect(readFileSync(trust, 'utf8')).toBe('{');
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+    const other = configuredMcpToolGrants(f.project, 'proj', options, { ...me, subject: 'other' });
+    expect(await withLocalPrincipalChannel(undefined, () => other.revoke(target), f.peer)).toEqual({ status: 'refused', reason: 'principal' });
+    expect(f.policyRecords()).toEqual(before);
   }, 90_000);
 
   it('pin drift: a changed tool list offers nothing new until re-approval, which replaces the grant (never a second one); remove takes it away; a re-added name has none until approved', async () => {

@@ -39,6 +39,11 @@ describe('/mcp human output', () => {
     expect(await run('tr', '', { servers: [], problems: [] })).toEqual(['Bu proje için kayıtlı MCP sunucusu yok. Eklemek için: deckent mcp add …']);
     expect(await run('tr', 'approve fx', {})).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(await run('en', 'reconnect fx', {})).toEqual(['fx restarts the next time it is used']);
+    const revoked = { revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } };
+    expect.soft(await run('en', 'revoke fx', revoked)).toEqual(['Trust for fx was revoked. Approve it again before starting the server.',
+      'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    expect(await run('tr', 'revoke fx', revoked)).toEqual(['fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.',
+      'Bu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.']);
     expect(await run('tr', 'remove fx', { removed: { scope: 'user' } })).toEqual(['fx kaldırıldı (kullanıcı)']);
     expect(await run('en', 'frobnicate')).toEqual(['Usage: /mcp [list] | /mcp approve|reconnect|revoke|remove <name>']);
   });
