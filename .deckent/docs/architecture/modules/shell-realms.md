@@ -59,7 +59,8 @@ the installation’s normal launcher directory. The development entry keeps its 
 created, written or re-moded, and a copy the service has not placed yet is reported as "not placed … yet". The shipped provider list is
 one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the service's default port, MCP `inspect` starts and doctor.
 
-Shell and MCP stdio launches count the final bubblewrap arguments after `argv[0]`, including `--`, the program and its arguments.
+Shell, native worker input shell and MCP stdio launches count the final bubblewrap arguments after `argv[0]`, including `--`, the program and its arguments.
+The native worker count includes all prepared input binds and the last read-only remount.
 The compatibility limit comes from the bubblewrap v0.13.0 parser pinned in [the packaging lock](../../../../packaging/bwrap/bwrap.lock.json).
 Over that limit, `SANDBOX_VIEW_TOO_LARGE` reports the count, the limit and the contributions of the view and command without
 disclosing paths. The shell or MCP server stays stopped. The separate 1 MiB view-prefix byte check still applies.

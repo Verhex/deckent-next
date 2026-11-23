@@ -55,7 +55,7 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
   return withinByteBound(args) ? args : null;
 }
 
-const withinByteBound = (args: readonly string[]) =>
+export const withinByteBound = (args: readonly string[]) =>
   args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0) <= BUBBLEWRAP_ARGUMENT_MAX_BYTES;
 
 function isolatedViewPrefix(view: IsolatedProcessView): string[] {
@@ -99,7 +99,7 @@ export function isolatedProcessCommand(input: Readonly<{ shell: string; launcher
   if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) {
     const protective = input.view.stateDir ? 6 * input.view.stateMasks.directories.length + 3 * input.view.stateMasks.files.length : 0;
     const message = argumentCountRefusal(args.length, { home: 0, protective, pins: 0, remounts: 2, tail: tail.length }, input.environment ?? process.env, true);
-    throw ErrorRegistry.createError(SANDBOX_VIEW_TOO_LARGE, { message });
+    throw ErrorRegistry.createError(SANDBOX_VIEW_TOO_LARGE, { message, params: { check: message } });
   }
   if (!withinByteBound(view)) return null;
   return Object.freeze({ executable: input.shell, args: Object.freeze(['-c', 'trap "" INT; exec "$0" "$@"', input.launcher, ...args]) });

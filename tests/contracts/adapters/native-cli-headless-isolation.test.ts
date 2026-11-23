@@ -24,6 +24,20 @@ type Results = { read: Record<string, string>; list: Record<string, string[] | s
 const results = async (c: Awaited<ReturnType<typeof connection>>) => (await c.log()).find(entry => entry.mode === 'isolation') as unknown as { results: Results; env: Record<string, string> };
 
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI runs isolated (bundled bubblewrap, fake CLI)', () => {
+  it('retains the safe argument-count refusal in the closed preflight record', async () => {
+    const c = await connection();
+    // Each masked directory contributes six arguments, so setup and the command take the final list over 9,000.
+    for (let i = 0; i < 1_500; i++) await mkdir(join(c.configDir, `fixture-${i}`));
+    const refusal = await c.port.preflight(c.profile).catch(error => error as Error);
+    expect(refusal).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE',
+      message: expect.stringMatching(/needs 90\d\d arguments and can accept at most 9000.*configuration directory with fewer entries, then reconnect and retry/u) });
+    const record = JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8'));
+    expect(record).toMatchObject({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE',
+      check: (refusal as Error).message });
+    expect(record.check).not.toMatch(/\/tmp\/|fixture-\d/u);
+    expect(await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId)).toMatchObject([{ state: 'closed', isolation: null }]);
+    expect(await c.log()).toEqual([]);
+  });
   it('sees only its login dir and run dir: the rest of HOME is absent, other login entries are masked, writes outside the bind fail', async () => {
     const c = await connection();
     const home = join(c.root, 'home'), canary = join(home, '.ssh', 'id_canary'), outside = join(c.root, 'outside.txt');

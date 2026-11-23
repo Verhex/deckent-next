@@ -428,6 +428,46 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
 });
 
 describe.skipIf(!sandboxReady)('bubblewrap argument bound with the real bwrap (SANDBOX-SPAWN 2026-10-18)', () => {
+  it('counts the native worker input bind, final remount and shell tail before spawning', async () => {
+    const { nativeWorkerViewSandboxes } = await import('../../../src/composition/core/execution/internal/worker-inputs.js');
+    const f = await fixture();
+    const root = join(f.root, 'worker-project'), source = join(f.root, 'worker-input');
+    await mkdir(root); await writeFile(source, 'worker-boundary-ok');
+    const project = await createWorkspaceScope(root, ['*.fixture-mask']);
+    const layout = { ...f.layout, project, writeFloor: () => false };
+    const launcher = join(f.root, 'worker-launcher'), invocations = join(f.root, 'worker-invocations');
+    await writeFile(launcher, `#!/bin/sh\nprintf '%s\\n' "$#" >> "${invocations}"\nexec "${capabilities.bubblewrap.launcher!.path}" "$@"\n`, { mode: 0o700 });
+    const measured = await selectBubblewrapLauncher({ stateDir: null, systemPaths: [launcher], ancestorRoot: f.root, trustedOwners: [process.getuid!()] });
+    expect(measured.status, measured.detail ?? '').toBe('available');
+    await writeFile(invocations, '');
+    const target = '/deckent/inputs/fixture', request = { command: `cat ${target}`, cwd: project.root, environment: f.environment };
+    const [worker] = nativeWorkerViewSandboxes(layout, { views: [{ source, target, file: true }], validate: async () => undefined,
+      read: async () => null }, [bubblewrapShellSandbox(layout)]);
+    const usable = worker!.usable(linux({ bubblewrap: measured }));
+    if (!usable.ok) throw new Error(usable.reason);
+    const resolved = await resolveBubblewrapView(layout, f.environment);
+    if (!resolved.ok) throw new Error(resolved.reason);
+    // One three-argument input bind, a two-argument remount and the six-argument shell tail.
+    const needed = 9_000 - bubblewrapArguments(resolved.view).length - 11;
+    const directories = (2 * needed) % 3, files = (needed - 2 * directories) / 3;
+    const mask = (name: string) => join(root, `${name}.fixture-mask`);
+    for (let i = 0; i < directories; i++) await mkdir(mask(`dir-${i}`));
+    for (let i = 0; i < files; i++) await writeFile(mask(`file-${i}`), '');
+    expect(await usable.realm.run(request)).toMatchObject({ status: 'exited', exitCode: 0, output: 'worker-boundary-ok' });
+    if (directories > 0) {
+      await rmdir(mask('dir-0'));
+      await writeFile(mask('dir-0'), '');
+    } else {
+      await rm(mask('file-0'));
+      await mkdir(mask('dir-0'));
+      await mkdir(mask('dir-1'));
+    }
+    const refused = await usable.realm.run(request);
+    expect(refused).toMatchObject({ status: 'spawn-failed', exitCode: null, cleanup: 'clean',
+      output: expect.stringMatching(/SANDBOX_VIEW_TOO_LARGE: The launcher needs 9001 arguments and can accept at most 9000.*command tail 6.*then retry/u) });
+    expect(refused.output).not.toContain(f.root);
+    expect(await readFile(invocations, 'utf8')).toBe('9000\n');
+  });
   it('spawns at 9,000 final arguments and refuses 9,001 before starting the launcher', async () => {
     const f = await fixture();
     const root = join(f.root, 'boundary-project');
