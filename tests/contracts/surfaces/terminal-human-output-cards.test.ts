@@ -25,8 +25,8 @@ async function card(locale: Locale, command: string, done: string) {
 }
 
 describe('run and worker cards', () => {
-  it.each([['en', ['revision 4 · cancellation requested', '2 waiting, 1 running, 1 weird', '· 3f2a9c1e']],
-    ['tr', ['revizyon 4 · iptal istendi', '2 bekliyor, 1 çalışıyor, 1 weird', '· 3f2a9c1e']]] as const)('/runs (%s)', async (locale, lines) => {
+  it.each([['en', ['revision 4 · cancellation requested', 'Recorded task phases: 2 waiting, 1 active in the Run record, 1 weird.', '· 3f2a9c1e']],
+    ['tr', ['revizyon 4 · iptal istendi', 'Kayıtlı görev durumları: 2 bekliyor, iş kaydında 1 etkin görev, 1 weird.', '· 3f2a9c1e']]] as const)('/runs (%s)', async (locale, lines) => {
     const text = await card(locale, '/tasks', lines[2]);
     for (const line of lines) expect(text).toContain(line);
     expect(text).not.toContain(RUN); expect(text).not.toMatch(/(?<!\p{L})rev\b|pending:|active:|· cancel\b/u); // a raw revision word, not the end of Turkish "Görev"
