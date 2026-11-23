@@ -42,3 +42,28 @@ it('prints the trust card in the person\'s words and the grant outcome as a sent
   const trGranted = await run('tr', { status: 'granted' });
   expect(trGranted.text).toContain('Politika izni yazıldı: bu sunucuyu çağırabilirsiniz; standart mod her çağrıda, "her zaman sor" işaretli araçlar her modda sorar; her çağrı denetim kaydına yazılır.');
 });
+
+it('prints the two revoke outcomes in EN and TR and preserves the same JSON receipt', async () => {
+  const receipt = { schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } };
+  const revoke = async (locale: 'en' | 'tr', result: unknown, json = false) => {
+    const out: string[] = [];
+    await main(['mcp', 'revoke', 'fx', '--lang', locale, ...(json ? ['--json'] : [])], {
+      root: '/p', env: {}, stdout: { write(value: string) { out.push(value); } },
+      async runMcpCommand(_root: string, request: unknown) { expect(request).toEqual({ verb: 'revoke', name: 'fx' }); return result; },
+    } as never);
+    return out.join('').trimEnd();
+  };
+  const enTrust = 'Trust for fx was revoked. Approve it again before starting the server.';
+  const enWitness = `${enTrust}\nThe policy grant was kept. Revoke it from the owning person’s terminal.`;
+  expect.soft(await revoke('en', receipt)).toBe(enWitness);
+  expect(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'APPROVAL_INTERACTIVE_REQUIRED' } })).toBe(enWitness);
+  expect.soft(await revoke('tr', receipt)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.\nPolitika izni kaldı. İzni sahibinin terminalinden kaldırın.');
+  const enJson = await revoke('en', receipt, true), trJson = await revoke('tr', receipt, true);
+  expect(trJson).toBe(enJson);
+  expect(JSON.parse(enJson)).toEqual(receipt);
+  const trustOnly = { schemaVersion: 1, revoked: receipt.revoked };
+  expect.soft(await revoke('en', trustOnly)).toBe(`${enTrust}\nNo policy grant removal was recorded.`);
+  expect(JSON.parse(await revoke('en', trustOnly, true))).toEqual(trustOnly);
+  expect.soft(await revoke('en', { ...receipt, grant: { status: 'revoked' } })).toBe(`${enTrust}\nPolicy grant removed: calls to this server follow your company policy again.`);
+  expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'delegation' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
+});

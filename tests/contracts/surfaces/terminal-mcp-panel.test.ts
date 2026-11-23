@@ -5,7 +5,7 @@ import { t } from '#platform/index.js';
 
 // T3 L4 PANELS — `/mcp`: the window's port over the host's registry command (the same handler as `deckent mcp`). It changes nothing itself:
 // every action is one registry request; trust cards become the window's questions in the person's language. Integration (L4 ↔ L1): HTTP entries,
-// revoke (trust and grant together), the person's real grant in the detail, and the K4 realms with the networked sandbox first.
+// revoke (trust and grant outcomes), the person's real grant in the detail, and the K4 realms with the networked sandbox first.
 function host(results: Partial<Record<McpPanelRequest['verb'], unknown>>, cards: unknown[] = []) {
   const requests: McpPanelRequest[] = [], answers: (boolean | null)[] = [];
   const run = async (_root: string, request: McpPanelRequest, _options: unknown, ask: (card: unknown) => Promise<boolean | null>) => {
@@ -91,15 +91,16 @@ describe('/mcp window port', () => {
     expect(lines).toEqual(['Added files (user): /g/mcp.json', 'files is trusted; 1 tool pinned.']);
   });
   it('an HTTP draft is one `add` of a `type: http` entry with its headers (the registry validates the URL); revoke, reconnect and remove are their own requests', async () => {
-    const { run, requests } = host({ add: { added: { name: 'remote', scope: 'local', file: '/p/.deckent/mcp.local.json' }, trust: 'trusted', pinnedTools: 2 }, remove: { removed: { scope: 'project' } } });
+    const { run, requests } = host({ add: { added: { name: 'remote', scope: 'local', file: '/p/.deckent/mcp.local.json' }, trust: 'trusted', pinnedTools: 2 },
+      revoke: { revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } }, remove: { removed: { scope: 'project' } } });
     const port = mcpPanelPort('/p', run, {}, 'en');
     expect(await port.add({ transport: 'http', name: 'remote', target: 'https://mcp.example.com/mcp', args: [], env: {}, headers: { Authorization: 'Bearer $DECK:GH' }, realm: '',
       scope: 'local' }, async () => true)).toEqual(['Added remote (local): /p/.deckent/mcp.local.json', 'remote is trusted; 2 tools pinned.']);
     expect(port.transports.find(choice => choice.id === 'http')!.blocked).toBeUndefined();
-    expect(await port.revoke('files')).toEqual(['Trust and the tool permission of files were revoked. It does not start until you approve it again.']);
+    expect(await port.revoke('fx')).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'The policy grant was kept. Revoke it from the owning person’s terminal.']);
     await port.reconnect('files'); expect(await port.remove('files')).toEqual(['Removed files (project)']);
     expect(requests).toEqual([{ verb: 'add', scope: 'local', name: 'remote', approve: true, entry: { type: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GH' } } },
-      { verb: 'revoke', name: 'files' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
+      { verb: 'revoke', name: 'fx' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
   });
   it('G3: approve sends no alwaysAsk list, so a re-approval keeps the locks the CLI set', async () => {
     const { run, requests } = host({ approve: { approved: true, pinnedTools: 2 } });

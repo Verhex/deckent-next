@@ -3,6 +3,7 @@ import { ErrorRegistry, EXIT_CODES, emit, formatValue, t, type ExitCode } from '
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, type CliCardOption } from '#surfaces/core/cli-human/index.js';
+import { mcpRevokeLines } from '#surfaces/core/mcp-presentation/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { askMcpCard, mcpCancelled, mcpConfirmOptions, mcpLaunchText, mcpSafe, mcpScopeWord, mcpStateWord, mcpTrustCard, renderMcpList, renderMcpServer,
   type McpListedServer } from './mcp-view.js';
@@ -110,7 +111,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   if (decides && yes) emit(t('climodels.mcp.yesShowsCard', {}, locale), { level: 'warning', ...sinks });
   const result = await context.runMcpCommand(root, request, options, trustAsker(context, locale), locale);
   emit(result, { ...sinks, json, render: value => request.verb === 'list' ? renderMcpList(value, check, locale, context)
-    : request.verb === 'get' ? renderMcpServer(value, locale) : mcpResultText(value, locale) });
+    : request.verb === 'get' ? renderMcpServer(value, locale) : mcpResultText(value, request.verb, locale) });
   if (bare && person && request.verb === 'list') return mcpWindow(context, locale, ((result ?? {}) as { servers?: McpListedServer[] }).servers ?? []);
 }
 
@@ -138,13 +139,13 @@ async function mcpAct(context: CommandContext, locale: Locale, server: McpListed
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   if (verb !== 'approve') {
     const body = [t('climodels.mcp.field.command', {}, locale) + `: ${mcpLaunchText(server)}`, t('climodels.mcp.field.realm', {}, locale) + `: ${mcpSafe(server.realm ?? '-')}`,
-      t('climodels.mcp.field.tools', {}, locale) + `: ${server.pinnedTools ?? 0}`, verb === 'revoke' ? t('climodels.mcp.card.revokeWhat', {}, locale) : t('climodels.mcp.card.removeWhat', {}, locale)];
+      t('climodels.mcp.field.tools', {}, locale) + `: ${server.pinnedTools ?? 0}`, verb === 'revoke' ? t('cli.mcp.revoke.cardEffect', {}, locale) : t('climodels.mcp.card.removeWhat', {}, locale)];
     const answer = await askMcpCard(context, locale, { title: verb === 'revoke' ? t('climodels.mcp.card.revoke', { name: mcpSafe(server.name) }, locale) : t('climodels.mcp.card.remove', { name: mcpSafe(server.name) }, locale), body, options: mcpConfirmOptions(locale) });
     if (answer !== 'apply') { mcpCancelled(context, locale); return EXIT_CODES.error; }
   }
   const request: McpCommandRequest = verb === 'remove' ? { verb, name: server.name, scope: server.scope as Scope } : { verb, name: server.name };
   const result = await context.runMcpCommand!(root, request, options, trustAsker(context, locale), locale);
-  emit(result, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: value => mcpResultText(value, locale) });
+  emit(result, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: value => mcpResultText(value, verb, locale) });
 }
 
 /** Bare `deckent mcp` on a person's terminal: after the table, pick a server and what to do with it (Esc closes; nothing changes). */
@@ -189,9 +190,10 @@ async function mcpAddForm(context: CommandContext, locale: Locale, scope: Scope 
 }
 
 /** A change's result in the person's words (add, approve, revoke, remove, import), with the K1 grant outcome as one sentence. */
-function mcpResultText(value: unknown, locale: Locale): string {
+function mcpResultText(value: unknown, verb: McpCommandRequest['verb'], locale: Locale): string {
+  if (verb === 'revoke') return mcpRevokeLines(value, locale).map(mcpSafe).join('\n');
   const result = (value ?? {}) as { added?: { name: string; scope: string }; trust?: string; approved?: boolean; name?: string; scope?: string; pinnedTools?: number;
-    revoked?: { name: string }; removed?: { name: string; scope: string }; reset?: { name: string }; imported?: { name: string; scope: string }[];
+    removed?: { name: string; scope: string }; reset?: { name: string }; imported?: { name: string; scope: string }[];
     skipped?: { name: string | null; reason: string }[]; grant?: unknown };
   const lines: string[] = [];
   if (result.added) {
@@ -203,7 +205,6 @@ function mcpResultText(value: unknown, locale: Locale): string {
     const values = { name: mcpSafe(result.name), scope: mcpScopeWord(result.scope ?? '', locale), tools: result.pinnedTools ?? 0 };
     lines.push(result.approved ? t('climodels.mcp.result.approved', values, locale) : t('climodels.mcp.result.notApproved', values, locale));
   }
-  else if (result.revoked) lines.push(t('terminal.mcp.revoked', { name: mcpSafe(result.revoked.name) }, locale));
   else if (result.removed) lines.push(t('terminal.mcp.removed', { name: mcpSafe(result.removed.name), scope: mcpScopeWord(result.removed.scope, locale) }, locale));
   else if (result.imported) {
     lines.push(result.imported.length ? t('climodels.mcp.result.imported', { names: result.imported.map(item => `${mcpSafe(item.name)} (${mcpScopeWord(item.scope, locale)})`).join(', ') }, locale)
@@ -246,7 +247,7 @@ function mcpScopeText(scope: string, locale: Locale): string {
 /**
  * `/mcp` in the terminal (MCP-CLIENT, owner 2026-09-28): the servers of this project with their scope and trust state (nothing is started), and
  * `approve <name>` (forget a decline: the next message asks with the trust cards), `reconnect <name>` (the service restarts it on its next use),
- * `remove <name>` (from its registry file; its trust is revoked), `revoke <name>` (K1: its trust and the tool grant go; the entry stays).
+ * `remove <name>` (from its registry file; its trust is revoked), `revoke <name>` (K1: trust is revoked and grant removal is reported separately).
  */
 export async function mcpSlash(root: string, args: string, context: CommandContext, options: ConfigLoadOptions, locale: Locale): Promise<readonly string[]> {
   const [verb = 'list', name, ...extra] = args.split(/\s+/u).filter(Boolean);
@@ -266,7 +267,7 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
   }
   if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }
   if (verb === 'reconnect') { await run({ verb: 'reconnect', name: name! }); return [t('terminal.mcp.reconnect', { name: name! }, locale)]; }
-  if (verb === 'revoke') { await run({ verb: 'revoke', name: name! }); return [t('terminal.mcp.revoked', { name: name! }, locale)]; }
+  if (verb === 'revoke') return mcpRevokeLines(await run({ verb: 'revoke', name: name! }), locale);
   if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: mcpScopeText(removed.removed.scope, locale) }, locale)]; }
   return [t('terminal.mcp.usage', {}, locale)];
 }
