@@ -93,6 +93,26 @@ describe('assistant stream state machine', () => {
     expect(grouped.units.map(shape)).toEqual(['text', ['r1:ok', 'reasoning', 'r2:ok', 'r3:ok'], 'e1:error', 'w1:ok', 'r4:ok', ['r5:ok', 'r6:ok'], 'text', 'r7:ok']);
   });
 
+  it('renders prose, the intervening tool with its approval outcome, and the next paragraph in order', () => {
+    const tool = { kind: 'tool', callId: 'read', name: 'read_file', target: 'scoped.txt', toolClass: 'read' } as const;
+    const { units, footer } = play([
+      [{ kind: 'text', text: 'I will che' }, 1_010],
+      [{ kind: 'text', text: 'ck the file.' }, 1_020],
+      [{ ...tool, phase: 'started', status: null, ms: null }, 1_030],
+      [{ kind: 'approval', phase: 'requested', callId: 'read', approvalId: 'a', revision: 0, summary: 'Read the file', preview: 'scoped.txt', expiresAt: 2_000 }, 1_040],
+      [{ kind: 'approval', phase: 'settled', callId: 'read', approvalId: 'a', outcome: 'deny' }, 1_050],
+      [{ ...tool, phase: 'finished', status: 'denied', ms: 30 }, 1_060],
+      [{ kind: 'text', text: '\n\nThe file was skipped.' }, 1_070],
+      [{ kind: 'done', finish: 'stop' }, 1_080],
+    ]);
+    expect([...units, footer]).toMatchObject([
+      { kind: 'text', markdown: 'I will check the file.', lead: true },
+      { kind: 'tool', name: 'read_file', target: 'scoped.txt', status: 'denied', declined: true },
+      { kind: 'text', markdown: 'The file was skipped.', lead: false },
+      { kind: 'footer', finish: 'stop' },
+    ]);
+  });
+
   it('adapts a complete non-streaming reply into lead units plus a footer', () => {
     expect(renderCompleteReply('# Hi\n\n| a |\n|---|\n| 1 |', 100, 350)).toEqual([
       { kind: 'text', markdown: '# Hi', lead: true },

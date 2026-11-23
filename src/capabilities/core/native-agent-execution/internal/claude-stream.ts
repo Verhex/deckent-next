@@ -50,6 +50,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const wire = options.planning, oldMessages = new Set<string>();
   let sessionId: unknown, priorIdentityUnknown = false, finalId: string | undefined, finalRequestId: string | undefined, finalText = '';
+  let lastProseId: string | undefined, proseEndsWithWhitespace = true;
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
   const pluginPolicy = entry.agent.transport.guards.plugins;
@@ -143,9 +144,18 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
         else if (block.type === 'text') { if (typeof block.text !== 'string') return fail('text'); }
         else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') return fail('block');
       }
+      // Claude can emit separate records for the content blocks of one message.
+      const messageId = typeof message.id === 'string' && message.id ? message.id : undefined;
       for (const block of message.content as Record<string, unknown>[]) if (block.type === 'text') {
-        if (wire?.delivered) finalText += block.text;
-        else if (!wire?.active) emitDelta(options.onDelta, block.text as string);
+        const text = block.text as string;
+        if (wire?.delivered) finalText += text;
+        else if (!wire?.active && text) {
+          const separates = messageId !== undefined && lastProseId !== undefined && messageId !== lastProseId
+            && !proseEndsWithWhitespace && !/^\s/u.test(text);
+          emitDelta(options.onDelta, separates ? '\n\n' + text : text);
+          lastProseId = messageId;
+          proseEndsWithWhitespace = /\s$/u.test(text);
+        }
       }
       return;
     }

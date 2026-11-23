@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { MODEL_INVOCATION_DELTA_TEXT_MAX } from '#domain/index.js';
 import { toolSessionSchema, type NativeAgentToolResult } from '#capabilities/index.js';
 import { codexAgentArgv, codexAgentTurn, runHeadlessLogin, type CodexAgentResultLookup } from '#adapters/core/native-cli-headless/index.js';
 type Prepared = Parameters<typeof codexAgentTurn>[0];
@@ -168,4 +169,15 @@ it('keeps distinct ordinary Codex message deltas and the final completed answer 
   expect(feed(driver, [thread, turn, first, start(), finish(), answer, done])).toEqual(Array(7).fill(null));
   expect(deltas).toEqual(['Before the tool.\n', 'answer']);
   expect(driver.end({ exited: true, exitCode: 0 }, egress)).toMatchObject({ response: { native: { choices: [{ message: { content: 'answer' } }] } } });
+});
+
+it('separates consecutive completed Codex prose items across a correlated tool call', () => {
+  const deltas: string[] = [], driver = codexAgentTurn(prepared, preflight, session, lookup, delta => deltas.push(delta.text));
+  const first = { type: 'item.completed', item: { id: 'first', type: 'agent_message', text: 'Before the tool.' } };
+  const longText = 'a'.repeat(MODEL_INVOCATION_DELTA_TEXT_MAX) + 'nswer';
+  const last = { ...answer, item: { ...answer.item, text: longText } };
+  expect(feed(driver, [thread, turn, first, start(), finish(), last, done])).toEqual(Array(7).fill(null));
+  expect(deltas.map(delta => delta.length)).toEqual([first.item.text.length, MODEL_INVOCATION_DELTA_TEXT_MAX, 7]);
+  expect(deltas.join('')).toBe(`${first.item.text}\n\n${longText}`);
+  expect(driver.end({ exited: true, exitCode: 0 }, egress)).toMatchObject({ response: { native: { choices: [{ message: { content: longText } }] } } });
 });
