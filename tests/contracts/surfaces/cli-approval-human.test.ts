@@ -2,14 +2,15 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { getDecisionSteps, type DecisionDelegationView, type ApprovalRecord } from '#domain/index.js';
 import { mcpCapabilityRegistry } from '#engine/index.js';
-import { answerOnCard, approvalPickLabel, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
+import { answerOnCard, approvalPickLabel, cardIo, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
+import * as cards from '#surfaces/core/cli-human/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 /**
@@ -137,6 +138,28 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
   const label = approvalPickLabel(approval('secret-1', { summary: `curl -H "x-api-key: ${token}" https://api.example` }), 'en');
   expect(label).not.toContain('sk-ant-api03-AAAA'); expect(label).toContain('curl');
   expect(requests[0]!.body!.join('\n')).not.toContain('sk-ant');
+});
+
+it('an approval card closes at the earlier deadline and sends nothing for an answer at expiry', async () => {
+  const record = approval('short-lived', { created: now - 1_000, ttl: 2_000 });
+  const decideApproval = vi.fn(async () => null), context = { env: {}, decideApproval };
+  const clock = vi.spyOn(Date, 'now'), timeout = vi.spyOn(AbortSignal, 'timeout'), card = vi.spyOn(cards, 'askCliCard');
+  try {
+    for (const [ttl, elapsed, answer, bound, locale, message] of [
+      [5_000, 1_000, null, 1_000, 'en', 'This approval expired. No decision was recorded.'],
+      [5_000, 1_000, 'once', 1_000, 'en', 'This approval expired. No decision was recorded.'],
+      [5_000, 1_000, 'no', 1_000, 'tr', 'Bu onayın süresi doldu. Karar kaydedilmedi.'],
+      [5_000, 999, null, 1_000, 'en', 'No answer; nothing was decided.'],
+      [500, 500, null, 500, 'en', 'No answer; nothing was decided.'],
+    ] as const) {
+      clock.mockReturnValue(now);
+      card.mockImplementationOnce(async () => { clock.mockReturnValue(now + elapsed); return answer; });
+      const result = await answerOnCard(record, undefined, 'live', context, cardIo(context, locale, ttl).ask, locale);
+      expect(timeout).toHaveBeenLastCalledWith(bound);
+      expect(decideApproval).not.toHaveBeenCalled();
+      expect(result).toBe(message);
+    }
+  } finally { card.mockRestore(); timeout.mockRestore(); clock.mockRestore(); }
 });
 
 it('decide: `{}` names the missing field (no "model call" text), --schema prints the contract, bare decide lists recent decisions', async () => {

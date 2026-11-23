@@ -127,10 +127,11 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
  */
 export async function answerOnCard(record: ApprovalRecord, reason: string | undefined, scopeId: string, context: ApprovalCommandContext,
   ask: ReturnType<typeof cardIo>['ask'], locale: Locale): Promise<string> {
-  const own = reason?.trim(), now = Date.now();
+  const own = reason?.trim(), now = Date.now(), { expiresAt } = record.request;
   const answer = await ask({ title: t('cli.approval.card.title', { what: approvalWhat(record, locale) }, locale),
     body: [...approvalLines(record, now, locale), own ? t('cli.approval.card.reasonGiven', { reason: own }, locale) : t('cli.approval.card.reasonDefault', {}, locale)],
-    options: standingCardOptions(locale, { hardFloor: onHardFloor(record) }) });
+    options: standingCardOptions(locale, { hardFloor: onHardFloor(record) }) }, expiresAt);
+  if (Date.now() >= expiresAt) return t('cli.approval.card.expired', {}, locale);
   if (answer !== 'once' && answer !== 'no') return t('cli.approval.card.nothing', {}, locale);
   if (!context.decideApproval) throw ErrorRegistry.createError('CLI_USAGE');
   const decision = answer === 'once' ? 'allow' : 'deny';
