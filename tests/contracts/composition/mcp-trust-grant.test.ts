@@ -119,6 +119,8 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     const withoutGrant = f.policyRecords();
     f.env[agentMarker] = '1';
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
+      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
     expect(f.policyRecords()).toEqual(withoutGrant);
     delete f.env[agentMarker];
     // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
@@ -138,6 +140,35 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect.soft(f.mcpGrants()).toEqual([]);
     expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+  }, 90_000);
+
+  it('keeps the parent receipt for headless CI-only and unmarked calls with no grant, and refuses removal of an existing grant', async () => {
+    const f = await fixture();
+    const request = { verb: 'revoke', name: 'fx' } as const;
+    const receipt = { schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } };
+    const headlessRevoke = () => runConfiguredMcpCommand(f.project, request, { env: f.env }, async () => true);
+    expect(await attestLocalInteractiveTerminal()).toBe(false);
+    expect(process.env[agentMarker]).toBeUndefined();
+
+    for (const ci of [undefined, 'true']) {
+      vi.stubEnv('CI', ci);
+      if (ci === undefined) delete f.env['CI'];
+      else f.env['CI'] = ci;
+      try {
+        expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
+        const withGrant = f.policyRecords();
+        expect(await headlessRevoke()).toEqual({ ...receipt, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } });
+        expect(f.policyRecords()).toEqual(withGrant);
+        expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', trust: null } });
+        expect(await f.run(request)).toEqual({ ...receipt, grant: { status: 'revoked' } });
+
+        const withoutGrant = f.policyRecords();
+        expect.soft(await headlessRevoke(), ci === undefined ? 'unmarked' : 'CI only').toEqual(receipt);
+        expect(f.policyRecords()).toEqual(withoutGrant);
+        expect(await f.run({ verb: 'remove', name: 'fx' })).not.toHaveProperty('grant');
+      } finally { vi.unstubAllEnvs(); }
+    }
   }, 90_000);
 
   it('refuses grant removal before policy writes when only the process environment is AI-marked', async () => {
