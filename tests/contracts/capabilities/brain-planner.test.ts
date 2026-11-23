@@ -68,8 +68,8 @@ it('defaults to v7 with explicit coding scope, criterion ids and person language
   const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
   expect(current.template).toMatchObject({ id: 'run-proposal', version: 7 });
   const instruction = current.messages[0]!.content;
-  expect(instruction).toContain("In each coding task's workInput.scope.paths, list only the paths the person explicitly asked to change in that task.");
-  expect(instruction).toContain("Use dir/** only when the person explicitly includes the whole subtree in that task's change scope.");
+  expect(instruction).toContain("In each coding task's workInput.scope.paths, include every path the person explicitly asked that task to change, and no others.");
+  expect(instruction).toContain("For each entire subtree explicitly requested for change, use its directory path followed by /**.");
   expect(instruction).toContain('Omit paths given only as references or location hints, and paths excluded from change.');
   expect(instruction).toContain('If a change target is missing or ambiguous, request clarification through a new intent.');
   expect(instruction).toContain('copy its DECKENT-PLAN-CHALLENGE/1 line exactly at byte zero, then one LF and exactly one JSON object');
