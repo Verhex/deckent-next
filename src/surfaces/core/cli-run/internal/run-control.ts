@@ -1,11 +1,11 @@
 import { runControlActions } from '#surfaces/core/terminal-ledger/index.js';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
 import { familyScope, pickRun, readScopeRuns, resolveRunId, runStateWord, runTitle, shownId, type RunHumanIo } from './run-human.js';
 import { runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
-import { renderRunCancellation } from './cancellation.js';
+import { renderRunCancellation, runCancellationExitCode } from './cancellation.js';
 import REGISTRY from './run.json' with { type: 'json' };
 
 export type RunControl = 'cancel' | 'hold' | 'resume' | 'close';
@@ -37,19 +37,19 @@ export type RunControlInput = Readonly<{ scopeId?: string | undefined; runId?: s
  * the card, a card naming scope, Run and consequence, and a command id from the system. `n`, Esc or silence write nothing. A Run that changed
  * meanwhile is read again and asked again if the action remains available (bounded). The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
  */
-export async function runControlFlow(action: RunControl, context: RunCommandContext, io: RunHumanIo, input: RunControlInput): Promise<void> {
+export async function runControlFlow(action: RunControl, context: RunCommandContext, io: RunHumanIo, input: RunControlInput): Promise<ExitCode> {
   const { locale, print } = io;
   const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: input.scopeId, mutating: true, interactive: true, ask: io.ask });
-  if (!scope) { print(t('cli.run.control.nothing', {}, locale)); return; }
+  if (!scope) { print(t('cli.run.control.nothing', {}, locale)); return EXIT_CODES.error; }
   const scopeId = scope.scopeId;
   const answering = input.answer !== undefined || input.quota !== undefined;
   let runId = input.runId ? await resolveRunId(context, scopeId, input.runId) : undefined;
   if (!runId) {
     // An answer goes to a Run that waits (the service checks which task asked); every other control to the Runs whose state offers it.
     const runs = (await readScopeRuns(context, scopeId)).filter(run => answering ? run.state.kind === 'parked' : runControls(run).includes(action));
-    if (!runs.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return; }
+    if (!runs.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return EXIT_CODES.error; }
     const picked = await pickRun(io, scopeId, runs, t('cli.run.control.pick', { scope: scopeId, action }, locale));
-    if (!picked) { print(t('cli.run.control.nothing', {}, locale)); return; }
+    if (!picked) { print(t('cli.run.control.nothing', {}, locale)); return EXIT_CODES.error; }
     runId = picked.runId;
   }
   if (!context.inspectRun || (action === 'cancel' ? !context.deliverRunCancellation : !context.applyRunLifecycle)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
@@ -59,7 +59,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
     if (!answering && !runControls(run).includes(action)) {
       print(terminalSafeText(t('run.control.noActionInState', { run: shownId(run.runId), state: runStateWord(run, locale) }, locale)));
-      return;
+      return EXIT_CODES.error;
     }
     // S6R-6: a held Run's card says why it is held, in words (a system hold's catalog text, never its raw code).
     const held = action === 'hold' ? null : runHoldReasonText(run.state, locale);
@@ -69,14 +69,14 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
     const answer = await io.ask(controlCard(action, run, scopeId, locale, extra));
     if (answer !== 'yes') {
       print(action === 'cancel' ? t('terminal.cancel.kept', { run: shownId(run.runId) }, locale) : t('terminal.runControl.kept', { run: shownId(run.runId) }, locale));
-      return;
+      return EXIT_CODES.error;
     }
     const commandId = `cli-run-${action}-${randomUUID()}`;
     try {
       if (action === 'cancel') {
         const result = await context.deliverRunCancellation!(io.root, { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: run.revision }, io.options);
         print(terminalSafeText(renderRunCancellation(result, commandId, scopeId, runId, locale)));
-        return;
+        return runCancellationExitCode(result);
       }
       const command = runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: run.revision,
         ...(action === 'hold' ? { action, holdReason: reason } : input.quota !== undefined ? { action: 'quota-answer', choice: input.quota } : input.answer !== undefined ? { action: 'answer', answer: input.answer, taskId: input.taskId } : { action }) });
@@ -84,7 +84,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
       const params = { run: shownId(runId), command: commandId, revision: after?.revision ?? '—', state: after ? runStateWord(after, locale) : '—' };
       print(terminalSafeText(action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
         : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale)));
-      return;
+      return after ? EXIT_CODES.success : EXIT_CODES.error;
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
       if (typeof code !== 'string' || !REGISTRY.control.staleCodes.includes(code) || round >= REGISTRY.control.staleRetries) throw error;

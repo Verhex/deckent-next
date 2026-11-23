@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -97,8 +97,17 @@ it('a short id resolves on inspect and on the AI control path; an ambiguous pref
   const missing = await run(['run', 'inspect', '--scope', 's', '--id', 'ffff0000', '--lang', 'tr'], s.context, root);
   expect(missing.code).toBe(1); expect(missing.err).toContain('Kayıtlı iş bulunamadı: ffff0000.');
   s.calls.length = 0;
-  const cancelled = await run(['run', 'cancel', '--scope', 's', '--id', 'a1b2ff', '--command-id', 'c-1', '--expected-revision', '7', '--json'], s.context, root);
+  const cancelArgv = ['run', 'cancel', '--scope', 's', '--id', 'a1b2ff', '--command-id', 'c-1', '--expected-revision', '7', '--json'];
+  const cancelled = await run(cancelArgv, s.context, root);
   expect(cancelled.code).toBe(0); expect(s.calls.find(call => call.startsWith('cancel:'))).toContain(`"runId":"${OTHER}"`);
+  const settled = ['not-dispatched', 'prevented', 'terminal'].map((status, index) => ({ taskId: `t${index}`, attemptId: `a${index}`, status }));
+  for (const status of [null, 'unresolved', 'denied', 'unavailable']) {
+    const payload = { schemaVersion: 1, layout: {}, delivery: { schemaVersion: 2, runId: OTHER, scopeId: 's', cancellationRequested: true,
+      outcomes: status ? [...settled, { taskId: 't3', attemptId: 'a3', status }] : settled } };
+    const result = await run(cancelArgv, { ...s.context, async deliverRunCancellation() { return payload; } }, root);
+    expect.soft(result.code, status ?? 'settled').toBe(status ? 1 : 0);
+    expect(JSON.parse(result.text)).toEqual(payload); expect(result.err).toBe('');
+  }
 });
 
 it('negative: the AI and pipe control path still requires --command-id and --expected-revision and writes nothing without them', async () => {
@@ -122,19 +131,27 @@ it('TTY control: the picker offers only Runs whose state allows it; declined or 
   registerProviderConfig();
   const root = await project({ terminal: { scopeId: 's' } });
   const finished = { ...view(), runId: OTHER, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' } };
-  for (const answers of [['s', LONG, 'no'], ['s', LONG, null], [null]]) {
+  for (const answers of [['s', LONG, 'no'], ['s', LONG, null], ['s', null], [null]]) {
     const s = store([view(), finished]), printed: string[] = [], cards = scripted([...answers]);
-    await runControlFlow('cancel', { ...s.context, root, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) } as never,
+    const code = await runControlFlow('cancel', { ...s.context, root, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) } as never,
       { locale: 'en', root, options: { env: { HOME: join(root, 'h') } }, ask: cards.ask as never, print: text => printed.push(text) }, {});
+    expect.soft(code).toBe(1);
     expect(s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'))).toEqual([]);
-    if (answers.length > 1) {
+    if (answers.length >= 2) {
       expect(cards.asked[1]!.options.map(option => option.id)).toEqual([LONG]); // the finished Run is not offered
       expect(cards.asked[1]).toMatchObject({ initial: LONG }); // Enter takes the first (waiting first, newest) Run
-      expect(printed.join('\n')).toContain('Run a1b2c3d4 was not cancelled.'); // the terminal /cancel words
-    } else expect(printed).toEqual(['Nothing was sent.']);
+    }
+    if (answers.length === 3) expect(printed.join('\n')).toContain('Run a1b2c3d4 was not cancelled.'); // the terminal /cancel words
+    else expect(printed).toEqual(['Nothing was sent.']);
     // A change never takes the configured default silently: the scope card came first, the default preselected.
     expect(cards.asked[0]).toMatchObject({ initial: 's' });
   }
+  const s = store([finished]), printed: string[] = [], cards = scripted([]);
+  const code = await runControlFlow('cancel', { ...s.context, root } as never,
+    { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's' });
+  expect.soft(code).toBe(1);
+  expect(cards.asked).toHaveLength(0); expect(s.calls).toEqual(['ids:s', 'inspect:a1b2ff']);
+  expect(printed).toEqual(["No Run in scope s can take 'deckent run cancel' now."]);
 });
 
 it('TTY cancel and close show a named cancelled Run without a card or write', async () => {
@@ -145,11 +162,47 @@ it('TTY cancel and close show a named cancelled Run without a card or write', as
   ] as const) {
     const s = store([view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } })]);
     const printed: string[] = [], cards = scripted(['yes']);
-    await runControlFlow(action, s.context as never, { locale, root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: LONG });
+    const code = await runControlFlow(action, s.context as never, { locale, root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: LONG });
+    expect.soft(code, action).toBe(1);
     expect.soft(cards.asked, action).toHaveLength(0);
     expect.soft(s.calls, action).toEqual(['ids:s', 'inspect:a1b2c3']);
     expect.soft(printed, action).toEqual([notice]);
   }
+});
+
+it('main reports the interactive Run-control result with the matching cards and sends', async () => {
+  const root = await project();
+  const cancelled = view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } });
+  const mount = vi.spyOn(await import('../../../src/surfaces/core/cli-human/internal/card-view.js'), 'mountCliCard');
+  try {
+    for (const [scenario, answer, sends, cards, notice] of [
+      ['fresh refusal', 'yes', 0, 0, 'Run a1b2c3d4 is cancelled. No action was sent.'],
+      ['conflict', 'yes', 1, 1, 'Run a1b2c3d4 is cancelled. No action was sent.'],
+      ['decline', 'no', 0, 1, 'Run a1b2c3d4 was not cancelled.'],
+      ['partial delivery', 'yes', 1, 1, 'Attention: termination not confirmed for 1 of 1 attempts.'],
+    ] as const) {
+      mount.mockReset().mockResolvedValue(answer);
+      const s = store([scenario === 'fresh refusal' ? cancelled : view()]);
+      const out = sinks();
+      const deliver = vi.fn(async () => {
+        if (scenario === 'conflict') {
+          s.byId.set(LONG, { ...cancelled, revision: 8 });
+          throw Object.assign(new Error('stale'), { code: 'RUN_STORE_CONFLICT' });
+        }
+        return { schemaVersion: 1, layout: {}, delivery: { schemaVersion: 2, runId: LONG, scopeId: 's', cancellationRequested: true,
+          outcomes: [{ taskId: 't0', attemptId: 'a0', status: 'unresolved' }] } };
+      });
+      const code = await main(['run', 'cancel', '--scope', 's', '--id', LONG, '--lang', 'en'], { ...s.context, root,
+        env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdin: { isTTY: true, setRawMode() {} },
+        stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr, deliverRunCancellation: deliver } as never);
+      expect.soft(code, scenario).toBe(1);
+      expect(mount, scenario).toHaveBeenCalledTimes(cards);
+      expect(deliver, scenario).toHaveBeenCalledTimes(sends);
+      expect(s.calls, scenario).toEqual(scenario === 'conflict' ? ['ids:s', 'inspect:a1b2c3', 'inspect:a1b2c3'] : ['ids:s', 'inspect:a1b2c3']);
+      expect(out.out.join(''), scenario).toContain(notice); expect(out.err).toEqual([]);
+      if (scenario === 'partial delivery') expect(out.out.join('')).toContain('cancellation request recorded');
+    }
+  } finally { mount.mockRestore(); }
 });
 
 it('TTY hold: the revision is read just before the card, the card names scope and Run, the command id comes from the system; a stale Run is read again and asked again', async () => {
@@ -162,7 +215,8 @@ it('TTY hold: the revision is read just before the card, the card names scope an
     return apply(r, command);
   };
   const printed: string[] = [], cards = scripted(['yes', 'yes']);
-  await runControlFlow('hold', s.context as never, { locale: 'tr', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+  const code = await runControlFlow('hold', s.context as never, { locale: 'tr', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+  expect.soft(code).toBe(0);
   expect(cards.asked).toHaveLength(2);
   expect(cards.asked[0]!.title).toContain('Month-end close');
   expect(cards.asked[0]!.body!.join('\n')).toContain('Kapsam: s'); expect(cards.asked[0]!.body!.join('\n')).toContain('revizyon 7');
@@ -181,7 +235,8 @@ it('TTY cancel and close: a yes sends one command with a system command id at th
   for (const action of ['cancel', 'close'] as const) {
     const target = action === 'close' ? view([{ phase: 'pending' }], { state: { kind: 'parked', reason: 'operator-hold', note: 'Release window', since: 1, deadline: 2 } }) : view();
     const s = store([target]), printed: string[] = [], cards = scripted(['yes']);
-    await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+    const code = await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+    expect.soft(code, action).toBe(0);
     expect(cards.asked).toHaveLength(1);
     const writes = s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'));
     expect(writes).toHaveLength(1);
