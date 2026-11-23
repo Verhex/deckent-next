@@ -45,11 +45,12 @@ it.skipIf(process.platform !== 'linux')('turns a native peer fatal into typed co
   const release = resolve('dist/adapters/core/local-runtime-socket/native/build/Release/peer_credentials.node');
   const test = resolve('src/adapters/core/local-runtime-socket/native/build/Test/peer_credentials.node');
   const cli = resolve('dist/composition/core/cli/internal/entry.js');
+  // Inherit the addon's non-enumerable exports so fault injection keeps filesystem identity available.
   const fatalProgram = String.raw`
     import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url'; import {createConnection} from 'node:net';
     const [sdk,project,releasePath,testPath]=process.argv.slice(1); const require=createRequire(import.meta.url);
     const injected=require(testPath); let listener;
-    const replacement=Object.freeze({...injected,lockFile:injected.lockFile,isConnectionActive:injected.isConnectionActive,createListener(...args){listener=injected.createListener(...args);return listener;}});
+    const replacement=Object.freeze(Object.create(injected,{createListener:{value(...args){listener=injected.createListener(...args);return listener;}}}));
     const key=require.resolve(releasePath); require.cache[key]={id:key,filename:key,loaded:true,exports:replacement,children:[],paths:[]};
     const {startConfiguredRuntimeService}=await import(pathToFileURL(sdk).href);
     const observer={async onPage(){},async onError(){}};
@@ -72,8 +73,8 @@ it.skipIf(process.platform !== 'linux')('turns a native peer fatal into typed co
   const preload = join(root, 'inject-peer-fatal.mjs');
   await writeFile(preload, `import {createRequire} from 'node:module';import {createConnection} from 'node:net';
     const require=createRequire(import.meta.url),injected=require(${JSON.stringify(test)}),key=require.resolve(${JSON.stringify(release)});
-    const replacement=Object.freeze({...injected,lockFile:injected.lockFile,isConnectionActive:injected.isConnectionActive,createListener(...args){const listener=injected.createListener(...args);
-      setImmediate(()=>{listener.__testFailNextReadable(1);const socket=createConnection(args[0]);socket.on('error',()=>{});});return listener;}});
+    const replacement=Object.freeze(Object.create(injected,{createListener:{value(...args){const listener=injected.createListener(...args);
+      setImmediate(()=>{listener.__testFailNextReadable(1);const socket=createConnection(args[0]);socket.on('error',()=>{});});return listener;}}}));
     require.cache[key]={id:key,filename:key,loaded:true,exports:replacement,children:[],paths:[]};`);
   let fatal: Child | undefined; let restart: Child | undefined; let cliFatal: Child | undefined; let cliGrace: Child | undefined;
   try {
@@ -108,10 +109,10 @@ it.skipIf(process.platform !== 'linux')('turns a native peer fatal into typed co
     const gracePreload = join(root, 'inject-peer-fatal-with-half-open.mjs');
     await writeFile(gracePreload, `import {createRequire} from 'node:module';import {createConnection} from 'node:net';
       const require=createRequire(import.meta.url),injected=require(${JSON.stringify(test)}),key=require.resolve(${JSON.stringify(release)});
-      const replacement=Object.freeze({...injected,lockFile:injected.lockFile,isConnectionActive:injected.isConnectionActive,createListener(...args){let listener,faulted=false;const accepted=args[2];
+      const replacement=Object.freeze(Object.create(injected,{createListener:{value(...args){let listener,faulted=false;const accepted=args[2];
         args[2]=handoff=>{accepted(handoff);if(!faulted){faulted=true;setImmediate(()=>{listener.__testFailNextReadable(1);
           const trigger=createConnection(args[0]);trigger.on('error',()=>{});});}};
-        listener=injected.createListener(...args);setImmediate(()=>{const held=createConnection(args[0],()=>held.write(Buffer.from([0,0])));held.on('error',()=>{});});return listener;}});
+        listener=injected.createListener(...args);setImmediate(()=>{const held=createConnection(args[0],()=>held.write(Buffer.from([0,0])));held.on('error',()=>{});});return listener;}}}));
       require.cache[key]={id:key,filename:key,loaded:true,exports:replacement,children:[],paths:[]};`);
     cliGrace = spawn(process.execPath, ['--import', gracePreload, cli, 'runtime', 'serve', '--json'], {
       cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'],

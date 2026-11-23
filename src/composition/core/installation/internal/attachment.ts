@@ -30,7 +30,8 @@ export async function executeConfiguredProjectAttachment(root: string, input: un
   if (confirm && ['preview', 'offer', 'apply', 'register-preview', 'register'].includes(command.action)) await prepareConfiguredAttachmentDirectory(root, options, confirm);
   const app = await configuredProjectAttachment(root, options);
   const complete = async (result: Awaited<ReturnType<typeof app.apply>>) => {
-      const modelLease = await grantConfiguredModelUse(root, result.attachment.scopeId, options, result.preparation?.digest);
+      const modelLease = await grantConfiguredModelUse(root, result.attachment.scopeId, options, result.preparation?.digest,
+        command.action === 'apply' ? command.commandId : undefined);
       const config = await loadComposedConfig(root, options), registration = await configuredAttachmentStore(config, options).registration();
       const metered = configuredInvocationProfiles(config).some(profile => profile.scopeId === result.attachment.scopeId && modelInvocationBillingAxis(profile) === 'metered');
       const budget = metered && registration ? await applyConfiguredProviderSpendTemplate(root, result.attachment.scopeId,

@@ -207,8 +207,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  const describeChat = () => context.describeTerminalChatPlan?.(root, options) ?? Promise.resolve(null);
   if (parsed.action === 'chat-plan') {
+    const chat = await describeChat();
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
     return;
@@ -224,7 +225,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ?? { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' } as const,
   project: await context.loadProjectIdentity?.(root, options) ?? { status: 'unavailable', reason: 'unsupported' } as const });
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat, await readIdentity());
+    const payload = statusPayload(tty, config, await describeChat(), await readIdentity());
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -258,6 +259,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   }
+  const chat = await describeChat();
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   if (left() || !await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options) || left()) return;

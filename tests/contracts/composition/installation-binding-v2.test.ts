@@ -10,6 +10,7 @@ import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding,
 import { main } from '#surfaces/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const filesystem = await import('#adapters/core/installation-files/internal/filesystem-identity.js');
 
 /** Only the platform machine identity is simulated (absent); every path, inode, lock and record is the real filesystem. */
 const probe = vi.hoisted(() => ({ machine: undefined as string | Error | undefined }));
@@ -59,6 +60,7 @@ const filesystemReport = expect.objectContaining({ status: expect.stringMatching
 describe.skipIf(process.platform !== 'linux')('installation binding v2 through configured composition (Linux filesystem evidence)', () => {
   it('binds to a configured machine identity source behind a mounted-secret symlink; only a keyed digest is persisted or reported', async context => {
     if (bindingNotRun) context.skip(bindingNotRun);
+    vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'unavailable', reason: 'native-unavailable' });
     const f = await fixture(); noMachineId(); await f.configure({ machineIdentity: { source: await mountedSecret(f.root, RAW) } });
     const ids = await ensureConfiguredTerminalIdentity(f.project, 's', f.options), bytes = await readFile(f.path, 'utf8');
     expect(JSON.parse(bytes)).toMatchObject({ schemaVersion: 2, installationId: ids.installationId, binding: { schemaVersion: 2, strength: 'machine', source: 'configured',

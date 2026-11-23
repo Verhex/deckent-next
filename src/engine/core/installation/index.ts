@@ -4,7 +4,7 @@ export type { NativeTemplatePorts, /** @deprecated No importer in Core; barrel n
 export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
 export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';
 export { assessInstallationBinding, classifyInstallationRebinding, policyRebindAdmission } from '#engine/core/bootstrap-identity/index.js';
-export type { RebindAdmission, InstallationIdentityResolutionInput, InstallationIdentityResolutionView } from '#engine/core/bootstrap-identity/index.js';
+export type { RebindAdmission, InstallationIdentityResolutionInput, InstallationIdentityResolutionView, RegisteredInstallationBinding } from '#engine/core/bootstrap-identity/index.js';
 export type { InstallationIdentityStore, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead,
   /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationBindingObservation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InstallationBindingAssessment } from '#engine/core/bootstrap-identity/index.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,

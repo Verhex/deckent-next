@@ -18,7 +18,7 @@ export const removalRegistry = z.strictObject({ schemaVersion: z.literal(6), ini
   recoveryRoot: z.partialRecord(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.strictObject({ environment: z.string().nullable(), fallback: persistedString(z.string().min(1)), path: persistedString(z.string().min(1)) })),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), busctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
   archive: z.strictObject({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.strictObject({ pattern: z.string(), lease: z.string() }), members: z.array(z.string().transform(source => source.replace('{backupAudit}', BACKUP_AUDIT_LOCATIONS.installation))), transient: z.array(z.string()), companionSuffix: persistedString(z.string().min(1)), manifestSuffix: persistedString(z.string().min(1)), owner: persistedString(z.string().min(1)) }),
-  purgeMembers: z.record(z.string(), z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
+  purgeMembers: z.record(z.string(), z.array(z.string()).min(1)).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
   treeMembers: z.record(z.string(), z.strictObject({ directory: z.literal('{backupAudit}').transform(() => BACKUP_AUDIT_LOCATIONS.installation), proof: z.literal('sealed-audit-record') }))
     .refine(value => Object.keys(value).every(name => restorable.includes(name))),
@@ -47,7 +47,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     contribution: 'durable', locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep })); };
   if (!base.deletionRoots.includes(layout.root)) blockers.push(`authority-relocated:${layout.root}`);
   else {
-    for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
+    for (const [name, files] of Object.entries(registry.purgeMembers) as [ProductResource, string[]][]) for (const file of files) {
       if (name === 'projectAttachment' && !config.installation.sharedRegistrationId) continue;
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
       if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !pathWithin(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }

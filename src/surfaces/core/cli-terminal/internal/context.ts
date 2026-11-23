@@ -81,6 +81,7 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
   /** Managed interactive startup only; status and piped observation never call this write port. */
   ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly installationId: string; readonly projectId: string }>;
+  preflightTerminalIdentity?: (root: string, options: ConfigLoadOptions) => Promise<void>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   describeRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<ServiceDescription>;
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;

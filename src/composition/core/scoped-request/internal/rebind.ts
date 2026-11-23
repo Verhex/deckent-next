@@ -19,7 +19,7 @@ export async function plainMacosRebinding(config: ResolvedConfig, options: Confi
 
 export async function admitInstallationRebinding(config: ResolvedConfig, options: ConfigLoadOptions, store: FileInstallationIdentityStore,
   principal: { readonly issuer: string; readonly subject: string }): Promise<RebindAdmission> {
-  const observed = await store.inspectRebinding();
+  const observed = await store.inspectPlainRebinding();
   // bind/strengthen retain their existing automatic write behavior; no relocated class is assigned to them.
   if (observed.class === null || observed.class === REBIND_CLASS.deviceOnly) return { class: REBIND_CLASS.deviceOnly, basis: 'open-class' };
   try {

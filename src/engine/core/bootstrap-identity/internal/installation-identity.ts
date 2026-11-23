@@ -25,6 +25,8 @@ export type InstallationIdentityRead = IdentityRead<InstallationIdentity> & {
   readonly binding?: InstallationBindingObservation;
   /** The next installation-bound write must take the store's write path (bind, strengthen or refuse). Reads never act on it. */
   readonly pendingWrite?: true;
+  /** A retained binding can advance after a positive write decision. A matching legacy read remains usable. */
+  readonly pendingUpgrade?: true;
 };
 
 /** Bootstrap metadata only; ownership and execution authority remain with existing contracts. */
@@ -36,6 +38,14 @@ export interface InstallationIdentityStore {
   resolveRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }): Promise<InstallationIdentityResolutionView>;
 }
 export interface InstallationBindingSource { capture(): Promise<InstallationBindingCapability> }
+export interface RegisteredInstallationBinding {
+  readonly identity: InstallationIdentity;
+  readonly binding: InstallationBinding | null;
+  readonly capture: InstallationBindingCapture;
+  readonly candidate: InstallationBinding;
+  readonly outcome: InstallationBindingAssessment | 'bind';
+  commit(kind: 'registration-only' | 'device-only' | 'person', publishRegistration: () => Promise<void>): Promise<void>;
+}
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
 export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
   | 'INSTALLATION_IDENTITY_LOCKED' | 'INSTALLATION_IDENTITY_UNSUPPORTED' | 'INSTALLATION_IDENTITY_RELOCATED'
@@ -48,7 +58,7 @@ export class InstallationIdentityError extends CodedError {
   }
 }
 
-/** Only for a relocated legacy binding. v3 reaches its existing writer fence before this classifier. */
+/** A relocated v3 binding always requires a moved-class decision. */
 export function classifyInstallationRebinding(recorded: InstallationBinding | null, captured: InstallationBindingCapability): RebindClass {
   return recorded && recorded.schemaVersion !== 3 && (recorded.schemaVersion === 1 || recorded.strength === 'machine')
     && !('status' in captured) && captured.strength === 'machine' && recorded.machineDigest === captured.machineDigest

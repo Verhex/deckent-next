@@ -2,13 +2,15 @@ import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from '
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FileInstallationIdentityStore } from '#adapters/index.js';
+import { FileInstallationIdentityStore, readScopeCompanies, registerLedgerScopes } from '#adapters/index.js';
 import { hashInstallationProfilePayload } from '#engine/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, loadConfig, productResourcePath, resolveProductLayout } from '#platform/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { applyInstallation, inspectInstallation, resumeInstallation } from '../../../src/index.js';
 import { installationProfile } from '../support/installation-profile.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const filesystem = await import('#adapters/core/installation-files/internal/filesystem-identity.js');
 
 /**
  * Astra 2382 P1-3: owned init (direct policy setup, init apply/resume) evaluates the identity write admission (configured source,
@@ -27,7 +29,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 });
 const bindingNotRun = await installationBindingNotRunReason(), configuredImage = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const roots: string[] = [];
-afterEach(async () => { probe.machine = undefined; clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { probe.machine = undefined; vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const noMachineId = () => { probe.machine = Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); };
 const exists = (path: string) => lstat(path).then(() => true, () => false);
 /** Every file under `.deckent` with its bytes: the whole persistent footprint of a refused command. */
@@ -49,6 +51,55 @@ async function policyProject(installation?: Record<string, unknown>) {
   }
   return { root, project, deckent: join(project, '.deckent'), identity: join(project, '.deckent/installation-identity/identity.json') };
 }
+
+it.skipIf(process.platform !== 'linux')('retains a legacy identity only after the scoped writer beats a competing company pin', async context => {
+  if (bindingNotRun) context.skip(bindingNotRun);
+  probe.machine = '0123456789abcdef0123456789abcdef';
+  vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available',
+    identity: { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' } });
+  for (const foreign of [true, false]) {
+    const f = await policyProject(), scope = 'installation';
+    const options = { env: { HOME: join(f.root, 'home'), DECKENT_GLOBAL_HOME: join(f.root, 'global') } };
+    await applyPolicyTemplateInstallation(f.project, scope, options);
+    const config = await loadConfig(f.project, { ...options, heal: false });
+    const path = productResourcePath(config.productLayout, 'ledger'), companion = join(f.deckent, 'installation-identity/identity.pre-v3.json');
+    const record = JSON.parse(await readFile(f.identity, 'utf8'));
+    expect(record.binding.schemaVersion).toBe(3);
+    const { canonicalRoot, device, inode, machineDigest } = record.binding;
+    const legacy = Buffer.from('  ' + JSON.stringify({ ...record, binding: { schemaVersion: 1, machineDigest, canonicalRoot, device, inode } }) + '\n\n');
+    await writeFile(f.identity, legacy);
+    expect(readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, [scope]).has(scope)).toBe(false);
+    const actual = FileInstallationIdentityStore.prototype.read;
+    const observe = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async function (this: FileInstallationIdentityStore) {
+      const value = await actual.call(this);
+      expect(value).toMatchObject({ status: 'available', pendingUpgrade: true });
+      expect(await readFile(f.identity)).toEqual(legacy);
+      expect(await exists(companion)).toBe(false);
+      if (foreign) registerLedgerScopes(path, config.storage.sqlite, 'competing-company', [scope], 'admission');
+      return value;
+    });
+    const upgrade = FileInstallationIdentityStore.prototype.upgradeAdmittedBinding;
+    const publish = vi.spyOn(FileInstallationIdentityStore.prototype, 'upgradeAdmittedBinding').mockImplementationOnce(function (this: FileInstallationIdentityStore, expected) {
+      expect(readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, [scope]).get(scope)).toBe(config.company.id);
+      return upgrade.call(this, expected);
+    });
+    const write = loadConfiguredScopeContext(f.project, scope, options, 'write');
+    if (foreign) {
+      await expect(write).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN', reason: 'COMPANY' });
+      expect(await readFile(f.identity)).toEqual(legacy);
+      expect(await exists(companion)).toBe(false);
+      expect(publish).not.toHaveBeenCalled();
+    } else {
+      await expect(write).resolves.toMatchObject({ installationId: record.installationId });
+      expect(readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, [scope]).get(scope)).toBe(config.company.id);
+      expect(JSON.parse(await readFile(f.identity, 'utf8')).binding.schemaVersion).toBe(3);
+      expect(await readFile(companion)).toEqual(legacy);
+      expect(publish).toHaveBeenCalledOnce();
+    }
+    observe.mockRestore();
+    publish.mockRestore();
+  }
+});
 
 describe.skipIf(process.platform !== 'linux')('direct policy setup admits the identity write before any target or journal', () => {
   it('refuses required machine binding without a machine identity for a first identity and for an existing weak one, with no footprint', async context => {

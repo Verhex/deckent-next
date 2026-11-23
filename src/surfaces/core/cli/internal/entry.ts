@@ -109,11 +109,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
-    if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
+    const terminalAction = argv[1], terminalWriter = interactiveTerminal(context) && (interactive || (argv[0] === 'terminal'
+      && (terminalAction === undefined || terminalAction.startsWith('-') || terminalAction === 'session' || terminalAction === 'workline')));
+    const preflight = (terminalWriter ? context.preflightTerminalIdentity : undefined) ?? context.loadInstallationIdentity;
+    if (preflight && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
       && cliInstallationContract(argv, CLI_COMMANDS) === undefined) {
       locale = resolveLocale(language, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
-      await context.loadInstallationIdentity(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });
+      await preflight(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });
     }
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).

@@ -1,6 +1,8 @@
 {
   "kernelIdentityReadBytes": 512,
   "processFileReadBytes": 65536,
+  "jsonDocumentReadBytes": 16777216,
+  "installationPublicationTransactionIdLength": 256,
   "workerMemoryEstimateMB": 400,
   "workerCountCap": 30,
   "observationConcurrency": 8,

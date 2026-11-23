@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
 import * as engine from '#engine/index.js';
 import * as platform from '#platform/index.js';
+import { installationRegistrationSchema, type ReadableInstallationRegistration } from '#domain/index.js';
 import { plainMacosRebinding } from '#composition/core/scoped-request/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIdentity, readScopeCompanies } from '#adapters/index.js';
 import { clearConfigCache, loadConfig, productResourcePath, resolveProductLayout } from '#platform/index.js';
@@ -18,6 +19,7 @@ import { main as mcpMain } from '#composition/core/mcp/index.js';
 import { applyPolicyTemplateInstallation, applySuppliedInstallation } from '#composition/core/installation/index.js';
 import { main } from '#surfaces/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const filesystem = await import('#adapters/core/installation-files/internal/filesystem-identity.js');
 const bindingNotRun = await installationBindingNotRunReason();
 
 const roots: string[] = [];
@@ -65,6 +67,31 @@ async function pendingPolicyFixture() {
 }
 
 describe('relocation producer to actual CLI surface', () => {
+  it('runs the explicit v3 recovery separately from the restricted restore port and preserves the original UUID for keep', async () => {
+    vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available',
+      identity: { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' } });
+    const f = await fixture(), originalPath = join(f.original, '.deckent/installation-identity/identity.json');
+    const { cli } = await loadConfig(f.project, { ...f.options, heal: false });
+    for (const key of [...cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+    await mkdir(join(f.root, 'global'), { mode: 0o500 });
+    const original = await readFile(originalPath), copied = await readFile(f.path);
+    expect(JSON.parse(original.toString()).binding.schemaVersion).toBe(3);
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(false);
+    await expect(resolveConfiguredInstallationIdentity(f.project, 'keep', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });
+    expect(await readFile(f.path)).toEqual(copied);
+    const keepPath = join(f.root, 'move');
+    await rename(f.original, keepPath);
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+    await expect(resolveConfiguredInstallationIdentity(keepPath, 'keep', f.options)).resolves.toMatchObject({
+      installationId: f.identity.installationId, previousInstallationId: f.identity.installationId, class: 'moved',
+    });
+    const kept = await readFile(join(keepPath, '.deckent/installation-identity/identity.json'));
+    await expect(resolveConfiguredInstallationIdentity(keepPath, 'new', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' });
+    const next = await resolveConfiguredInstallationIdentity(f.project, 'new', f.options);
+    expect(next.previousInstallationId).toBe(f.identity.installationId);
+    expect(next.installationId).not.toBe(f.identity.installationId);
+    expect(await readFile(join(keepPath, '.deckent/installation-identity/identity.json'))).toEqual(kept);
+  });
   it.each(['en', 'tr'])('stops commands and offers two explicit choices, without mutation (%s)', async lang => {
     const f = await fixture(), bytes = await readFile(f.path, 'utf8'), startRuntimeService = vi.fn();
     expect(await main(['runtime', 'serve', '--lang', lang], { ...f.context, startRuntimeService })).toBe(78);
@@ -235,9 +262,8 @@ describe('relocation producer to actual CLI surface', () => {
 it('keeps device-only open to AI without policy or witness; moved needs the exact fresh file rule', async () => {
   const f = await fixture(), record = JSON.parse(await readFile(f.path, 'utf8'));
   // A live/N1-like platform v1 record: retain machine/path/inode, change only recorded device.
-  record.binding.canonicalRoot = join(f.project, '.deckent');
   const location = await stat(join(f.project, '.deckent'), { bigint: true });
-  record.binding.inode = String(location.ino); record.binding.device = '0';
+  record.binding = { schemaVersion: 1, machineDigest: record.binding.machineDigest, canonicalRoot: join(f.project, '.deckent'), inode: String(location.ino), device: '0' };
   await writeFile(f.path, JSON.stringify(record));
   const witness = vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(false);
   const loadPolicy = vi.spyOn(adapters.FilePolicySource.prototype, 'load');
@@ -306,11 +332,19 @@ it('does not gate bind or strengthen, and macOS plain excludes only this install
 
 it('the adapter keep port refuses moved identity in the witnessed=true backup-restore path', async () => {
   const f = await fixture(), bytes = await readFile(f.path);
-  // Shared restores normally take the reference branch or DENIED. Exercise the otherwise unreachable keep port itself.
+  const layout = resolveProductLayout({ projectRoot: f.original }), owner = readLocalOsIdentity();
+  const registration = installationRegistrationSchema.parse({ schemaVersion: 1, registrationId: f.identity.installationId,
+    source: { projectRoot: f.original, layoutRoot: layout.root, bootstrapConfigPath: layout.bootstrapConfigPath,
+      layoutRevision: layout.revision, installationId: f.identity.installationId, projectId: f.projectIdentity.projectId,
+      companyId: 'local', scopeId: 's', owner: { issuer: owner.issuer, subject: owner.subject },
+      location: { canonicalRoot: layout.root, device: '0', inode: '1' } }, entries: [] });
+  // Exercise the source branch itself. Shared restores ordinarily take the reference branch.
   vi.spyOn(engine.ProjectAttachmentRelocationApplication.prototype, 'apply').mockImplementation(async function (this: engine.ProjectAttachmentRelocationApplication, _scope, witnessed) {
     expect(witnessed).toBe(true);
-    const ports = (this as unknown as { ports: { keepIdentity(): Promise<string> } }).ports;
-    await ports.keepIdentity(); throw new Error('MOVED_BACKUP_KEEP_MUST_REFUSE');
+    const ports = (this as unknown as { ports: { store: adapters.FileProjectAttachmentStore;
+      reconcileSource(record: ReadableInstallationRegistration, restore: boolean): Promise<unknown> } }).ports;
+    await ports.store.hold(() => ports.reconcileSource(registration, true));
+    throw new Error('MOVED_BACKUP_KEEP_MUST_REFUSE');
   });
   await expect(adapters.relocateInstallationProjectReference(f.project, 's', f.options, async () => { throw new Error('SOURCE_MUST_NOT_RUN'); }, true))
     .rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_REBIND_REQUIRED' });

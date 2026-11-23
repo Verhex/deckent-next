@@ -6,7 +6,7 @@ import { ATTACHMENT_REGISTRATION_VERSION, installationRegistrationSchema, readab
   normalizeAttachmentRegistration, isNewAttachmentRegistration, isNewAttachment, isNewerAttachmentVersion, attachmentRevocationRecord, isAttachmentRevocationDiff,
   type ReadableInstallationRegistration as InstallationRegistration, type ReadableProjectAttachment as ProjectAttachment, type AttachmentLocation, type AttachmentRevocation } from '#domain/index.js';
 import { attachmentFailure } from '#engine/index.js';
-import { readInstallationFile, InstallationFileError, inspectFilesystemIdentity } from '#adapters/core/installation-files/index.js';
+import { readInstallationFile, readInstallationFileBytes, InstallationFileError, inspectFilesystemIdentity } from '#adapters/core/installation-files/index.js';
 import { ErrorRegistry, inspectProductFile, prepareProductFile, prepareProductCompanionPath, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout,
   serializeJsonDocument, withConfigWriteLock, writeJsonAtomic, writeTextAtomic, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 const heldRegistries = new AsyncLocalStorage<ReadonlySet<string>>();
@@ -63,15 +63,19 @@ export async function prepareAttachmentDirectory(root: string, authorize: () => 
   }
 }
 export class FileProjectAttachmentStore {
+  private readonly registrationBytes = new WeakMap<InstallationRegistration, Buffer>();
   constructor(readonly layout: ProductLayout, readonly options: ConfigLoadOptions, readonly maxBytes: number, readonly timeoutMs: number) {}
   get global(): ProductLayout {
     const options = this.options, config = resolveGlobalConfigPaths(options.env, options.platform).platformPath;
     return resolveProductLayout({ projectRoot: dirname(config), root: dirname(config), bootstrapConfigPath: config });
   }
-  private async read(layout: ProductLayout, resource: 'installationRegistration' | 'projectAttachment') {
+  private async readBytes(layout: ProductLayout, resource: 'installationRegistration' | 'projectAttachment') {
     const path = productResourcePath(layout, resource);
-    return readInstallationFile({ root: resource === 'projectAttachment' ? dirname(path) : layout.root, path,
+    return readInstallationFileBytes({ root: resource === 'projectAttachment' ? dirname(path) : layout.root, path,
       maxBytes: resource === 'installationRegistration' ? this.readCap : this.maxBytes });
+  }
+  private async read(layout: ProductLayout, resource: 'installationRegistration' | 'projectAttachment') {
+    return (await this.readBytes(layout, resource))?.toString('utf8') ?? null;
   }
   private get readCap() { return Math.min(Number.MAX_SAFE_INTEGER, this.maxBytes + attachmentRegistrationAllowance(this.maxBytes)); }
   private sizeFailure(layout: ProductLayout, resource: 'installationRegistration') : never {
@@ -79,17 +83,18 @@ export class FileProjectAttachmentStore {
   }
   async registration(): Promise<InstallationRegistration | null> {
     if (process.platform === 'win32' || this.layout.platform === 'win32') return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
-    const bytes = await this.read(this.global, 'installationRegistration');
+    const bytes = await this.readBytes(this.global, 'installationRegistration');
     if (bytes === null) return null;
-    let value: unknown; try { value = JSON.parse(bytes); } catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
+    let value: unknown; try { value = JSON.parse(bytes.toString('utf8')); } catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
     if (isNewerAttachmentVersion(value, ATTACHMENT_REGISTRATION_VERSION)) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
     const parsed = readableInstallationRegistrationSchema.safeParse(value);
-    if (parsed.success && parsed.data.schemaVersion !== ATTACHMENT_REGISTRATION_VERSION && Buffer.byteLength(bytes) > this.maxBytes) {
+    if (parsed.success && parsed.data.schemaVersion !== ATTACHMENT_REGISTRATION_VERSION && bytes.length > this.maxBytes) {
       await readInstallationFile({ root: this.global.root, path: productResourcePath(this.global, 'installationRegistration'), maxBytes: this.maxBytes });
       return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     }
     if (parsed.success && parsed.data.schemaVersion === ATTACHMENT_REGISTRATION_VERSION
       && Buffer.byteLength(serializeJsonDocument(normalizeAttachmentRegistration(parsed.data))) > this.maxBytes) return this.sizeFailure(this.global, 'installationRegistration');
+    if (parsed.success) this.registrationBytes.set(parsed.data, bytes);
     return parsed.success ? parsed.data : attachmentFailure('PROJECT_ATTACHMENT_INVALID');
   }
   async attachment(): Promise<ProjectAttachment | null> {
@@ -119,6 +124,28 @@ export class FileProjectAttachmentStore {
     const path = await prepareProductFile(this.global, 'installationRegistration');
     await writeJsonAtomic(path, value);
     await inspectProductFile(this.global, 'installationRegistration');
+  }
+  fitsJoined(value: InstallationRegistration): boolean {
+    return Buffer.byteLength(serializeJsonDocument(value)) <= this.readCap
+      && Buffer.byteLength(serializeJsonDocument(normalizeAttachmentRegistration(value))) <= this.maxBytes;
+  }
+  /** Only the source reconciliation and witnessed attach settlement use this v3 writer. */
+  async writeJoined(expected: InstallationRegistration, next: InstallationRegistration): Promise<void> {
+    const path = productResourcePath(this.global, 'installationRegistration');
+    if (!heldRegistries.getStore()?.has(path)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+    const before = this.registrationBytes.get(expected);
+    const check = async () => {
+      if (before === undefined || !(await this.readBytes(this.global, 'installationRegistration'))?.equals(before))
+        return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    };
+    await check();
+    const value = readableInstallationRegistrationSchema.parse(next);
+    if (value.schemaVersion !== ATTACHMENT_REGISTRATION_VERSION) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+    const bytes = Buffer.from(serializeJsonDocument(value));
+    if (!this.fitsJoined(value)) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+    await writeTextAtomic(await prepareProductFile(this.global, 'installationRegistration'), bytes, check);
+    if (!(await this.readBytes(this.global, 'installationRegistration'))?.equals(bytes)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    this.registrationBytes.set(next, bytes);
   }
   async writeRevocation(expected: InstallationRegistration, change: AttachmentRevocation): Promise<void> {
     const path = productResourcePath(this.global, 'installationRegistration');
