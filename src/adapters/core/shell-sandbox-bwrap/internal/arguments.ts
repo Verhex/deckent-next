@@ -44,6 +44,8 @@ export interface BubblewrapView {
   /** Denied files inside the project: `/dev/null` bound read-only in their place. A plain (non-device) bind carries `nodev`, so the
    * file opens with EACCES either way: no bytes are readable, no write lands; it is protected, not absent. */
   readonly maskedFiles: readonly string[];
+  /** The HOME walk appends its surviving masks after the project and host masks. */
+  readonly homeMaskStart?: Readonly<{ directories: number; files: number }>;
   /**
    * OPEN-SANDBOX (a full-access call): the host's root is bound read-write as the user sees it and the network namespace is kept (no system
    * allowlist, no toolchain binds, no private `/tmp` or HOME tmpfs); the PID namespace, `--die-with-parent`, `--new-session`, a fresh
@@ -67,8 +69,8 @@ export const BUBBLEWRAP_SYSTEM_PATHS: readonly string[] = Object.freeze(['/usr',
 
 /** SANDBOX-SPAWN (2026-10-18): argv + env over ARG_MAX (2 MiB) is a silent `spawn E2BIG` (live: 3 073 172 bytes); half bounds a view, refused by name over it. */
 export const BUBBLEWRAP_ARGUMENT_MAX_BYTES = 1_048_576;
-export const bubblewrapArgumentsOverBound = (args: readonly string[], max: number, bytes = args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0)): string | null => bytes <= max ? null
-  : `SANDBOX_VIEW_TOO_LARGE: ${args.filter(arg => ['--bind', '--ro-bind', '--ro-bind-try', '--tmpfs', '--overlay'].includes(arg)).length} mounts need ${bytes} bytes of arguments, over the bound of ${max} (too many read-only paths or deny masks; deckent doctor runs the same view)`;
+/** Compatibility with the v0.13.0 parser pinned in packaging/bwrap/bwrap.lock.json. It counts everything after argv[0]. */
+export const BUBBLEWRAP_ARGUMENT_MAX_COUNT = 9_000;
 
 /** Astra 2189 R7: the most ancestor directories a view pins as mount points (beyond it the view is refused, never run with a
  * renamable ancestor). Measured 2026-09-30 on the owner's HOME from a worktree: 32 pins (HOME, directories above masked credentials and
@@ -149,18 +151,30 @@ export const ancestorPins = (view: BubblewrapView): string[] => placedPins(view)
  * sandbox dies with the service process (PID namespace: every process a command started ends with the call, a `setsid` escapee
  * included), a new session (no TIOCSTI injection into the owner's terminal), fresh /proc and a minimal /dev.
  */
-export function bubblewrapArguments(view: BubblewrapView): string[] {
+export const bubblewrapArguments = (view: BubblewrapView): string[] => bubblewrapArgumentPlan(view).prefix;
+
+export function bubblewrapArgumentPlan(view: BubblewrapView) {
   // Order is load-bearing (the man page: applied in argument order): `--share-net` after `--unshare-all` keeps the host network; the root
   // bind before `/proc` and `/dev`, which cover the host's. R7: each ancestor pin right after the host-writable mount it follows (`placedPins`).
   const pins = new Map<number, string[]>();
-  for (const pin of placedPins(view)) pins.set(pin.after, [...(pins.get(pin.after) ?? []), '--bind', pin.path, pin.path]);
+  const placements = placedPins(view);
+  for (const pin of placements) pins.set(pin.after, [...(pins.get(pin.after) ?? []), '--bind', pin.path, pin.path]);
   const args = view.open ? ['--unshare-all', '--share-net', '--die-with-parent', '--new-session', '--bind', '/', '/', ...pins.get(-1) ?? [], '--proc', '/proc', '--dev', '/dev']
     : ['--unshare-all', ...(view.network ? ['--share-net'] : []), '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev', '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
-  viewMounts(view).forEach((mount, index) => args.push(...mount.args, ...pins.get(index) ?? []));
+  let protective = 0;
+  viewMounts(view).forEach((mount, index) => {
+    args.push(...mount.args, ...pins.get(index) ?? []);
+    if (mount.protective && !mount.hostWritable) protective += mount.args.length;
+  });
+  const beforeRemounts = args.length;
   // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
   for (const path of view.hiddenPaths ?? view.open?.hidden ?? []) args.push('--remount-ro', path);
   for (const path of view.emptiedDirectories ?? []) args.push('--remount-ro', path);
   if (view.containedWorkspaceRoot) args.push('--remount-ro', view.containedWorkspaceRoot);
+  const remounts = args.length - beforeRemounts;
   args.push('--chdir', view.projectRoot);
-  return args;
+  const home = view.homeMaskStart
+    ? 2 * (view.maskedDirectories.length - view.homeMaskStart.directories) + 3 * (view.maskedFiles.length - view.homeMaskStart.files)
+    : 0;
+  return { prefix: args, counts: { home, protective: protective - home, pins: 3 * placements.length, remounts } };
 }

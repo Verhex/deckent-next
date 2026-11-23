@@ -140,11 +140,13 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
   if (capabilities.platform === 'linux') for (const sandbox of context.sandboxes) {
     const usable = shellLaunchUsable(sandbox, capabilities);
     if (!usable.ok) { rejected.push({ kind: sandbox.kind, reason: usable.reason }); continue; }
-    const launch = await usable.launch(context.environment, profile);
+    const tail = ['--', server.command, ...server.args];
+    const launch = await usable.launch(context.environment, profile, tail);
+    if (!launch.ok && launch.code === 'SANDBOX_VIEW_TOO_LARGE') return { ok: false, reason: 'sandbox-unavailable', detail: launch.reason };
     if (!launch.ok) { rejected.push({ kind: sandbox.kind, reason: launch.reason }); continue; }
     // The card's words come from the view this launch enforces (C5: the project read-only), with how to let a server write.
     const fallback = describeSandboxFallback(sandbox.kind, rejected);
-    return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, projectReadOnly: launch.view.projectReadOnly,
+    return { ok: true, command: launch.file, args: [...launch.args, ...tail], env, sandboxed: true, projectReadOnly: launch.view.projectReadOnly,
       posture: `sandbox: ${launch.posture}${launch.view.projectReadOnly ? `; ${MCP_HOST_REALM_HINT}` : ''}${fallback ? `\n${fallback}` : ''}`,
       sandbox: { prefix: launch.args, command: server.command, args: server.args } };
   }

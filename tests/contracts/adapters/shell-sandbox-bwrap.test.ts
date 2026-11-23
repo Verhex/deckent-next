@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { existsSync } from 'node:fs';
-import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, rmdir, symlink, writeFile } from 'node:fs/promises';
 import type { Server } from 'node:net';
 import { listenTcpFixture } from '../support/tcp-fixture-server.js';
 import { tmpdir } from 'node:os';
@@ -10,12 +10,23 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapObservation, buildLandlockRules, createWorkspaceScope, resolveShellRealm, hostShellRealm, type ShellCapabilities,
   type ShellSandboxLayout } from '#adapters/index.js';
-import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView, BUBBLEWRAP_KNOWN_PATHS } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { bubblewrapArguments, bubblewrapShellSandbox, isolatedProcessArguments, isolatedProcessCommand, resolveBubblewrapView, selectBubblewrapLauncher, BUBBLEWRAP_KNOWN_PATHS } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // S9 at the real boundary: the installed bubblewrap, a real bash, a real project with a `.git`, a real HOME with a secret, a scratch area.
 const capabilities = await measureTestShellHost();
 const sandboxReady = capabilities.bubblewrap.status === 'available';
+it('counts the isolated CLI arguments forwarded to the launcher, excluding the outer shell', () => {
+  const view = { workDir: '/tmp/work', workFiles: [], executables: [], stateDir: '/tmp/state',
+    stateMasks: { directories: [], files: Array<string>(2_960).fill('/tmp/state/masked') }, sockets: [], tmpfsBytes: 1_048_576 };
+  const prefix = isolatedProcessArguments(view)!;
+  const command = ['/bin/true', ...Array<string>(9_000 - prefix.length - 5).fill('x')];
+  const input = { shell: '/bin/sh', launcher: '/bin/bwrap', view, fileSizeBlocks: 1024, openFiles: 32, command, environment: { LANG: 'en_US.UTF-8' } };
+  expect(isolatedProcessCommand(input)?.args.slice(3)).toHaveLength(9_000);
+  expect(() => isolatedProcessCommand({ ...input, command: [...command, 'x'] })).toThrow(expect.objectContaining({
+    code: 'SANDBOX_VIEW_TOO_LARGE', message: expect.stringMatching(/9001 arguments.*project\/state and host protection 8880.*configuration directory with fewer entries/u),
+  }));
+});
 it('K27: a closed native Attempt hides its state ancestor and enforces inherited hard data and Node heap bounds', async () => {
   const { nativeAgentRealmAvailable } = await import('../../fixtures/native-headless/agent.js');
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
@@ -320,7 +331,7 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     const view = await resolveBubblewrapView(f.layout, f.environment);
     if (!view.ok) throw new Error(view.reason);
     expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.project, 'sub', '.git'), join(f.main, '.git', 'sentinel-alias'), join(f.main, '.git', 'worktrees', 'worktree', 'sentinel-alias')]));
-    const ran = await f.run(`for p in sub/.git ${f.main}/.git/sentinel-alias ${f.main}/.git/worktrees/worktree/sentinel-alias; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done;`
+    const ran = await f.run(`exec 2>&1; for p in sub/.git ${f.main}/.git/sentinel-alias ${f.main}/.git/worktrees/worktree/sentinel-alias; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done;`
       + ' git status --short; echo "status=$?"; git log --oneline -1 | wc -l');
     expect(ran.output).not.toContain('SECRET');
     expect(ran.output.match(/Permission denied/gu)?.length).toBe(6); expect(ran.output.match(/w=1/gu)?.length).toBe(3);
@@ -417,13 +428,52 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
 });
 
 describe.skipIf(!sandboxReady)('bubblewrap argument bound with the real bwrap (SANDBOX-SPAWN 2026-10-18)', () => {
+  it('spawns at 9,000 final arguments and refuses 9,001 before starting the launcher', async () => {
+    const f = await fixture();
+    const root = join(f.root, 'boundary-project');
+    await mkdir(root);
+    const project = await createWorkspaceScope(root, ['*.fixture-mask']);
+    const layout = { ...f.layout, project, writeFloor: () => false };
+    const command = 'printf boundary-ok', request = { command, cwd: project.root, environment: f.environment };
+    const launcher = join(f.root, 'recording-launcher'), invocations = join(f.root, 'invocations');
+    await writeFile(launcher, `#!/bin/sh\nprintf '%s\\n' "$#" >> "${invocations}"\nexec "${capabilities.bubblewrap.launcher!.path}" "$@"\n`, { mode: 0o700 });
+    const measured = await selectBubblewrapLauncher({ stateDir: null, systemPaths: [launcher], ancestorRoot: f.root, trustedOwners: [process.getuid!()] });
+    expect(measured.status, measured.detail ?? '').toBe('available');
+    await writeFile(invocations, '');
+    const usable = bubblewrapShellSandbox(layout).usable(linux({ bubblewrap: measured }));
+    if (!usable.ok) throw new Error(usable.reason);
+    const resolved = await resolveBubblewrapView(layout, f.environment);
+    if (!resolved.ok) throw new Error(resolved.reason);
+    // Each masked file adds three arguments, each masked directory two. The project root is already a mount point.
+    const needed = 9_000 - bubblewrapArguments(resolved.view).length - 6;
+    const directories = (2 * needed) % 3, files = (needed - 2 * directories) / 3;
+    const mask = (name: string) => join(project.root, `${name}.fixture-mask`);
+    for (let i = 0; i < directories; i++) await mkdir(mask(`dir-${i}`));
+    for (let i = 0; i < files; i++) await writeFile(mask(`file-${i}`), '');
+    expect(await usable.realm.run(request)).toMatchObject({ status: 'exited', exitCode: 0, output: 'boundary-ok' });
+    if (directories > 0) {
+      await rmdir(mask('dir-0'));
+      await writeFile(mask('dir-0'), '');
+    } else {
+      await rm(mask('file-0'));
+      await mkdir(mask('dir-0'));
+      await mkdir(mask('dir-1'));
+    }
+    expect(await usable.realm.run(request)).toMatchObject({ status: 'spawn-failed', exitCode: null,
+      output: expect.stringMatching(/SANDBOX_VIEW_TOO_LARGE: The launcher needs 9001 arguments and can accept at most 9000.*command tail 6/u) });
+    expect(await readFile(invocations, 'utf8')).toBe('9000\n');
+    const mcp = (count: number) => usable.launch!(f.environment, undefined, ['--', '/bin/true', ...Array<string>(count).fill('x')]);
+    expect(await mcp(4)).toMatchObject({ ok: false, code: 'SANDBOX_VIEW_TOO_LARGE', reason: expect.stringContaining('command tail 6') });
+    expect(await mcp(3)).toMatchObject({ ok: true });
+  });
+
   it('refuses a view whose arguments exceed their bound by name, instead of an errno-less spawn failure (SANDBOX-SPAWN 2026-10-18)', async () => {
     const f = await fixture();
     // A long-lived launch needs the write floor's matcher (fail closed); the fixture's layout gets an empty one.
     const usable = bubblewrapShellSandbox({ ...f.layout, writeFloor: () => false }, { maxArgumentBytes: 512 }).usable(capabilities);
     if (!usable.ok) throw new Error(usable.reason);
     const result = await usable.realm.run({ command: 'echo ran > must-not-exist', cwd: f.scope.root, environment: f.environment });
-    expect(result).toMatchObject({ status: 'spawn-failed', output: expect.stringMatching(/^\[deckent\] sandbox: SANDBOX_VIEW_TOO_LARGE: \d+ mounts need \d+ bytes of arguments, over the bound of 512 .*; nothing was run\.$/u) });
+    expect(result).toMatchObject({ status: 'spawn-failed', output: expect.stringMatching(/^\[deckent\] sandbox: SANDBOX_VIEW_TOO_LARGE: The sandbox view needs \d+ bytes of arguments and can use at most 512\. .*; nothing was run\.$/u) });
     expect(existsSync(join(f.project, 'must-not-exist'))).toBe(false);
     const launched = await usable.launch!(f.environment);
     expect(launched).toMatchObject({ ok: false, reason: expect.stringContaining('SANDBOX_VIEW_TOO_LARGE') });

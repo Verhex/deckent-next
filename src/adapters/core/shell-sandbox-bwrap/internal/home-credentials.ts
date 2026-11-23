@@ -21,12 +21,17 @@ async function boundedNames(path: string, remaining: number): Promise<{ names: D
 }
 /** Known locations first; then depth-3 credentials, prioritizing skip-root ancestors within the same budget. */
 export async function maskHomeCredentials(home: string, denied: (rel: string) => boolean, skip: readonly string[],
-  directories: string[], files: string[], maxMasks: number, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
+  directories: string[], files: string[], nonHome: { directories: number; files: number }, maxMasks: number, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
   const refuse = (detail: string) => t('shell.homeCredentialsRefused', { detail, entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment));
   const overMasks = () => directories.length + files.length > maxMasks ? refuse('mask bound') : null;
   const hide = (path: string): string | null => {
     if (path === home || skip.some(root => under(root, path))) return refuse('HOME root or project/state ancestor cannot be inspected');
-    for (const list of [directories, files]) for (let i = list.length - 1; i >= 0; i--) if (under(list[i]!, path)) list.splice(i, 1);
+    for (const [kind, list] of [['directories', directories], ['files', files]] as const) {
+      for (let i = list.length - 1; i >= 0; i--) if (under(list[i]!, path)) {
+        if (i < nonHome[kind]) nonHome[kind]--;
+        list.splice(i, 1);
+      }
+    }
     directories.push(path); return overMasks();
   };
   let probes = 0;

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { access, constants, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { FIXED_TOOL_PATH } from '#platform/index.js';
+import { BUBBLEWRAP_ARGUMENT_MAX_COUNT } from '#adapters/core/shell-sandbox-bwrap/index.js';
 
 /**
  * Why a server did not start inside its sandbox view (MCP-SANDBOX-PATHS, 2026-09-29): a path the server needs exists on this machine but the
@@ -35,8 +36,10 @@ async function resolveCommand(command: string, pathVariable: string | undefined,
 }
 /** The candidates the view does not show, asked of the same view the server started in (`launcher prefix -- /bin/sh …`): null when the probe fails. */
 function hiddenInView(launcher: { readonly file: string; readonly prefix: readonly string[] }, paths: readonly string[], cwd: string): Promise<ReadonlySet<string> | null> {
+  const args = [...launcher.prefix, '--', '/bin/sh', '-c', PROBE_SCRIPT, 'sh', ...paths];
+  if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) return Promise.resolve(null);
   return new Promise(done => {
-    execFile(launcher.file, [...launcher.prefix, '--', '/bin/sh', '-c', PROBE_SCRIPT, 'sh', ...paths],
+    execFile(launcher.file, args,
       { cwd, env: { PATH: FIXED_TOOL_PATH }, timeout: PROBE_TIMEOUT_MS, maxBuffer: 65_536, encoding: 'utf8' },
       (error, stdout) => done(error ? null : new Set(stdout.split('\0').filter(Boolean))));
   });
