@@ -24,11 +24,16 @@ export function planSourceRepair(registration: ReadableInstallationRegistration,
   const samePlace = old.canonicalRoot === binding.canonicalRoot && old.inode === binding.inode;
   const filesystemIdentity = capture.filesystemIdentity ?? null;
   const deviceOnly = outcome === 'relocated' && classifyInstallationRebinding(binding, capture) === 'device-only';
+  // H-back leaves the same legacy location tuple with L2 evidence and a settled lineage.
+  const sameLegacyLocation = samePlace && old.device === binding.device && (!('filesystemIdentity' in old)
+    || (retained?.fromBinding === from && retained.toBinding === from && retained.headDevice === old.device
+      && isDeepStrictEqual(retained.filesystemIdentity, old.filesystemIdentity)
+      && assessAttachmentLocation(old, { ...location, filesystemIdentity })));
 
   let repair: 'H-back' | 'H-fwd' | 'S1' | 'S2';
   if (ahead && outcome === 'match') repair = 'H-back';
   else if (ahead && deviceOnly && samePlace) repair = 'H-fwd';
-  else if (deviceOnly && samePlace && !('filesystemIdentity' in old) && old.device === binding.device) repair = 'S1';
+  else if (deviceOnly && sameLegacyLocation) repair = 'S1';
   else if (binding.schemaVersion === 3 && outcome === 'match' && samePlace && !('filesystemIdentity' in old)
     && !assessAttachmentLocation(old, { ...location, filesystemIdentity }) && devices.has(old.device)) repair = 'S2';
   else return null;

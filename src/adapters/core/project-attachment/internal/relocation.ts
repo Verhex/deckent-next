@@ -24,7 +24,7 @@ export async function relocateInstallationProjectReference(root: string, scopeId
 
 /** Called only from write entries after the target's principal/scope/reference checks. */
 export async function repairRegisteredInstallationSource(config: ResolvedConfig, options: ConfigLoadOptions, actor: AttachmentPerson, scopeId: string,
-  source: InspectSource, admit: () => Promise<void>) {
+  source: InspectSource, admit: () => Promise<void>, requireActiveTarget?: (current: ReadableInstallationRegistration | null) => void) {
   const store = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
   const matches = (record: ReadableInstallationRegistration | null): record is ReadableInstallationRegistration =>
     !!record && !record.unregistered && record.source.projectRoot === config.projectRoot && record.source.scopeId === scopeId
@@ -40,6 +40,7 @@ export async function repairRegisteredInstallationSource(config: ResolvedConfig,
   }
   await store.hold(async () => {
     const registration = await store.registration();
+    requireActiveTarget?.(registration);
     if (!matches(registration) || await store.attachment()) return;
     await reconcileSource(config, store, registration, actor, source, 'automatic', admit);
   });

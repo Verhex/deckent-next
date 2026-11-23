@@ -15,19 +15,20 @@ export async function inspectConfiguredInstallationSource(root: string, scopeId:
 export const configuredAttachmentStore = (config: ResolvedConfig, options: ConfigLoadOptions) => new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
 export function configuredInstallationProjectContext(config: ResolvedConfig, options: ConfigLoadOptions, scopeId?: string, actor?: { readonly issuer: string; readonly subject: string },
   inspectSource: typeof inspectConfiguredInstallationSource = inspectConfiguredInstallationSource, admitWrite?: () => Promise<void>) {
-  const repair = admitWrite && actor ? async (source: ResolvedConfig, sourceScope: string) => {
+  const repair = admitWrite && actor ? async (source: ResolvedConfig, sourceScope: string,
+    requireActiveTarget?: Parameters<typeof repairRegisteredInstallationSource>[6]) => {
     await repairRegisteredInstallationSource(source, options, actor, sourceScope, (root, scope, person, locked) => inspectSource(root, scope, person, options, locked), async () => {
       await admitWrite();
       if (source.projectRoot === config.projectRoot && sourceScope === scopeId) return;
       const document = await contextPolicySource({ layout: source.productLayout, config: source }).load();
       await resolveConfiguredScopeMembership(source, document, actor, [sourceScope], 'write');
-    });
+    }, requireActiveTarget);
   } : undefined;
   const ports = localInstallationProjectContextPorts(config, options, source => inspectSource(source.projectRoot, source.scopeId, actor ?? source.owner, options),
     repair && scopeId ? () => repair(config, scopeId) : undefined);
-  return resolveInstallationProjectContext({ ...ports, ...(repair ? { repairSource: async source => {
+  return resolveInstallationProjectContext({ ...ports, ...(repair ? { repairSource: async (source, requireActiveTarget) => {
     const fresh = await loadComposedConfig(source.projectRoot, { ...options, heal: false, force: true });
-    await repair(fresh, source.scopeId);
+    await repair(fresh, source.scopeId, requireActiveTarget);
   } } : {}) }, { registrationId: config.installation.sharedRegistrationId ?? null, companyId: config.company.id,
     ...optionalField('scopeId', scopeId), ...optionalField('actor', actor) });
 }

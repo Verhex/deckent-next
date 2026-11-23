@@ -17,7 +17,7 @@ export interface InstallationContextPorts {
   registration(): Promise<InstallationRegistration | null>;
   attachment(): Promise<ProjectAttachment | null>;
   source(source: InstallationSource): Promise<{ readonly identity: InstallationIdentityRead; readonly source: InstallationSource }>;
-  repairSource?(source: InstallationSource): Promise<void>;
+  repairSource?(source: InstallationSource, requireActiveTarget: (current: InstallationRegistration | null) => InstallationRegistration): Promise<void>;
   target(): Promise<{ readonly canonicalRoot: string; readonly device: string; readonly inode: string; readonly projectId: string | null }>;
   observeFilesystemIdentity?(location: AttachmentLocation): Promise<FilesystemIdentity | null>;
   legacy(): Promise<InstallationIdentityRead>;
@@ -49,10 +49,13 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   if (entry.state !== 'active') return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   const target = await ports.target();
   if (target.projectId !== attachment.projectId || !await matchesObservedAttachmentLocation(ports, attachment.location, target)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-  await ports.repairSource?.(registration.source);
-  const current = ports.repairSource ? await ports.registration() : registration;
-  if (!current || current.unregistered || current.registrationId !== registration.registrationId
-    || !isDeepStrictEqual(current.entries.find(item => item.attachment.projectId === attachment.projectId), entry)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+  const requireActiveTarget = (current: InstallationRegistration | null) => {
+    if (!current || current.unregistered || current.registrationId !== registration.registrationId
+      || !isDeepStrictEqual(current.entries.find(item => item.attachment.projectId === attachment.projectId), entry)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    return current;
+  };
+  await ports.repairSource?.(registration.source, requireActiveTarget);
+  const current = ports.repairSource ? requireActiveTarget(await ports.registration()) : registration;
   const observed = await ports.source(current.source).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
   if (!await matchesObservedAttachmentSource(ports, current.source, observed.source) || observed.identity.status !== 'available'
     || observed.identity.pendingWrite || observed.identity.value.installationId !== registration.source.installationId

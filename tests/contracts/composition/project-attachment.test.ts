@@ -45,7 +45,7 @@ const personEffectWitness = vi.hoisted(() => ({ allowed: false }));
 vi.mock('#adapters/core/local-principal/internal/interactive.js', () => ({ attestLocalInteractiveTerminal: async () => personEffectWitness.allowed }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, lstat: vi.fn(actual.lstat), rename: vi.fn(actual.rename) };
+  return { ...actual, lstat: vi.fn(actual.lstat), rename: vi.fn(actual.rename), stat: vi.fn(actual.stat) };
 });
 vi.mock('node:child_process', async importOriginal => {
   const actual = await importOriginal<typeof import('node:child_process')>();
@@ -58,7 +58,12 @@ vi.mock('#surfaces/index.js', async importOriginal => {
   return { ...actual, askCliCard: vi.fn(async () => 'no') };
 });
 const roots: string[] = [];
-afterEach(async () => { personEffectWitness.allowed = false; vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => {
+  personEffectWitness.allowed = false;
+  vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache();
+  vi.mocked(fs.lstat).mockReset(); vi.mocked(fs.rename).mockReset(); vi.mocked(fs.stat).mockReset();
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 async function snapshotBytes(root: string, prefix = ''): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
   for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
@@ -659,6 +664,97 @@ it.skipIf(process.platform !== 'linux')('a governed source write finishes a devi
   const repaired = JSON.parse(await readFile(identity, 'utf8'));
   expect(repaired.binding).toMatchObject({ schemaVersion: 3, device: registration.source.location.device });
   expect(await readFile(join(productResourcePath(config.productLayout, 'installationIdentity'), 'identity.pre-v3.json'))).toEqual(legacy);
+});
+
+it.skipIf(process.platform !== 'linux')('preserves source bytes when revoke or detach wins before source repair takes the registration lock', async () => {
+  vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available',
+    identity: registrationV3Fixture.source.location.filesystemIdentity });
+  const hold = FileProjectAttachmentStore.prototype.hold;
+  for (const action of ['revoke', 'detach'] as const) {
+    const f = await fixture(), target = await f.make(f.b), preview = await target.app.preview('target');
+    const { attachment } = await target.app.apply('target', preview.planDigest, randomUUID());
+    const config = await loadComposedConfig(f.a, f.options), store = f.selected.store;
+    const registrationPath = productResourcePath(store.global, 'installationRegistration');
+    const directory = productResourcePath(config.productLayout, 'installationIdentity'), identity = join(directory, 'identity.json');
+    const record = JSON.parse(await readFile(identity, 'utf8'));
+    const { machineDigest, canonicalRoot, inode } = record.binding;
+    const legacy = Buffer.from(JSON.stringify({ ...record, binding: { schemaVersion: 1, machineDigest, canonicalRoot, inode, device: '0' } }));
+    await writeFile(identity, legacy);
+    const registration = (await store.registration())!;
+    await store.hold(() => store.writeJoined(registration, { ...registration, schemaVersion: 3, source: {
+      ...registration.source, location: { ...registration.source.location, device: '0' },
+    } }));
+    let bytesAfterRemoval: Buffer | undefined;
+    const beforeRepairLock = vi.spyOn(FileProjectAttachmentStore.prototype, 'hold').mockImplementationOnce(async function (
+      this: FileProjectAttachmentStore, work: () => Promise<unknown>,
+    ) {
+      await store.hold(async () => {
+        await store.writeRevocation((await store.registration())!, { action, projectId: attachment.projectId });
+        bytesAfterRemoval = await readFile(registrationPath);
+      });
+      return hold.call(this, work);
+    });
+    try {
+      await expect(loadConfiguredScopeContext(f.b, 'target', f.options, 'write')).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+      expect(bytesAfterRemoval, action).toBeDefined();
+      expect.soft(await readFile(registrationPath), action).toEqual(bytesAfterRemoval);
+      expect.soft(await readFile(identity), action).toEqual(legacy);
+      await expect.soft(readFile(join(directory, 'identity.pre-v3.json')), action).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally { beforeRepairLock.mockRestore(); }
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('recovers the persisted H-back output after another renumber only with the same filesystem evidence', async () => {
+  const filesystemIdentity = registrationV3Fixture.source.location.filesystemIdentity;
+  const observe = vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available', identity: filesystemIdentity });
+  const f = await fixture(), { productLayout } = await loadComposedConfig(f.a, f.options);
+  const registrationPath = productResourcePath(f.selected.store.global, 'installationRegistration');
+  const directory = productResourcePath(productLayout, 'installationIdentity'), identity = join(directory, 'identity.json');
+  const firstCopy = join(directory, 'identity.pre-v3.json'), record = JSON.parse(await readFile(identity, 'utf8'));
+  const { canonicalRoot, machineDigest, device, inode } = record.binding;
+  const legacy = Buffer.from(JSON.stringify({ ...record, binding: { schemaVersion: 1, machineDigest, canonicalRoot, device, inode } }));
+  await writeFile(identity, legacy);
+  const actual = await vi.importActual<typeof fs>('node:fs/promises');
+  let observedDevice = BigInt(device) + 1n;
+  vi.mocked(fs.lstat).mockImplementation(async (...args) => {
+    const info = await actual.lstat(...args);
+    return args[0] === productLayout.root && typeof info.dev === 'bigint' ? Object.assign(info, { dev: observedDevice }) : info;
+  });
+  vi.mocked(fs.stat).mockImplementation(async (...args) => {
+    const info = await actual.stat(...args);
+    return args[0] === productLayout.root && typeof info.dev === 'bigint' ? Object.assign(info, { dev: observedDevice }) : info;
+  });
+  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    if (to === identity) throw Object.assign(new Error('injected identity publication failure'), { code: 'EIO' });
+    return actual.rename(from, to);
+  });
+  await expect(loadConfiguredScopeContext(f.a, 'source', f.options, 'write')).rejects.toBeDefined();
+  expect(await readFile(identity)).toEqual(legacy);
+  expect(await readFile(firstCopy)).toEqual(legacy);
+  vi.mocked(fs.rename).mockReset().mockImplementation(actual.rename);
+  observedDevice = BigInt(device);
+  await expect(loadConfiguredScopeContext(f.a, 'source', f.options, 'write')).resolves.toMatchObject({ installationId: record.installationId });
+  const backward = await readFile(registrationPath);
+  const result = JSON.parse(backward.toString('utf8'));
+  expect(result).toMatchObject({ source: { location: { device, filesystemIdentity } }, lineage: { headDevice: device, filesystemIdentity } });
+  expect(result.lineage.fromBinding).toBe(result.lineage.toBinding);
+  expect(await readFile(identity)).toEqual(legacy);
+
+  observedDevice = BigInt(device) + 2n;
+  observe.mockResolvedValue({ status: 'available', identity: { ...filesystemIdentity, value: 'f'.repeat(64) } });
+  await expect(loadConfiguredScopeContext(f.a, 'source', f.options, 'write')).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+  expect(await readFile(registrationPath)).toEqual(backward);
+  expect(await readFile(identity)).toEqual(legacy);
+  expect(await readFile(firstCopy)).toEqual(legacy);
+
+  observe.mockResolvedValue({ status: 'available', identity: filesystemIdentity });
+  await expect(loadConfiguredScopeContext(f.a, 'source', f.options, 'write')).resolves.toMatchObject({ installationId: record.installationId });
+  expect(JSON.parse(await readFile(identity, 'utf8'))).toMatchObject({ installationId: record.installationId,
+    binding: { schemaVersion: 3, device: String(observedDevice), filesystemIdentity } });
+  expect(JSON.parse(await readFile(registrationPath, 'utf8'))).toMatchObject({
+    source: { location: { device: String(observedDevice), filesystemIdentity } },
+  });
+  expect(await readFile(firstCopy)).toEqual(legacy);
 });
 
 it('uses the retained binding and the fresh observation for H-back, H-fwd and S2 without carrying dead or long device lineage', () => {
