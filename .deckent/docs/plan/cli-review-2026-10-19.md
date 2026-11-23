@@ -44,7 +44,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 - **Kabul kanıtı:** kabul satırı kanıt türünü söyler (ör. `process-exit@1` → "kabul: çıkış kodu · içerik bağımsız doğrulanmadı"); Kanun 1.
 - **TTY akışları:** onay kartı (bir kez / bu oturum / her zaman / hayır; sert tabanda "her zaman" yok), değerler yalnız seçimle (owner 10-08; MCP komut/URL istisnası önizleme + onayla), değişiklik öncesi önizleme kartı, terminaldeki slash pencereleriyle tek uygulama.
 
-**Açık sorular (uygulamada kaynakta çözülür):** `inventory` 8 / `workers` 64 kayıt farkı; `coding template --preview` "toolchain yok" ama canlıda profil kullanılıyor; `paths` ve `doctor` farklı soket yolu; `workers`'taki 21 `stale` kaydın gerçek durumu; terminal "bağlam ?" nedeni.
+**Açık sorular (uygulamada kaynakta çözülür):** `inventory` 8 / `workers` 64 kayıt farkı; `coding template --preview` "toolchain yok" ama mevcut bir profil çalışabiliyor; `paths` ve `doctor` farklı soket yolu; `workers`'taki 21 `stale` kaydın gerçek durumu; terminal "bağlam ?" nedeni.
 
 **Ölçülmeyenler:** yazan/etki üreten alt komutlar (her bölümde adıyla), terminal slash komutları, TTY `/doctor` ve `/config` pencereleri, Windows/macOS, gerçek `backup verify` (parola owner'da), canlı `do` isteği (owner atladı).
 
@@ -98,7 +98,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## workers
 
-**Ölçüm (`live`):** argümansız ve `--scope`'suz `list` genel `CLI_USAGE` (çıkış 2). `workers list --scope live` çalışır (çıkış 0): 285 satır, 64 kayıt, çalışan worker yok (41 `released`, 21 `stale` (en yenisi ~12 sa), 2 `unavailable`). `watch` aynı tam listeyi akıtır. `--json` çalışır. `--lang` yoksa çıktı İngilizce, `--lang tr` ile büyük ölçüde TR (config dili okunmuyor). `--scope pilot` kabul edilir (eski `deckent-dev` kaynağı `unavailable`); kayıtsız scope İngilizce `SCOPE_UNKNOWN` (çıkış 1), geçerli scope'ları listelemez.
+**Ölçüm:** Argümansız ve `--scope`'suz `list` genel `CLI_USAGE` (çıkış 2). Geçerli bir kapsamla `workers list` çalıştı (çıkış 0). Etkin işçi yokken bile 64 geçmiş kayıt 285 satır tuttu. `watch` aynı tam listeyi akıttı ve `--json` çalıştı. `--lang` yoksa İngilizce, `--lang tr` ile büyük ölçüde TR (config dili okunmuyor). Kayıtlı eski kaynak kullanılamıyorsa `unavailable` gösterilir. Kayıtsız kapsam İngilizce `SCOPE_UNKNOWN` döndürdü (çıkış 1) ve geçerli kapsamları listelemedi.
 
 **Bulgular:**
 1. Varsayılan görünüm geçmişi döker; "şu an ne çalışıyor" 285 satırda kaybolur, özet ve filtre yok.
@@ -115,7 +115,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## report
 
-**Ölçüm (`live`, run `5ff7e6cb…`):** `--run` yoksa genel `CLI_USAGE` (çıkış 2). Gerçek run ile çalışır (çıkış 0): görev kabul sayıları, CPU, API maliyeti "bilinmiyor USD", görev başına profil/model/effort/tepe bellek/süre; abonelik/yerel model çağrısı, insan müdahalesi, yeniden iş, geri alma "bilinmiyor"; "Kıyas için kanıt yetersiz (0 eş)". `--lang` yoksa İngilizce; kök `src/surfaces/core/cli/internal/report.ts:16` dili yalnız `--lang` ve ortamdan çözer, config `language` okunmaz; aynı kalıp 12 dosyada (hepsi tek tek doğrulanmadı). Olmayan run İngilizce `RUN_NOT_FOUND` (çıkış 1).
+**Ölçüm:** `--run` yoksa genel `CLI_USAGE` (çıkış 2). Tam kimlikle gerçek bir Run raporu döndü (çıkış 0). Görev kabul sayıları, CPU ve görev başına profil, model, effort, tepe bellek ve süre gösterildi. API maliyeti "bilinmiyor USD" idi. Abonelik veya yerel çağrı, insan müdahalesi, yeniden iş ve geri alma da bilinmiyordu. "Kıyas için kanıt yetersiz (0 eş)" gösterildi. `--lang` yoksa İngilizce. Kök `src/surfaces/core/cli/internal/report.ts:16` dili yalnız `--lang` ve ortamdan çözer, config `language` okunmaz. Aynı kalıp 12 dosyada görüldü (hepsi tek tek doğrulanmadı). Olmayan Run İngilizce `RUN_NOT_FOUND` döndürdü (çıkış 1).
 
 **Bulgular:**
 1. Run kimliğini bulmanın insan yolu yok: CLI'da `run list` yok, kimlik 64 hex; tek dolaylı yol İngilizce ve ham `deckent inventory`.
@@ -132,13 +132,13 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## run
 
-**Ölçüm:** argümansız İngilizce `CLI_USAGE` (çıkış 2). `run inspect --scope live --id <64 hex>` çalışır (çıkış 0, 83 satır, İngilizce); kısa kimlik (`5ff7e6cb`) `RUN_NOT_FOUND`. `create`, `propose`, `reserve`, `cancel`, `close`, `hold`, `resume` yazdığı için çalıştırılmadı; hepsi `--command-id` + `--expected-revision` ister, `create` graph JSON, `propose` öneri JSON bekler.
+**Ölçüm:** Argümansız İngilizce `CLI_USAGE` (çıkış 2). `run inspect --scope <kapsam> --id <64 hex>` tam kimlikle çalıştı (çıkış 0, 83 satır, İngilizce). Kısaltılmış kimlik `RUN_NOT_FOUND` döndürdü. Yazım yapan `create`, `propose`, `reserve`, `cancel`, `close`, `hold`, `resume` ölçülmedi. Bunlar `--command-id` ve `--expected-revision` ister. `create` grafik JSON'u, `propose` öneri JSON'u bekler.
 
 **Bulgular (`run inspect`):**
 1. "Evaluation: accepted" değerlendiricisi `process-exit@1`: kabul işlem çıkış koduna dayanır; içerik doğruluğu worker beyanıdır (`CLAIM …`). Kanun 1 gereği ekran kanıt türünü söylemez.
 2. Çelişki ve tekrar: "Acceptance: class unknown · policy unknown · profile unknown · accepted · criteria unknown" sonrasında profil ve kriter adı verilir; run kimliği 4 kez; `report` çıktısı başa kopyalı.
 3. Gizli bilgi kapısı istisna listesi 64 yol satır satır basılır (`.npmrc` `acknowledgedDenyPaths` ile açılmış); denetimli istisna kanıtı ama varsayılan görünümde gürültü.
-4. Ham değerler: hash, UUID, `sequence 2454`, "revision 3 (not live status)".
+4. Ham değerler: hash, UUID ve sıra numarası. Revizyon, canlı durum olmadığını belirten İngilizce metinle gösterilir.
 
 **Kabul edilen hâl (owner 2026-10-19):**
 - Argümansız `deckent run` alt komut listesi; `run list` son run'lar; kısa kimlik her alt komutta.
@@ -149,7 +149,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## task
 
-**Ölçüm (run `5ff7e6cb…`, görev `create-do-test-file`):** argümansız İngilizce `CLI_USAGE` (çıkış 2). `task inspect` çalışır (54 satır, İngilizce; çoğu 64 yollu gizli bilgi istisna listesi; aynı "Acceptance: … unknown · accepted" çelişkisi). `task transcript` çalışır, en okunur çıktı (zaman çizelgesi, token/önbellek %78, araç sayıları, "abonelik kullanımı ücret değildir"), İngilizce. `task patch-preview --stat` çalışır ("1 files, +1 -0", önizleme ≠ kabul), İngilizce. `task integration-queue-list --scope live` insan modunda **ham tek satır JSON** basar (başında TR "Kuyruk sonucu:"; `labelKey: queue.git.target` gibi anahtarlar çözülmemiş). `execute`, `evaluate`, `accept`, `reject`, `patch-prepare`, `integration-*`, `queue-enqueue/confirm/rollback` yazdığı için, `integration-inspect` `--command-id` gerektirdiği için çalıştırılmadı.
+**Ölçüm:** Argümansız İngilizce `CLI_USAGE` (çıkış 2). `task inspect` çalıştı (54 satır, İngilizce), uzun sır kapısı istisna listesini ve "Acceptance: … unknown · accepted" çelişkisini gösterdi. `task transcript` en okunur çıktıydı (zaman çizelgesi, token ve önbellek ölçümü, araç sayıları, "abonelik kullanımı ücret değildir"). `task patch-preview --stat` değişiklik özetini İngilizce gösterdi (önizleme kabul vermez). `task integration-queue-list` insan modunda **ham tek satır JSON** bastı. Başta TR "Kuyruk sonucu:" vardı ve `labelKey: queue.git.target` gibi anahtarlar çözülmedi. Yazım yapan alt komutlar çalıştırılmadı. `integration-inspect` için `--command-id` gerekliydi.
 
 **Bulgular:**
 1. **Öncelikli (owner 2026-10-19):** teslim kuyruğu listesi okunamaz; sonuçlar (`adopted`, `stale-refused`, `verification-failed`, `parked`) ve `nextAction` JSON içinde; `parked` bir teslim fark edilemez. Beta kapısı 4 (init → /do → teslim) yolunda.
@@ -164,7 +164,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## pool
 
-**Ölçüm:** argümansız genel hata (çıkış 2). `pool status` `--scope`'suz çalışır (varsayılan `live`, çıkış 0), 3 satır İngilizce: "Pool live: open (revision 0, by - at -, reason: -)", "Reserved or running: 0; in flight incl. evaluating: 0; drained: false", "capacity 4/4; last change -, by -, at -". `hold`, `resume`, `set-capacity`, `quota-release` yazdığı için çalıştırılmadı; kaynak okundu.
+**Ölçüm:** Argümansız genel hata (çıkış 2). `pool status`, `--scope` olmadan yapılandırılmış varsayılan kapsamı okudu (çıkış 0). Üç İngilizce satırda durum, ayrılmış veya çalışan ve değerlendirmedeki işler, kapasite ve değişiklik bilgileri gösterildi. Son değişiklik bilinmediğinde ham yer tutucular kaldı. Yazım yapan `hold`, `resume`, `set-capacity` ve `quota-release` kaynakta incelendi.
 
 **Bulgular:**
 1. Değişiklik komutları bugün sessizce `live`'a gider: `src/surfaces/core/cli/internal/pool.ts:44` `--scope` yoksa `terminal.scopeId` kullanır; `hold`, `resume`, `set-capacity`, `quota-release` dahil. Yeni scope kuralıyla çelişir.
@@ -188,7 +188,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## models
 
-**Ölçüm:** argümansız `deckent models` çalışır (18 satır, İngilizce): "Declared model catalog connect-a386e463…", bağlı sağlayıcı beyanları (Anthropic API, DeepSeek, yerel vLLM Qwen, OpenAI, OpenRouter), "kullanılabilirlik gözlemlenmez". `models catalog list --scope live` ayrı ikinci liste (39 satır, İngilizce): worker kataloğu, 6 kanal; bu scope'ta yalnız claude ve codex abonelik kanalları etkin; yerel vLLM bu listede yok. Argümansız `binding`, `activation`, `spending`, `catalog`, `catalog list` genel hata (çıkış 2). `binding`/`activation`/`activate`/`deactivate` sağlayıcı ve model sürümü + `--binding-digest <sha256>`; `invoke`/`spending` vb. JSON; `connect` tam API kimliği ister. Yazanlar çalıştırılmadı.
+**Ölçüm:** Argümansız `deckent models` İngilizce çalıştı (18 satır) ve bağlı sağlayıcıların beyanlarını gösterdi. Kullanılabilirliği ölçmediğini belirtti. Kapsamlı `models catalog list` ikinci, İngilizce bir işçi kataloğu verdi (39 satır). Kataloğa kayıt, o kapsamda etkin olmayı göstermiyordu. Argümansız `binding`, `activation`, `spending`, `catalog`, `catalog list` genel hata (çıkış 2). `binding`/`activation`/`activate`/`deactivate` sağlayıcı ve model sürümü ile `--binding-digest <sha256>` ister. `invoke` ve `spending` JSON, `connect` tam API kimliği ister. Yazım yapanlar çalıştırılmadı.
 
 **Bulgular:**
 1. İki "katalog" (beyan ve worker kataloğu) farkı anlatılmaz; ikisi aynı modelleri göstermez; "bu scope'ta hangi modelle iş yapabilirim" doğrudan cevaplanmaz.
@@ -205,7 +205,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## approval
 
-**Ölçüm:** argümansız genel hata (çıkış 2). Dört alt komut (`list`, `inspect`, `decide`, `renew`) yalnız `--input` JSON; yardım biçimi göstermez. `{"schemaVersion":1,"scopeId":"live"}` → İngilizce "Invalid inventory query. Check scope, cursor and page size." (`INVENTORY_QUERY_INVALID`, çıkış 2): yanlış alan adı, eksik `afterId`/`limit` söylenmez. Doğru girdiyle (`afterId: null, limit: 3`) çalışır (çıkış 0) ama insan modunda girintili ham JSON basar; kök `src/surfaces/core/cli/internal/approvals.ts:28` her sonucu `JSON.stringify` ile basar (dört alt komut). Sıra en eskiden (ilk kayıt 2026-09-30, karara bağlanmış); bekleyenler öne gelmez, durum filtresi yok; zaman epoch ms, digest/policy hash/UUID. `decide` yazdığı için çalıştırılmadı (kaynak: `commandId`, `expectedRevision`, `decision` allow/deny, zorunlu `reason`).
+**Ölçüm:** Argümansız genel hata (çıkış 2). Dört alt komut (`list`, `inspect`, `decide`, `renew`) yalnız `--input` JSON kabul eder ve yardım biçimi göstermez. Yalnız sürüm ve kapsam alanlarını içeren giriş, eksik `afterId` ve `limit` alanlarını adlandırmadan İngilizce `INVENTORY_QUERY_INVALID` döndürdü (çıkış 2). Doğru sayfalama girdisiyle çalıştı (çıkış 0) ama insan modunda girintili ham JSON bastı (`src/surfaces/core/cli/internal/approvals.ts:28`). En eski kayıtlar önce geldi, bekleyenler öne alınmadı ve durum filtresi yoktu. Tarihler epoch ms, kimlik ve bütünlük alanları ham özet ve UUID olarak gösterildi. Yazan `decide` çalıştırılmadı. Kaynakta `commandId`, `expectedRevision`, allow/deny kararı ve gerekçe zorunludur.
 
 **Kabul edilen hâl (owner 2026-10-19):**
 - Argümansız `deckent approval`: varsayılan scope'ta bekleyenler en üstte (okuma); satır: ne istendi (araç + komut özeti) · kim · bitiş ("8 dk kaldı").
@@ -216,14 +216,14 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## policy
 
-**Ölçüm:** argümansız genel hata (çıkış 2). `policy status` TR çalışır (1 admin, elle kurulmuş politika, revizyon hash'i, etiketsiz `host-1/user-1`, "Politika yönetimi kullanılabilir." tekrarı, "Dış kimlik… doğrulanmadı"). `policy grants` `--mine`'sız genel hata; `--mine` ile TR "Bu kapsamda kayıtlı kalıcı onayınız yok." `policy delegations --scope live` TR: AI'a devredilebilen 6 adım hepsi kapalı, ifade "Yönetilen izin yok / etkin durum: Seçimin bütününe izin yok". `policy mcp list` TR: iki scope'u (`pilot`, `live`) gösteren tek komut; tüm MCP gruplarında "Grup izni yok / Etkin yetki yok". `policy vocabulary` insan modunda 180 satır ham JSON. `policy upgrade --template current --preview` TR, ham "(not-first-run)". `delegate`, `undelegate`, `revoke`, `upgrade --apply`, `mcp grant/revoke` yazdığı için çalıştırılmadı (`revoke`'ta `--yes` var).
+**Ölçüm:** Argümansız genel hata (çıkış 2). `policy status` TR çalıştı. Revizyon özeti ve kişi/makine bilgileri etiketsizdi, "Politika yönetimi kullanılabilir." yinelendi ve dış kimlik doğrulaması bilinmiyordu. `policy grants` `--mine` olmadan genel hata verdi. `--mine` ile kayıtlı kalıcı onay olmadığı açıkça bildirildi. `policy delegations` ve `policy mcp list` TR çalıştı. İlki yönetilen izin ile etkin durumu, ikincisi kapsamları ve grup/etkin izin durumunu gösterdi. `policy vocabulary` insan modunda 180 satır ham JSON bastı. `policy upgrade --template current --preview` TR çıktı içinde ham "(not-first-run)" gösterdi. Yazım yapan alt komutlar çalıştırılmadı.
 
 **Bulgular:**
 1. Gizli alt komut: `policy mcp list|grant|revoke` çalışır, kullanımda yazar, "Komutlar" listesinde yok.
 2. `grants` için `--mine` zorunlu; argümansız hata.
 3. `vocabulary` insan modunda ham JSON.
 4. İfade ve ham değer: "Seçimin bütününe izin yok", "Operatör dışı beklemeden sürdür", revizyon hash'leri, etiketsiz principal, `not-first-run`.
-5. Bilgi (karar değil): `live`'da hiçbir MCP grup izni yok, MCP üzerinden AI bu scope'ta iş yapamaz; kısıtlı varsayılan olduğu düşünülüyor, doğrulanmadı.
+5. Bilgi (karar değil): Grupta etkin MCP izni bulunmadığında AI o kapsamda MCP üzerinden iş yapamaz. Kısıtlı varsayılanın bu durumu oluşturduğu doğrulanmadı.
 
 **Kabul edilen hâl (owner 2026-10-19):**
 - Argümansız `deckent policy`: varsayılan scope politika özeti (okuma): admin, politika türü, kalıcı izinlerim, AI'a devredilen adımlar, MCP grup izinleri özeti.
@@ -235,7 +235,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## backup
 
-**Ölçüm:** argümansız ve `--set`'siz İngilizce genel hata. Parola gizli istem veya stdin, argüman olamaz; parola owner'da olduğu için gerçek `verify` yapılmadı; `create`/`restore` yazdığı için çalıştırılmadı. `config get backup`: `schedule: before-upgrade`, `retention: 7`. Var olan setler yalnız dosya sisteminde bulundu: `.deckent/live-data/state/backups/recovery/` altında 2026-10-09–10-15 arası en az 5 set.
+**Ölçüm:** argümansız ve `--set`'siz İngilizce genel hata. Parola gizli istem veya stdin, argüman olamaz; parola owner'da olduğu için gerçek `verify` yapılmadı; `create`/`restore` yazdığı için çalıştırılmadı. `config get backup`: `schedule: before-upgrade`, `retention: 7`. Yedek kümeleri yalnız dosya sisteminden görülebildi. Bakım ekibinin kendi yedek konumu özel kayıttadır.
 
 **Bulgular:**
 1. **Öncelikli (owner 2026-10-19):** `backup verify --scope live --set /nonexistent` (yol yok) → "Parola yanlış ya da kurtarma seti değiştirilmiş: set açılamıyor… set özgün değildir, başka bir set kullanın." (`BACKUP_PASSPHRASE_INVALID`, çıkış 78). Kurtarma anında yanlış teşhis.
@@ -250,7 +250,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## identity
 
-**Ölçüm:** argümansız genel hata. `identity profiles` çalışır (İngilizce başlık): Custom, Enterprise, Solo, Team; her satırda 64 hex digest, başta registry hash'i; profil farkı anlatılmaz. `identity choices --scope live` çalışır ama etiketsiz (`core:team@1: profile-reader, profile-contributor`, `os-000001…: user-1@host-1`, `live`). `identity preview --scope live` İngilizce "Invalid identity profile or package." (`IDENTITY_PROFILE_INVALID`, çıkış 2); gerçek neden config `identity.profile.id` boş, yani profil seçilmemiş. `config get backup` grup olarak çalışırken `config get identity` "bilinmeyen anahtar". `distribute --apply` yazdığı için çalıştırılmadı.
+**Ölçüm:** Argümansız genel hata. `identity profiles` çalıştı (İngilizce başlık). Custom, Enterprise, Solo, Team satırlarında ve başlıkta ham özetler vardı, profil farkları açıklanmadı. `identity choices` kapsam, kişi ve rol alanlarını etiketsiz gösterdi. `identity preview`, profil seçilmediğinde (config `identity.profile.id` boş) İngilizce "Invalid identity profile or package." (`IDENTITY_PROFILE_INVALID`, çıkış 2) döndürdü. `config get backup` grup olarak çalışırken `config get identity` "bilinmeyen anahtar" dedi. `distribute --apply` yazım yaptığı için çalıştırılmadı.
 
 **Bulgular:**
 1. Kurulumda kimlik profili seçili değil; `doctor` ve `identity` söylemez, `preview` "profil geçersiz" diye yanlış teşhis verir (owner 10-05 solo/team/enterprise/custom kararı bu kurulumda uygulanmamış görünüyor).
@@ -314,7 +314,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## audit
 
-**Ölçüm:** argümansız genel hata (çıkış 2). `audit verify` scope'suz çalışır (varsayılan `live`, 0,7 s, TR): "Audit live sonucu: eşleşiyor (uçtan uca doğrulandı)"; `--lang en` çalışır; ölçülen en temiz çıktı. `--export-checkpoint` son checkpoint'i tek satır JSON basar (sıra 36, head 2553, digest'ler, MAC; ayrı cihazda saklanmak için). `rebaseline` yazdığı için çalıştırılmadı (yardım: TTY y/N, AI reddedilir, gerekçe zorunlu).
+**Ölçüm:** Argümansız genel hata (çıkış 2). `audit verify` varsayılan kapsamda 0,7 s sürdü ve eşleşmeyi TR olarak "uçtan uca doğrulandı" diye gösterdi. `--lang en` çalıştı. `--export-checkpoint` ayrı cihazda tutulabilen son denetim noktasını sıra, head, özetler ve MAC içeren tek satır JSON olarak bastı. Yazım yapan `rebaseline` çalıştırılmadı. Yardıma göre TTY y/N ve gerekçe gerekli, AI reddedilir.
 
 **Bulgular:**
 1. Argümansız `deckent audit` hata verir; `verify` zaten varsayılanla çalışır.
@@ -330,7 +330,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## inventory
 
-**Ölçüm:** `--scope`'suz genel hata. `inventory --scope live` çalışır (İngilizce; `--lang tr` ile TR): "Stored execution records: 8…; canlı durum veya kabul edilmiş sonuç değildir" (dürüst). Satır: 64 hex run / görev / tam attempt UUID / sahip / çıkış / iptal / çıktı referansı; sonda "Next page: --after <uuid>". `--limit 100` İngilizce `DISPATCH_INVENTORY_LIMIT`, sınırı söylemez (config `inspection.maxPageSize = 64`).
+**Ölçüm:** `--scope`'suz genel hata. Geçerli kapsamda `inventory` çalıştı. İngilizce çıktı `--lang tr` ile Türkçeye döndü ve kayıtlı yürütme verisinin canlı durum ya da kabul edilmiş sonuç olmadığını belirtti. Satırda Run ve Attempt kimlikleri, görev, sahip, çıkış, iptal ve çıktı referansı bulunuyordu. Sonraki sayfa için "--after <uuid>" gösterildi. `--limit 100` İngilizce `DISPATCH_INVENTORY_LIMIT` döndürdü ancak ayarlı sınırı (`inspection.maxPageSize = 64`) söylemedi.
 
 **Bulgular:**
 1. **Açık soru:** `inventory` bu scope'ta 8 yürütme kaydı, `workers list` 64 farklı attempt gösterir; farklı kaynaklar okunuyor olabilir, neden doğrulanmadı.
@@ -346,12 +346,12 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## paths
 
-**Ölçüm:** argümansız çalışır (çıkış 0) ama insan modunda 36 satır ham JSON: layout revizyon hash'i, kök `.deckent/live-data`, 28 kaynak yolu. `paths --global` JSON, kök `~/.local/state/deckent-next-dev`.
+**Ölçüm:** Argümansız çalıştı (çıkış 0) ancak insan modunda 36 satır ham JSON bastı. Çıktı yerleşim revizyon özetini, kökü ve 28 kaynak yolunu içerdi. `paths --global` global kökü JSON biçiminde gösterdi.
 
 **Bulgular:**
 1. İnsan modunda ham JSON.
 2. Yollar açıklanmaz (`fileEffects`, `instructionTrust`, `treeScanCache`); var/yok gösterilmez.
-3. Soket çelişkisi: `paths` `.deckent/live-data/state/runtime.sock`, `doctor` `/tmp/dk-1000-af34…/s` (olası neden Unix soket yolu uzunluk sınırı; doğrulanmadı).
+3. Soket çelişkisi: `paths` ile `doctor` farklı soket yolları gösterdi. Unix soket yolu uzunluk sınırı olası neden olarak kaydedildi, doğrulanmadı.
 4. MCP tanım dosyası (`~/.local/state/deckent-next-dev/mcp.json`) ve gizli depo dosyası listede yok.
 
 **Kabul edilen hâl (owner 2026-10-19):**
@@ -362,7 +362,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## runtime
 
-**Ölçüm:** argümansız genel hata. `runtime describe` çalışır (çıkış 0), tek satır İngilizce: "Runtime service local, instance 9d934110-…; shutdown is configured and requires authorization." `--json`: `instanceId`, `identity {scopeId live, serviceId local}`, `build {sourceTreeSha256 71c248bf…, sourceCommit a4d2d444…}`, `processId`, `configDigest`, `autoStarted false`, `idleStopMs null`. `serve`, `shutdown`, `restart` canlı servisi etkilediği için çalıştırılmadı (`shutdown` servis + instance kimliği, command-id, gerekçe ister).
+**Ölçüm:** Argümansız genel hata. `runtime describe` çalıştı (çıkış 0). İngilizce tek satır servis ve instance kimliklerini gösterdi, kapanış için yetki gerektiğini belirtti. JSON çıktısı kapsam ve servis, build kaynak commit'i ve özetleri, süreç kimliği, config özeti ve otomatik başlatma ile boşta duruş alanlarını içerdi. Çalışan servisi etkileyen `serve`, `shutdown`, `restart` çalıştırılmadı. `shutdown` servis ve instance kimliğini, command-id ve gerekçe ister.
 
 **Okunabilirlik doğrulaması (owner isteği):** sürüm/derleme evet (`describe` build = `deckent --version` derlemesi); yapılandırma güncelliği evet (`configDigest`, `doctor` `serviceConfig: current`); çalışan iş sayısı evet (`pool status`, servissiz); çalışma süresi **hayır** (`describe`'da başlangıç alanı yok; OS'tan okunur: süreç 3799421, 2026-10-18 14:19:47, ~13,5 sa; yalnız Linux `ps`); bağlı terminal oturumu **hayır** (alan bulunamadı).
 
@@ -380,12 +380,12 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## coding
 
-**Ölçüm:** argümansız genel hata. `coding template --provider codex|claude --kind coding --preview` ikisi de TR `CODING_TEMPLATE_TOOLCHAIN_REQUIRED` (çıkış 78): "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok…" — `toolchains` codex'i güncel ve kabul edilmiş gösterirken ve canlıda `native-coding-template-0b47…` profili kullanılırken. Kayıtsız sağlayıcı TR `CODING_TEMPLATE_INPUT_INVALID`, geçerli değerleri listelemez. `coding prepare` `{}` → İngilizce `EXECUTION_PROFILE_INVALID`; JSON biçimi yardımda yok. `--apply` config yazdığı için çalıştırılmadı.
+**Ölçüm:** argümansız genel hata. `coding template --provider codex|claude --kind coding --preview` ikisi de TR `CODING_TEMPLATE_TOOLCHAIN_REQUIRED` (çıkış 78): "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok…" — `toolchains` codex'i güncel ve kabul edilmiş gösterirken ve mevcut bir kodlama profili çalışırken. Kayıtsız sağlayıcı TR `CODING_TEMPLATE_INPUT_INVALID`, geçerli değerleri listelemez. `coding prepare` `{}` → İngilizce `EXECUTION_PROFILE_INVALID`; JSON biçimi yardımda yok. `--apply` config yazdığı için çalıştırılmadı.
 
 **Bulgular:**
 1. Geçerli sağlayıcı, `--kind` ve imaj (`sha256`) hiçbir yerde listelenmez.
 2. Mevcut kodlama profillerini görmenin yolu yok.
-3. **Açık soru:** `--preview` "toolchain yok" der, canlıda profil kullanılır; olası neden `--image` verilmeyince imaj belirsizliği, doğrulanmadı; sonraki adım söylenmez.
+3. **Açık soru:** `--preview` "toolchain yok" der, mevcut profil çalışır; olası neden `--image` verilmeyince imaj belirsizliği, doğrulanmadı; sonraki adım söylenmez.
 4. `prepare` JSON biçimi belgelenmemiş, hata İngilizce.
 
 **Kabul edilen hâl (owner 2026-10-19):**
@@ -410,7 +410,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## operation (lead önerisi; owner genel onayı 2026-10-19, tek tek sunulmadı)
 
-**Ölçüm:** argümansız genel hata. Yardım iyi: koşullu yazım, idempotency, etkiden önce niyet kaydı, belirsiz sonuçta tekrar yok, onay gerekiyorsa `approval-pending` ve hiçbir şey gönderilmez, `--wait`. `config get operations` → `catalog: []`, `targets: []`: bu kurulumda tanımlı işlem ve hedef yok. `operation inspect --scope live --command-id yok-boyle` İngilizce "No recorded operation yok-boyle in this scope." **çıkış 0** (`run`'da bulunamayan kayıt çıkış 1). `operation execute` `{"schemaVersion":1}` → yanlış alanlı İngilizce "Invalid inventory query…" (`INVENTORY_QUERY_INVALID`, çıkış 2; `approval`'daki ile aynı). `execute`/`compensate` etki ürettiği için gerçek girdiyle çalıştırılmadı.
+**Ölçüm:** Argümansız genel hata. Yardım koşullu yazımı, idempotency'yi, etkiden önce niyeti, belirsiz sonuçta tekrar olmamasını, `approval-pending` durumunda gönderim yapılmamasını ve `--wait` seçeneğini açıkladı. `config get operations` işlem kataloğu ve hedefleri gösterdi. Var olmayan örnek komut kimliğinde `operation inspect` İngilizce kayıt bulunamadığını yazdı ve **çıkış 0** döndürdü (`run` benzer durumda çıkış 1). Eksik şemalı `operation execute` İngilizce `INVENTORY_QUERY_INVALID` döndürdü (çıkış 2). `execute` ve `compensate` etki üreten girdilerle çalıştırılmadı.
 
 **Bulgular:**
 1. Müşterinin ERP/CRM iş süreci yolu (north star) bu kurulumda boş ve komut bunu söylemez; boş katalogda sonraki adım yok.
@@ -425,7 +425,7 @@ Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-I
 
 ## terminal (lead önerisi; owner genel onayı 2026-10-19, tek tek sunulmadı)
 
-**Ölçüm:** argümansız `deckent` PTY'de (120×40, tuşsuz 8 s) açılır: giriş kutusu ("Bir görev yaz · / komutlar · @ dosya"), alt durum çubuğu (`live · Qwen3.8-27B-INT4-W4A16 (local-vllm) · Hazır · ⏵⏵ tam otomatik · düşünme açık · bağlam ? · öz-kaynak zemini açık`), kısayol satırı, karşılama (proje, model, `/help`), "Runtime servisine bağlanıldı (9d934110-…)". Slash komutları tuş gerektirdiği için ölçülmedi. `terminal status` TR ve okunur (kurulum/proje kimliği, TTY yetenekleri, "inference_serving profili yapılandırılmamış", sohbet modeli `local-vllm/Qwen3.8-27B-INT4-W4A16@1`). `terminal chat-plan` insan modunda tek satır JSON (`status: ready`). `terminal snapshot` önce "inference_serving tanımlı değil", ardından genel `CLI_USAGE` (iki hata, çıkış 2). Sohbet modelinin (yerel vLLM) şu an erişilebilir olduğu doğrulanmadı.
+**Ölçüm:** Argümansız `deckent` PTY'de (120×40, tuşsuz 8 s) açıldı. Giriş kutusu, alt durum çubuğu (kapsam, model, hazır durumu, izin modu, düşünme, bağlam, öz-kaynak zemini), kısayol satırı, karşılama ve servis bağlantısı bildirimi görüldü. Slash komutları tuş gerektirdiği için ölçülmedi. `terminal status` TR ve okunurdu. Kurulum ve proje alanları, TTY yetenekleri, sohbet modeli ve eksik `inference_serving` profili görüldü. `terminal chat-plan` insan modunda tek satır JSON bastı (`status: ready`). `terminal snapshot` önce eksik profili, sonra genel `CLI_USAGE` hatasını yazdı (çıkış 2). Sohbet modelinin erişimi ayrıca doğrulanmadı.
 
 **Bulgular:**
 1. Durum çubuğunda "bağlam ?": bağlam penceresi bilinmiyor; olası neden `inference_serving` profili olmaması (doğrulanmadı).

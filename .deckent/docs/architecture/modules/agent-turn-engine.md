@@ -97,7 +97,7 @@ turn ends with one `done`; a turn without a model answer (reasoning spent the ou
 an engine-written closure note instead of silence. Identical read calls in one turn are answered with a reference to the earlier
 result, other classes are never deduplicated. The runtime operation, context admission/compaction and terminal rendering are
 implemented in the slices below; the T-L5 review limits remain open.
-**Truncated rounds (TRUNCATED-TOOLCALL, Jev 6192a348; live with the next switch).** A round is truncated when its reported completion
+**Truncated rounds (TRUNCATED-TOOLCALL, Jev 6192a348).** A round is truncated when its reported completion
 count reaches the completion limit every round requests (`AgentTurnAdmission.completionLimitTokens` = `terminal.chat.
 maxCompletionTokens`) or its finish is `length`; the finish alone is not trusted (vLLM v0.30.0 streams a tool call cut at
 `max_completion_tokens` as `tool_calls` — serving.py overwrites `length`, fixed upstream by PR #46303 after v0.30.0 — and its
@@ -200,7 +200,7 @@ generation only as a `[cut … sha256]` marker — the verbatim carry above does
 it does not change it; the harvest card input TC-1 COMPACT-CARRY regenerates a canonical block outside the compaction message from the
 turn ledger/history in every generation, with a compaction render version bump. TC-0…TC-7 are inside the owner's full-TUI acceptance
 (2026-10-01); the TC-1 mechanism is card input, not yet decided in detail (PLAN TUI-COMPLETION); not implemented.) The turn emits `compacted` (surface: one line "N earlier messages were summarized"), measures again and applies
-admission. The summary answer is normalized into the bounded shape before validation (TERM-FEEDBACK-1, live turn 975da614 answered every list
+admission. The summary answer is normalized into the bounded shape before validation (TERM-FEEDBACK-1, when an answer supplies a list
 field as one string): a string, scalars or objects become items, an absent list is empty, text longer than an item is split at a space
 (no text dropped), a count past the bound is named (`[N more items omitted by Deckent]`), a too long objective is cut with its length
 and digest; an answer without a string objective is unreadable. The `summarize` port distinguishes a summary, `unreadable` (the call
@@ -290,15 +290,15 @@ does not compile). The service resolves the locale as elsewhere (its environment
 'Write every string in <language>' instead of 'the language of the conversation'. Every turn's request digest changes again. Not forced: a
 local model can still drift; no post-check exists (a post-answer language check is a separate card). The terminal's own locale is not on the
 wire: terminal and service differ only for `terminal --lang` or a service started from another environment. Lead decision (2026-09-30): B now —
-the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
+the installation configuration can set `language: tr` for the service; A — `chatTurn.language?` on the wire — needs protocol
 v19 (v18 is released) and ships with the next protocol bundle. (Option A has not been added through protocol v29; the service locale still decides.)
-System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
+System prompt **v6** (PROMPT-POSTURE): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
 (the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, deckent state sealed, the configuration written
 only by an owner-approved call (Astra 2192 R9, historical; superseded by W3 on 2026-10-09: configuration remains read-only in every shell call); closed = no network; host; unavailable), and `Network access: none` stays only when the
 shell has no network. Every turn's request digest changes again.
 System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offered it names the per-answer output limit
 (`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.
-System prompt **v10** (NATIVE-BAGLAM, owner 2026-10-14, beta gate 3; live finding: "hangi moddayız" was answered by reading
+System prompt **v10** (NATIVE-BAGLAM, owner 2026-10-14, beta gate 3; a prior answer to "hangi moddayız" looked up the permission mode in
 `.deckent/config.json`, one answer carried English reasoning): after the tools the segment carries the **session context v1**
 (`src/engine/core/agent-turn/internal/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): deckent version, scope, session id, the permission mode as
 the decision reads it (`principalPermissionMode`; a stored full-access start mode without a launched full-access turn reads standart;
@@ -322,7 +322,7 @@ splits agree (`createInlineReasoningRouter` / `splitInlineReasoning`); provider 
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
-resources added later; TERM-FEEDBACK-1: the owner's live session listed and read other saved conversations): each resource, anything
+resources added later; TERM-FEEDBACK-1: saved conversations were listable and readable): each resource, anything
 under it, its sidecars (`rel*`: `ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary
 (`.policy.json.<id>.tmp`). The deny list's nested literal heads (`WorkspaceScope.protectedAnchors`: literal nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from `.deckent/host/**`); a pattern starting with a glob has none. A sandbox never grants their ancestors whole, even under an ignored tree; `.gitignore` cannot lift this deny-derived floor (Astra 2162).
 `.deckent/live-data/state/ledger.db`, `.deckent/host`, …) are protected together with their ancestors by both sandboxes even under an

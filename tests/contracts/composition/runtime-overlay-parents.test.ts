@@ -115,7 +115,8 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
       await mkdir(join(f.project, '.deckent', 'docs'), { recursive: true }); await writeFile(join(f.project, '.deckent', 'docs', 'report.md'), 'original\n');
       const result = await f.call('run_shell', { command: 'd=.deckent/docs; echo changed > "$d/report.md"; echo done' }, 'allow');
       expect(result.card).toBe(true);
-      expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
+      // A write refused only in the turn's batched record has no proof at call time: the call is not ok; the allowed write stays ok.
+      expect(result, f.evidence(result)).toMatchObject({ status: deny ? 'error' : 'ok' });
       const approved = f.audit().map(record => record.event.subject).filter(subject => subject.kind === 'sandbox-write-approved');
       if (deny) {
         expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('original\n');
@@ -133,7 +134,8 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const f = await runtime([...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
     const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f; echo done' }, 'allow');
     approvedDestructive(result);
-    expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
+    // The denied entry is refused in the turn's batched record only, so the call is not ok; nothing was applied.
+    expect(result, f.evidence(result)).toMatchObject({ status: 'error' });
     expect(existsSync(join(f.project, 'n1'))).toBe(false);
     // The entry's own decision refuses first; no directory is decided or made.
     expect(result.text).toContain('not applied: n1/n2/f (denied by policy)');
