@@ -23,13 +23,15 @@ export function delegationCardLines(view: DecisionDelegationView, step: string, 
   return [t('cli.policy.toggle.actor', { actor: `${view.principal.issuer}/${view.principal.subject}`, scope: view.scopeId, resource: view.resourceId ?? '*' }, locale),
     action === 'grant' ? t('cli.policy.toggle.becomesOn', { what: label(step) }, locale) : t('cli.policy.toggle.becomesOff', { what: label(step) }, locale),
     ...view.steps.map(row => `  ${label(row.step.id)} · ${row.managed === 'conflict' ? t('cli.policy.conflict', {}, locale) : onOff(row.effective, locale)}`),
-    t('policy.delegate.limit', {}, locale)];
+    t('policy.delegate.limit', {}, locale),
+    t('policy.delegate.shellIdentity', {}, locale)];
 }
 /** The AI delegation steps of one scope as a table: step · what it lets the AI do · on/off (the effective decision), a conflict named. */
 export function delegationTable(view: DecisionDelegationView, locale: Locale, style: ReturnType<typeof cliTableStyle>): string {
   const words = delegationWords(locale);
-  return renderCliTable([{ header: t('cli.policy.column.step', {}, locale) }, { header: t('cli.policy.column.label', {}, locale), shrink: true }, { header: t('cli.policy.column.ai', {}, locale) }],
+  const table = renderCliTable([{ header: t('cli.policy.column.step', {}, locale) }, { header: t('cli.policy.column.label', {}, locale), shrink: true }, { header: t('cli.policy.column.ai', {}, locale) }],
     view.steps.map(row => [row.step.id, words.step[row.step.id] ?? row.step.id, row.managed === 'conflict' ? t('cli.policy.conflict', {}, locale) : onOff(row.effective, locale)]), style);
+  return [table, t('policy.delegate.shellIdentity', {}, locale)].join('\n');
 }
 /** The MCP capability groups of one scope as a table: group · on/off/partial · a conflict named. */
 export function mcpTable(view: McpCapabilityView, locale: Locale, style: ReturnType<typeof cliTableStyle>): string {
