@@ -21,7 +21,7 @@ type PersonDenial = { approvalId: string; actionDigest: string; subject: Approva
 export type AgentRoundOutcome =
   | { readonly status: 'responded'; readonly content: string; readonly reasoning: string; readonly toolCalls: readonly AgentToolCall[];
     readonly finish: string; readonly continuation?: AgentMessageContinuation; readonly providerStop?: AgentProviderStop; readonly usage: { readonly promptTokens: number; readonly completionTokens: number } | null }
-  | { readonly status: 'failed'; readonly state: string };
+  | { readonly status: 'failed'; readonly state: string; readonly reason?: 'provider-quota' };
 
 /**
  * The loop's only ways to act. Rounds are governed invocations (policy, activation, allocation, spending, receipts) whose command
@@ -601,10 +601,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         }
       } else outcome = await ports.invokeRound({ round: rounds, messages, tools }, onDelta, signal);
     } catch { outcome = { status: 'failed', state: native?.failedSettlement ? 'unknown' : signal.aborted || native?.interrupted ? 'cancelled' : 'unavailable' }; }
-    // Consult the bridge fact after draining proposals, with interruption, planning and uncertain effects taking precedence.
+    // After draining proposals, preserve interruption, planning, uncertain effects and verified provider quota stops.
     if (toolLimitReached && native && !signal.aborted && !native.interrupted && !native.planningRefused && !ports.planning?.active) {
-      if (!native.failedSettlement && !coordinator.effectsUnknown) return finish('error', t('agent.turn.outcome.toolCallLimit', {}, input.language));
-      outcome = { status: 'failed', state: 'unknown' };
+      if (native.failedSettlement || coordinator.effectsUnknown) outcome = { status: 'failed', state: 'unknown' };
+      else if (outcome.status !== 'failed' || outcome.reason !== 'provider-quota') return finish('error', t('agent.turn.outcome.toolCallLimit', {}, input.language));
     }
     if (outcome.status === 'responded') {
       for (const part of routed.finish()) show(part);

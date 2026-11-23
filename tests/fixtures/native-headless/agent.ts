@@ -42,6 +42,8 @@ export interface FakeAgentScenario {
   readonly thinkingTokens?: boolean;
   /** Claude stream lines emitted right after init. */
   readonly events?: readonly Record<string, unknown>[];
+  /** Claude stream lines emitted after the MCP calls return and before the final result. */
+  readonly eventsAfterCalls?: readonly Record<string, unknown>[];
 }
 export async function writeFakeAgentCli(dir: string, family: string, scenario: FakeAgentScenario = {}) {
   const entry = nativeCliAgent(family)!;
@@ -94,6 +96,7 @@ async function main() {
   if (!claude) await line({type:'item.completed',item:{id:itemId,type:'mcp_tool_call',server:e.bridge.serverName,tool:call.name,arguments:call.arguments,status:x.failedTool && result.isError?'failed':'completed',result,error:null}});
   else await line({type:'user',message:{role:'user',content:[{type:'tool_result',tool_use_id:id,content:result.content}]},parent_tool_use_id:null});
  }
+ for (const event of x.eventsAfterCalls ?? []) await line({...event,session_id:'s-1',uuid:'u-after-calls'});
  const text=(x.answer ?? 'agent completed')+(x.echoToken?' '+token:'')+(x.loginCanary?' '+x.loginCanary:'');
  if (x.loginCanary) console.error(x.loginCanary); if(x.echoToken) console.error(token);
  if (claude) { const half=Math.floor(text.length/2); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:text.slice(0,half)},{type:'text',text:text.slice(half)}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }

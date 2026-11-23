@@ -335,7 +335,8 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             const content = inspected?.responseContent;
             const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
             const limitText = cliSubscription && body ? nativeQuotaText(body, language) : null;
-            if (limitText) return { status: 'failed', state: limitText };
+            if (limitText) return { status: 'failed', state: limitText,
+              ...(outcome.state === 'rejected' && body?.refusal === 'quota' ? { reason: 'provider-quota' } : {}) };
             if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
             if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
             if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
