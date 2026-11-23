@@ -1,5 +1,5 @@
 import { createTargetQueueHost } from './queue-host.js';
-import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
+import { checkpointConfiguredAudit, signRefusalTarget } from '#composition/core/audit/index.js';
 import { withRunProgressionObservation, withRunProgressionSession, AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateExecutionSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
@@ -116,7 +116,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers,
     createConfiguredNativeChatRuntime(projectRoot, options),
     ports.planWork ? (...args) => withRunProgressionSession(runSession, () => ports.planWork!(...args)) : undefined,
-    ports.proposalViews, ports.planSameTurn);
+    ports.proposalViews, ports.planSameTurn, signRefusalTarget);
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, { onPage: (command, result) => observer.onModelCancellationPage?.(command, result), onError: (command, error) => observer.onModelCancellationError?.(command, error), }, options);
   const build = readBuildIdentity();

@@ -4,7 +4,7 @@ import type { ServiceShutdownAdmissionResult, ShutdownCommand, ToolchainCurrency
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
-import type { AuditRebaselineHandler, AuditVerifyHandler } from './audit.js';
+import type { AuditCandidateHandler, AuditRebaselineHandler, AuditVerifyHandler } from './audit.js';
 import type { BackupHandler, BackupSetsHandler } from './backup.js';
 import type { CodingProfilePreparationHandler, CodingTemplateHandler } from './coding.js';
 import type { OperationEffectHandler, OperationInspectHandler } from './operation.js';
@@ -22,6 +22,7 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   verifyAudit?: AuditVerifyHandler;
   /** BeUser S-04: one verified page of a scope's audit log (`deckent audit list`). */
   listAudit?: (root: string, query: AuditListQuery, options: ConfigLoadOptions) => Promise<AuditListView>;
+  showAuditCandidate?: AuditCandidateHandler;
   rebaselineAudit?: AuditRebaselineHandler;
   executeBackup?: BackupHandler;
   /** S4B-4 §6.6: after a restore, how many memory purges the journal holds that the restored ledger lacks (re-applied before work starts). */

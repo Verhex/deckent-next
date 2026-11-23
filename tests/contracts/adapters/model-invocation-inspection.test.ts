@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
+import { inspectRefusalCandidate } from '#composition/core/model-invocation/index.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { tmpdir, userInfo } from 'node:os';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, expectTypeOf, it, vi } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { encodeModelBindingDefinition, memoryDistillerPrincipal, parseProviderCatalog, resolveModelBindingDefinition, type RateLimitFact } from '#domain/index.js';
+import { encodeModelBindingDefinition, memoryDistillerPrincipal, parseProviderCatalog, resolveModelBindingDefinition, policySchema, type RateLimitFact } from '#domain/index.js';
 import type { ClaudeRateLimit } from '#capabilities/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { ModelInvocationInspectionApplication, verifiedPrincipal, parseModelInvocationInspectionForQuery, createModelInvocationResponseEvidence, createModelInvocationPlanUsage, modelInvocationPlanUsageDigest, verifyModelInvocationPlanUsage, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
 const roots: string[] = [], options = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2_000 };
@@ -279,4 +281,30 @@ it('selects the private body only for the exact responded receipt, with permissi
     await expect(app.readRetainedTurnResponse(receipt, async () => { await person(); writer.exec('COMMIT'); }, current)).rejects.toMatchObject(refused);
     expect(selected).toEqual([]);
   } finally { sql.mockRestore(); writer.close(); }
+});
+
+it('binds the candidate inspector to both permissions and returns only its verified locator and descriptor', async () => {
+  const { path } = await fixture('responded'), config = await loadComposedConfig(dirname(path), { heal: false });
+  const locator = { invocationId: 'invocation', reference };
+  const stored = await appFor(path, true).inspect({ schemaVersion: 2, scopeId: 'scope', ...locator, includeResponseContent: true });
+  const installationId = 'fixture-installation';
+  const grant = { id: 'fixture-read', effect: 'allow', scopes: ['scope'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+    resource: { kind: 'model-invocation', ids: 'all' } };
+  const context = { config, layout: config.productLayout, ownerUid: userInfo().uid, installationId, principal: principal(), path: async () => path };
+  const document = (actions: string[]) => policySchema.parse({ schemaVersion: 1, revision: 'candidate-read', restrictions: [], grants: [{ ...grant, actions }] });
+  for (const action of ['inspect', 'inspect-content']) {
+    await expect(inspectRefusalCandidate({ ...context, document: document([action]) }, 'scope', locator)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  }
+  const allowed = { ...context, document: document(['inspect', 'inspect-content']) };
+  const resolve = (candidate = locator) => inspectRefusalCandidate(allowed, 'scope', candidate);
+  expect(await resolve()).toEqual({ ...locator, scopeId: 'scope', installationId, companyId: config.company.id, descriptor: stored.responseContent?.descriptor });
+  await expect(resolve({ ...locator, reference: { ...reference, modelVersion: 2 } })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+  expect(await resolve({ ...locator, invocationId: 'missing' })).toBeNull();
+
+  const store = await openSqliteModelInvocationStore(path, options, 'forbid');
+  try {
+    await store.purgeContent({ command: { schemaVersion: 1, commandId: 'candidate-purge', scopeId: 'scope', ...locator,
+      expectedContentDigest: stored.responseContent!.descriptor.digest }, actor, authorization: { revision: 'candidate-read', ruleId: 'purge-content' }, purgedAtMs: 30 });
+  } finally { store.close(); }
+  expect(await resolve()).toBeNull();
 });

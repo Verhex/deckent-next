@@ -427,6 +427,7 @@
   "cli.audit.refusal.source.adapter-reported": "Adapter reported a refusal (adapter-reported)",
   "cli.audit.refusal.countAtLeast": "Count is at least {count}.",
   "cli.audit.refusal.countExact": "Count is exactly {count}.",
+  "cli.audit.refusal.verifiedMatch": "Candidate target verified.",
   "cli.audit.refusal.unresolved": "Target not resolvable.",
   "cli.audit.refusal.joined": "Allowed by policy, refused at the boundary (related: {sequences})",
   "cli.audit.refusal.correlationLimited": "Related-record lookup reached its bound; an absent match is unverified.",

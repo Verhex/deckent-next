@@ -56,10 +56,11 @@ export async function showConfiguredAuditCandidate(root: string, input: { readon
     try {
       if (!auditScopeRecorded(store, scopeId)) return null;
       const key = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile);
-      const row = new AuditApplication(store, key).atSequence(scopeId, input.sequence);
+      const audit = new AuditApplication(store, key), row = audit.atSequence(scopeId, input.sequence);
       if (row?.sequence !== input.sequence) return null;
       const { subject } = row.event;
-      const result = { sequence: row.sequence, event: row.event, targetResolution: 'not-resolvable' as 'verified-match' | 'not-resolvable' };
+      const result = { sequence: row.sequence, event: row.event, ...relatedAuditRecords(audit, [row], context.config.audit),
+        targetResolution: 'not-resolvable' as 'verified-match' | 'not-resolvable' };
       if (subject.kind !== 'access-refusal-summary' || !subject.target.identity || subject.invocationId !== input.candidate.invocationId
         || !context.installationId || context.principal.assurance !== 'os-user') return result;
       try {
@@ -67,10 +68,10 @@ export async function showConfiguredAuditCandidate(root: string, input: { readon
         if (!candidate || candidate.scopeId !== scopeId || candidate.installationId !== context.installationId
           || candidate.companyId !== context.config.company.id || !isDeepStrictEqual(candidate.reference, input.candidate.reference)
           || !verifyRefusalTarget(subject, candidate, key)) return result;
-        const current = await loadComposedConfig(root, { ...options, heal: false });
-        const policy = await contextPolicySource(context).load();
-        if (isDeepStrictEqual(current.productLayout, context.layout) && current.company.id === context.config.company.id
-          && isDeepStrictEqual(policy, context.document) && await context.path() === path) result.targetResolution = 'verified-match';
+        const current = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read');
+        if (current.installationId === context.installationId && current.config.company.id === context.config.company.id
+          && isDeepStrictEqual(current.layout, context.layout) && isDeepStrictEqual(current.principal, context.principal)
+          && isDeepStrictEqual(current.document, context.document) && await current.path() === path) result.targetResolution = 'verified-match';
         return result;
       } catch { return result; }
     } finally { store.close(); }
