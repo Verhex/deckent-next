@@ -13,13 +13,13 @@ const work = (extra: object = {}) => ({ schemaVersion: 2, task: 'Append done', s
 const draft = (workInput?: object) => { const { graph, budgetCeiling, requiredPermissions } = proposalFixture('feature');
   return { graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'coding', ...(workInput ? { workInput } : {}) }] }, budgetCeiling, requiredPermissions }; };
 
-it('selects template v6 (F2-11 class descriptions over v5: person language, system assignment, context v3) by default; v1–v5 stay available with their exact bytes', () => {
-  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 6, modelAssignment: 'system', contextVersion: 3, personLanguage: true });
+it('defaults to v7 with system assignment and retains the previous template versions', () => {
+  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 7, modelAssignment: 'system', contextVersion: 3, personLanguage: true });
   const config = brainPlannerConfigSchema.parse({});
-  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system'], [5, 'system'], [6, 'system']]);
+  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system'], [5, 'system'], [6, 'system'], [7, 'system']]);
   const [v5, v6] = [5, 6].map(version => config.templates.find(row => row.version === version)!.instruction);
   expect(v6).toBe(v5!.replace('acceptance criteria.', "acceptance criteria. Choose each task's WorkClass from the supplied class descriptions: the narrowest class whose description fits that task; a kind's binding is only the default when no narrower class fits.")
-    // Same-turn planning (owner 141, design Rev 3 R3.3): v6 alone gains the conditional framing sentence; v1–v5 keep their bytes.
+    // Same-turn planning (owner 141, design Rev 3 R3.3): v6 introduced the conditional framing sentence.
     + ' If and only if this is a same-turn preparation result, copy its DECKENT-PLAN-CHALLENGE/1 line exactly at byte zero, then one LF and exactly one JSON object in the supplied schema; call no more tools and write no other text. Otherwise return plain JSON as above.');
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).modelAssignment).toBe('brain');
   expect(brainAssignsWorkers({})).toBe(false); expect(brainAssignsWorkers({ selected: { id: 'run-proposal', version: 2 } })).toBe(true);
