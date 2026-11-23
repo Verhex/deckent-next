@@ -1,7 +1,7 @@
 import { siwcCliCommand } from '#surfaces/core/siwc/index.js';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { parseModelReference } from '#domain/index.js';
-import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ModelCommandContext } from './context.js';
 import { modelInvocationCommand } from './model-invocation.js';
@@ -15,7 +15,8 @@ import { renderModelsTable } from './models-table.js';
 import { modelsInteractive, retirementWarningDays } from './io.js';
 
 interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string; declared: boolean; catalog: boolean; verbose: boolean; scopeId?: string;
-  providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number }
+  providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number;
+  usage?: 'action' | 'declaredScope' }
 function positiveVersion(value: string | undefined): number {
   if (!value || !/^[1-9]\d*$/.test(value)) throw ErrorRegistry.createError('CLI_USAGE');
   const parsed = Number(value); if (!Number.isSafeInteger(parsed)) throw ErrorRegistry.createError('CLI_USAGE'); return parsed;
@@ -42,10 +43,13 @@ function parse(argv: readonly string[]): Parsed {
       else if (value === '--provider-version') parsed.providerVersion = positiveVersion(supplied);
       else if (value === '--model') parsed.modelId = supplied;
       else parsed.modelVersion = positiveVersion(supplied);
+    } else if (index === 1 && value && !value.startsWith('-') && !hasCliAction('models', value)) {
+      parsed.usage = 'action';
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (parsed.help && (parsed.json || parsed.noColor)) throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.declared && (parsed.scopeId || parsed.catalog)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (parsed.declared && parsed.catalog) throw ErrorRegistry.createError('CLI_USAGE');
+  if (parsed.declared && parsed.scopeId) parsed.usage ??= 'declaredScope';
   // Lead J2e (C-MODELS decision 2): plain `models --json` keeps the declared-list contract scripts and AI read; the catalog JSON needs `--catalog`
   // (or `--scope`, which only the catalog takes).
   if (action === 'list' && parsed.json && !parsed.catalog && !parsed.scopeId) parsed.declared = true;
@@ -93,6 +97,10 @@ export async function modelsCommand(argv: readonly string[], context: ModelComma
   // M2: which exact catalog model serves which role; `set` is a person's card.
   if (argv[1] === 'roles') return modelRolesCommand(argv, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);
+  if (parsed.usage) {
+    const usage = parsed.usage === 'action' ? t('climodels.usage.action', {}, locale) : t('climodels.usage.declaredScope', {}, locale);
+    throw ErrorRegistry.createError('CLI_USAGE', { locale, params: { usage } });
+  }
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) { emit(parsed.action === 'binding' ? t('cli.help.modelsBinding', {}, locale) : t('cli.help.models', {}, locale), sinks); return; }
   const options: ConfigLoadOptions = { env }, root = context.root ?? process.cwd();
