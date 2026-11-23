@@ -1,18 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { createInstallationSecretCustody, nativeCodingDependencyLayout, openConfiguredSecretStore, reopenWorkerTree, resolveGitWorkTarget,
+import { nativeCodingDependencyLayout, reopenWorkerTree, resolveGitWorkTarget,
   sealedWorkerTreeLocation, verifySealedWorkerTree } from '#adapters/index.js';
 import type { NativeNodeDependencyReference } from '#domain/index.js';
-import { authorizeWorkTargetUse, ENV_SECRET_STORE_ID, packageConsentDigest, samePackagePerson, type AuditApplication } from '#engine/index.js';
-import { combineKnownSecrets, getConfigKnownSecrets, knownSecretValues, productResourcePath, redactForRecord,
-  type ConfigLoadOptions, type WorkerPackageAllowance } from '#platform/index.js';
+import { authorizeWorkTargetUse, packageConsentDigest, samePackagePerson, type AuditApplication } from '#engine/index.js';
+import { getConfigKnownSecrets, productResourcePath, redactForRecord,
+  type ConfigLoadOptions, type KnownSecretSnapshot, type WorkerPackageAllowance } from '#platform/index.js';
 import { contextPolicySource, withLayoutPolicyWriteLock } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { activePackageRow, packageActivitySubject, packageAllowance, packagePartition, packagePublication, packageRefused, packageRetirement, packageRowDigest,
   readManagedPackageRows, recordPackageAuthority, retirePackageGeneration, verifyPackagePerson, withPackagePartition, withPackagePartitions,
   type PackageContext, type PackageProfile } from './package-activity.js';
 import { configuredPreparedInput } from './prepared-input.js';
+import { readPackageSecrets, withPackageSecretCustody } from './package-secrets.js';
 
 type Reference = NativeNodeDependencyReference;
 type Binding = Readonly<{ reference: Reference; profile: PackageProfile }>;
@@ -21,9 +22,9 @@ const sameCustody = (before: PackageContext, after: PackageContext) =>
   && samePackagePerson(before.principal, after.principal);
 
 async function checkCurrentVersion(root: string, context: PackageContext, options: ConfigLoadOptions, audit: AuditApplication,
-  scopeId: string, row: WorkerPackageAllowance, profile: PackageProfile) {
+  scopeId: string, row: WorkerPackageAllowance, profile: PackageProfile, known?: KnownSecretSnapshot) {
   const layout = nativeCodingDependencyLayout();
-  const current = await configuredPreparedInput(root, context, scopeId, layout, undefined, options);
+  const current = await configuredPreparedInput(root, context, scopeId, layout, undefined, options, known);
   if (await packagePartition(context, scopeId, profile, { ...current, layout: layout.id }) !== row.partition) throw packageRefused();
   const { digest: listDigest } = await current.review(), { lockfileDigest } = current;
   await current.assertCurrent();
@@ -52,7 +53,7 @@ export async function pinPackageAllowance(root: string, context: PackageContext,
   });
 }
 
-export async function verifyPackageObject(context: PackageContext, reference: Reference, known = getConfigKnownSecrets(context.config)) {
+export async function verifyPackageObject(context: PackageContext, reference: Reference, known: KnownSecretSnapshot) {
   if (!context.config.execution) throw packageRefused();
   const limits = context.config.execution.secretGate, object = sealedWorkerTreeLocation(productResourcePath(context.installationLayout, 'artifacts'), reference);
   const { source } = await reopenWorkerTree(object, nativeCodingDependencyLayout().mount, reference.listDigest, limits, known);
@@ -77,40 +78,18 @@ export async function describePackageDecision(context: PackageContext, reference
   }, false, 'read');
 }
 
-async function registeredSecretValues(context: PackageContext, env: NonNullable<ConfigLoadOptions['env']>, platform: string, selected?: string) {
-  const store = openConfiguredSecretStore(context.config, env, platform), backend = store.descriptor.id, values: string[] = [];
-  if (selected !== undefined && selected !== backend) throw packageRefused();
-  if (backend !== ENV_SECRET_STORE_ID) {
-    for (const name of await store.listNames()) {
-      const value = await store.get(name);
-      if (value === undefined) throw packageRefused();
-      values.push(value);
-    }
-  }
-  return { backend, values: [...new Set(values)].sort() };
-}
-
-const packageSecrets = (context: PackageContext, values: readonly string[]) =>
-  combineKnownSecrets(getConfigKnownSecrets(context.config), knownSecretValues(values));
-
-export async function packageReviewSecrets(context: PackageContext, options: ConfigLoadOptions) {
-  const { values } = await registeredSecretValues(context, options.env ?? process.env, options.platform ?? process.platform);
-  return packageSecrets(context, values);
-}
-
 /** Scans before entering the writer locks. Only a scan of the still-current authority can cross the effect boundary. */
 export function withPackageUse<T>(root: string, context: PackageContext, options: ConfigLoadOptions, bindings: readonly [Binding, ...Binding[]],
-  action: 'admit' | 'open', useId: string, work: () => Promise<T>, prepare?: (fresh: PackageContext, binding: Binding) => Promise<void>): Promise<T> {
+  action: 'admit' | 'open', useId: string, work: () => Promise<T>, prepare?: (fresh: PackageContext, binding: Binding, known: KnownSecretSnapshot) => Promise<void>): Promise<T> {
   const inputs = bindings.map(binding => ({ binding, row: packageAllowance(binding.reference) }));
-  const { scopeId } = bindings[0].reference.approval, env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  const { scopeId } = bindings[0].reference.approval;
   const load = () => loadConfiguredScopeContext(root, scopeId, { ...options, heal: false, force: true }, 'read');
   return withPackagePartitions(context, inputs.map(({ row }) => row.partition), async audit => {
     const scanned = await load(), execution = scanned.config.execution;
     if (!execution || !sameCustody(context, scanned)) throw packageRefused();
     const target = await resolveGitWorkTarget(root, execution, scanned.layout), rows = await readManagedPackageRows(root, scanned, options);
     await authorizeWorkTargetUse(contextPolicySource(scanned, scanned.document), target.id, scopeId, scanned.principal);
-    const secrets = await registeredSecretValues(scanned, env, platform);
-    const known = packageSecrets(scanned, secrets.values);
+    const { registered, known } = await readPackageSecrets(scanned.config, options);
     const checks: { row: WorkerPackageAllowance; assertCurrent: () => Promise<void>; verify: () => Promise<void> }[] = [];
     for (const { binding, row } of inputs) {
       const { reference, profile } = binding;
@@ -118,17 +97,16 @@ export function withPackageUse<T>(root: string, context: PackageContext, options
         || await packagePartition(scanned, scopeId, profile, reference) !== row.partition
         || !isDeepStrictEqual(activePackageRow(audit, scopeId, row.partition, rows), row)) throw packageRefused();
       await verifyPackagePerson(scanned, scopeId, row);
-      const assertCurrent = await checkCurrentVersion(root, scanned, options, audit, scopeId, row, profile);
-      await prepare?.(scanned, binding);
+      const assertCurrent = await checkCurrentVersion(root, scanned, options, audit, scopeId, row, profile, known);
+      await prepare?.(scanned, binding, known);
       const verify = await verifyPackageObject(scanned, reference, known);
       checks.push({ row, assertCurrent, verify });
     }
-    const custody = createInstallationSecretCustody(env, platform);
     // Custody precedes policy in the existing custody → config → policy chain, and this path never takes the config writer lock.
-    return custody.exclusive(() => withLayoutPolicyWriteLock(scanned.layout, async () => {
+    return withPackageSecretCustody(options, custody => withLayoutPolicyWriteLock(scanned.layout, async () => {
       const fresh = await load();
       if (!sameCustody(scanned, fresh) || !isDeepStrictEqual(scanned.config, fresh.config) || !isDeepStrictEqual(scanned.document, fresh.document)
-        || !isDeepStrictEqual(secrets, await registeredSecretValues(fresh, env, platform, await custody.selected()))) throw packageRefused();
+        || !isDeepStrictEqual(registered, (await readPackageSecrets(fresh.config, options, await custody.selected())).registered)) throw packageRefused();
       for (const { assertCurrent, verify } of checks) {
         await assertCurrent();
         await verify();

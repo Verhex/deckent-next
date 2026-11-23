@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { userInfo } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, t, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
@@ -11,7 +12,7 @@ import { packageConsentDigest, verifiedPrincipal, authenticate, selectedHubSkill
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
-import { withPackageUse } from '#composition/core/workspace-patch/index.js';
+import { readPackageSecrets, withPackageSecretCustody, withPackageUse } from '#composition/core/workspace-patch/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
@@ -76,17 +77,24 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       const configuredPorts = options.nativeCliWorker?.ports ?? (options.nativeCliWorker?.runtime
         ? createConfiguredNativeCliWorkerPorts(projectRoot, identity.scopeId, store, options, options.nativeCliWorker.runtime) : undefined);
+      let scannedPackages: Awaited<ReturnType<typeof readPackageSecrets>> | undefined;
       const reopen = async <T>(stage: string, validate: (() => Promise<void>) | undefined, work: () => Promise<T>) => {
-        if (dependencies?.state !== 'sealed' || !dependencies.allowance) return work();
+        if (dependencies?.state !== 'sealed' || !validate) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+        // Compare the completed scan's snapshot under custody through each managed handover.
+        if (!dependencies.allowance) return withPackageSecretCustody(options, async custody => {
+          const { registered } = await readPackageSecrets(config, options, await custody.selected());
+          if (!isDeepStrictEqual(scannedPackages?.registered, registered)) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+          await validate();
+          return work();
+        });
         const useId = packageConsentDigest('worker-package-attempt:1', { identity, stage });
         return withPackageUse(projectRoot, scope, options, [{ reference: dependencies, profile: selected }], 'open', useId, work, async fresh => {
           const policy = contextPolicySource(fresh, fresh.document);
           await new DispatchPolicyAuthorization(policy).authorizeIdentity('execute', identity, fresh.principal);
-          if (!validate) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
           await validate();
         });
       };
-      const nativePorts = dependencies?.state === 'sealed' && dependencies.allowance && configuredPorts ? {
+      const nativePorts = dependencies?.state === 'sealed' && configuredPorts ? {
         ...configuredPorts,
         openTools: (...args: Parameters<NativeCliWorkerPorts['openTools']>) =>
           reopen('tools', args[3].sealedNodeModules?.validate, () => configuredPorts.openTools(...args)),
@@ -146,8 +154,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
       const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } });
       const sealedViews = sealedNodeModules && packageContext ? [sealedNodeModules.scanView, { text: packageContext, label: 'prompt:sealed-dependencies' }] : [];
-      await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv).concat(sealedViews), settings: gate, fingerprint: [config, git.sourceRoot], lockfile, sharesTree: pathsShareTree,
-        refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, release);
+      if (sealedNodeModules) scannedPackages = await readPackageSecrets(config, options)
+        .catch(async (error: unknown) => { await release().catch(() => undefined); throw error; });
+      const known = scannedPackages?.known ?? getConfigKnownSecrets(config);
+      await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv).concat(sealedViews), settings: gate,
+        fingerprint: [config, git.sourceRoot, scannedPackages?.registered], lockfile, sharesTree: pathsShareTree,
+        refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, known) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, release);
       // PRE-7: Deckent's own preflight of the declared environment on the worker's floor, without its connection (no credential, no model); an unmet
       // requirement refuses the launch typed below (the Run parks naming it) and releases the checkout, as the secret gate does.
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
@@ -197,7 +209,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             const prepared = await prepareNativeCliWorker({
               profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
               onEvents: batch => nativeEvents!.accept(batch),
-              ...(dependencyContext ? { dependencyContext } : {}), language, knownSecrets: getConfigKnownSecrets(config),
+              ...(dependencyContext ? { dependencyContext } : {}), language, knownSecrets: known,
               toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(sealedNodeModules ? { sealedNodeModules } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
               fence: () => nativeCliWorkerFence(store, identity)
             });

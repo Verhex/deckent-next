@@ -18,7 +18,7 @@ export function nativeInputAdmission(root: string, context: Context, options: Co
       const profiles = execution.tasks.map(task => selected(task.profile));
       if (!profiles.some(profile => profile?.dependencies)) return { execution };
       if (profiles.some(profile => profile?.dependencies?.state === 'sealed')) throw refused();
-      const source = await configuredPreparedInput(root, { ...context, principal }, scopeId, layout, workspace?.baseRevision);
+      const source = await configuredPreparedInput(root, { ...context, principal }, scopeId, layout, workspace?.baseRevision, options);
       const { digest: listDigest, manifest } = await source.review();
       const packageRows = manifest.entries.flatMap(row => row.digest ? row.rules.map(rule => ({ path: row.path, rule, digest: row.digest! })) : []);
       const { project, workTarget, lockfileDigest, platform } = source;
@@ -56,8 +56,8 @@ export function nativeInputAdmission(root: string, context: Context, options: Co
       const [first, ...rest] = selectedAllowances.values();
       if (!first) return work();
       return withPackageUse(root, { ...context, principal }, options, [first, ...rest], 'admit', create.commandId,
-        async () => { await recheckPolicy(); return work(); }, async (fresh, binding) => {
-        const pinned = await configuredPreparedInput(root, fresh, create.identity.scopeId, layout, workspace?.baseRevision, options);
+        async () => { await recheckPolicy(); return work(); }, async (fresh, binding, known) => {
+        const pinned = await configuredPreparedInput(root, fresh, create.identity.scopeId, layout, workspace?.baseRevision, options, known);
         if (pinned.project !== binding.reference.project || pinned.workTarget !== binding.reference.workTarget
           || pinned.lockfileDigest !== binding.reference.lockfileDigest || (await pinned.review()).digest !== binding.reference.listDigest) throw refused();
       });
@@ -68,7 +68,7 @@ export function nativeInputAdmission(root: string, context: Context, options: Co
 export async function produceConfiguredNativeInputs(root: string, scopeId: string, options: ConfigLoadOptions, cachePath?: string) {
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
   const layout = nativeCodingDependencyLayout();
-  return { ...await configuredPackageList(root, context, scopeId, layout, cachePath), layout };
+  return { ...await configuredPackageList(root, context, scopeId, layout, options, cachePath), layout };
 }
 
 export async function inspectConfiguredNativeInputs(root: string, scopeId: string, options: ConfigLoadOptions = {}, runId?: string) {
@@ -94,7 +94,7 @@ export async function inspectConfiguredNativeInputs(root: string, scopeId: strin
       return { kind: 'run' as const, rows };
     } finally { store.close(); }
   }
-  const source = await configuredPreparedInput(root, context, scopeId, layout);
+  const source = await configuredPreparedInput(root, context, scopeId, layout, undefined, options);
   const { project, workTarget, lockfileDigest, platform } = source, { digest: listDigest, manifest } = await source.review();
   return { kind: 'prepared' as const, project, workTarget, lockfileDigest, platform, listDigest, layout, manifest };
 }

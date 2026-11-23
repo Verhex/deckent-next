@@ -4,18 +4,23 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rmdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, readLocalOsIdentity, resolveNativeCliWorkerProfile, sealedWorkerTreeLocation, withMcpPrincipal } from '#adapters/index.js';
 import { inspectSealedWorkerTree, reviewSealedWorkerTree, sealWorkerTree } from '#adapters/core/worker-tree-gate/index.js';
 import { approvalRecordSchema } from '#domain/index.js';
-import { DispatchPolicyAuthorization, FILE_SECRET_STORE_ID, RUNTIME_SERVICE_SCHEMA_VERSION, RunAdmissionApplication, verifiedPrincipal } from '#engine/index.js';
-import { EMPTY_KNOWN_SECRETS, getConfigKnownSecrets, knownSecretValues, loadConfig, prepareProductDirectory, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, sha256, withConfigWriteLock, WORKER_PACKAGE_ALLOWANCE_KEY, type DeckentConfig } from '#platform/index.js';
+import { DispatchPolicyAuthorization, FILE_SECRET_STORE_ID, RUNTIME_SERVICE_SCHEMA_VERSION, RunAdmissionApplication, RunCreationAuthority, verifiedPrincipal } from '#engine/index.js';
+import { EMPTY_KNOWN_SECRETS, ErrorRegistry, getConfigKnownSecrets, knownSecretValues, loadConfig, prepareProductDirectory, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, sha256, withConfigWriteLock, WORKER_PACKAGE_ALLOWANCE_KEY, type DeckentConfig } from '#platform/index.js';
+import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
+import { codingCommand } from '#surfaces/core/cli-admin/index.js';
 import { createConfiguredConfigApplication } from '#composition/core/config/index.js';
+import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
+import { composeCore } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { changeConfiguredPackageAllowance, withPackageUse } from '#composition/core/workspace-patch/index.js';
-import { inspectConfiguredNativeInputs } from '#composition/core/runs/index.js';
+import { inspectConfiguredNativeInputs, produceConfiguredNativeInputs } from '#composition/core/runs/index.js';
 // eslint-disable-next-line no-restricted-imports -- Exercise the producer and last-boundary Run seams without exporting a fixture mode.
 import { nativeInputAdmission } from '../../../src/composition/core/runs/internal/native-inputs.js';
 // eslint-disable-next-line no-restricted-imports -- The application reuses the real ledger audit and approval integrity custody.
@@ -149,6 +154,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind,
 const command = (runId: string) => ({ schemaVersion: 1 as const, scopeId, commandId: runId, runId, graph });
 
 async function fixture(mode?: 'writers' | 'current-source', useFileStore = mode === 'writers') {
+  composeCore();
   const root = await mkdtemp(join(tmpdir(), 'package-allowance-')), configDir = join(root, '.deckent'), source = join(root, 'package-source'), checkout = join(root, 'checkout');
   roots.push(root);
   for (const folder of [configDir, source, checkout]) await mkdir(folder, { mode: 0o700 });
@@ -171,7 +177,8 @@ async function fixture(mode?: 'writers' | 'current-source', useFileStore = mode 
     model: { channelId: 'fixture-channel', modelId: 'fixture-model', auxiliaryModelIds: [] } });
   const settings = {
     ...(mode === 'current-source' ? { installation: { npmPackageCache: join(root, 'archives') } } : {}),
-    service: { identity: { scopeId, serviceId: 'fixture' } }, execution: { git: { gitExecutable: 'git', timeoutMs: 10_000 } },
+    service: { identity: { scopeId, serviceId: 'fixture' } }, execution: { git: { gitExecutable: git.gitExecutable, timeoutMs: 10_000 },
+      ...(mode === 'current-source' ? { deliveryMode: 'reference' } : {}) },
     admission: { poolId: 'pool', ordering: 'input-order', executionSlots: 2, inFlightSlots: 2, registry: {
       schemaVersion: 1, revision: 'fixture', profiles: [template], kinds: [{ kind, profile: { id: template.id, version: template.version } }],
       evaluators: [{ id: 'test-evaluator', version: 1, implementation: { id: 'test-evaluator', version: 1 } }],
@@ -591,6 +598,138 @@ it.skipIf(process.platform !== 'linux')('refuses a grant before the card when th
     await expect(f.change('grant')).rejects.toMatchObject({ code: 'WORKER_TREE_SECRET_REFUSED' });
     expect(f.text).toEqual([]);
     expect((await readFile(f.configPath, 'utf8')).includes('packageAllowances')).toBe(false);
+  } finally { f.store.close(); }
+});
+
+type PackageFixture = Awaited<ReturnType<typeof fixture>>;
+async function registerPackageValue(f: PackageFixture) {
+  await executeConfiguredRuntimeSecretOperation(f.root, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'per-run-fixture-secret',
+    operation: 'setSecret', delivery: { maxResultBytes: 4096 }, input: { schemaVersion: 1, scopeId, name: 'PACKAGE_FIXTURE', value: payload } },
+  { pid: process.pid, uid: userInfo().uid, gid: userInfo().gid, assurance: 'linux-so-peercred' }, 4096, f.options);
+  const { config } = await f.context();
+  expect(getConfigKnownSecrets(config).spans(payload)).toHaveLength(0);
+  expect(config.toolchains.packageAllowances).toBeUndefined();
+}
+
+async function approvePackageRun(f: PackageFixture, runId: string) {
+  const pending = await f.run(runId).catch((error: unknown) => error);
+  expect(pending).toMatchObject({ code: 'RUN_APPROVAL_REQUIRED', params: { approvalId: expect.any(String) } });
+  const { params: { approvalId } } = pending as { params: { approvalId: string } };
+  const request = await configuredApproval(f.root, 'inspect', { schemaVersion: 1, scopeId, approvalId }, f.options);
+  expect(JSON.stringify(request).includes(payload)).toBe(false);
+  await configuredApproval(f.root, 'decide', { schemaVersion: 1, scopeId, approvalId, expectedRevision: 0,
+    commandId: 'per-run-card-answer', decision: 'allow', reason: 'Fixture Run card', channel: 'local-terminal-card' }, f.options);
+}
+
+async function expectPrivatePackageRefusal(f: PackageFixture, result: Promise<unknown>) {
+  const refusal = await result.then(() => null, (error: unknown) => error);
+  expect(JSON.stringify([String(refusal), refusal, await f.audit(), f.text]).includes(payload)).toBe(false);
+  expect(refusal).toMatchObject({ code: 'WORKER_TREE_SECRET_REFUSED', params: { paths: expect.stringContaining('node_modules/pkg/check.js (known-secret)') } });
+}
+
+it.skipIf(process.platform !== 'linux').each(['list production', 'standalone preview', 'Run card'] as const)(
+  'per-Run packages refuse an unreferenced registered value at %s', async boundary => {
+    const f = await fixture('current-source', true);
+    try {
+      await committedPackageVersions(f.root);
+      await registerPackageValue(f);
+      const actions = {
+        'list production': () => produceConfiguredNativeInputs(f.root, scopeId, f.options),
+        'standalone preview': () => inspectConfiguredNativeInputs(f.root, scopeId, f.options),
+        'Run card': () => f.run('registered-before-card'),
+      };
+      await expectPrivatePackageRefusal(f, actions[boundary]());
+    } finally { f.store.close(); }
+  });
+
+it.skipIf(process.platform !== 'linux')('per-Run sealing refuses a value registered after the Run card was approved', async () => {
+  const f = await fixture('current-source', true);
+  const prepare = RunCreationAuthority.prototype.prepare;
+  try {
+    await committedPackageVersions(f.root);
+    const runId = 'registered-before-sealing';
+    await approvePackageRun(f, runId);
+    vi.spyOn(RunCreationAuthority.prototype, 'prepare').mockImplementationOnce(async function (this: RunCreationAuthority, ...args) {
+      const admitted = await prepare.apply(this, args);
+      await registerPackageValue(f);
+      return admitted;
+    });
+    await expectPrivatePackageRefusal(f, f.run(runId));
+    expect(await f.store.loadRunReceipt(scopeId, runId)).toBeNull();
+  } finally {
+    vi.restoreAllMocks();
+    f.store.close();
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('per-Run Attempt refuses a value registered after sealing, before worker delivery', async () => {
+  const f = await fixture('current-source', true);
+  try {
+    await committedPackageVersions(f.root);
+    const runId = 'registered-before-opening';
+    await approvePackageRun(f, runId);
+    await f.run(runId);
+    const { reference, profile } = await f.read(runId);
+    expect(reference.allowance).toBeUndefined();
+    const run = (await f.store.loadRun(scopeId, runId))!;
+    const identity = { ...run.identity, taskId: 't', attemptId: 'fixture-opening', generation: 1 };
+    const { principal: { id, issuer, subject } } = await f.context();
+    await f.store.reserveRunTasks({ commandId: 'fixture-reserve', actor: { id, issuer, subject }, scopeId, runId, expectedRevision: run.revision, now: Date.now(), identities: [identity] });
+    await registerPackageValue(f);
+    const { binding } = resolveNativeCliWorkerProfile(profile), agent = nativeCliAgent(binding.protocolFamily)!;
+    const seal = { schemaVersion: 1 as const, capability: 'NativeAgentExecution' as const, executable: binding.definition.executable,
+      cliVersion: '2.1.317', ownerUid: userInfo().uid, profileDigest: binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(agent) };
+    const checkEnvironment = vi.fn(async () => { throw ErrorRegistry.createError('NATIVE_WORKER_LOCKFILE_CHANGED'); });
+    const openTools = vi.fn(async () => { throw Error('fixture reached worker opening'); });
+    const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => {},
+      capacity: { acquire: async () => ({ state: 'acquired' as const, release: async () => {} }) }, checkEnvironment, openTools,
+      driver: async () => { throw Error('fixture reached worker driver'); },
+      bridgeLimits: { idleMs: 1000, maxConnections: 2, replayMaxEntries: 2, replayMaxBytes: agent.bridge.frameMaxBytes * 2 } };
+    const execution = executeConfiguredTask(f.root, identity, { ...f.options, nativeCliWorker: { ports, projectionRetired: true } }).finally(() => {
+      const preflight = checkEnvironment.mock.calls.length, tools = openTools.mock.calls.length;
+      if (preflight || tools) console.log(JSON.stringify({ preflight, tools }));
+    });
+    await expectPrivatePackageRefusal(f, execution);
+    expect(checkEnvironment).not.toHaveBeenCalled();
+    expect(openTools).not.toHaveBeenCalled();
+    expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    expect((await f.audit()).some(({ event: { subject } }) => subject.kind === 'worker-tree-refused'
+      && subject.findings.some(({ path, rule }) => path === 'node_modules/pkg/check.js' && rule === 'known-secret'))).toBe(true);
+  } finally { f.store.close(); }
+});
+
+it.skipIf(process.platform !== 'linux').each([
+  ['withdraw', 'en'], ['withdraw', 'tr'], ['retire', 'en'], ['retire', 'tr'],
+] as const)('late grant replay after %s renders the historical decision in %s', async (end, locale) => {
+  const f = await fixture('current-source');
+  try {
+    const revisions = await committedPackageVersions(f.root), commandId = randomUUID(), runId = 'late-grant-replay';
+    const output: string[] = [];
+    let decision: Awaited<ReturnType<typeof f.change>> | undefined;
+    const handover = vi.fn(async () => {});
+    const stdout = { isTTY: true, write(value: string) { output.push(value); } };
+    const cli = () => codingCommand(['coding', 'template', '--allow-dependencies', '--kind', kind, '--scope', scopeId, '--command-id', commandId, '--lang', locale], {
+      root: f.root, env: f.options.env, stdin: Object.assign(new PassThrough(), { isTTY: true }), stdout,
+      configureCodingTemplate: async () => { throw Error('fixture reached template setup'); },
+      changeCodingAllowance: (root, request, options) => changeConfiguredPackageAllowance(root, request, options, async () => {
+        decision = await f.change('grant', commandId);
+        await f.run(runId);
+        if (end === 'withdraw') await f.change('withdraw');
+        else {
+          revisions.select(revisions.listChanged);
+          await expect(f.use(runId, 'open', handover)).rejects.toMatchObject({ code: 'NATIVE_WORKER_DEPENDENCIES_REFUSED' });
+          revisions.select(revisions.approved);
+        }
+        return true;
+      }),
+    });
+    await cli();
+    await expect(f.use(runId, 'open', handover)).rejects.toMatchObject({ code: 'NATIVE_WORKER_DEPENDENCIES_REFUSED' });
+    expect(handover).not.toHaveBeenCalled();
+    if (decision?.status !== 'active') throw Error('fixture failed to publish the winning grant');
+    const { decisionId, version } = decision;
+    expect(output.join('').trim()).toBe(locale === 'en' ? `Recorded package decision ${decisionId} · version ${version} · inactive.`
+      : `Kayıtlı paket kararı ${decisionId} · sürüm ${version} · etkin değil.`);
   } finally { f.store.close(); }
 });
 

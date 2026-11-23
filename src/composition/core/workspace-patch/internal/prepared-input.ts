@@ -4,9 +4,10 @@ import { userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { codingPreparedInput, produceCodingPackageList, gitCommittedInputSource, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { authorizeWorkTargetUse } from '#engine/index.js';
-import { ErrorRegistry, getConfigKnownSecrets, loadConfig, prepareProductDirectory, withConfigWriteLock, type ConfigLoadOptions, type KnownSecretSnapshot } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, prepareProductDirectory, withConfigWriteLock, type ConfigLoadOptions, type KnownSecretSnapshot } from '#platform/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import type { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { readPackageSecrets } from './package-secrets.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 type Layout = Readonly<{ source: string; lockfile: string; fileList: string; mount: string }>;
@@ -20,18 +21,19 @@ async function packageSource(root: string, context: Context, scopeId: string, la
   const workTarget = target.git.sourceRoot, lock = gitCommittedInputSource(execution.git, workTarget, pinnedCommit ?? target.baseCommit ?? 'HEAD');
   const file = await lock.read(layout.lockfile, execution.secretGate.maxFileBytes).catch(() => null);
   if (!file) throw ErrorRegistry.createError('NATIVE_WORKER_LOCKFILE_CHANGED');
-  const lockfileDigest = createHash('sha256').update(file.bytes).digest('hex'), known = getConfigKnownSecrets(context.config);
+  const lockfileDigest = createHash('sha256').update(file.bytes).digest('hex');
   const cache = context.config.installation.npmPackageCache ?? join(userInfo().homedir, '.npm', '_cacache');
-  return { project, workTarget, execution, file, lockfileDigest, known, cache, platform: `${process.platform}-${process.arch}` };
+  return { project, workTarget, execution, file, lockfileDigest, cache, platform: `${process.platform}-${process.arch}` };
 }
 
-export async function configuredPreparedInput(root: string, context: Context, scopeId: string, layout: Layout, pinnedCommit?: string,
-  options: ConfigLoadOptions = {}, reviewSecrets?: KnownSecretSnapshot) {
-  const { project, workTarget, execution, file, lockfileDigest, known, cache, platform } = await packageSource(root, context, scopeId, layout, pinnedCommit);
+export async function configuredPreparedInput(root: string, context: Context, scopeId: string, layout: Layout, pinnedCommit: string | undefined,
+  options: ConfigLoadOptions, reviewSecrets?: KnownSecretSnapshot) {
+  const { project, workTarget, execution, file, lockfileDigest, cache, platform } = await packageSource(root, context, scopeId, layout, pinnedCommit);
   const list = await gitCommittedInputSource(execution.git, workTarget, file.commit).read(layout.fileList, execution.secretGate.maxFileBytes).catch(() => null);
   if (!list)
     throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-  const source = await codingPreparedInput(workTarget, layout.source, layout.mount, execution.secretGate, reviewSecrets ?? known, file.bytes, list.bytes, cache, project);
+  const known = reviewSecrets ?? (await readPackageSecrets(context.config, options)).known;
+  const source = await codingPreparedInput(workTarget, layout.source, layout.mount, execution.secretGate, known, file.bytes, list.bytes, cache, project);
   return { project, workTarget, lockfileDigest, platform, review: source.review,
     async assertCurrent() {
       const current = await packageSource(root, context, scopeId, layout);
@@ -49,8 +51,9 @@ export async function configuredPreparedInput(root: string, context: Context, sc
     } };
 }
 
-export async function configuredPackageList(root: string, context: Context, scopeId: string, layout: Layout, cachePath?: string) {
-  const { project, workTarget, execution, file, lockfileDigest, known, cache, platform } = await packageSource(root, context, scopeId, layout);
+export async function configuredPackageList(root: string, context: Context, scopeId: string, layout: Layout, options: ConfigLoadOptions, cachePath?: string) {
+  const { project, workTarget, execution, file, lockfileDigest, cache, platform } = await packageSource(root, context, scopeId, layout);
+  const { known } = await readPackageSecrets(context.config, options);
   const produced = await produceCodingPackageList(workTarget, layout.source, layout.mount, execution.secretGate, known,
     file.bytes, cachePath === undefined ? cache : resolve(root, cachePath), project);
   const fresh = await packageSource(root, context, scopeId, layout);

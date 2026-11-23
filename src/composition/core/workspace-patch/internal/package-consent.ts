@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { clientCommandIdSchema, executionRegistrySchema, NATIVE_CODING_TEMPLATE_ADAPTER_ID } from '#domain/index.js';
+import { clientCommandIdSchema, executionRegistrySchema, NATIVE_CODING_TEMPLATE_ADAPTER_ID, type AuditRecord } from '#domain/index.js';
 import { createConfigFileDocuments, nativeCodingDependencyLayout, openLocalIntegrityAuthority, openSqliteApprovalStore, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { authorizeWorkTargetUse, ConfigChangeApprovalBroker, evaluateConfigWrite, isConfigConsentPerson, isPackageScopeAdministrator, planConfigChange, samePackagePerson, validateConfigLayers,
   type AuditApplication, type ConfigChangeSubject, type ConfigDocumentPort, type ConfigWriteInput } from '#engine/index.js';
@@ -12,7 +12,8 @@ import { configuredApproval } from '#composition/core/approvals/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { configuredPreparedInput } from './prepared-input.js';
-import { packageReviewSecrets, verifyPackageObject } from './package-use.js';
+import { verifyPackageObject } from './package-use.js';
+import { readPackageSecrets } from './package-secrets.js';
 import { managedPackageRows, packageActivity, packageActivitySubject, packageBasis, packageIntentId, packagePartition, packagePublication, packageRefused,
   packageRowDigest, recordPackagePublication, verifyPackagePerson, withPackagePartition, type PackageContext } from './package-activity.js';
 
@@ -71,31 +72,31 @@ export async function changeConfiguredPackageAllowance(root: string, request: Pa
     });
   };
   const partition = await keyFor(context);
-  const original = await withPackagePartition(context, partition, async audit => ({
-    ...packageActivity(audit, scopeId, partition),
-    publication: packagePublication(audit, scopeId, partition, commandId),
-    intent: audit.load(scopeId, packageIntentId(partition, commandId)),
-  }));
-  const snapshot = await snapshotConfiguredConfig(root, options);
-  const before = original, originalSubject = packageActivitySubject(original.publication, partition);
-  if (originalSubject) {
-    if (originalSubject.action !== (action === 'grant' ? 'set' : 'unset')
-      || !samePackagePerson(context.principal, original.publication!.event.principal)) throw packageRefused();
-    const exact = await withPackagePartition(context, partition, async audit => {
-      const activity = packageActivity(audit, scopeId, partition, original.publication!.sequence);
-      const grant = activity.grant ? audit.load(scopeId, packageIntentId(partition, activity.grant))?.event.subject : null;
-      if (grant?.kind !== 'config-change' || !grant.approvalId) throw packageRefused();
-      return { decisionId: grant.approvalId, version: activity.version };
-    });
+  async function replayDecision(current: PackageContext, audit: AuditApplication, publication: AuditRecord,
+    activity: ReturnType<typeof packageActivity>, expected?: WorkerPackageAllowance) {
+    const subject = packageActivitySubject(publication, partition);
+    if (subject?.action !== (action === 'grant' ? 'set' : 'unset') || !samePackagePerson(current.principal, publication.event.principal)
+      || (expected && subject.digest !== packageRowDigest(expected))) throw packageRefused();
+    const latest = activity.latest?.sequence === publication.sequence;
+    const atPublication = latest ? activity : packageActivity(audit, scopeId, partition, publication.sequence);
+    const grant = atPublication.grant ? audit.load(scopeId, packageIntentId(partition, atPublication.grant))?.event.subject : null;
+    if (grant?.kind !== 'config-change' || !grant.approvalId) throw packageRefused();
+    const exact = { decisionId: grant.approvalId, version: atPublication.version };
+    const snapshot = await snapshotConfiguredConfig(root, options);
     const row = managedPackageRows(snapshot.document).find(entry => entry.partition === partition && entry.decisionId === exact.decisionId);
-    if (action === 'grant') {
-      if (!row || original.latest?.sequence !== original.publication!.sequence) return { status: 'historical' as const, ...exact };
-      await verifyPackagePerson(context, scopeId, row);
-      if (originalSubject.digest !== packageRowDigest(row)) throw packageRefused();
-      return { status: 'active' as const, ...exact };
-    }
-    if (!row) return { status: 'withdrawn' as const, ...exact };
+    if (action === 'withdraw') return row ? undefined : { status: 'withdrawn' as const, ...exact };
+    if (!row || !latest) return { status: 'historical' as const, ...exact };
+    if (subject.digest !== packageRowDigest(row)) throw packageRefused();
+    await verifyPackagePerson(current, scopeId, row);
+    return { status: 'active' as const, ...exact };
   }
+  const { before, intent, replay } = await withPackagePartition(context, partition, async audit => {
+    const before = packageActivity(audit, scopeId, partition), publication = packagePublication(audit, scopeId, partition, commandId);
+    return { before, intent: audit.load(scopeId, packageIntentId(partition, commandId)),
+      replay: publication ? await replayDecision(context, audit, publication, before) : undefined };
+  });
+  if (replay) return replay;
+  const snapshot = await snapshotConfiguredConfig(root, options);
   const documents = createConfigFileDocuments(root, options);
 
   async function checkActor() {
@@ -135,7 +136,7 @@ export async function changeConfiguredPackageAllowance(root: string, request: Pa
   }
 
   const decisionPolicy = await authorizeGrant(context);
-  const known = await packageReviewSecrets(context, options);
+  const { known } = await readPackageSecrets(context.config, options);
   const source = await configuredPreparedInput(root, context, scopeId, layout, undefined, options, known);
   const reviewed = await source.review();
   const binding = { layout: layout.id, project: source.project, workTarget: source.workTarget, platform: source.platform,
@@ -158,7 +159,7 @@ export async function changeConfiguredPackageAllowance(root: string, request: Pa
   if (!await confirm({ title: t('coding.dependencies.allowance.grantTitle', {}, locale), lines, action })) return { status: 'declined' as const };
 
   const subject: ConfigChangeSubject = { kind: 'config-change', layer, commandId, action: 'set', keyPath,
-    before: String(before.version), after: basis, valueDigest: basis, expectDigest: original.intent?.event.subject.kind === 'config-change' ? original.intent.event.subject.beforeDigest : snapshot.digest, ruleId: decisionPolicy.ruleId ?? 'policy' };
+    before: String(before.version), after: basis, valueDigest: basis, expectDigest: intent?.event.subject.kind === 'config-change' ? intent.event.subject.beforeDigest : snapshot.digest, ruleId: decisionPolicy.ruleId ?? 'policy' };
   const { config } = context, integrity = await openLocalIntegrityAuthority(context.layout, config.approvals.keyFile, true);
   const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite, 'forbid');
   let decisionId: string;
@@ -180,14 +181,16 @@ export async function changeConfiguredPackageAllowance(root: string, request: Pa
     const current = await checkActor();
     await authorizeGrant(current);
     const settled = packagePublication(audit, scopeId, partition, commandId);
+    const activity = packageActivity(audit, scopeId, partition);
     if (settled) {
-      if (packageActivitySubject(settled, partition)?.digest !== packageRowDigest(row)) throw packageRefused();
-      return { status: 'active' as const, decisionId, version };
+      const replay = await replayDecision(current, audit, settled, activity, row);
+      if (!replay) throw packageRefused();
+      return replay;
     }
-    const fresh = await snapshotConfiguredConfig(root, options), activity = packageActivity(audit, scopeId, partition);
+    const fresh = await snapshotConfiguredConfig(root, options);
     const evidence = await verifyPackagePerson(current, scopeId, row, true);
     if (activity.latest?.sequence !== before.latest?.sequence || activity.version + 1 !== version) throw packageRefused();
-    const freshKnown = await packageReviewSecrets(current, options);
+    const { known: freshKnown } = await readPackageSecrets(current.config, options);
     const now = await configuredPreparedInput(root, current, scopeId, layout, undefined, options, freshKnown);
     if (now.lockfileDigest !== row.lockfileDigest || (await now.review()).digest !== row.listDigest) throw packageRefused();
     const verify = await verifyPackageObject(current, { ...binding, state: 'sealed', approval: { scopeId, commandId } }, freshKnown);
