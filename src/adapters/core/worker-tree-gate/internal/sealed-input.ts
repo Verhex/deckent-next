@@ -1,17 +1,18 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { gitInputMountTracked, nativeCodingDependencyLayout, sealedWorkerTreeLocation, verifySealedWorkerTree,
-  type NativeCliWorkerToolContext, type WorkerTreeView, type resolveNativeCliWorkerProfile } from '#adapters/index.js';
+import { NATIVE_NODE_DEPENDENCY_LAYOUT as profile, type NativeNodeDependencyReference } from '#domain/index.js';
+import { gitInputMountTracked } from '#adapters/core/git-workspace/index.js';
 import { ErrorRegistry, productResourcePath, sha256, type DeckentConfig, type ProductLayout } from '#platform/index.js';
+import { type WorkerTreeKnownSecrets } from './scan.js';
+import { reopenWorkerTree, sealedWorkerTreeLocation, verifySealedWorkerTree } from './sealed-tree.js';
 
-type Reference = Extract<ReturnType<typeof resolveNativeCliWorkerProfile>['dependencies'], { state: 'sealed' }>;
 const refused = () => ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
 const read = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 
-export async function openSealedNativeInput(reference: Reference, input: Readonly<{ root: string; workTarget: string; checkout: string;
-  scopeId: string; config: DeckentConfig; layout: ProductLayout }>): Promise<NonNullable<NativeCliWorkerToolContext['sealedNodeModules']> & Readonly<{ scanView: WorkerTreeView }>> {
-  const { config, checkout } = input, execution = config.execution, profile = nativeCodingDependencyLayout();
+export async function openSealedNativeInput(reference: NativeNodeDependencyReference, input: Readonly<{ root: string; workTarget: string; checkout: string;
+  scopeId: string; config: DeckentConfig; layout: ProductLayout }>) {
+  const { config, checkout } = input, execution = config.execution;
   if (!execution || reference.layout !== profile.id || reference.approval.scopeId !== input.scopeId || reference.platform !== `${process.platform}-${process.arch}`
     || reference.project !== await realpath(input.root) || reference.workTarget !== await realpath(input.workTarget)) throw refused();
   const target = join(checkout, profile.mount), lockfile = join(checkout, profile.lockfile), { secretGate: limits } = execution;
@@ -57,3 +58,17 @@ export async function openSealedNativeInput(reference: Reference, input: Readonl
     if (!now.isDirectory() || now.dev !== objectStat.dev || now.ino !== objectStat.ino || now.ctimeNs !== objectStat.ctimeNs) throw refused();
   } });
 }
+
+export async function verifyPackageObject(context: Readonly<{ config: DeckentConfig; installationLayout: ProductLayout }>,
+  reference: NativeNodeDependencyReference, known: WorkerTreeKnownSecrets) {
+  if (!context.config.execution) throw refused();
+  const limits = context.config.execution.secretGate, object = sealedWorkerTreeLocation(productResourcePath(context.installationLayout, 'artifacts'), reference);
+  const { source } = await reopenWorkerTree(object, profile.mount, reference.listDigest, limits, known);
+  const identity = await lstat(source, { bigint: true });
+  return async () => {
+    const checked = await verifySealedWorkerTree(object, reference.listDigest, limits);
+    const fresh = await lstat(checked.source, { bigint: true });
+    if (checked.source !== source || fresh.dev !== identity.dev || fresh.ino !== identity.ino || fresh.ctimeNs !== identity.ctimeNs) throw refused();
+  };
+}
+

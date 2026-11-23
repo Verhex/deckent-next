@@ -1,5 +1,5 @@
-import type { ExecutionProfileDefinition, NativeNodeDependencyParameters } from '#domain/index.js';
-import { nativeCliWorkerParameters, nativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
+import type { ExecutionProfileDefinition, NativeNodeDependencyParameters, NativeNodeDependencyReference } from '#domain/index.js';
+import { isNativeCliWorkerProfile, nativeCliWorkerParameters, nativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
 import { resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, isNativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
@@ -23,4 +23,10 @@ export function resolveNativeCliWorkerProfile(input: ExecutionProfileDefinition)
 }
 export function createNativeCliWorkerProfile(base: ExecutionProfileDefinition, binding: NativeCliWorkerBinding, dependencies?: NativeNodeDependencyParameters): ExecutionProfileDefinition {
   const profile = nativeCliWorkerProfile(base, binding, dependencies); resolveNativeCliWorkerProfile(profile); return profile;
+}
+
+export function selectNativePackageProfile(profile: ExecutionProfileDefinition) {
+  if (!isNativeCliWorkerProfile(profile)) return null;
+  const { base, binding, dependencies } = resolveNativeCliWorkerProfile(profile);
+  return { ...(dependencies ? { dependencies } : {}), bind: (reference: NativeNodeDependencyReference) => createNativeCliWorkerProfile(base, binding, reference) };
 }

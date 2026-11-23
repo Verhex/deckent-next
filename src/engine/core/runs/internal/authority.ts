@@ -49,7 +49,8 @@ export class RunCreationAuthority {
     if (verdict.decision === 'deny') { this.seal(command, principal, { ...evaluation, verdict }, null); throw new PolicyAuthorizationError('POLICY_DENIED'); }
     return { ...evaluation, verdict, askedAtExecution };
   }
-  async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate, workspace?: RunWorkspaceCustody, packageRows?: readonly PackageApprovalRow[]) {
+  async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate,
+    workspace?: RunWorkspaceCustody, packageRows?: readonly PackageApprovalRow[], withCurrentInputs?: <T>(work: () => Promise<T>) => Promise<T>) {
     // Resolution may have awaited catalogs or workspace custody; never apply a stale sampled policy.
     const current = await this.source.load();
     if (hash('policy:1', current) !== hash('policy:1', evaluation.policy)) {
@@ -64,21 +65,25 @@ export class RunCreationAuthority {
     }
     // R9 (owner 2026-11-05): the worker ceiling belongs to a plan the person approves on its card (shown there, sealed in its basis); a Run admitted without a card keeps the current mode alone.
     if (evaluation.verdict.decision === 'allow' && create.execution.workerMode) create = { ...create, execution: Object.fromEntries(Object.entries(create.execution).filter(([key]) => key !== 'workerMode')) as RunCreate['execution'] };
-    const record = this.seal(command, principal, evaluation, this.basis(create, workspace)), reference = { eventId: record.event.eventId, sequence: record.sequence };
-    const input = this.approvalInput(record, evaluation.policy, personProposal);
-    const preview = personInput ? renderPackageApprovalPreview(packageRows, input.subject.admissionDigest, this.presentation.locale, this.presentation.known) : undefined;
-    const approvalInput = { ...input, personInput, ...(preview ? { preview } : {}), summary: renderRunCreateApprovalSummary(command, create,
-      evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
-    if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
-    const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
-      : { decision: reference, approval: this.approve(approvalInput) };
-    return { authority, create, recheckPolicy: async () => {
-      if (hash('policy:1', await this.source.load()) !== hash('policy:1', evaluation.policy)) throw ErrorRegistry.createError('APPROVAL_STALE');
-    }, assert: () => {
-      this.records.verify(record);
-      if (!authority.approval) this.approvals.assertUnrequested(command.scopeId, command.commandId);
-      if (authority.approval && encodeCommandProjection('approval-reference:1', this.approve(approvalInput)) !== encodeCommandProjection('approval-reference:1', authority.approval)) throw new AuditError('AUDIT_INTEGRITY');
-    } };
+    // Custody covers publication of the approval request. The person answers the recorded request separately.
+    const admit = async () => {
+      const record = this.seal(command, principal, evaluation, this.basis(create, workspace)), reference = { eventId: record.event.eventId, sequence: record.sequence };
+      const input = this.approvalInput(record, evaluation.policy, personProposal);
+      const preview = personInput ? renderPackageApprovalPreview(packageRows, input.subject.admissionDigest, this.presentation.locale, this.presentation.known) : undefined;
+      const approvalInput = { ...input, personInput, ...(preview ? { preview } : {}), summary: renderRunCreateApprovalSummary(command, create,
+        evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
+      if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
+      const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
+        : { decision: reference, approval: this.approve(approvalInput) };
+      return { authority, create, recheckPolicy: async () => {
+        if (hash('policy:1', await this.source.load()) !== hash('policy:1', evaluation.policy)) throw ErrorRegistry.createError('APPROVAL_STALE');
+      }, assert: () => {
+        this.records.verify(record);
+        if (!authority.approval) this.approvals.assertUnrequested(command.scopeId, command.commandId);
+        if (authority.approval && encodeCommandProjection('approval-reference:1', this.approve(approvalInput)) !== encodeCommandProjection('approval-reference:1', authority.approval)) throw new AuditError('AUDIT_INTEGRITY');
+      } };
+    };
+    return withCurrentInputs ? withCurrentInputs(admit) : admit();
   }
   /** A evaluated Run policy remains evidence even when another admission prerequisite refuses the effect. */
   recordUnapplied(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): void { this.seal(command, principal, evaluation, null); }

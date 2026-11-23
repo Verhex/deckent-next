@@ -1,23 +1,19 @@
-import { dirname, join } from 'node:path';
-import { lstat } from 'node:fs/promises';
 import type { AuditRecord, NativeNodeDependencyReference } from '#domain/index.js';
-import { openLocalIntegrityAuthority, openSqliteApprovalStore, selectWorkTarget } from '#adapters/index.js';
-import { admitDecided, approvalRequestDigest, AUDIT_PAGE_MAX, configChangeApprovalActionDigest, packageConsentDigest as packageDigest, samePackagePerson, verifyApproval, type AuditApplication } from '#engine/index.js';
-import { ErrorRegistry, privateDirectory, privateFile, productResourcePath, withConfigWriteLock, WORKER_PACKAGE_ALLOWANCE_KEY, WORKER_PACKAGE_CONSENT, workerPackageAllowancesSchema, type ConfigLoadOptions, type WorkerPackageAllowance } from '#platform/index.js';
-import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
-import { withScopeAudit, type loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { ErrorRegistry, WORKER_PACKAGE_ALLOWANCE_KEY, WORKER_PACKAGE_CONSENT, workerPackageAllowancesSchema, type WorkerPackageAllowance } from '#platform/index.js';
+import { admitDecided, approvalRequestDigest, configChangeApprovalActionDigest, verifyApproval } from '#engine/core/approval/index.js';
+import { AUDIT_PAGE_MAX, type AuditApplication } from '#engine/core/audit/index.js';
+import { packageConsentDigest as packageDigest, samePackagePerson } from '#engine/core/config/index.js';
+import type { PackageContext, PackageProfile, WorkerPackagePorts } from './ports.js';
 
-export type PackageContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-export type PackageProfile = Readonly<{ id: string; version: number }>;
 export type PackageInput = Pick<NativeNodeDependencyReference, 'layout' | 'platform' | 'project' | 'workTarget'>;
 export const packageRefused = () => ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-export async function packagePartition(context: PackageContext, scope: string, profile: PackageProfile, input: PackageInput) {
+export async function packagePartition<C extends PackageContext>(ports: WorkerPackagePorts<C>, context: C, scope: string, profile: PackageProfile, input: PackageInput) {
   const { installationId, projectId, config } = context;
   if (!installationId || !projectId) throw packageRefused();
-  const target = await lstat(input.workTarget, { bigint: true });
-  if (!target.isDirectory()) throw packageRefused();
+  const target = await ports.targetIdentity(input.workTarget);
+  if (!target.isDirectory) throw packageRefused();
   return packageDigest('worker-package-partition:1', { installationId, companyId: config.company.id, scope, projectId, project: input.project,
-    workTarget: { path: input.workTarget, id: selectWorkTarget(config.execution)?.id ?? null, device: String(target.dev), inode: String(target.ino) },
+    workTarget: { path: input.workTarget, id: ports.selectedTarget(context), device: target.device, inode: target.inode },
     platform: input.platform, layout: input.layout, profile: { id: profile.id, version: profile.version } });
 }
 
@@ -38,12 +34,10 @@ export function managedPackageRows(document: Record<string, unknown>) {
   return workerPackageAllowancesSchema.parse(tools?.packageAllowances ?? []);
 }
 
-export async function readManagedPackageRows(root: string, context: PackageContext, options: ConfigLoadOptions | undefined) {
-  const snapshot = await snapshotConfiguredConfig(root, options);
+export async function readManagedPackageRows<C extends PackageContext>(ports: WorkerPackagePorts<C>, context: C) {
+  const snapshot = await ports.snapshotConfig();
   const rows = managedPackageRows(snapshot.document);
-  if (!rows.length) return rows;
-  const path = context.layout.bootstrapConfigPath;
-  if (!await privateDirectory(dirname(path)) || !privateFile(await lstat(path))) throw packageRefused();
+  if (rows.length && !await ports.rowsArePrivate(context)) throw packageRefused();
   return rows;
 }
 
@@ -115,12 +109,9 @@ export function activePackageRow(audit: AuditApplication, scopeId: string, parti
   return null;
 }
 
-export async function verifyPackagePerson(context: PackageContext, scopeId: string, row: WorkerPackageAllowance, publishing = false) {
-  const { config, layout } = context;
-  const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
-  const approvalStore = openSqliteApprovalStore(await context.path(), config.storage.sqlite, 'forbid');
-  try {
-    const record = verifyApproval(approvalStore.store.load(scopeId, row.decisionId), integrity), { request } = record;
+export function verifyPackagePerson<C extends PackageContext>(ports: WorkerPackagePorts<C>, context: C, scopeId: string, row: WorkerPackageAllowance, publishing = false) {
+  return ports.withApprovals(context, false, (store, integrity) => {
+    const record = verifyApproval(store.load(scopeId, row.decisionId), integrity), { request } = record;
     const subject = request.schemaVersion === 3 ? request.subject : null;
     const refusal = (verification: string) => ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED', { params: { verification } });
     if (request.scopeId !== scopeId || request.approvalId !== row.decisionId || request.schemaVersion !== 3
@@ -132,24 +123,23 @@ export async function verifyPackagePerson(context: PackageContext, scopeId: stri
     if (publishing && request.policyRevision !== context.document.revision) throw refusal('policy-revision');
     if (publishing && !samePackagePerson(context.principal, request.requester)) throw refusal('current-requester');
     const answered = record.decision;
-    const decision = admitDecided(record, publishing ? { now: Date.now(), window: config.approvals.requestTtlMs } : null,
+    const decision = admitDecided(record, publishing ? { now: Date.now(), window: context.config.approvals.requestTtlMs } : null,
       answered !== null && 'deciderClass' in answered && answered.deciderClass === 'human-tty'
       && answered.assurance !== 'ai-policy' && samePackagePerson(answered.actor, request.requester)
       && answered.channel === 'local-terminal-card' && answered.reason === subject.valueDigest);
     if (decision.requestDigest !== approvalRequestDigest(request)) throw packageRefused();
     return { actor: decision.actor, person: decision.actor.id, decidedAt: decision.decidedAt, decisionId: row.decisionId, version: row.version, expectDigest: subject.expectDigest };
-  } finally { approvalStore.close(); }
+  });
 }
 
-export function withPackagePartition<T>(context: PackageContext, partition: string, work: (audit: AuditApplication) => Promise<T>) {
-  return withPackagePartitions(context, [partition], work);
+export function withPackagePartition<C extends PackageContext, T>(ports: WorkerPackagePorts<C>, context: C, partition: string, work: (audit: AuditApplication) => Promise<T>) {
+  return withPackagePartitions(ports, context, [partition], work);
 }
-export function withPackagePartitions<T>(context: PackageContext, partitions: readonly string[], work: (audit: AuditApplication) => Promise<T>) {
-  const directory = join(productResourcePath(context.installationLayout, 'audit'), 'package-allowance-locks');
-  let held = () => withScopeAudit(context, work);
+export function withPackagePartitions<C extends PackageContext, T>(ports: WorkerPackagePorts<C>, context: C, partitions: readonly string[], work: (audit: AuditApplication) => Promise<T>) {
+  let held = () => ports.withAudit(context, work);
   for (const partition of [...new Set(partitions)].sort().reverse()) {
     const inner = held;
-    held = () => withConfigWriteLock(join(directory, partition), inner, context.config.configFile.writeLockTimeoutMs);
+    held = () => ports.lockPartition(context, partition, inner);
   }
   return held();
 }

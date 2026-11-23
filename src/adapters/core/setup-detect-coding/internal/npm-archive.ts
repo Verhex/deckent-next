@@ -3,8 +3,8 @@ import { constants as bufferBounds } from 'node:buffer';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
-import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import { readPreparedInputFile } from '#adapters/core/worker-tree-gate/index.js';
+import { ErrorRegistry, redactForRecord } from '#platform/index.js';
+import { readPreparedInputFile, type WorkerTreeKnownSecrets } from '#adapters/core/worker-tree-gate/index.js';
 
 const unzip = promisify(gunzip);
 const BLOCK = 512;
@@ -22,7 +22,7 @@ const field = (record: Buffer, at: number, length: number) => {
 function paxPath(data: Buffer) {
   let path: string | undefined;
   for (let offset = 0; offset < data.length;) {
-    const space = data.indexOf(32, offset), digits = data.subarray(offset, space).toString('ascii');
+    const space = data.indexOf(' ', offset), digits = data.subarray(offset, space).toString('ascii');
     if (space <= offset || !/^[1-9][0-9]*$/u.test(digits)) return refuse();
     const end = offset + Number(digits);
     if (end <= space || end > data.length || data[end - 1] !== 10) return refuse();
@@ -80,7 +80,7 @@ export function npmArchiveInventory(read: (hex: string, limit: number) => Promis
 }
 
 /** npm content-v2 addressing. No index lookup, directory enumeration, fallback or execution. */
-export function cachedNpmInventory(cache: string, limits: Parameters<typeof npmArchiveInventory>[1], known: KnownSecretSnapshot) {
+export function cachedNpmInventory(cache: string, limits: Parameters<typeof npmArchiveInventory>[1], known: WorkerTreeKnownSecrets) {
   const read = npmArchiveInventory((hex, limit) =>
     readPreparedInputFile(join(cache, 'content-v2', 'sha512', hex.slice(0, 2), hex.slice(2, 4), hex.slice(4)), limit), limits);
   const verified = new Map<string, Map<string, string>>();
@@ -92,7 +92,7 @@ export function cachedNpmInventory(cache: string, limits: Parameters<typeof npmA
       verified.set(integrity, contents);
       return contents;
     } catch {
-      const safe = redactForRecord(packagePath, known);
+      const safe = known.matchesPackageValue?.([packagePath]) ? '-' : redactForRecord(packagePath, known);
       throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED', { params: {
         package: /[\p{Cc}\p{Cf}]/u.test(safe) ? '-' : safe.slice(0, 512),
       } });

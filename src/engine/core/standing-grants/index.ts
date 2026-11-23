@@ -1,0 +1,1 @@
+export { STANDING_GRANTS_LIST, StandingGrantsInspection, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ standingGrantsQuerySchema, type AuthorityChangeHistory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type StandingGrantEntry, type StandingGrantsPage } from './internal/standing-inspection.js';

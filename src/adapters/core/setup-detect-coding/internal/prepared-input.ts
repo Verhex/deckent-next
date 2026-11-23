@@ -13,7 +13,7 @@ export async function codingPreparedInput(target: string, relative: string, labe
 
 async function preparedInput(target: string, relative: string, label: string, options: Parameters<typeof sealWorkerTree>[4], known: Parameters<typeof sealWorkerTree>[5],
   lockfile: Buffer, list: Buffer, archive: ReturnType<typeof cachedNpmInventory>, project: string) {
-  if ([project, target].some(path => redactForRecord(path, known) !== path || /[\p{Cc}\p{Cf}]/u.test(path)))
+  if ([project, target].some(path => known.matchesPackageValue?.([path]) || redactForRecord(path, known) !== path || /[\p{Cc}\p{Cf}]/u.test(path)))
     throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
   const source = join(target, relative), selection = await npmPackageSelection(relative, lockfile, list, options.maxFiles, archive);
   return { review: () => reviewSealedWorkerTree(source, label, options, known, selection),

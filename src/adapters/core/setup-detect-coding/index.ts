@@ -5,3 +5,4 @@ export { gitTracksPaths } from './internal/tracked.js';
 export { codingPreparedInput, produceCodingPackageList } from './internal/prepared-input.js';
 export { firstCommitTarget, FIRST_COMMIT_OPERATION } from './internal/first-commit-effect.js';
 export { codingSetupFamily, type CodingFacts } from './internal/family.js';
+export { openPreparedPackageInput, packageTargetIdentity, writePreparedPackageList } from './internal/package-source.js';

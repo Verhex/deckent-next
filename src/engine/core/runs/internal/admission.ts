@@ -23,6 +23,10 @@ export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). Trusted workspace custody after authorization, never wire input. Replay reads recorded custody rather than a moving live reference. */
 export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export type PackageApprovalRow = Readonly<{ path: string; rule: string; digest: string }>;
+type PinnedRunInputs = Readonly<{
+  execution: RunCreate['execution']; packageRows?: readonly PackageApprovalRow[];
+  withCurrentInputs?: <T>(work: () => Promise<T>) => Promise<T>;
+}>;
 export interface RunAdmissionContext {
   /** Trusted composition freezes subscription/lease evidence into execution profile parameters; every task, including fixed models. */
   modelUse?: {
@@ -33,7 +37,7 @@ export interface RunAdmissionContext {
   resources?(execution: RunCreate['execution'], principal: VerifiedPrincipal): Promise<readonly RunCapacityBinding[]>;
   /** Trusted input custody prepares the approval basis, then publishes only after authority has been witnessed. */
   inputs?: {
-    pin(create: RunCreate, principal: VerifiedPrincipal, workspace?: RunWorkspaceCustody): Promise<Readonly<{ execution: RunCreate['execution']; packageRows?: readonly PackageApprovalRow[] }>>;
+    pin(create: RunCreate, principal: VerifiedPrincipal, workspace?: RunWorkspaceCustody): Promise<PinnedRunInputs>;
     publish(create: RunCreate, principal: VerifiedPrincipal, workspace?: RunWorkspaceCustody): Promise<void>;
     commit?<T>(create: RunCreate, principal: VerifiedPrincipal, workspace: RunWorkspaceCustody | undefined,
       work: () => Promise<T>, recheckPolicy: () => Promise<void>): Promise<T>;
@@ -88,7 +92,7 @@ export class RunAdmissionApplication {
     const workspace = pin ? runWorkspaceCustodySchema.parse(await pin(replay !== null)) : undefined;
     if (workspace && (workspace.scopeId !== command.scopeId || workspace.runId !== command.runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     if (replay) return this.pinned(replay, command, principal, workspace);
-    let create: RunCreate, packageRows: readonly PackageApprovalRow[] | undefined;
+    let create: RunCreate, pinned: PinnedRunInputs | undefined;
     try {
       const resolved = command.branch ? resolveAdmissionBranch(command.graph, command.branch) : undefined;
       const graph = resolved?.graph ?? command.graph;
@@ -98,15 +102,15 @@ export class RunAdmissionApplication {
       create = runCreateSchema.parse({ commandId: command.commandId, actor, graph, ...(command.proposal ? { proposal: command.proposal } : {}), ...(resolved ? { branch: resolved.decision } : {}),
         identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution });
       if (this.context.inputs) {
-        const pinned = await this.context.inputs.pin(create, principal, workspace);
+        pinned = await this.context.inputs.pin(create, principal, workspace);
         create = runCreateSchema.parse({ ...create, execution: pinned.execution });
-        packageRows = pinned.packageRows;
       }
     } catch (error) {
       this.authorization.recordUnapplied(command, principal, evaluation);
       throw error;
     }
-    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace, packageRows); create = admitted.create; // R9: without a card, no worker ceiling
+    const admitted = await this.authorization.prepare(command, principal, evaluation, create, workspace, pinned?.packageRows, pinned?.withCurrentInputs);
+    create = admitted.create; // R9: without a card, no worker ceiling
     try {
       await this.context.modelUse?.recheck(create.execution, principal);
       const resources = this.context.resources ? runCapacityBindingsSchema.parse(await this.context.resources(create.execution, principal)) : undefined;

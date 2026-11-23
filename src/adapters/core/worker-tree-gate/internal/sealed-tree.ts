@@ -1,9 +1,9 @@
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rmdir, symlink, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { ErrorRegistry, privateDirectory, readPrivateFile, type KnownSecretSnapshot } from '#platform/index.js';
+import { ErrorRegistry, privateDirectory, readPrivateFile } from '#platform/index.js';
 import { WORKER_TREE_SHOWN_PATHS } from '#engine/index.js';
-import { scanWorkerTree, type WorkerTreeGateOptions } from './scan.js';
+import { scanWorkerTree, type WorkerTreeGateOptions, type WorkerTreeKnownSecrets } from './scan.js';
 import gate from './gate.json' with { type: 'json' };
 import { capture, digest, refused, readFlags, SealedFileSizeError, type Entry, type TreeLimits, type TreeSelection } from './sealed-capture.js';
 import { reserveSealedCapacity } from './sealed-capacity.js';
@@ -44,7 +44,7 @@ function patternRefusal(findings: readonly Readonly<{ path: string; rule: string
     omitted: Math.max(0, findings.length - WORKER_TREE_SHOWN_PATHS) } });
 }
 
-async function scan(source: string, label: string, entries: readonly Row[], options: WorkerTreeGateOptions, known: KnownSecretSnapshot,
+async function scan(source: string, label: string, entries: readonly Row[], options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets,
   collect?: Map<string, readonly string[]>, selectedSource = false) {
   const result = await scanWorkerTree([{ source, label, sealedPatterns: { entries,
     ...(collect ? { collect: (path, rules) => { collect.set(path, rules); }, selectedSource } : {}) } }], options, known)
@@ -54,7 +54,7 @@ async function scan(source: string, label: string, entries: readonly Row[], opti
 }
 
 /** The person's list may contain names and link text. Check it before displaying any of it. */
-export async function reviewSealedWorkerTree(source: string, label: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot, selection?: TreeSelection) {
+export async function reviewSealedWorkerTree(source: string, label: string, options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets, selection?: TreeSelection) {
   const observed = await captureTree(source, options, selection ? { selection } : {}), rules = new Map<string, readonly string[]>();
   await scan(source, label, list(observed).entries, options, known, rules, selection !== undefined);
   const checked = await captureTree(source, options, selection ? { selection } : {});
@@ -67,14 +67,14 @@ export async function reviewSealedWorkerTree(source: string, label: string, opti
 /** Publication renames a private, verified directory. An existing object is usable only through full verification. */
 type SealedCapacity = Readonly<{ run<T>(store: string, work: () => Promise<T>): Promise<T>; maxBytes(): Promise<number> }>;
 
-export function sealWorkerTree(source: string, object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot,
+export function sealWorkerTree(source: string, object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets,
   selection?: TreeSelection, capacity?: SealedCapacity) {
   const publish = () => publishSealedWorkerTree(source, object, label, approvedDigest, options, known, selection, capacity);
   const locks = join(dirname(dirname(object)), 'sealed-worker-input-locks');
   return capacity ? capacity.run(join(locks, basename(object)), publish) : publish();
 }
 
-async function publishSealedWorkerTree(source: string, object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot,
+async function publishSealedWorkerTree(source: string, object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets,
   selection: TreeSelection | undefined, capacity: SealedCapacity | undefined) {
   const parentDirectory = dirname(object);
   if (!await privateDirectory(dirname(parentDirectory))) throw refused();
@@ -188,7 +188,7 @@ export async function verifySealedWorkerTree(object: string, approvedDigest: str
   return { source, digest: approvedDigest, entries: verified.entries };
 }
 
-export async function reopenWorkerTree(object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot) {
+export async function reopenWorkerTree(object: string, label: string, approvedDigest: string, options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets) {
   const { source, digest, entries } = await verifySealedWorkerTree(object, approvedDigest, options);
   await scan(source, label, entries, options, known);
   return { source, digest };

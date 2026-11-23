@@ -6,10 +6,11 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, readLocalOsIdentity, resolveNativeCliWorkerProfile, sealedWorkerTreeLocation, withMcpPrincipal } from '#adapters/index.js';
-import { inspectSealedWorkerTree, reviewSealedWorkerTree, sealWorkerTree } from '#adapters/core/worker-tree-gate/index.js';
+import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, readLocalOsIdentity, resolveNativeCliWorkerProfile, selectNativePackageProfile, sealedWorkerTreeLocation, withMcpPrincipal } from '#adapters/index.js';
+import { inspectSealedWorkerTree, openSealedNativeInput, reviewSealedWorkerTree, sealWorkerTree } from '#adapters/core/worker-tree-gate/index.js';
+import { packageActivity, packageIntentId } from '#engine/core/worker-packages/index.js';
 import { approvalRecordSchema } from '#domain/index.js';
-import { DispatchPolicyAuthorization, FILE_SECRET_STORE_ID, RUNTIME_SERVICE_SCHEMA_VERSION, RunAdmissionApplication, RunCreationAuthority, verifiedPrincipal } from '#engine/index.js';
+import { DispatchPolicyAuthorization, ENCRYPTED_FILE_SECRET_STORE_ID, FILE_SECRET_STORE_ID, RUNTIME_SERVICE_SCHEMA_VERSION, RunAdmissionApplication, RunCreationAuthority, nativePackageAdmission, verifiedPrincipal } from '#engine/index.js';
 import { EMPTY_KNOWN_SECRETS, ErrorRegistry, getConfigKnownSecrets, knownSecretValues, loadConfig, prepareProductDirectory, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, sha256, withConfigWriteLock, WORKER_PACKAGE_ALLOWANCE_KEY, type DeckentConfig } from '#platform/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
 import { codingCommand } from '#surfaces/core/cli-admin/index.js';
@@ -19,16 +20,10 @@ import { configuredApproval } from '#composition/core/approvals/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
-import { changeConfiguredPackageAllowance, withPackageUse } from '#composition/core/workspace-patch/index.js';
+import { changeConfiguredPackageAllowance, configuredWorkerPackagePorts, withPackageUse } from '#composition/core/workspace-patch/index.js';
 import { inspectConfiguredNativeInputs, produceConfiguredNativeInputs } from '#composition/core/runs/index.js';
-// eslint-disable-next-line no-restricted-imports -- Exercise the producer and last-boundary Run seams without exporting a fixture mode.
-import { nativeInputAdmission } from '../../../src/composition/core/runs/internal/native-inputs.js';
 // eslint-disable-next-line no-restricted-imports -- The application reuses the real ledger audit and approval integrity custody.
 import { withRunCreationAuthority } from '../../../src/composition/core/runs/internal/authority.js';
-// eslint-disable-next-line no-restricted-imports -- Check exact publication/withdrawal evidence in the audit.
-import { packageActivity, packageIntentId } from '../../../src/composition/core/workspace-patch/internal/package-activity.js';
-// eslint-disable-next-line no-restricted-imports -- Open the real Attempt input boundary on a disposable checkout.
-import { openSealedNativeInput } from '../../../src/composition/core/execution/internal/sealed-input.js';
 // eslint-disable-next-line no-restricted-imports -- Use the configured secret command writer without starting a service.
 import { executeConfiguredRuntimeSecretOperation } from '../../../src/composition/core/runtime-service/internal/secret.js';
 // eslint-disable-next-line no-restricted-imports -- Exercise both production input-floor entries without expanding the composition API.
@@ -49,6 +44,7 @@ const collision = new AsyncLocalStorage<'writer' | 'use'>();
 const hooks = vi.hoisted(() => ({
   failPublication: false, person: undefined as undefined | { id: string; issuer: string; subject: string; assurance: 'os-user' },
   prepared: undefined as unknown, extraKnown: undefined as unknown,
+  afterScopeLoad: undefined as undefined | (() => Promise<void>),
   lock: undefined as undefined | ((path: string, phase: 'request' | 'held') => void | Promise<void>),
 }));
 vi.mock('#platform/index.js', async load => {
@@ -68,9 +64,19 @@ vi.mock('#adapters/index.js', async load => {
   return { ...actual, attestLocalInteractiveTerminal: async () => true, readLocalOsIdentity: () => hooks.person ?? actual.readLocalOsIdentity() };
 });
 vi.mock('#adapters/core/local-principal/internal/interactive.js', () => ({ attestLocalInteractiveTerminal: async () => true }));
-vi.mock('../../../src/composition/core/workspace-patch/internal/prepared-input.js', async load => {
-  const actual = await load<typeof import('../../../src/composition/core/workspace-patch/internal/prepared-input.js')>();
-  return { ...actual, configuredPreparedInput: (...args: Parameters<typeof actual.configuredPreparedInput>) => hooks.prepared ?? actual.configuredPreparedInput(...args) };
+vi.mock('#composition/core/scoped-request/index.js', async load => {
+  const actual = await load<typeof import('#composition/core/scoped-request/index.js')>();
+  return { ...actual, async loadConfiguredScopeContext(...args: Parameters<typeof actual.loadConfiguredScopeContext>) {
+    const context = await actual.loadConfiguredScopeContext(...args);
+    const afterLoad = hooks.afterScopeLoad;
+    hooks.afterScopeLoad = undefined;
+    await afterLoad?.();
+    return context;
+  } };
+});
+vi.mock('#adapters/core/setup-detect-coding/index.js', async load => {
+  const actual = await load<typeof import('#adapters/core/setup-detect-coding/index.js')>();
+  return { ...actual, openPreparedPackageInput: (...args: Parameters<typeof actual.openPreparedPackageInput>) => hooks.prepared ?? actual.openPreparedPackageInput(...args) };
 });
 vi.mock('../../../src/adapters/core/config-file/internal/documents.js', async load => {
   const actual = await load<typeof import('../../../src/adapters/core/config-file/internal/documents.js')>();
@@ -86,6 +92,7 @@ vi.mock('../../../src/adapters/core/config-file/internal/documents.js', async lo
 afterEach(async () => {
   hooks.person = undefined; hooks.failPublication = false; hooks.extraKnown = undefined; hooks.lock = undefined;
   hooks.prepared = undefined;
+  hooks.afterScopeLoad = undefined;
   for (const root of roots.splice(0)) await removeFixture(root);
 });
 
@@ -196,7 +203,7 @@ async function fixture(mode?: 'writers' | 'current-source', useFileStore = mode 
       rule('run-create', 'run', ['create'], [local], 'all', runCard ? 'require-approval' : 'allow'),
       rule('run-inspect', 'run', ['inspect']),
       rule('attempt-open', 'attempt', ['execute']),
-      rule('secret-register', 'secret', ['set']),
+      rule('secret-register', 'secret', ['set', 'switch']),
       rule('admin', 'operation', ['execute'], [proxyAdmin], ['policy.administer']),
       ...(configWrite ? [rule('config', 'config', ['write'], [local], [`project:${WORKER_PACKAGE_ALLOWANCE_KEY}`], configWrite === 'require-approval' ? configWrite : 'allow')] : []),
     ] }), { mode: 0o600 });
@@ -211,7 +218,8 @@ async function fixture(mode?: 'writers' | 'current-source', useFileStore = mode 
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 } });
   const known = () => (hooks.extraKnown ?? getConfigKnownSecrets(config)) as ReturnType<typeof getConfigKnownSecrets>;
   hooks.prepared = mode === 'current-source' ? undefined : { project: root, workTarget: root, platform: `${process.platform}-${process.arch}`, lockfileDigest: sha256(lockText),
-    assertCurrent: async () => {},
+    get known() { return known(); },
+    assertCurrent: async () => {}, withCurrentSecrets: (work: () => Promise<unknown>) => work(),
     review: () => reviewSealedWorkerTree(source, 'node_modules', gate, known()), seal: (reference: Parameters<typeof sealedWorkerTreeLocation>[1]) =>
       sealWorkerTree(source, sealedWorkerTreeLocation(artifacts, reference), 'node_modules', reference.listDigest, gate, known(), undefined, {
         run: (key, work) => withConfigWriteLock(key, work, gate.timeoutMs), maxBytes: async () => config.installation.sealedPackageStoreMaxBytes,
@@ -224,7 +232,7 @@ async function fixture(mode?: 'writers' | 'current-source', useFileStore = mode 
       async createRun(...args: Parameters<typeof store.createRun>) { await beforeCommit?.(); return store.createRun(...args); },
     };
     return withRunCreationAuthority(ctx, authority => new RunAdmissionApplication(persistence, verifiedPrincipal(ctx.principal), authority, { authorize: async () => {} }, {
-      inputs: nativeInputAdmission(root, ctx, options),
+      inputs: nativePackageAdmission(configuredWorkerPackagePorts(root, options), ctx, selectNativePackageProfile),
       async resolve() { const execution = fixtureExecution(graph);
         return { now: Date.now(), layoutRevision: ctx.layout.revision, execution: { ...execution, tasks: execution.tasks.map(task => ({ ...task, profile: compiled })) },
           policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['t'] } }; },
@@ -518,11 +526,11 @@ it.skipIf(process.platform !== 'linux').each(writerCollisions)('authority collis
   }
 }, 15_000);
 
-async function committedPackageVersions(root: string) {
+async function committedPackageVersions(root: string, extra = '') {
   const source = join(root, 'node_modules', 'pkg'), archive = join(root, 'package'), tarball = join(root, 'fixture.tgz');
   await mkdir(source, { recursive: true });
   await mkdir(archive);
-  const files = { 'package.json': '{"name":"pkg","version":"1.0.0"}', 'check.js': `// https://${payload}@example.invalid\n` };
+  const files = { 'package.json': '{"name":"pkg","version":"1.0.0"}', 'check.js': `// https://${payload}@example.invalid\n${extra}` };
   for (const [name, value] of Object.entries(files)) {
     await writeFile(join(source, name), value);
     await writeFile(join(archive, name), value);
@@ -602,13 +610,14 @@ it.skipIf(process.platform !== 'linux')('refuses a grant before the card when th
 });
 
 type PackageFixture = Awaited<ReturnType<typeof fixture>>;
-async function registerPackageValue(f: PackageFixture) {
+async function registerPackageValue(f: PackageFixture, value = payload, perRun = true) {
   await executeConfiguredRuntimeSecretOperation(f.root, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'per-run-fixture-secret',
-    operation: 'setSecret', delivery: { maxResultBytes: 4096 }, input: { schemaVersion: 1, scopeId, name: 'PACKAGE_FIXTURE', value: payload } },
+    operation: 'setSecret', delivery: { maxResultBytes: 4096 }, input: { schemaVersion: 1, scopeId, name: 'PACKAGE_FIXTURE', value } },
   { pid: process.pid, uid: userInfo().uid, gid: userInfo().gid, assurance: 'linux-so-peercred' }, 4096, f.options);
   const { config } = await f.context();
-  expect(getConfigKnownSecrets(config).spans(payload)).toHaveLength(0);
-  expect(config.toolchains.packageAllowances).toBeUndefined();
+  expect(getConfigKnownSecrets(config).spans(value)).toHaveLength(0);
+  expect((await readFile(f.configPath, 'utf8')).includes('$DECK:PACKAGE_FIXTURE')).toBe(false);
+  if (perRun) expect(config.toolchains.packageAllowances).toBeUndefined();
 }
 
 async function approvePackageRun(f: PackageFixture, runId: string) {
@@ -621,9 +630,12 @@ async function approvePackageRun(f: PackageFixture, runId: string) {
     commandId: 'per-run-card-answer', decision: 'allow', reason: 'Fixture Run card', channel: 'local-terminal-card' }, f.options);
 }
 
-async function expectPrivatePackageRefusal(f: PackageFixture, result: Promise<unknown>) {
+const packageApprovals = (f: PackageFixture) =>
+  configuredApproval(f.root, 'list', { schemaVersion: 1, scopeId, afterId: null, limit: 10 }, f.options);
+
+async function expectPrivatePackageRefusal(f: PackageFixture, result: Promise<unknown>, value = payload) {
   const refusal = await result.then(() => null, (error: unknown) => error);
-  expect(JSON.stringify([String(refusal), refusal, await f.audit(), f.text]).includes(payload)).toBe(false);
+  expect(JSON.stringify([String(refusal), refusal, await f.audit(), f.text, await packageApprovals(f)]).includes(value)).toBe(false);
   expect(refusal).toMatchObject({ code: 'WORKER_TREE_SECRET_REFUSED', params: { paths: expect.stringContaining('node_modules/pkg/check.js (known-secret)') } });
 }
 
@@ -662,10 +674,10 @@ it.skipIf(process.platform !== 'linux')('per-Run sealing refuses a value registe
   }
 });
 
-it.skipIf(process.platform !== 'linux')('per-Run Attempt refuses a value registered after sealing, before worker delivery', async () => {
+async function expectPerRunOpeningRefused(value: string) {
   const f = await fixture('current-source', true);
   try {
-    await committedPackageVersions(f.root);
+    await committedPackageVersions(f.root, '// ' + value + '\n');
     const runId = 'registered-before-opening';
     await approvePackageRun(f, runId);
     await f.run(runId);
@@ -675,7 +687,7 @@ it.skipIf(process.platform !== 'linux')('per-Run Attempt refuses a value registe
     const identity = { ...run.identity, taskId: 't', attemptId: 'fixture-opening', generation: 1 };
     const { principal: { id, issuer, subject } } = await f.context();
     await f.store.reserveRunTasks({ commandId: 'fixture-reserve', actor: { id, issuer, subject }, scopeId, runId, expectedRevision: run.revision, now: Date.now(), identities: [identity] });
-    await registerPackageValue(f);
+    await registerPackageValue(f, value);
     const { binding } = resolveNativeCliWorkerProfile(profile), agent = nativeCliAgent(binding.protocolFamily)!;
     const seal = { schemaVersion: 1 as const, capability: 'NativeAgentExecution' as const, executable: binding.definition.executable,
       cliVersion: '2.1.317', ownerUid: userInfo().uid, profileDigest: binding.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(agent) };
@@ -689,12 +701,104 @@ it.skipIf(process.platform !== 'linux')('per-Run Attempt refuses a value registe
       const preflight = checkEnvironment.mock.calls.length, tools = openTools.mock.calls.length;
       if (preflight || tools) console.log(JSON.stringify({ preflight, tools }));
     });
-    await expectPrivatePackageRefusal(f, execution);
+    await expectPrivatePackageRefusal(f, execution, value);
     expect(checkEnvironment).not.toHaveBeenCalled();
     expect(openTools).not.toHaveBeenCalled();
     expect(await f.store.loadBoundDispatch(identity)).toBeNull();
     expect((await f.audit()).some(({ event: { subject } }) => subject.kind === 'worker-tree-refused'
       && subject.findings.some(({ path, rule }) => path === 'node_modules/pkg/check.js' && rule === 'known-secret'))).toBe(true);
+  } finally { f.store.close(); }
+}
+
+// An unreferenced five-unit store value only present in package file contents.
+const shortPackageValue = String.fromCharCode(0x2603, 0x2604, 0x2605, 0x2606, 0x2607);
+it.skipIf(process.platform !== 'linux').each([payload, shortPackageValue])('per-Run Attempt refuses a registered value before worker delivery (%#)', expectPerRunOpeningRefused);
+
+it.skipIf(process.platform !== 'linux')('refuses a short registered value before either approval path shows the package', async () => {
+  const f = await fixture('current-source', true);
+  try {
+    await committedPackageVersions(f.root, '// ' + shortPackageValue + '\n');
+    await registerPackageValue(f, shortPackageValue);
+    await expectPrivatePackageRefusal(f, f.run('short-value-before-card'), shortPackageValue);
+    await expectPrivatePackageRefusal(f, f.change('grant'), shortPackageValue);
+    expect(f.text).toEqual([]);
+    expect(await packageApprovals(f)).toEqual([]);
+  } finally { f.store.close(); }
+});
+
+it.skipIf(process.platform !== 'linux')('refuses a short value registered after reusable approval before worker delivery', async () => {
+  const f = await fixture('current-source', true);
+  try {
+    await committedPackageVersions(f.root, '// ' + shortPackageValue + '\n');
+    await f.change('grant');
+    await f.run('short-value-reusable-open');
+    await registerPackageValue(f, shortPackageValue, false);
+    const handover = vi.fn(async () => null);
+    await expectPrivatePackageRefusal(f, f.use('short-value-reusable-open', 'open', handover), shortPackageValue);
+    expect(handover).not.toHaveBeenCalled();
+  } finally { f.store.close(); }
+});
+
+async function switchPackageStore(f: PackageFixture) {
+  const switched = await executeConfiguredRuntimeSecretOperation(f.root, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'package-fixture-switch',
+    operation: 'switchSecretStore', delivery: { maxResultBytes: 4096 }, input: { schemaVersion: 1, scopeId, to: ENCRYPTED_FILE_SECRET_STORE_ID, confirmDowngrade: false } },
+  { pid: process.pid, uid: userInfo().uid, gid: userInfo().gid, assurance: 'linux-so-peercred' }, 4096, f.options);
+  expect(switched).toMatchObject({ status: 'switched', from: FILE_SECRET_STORE_ID, to: ENCRYPTED_FILE_SECRET_STORE_ID, entries: 1, cleaned: true });
+}
+
+it.skipIf(process.platform !== 'linux').each(['list production', 'standalone preview', 'Run card', 'reusable card'] as const)(
+  'refuses %s from a context loaded before a managed store switch', async boundary => {
+    const f = await fixture('current-source', true);
+    try {
+      await committedPackageVersions(f.root);
+      await registerPackageValue(f);
+      const listPath = join(f.root, 'deckent-package-files.json'), sentinel = 'fixture list must stay unchanged';
+      await writeFile(listPath, sentinel);
+      hooks.afterScopeLoad = () => switchPackageStore(f);
+      const actions = {
+        'list production': () => produceConfiguredNativeInputs(f.root, scopeId, f.options),
+        'standalone preview': () => inspectConfiguredNativeInputs(f.root, scopeId, f.options),
+        'Run card': () => f.run('stale-store-before-card'),
+        'reusable card': () => f.change('grant'),
+      };
+      const refusal = await actions[boundary]().then(() => null, (error: unknown) => error);
+      expect(await readFile(listPath, 'utf8')).toBe(sentinel);
+      expect(f.text).toEqual([]);
+      expect(await packageApprovals(f)).toEqual([]);
+      expect((await f.context()).config['secrets']).toEqual({ store: ENCRYPTED_FILE_SECRET_STORE_ID });
+      expect(JSON.stringify([String(refusal), refusal, await f.audit()]).includes(payload)).toBe(false);
+      expect(refusal).toMatchObject({ code: 'NATIVE_WORKER_DEPENDENCIES_REFUSED' });
+    } finally { f.store.close(); }
+  });
+
+it.skipIf(process.platform !== 'linux')('refuses a Run card when the managed store switches after a clean package scan', async () => {
+  const f = await fixture('current-source', true);
+  try {
+    await committedPackageVersions(f.root);
+    await registerPackageValue(f, 'unrelated-fixture-value');
+    let custodyRequests = 0;
+    hooks.lock = async (path, phase) => {
+      if (path === f.globalPath + '.secret-custody' && phase === 'request' && ++custodyRequests === 2) {
+        hooks.lock = undefined;
+        await switchPackageStore(f);
+      }
+    };
+    await expect(f.run('store-switch-after-package-scan')).rejects.toMatchObject({ code: 'NATIVE_WORKER_DEPENDENCIES_REFUSED' });
+    expect(custodyRequests).toBe(2);
+    expect(await packageApprovals(f)).toEqual([]);
+  } finally { f.store.close(); }
+});
+
+it.skipIf(process.platform !== 'linux')('releases secret custody while the person considers a reusable package card', async () => {
+  const f = await fixture('current-source', true);
+  try {
+    await committedPackageVersions(f.root);
+    await registerPackageValue(f, 'unrelated-fixture-value');
+    const confirm = vi.fn(async () => { await switchPackageStore(f); return false; });
+    await expect(changeConfiguredPackageAllowance(f.root, { action: 'grant', scopeId, kind, locale: 'en' }, f.options, confirm))
+      .resolves.toEqual({ status: 'declined' });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(await packageApprovals(f)).toEqual([]);
   } finally { f.store.close(); }
 });
 

@@ -1,18 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { userInfo } from 'node:os';
-import { isDeepStrictEqual } from 'node:util';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, t, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
+  resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, openSealedNativeInput, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
-import { packageConsentDigest, verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
+import { assertAttemptPackageInput, reopenAttemptPackage, scanPackageSecrets, type PackageSecretSnapshot, verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
-import { readPackageSecrets, withPackageSecretCustody, withPackageUse } from '#composition/core/workspace-patch/index.js';
+import { configuredWorkerPackagePorts } from '#composition/core/workspace-patch/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
@@ -21,7 +20,6 @@ import { NATIVE_CLI_WORKER_ADAPTER, isNativeCliWorkerProfile, resolveNativeCliWo
   createNativeWorkerEvents, nativeWorkerCustodyFile, executionTaskHiddenPaths, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from './native-runtime.js';
 import { startConfiguredWorkerObservation } from './observation.js';
-import { openSealedNativeInput } from './sealed-input.js';
 /** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
 type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; runtime?: NativeCliWorkerRuntime; projectionRetired: boolean }> };
 /** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
@@ -66,40 +64,17 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const { run, profile: selected } = startContext;
       const native = isNativeCliWorkerProfile(selected) ? resolveNativeCliWorkerProfile(selected) : null;
       const dependencies = native?.dependencies;
-      if (dependencies) {
-        if (dependencies.state !== 'sealed' || !run?.authority || dependencies.approval.scopeId !== identity.scopeId) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-        if (!dependencies.allowance) {
-          const receipt = await store.loadRunReceipt(identity.scopeId, dependencies.approval.commandId);
-          if (!run.authority.approval || receipt?.snapshot.identity.runId !== identity.runId
-            || receipt.snapshot.authority?.approval?.approvalId !== run.authority.approval.approvalId)
-            throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-        }
-      }
+      if (dependencies) await assertAttemptPackageInput(dependencies, run, identity, (scopeId, commandId) => store.loadRunReceipt(scopeId, commandId));
+      const packagePorts = configuredWorkerPackagePorts(projectRoot, options);
       const configuredPorts = options.nativeCliWorker?.ports ?? (options.nativeCliWorker?.runtime
         ? createConfiguredNativeCliWorkerPorts(projectRoot, identity.scopeId, store, options, options.nativeCliWorker.runtime) : undefined);
-      let scannedPackages: Awaited<ReturnType<typeof readPackageSecrets>> | undefined;
-      const reopen = async <T>(stage: string, validate: (() => Promise<void>) | undefined, work: () => Promise<T>) => {
-        if (dependencies?.state !== 'sealed' || !validate) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-        // Compare the completed scan's snapshot under custody through each managed handover.
-        if (!dependencies.allowance) return withPackageSecretCustody(options, async custody => {
-          const { registered } = await readPackageSecrets(config, options, await custody.selected());
-          if (!isDeepStrictEqual(scannedPackages?.registered, registered)) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
-          await validate();
-          return work();
-        });
-        const useId = packageConsentDigest('worker-package-attempt:1', { identity, stage });
-        return withPackageUse(projectRoot, scope, options, [{ reference: dependencies, profile: selected }], 'open', useId, work, async fresh => {
-          const policy = contextPolicySource(fresh, fresh.document);
-          await new DispatchPolicyAuthorization(policy).authorizeIdentity('execute', identity, fresh.principal);
-          await validate();
-        });
-      };
+      let scannedPackages: PackageSecretSnapshot | undefined;
       const nativePorts = dependencies?.state === 'sealed' && configuredPorts ? {
         ...configuredPorts,
         openTools: (...args: Parameters<NativeCliWorkerPorts['openTools']>) =>
-          reopen('tools', args[3].sealedNodeModules?.validate, () => configuredPorts.openTools(...args)),
+          reopenAttemptPackage(packagePorts, scope, identity, dependencies, selected, scannedPackages, 'tools', args[3].sealedNodeModules?.validate, () => configuredPorts.openTools(...args)),
         ...(configuredPorts.checkEnvironment ? { checkEnvironment: (...args: Parameters<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>) =>
-          reopen('environment', args[3].sealedNodeModules?.validate, () => configuredPorts.checkEnvironment!(...args)) } : {}),
+          reopenAttemptPackage(packagePorts, scope, identity, dependencies, selected, scannedPackages, 'environment', args[3].sealedNodeModules?.validate, () => configuredPorts.checkEnvironment!(...args)) } : {}),
       } : configuredPorts;
       const docker = native ? null : resolveDockerTaskProfile(selected), profile = native ?? docker!, relayed = profile.siwcWorker && profile.nativeSubscription;
       const waiting = (reason: string) => nativeWorkerWaiting(projectRoot, identity, layout, store, options, reason, !native);
@@ -154,7 +129,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
       const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } });
       const sealedViews = sealedNodeModules && packageContext ? [sealedNodeModules.scanView, { text: packageContext, label: 'prompt:sealed-dependencies' }] : [];
-      if (sealedNodeModules) scannedPackages = await readPackageSecrets(config, options)
+      if (sealedNodeModules) scannedPackages = await scanPackageSecrets(packagePorts.secrets, config)
         .catch(async (error: unknown) => { await release().catch(() => undefined); throw error; });
       const known = scannedPackages?.known ?? getConfigKnownSecrets(config);
       await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv).concat(sealedViews), settings: gate,

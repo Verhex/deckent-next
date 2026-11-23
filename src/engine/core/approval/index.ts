@@ -1,3 +1,4 @@
+import standingListBounds from './internal/standing-list.json' with { type: 'json' };
 export { agentToolUndo } from './internal/assurance.js';
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval, expireApproval } from './internal/integrity.js';
 export { admitDecided, agentToolApprovalLeft, expireDue } from './internal/integrity.js';
@@ -17,7 +18,7 @@ export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from
 export { PolicyTemplateUpgrade, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type TemplateUpgradeMissing, type TemplateUpgradeResult } from './internal/template-upgrade.js';
 export { administerOwnPolicyChange, isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SessionStandingBinding } from './internal/standing.js';
-export { STANDING_GRANTS_LIST, StandingGrantsInspection, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ standingGrantsQuerySchema, type AuthorityChangeHistory, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type StandingGrantEntry, type StandingGrantsPage } from './internal/standing-inspection.js';
+export const standingGrantListBounds = Object.freeze({ ...standingListBounds });
 export type { PersistentStandingDependencies, StandingGrantView, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ StandingOffer } from './internal/standing.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,

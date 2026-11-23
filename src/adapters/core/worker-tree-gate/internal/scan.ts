@@ -1,8 +1,8 @@
 import { constants } from 'node:fs';
 import { lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join, posix } from 'node:path';
-import { CodedError, DECKENT_VERSION, digestText, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
-import { classifyDependencyBinary, dependencyNativeRefusal, DependencyTreePatternCache, type DependencyHit, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
+import { CodedError, DECKENT_VERSION, digestText, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic } from '#platform/index.js';
+import { classifyDependencyBinary, dependencyNativeRefusal, DependencyTreePatternCache, type DependencyHit, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan, type PackageKnownSecrets } from '#engine/index.js';
 import { archiveKind, configSecretHit, contentRule, decodedTexts, matchingContentRules, withoutNul, WORKER_TREE_PATTERN_RULES } from './content.js';
 import { createHash } from 'node:crypto';
 import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
@@ -12,6 +12,7 @@ export interface WorkerTreeGateOptions {
   readonly allowPatternPaths: readonly string[]; readonly acknowledgedDenyPaths: readonly string[];
   readonly maxFiles: number; readonly maxFileBytes: number; readonly maxTotalBytes: number; readonly timeoutMs: number; readonly cacheDirectory?: string; readonly checkoutRoot?: string;
 }
+export type WorkerTreeKnownSecrets = PackageKnownSecrets;
 /** S6: the deny paths the gate refuses are the terminal's credential floor (`CREDENTIAL_WORKSPACE_DENY`) — the same list, never a copy. */
 export const WORKER_TREE_DENY: readonly string[] = CREDENTIAL_WORKSPACE_DENY;
 export { WORKER_TREE_PATTERN_RULES } from './content.js';
@@ -57,7 +58,7 @@ class Incomplete extends CodedError { constructor(readonly limit: WorkerTreeLimi
  * - files, single-file bytes, total bytes and time are bounded and return `incomplete`, never a partial `clean`; a bind declared `dependencyTree`: see `DependencyTreePatternCache`.
  * Shown paths have control characters escaped and pass the record redactor with the configured values, so no path carries a value.
  */
-export async function scanWorkerTree(input: string | readonly WorkerTreeView[], options: WorkerTreeGateOptions, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS,
+export async function scanWorkerTree(input: string | readonly WorkerTreeView[], options: WorkerTreeGateOptions, known: WorkerTreeKnownSecrets = EMPTY_KNOWN_SECRETS,
   now: () => number = Date.now): Promise<WorkerTreeScan> {
   const deny = WORKER_TREE_DENY.map(pattern => ({ pattern, match: createGlobMatcher(pattern.toLowerCase()) }));
   const allowed = options.allowPatternPaths.map(glob => ({ by: `allowPatternPaths:${glob}`, match: createGlobMatcher(glob) })), acknowledged = new Set(options.acknowledgedDenyPaths);
@@ -68,6 +69,8 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const denyHit = (...paths: readonly string[]) => { const forms = paths.flatMap(workerTreeDenyForms); return deny.find(entry => forms.some(form => entry.match(form)))?.pattern; };
   const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
   const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
+  const knownHit = (texts: readonly string[], bytes?: Buffer) =>
+    (sealed && known.matchesPackageValue?.(texts, bytes, time)) || texts.some(text => known.spans(text).length);
   /** `checks`: the gate's own readers for a dependency-tree file (engine `DependencyTextChecks`). `read`: bounds before work (size, total on the open file); above `maxFileBytes` (dependency class only) never allocated whole: classified in bounded windows (hits, null = unscannable). */
   const checks = (rel: string) => ({ decode: decodedTexts, dropped: withoutNul, archive: archiveKind, known, rows: WORKER_TREE_PATTERN_RULES, match: (source: string, flags: string, texts: readonly string[]) => runner.match(source, flags, texts), first: (texts: readonly string[]) => contentRule(runner, rel, texts) });
   const read = async (path: string): Promise<Buffer | readonly DependencyHit[] | null> => {
@@ -96,7 +99,7 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   // The regex worker is unref'd; a one-shot process (CLI execute) must not exit while the gate waits for it, so the scan holds a ref'd timer.
   const keepAlive = setInterval(() => undefined, options.timeoutMs);
   const inspect = async (rel: string, texts: readonly string[], bytes?: Buffer, row?: SealedEntry) => {
-    if (texts.some(text => known.spans(text).length)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
+    if (knownHit(texts, bytes)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
     const refused = tree && bytes ? await dependencyNativeRefusal(bytes, texts, checks(rel)) : null; if (refused !== null) { findings.push({ path: shown(rel), rule: refused }); return; }
     // An archive is a finding only an operator glob lifts, decided before (never by) a pattern result or the dependency cache (Astra 2626 F1).
     const archive = bytes ? archiveKind(bytes) : null; if (archive !== null) { liftable(rel, `unscannable:archive-${archive}`, null); return; }
@@ -124,7 +127,7 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
     time();
     if (sealed) {
       const texts = decodedTexts(Buffer.from(display));
-      const rule = texts.some(text => known.spans(text).length) ? 'known-secret' : await contentRule(runner, display, texts, false);
+      const rule = knownHit(texts) ? 'known-secret' : await contentRule(runner, display, texts, false);
       if (rule !== null || texts.some(configSecretHit) || shown(display) !== display || /[\p{Cc}\p{Cf}]/u.test(display)) { findings.push({ path: `sha256:${digestText(display)}`, rule: rule === 'known-secret' ? rule : rule ? `pattern:${rule}` : 'unsafe-path' }); return; }
     }
     const pattern = inner === '' && display !== '' ? denyHit(display, posix.basename(display)) : denyHit(display, inner);
@@ -140,8 +143,11 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
       const bytes = Buffer.from(target);
       if (sealed) { if (bytes.length > options.maxFileBytes) throw new Incomplete('file-bytes', bytes.length, options.maxFileBytes);
         if ((total += bytes.length) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes); }
+      const texts = decodedTexts(bytes);
       checkBytes(row, 'link', bytes);
-      if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` }); else await inspect(display, decodedTexts(bytes), undefined, row);
+      if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` });
+      else if (sealed && known.matchesPackageValue?.(texts, bytes, time)) findings.push({ path: shown(display), rule: 'known-secret' });
+      else await inspect(display, texts, undefined, row);
     }
     else if (info.isFile()) { const bytes = await read(path); if (bytes === null) throw new Incomplete('file-bytes', info.size, options.maxFileBytes);
       if (Buffer.isBuffer(bytes)) { checkBytes(row, 'file', bytes); await inspect(display, decodedTexts(bytes), bytes, row); }

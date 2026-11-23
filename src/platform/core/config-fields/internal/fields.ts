@@ -42,7 +42,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     get backupKeep() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(3); },
     get writeLockTimeoutMs() { return persistedInteger().positive().max(2147483647).prefault(2000); },
   }).prefault({})),
-  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files', 'src/composition/core/workspace-patch'] }, 'live', z.strictObject({
+  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files', 'src/adapters/core/setup-detect-coding'] }, 'live', z.strictObject({
     get sealedPackageStoreMaxBytes() { return persistedInteger().positive().max(Number.MAX_SAFE_INTEGER).prefault(2147483648)
       .describe('config.field.installation.sealedPackageStoreMaxBytes'); },
     get npmPackageCache() { return persistedString(z.string().min(1).max(4096).regex(/^\/[^\p{Cc}\p{Cf}]*$/u)).optional()
