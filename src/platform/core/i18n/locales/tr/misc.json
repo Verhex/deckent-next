@@ -738,7 +738,7 @@
   "brain.here.cancelled": "Çalıştırılmadı; hiçbir şey değişmedi.",
   "cli.help.summary.do": "Brain ve mevcut onay kapılarıyla bir isteği planla",
   "cli.help.do": "deckent do --request <istek> --scope <kapsam> [--command-id <kimlik>] [--json]. Tekrar için aynı komut kimliği ve isteği kullanın; bu komut onay kararı vermez.",
-  "cli.help.do.workerRequired": "deckent do --request <istek> --scope <kapsam> [--command-id <kimlik>] [--json]. Tekrar için aynı komut kimliği ve isteği kullanın; bu komut onay kararı vermez. İşçi kurulmamışsa bu komut isteği reddeder.",
+  "cli.help.do.workerRequired": "deckent do --request <istek> --scope <kapsam> [--command-id <kimlik>] [--json]. Tekrar için aynı komut kimliği ve isteği kullanın; bu komut onay kararı vermez. Bu komutta geçerli klasörde doğrudan çalışma seçeneği yoktur. Yapılandırılmış işçi ve işçi kurulum kaydı yoksa yeni isteği reddeder. İşçi kurulumu sürüyorsa isteği bekleyen niyet olarak kaydedebilir.",
   "terminal.slash.do.execution": "İsteğinizden iş planı hazırlayın. İşçi kurulmadığında, sohbet ve politika izin verirse /do bu klasörde doğrudan çalışabilir.",
   "mcp.tool.planRun": "Seçilen etkin model ve provider-spend bütçesiyle istekten makbuzlu RunProposal üretir. Aynı komut/girdi kayıttan devam eder. MCP onay kararı veremez.",
   "config.field.brain_planner": "Sürümlü Brain planlama şablonu kaydı",

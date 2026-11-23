@@ -738,7 +738,7 @@
   "brain.here.cancelled": "Not run; nothing was changed.",
   "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
   "cli.help.do": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
-  "cli.help.do.workerRequired": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals. If no worker is set up, this command refuses the request.",
+  "cli.help.do.workerRequired": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals. This command has no option to work directly in the current folder. It refuses a new request when there is neither a configured worker nor a worker setup record. While worker setup is in progress, it can save the request as a waiting intent.",
   "terminal.slash.do.execution": "Plan work from your request. With no worker set up, /do can work directly in this folder when chat and policy allow it.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",
   "config.field.brain_planner": "Versioned Brain planning template registry",

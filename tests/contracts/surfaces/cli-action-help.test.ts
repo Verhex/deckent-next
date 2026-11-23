@@ -39,12 +39,19 @@ it('uses the environment locale for scoped Turkish help', async () => {
 });
 
 it.each([
-  ['en', 'If no worker is set up, this command refuses the request.'],
-  ['tr', 'İşçi kurulmamışsa bu komut isteği reddeder.'],
-] as const)('discloses the no-worker refusal in do help (%s)', async (language, refusal) => {
+  ['en', 'This command has no option to work directly in the current folder.',
+    'It refuses a new request when there is neither a configured worker nor a worker setup record.',
+    'While worker setup is in progress, it can save the request as a waiting intent.'],
+  ['tr', 'Bu komutta geçerli klasörde doğrudan çalışma seçeneği yoktur.',
+    'Yapılandırılmış işçi ve işçi kurulum kaydı yoksa yeni isteği reddeder.',
+    'İşçi kurulumu sürüyorsa isteği bekleyen niyet olarak kaydedebilir.'],
+] as const)('explains when do refuses or saves a request during worker setup (%s)', async (language, directWork, refusal, waiting) => {
   const f = context();
   expect(await main(['do', '--help', '--lang', language], f.context)).toBe(0);
-  expect(outputs.join('').replace(/\s+/g, ' ')).toContain(refusal);
+  const output = outputs.join('').replace(/\s+/g, ' ');
+  expect.soft(output).toContain(directWork);
+  expect.soft(output).toContain(refusal);
+  expect.soft(output).toContain(waiting);
   expect(f.initialized()).toBe(0);
 });
 
