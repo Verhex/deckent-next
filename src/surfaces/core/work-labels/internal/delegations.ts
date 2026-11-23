@@ -21,5 +21,6 @@ export function delegationLines(view: DecisionDelegationView, locale: Locale): r
   return [t('policy.delegate.target', { actor: `${view.principal.issuer}/${view.principal.subject}`, scope: view.scopeId, resource: view.resourceId ?? '*', revision: view.revision }, locale),
     ...view.steps.map(row => t('policy.delegate.row', { step: row.step.id, label: words.step[row.step.id] ?? row.step.id,
       managed: words.managed[row.managed], effective: words.effective[row.effective] }, locale)),
-    t('policy.delegate.limit', {}, locale)];
+    t('policy.delegate.limit', {}, locale),
+    t('policy.delegate.shellIdentity', {}, locale)];
 }

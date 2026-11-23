@@ -1100,6 +1100,7 @@
   "policy.delegate.effective.allowed": "Selection permitted by policy",
   "policy.delegate.effective.denied": "Selection not fully permitted",
   "policy.delegate.limit": "Only managed grants are removed; custom/role grants may remain. Execution permissions, business criteria and protected-card checks still apply. Without a resource id, this covers the selected scope’s resource class.",
+  "policy.delegate.shellIdentity": "A command typed in a shell runs as the person’s operating-system account. MCP delegation applies to the verified MCP caller.",
   "policy.delegate.confirm": "{action} · {step}? [y/N] ",
   "policy.delegate.keys": "y: confirm · N/Enter/Esc: cancel · PgUp/PgDn: inspect card",
   "policy.delegate.grant": "Delegate this step",
