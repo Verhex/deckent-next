@@ -64,9 +64,16 @@ it.each([
   expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, tasks: [task] } })))
     .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule } }));
 });
-it('supplies criterion-id annotation and selects v6 (F2-11 class descriptions over v5 person language) while keeping v1–v5 available', () => {
+it('defaults to v7 with explicit coding scope, criterion ids and person language while keeping v1–v6 selectable', () => {
   const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
-  expect(current.template.version).toBe(6);
+  expect(current.template).toMatchObject({ id: 'run-proposal', version: 7 });
+  const instruction = current.messages[0]!.content;
+  expect(instruction).toContain("In each coding task's workInput.scope.paths, include every path the person explicitly asked that task to change, and no others.");
+  expect(instruction).toContain("For each entire subtree explicitly requested for change, use its directory path followed by /**.");
+  expect(instruction).toContain('Omit paths given only as references or location hints, and paths excluded from change.');
+  expect(instruction).toContain('If a change target is missing or ambiguous, request clarification through a new intent.');
+  expect(instruction).toContain('copy its DECKENT-PLAN-CHALLENGE/1 line exactly at byte zero, then one LF and exactly one JSON object');
+  expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 6 } }).template.version).toBe(6);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 5 } }).template.version).toBe(5);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 4 } }).template.version).toBe(4);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 3 } }).template.version).toBe(3);
@@ -78,7 +85,7 @@ it('supplies criterion-id annotation and selects v6 (F2-11 class descriptions ov
   // D4: v5 names the person's language in the user message and asks for titles, tasks and criterion text in it; v4 and no language keep the old bytes.
   const user = (config: unknown, language?: string) => JSON.parse(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, config, undefined, language).messages[1]!.content);
   expect(user({}, 'tr').language).toBe('tr'); expect(user({ selected: { id: 'run-proposal', version: 4 } }, 'tr')).not.toHaveProperty('language'); expect(user({})).not.toHaveProperty('language');
-  expect(current.messages[0]!.content).toContain('workInput.title, workInput.task and criterionDefinitions description in that language');
+  expect(instruction).toContain('workInput.title, workInput.task and criterionDefinitions description in that language');
 });
 it('masks both credential-shaped and known escaped secrets before model context, output graph or summary can retain them', () => {
   const secret = 'opaque"and\\quoted', known = snapshotKnownSecrets([{ name: 'FIXTURE', value: secret }]);
