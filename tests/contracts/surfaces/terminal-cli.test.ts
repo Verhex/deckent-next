@@ -86,12 +86,33 @@ describe('deckent terminal CLI', () => {
       stdin: Object.assign(Readable.from(['/status\n', '/help\n', '/nope\n', 'hi\n', '/exit\n']), { isTTY: false }), initialize() {},
       async describeTerminalChatPlan() { return plan; }, async ensureRuntimeService() { ensured++; throw new Error('unreachable'); },
       async completeTerminalChat(_root: string, input: { messages: ReadonlyArray<{ content: string }> }) { sent.push(input.messages.at(-1)!.content); return 'ok'; } });
-    expect(code).toBe(0);
+    expect(code).toBe(2);
     expect(sent).toEqual(['hi']);
     expect(out.text()).toContain('Chat model:');
     // BeUser KER-09: /help answers the line-mode commands; an unknown one points to it.
     expect(out.text()).toContain('Line mode commands: /status'); expect(out.text()).toContain('Unknown command in line mode: /nope. /help lists');
+    expect(out.text()).toContain('Exit status: 0 completed, 1 refused, cancelled or unfinished turn, 2 unsupported command. The highest status applies to the session.');
     expect(ensured).toBe(0);
+  });
+
+  it('keeps the highest line-mode exit status through EOF after an unsupported command, an unfinished turn and a successful turn', async () => {
+    const f = await fixture(); const out = sink(), err = sink(); const sent: string[] = [];
+    const ensureRuntimeService = vi.fn(async () => { throw new Error('unreachable'); });
+    const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out.output, stderr: err.output,
+      stdin: Object.assign(Readable.from(['/mode\n', 'unfinished\n', 'retry\n']), { isTTY: false }), initialize() {},
+      async describeTerminalChatPlan() { return plan; }, ensureRuntimeService,
+      async completeTerminalChat() { throw new Error('line mode must stream'); },
+      async *streamTerminalChat(_root: string, input: { messages: readonly { content: string }[] }) {
+        const last = input.messages.at(-1)!.content; sent.push(last);
+        if (last === 'unfinished') return;
+        yield { kind: 'text', text: 'finished\n' };
+        yield { kind: 'done', finish: 'stop', note: null };
+      } });
+    expect(code).toBe(2);
+    expect(sent).toEqual(['unfinished', 'retry']);
+    expect(out.text()).toBe('finished\n');
+    expect(err.text()).toContain('Unknown command in line mode: /mode');
+    expect(ensureRuntimeService).not.toHaveBeenCalled();
   });
 
   it('requires a scope (flag or terminal.scopeId) for chat modes and rejects --json there before any turn', async () => {
@@ -122,7 +143,7 @@ describe('deckent terminal CLI', () => {
         if (input.messages.at(-1)!.content === 'two') throw new Error('provider detail must not leak');
         return `reply:${input.messages.at(-1)!.content} \u001b[31mpassword=hunter2x\u001b[0m`;
       } });
-    expect(code).toBe(0);
+    expect(code).toBe(1);
     expect(calls.map(call => [call.scopeId, call.last])).toEqual([['team-a', 'one'], ['team-a', 'two'], ['team-a', 'three']]);
     expect(calls[2]!.roles).toEqual(['system', 'user', 'user']);
     expect(out.text()).toContain('reply:one password=[REDACTED]'); expect(out.text()).toContain('reply:three');
@@ -134,9 +155,10 @@ describe('deckent terminal CLI', () => {
   it('streams piped line mode: first complete line before the turn ends, plain text, last line ended, tool and approval as plain stderr lines, a card cancels the turn', async () => {
     const f = await fixture(); const out = sink(), err = sink(); const stamps: { at: number; text: string }[] = []; let finishedAt = 0, brokenAt = 0, aborted = false; const seen: string[][] = [];
     const out2 = { write(value: string) { stamps.push({ at: performance.now(), text: value }); out.values.push(value); } };
+    const decideApproval = vi.fn(async () => { throw new Error('unreachable'); });
     const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out2, stderr: err.output,
       stdin: Object.assign(Readable.from(['first\n', 'ask\n', 'again\n', 'broken\n', '/exit\n']), { isTTY: false }), initialize() {},
-      async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },
+      async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; }, decideApproval,
       async completeTerminalChat() { throw new Error('line mode must stream'); },
       async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[] }, _o: unknown, signal?: AbortSignal) {
         const last = input.messages.at(-1)!.content; seen.push(input.messages.map(message => message.role));
@@ -159,7 +181,7 @@ describe('deckent terminal CLI', () => {
         yield { kind: 'message', message: { role: 'assistant', content: 'hello', toolCalls: [] } };
         yield { kind: 'done', finish: 'stop', note: null };
       } });
-    expect(code).toBe(0);
+    expect(code).toBe(1);
     // The first complete line reached stdout well before the turn's end; the open last line waits for it; nothing carries an escape.
     expect(stamps[0]!.at).toBeLessThan(finishedAt - 100); expect(stamps[0]!.text).toBe('hello!\n');
     expect(out.text()).not.toContain('\u001b'); expect(out.text()).toBe('hello!\nsecond\nhello!\nsecond\n3\nbroken\nx\n');
@@ -168,6 +190,7 @@ describe('deckent terminal CLI', () => {
     expect(err.text()).toContain('Approval required: write_file · x.txt');
     // Negative: the card was never answered, the turn was cancelled, and the cancelled question stays in history without an answer.
     expect(aborted).toBe(true);
+    expect(decideApproval).not.toHaveBeenCalled();
     expect(seen).toEqual([['system', 'user'], ['system', 'user', 'assistant', 'user'], ['system', 'user', 'assistant', 'user', 'user'], ['system', 'user', 'assistant', 'user', 'user', 'assistant', 'user']]);
   });
 
@@ -305,7 +328,7 @@ it('S05 line mode redacts a known value and a provider token split across deltas
       for (const text of [`key ${canary.slice(0, 12)}`, `${canary.slice(12)} token sk-ant-`, 'abcdef123456 \u001b[3', '1mred \u202eEND\nnext']) yield { kind: 'text', text };
       yield { kind: 'done', finish: 'stop', note: null };
     } });
-  expect(code).toBe(0);
+  expect(code).toBe(1);
   expect(out.text()).toBe('key \u2039secret:LINE_TEST\u203a token [REDACTED] red <U+202E>END\nnext\n\u2039secret:LINE_TEST\u203a\n');
   // Negative: no part of a value split across deltas or around an OSC, no token tail and no escape reaches the pipe.
   for (const text of [out.text(), err.text()]) for (const leaked of ['fictitious', 'known-0123', '0123456789', 'abcdef123456', '\u001b', '\u202e', '\u{E0041}']) expect(text).not.toContain(leaked);

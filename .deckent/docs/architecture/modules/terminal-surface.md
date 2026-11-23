@@ -112,7 +112,10 @@ Market notes live in the private proof record `TERMINAL-UI-LANDSCAPE`.
   `service.idleShutdown.afterMs` (default 15 minutes) without requests or executions; a hand- or config-started service never does.
 - **Adapters:** `deckent terminal workline [--scope <id>]` is the Ink view and requires TTY stdin and stdout
   (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session [--scope <id>]` is line mode and also serves piped
-  input (slash input stays local: `/status` answers locally, unknown commands are reported, never sent to the model); `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime
+  input. Slash input stays local, so `/status` answers locally and unsupported commands are reported without a model turn.
+  Line mode returns the highest status seen before `/exit`, `/quit`, or EOF. Completed sessions and observations return `0`.
+  A refused, cancelled, errored, truncated, or unfinished turn returns `1`. An unsupported slash command returns `2`.
+  `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime
   dependencies pinned exactly; `NO_COLOR`, `--no-color` and non-TTY stdout render without colour.
 - **Chat is one governed agent turn per message** (model rounds with tools in the full window; line mode keeps the single invocation
   described here): the `terminal.chat` config section names a declared
