@@ -2,16 +2,20 @@ import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-head
 import { mkdir, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { parseModelBindingDefinition, modelInvocationProfileSchema, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
+import { parseModelBindingDefinition, modelInvocationProfileSchema, readHeadlessRejection, type AgentTurnEvent, type ModelInvocationDelta, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservation, headlessFlagSetDigest, nativeCliHeadlessDefinitionSchema } from '#adapters/core/native-cli-headless/index.js';
 import { inspectNativeCliWorker } from '#adapters/core/native-cli-worker/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
+import { openSqliteAgentTurnStore } from '#adapters/core/sqlite-agent-turn/index.js';
 import { nativeEgressLimits, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
 import { createClaudeAgentDriver, nativeQuotaText, nativeAgentReasonText, type SameTurnPlanningPort, type SameTurnToolSessionPort, type ToolSessionPort } from '#capabilities/index.js';
 import { snapshotKnownSecrets, clockText, t } from '#platform/index.js';
+import { runDurableAgentTurn, type AgentTurnPorts } from '#engine/core/agent-turn/index.js';
+import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { fakeCodexNpm } from '../../fixtures/native-headless/codex.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
@@ -52,7 +56,9 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}, npm = f
     await driver.admit();
     const prepared = await native.prepare(profile, binding, { model, messages: [{ role: 'system', content: 'Use governed tools.' }, { role: 'user', content: user }], stream: false });
     const deltas: ModelInvocationDelta[] = [];
-    return { ...sealed, driver, bridge, native, prepared, deltas, run: (signal?: AbortSignal) => native.send(prepared, signal, delta => deltas.push(delta)) };
+    return { ...sealed, driver, bridge, native, prepared, deltas, run: (signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink) => native.send(prepared, signal, delta => {
+      deltas.push(delta); onDelta?.(delta);
+    }) };
   };
   return { c, profile, entry, start, propose, port, program: installation?.payload ?? executable };
 }
@@ -126,10 +132,34 @@ it('preserves Claude text block and record chunks within one message ID across a
   feed({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
   feed(claudeProse('answer', '', 'The file is ', 'readable.'));
   feed(claudeProse('follow-up', ' Already spaced.'));
+  feed(claudeProse('no-tool', 'Still contiguous.'));
   feed(resultLine('The file is readable. Already spaced.'));
   expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'completed' });
-  expect(deltas).toEqual(['I will che', 'ck the ', 'file.', '\n\nThe file is ', 'readable.', ' Already spaced.']);
+  expect(deltas).toEqual(['I will che', 'ck the ', 'file.', '\n\nThe file is ', 'readable.', ' Already spaced.', 'Still contiguous.']);
 });
+
+it.each(['tool first', 'text first', 'same message', 'existing whitespace', 'unsettled tool'] as const)(
+  'uses only an intervening verified Claude tool for a paragraph boundary (%s)', async order => {
+    const { entry, port } = await fixture(families[0]!);
+    const deltas: string[] = [];
+    const driver = createClaudeAgentDriver({ entry, port, model: PINNED, cliVersion: '9.1.0', runDir: '/run/dir',
+      outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy(), onDelta: delta => deltas.push(delta.text) });
+    const feed = (event: unknown) => expect(driver.line(JSON.stringify(event))).toBeUndefined();
+    const name = entry.bridge.toolPrefix + 'read_file', input = { path: 'scoped.txt' }, id = 'read-1';
+    const settle = () => driver.propose({ id, name: 'read_file', argumentsJson: JSON.stringify(input) },
+      { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal);
+    feed(initLine({ tools: [name], mcp_servers: [{ name: entry.bridge.serverName, status: 'connected' }] }));
+    feed(claudeProse('first', 'Before.'));
+    if (order !== 'unsettled tool') await settle();
+    const prose = order === 'existing whitespace' ? ' After.' : 'After.';
+    const line = claudeProse(order === 'same message' ? 'first' : 'second', prose), tool = { type: 'tool_use', id, name, input };
+    const blocks = line.message.content;
+    feed({ ...line, message: { ...line.message, content: order === 'text first' ? [...blocks, tool] : [tool, ...blocks] } });
+    if (order === 'unsettled tool') await settle();
+    feed(claudeProse('third', 'Next.'));
+    expect(deltas).toEqual(['Before.', order === 'tool first' ? '\n\n' + prose : prose,
+      order === 'text first' || order === 'unsettled tool' ? '\n\nNext.' : 'Next.']);
+  });
 
 it.each(['Claude', 'Codex'] as const)('separates %s prose around a settled tool in streamed and retained text', async provider => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
@@ -147,6 +177,71 @@ it.each(['Claude', 'Codex'] as const)('separates %s prose around a settled tool 
   expect(f.propose).toHaveBeenCalledOnce();
   expect(h.deltas.map(delta => delta.text).join('')).toBe(expected);
   expect(result).toMatchObject({ native: { choices: [{ message: { content: expected } }] } });
+});
+
+it.each(['ordinary prose', 'split registered secret'] as const)('renders real native deltas around a declined call and replays the recorded answer (%s)', async variant => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const split = variant === 'split registered secret', prefix = 'fragment.', suffix = 'continuation-572394abc';
+  const before = 'I will check the file.', after = 'The file was skipped.';
+  const f = await fixture(families[0]!, { calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }],
+    events: [claudeProse('preamble', split ? `I saw ${prefix}` : before)], answer: split ? suffix : after,
+    ...(split ? { loginCanary: prefix + suffix } : {}) });
+  const expected = split ? 'I saw ‹secret:FIXTURE_LOGIN› ‹secret:FIXTURE_LOGIN›' : `${before}\n\n${after}`;
+  const store = await openSqliteAgentTurnStore(join(f.c.root, 't5.sqlite'), { journalMode: 'wal', durability: 'full', busyTimeoutMs: 2_000 });
+  close.push(async () => store.close());
+  const tool = f.port.session.tools[0]!;
+  const tools = [{ ...tool, inputSchema: { ...tool.inputSchema, properties: { path: { type: 'string' as const } } } }];
+  const nativeSession = { ...f.port.session, tools }, messages = [{ role: 'user' as const, content: 'Read the scoped fixture.' }];
+  const claim = { scopeId: 'scope', turnId: nativeSession.turnId, principalKey: 'fixture', requestDigest: 'a'.repeat(64), claimedAtMs: 1_000 };
+  const input = { claim, messages, tools, nativeSession, signal: new AbortController().signal };
+  const live: AgentTurnEvent[] = [], execute = vi.fn<AgentTurnPorts['execute']>();
+  const invokeAgent = vi.fn<NonNullable<AgentTurnPorts['invokeAgent']>>(async ({ session }, onDelta, signal) => {
+    const h = await f.start('continue', null, session);
+    const response = await h.run(signal, onDelta);
+    if (!('native' in response)) throw new Error('Expected native completion');
+    const content = (response.native as { choices: { message: { content: string } }[] }).choices[0]!.message.content;
+    return { status: 'responded', content, reasoning: '', toolCalls: [], finish: 'stop', usage: null };
+  });
+  const ports: AgentTurnPorts = { invokeAgent, execute, now: () => 1_000, describe: () => 'scoped.txt',
+    invokeRound: async () => { throw new Error('unexpected pull round'); }, authorize: async () => 'require-approval',
+    async requestApproval({ call }) {
+      live.push({ kind: 'approval.requested', callId: call.id, approvalId: 'a', revision: 0, summary: 'Read the file', preview: 'scoped.txt', expiresAt: 2_000 });
+      live.push({ kind: 'approval.settled', callId: call.id, approvalId: 'a', outcome: 'deny' });
+      return 'deny';
+    },
+  };
+  const result = await runDurableAgentTurn({ ...input, emit: event => live.push(event) }, store, ports);
+  expect(result).toMatchObject({ finish: 'stop', answer: expected, toolCalls: 0, recorded: true, replayed: false });
+  expect(live.filter(event => event.kind === 'text').map(event => event.text).join('')).toBe(expected);
+  const units: AssistantUnit[] = [];
+  let state = startAssistantStream(1_000);
+  for await (const delta of streamTerminalAgentTurn({ projectRoot: f.c.root, scopeId: claim.scopeId, messages, options: {} }, {
+    async chatTurn(_root, { turnId }, onEvent) {
+      for (const event of live) if (event.kind !== 'done') onEvent(event);
+      return { ...result, turnId, notices: [] };
+    }, cancelChatTurn: async () => undefined, toolClass: () => 'read',
+  })) {
+    const step = renderAssistantStream(state, delta, 1_000);
+    state = step.state; units.push(...step.staticUnits);
+    if (split) for (const fragment of [prefix, suffix]) {
+      expect(JSON.stringify({ units, tail: step.liveTail, delta })).not.toContain(fragment);
+    }
+  }
+  expect(units).toMatchObject(split ? [
+    { kind: 'text', markdown: 'I saw ', lead: true },
+    { kind: 'tool', name: 'read_file', status: 'denied', declined: true },
+    { kind: 'text', markdown: '‹secret:FIXTURE_LOGIN› ‹secret:FIXTURE_LOGIN›', lead: false },
+  ] : [
+    { kind: 'text', markdown: before, lead: true },
+    { kind: 'tool', name: 'read_file', target: 'scoped.txt', status: 'denied', declined: true },
+    { kind: 'text', markdown: after, lead: false },
+  ]);
+  const replay: AgentTurnEvent[] = [];
+  await expect(runDurableAgentTurn({ ...input, emit: event => replay.push(event) }, store, ports))
+    .resolves.toMatchObject({ answer: expected, recorded: true, replayed: true, appendedCount: 0 });
+  expect(replay).toEqual([{ kind: 'text', text: expected }, { kind: 'done', finish: 'stop', note: null }]);
+  expect(invokeAgent).toHaveBeenCalledOnce();
+  expect(execute).not.toHaveBeenCalled();
 });
 
 it('WER-A chat continues after synthetic nonzero and sealed NO, and stops session and uncertain records', async () => {

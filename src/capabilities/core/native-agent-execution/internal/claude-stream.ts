@@ -50,7 +50,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   type Seen = { name: string; input: Record<string, unknown>; streamed: boolean; deckentCallId?: string; promise?: Promise<ToolResult>; settled?: boolean };
   const wire = options.planning, oldMessages = new Set<string>();
   let sessionId: unknown, priorIdentityUnknown = false, finalId: string | undefined, finalRequestId: string | undefined, finalText = '';
-  let lastProseId: string | undefined, proseEndsWithWhitespace = true;
+  let lastProseId: string | undefined, proseEndsWithWhitespace = true, toolBetweenProse = false;
   const calls = new Map<string, Seen>(), deckentIds = new Map<string, string>();
   // Owner 2026-11-05: an unrecognised event is recorded as a note (identifier only, bounded) and the turn goes on; a registry stop event stops it.
   const pluginPolicy = entry.agent.transport.guards.plugins;
@@ -146,12 +146,15 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       }
       // Claude can emit separate records for the content blocks of one message.
       const messageId = typeof message.id === 'string' && message.id ? message.id : undefined;
-      for (const block of message.content as Record<string, unknown>[]) if (block.type === 'text') {
+      for (const block of message.content as Record<string, unknown>[]) {
+        if (block.type === 'tool_use' && calls.get(block.id as string)?.settled) toolBetweenProse = true;
+        if (block.type !== 'text') continue;
         const text = block.text as string;
         if (wire?.delivered) finalText += text;
         else if (!wire?.active && text) {
-          const separates = messageId !== undefined && lastProseId !== undefined && messageId !== lastProseId
+          const separates = toolBetweenProse && messageId !== undefined && lastProseId !== undefined && messageId !== lastProseId
             && !proseEndsWithWhitespace && !/^\s/u.test(text);
+          toolBetweenProse = false;
           emitDelta(options.onDelta, separates ? '\n\n' + text : text);
           lastProseId = messageId;
           proseEndsWithWhitespace = /\s$/u.test(text);
@@ -250,7 +253,9 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const parsed = nativeAgentToolResultSchema.safeParse(value);
       if (!parsed.success || parsed.data.turnId !== session.turnId || parsed.data.generation !== session.generation || parsed.data.deckentCallId !== call.id
         || Buffer.byteLength(JSON.stringify(value)) > entry.bridge.frameMaxBytes) refuse('facade-result');
-      current.settled = true; return parsed.data;
+      current.settled = true;
+      if (current.streamed) toolBetweenProse = true;
+      return parsed.data;
     }).catch((error: unknown) => {
       if (failure) throw new ClaudeAgentError(failure.reason, failure.field);
       if (controller.signal.aborted || signal.aborted) throw new ClaudeAgentError('NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'cancelled');

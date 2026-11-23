@@ -57,6 +57,11 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
     || execution.ownerUid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const lifetime = new AbortController(), calls = new Map<string, NonNullable<ReturnType<CodexAgentResultLookup>>>();
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
+  let flushProseBeforeTool = () => {};
+  const propose: ToolSessionPort['propose'] = (...args) => {
+    flushProseBeforeTool();
+    return input.session.propose(...args);
+  };
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
   const deliveries = new WeakMap<Awaited<ReturnType<ToolSessionPort['propose']>>, () => string | undefined>();
@@ -73,7 +78,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
         refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; lifetime.abort();
         refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
       }
-      const result = await input.session.propose(call, correlation, AbortSignal.any([signal, lifetime.signal]));
+      const result = await propose(call, correlation, AbortSignal.any([signal, lifetime.signal]));
       // Retain the exact facade result; JSONL item ids never stand in for Deckent call custody.
       const frozen = Object.freeze({ ...call });
       calls.set(call.id, { call: frozen, active: () => !signal.aborted && !lifetime.signal.aborted, result: projectToolResult(result), recordedError: () => input.session.recordedError?.(frozen, result),
@@ -122,10 +127,23 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           // Profiles sharing a login may wait for its lock. Each owns its files before entering that wait.
           const runDir = await realpath(await mkdtemp(join(definition.stateDir, 'agent-run-')));
           const wire = planning && pin ? planningWire(planning, pin, known) : undefined;
-          let stream = EMPTY_RECORD_STREAM, text = '', returned = false;
+          let stream = EMPTY_RECORD_STREAM, text = '', publishedTail = '', returned = false;
+          const publish = (safe: string) => {
+            if (!safe) return;
+            emitDelta(onDelta, safe.startsWith(publishedTail) ? safe.slice(publishedTail.length) : safe);
+            publishedTail = '';
+          };
+          flushProseBeforeTool = () => {
+            // A plain sentence tail can be shown if the canonical projection leaves it intact. Keep its raw context for the next feed.
+            if (planning?.active || publishedTail || !/^[\p{L}\p{N}]+[.!?]$/u.test(stream.held)) return;
+            const safe = finishRecordStream(stream, known);
+            if (safe !== stream.held) return;
+            publishedTail = safe;
+            emitDelta(onDelta, safe);
+          };
           const delta: ModelInvocationDeltaSink = part => { if (planning?.active || part.kind !== 'text') return; text += part.text;
-            const fed = feedRecordStream(stream, part.text, known); stream = fed.state; emitDelta(onDelta, fed.text); };
-          claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
+            const fed = feedRecordStream(stream, part.text, known); stream = fed.state; publish(fed.text); };
+          claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: { ...input.session, propose }, model: prepared.model,
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, ...(wire ? { planning: wire } : {}), quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known, combined, wire);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
@@ -200,7 +218,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             // A completed, guarded turn is current surface evidence; a preflight alone never sets these facts.
             await recordNativeAgentObservation(profile, preflight, execution, input.now, true);
             if (planning?.active && combined.aborted) throw ErrorRegistry.createError('BRAIN_SAME_TURN_REFUSED', { params: { reason: 'cancelled' } });
-            if (!planning?.active) emitDelta(onDelta, finishRecordStream(stream, known));
+            if (!planning?.active) publish(finishRecordStream(stream, known));
             returned = true; return response;
           } finally {
             if (!returned && planning?.active && pin) planning.abandon(pin, combined.aborted ? 'cancelled' : 'completion-unknown');
