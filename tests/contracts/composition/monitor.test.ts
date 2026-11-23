@@ -23,7 +23,7 @@ import { prepareMonitorInstall, readMonitorRunResults, FileArtifactStore } from 
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { patchExclusions, patchFile } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
-import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { custodyPrincipal, custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 // MONITOR-DATA: the one composed monitor snapshot over real project ledgers (current + a configured next-project source).
 beforeEach(context => {
@@ -305,6 +305,59 @@ describe('inspectMonitor content authorization (security)', () => {
       expect(hidden).toMatchObject({ endedAtMs: null, endedAtSource: null });
       expect(hidden.diagnostics ?? []).not.toContain(loss);
     }
+  });
+
+  it.skipIf(process.platform !== 'linux')('binds selected Monitor content to each full Attempt identity when the old keys collide', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const loss = 'refusal-audit-loss';
+    const first = { scopeId: 's', runId: 'first', taskId: 't', attemptId: 'shared/a', layoutRevision: 'layout', generation: 1 };
+    const second = { ...first, scopeId: 's/shared', runId: 'second', attemptId: 'a' };
+    const scopes = [first.scopeId, second.scopeId];
+    const current = await project(root, 'collision', scopes, scopes);
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+    try {
+      for (const [identity, observedAt, refusalAuditLoss] of [[first, 40_000, loss], [second, 50_000, undefined]] as const) {
+        const { scopeId, runId, layoutRevision } = identity;
+        const attemptDir = join(root, runId), workspace = join(attemptDir, 'tree');
+        await mkdir(attemptDir, { mode: 0o700 });
+        const terminal = { handle: 'h', exitCode: 1, interrupted: false };
+        await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity,
+          backend: 'native-cli-worker', provider: 'codex', workspace, process: 'exited', handle: 'h', observedAt,
+          terminal, outputRecorded: false, refusalAuditLoss }), { mode: 0o600 });
+        await writeFile(join(attemptDir, 'worker.log'), JSON.stringify({ sequence: 1, observedAt, process: 'exited', terminal }) + '\n', { mode: 0o600 });
+        await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision }, graph, execution: fixtureExecution(graph),
+          now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: 20_800, identities: [identity] });
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace, argv: ['x'] } };
+        await store.claimDispatch(dispatchAdmission(claim));
+        await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: 30_800 });
+        await store.finishDispatch(claim, terminal);
+      }
+    } finally { store.close(); }
+
+    const config = await loadConfig(current.dir, current.options);
+    const permitFirst = vi.fn(async (identity: typeof first) => identity.scopeId === first.scopeId);
+    const captured = await prepareMonitorInstall(config, current.options.env, permitFirst);
+    const selected = await captured.readShown([first]);
+    const attempt = (reading: typeof selected, identity: typeof first) => {
+      const run = reading.runs.find(({ snapshot }) => snapshot.identity.scopeId === identity.scopeId && snapshot.identity.runId === identity.runId)!;
+      expect(run.snapshot.bindings[0]?.identity).toEqual(identity);
+      expect(run.attempts[0]?.attemptId).toBe(identity.attemptId);
+      return run.attempts[0]!;
+    };
+    expect(permitFirst).toHaveBeenCalledExactlyOnceWith(first);
+    expect(attempt(selected, first)).toMatchObject({ diagnostics: [loss], observedEndAtMs: 40_000 });
+    expect.soft(attempt(selected, second).diagnostics ?? []).not.toContain(loss);
+    expect.soft(attempt(selected, second).observedEndAtMs).toBeUndefined();
+
+    const permitBoth = vi.fn(async () => true);
+    const both = await (await prepareMonitorInstall(config, current.options.env, permitBoth)).readShown([first, second]);
+    expect(permitBoth).toHaveBeenCalledTimes(2);
+    expect(permitBoth).toHaveBeenCalledWith(first);
+    expect(permitBoth).toHaveBeenCalledWith(second);
+    expect.soft(attempt(both, first)).toMatchObject({ diagnostics: [loss], observedEndAtMs: 40_000 });
+    expect.soft(attempt(both, second).diagnostics ?? []).not.toContain(loss);
+    expect.soft(attempt(both, second).observedEndAtMs).toBe(50_000);
   });
 });
 

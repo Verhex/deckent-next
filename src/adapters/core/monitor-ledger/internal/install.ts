@@ -20,6 +20,8 @@ const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MO
 // Content-addressed outputs never change, so a first failure is computed once per (scope, digest) and kept in a small bounded cache.
 const failures = new Map<string, { readonly line: string | null; readonly failedTests: MonitorFailedTests | null }>();
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
+const attemptContentKey = ({ scopeId, runId, taskId, attemptId, generation, layoutRevision }: AttemptIdentity) =>
+  JSON.stringify([scopeId, runId, taskId, attemptId, generation, layoutRevision]);
 const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[], locale: Locale): readonly MonitorEvent[] =>
   Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorWorkerEvent(event, locale) })));
 
@@ -46,7 +48,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
     const extra = new Map<string, SelectedContent>();
     for (const files of selected) {
-      const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
+      const key = attemptContentKey(files.identity);
       try {
         // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
         const needsEnd = files.finished && !files.sealed && !!files.workspace;
@@ -65,10 +67,13 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (sidecars?.refusalAuditLoss) found.diagnostics = [sidecars.refusalAuditLoss];
         if (needsEnd) found.observedEndAtMs = observedEnd(files, sidecars);
         if (Object.keys(found).length) extra.set(key, found);
-      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
+      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
-    const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
-      const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;
+    // The ledger reader projects each attempt from the binding at the same index.
+    const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map((value, index) => {
+      const identity = run.snapshot.bindings[index]?.identity;
+      const found = identity && extra.get(attemptContentKey(identity));
+      return found ? Object.freeze({ ...value, ...found }) : value;
     })) }));
     return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
   } };

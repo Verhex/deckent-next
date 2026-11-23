@@ -61,6 +61,16 @@ it.skipIf(process.platform !== 'linux' || !existsSync('/proc/self/fd'))('[requir
   const read = () => readWorkerSidecars(root, 'worker', limits, Date.now(), identity);
   expect(await read()).toMatchObject({ heartbeat: { state: 'missing' }, result: { state: 'missing' }, activity: { receivedAt: 1 } });
   expect(await read()).not.toHaveProperty('refusalAuditLoss');
+  await writeFile(heartbeat, JSON.stringify({ ...sample, backend: 'unknown-backend' }));
+  const invalidBackend = await read();
+  expect(invalidBackend.heartbeat).toMatchObject({ state: 'available', phase: 'exited' });
+  expect.soft(invalidBackend).not.toHaveProperty('refusalAuditLoss');
+  await rm(heartbeat);
+  await writeFile(result, JSON.stringify({ ...sample, process: 'EXECUTING' }), { mode: 0o600 });
+  const legacyProcess = await read();
+  expect(legacyProcess.result).toMatchObject({ state: 'available', exitCode: 0 });
+  expect.soft(legacyProcess).not.toHaveProperty('refusalAuditLoss');
+  await rm(result);
   await writeFile(heartbeat, '{"refusalAuditLoss":"refusal-audit-loss"');
   expect(await read()).toMatchObject({ heartbeat: { state: 'malformed' } });
   expect(await read()).not.toHaveProperty('refusalAuditLoss');

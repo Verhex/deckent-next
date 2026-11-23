@@ -73,8 +73,9 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   if (outcome && !bound(outcome)) { outcome = null; result.state = 'identity-mismatch'; }
   const marked = (value: Record<string, unknown> | null, terminalRequired: boolean) => {
     if (value?.refusalAuditLoss !== 'refusal-audit-loss' || value.schemaVersion !== 1
-      || typeof value.backend !== 'string' || typeof value.provider !== 'string' || typeof value.workspace !== 'string' || !isAbsolute(value.workspace)
-      || !Number.isSafeInteger(value.observedAt) || typeof value.process !== 'string' || !catalog.phases.includes(value.process)
+      || typeof value.backend !== 'string' || !catalog.hostBackends.includes(value.backend)
+      || typeof value.provider !== 'string' || typeof value.workspace !== 'string' || !isAbsolute(value.workspace)
+      || !Number.isSafeInteger(value.observedAt) || typeof value.process !== 'string' || !catalog.hostProcessStates.includes(value.process)
       || (value.handle !== null && typeof value.handle !== 'string') || typeof value.outputRecorded !== 'boolean') return false;
     if (value.terminal === null) return !terminalRequired;
     const end = value.terminal as Record<string, unknown> | undefined;
