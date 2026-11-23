@@ -3,7 +3,7 @@ import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withExclusiveFileLock, type ExclusiveFileLock } from '#adapters/core/file-lock/index.js';
-import { probeProcessExistence, readPinnedFile } from '#platform/index.js';
+import { PinnedFileError, probeProcessExistence, readPinnedFile } from '#platform/index.js';
 import { refuse } from './contract.js';
 import type { HeadlessEntry } from './env.js';
 
@@ -23,7 +23,11 @@ export const loginRecordPath = (configDir: string, stateDir: string) => join(dir
 export const loginLockPath = (configDir: string, stateDir: string) => join(dirname(stateDir), LOCK_DIR, `${lockName(configDir)}.lock`);
 const read = async (path: string) => {
   try { return (await readPinnedFile(path))?.bytes.toString('utf8') ?? null; }
-  catch { refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-marker-read' }); }
+  catch (error) {
+    if (error instanceof PinnedFileError && error.reason === 'changed')
+      refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-marker-read-changed' });
+    refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-marker-read' });
+  }
 };
 /** Legacy marker compatibility: only a provably absent PID is reclaimable. Age, malformed records and PID reuse never prove release. */
 async function legacyBusy(path: string): Promise<LegacyBusy | null> {

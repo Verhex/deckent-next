@@ -93,6 +93,8 @@ const manifestProof = {
   'manifest-exclusion-changed': 'error.headless.npmProof.manifest-exclusion-changed',
   'manifest-declares-bin': 'error.headless.npmProof.manifest-declares-bin',
   'manifest-exclusion-unverified': 'error.headless.npmProof.manifest-exclusion-unverified',
+  'manifest-target-missing': 'error.headless.npmProof.manifest-target-missing',
+  'manifest-target-not-directory': 'error.headless.npmProof.manifest-target-not-directory',
 } as const;
 const npmProof = <const Reason extends keyof typeof manifestProof>(reason: Reason) =>
   classified(preflight, 'native', { check: 'npm-layout-unknown', reason } as const, {
@@ -136,6 +138,7 @@ const bound = { example: 16, accepts: (value: unknown) => typeof value === 'numb
 export const headlessDiagnosticCases = Object.freeze([
   diagnostic(unavailable, { check: 'path-search-empty' }, (p, l) => t('error.headless.pathSearchEmpty', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-unverified' }, (p, l) => t('error.headless.pathSearchUnverified', p, l), { bound }),
+  diagnostic(unavailable, { check: 'path-search-execute-unverified' }, (p, l) => t('error.headless.pathSearchExecuteUnverified', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-not-file' }, (p, l) => t('error.headless.pathSearchNotFile', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-execute-denied' }, (p, l) => t('error.headless.pathSearchExecuteDenied', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-incomplete' }, (p, l) => t('error.headless.pathSearchIncomplete', p, l), { bound }),
@@ -160,10 +163,12 @@ export const headlessDiagnosticCases = Object.freeze([
     'preflight-record-write': 'error.headless.preflightRecordWrite',
     'recorded-program-unverified': 'error.headless.recordedProgramUnverified',
     'recorded-program-mismatch': 'error.headless.recordedProgramMismatch',
+    'recorded-owner-mismatch': 'error.headless.recordedOwnerMismatch',
     'preflight-record-unreadable': 'error.headless.preflightRecordUnreadable',
     'auth-status': 'error.HEADLESS_PREFLIGHT_FAILED.auth-status',
     'agent-owner-mismatch': 'error.headless.agentOwnerMismatch',
     'agent-program-changed': 'error.headless.agentProgramChanged',
+    'agent-observation-identity-unverified': 'error.headless.agentObservationIdentityUnverified',
     'agent-program-path-mismatch': 'error.headless.agentProgramPathMismatch',
     'agent-path-outside-roots': 'error.headless.agentPathOutsideRoots',
     'agent-resolved-path-outside-roots': 'error.headless.agentResolvedPathOutsideRoots',
@@ -175,6 +180,7 @@ export const headlessDiagnosticCases = Object.freeze([
     'probe-scratch-create': 'error.headless.probeScratchCreate',
     'probe-scratch-remove': 'error.headless.probeScratchRemove',
     'login-status-incomplete': 'error.headless.loginStatusIncomplete',
+    'login-status-unreadable': 'error.headless.loginStatusUnreadable',
     'login-status-positive-nonzero': 'error.headless.loginStatusPositiveNonzero',
     'login-status-run-list': 'error.headless.loginStatusRunList',
     'login-status-run-remove': 'error.headless.loginStatusRunRemove',
@@ -183,11 +189,13 @@ export const headlessDiagnosticCases = Object.freeze([
     'realm-program-close': 'error.headless.realmProgramClose',
     'realm-gateway-close': 'error.headless.realmGatewayClose',
     'realm-process-request': 'error.headless.realmProcessRequest',
+    'realm-process-response': 'error.headless.realmProcessResponse',
     'lock-directory-create': 'error.headless.lockDirectoryCreate',
     'lock-directory-read': 'error.headless.lockDirectoryRead',
     'lock-directory-type': 'error.headless.lockDirectoryType',
     'lock-directory-private': 'error.headless.lockDirectoryPrivate',
     'lock-marker-read': 'error.headless.lockMarkerRead',
+    'lock-marker-read-changed': 'error.headless.lockMarkerReadChanged',
     'lock-marker-write': 'error.headless.lockMarkerWrite',
     'lock-marker-parse': 'error.headless.lockMarkerParse',
     'lock-marker-remove': 'error.headless.lockMarkerRemove',
@@ -229,6 +237,17 @@ export const headlessDiagnosticCases = Object.freeze([
   ...npmProof('manifest-exclusion-changed'),
   ...npmProof('manifest-declares-bin'),
   ...npmProof('manifest-exclusion-unverified'),
+  ...npmProof('manifest-target-missing'),
+  ...npmProof('manifest-target-not-directory'),
+  ...classified(preflight, 'reason', { check: 'login-status-incomplete' }, {
+    timeout: 'error.headless.loginStatus.timeout',
+    signal: 'error.headless.loginStatus.signal',
+    cancelled: 'error.headless.loginStatus.cancelled',
+    'start-failed': 'error.headless.loginStatus.start-failed',
+    'output-limit': 'error.headless.loginStatus.output-limit',
+    'line-limit': 'error.headless.loginStatus.line-limit',
+    stopped: 'error.headless.loginStatus.stopped',
+  }),
   ...classified(preflight, 'reason', { check: 'config-dir' }, {
     'relative-path': 'error.headless.config.relative-path',
     unresolved: 'error.headless.config.unresolved',
@@ -363,10 +382,27 @@ function caseFor(code: string, params: Params): Diagnostic | undefined {
 }
 
 /** Normalize an old or external error without trusting any extra data. */
-export function verifiedHeadlessParams(code: string, params: Params): Params | null {
+function verifiedHeadlessParams(code: string, params: Params): Params | null {
   const row = caseFor(code, params);
   if (!row) return null;
   return { ...row.fields, ...Object.fromEntries(Object.keys(row.extras ?? {}).map(key => [key, params[key]!])) };
+}
+
+/** The persisted form contains only the closed case, without renderer or local path metadata. */
+export function readHeadlessDiagnosticCase(input: unknown): { code: HeadlessDiagnosticCode; params: Params } | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length !== 2
+    || !Object.hasOwn(input, 'code') || !Object.hasOwn(input, 'params')) return null;
+  const { code, params } = input as { code: unknown; params: unknown };
+  if (typeof code !== 'string' || !isHeadlessDiagnosticCode(code) || !params || typeof params !== 'object' || Array.isArray(params)) return null;
+  const verified = verifiedHeadlessParams(code, params as Params);
+  return verified && Object.keys(verified).length === Object.keys(params).length ? { code, params: verified } : null;
+}
+
+/** A v1 refusal only kept the check. A matching case is usable only if there is no other interpretation. */
+export function readLegacyHeadlessDiagnosticCase(code: unknown, check: unknown) {
+  if (typeof code !== 'string' || typeof check !== 'string') return null;
+  const candidates = (headlessDiagnosticCases as readonly Diagnostic[]).filter(row => row.code === code && row.fields['check'] === check);
+  return candidates.length === 1 ? readHeadlessDiagnosticCase({ code, params: { check } }) : null;
 }
 
 export function localizeHeadlessDiagnostic(code: HeadlessDiagnosticCode, params: Params, locale: Locale): string {
@@ -382,10 +418,29 @@ function identifier(row: Diagnostic): HeadlessDiagnosticIdentifier {
 }
 export function headlessDiagnosticIdentifier(code: string, params: Params): HeadlessDiagnosticIdentifier | undefined {
   const row = caseFor(code, params);
-  return row && !row.extras ? identifier(row) : undefined;
+  if (!row) return undefined;
+  const base = identifier(row);
+  // The existing failure identifier may include only values checked by the closed case.
+  return row.extras ? `${base}__${Object.keys(row.extras).sort().map(key => params[key]).join('__')}` : base;
 }
 export function readHeadlessDiagnosticIdentifier(value: string, locale: Locale): string | undefined {
   if (!value.startsWith('HEADLESS_') || !value.includes('__')) return undefined;
-  const row = (headlessDiagnosticCases as readonly Diagnostic[]).find(row => !row.extras && identifier(row) === value);
-  return row ? row.render(row.fields, locale) : t('error.headless.diagnosticUnverified', {}, locale);
+  for (const row of headlessDiagnosticCases as readonly Diagnostic[]) {
+    const base = identifier(row);
+    if (!row.extras) {
+      if (base === value) return row.render(row.fields, locale);
+      continue;
+    }
+    if (!value.startsWith(base + '__')) continue;
+    const keys = Object.keys(row.extras).sort(), passed = value.slice(base.length + 2).split('__', keys.length + 1);
+    if (passed.length !== keys.length) break;
+    const extra = Object.fromEntries(keys.map((key, index) => {
+      const raw = passed[index]!;
+      return [key, typeof row.extras![key]!.example === 'number' && String(Number(raw)) === raw ? Number(raw) : raw];
+    }));
+    const params = readHeadlessDiagnosticCase({ code: row.code, params: { ...row.fields, ...extra } })?.params;
+    if (params) return row.render(params, locale);
+    break;
+  }
+  return t('error.headless.diagnosticUnverified', {}, locale);
 }

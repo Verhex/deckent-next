@@ -1,5 +1,5 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
-import { isHeadlessDiagnosticCode, verifiedHeadlessParams } from './headless-diagnostics.js';
+import { isHeadlessDiagnosticCode, readHeadlessDiagnosticCase } from './headless-diagnostics.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { localHeadlessPathDetail, retainHeadlessFailedCheck, retainHeadlessPaths } from './headless-paths.js';
 import { DeckentError } from './error.js';
@@ -712,7 +712,8 @@ export const ErrorRegistry = Object.freeze({
   createError(code: string, options: { message?: string; suggestion?: string; params?: Params; locale?: Locale; cause?: unknown } = {}): DeckentError {
     if (isHeadlessDiagnosticCode(code)) options = {
       ...(options.locale !== undefined && { locale: options.locale }),
-      params: verifiedHeadlessParams(code, options.params ?? {}) ?? {},
+      // An empty parameter set can itself be a definite diagnosis.
+      params: readHeadlessDiagnosticCase({ code, params: options.params === undefined ? {} : options.params })?.params ?? { check: 'diagnostic-unverified' },
     };
     const locale = options.locale ?? resolveLocale();
     const entry = this.get(code, locale, options.params);

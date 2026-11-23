@@ -55,8 +55,7 @@ export async function inspectSubscriptionReadiness(input: SubscriptionReadinessQ
   const seal = nativeAgentExecutionSchema.safeParse(observed?.execution);
   checks.push([seal.success ? seal.data.profileDigest === query.profileDigest && seal.data.flagSetDigest === query.flagSetDigest : undefined,
     'NATIVE_AGENT_CAPABILITY_UNSEALED']);
-  // The terminal renders this detail. Worker prerequisite readers still parse the strict readiness record.
-  const diagnostic = query.surface === 'chat' ? observed?.diagnostic : undefined;
+  const diagnostic = query.surface === 'chat' || query.surface === 'worker' ? observed?.diagnostic : undefined;
   // A known blocker is more informative than an earlier missing observation; neither can produce ready.
   const refused = checks.find(([value]) => value === false);
   if (refused) return incomplete('unavailable', refused[1], diagnostic);

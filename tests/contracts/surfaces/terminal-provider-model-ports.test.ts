@@ -947,11 +947,20 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
     state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
+    state = { ...state, diagnostic: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'agent-owner-mismatch' } }) } as NativeAgentReadiness;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('error.headless.agentOwnerMismatch', {}, locale));
     state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
       profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
     const ready = await subscriptionModelView(plain, port, locale);
     expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.readiness.ready', {}, locale));
     expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', references: [reference] });
+    const readyFacts = state;
+    state = { ...readyFacts, diagnostic: { message: CANARY } } as NativeAgentReadiness;
+    const malformed = await subscriptionModelView(plain, port, locale);
+    expect.soft(malformed.choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
+    expect.soft(malformed.choices[0]!.detail).not.toContain(CANARY);
+    state = { ...readyFacts, unrelated: true } as NativeAgentReadiness;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
     // A later missing observation cannot retain an earlier ready projection: every view build reads again (no cross-build cache).
     state = undefined; const builds = calls.length;
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));

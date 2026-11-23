@@ -72,11 +72,12 @@ async function finishSignIn(input: HeadlessLoginInput, entry: NonNullable<Return
   const decoded = (base64: string) => Buffer.from(base64, 'base64').toString('utf8');
   const auth = status.reason === 'exit' && !status.limit ? headlessAuth(headless.auth, { exitCode: status.exitCode, stdout: decoded(status.stdoutBase64), stderr: decoded(status.stderrBase64) }, input.configDir) : null;
   const signedIn = auth?.state === 'signed-in';
+  if (signedIn && status.cleanupError) throw status.cleanupError;
   const statusIssue = status.limit ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: status.limit })
     : auth?.state === 'signed-out' ? headlessDiagnostic('HEADLESS_LOGIN_REQUIRED', { reason: auth.reason })
       : auth?.state === 'config-dir' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: auth.reason })
-        : !auth ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-incomplete' })
-          : auth.state === 'unreadable' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'auth-status' })
+        : status.reason !== 'exit' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-incomplete', reason: status.reason })
+          : !auth || auth.state === 'unreadable' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-unreadable' })
             : status.exitCode !== 0 ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-positive-nonzero' }) : undefined;
   return Object.freeze({ schemaVersion: 1, configDir: input.configDir, owned: input.owned, exit, signedIn, authMethod: signedIn ? text(auth.authMethod) : null, subscriptionType: signedIn ? text(auth.subscriptionType) : null,
     ...(statusIssue && { statusIssue }) });

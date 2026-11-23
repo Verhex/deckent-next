@@ -1,4 +1,4 @@
-import type { HeadlessDiagnosticArgs } from './headless-diagnostics.js';
+import { readHeadlessDiagnosticCase, readLegacyHeadlessDiagnosticCase, type HeadlessDiagnosticArgs } from './headless-diagnostics.js';
 import { DeckentError } from './error.js';
 import { ErrorRegistry } from './registry.js';
 
@@ -10,16 +10,23 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
   throw headlessDiagnostic(...args);
 }
 
-const signInReturned = new WeakSet<DeckentError>();
+export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unknown): DeckentError {
+  const diagnostic = readHeadlessDiagnosticCase(refusal) ?? readLegacyHeadlessDiagnosticCase(refusal, legacyCheck);
+  return diagnostic ? ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params }) : ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED');
+}
+
+const signInReturned = new WeakSet<object>();
 /** The original diagnostic remains the shared error. Command-start evidence is local to this interaction. */
 export function markHeadlessLoginReturned(error: unknown): never {
-  if (error instanceof DeckentError) signInReturned.add(error);
+  if (isObject(error)) signInReturned.add(error);
   throw error;
 }
 
 export function didHeadlessLoginReturn(error: unknown): boolean {
+  if (isObject(error) && signInReturned.has(error)) return true;
   if (!(error instanceof DeckentError)) return false;
   const check = error.params?.['check'];
-  return signInReturned.has(error) || error.code === 'HEADLESS_PREFLIGHT_FAILED'
-    && (check === 'login-record-write' || check === 'login-record-rename');
+  return error.code === 'HEADLESS_PREFLIGHT_FAILED' && (check === 'login-record-write' || check === 'login-record-rename');
 }
+
+const isObject = (value: unknown): value is object => (typeof value === 'object' && value !== null) || typeof value === 'function';

@@ -7,6 +7,7 @@ import { configuredInvocationProfiles, configServiceState } from '#engine/index.
 import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
+import { cliMode } from '#surfaces/core/cli-human/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
 import { offerDoctorFixes } from './doctor-fix.js';
@@ -140,7 +141,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
-  const checks = [...doctorChecks(data, facts, locale)];
+  const checks = [...doctorChecks(data, { ...facts, showLocalHeadlessPaths: cliMode(context, args.json).mode === 'interactive' }, locale)];
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, next: permission.command });
   if (await context.inspectLegacyProjectInstructions?.(root).catch(() => false)) checks.push({ group: 'setup', id: 'instructions.legacy', state: 'warning',

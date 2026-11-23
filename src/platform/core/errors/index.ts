@@ -1,6 +1,7 @@
 export * from './internal/error.js';
-export { headlessDiagnostic, refuseHeadlessDiagnostic, markHeadlessLoginReturned, didHeadlessLoginReturn } from './internal/headless-error.js';
-export { headlessDiagnosticCases, isHeadlessDiagnosticCode, headlessDiagnosticIdentifier, readHeadlessDiagnosticIdentifier } from './internal/headless-diagnostics.js';
+export { headlessDiagnostic, refuseHeadlessDiagnostic, markHeadlessLoginReturned, didHeadlessLoginReturn, readHeadlessDiagnosticRecord } from './internal/headless-error.js';
+export { headlessDiagnosticCases, isHeadlessDiagnosticCode, headlessDiagnosticIdentifier, readHeadlessDiagnosticIdentifier,
+  readHeadlessDiagnosticCase } from './internal/headless-diagnostics.js';
 export type { HeadlessDiagnosticArgs, HeadlessDiagnosticIdentifier, HeadlessPreflightParams, NpmCheckReason } from './internal/headless-diagnostics.js';
 export * from './internal/exit-codes.js';
 export * from './internal/lint.js';

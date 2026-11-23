@@ -9,6 +9,7 @@ export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 export type { Params } from '#platform/core/i18n/index.js';
 export { DeckentError, CodedError, isCodedError, headlessDiagnostic, refuseHeadlessDiagnostic, markHeadlessLoginReturned, didHeadlessLoginReturn } from '#platform/core/errors/index.js';
 export { isHeadlessDiagnosticCode, headlessDiagnosticIdentifier, readHeadlessDiagnosticIdentifier } from '#platform/core/errors/index.js';
+export { readHeadlessDiagnosticCase, readHeadlessDiagnosticRecord } from '#platform/core/errors/index.js';
 export type { ErrorCategory, HeadlessDiagnosticIdentifier, HeadlessPreflightParams, NpmCheckReason } from '#platform/core/errors/index.js';
 export { ErrorRegistry, ERROR_CODES, isAuthorizationRefusal, launchRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';

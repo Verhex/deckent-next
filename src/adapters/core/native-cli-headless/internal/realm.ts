@@ -1,4 +1,4 @@
-import { isCodedError } from '#platform/index.js';
+import { DeckentError, headlessDiagnostic, isCodedError } from '#platform/index.js';
 import type { Dir } from 'node:fs';
 import { constants } from 'node:fs';
 import { access, mkdtemp, open, opendir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -171,19 +171,26 @@ async function recordEgress(stateDir: string, egress: HeadlessEgress, now: () =>
   await writeFile(temporary, JSON.stringify(record), { mode: 0o600, flag: 'wx' }); await rename(temporary, target);
 }
 type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 'executable' | 'args' | 'cwd' | 'env' | 'schemaVersion'>;
+type HeadlessProcessResult = ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null; cleanupError?: DeckentError };
+const unsuccessfulProcess = (result: HeadlessProcessResult) => result.limit !== null || result.reason !== 'exit' || result.exitCode !== 0;
 /**
  * The one way a headless CLI process starts (preflight probes and the call): inside the realm, with the connection's own gateway for the
  * provider's allowlisted endpoints, the login dir as the only host directory it may write and the run dir as private memory. The gateway lives
  * exactly as long as the process. A realm that could not start is a typed isolation refusal; no path runs the CLI outside it.
  */
 export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
-  onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
+  onLine?: ProcessLineConsumer): Promise<HeadlessProcessResult> {
   // f5: one spawn per login dir across the person's connections, none while the CLI's own refresh lock exists (item 5).
-  const start = performance.now(); let entered = false;
-  try { return await withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => {
-    entered = true; return runLocked(entry, isolation, spawn, bounds, signal, onLine);
+  const start = performance.now(); let entered = false, primaryResult: HeadlessProcessResult | undefined;
+  try { return await withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, async () => {
+    entered = true;
+    const result = await runLocked(entry, isolation, spawn, bounds, signal, onLine);
+    if (unsuccessfulProcess(result)) primaryResult = result;
+    return result;
   }, signal); }
   catch (error) {
+    if (primaryResult && error instanceof DeckentError)
+      return { ...primaryResult, cleanupError: primaryResult.cleanupError ?? error };
     // Only cancellation before the realm callback proves that no process started; later failures retain their uncertainty.
     if (entered || !signal?.aborted || error !== signal.reason && !(error instanceof Error && error.name === 'AbortError')) throw error;
     return { schemaVersion: 1, requestId: randomUUID(), started: false, reason: 'cancelled', exitCode: null, signal: null,
@@ -192,7 +199,7 @@ export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: Headl
   }
 }
 async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
-  onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
+  onLine?: ProcessLineConsumer): Promise<HeadlessProcessResult> {
   const seal = await headlessIsolationSeal(isolation), realm = entry.headless.isolation, provider = nativeCliIdSchema.safeParse(entry.id);
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'gateway-provider' });
   const { program } = spawn, packageRoot = program.packageRoot;
@@ -203,6 +210,7 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
   let file: Awaited<ReturnType<typeof pinHeadlessExecutable>> | undefined;
   let scratch: string | undefined, gateway: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
   let failed = false;
+  let outcome: HeadlessProcessResult | undefined;
   try {
     // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
     scratch = realm.configEphemeral ? await mkdtemp(join(spawn.stateDir, 'login-copy-'))
@@ -232,6 +240,8 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
       ...bounds }, signal, onLine, file.fd).catch((error: unknown) => {
       if (isCodedError(error, 'PROCESS_RUNNER_INVALID'))
         refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-process-request' });
+      if (isCodedError(error, 'PROCESS_RUNNER_RESPONSE_INVALID'))
+        refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-process-response' });
       throw error;
     });
     const summary = gateway.egress();
@@ -246,13 +256,17 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     const status = versionProbe && evidence.reason === 'exit' && evidence.exitCode === RELAY_STATUS ? /\ndeckent-relay-status: (SIG[A-Z0-9]+|\d{1,3})\n$/u.exec(stderr) : null;
     const result = !status ? evidence : { ...evidence, stderrBase64: Buffer.from(stderr.slice(0, status.index)).toString('base64'),
       ...(/^SIG/u.test(status[1]!) ? { reason: 'signal' as const, exitCode: null, signal: status[1]! } : { exitCode: Number(status[1]) }) };
-    return { ...result, egress: summary, limit };
+    outcome = { ...result, egress: summary, limit };
+    return outcome;
   } catch (error) { failed = true; throw error; }
   finally {
     let cleanup: 'realm-program-close' | 'realm-gateway-close' | 'realm-scratch-remove' | undefined;
     try { await file?.close(); } catch { cleanup = 'realm-program-close'; }
     try { await gateway?.close(); } catch { cleanup ??= 'realm-gateway-close'; }
     if (scratch) try { await rm(scratch, { recursive: true, force: true }); } catch { cleanup ??= 'realm-scratch-remove'; }
-    if (!failed && cleanup) refuse('HEADLESS_PREFLIGHT_FAILED', { check: cleanup });
+    if (!failed && cleanup) {
+      if (!outcome || !unsuccessfulProcess(outcome)) refuse('HEADLESS_PREFLIGHT_FAILED', { check: cleanup });
+      outcome.cleanupError = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: cleanup });
+    }
   }
 }

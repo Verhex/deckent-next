@@ -2,18 +2,24 @@
 // it only the system prefixes, its own executable, the person's bound login dir and its private run dir; its network is the provider allowlist
 // through the gateway. A scripted fake CLI probes the realm from inside: no real CLI, no model call, no real credential.
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import * as files from 'node:fs/promises';
 import { existsSync, lstatSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
+import * as processRunner from '#adapters/core/process-runner/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
-import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
+import { doctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { assistantLine, fullHelp, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 const servers: Server[] = [];
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 afterEach(async () => { await cleanupConnections(); await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve)))); });
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 const happy = (probe: IsolationProbe): FakeStep[] => [{ line: uiLine() }, { line: initLine() }, { isolation: probe }, { line: assistantLine('{"ok":true}') },
@@ -151,6 +157,75 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
 
 describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () => {
   const unavailable = async () => bubblewrapObservation('unavailable', 'no bubblewrap launcher');
+  const doctor = (logins: DoctorCheckFacts['headlessLogins'], locale: 'en' | 'tr') => doctorChecks({
+    platform: 'linux', host: { cpuCores: 1, totalMemMB: 1024, recommendedMaxWorkers: 1 }, company: { companyId: 'default' },
+    principal: { id: 'fixture' }, secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null,
+  }, { scopeId: 'scope', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null,
+    retiringModels: [], poolStatus: 'unconfigured', toolchainUpdateEnabled: false, imageId: null, headlessLogins: logins }, locale)
+    .find(row => row.id === 'work.brainLogin')?.text;
+
+  it('Doctor preserves the bind-race diagnostic after persistence and treats ambiguous legacy checks as unverified', async () => {
+    const c = await connection({}, {}, 'a'.repeat(64), async () => launcher);
+    const path = join(c.root, 'bin', 'fake-launcher');
+    await writeFile(path, '#!/bin/sh\necho "bwrap: Race condition binding dirfd" >&2\nexit 1\n', { mode: 0o700 });
+    const info = lstatSync(path, { bigint: true }), launcher = { ...bubblewrapObservation('available'), status: 'available' as const,
+      launcher: { source: 'system' as const, path, version: '0.13.0', sha256: null, overlay: true,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } };
+    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ params: { check: 'executable-changed', reason: 'bind-race-diagnostic' } });
+    const logins = () => readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    const stored = await logins();
+    expect.soft(doctor(stored, 'en')).toContain('The process exited with a bind-race diagnostic.');
+    expect.soft(doctor(stored, 'tr')).toContain('Süreç, bağlama yarışı tanısıyla sonlandı.');
+    expect.soft(doctor(stored, 'en')).not.toContain('identity differs');
+    expect.soft(doctor(stored, 'en')).not.toContain('outside');
+    expect(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8')).not.toContain(c.executable);
+    for (const check of ['executable-changed', 'npm-layout-unknown']) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check }));
+      expect.soft(doctor(await logins(), 'en')).toContain('The provider-program diagnostic could not be verified.');
+    }
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check: 'realm-scratch-create' }));
+    expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');
+  });
+
+  it('Doctor and the shared error renderer treat malformed diagnostic cases as unverified for every code', async () => {
+    const c = await connection({}, {}, 'a'.repeat(64), unavailable);
+    await mkdir(join(c.root, 'state'), { mode: 0o700 });
+    for (const code of new Set(headlessDiagnosticCases.map(row => row.code))) {
+      const params = { invalid: '/private/g3-r9-diagnostic-canary' };
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: { code, params } }));
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      const error = ErrorRegistry.createError(code, { params });
+      for (const [locale, expected] of [['en', 'The provider-program diagnostic could not be verified.'],
+        ['tr', 'Sağlayıcı programına ilişkin tanı doğrulanamadı.']] as const) {
+        expect.soft(doctor(logins, locale), code).toContain(expected);
+        expect.soft(error.localize?.(locale).message, code).toBe(expected);
+      }
+      expect(JSON.stringify(error)).not.toContain(params.invalid);
+    }
+  });
+  it('Doctor shows a completed negative parser probe even when its scratch cleanup fails', async () => {
+    const info = lstatSync(process.execPath, { bigint: true });
+    const c = await connection({}, {}, 'a'.repeat(64), async () => ({ ...bubblewrapObservation('available'), status: 'available',
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } }));
+    const remove = files.rm;
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      if (typeof args[0] === 'string' && /\/probe-[^/]+$/u.test(args[0])) throw new Error('fixture probe cleanup failure');
+      return remove(...args);
+    });
+    const replies = ['9.1.0 (Claude Code)', fullHelp(), 'parser output without the required refusal'];
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+      stdoutBase64: Buffer.from(replies.shift() ?? '').toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      await expect.soft(c.port.preflight(c.profile)).rejects.toMatchObject({ params: { check: 'flags', reason: 'parser-unverified' } });
+      expect(cleanup.mock.calls.some(([path]) => typeof path === 'string' && /\/probe-[^/]+$/u.test(path))).toBe(true);
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect(doctor(logins, 'en')).toContain('parser');
+      expect(doctor(logins, 'tr')).toContain('ayrıştırıcı');
+    } finally { cleanup.mockRestore(); runner.mockRestore(); }
+  });
   it('refuses typed before any spawn when no bubblewrap launcher is usable (preflight and connect)', async () => {
     const c = await connection({ steps: happy({}) }, {}, 'a'.repeat(64), unavailable);
     await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE', params: { check: 'launcher' } });

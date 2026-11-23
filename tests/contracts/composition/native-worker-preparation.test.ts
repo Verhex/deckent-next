@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
+import { headlessDiagnostic, readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/native-headless/agent.js';
@@ -69,6 +70,16 @@ it('K26: a preflight failure returns its typed wait without starting a model or 
     expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_LOGIN_REQUIRED');
     expect(preflight).toHaveBeenCalledTimes(1); expect(driver).not.toHaveBeenCalled();
     expect(await h.runtime.readiness.read(h.query)).toBeNull(); expect(h.f.posts).toBe(0);
+    preflight.mockRejectedValue(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-directory-create' }));
+    const reason = await h.runtime.prepare!(h.profile);
+    expect(reason).toBe('HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE');
+    expect(readHeadlessDiagnosticIdentifier(reason!, 'en')).toBe('The sign-in lock directory could not be created.');
+    expect(readHeadlessDiagnosticIdentifier(reason!, 'tr')).toBe('Giriş kilidi dizini oluşturulamadı.');
+    preflight.mockRejectedValue(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'version', reason: 'exit', exitCode: '17' }));
+    const exited = await h.runtime.prepare!(h.profile);
+    expect(readHeadlessDiagnosticIdentifier(exited!, 'en')).toContain('version check reported exit code 17');
+    expect(readHeadlessDiagnosticIdentifier(exited!, 'tr')).toContain('sürüm denetimi 17 çıkış kodunu bildirdi');
+    expect(readHeadlessDiagnosticIdentifier(exited!.replace(/17$/u, '/private/provider-output'), 'en')).toBe('The provider-program diagnostic could not be verified.');
     // An unmapped code, even an inherited property name, is the environment refusal.
     preflight.mockRejectedValue({ code: 'constructor' }); expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   } finally { await h.f.close(); }

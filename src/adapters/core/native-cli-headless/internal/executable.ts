@@ -186,7 +186,7 @@ function packagePosition(path: string) {
   return packageRoot ? { packageRoot, manifestRoots } : undefined;
 }
 
-async function binTargetInfo(root: FileHandle, target: unknown) {
+async function binTargetInfo(root: FileHandle, packageRoot: string, target: unknown) {
   if (typeof target !== 'string' || isAbsolute(target) || target.includes('\\') || target.includes('\0')) throw new Error();
   const parts = target.replace(/^\.\//u, '').split(sep);
   if (parts.length > BIN_MAX_DEPTH || parts.some(part => !part || part === '.' || part === '..')) throw new Error();
@@ -194,7 +194,15 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
   try {
     for (const [index, part] of parts.entries()) {
       const directory = index < parts.length - 1 ? constants.O_DIRECTORY : 0;
-      const next = await open(`${fdPath(current)}/${part}`, O_PATH | constants.O_NOFOLLOW | directory);
+      const next = await open(`${fdPath(current)}/${part}`, O_PATH | constants.O_NOFOLLOW | directory).catch((error: unknown) => {
+        const reason = lookupReason(error);
+        if (reason === 'missing' || reason === 'not-directory') {
+          return { path: join(packageRoot, ...parts.slice(0, index + 1)),
+            reason: reason === 'missing' ? 'manifest-target-missing' : 'manifest-target-not-directory' } as const;
+        }
+        throw error;
+      });
+      if ('reason' in next) { failed = true; return next; }
       try { if (current !== root) await current.close(); }
       finally { current = next; }
     }
@@ -205,7 +213,8 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
   finally { if (current !== root) await current.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 
-type ManifestExclusionFailure = 'manifest-exclusion-unverified' | 'manifest-exclusion-changed' | 'manifest-declares-bin';
+type ManifestExclusionFailure = 'manifest-exclusion-unverified' | 'manifest-exclusion-changed' | 'manifest-declares-bin'
+  | Readonly<{ path: string; reason: 'manifest-target-missing' | 'manifest-target-not-directory' }>;
 
 async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIntStats, maxBytes: number, remaining: number): Promise<number | ManifestExclusionFailure> {
   let failure: ManifestExclusionFailure = 'manifest-exclusion-unverified';
@@ -222,7 +231,8 @@ async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIn
       const targets = typeof bin === 'string' ? [bin] : Object.values(bin ?? {});
       if (targets.length > remaining) return failure;
       for (const target of targets) {
-        const info = await binTargetInfo(root, target);
+        const info = await binTargetInfo(root, packageRoot, target);
+        if ('reason' in info) { failure = info; return failure; }
         if (info.dev === chosen.dev && info.ino === chosen.ino) {
           failure = 'manifest-declares-bin';
           return failure;
@@ -335,8 +345,8 @@ async function provesNativeExecutable(path: string, expected: BigIntStats): Prom
 
 export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, context?: 'new' | 'path' | 'recheck'): Promise<HeadlessExecutable> {
   const unavailable = (reason: SelectionFailure, failedPath = chosen): never => {
-    if (context === 'new') headlessSelectionRefusal(chosen, reason);
-    if (context === 'path') headlessExecutableRefusal({ check: 'path-candidate-unverified', reason }, failedPath);
+    if (context === 'new' || context === 'path') headlessExecutableRefusal(
+      { check: context === 'new' ? 'selected-file' : 'path-candidate-unverified', reason }, chosen, failedPath === chosen ? undefined : failedPath);
     if (context === 'recheck') executableRecheckRefusal(failedPath, reason === 'unavailable' ? 'verification-unavailable' : reason);
     const checks = {
       unavailable: 'recorded-path-unverified', missing: 'recorded-path-missing', 'not-directory': 'recorded-path-not-directory',
@@ -359,7 +369,11 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
     const reason = await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes);
     if (reason !== true) {
       const native = await provesNativeExecutable(launcher, launcherInfo);
-      if (native !== true) headlessExecutableRefusal({ check: 'npm-layout-unknown', reason, native }, chosen);
+      if (native !== true) {
+        if (typeof reason === 'string') headlessExecutableRefusal({ check: 'npm-layout-unknown', reason, native }, chosen);
+        throw ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED',
+          { check: 'npm-layout-unknown', reason: reason.reason, native }), reason.path);
+      }
     }
   }
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);

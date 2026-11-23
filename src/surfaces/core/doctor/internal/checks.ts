@@ -47,6 +47,7 @@ export interface DoctorCheckFacts {
    * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
   readonly siwcConnections?: readonly import('#domain/index.js').SubscriptionConnectionInspection[] | null;
   readonly modelConnections?: readonly Readonly<{ profile: string; tools: 'available' | 'none' | 'unknown'; stale: boolean }>[] | null;
+  readonly showLocalHeadlessPaths?: boolean;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
     diagnostic?: { localize?: ((locale: Locale) => { message: string }) | undefined }; egressUnreadable?: boolean;
@@ -255,11 +256,14 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
-    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? login.state === 'open' ? t('doctor.headless.notOwned', {}, l) : t('doctor.headless.externalDirectory', {}, l) : '';
+    const suggestMove = login.state === 'open' && login.owned === false && !login.egressUnreadable;
+    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : suggestMove ? t('doctor.headless.notOwned', {}, l)
+      : login.owned === false ? t('doctor.headless.externalDirectory', {}, l) : '';
     const diagnosis = login.diagnostic?.localize?.(l).message;
-    const detail = diagnosis ? ' ' + diagnosis : '';
+    const pathDetail = f.showLocalHeadlessPaths ? ErrorRegistry.localHeadlessPathDetail(login.diagnostic, l) : undefined;
+    const detail = (diagnosis ? ' ' + diagnosis : '') + (pathDetail ? '\n' + pathDetail : '');
     const gateway = login.egressUnreadable ? ' ' + t('doctor.headless.egressUnreadable', {}, l) : '';
-    const next = login.state === 'open' && login.owned === false ? 'deckent models login --connection claude-cli-subscription' : undefined;
+    const next = suggestMove ? 'deckent models login --connection claude-cli-subscription' : undefined;
     rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own + detail + gateway)
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
         plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused + detail + gateway,

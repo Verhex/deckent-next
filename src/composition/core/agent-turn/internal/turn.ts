@@ -109,9 +109,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       if (readiness.state === 'unknown' && host.nativeAgent?.preflight) {
         try {
           await host.nativeAgent.preflight(profile, AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]));
-          execution = await nativeChatVerificationExecution(profile, host.nativeAgent);
+          execution = await nativeChatVerificationExecution(profile, host.nativeAgent, error => { diagnostic = error; });
           readiness = await inspectNativeChat(profile, host.nativeAgent);
-          diagnostic = readiness.diagnostic;
+          diagnostic = execution ? readiness.diagnostic : diagnostic ?? readiness.diagnostic;
           if (readiness.state === 'unavailable') execution = null;
         } catch (error) {
           if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)

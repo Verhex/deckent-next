@@ -92,7 +92,10 @@ export async function readNativeAgentObservation(profile: ModelInvocationProfile
       diagnosed?.(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-program-changed' }));
       return null;
     }
-    if (!display && record.identity !== await identity(profile, program)) return null;
+    if (!display && record.identity !== await identity(profile, program)) {
+      diagnosed?.(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-observation-identity-unverified' }));
+      return null;
+    }
     return Object.freeze({ ...record.observed, toolSurface: record.observed.toolSurface ?? null,
       plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null, ...(display ? { checkedAtMs: record.checkedAtMs } : {}) }); // NF-7: display says when
   } catch (error) {

@@ -106,6 +106,7 @@ export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = `[deckent] ${t('agent.turn.
 const cancelledMidAnswer = (language?: Locale) => `[deckent] ${t('agent.turn.outcome.cancelledMidAnswer', {}, language)}`;
 /** Keep diagnostic codes/classification tokens intact; the human state name follows the turn's language. */
 function outcomeState(state: string, language: Locale = LOCALES[0]): string {
+  if (state === 'unknown: interrupted') return `${t('agent.turn.outcome.unknown', {}, language)}: ${t('monitor.cause.interrupted', {}, language)}`;
   const [name] = state.split(':', 1);
   const labels: Readonly<Record<string, string>> = {
     rejected: t('agent.turn.outcome.rejected', {}, language), unknown: t('agent.turn.outcome.unknown', {}, language),

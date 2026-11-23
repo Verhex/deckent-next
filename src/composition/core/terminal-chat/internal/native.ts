@@ -8,13 +8,14 @@ import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionRe
 async function sealedForProfile(profile: ModelInvocationProfile, execution: NativeAgentExecution) {
   const definition = nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition);
   const entry = nativeCliAgent(profile.protocol.family);
-  if (!definition.success || !entry) return false;
+  if (!definition.success || !entry) return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-query-unavailable' });
   const { executable, ownerUid } = definition.data;
   if (execution.ownerUid !== ownerUid) return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' });
   return sealMatchesDefinition(execution, definition.data,
     () => resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable))
     .then(matched => matched ? true : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-program-path-mismatch' }),
-      (error: unknown) => error instanceof DeckentError ? error : false);
+      (error: unknown) => error instanceof DeckentError ? error
+        : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' }));
 }
 
 export async function inspectNativeChat(profile: ModelInvocationProfile, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<NativeAgentReadiness & { readonly diagnostic?: DeckentError }> {
@@ -39,10 +40,17 @@ export async function nativeChatVerifiedAtMs(profile: ModelInvocationProfile, di
 }
 
 /** Invocation-only eligibility: missing surface facts may be checked by the guarded first turn; false never is eligible. */
-export async function nativeChatVerificationExecution(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader }) {
+export async function nativeChatVerificationExecution(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader },
+  diagnose?: (error: DeckentError) => void) {
   const query = nativeReadinessQuery(profile, 'chat');
   if (!query) return null;
   const observed = await runtime.readiness.read(query);
   const prerequisites = await inspectSubscriptionReadiness(query, { read: async () => observed }, { unknownSurfaceFacts: 'allow' });
-  return prerequisites.state === 'ready' && await sealedForProfile(profile, prerequisites.execution) === true ? prerequisites.execution : null;
+  if (prerequisites.state !== 'ready') {
+    if (prerequisites.diagnostic) diagnose?.(prerequisites.diagnostic);
+    return null;
+  }
+  const seal = await sealedForProfile(profile, prerequisites.execution);
+  if (seal instanceof DeckentError) diagnose?.(seal);
+  return seal === true ? prerequisites.execution : null;
 }

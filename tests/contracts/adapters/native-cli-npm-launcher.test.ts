@@ -358,6 +358,21 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
     const absent = await prepare(bin).catch((failure: unknown) => failure) as DeckentError;
     expect(absent.localize?.('en').message).toContain('was not found in the PATH directories checked');
     expect(absent.localize?.('tr').message).toContain('denetlenen PATH dizinlerinde');
+    await writeFile(candidate, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const access = files.access;
+    const execute = vi.spyOn(files, 'access').mockImplementation(async (...args) => {
+      if (args[0] === candidate) throw Object.assign(new Error('candidate disappeared after stat'), { code: 'ENOENT' });
+      return access(...args);
+    });
+    try {
+      const error = await prepare(bin).catch((failure: unknown) => failure) as DeckentError;
+      expect(error.localize?.('en').message).toContain('A regular file was found on PATH, but its execute access could not be verified.');
+      expect(error.localize?.('tr').message).toContain('PATH üzerinde normal bir dosya bulundu ancak çalıştırma erişimi doğrulanamadı.');
+      expect(JSON.stringify(error)).not.toContain(candidate);
+      await expect(prepare([bin, dirname(f.chosen)].join(delimiter), 'relative-directory')).rejects.toMatchObject({
+        params: { check: 'config-dir', reason: 'relative-path' },
+      });
+    } finally { execute.mockRestore(); }
   });
 
   it.each([
@@ -822,6 +837,13 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
         const { executable } = await packageProgram(content);
         await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
       }
+      const missing = await packageProgram({ ...manifest, bin: 'missing/command' });
+      const lookup = await classify(missing.executable).catch((error: unknown) => error) as DeckentError;
+      expect(lookup).toMatchObject(unknownLayout);
+      expect(lookup.localize?.('en').message).toContain('A declared launcher path has a missing component.');
+      expect(lookup.localize?.('tr').message).toContain('Bildirilen başlatıcı yolunun bir bileşeni bulunamadı.');
+      expect(ErrorRegistry.localHeadlessPathDetail(lookup, 'en', missing.packageRoot)).toBe('Failed check at: ~/missing');
+      expect(JSON.stringify(lookup)).not.toContain(missing.packageRoot);
       const { executable, packageRoot } = await packageProgram(undefined);
       const manifestPath = join(packageRoot, 'package.json'), outside = join(dirname(packageRoot), 'outside');
       await writeFile(outside, '#!/bin/sh\nexit 0\n', { mode: 0o700 });

@@ -29,7 +29,7 @@ export function createConfiguredNativeCliWorkerRuntime(root: string, options: Co
     async prepare(profile) {
       const entry = nativeCliAgent(profile.protocol.family); if (!entry) return 'NATIVE_AGENT_CAPABILITY_UNSEALED';
       const definition = nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition);
-      return prepareNativeWorkerObservation({ read: () => readNativeAgentObservation(profile),
+      return prepareNativeWorkerObservation({ read: diagnose => readNativeAgentObservation(profile, Date.now, false, diagnose),
         claim: () => nativeWorkerEvidenceFile(definition.stateDir, definition.ownerUid, entry.headless.limits.preflightOutputBytes,
           modelInvocationProfileDigest(profile), 'worker-preflight').claim(), preflight: () => preflightNativeAgent(profile, Date.now, isolation) });
     },

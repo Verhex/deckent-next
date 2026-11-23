@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ProcessEvidence } from '#adapters/core/process-runner/index.js';
-import type { HeadlessPreflightParams } from '#platform/index.js';
+import { DeckentError, readHeadlessDiagnosticCase, type HeadlessPreflightParams } from '#platform/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
 import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
@@ -95,8 +94,8 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     await rename(temporary, target).catch(writeFailed);
   };
   const closed = async (error: unknown): Promise<never> => {
-    const code = (error as { code?: unknown }).code, params = (error as { params?: { check?: unknown } }).params;
-    await record({ state: 'closed', refusal: typeof code === 'string' ? code : 'HEADLESS_PREFLIGHT_FAILED', check: typeof params?.check === 'string' ? params.check : null }).catch(() => undefined);
+    const refusal = error instanceof DeckentError ? readHeadlessDiagnosticCase({ code: error.code, params: error.params }) : null;
+    await record({ state: 'closed', refusal, check: refusal?.params['check'] ?? null }).catch(() => undefined);
     throw error;
   };
   // S3-5: checked on every call, cached or not: a launcher that is gone or changed closes the channel before any claim.
@@ -108,7 +107,7 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   const cached = passed.get(key);
   if (cached) return cached;
   const env = buildHeadlessEnv(headless, runDir, definition.configDir);
-  const run = async (args: readonly string[], cwd = runDir, spawnEnv = env, configDir = definition.configDir): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
+  const run = async (args: readonly string[], cwd = runDir, spawnEnv = env, configDir = definition.configDir) => {
     // No emptying here: another process's preflight must never remove an in-flight call's prompt file (only `send` empties, under maxInFlight).
     const result = await runHeadlessIsolated(entry, isolation, { executable, program, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir, now },
       { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
@@ -125,18 +124,25 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     if (version === null) return versionRefusal({ check: 'version', reason: 'unreadable' });
     if (compareToolchainVersions(version, definition.minCliVersion) < 0) versionRefusal(verifiedCliVersion(definition.minCliVersion) !== null ? { check: 'version', reason: 'too-old', version, minimum: definition.minCliVersion }
       : { check: 'version', reason: 'too-old-unrenderable' });
-    const help = (await run(headless.preflight.helpArgs)).stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
+    const helpRun = await run(headless.preflight.helpArgs);
+    if (helpRun.cleanupError) throw helpRun.cleanupError;
+    const help = helpRun.stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
     // A hidden flag is proven by the parser refusing a bad value, in an empty temporary config dir: the probe never sees the person's login.
     const accepted = async (probe: NonNullable<ReturnType<typeof hidden.get>>) => {
       const capability = command.capabilities.maxTurns?.hiddenHelpProbe, shape = probe === 'max-turns-capability' ? capability && { args: capability.args, refusal: [capability.refusal] } : probe;
       if (!shape) return false;
       const empty = await mkdtemp(join(definition.stateDir, 'probe-'))
         .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'probe-scratch-create' }));
-      let failed = false;
-      try { const output = await run(shape.args, empty, buildHeadlessEnv(headless, empty, empty), empty); return shape.refusal.every(text => `${output.stderr}\n${output.stdout}`.includes(text)); }
-      catch (error) { failed = true; throw error; }
+      let confirmed = false;
+      try {
+        const output = await run(shape.args, empty, buildHeadlessEnv(headless, empty, empty), empty);
+        const matched = shape.refusal.every(text => `${output.stderr}\n${output.stdout}`.includes(text));
+        if (matched && output.cleanupError) throw output.cleanupError;
+        confirmed = matched;
+        return confirmed;
+      }
       finally { await rm(empty, { recursive: true, force: true }).catch(() => {
-        if (!failed) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'probe-scratch-remove' });
+        if (confirmed) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'probe-scratch-remove' });
       }); }
     };
     for (const flag of agent?.requiredFlags ?? headlessRequiredFlags(entry)) {
@@ -144,10 +150,12 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
       if (probe === undefined ? !help.includes(flag) : !(await accepted(probe))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags',
         reason: probe === undefined ? 'help-unverified' : 'parser-unverified' });
     }
-    const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
+    const status = await run(headless.preflight.authStatusArgs);
+    const auth = headlessAuth(headless.auth, status, definition.configDir);
     if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED', { reason: auth.reason });
     if (auth.state === 'config-dir') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state, reason: auth.reason });
     if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'auth-status' });
+    if (status.cleanupError) throw status.cleanupError;
     const current = await resolveHeadlessExecutable(entry, program.chosen, definition.ownerUid, 'recheck');
     if (current.identity !== program.identity) headlessExecutableRefusal({ check: 'executable-changed' }, program.chosen, executable);
     const sealed = Object.freeze({ executable, program, version, flagSetDigest, runDir, env, isolation: isolated });

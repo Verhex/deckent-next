@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, configuredInvocationProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
-import { ErrorRegistry, type DeckentError, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, headlessDiagnostic, type DeckentError, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -71,13 +71,16 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const binding = await (snapshot?.bindings.inspect(reference) ?? inspectModelBinding(projectRoot, reference, options));
   const profile = nativeChatProfile(configuredInvocationProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
+  const headlessModel = binding.status === 'declared' && binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null);
+  const toolsDiagnostic = native?.diagnostic ?? (headlessModel && (!native || native.state === 'unavailable')
+    ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) : undefined);
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
   const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
-    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
+    tools: binding.status !== 'declared' ? 'unknown' : headlessModel ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}),
-    ...(native?.diagnostic && { toolsDiagnostic: native.diagnostic }) });
+    ...(toolsDiagnostic && { toolsDiagnostic }) });
 }
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
   settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {

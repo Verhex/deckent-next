@@ -1,7 +1,7 @@
 import { compareToolchainVersions, prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { DeckentError, ErrorRegistry, headlessDiagnostic, isHeadlessDiagnosticCode, isRecord } from '#platform/index.js';
+import { DeckentError, headlessDiagnostic, isRecord, readHeadlessDiagnosticRecord } from '#platform/index.js';
 import { headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { searchExecutable } from '#adapters/core/setup-detect-execution/index.js';
@@ -23,7 +23,8 @@ export async function headlessExecutable(entry: NonNullable<ReturnType<typeof na
     const result = await searchExecutable(entry.command.executable, input.env, connect.pathSearchDirectories, input.signal ? AbortSignal.any([input.signal, controller]) : controller);
     if (result.path === null) {
       if (!result.completed) refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'path-search-incomplete', bound: connect.pathSearchDirectories });
-      const check = result.unverified ? 'path-search-unverified' : result.executeDenied ? 'path-search-execute-denied' : result.notFile ? 'path-search-not-file' : 'path-search-empty';
+      const check = result.executeUnverified ? 'path-search-execute-unverified' : result.unverified ? 'path-search-unverified'
+        : result.executeDenied ? 'path-search-execute-denied' : result.notFile ? 'path-search-not-file' : 'path-search-empty';
       refuse('HEADLESS_CLI_UNAVAILABLE', { check, bound: connect.pathSearchDirectories });
     }
     named = result.path;
@@ -73,10 +74,16 @@ export function headlessConnectionAdapter(definition: NativeCliHeadlessDefinitio
 }
 /** f5: the connection's cumulative gateway refusals (counts and host names, most refused first), or null when none was recorded. */
 async function readEgress(stateDir: string) {
-  const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').then(text => JSON.parse(text) as unknown, () => null);
-  const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (raw === null) return null;
+  const value: unknown = JSON.parse(raw);
+  const { schemaVersion, lastRefusedAtMs, ...summary } = isRecord(value) ? value : {};
   const parsed = (schemaVersion === 1 || schemaVersion === 2) && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
-  return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
+  if (!parsed?.success) return undefined;
+  return parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
     ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
 }
 type PreflightRecord = { state?: unknown; refusal?: unknown; check?: unknown; version?: unknown; updatedFrom?: unknown; executable?: unknown; revision?: unknown; size?: unknown; mtimeMs?: unknown;
@@ -98,7 +105,7 @@ async function currentPreflightRefusal(record: PreflightRecord, family: string, 
   if (!entry) return headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
   const uid = process.getuid?.();
   if (uid === undefined) return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'program-owner-unverified' });
-  if (uid !== definition.ownerUid) return headlessDiagnostic('HEADLESS_OWNER_MISMATCH');
+  if (uid !== definition.ownerUid) return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-owner-mismatch' });
   let program: Awaited<ReturnType<typeof resolveHeadlessExecutable>>;
   try { program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid); }
   catch (error) { return error instanceof DeckentError ? error : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' }); }
@@ -128,16 +135,16 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
     const mismatch = !identified ? null : family ? await currentPreflightRefusal(prior, family, definition)
       : headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
     const record = mismatch ? null : prior;
-    const closed = record?.state === 'closed'
-      ? ErrorRegistry.createError(typeof record.refusal === 'string' && isHeadlessDiagnosticCode(record.refusal)
-        ? record.refusal : 'HEADLESS_PREFLIGHT_FAILED', { params: typeof record.check === 'string' ? { check: record.check } : {} }) : null;
+    const closed = record?.state === 'closed' ? readHeadlessDiagnosticRecord(record.refusal, record.check) : null;
     const diagnostic = observed.diagnostic ?? mismatch ?? closed;
-    const egress = await readEgress(definition.stateDir).then(value => ({ egress: value }), () => ({ egress: null, egressUnreadable: true }));
+    const egress = await readEgress(definition.stateDir).then(value => value === undefined ? { egress: null, egressUnreadable: true } : { egress: value },
+      () => ({ egress: null, egressUnreadable: true }));
     const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
-      : record?.refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
+      : closed?.code === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
     return Object.freeze({ state: !record ? 'unknown' as const : record.state === 'open' ? 'open' as const : 'closed' as const, authMethod: text(record?.auth?.authMethod),
       // s3c: whether the connection uses the Brain's own login dir (a sealed older one keeps working; the doctor suggests the move).
-      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, owned: ownedRoot !== null && dirname(definition.configDir) === ownedRoot,
+      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir,
+      ...(ownedRoot !== null && { owned: dirname(definition.configDir) === ownedRoot }),
       consent: definition.delegatedUse?.classes ?? [], isolation,
       // S7: the CLI behind the connected path changed version since an earlier passing check (`doctor.headless.updated`).
       cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { cli: basename(definition.executable), from: text(record.updatedFrom)!, to: text(record.version)! } : null,

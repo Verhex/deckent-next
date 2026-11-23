@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clearConfigCache, DeckentError, ErrorRegistry, productResourcePath, reportFatal, resolveProductPaths } from '#platform/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
+import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { loginConfiguredHeadless } from '#composition/core/model-connect/index.js';
 import * as modelInvocation from '#composition/core/model-invocation/index.js';
 import { main } from '#surfaces/core/cli/index.js';
@@ -79,7 +80,7 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
       ['record rename', 130, ['The sign-in command was interrupted.', 'Giriş komutu kesildi.']],
       ['record write', 1, ['The sign-in command ended with a failure.', 'Giriş komutu başarısız sonuçlandı.']],
       ['status working directory list', 0, null], ['status working directory cleanup', 0, null],
-      ['realm scratch create', 0, null], ['realm scratch cleanup', 0, null],
+      ['realm scratch create', 0, null], ['realm scratch cleanup', 0, null], ['realm response invalid', 0, null],
     ] as const) {
       const f = await project('g3-'), executable = join(f.root, 'fixture-provider');
       const scratch = boundary.startsWith('realm scratch'), command = scratch ? ['models', 'login', '--connection', 'codex-cli-subscription'] : LOGIN;
@@ -118,10 +119,17 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
         if (boundary === 'realm scratch create' && isScratch(args[0])) hit();
         return original.mkdtemp(...args);
       }) as typeof files.mkdtemp);
-      const runner = scratch ? vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      const runner = scratch || boundary === 'realm response invalid' ? vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
         schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
         stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
       })) : undefined;
+      if (boundary === 'realm response invalid') runner!.mockImplementation(async () => {
+        hit.mockImplementationOnce(() => undefined);
+        hit();
+        const error = new processRunner.ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
+        error.message = sentinel;
+        throw error;
+      });
       try {
         let sharedError: unknown;
         const cliError = capture();
@@ -139,6 +147,10 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
           expect.soft(typed.localize?.('en').message).toBe(`${expected[0]} deckent could not save the outcome. The subscription state in this directory was not verified.`);
           expect.soft(typed.localize?.('tr').message).toBe(`${expected[1]} deckent sonucu kaydedemedi. Bu dizindeki abonelik durumu doğrulanmadı.`);
         }
+        if (boundary === 'realm response invalid') {
+          expect.soft(typed.localize?.('en').message).toBe('The isolated process result failed validation.');
+          expect.soft(typed.localize?.('tr').message).toBe('Yalıtılmış süreç sonucu doğrulamayı geçemedi.');
+        }
         const crashes = productResourcePath(resolveProductPaths(f.root, { env: f.env }), 'crashes');
         expect.soft(await files.readdir(crashes).catch(() => []), boundary).toEqual([]);
         const portable = capture();
@@ -151,6 +163,62 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
       }
     }
   } finally { isolation.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('interactive sign-in keeps the measured status limit when realm cleanup fails', async () => {
+  const f = await project('g3-'), executable = join(f.root, 'fixture-provider');
+  await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const launcher = await files.lstat(process.execPath, { bigint: true });
+  const isolation = vi.spyOn(modelInvocation, 'configuredBubblewrap').mockReturnValue(async () => ({
+    status: 'available', rejected: [], restriction: null, detail: null,
+    launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+      identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') },
+  }));
+  const exitCode = nativeCliHeadless('codex-jsonl')!.headless.isolation.limits.exits['cpu-time'];
+  const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => {
+    return { schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode, signal: null,
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+  });
+  const remove = files.rm;
+  const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+    if (typeof args[0] === 'string' && /\/login-copy-[^/]+$/u.test(args[0])) throw new Error('fixture cleanup failure');
+    return remove(...args);
+  });
+  try {
+    const view = await loginConfiguredHeadless({ connection: 'codex-cli-subscription', executable }, { env: f.env },
+      async () => true, { attest: async () => true });
+    expect(view).toMatchObject({ exit: 'completed', signedIn: false, statusIssue: { code: 'HEADLESS_LIMIT_REACHED', params: { limit: 'cpu-time' } } });
+    expect(renderHeadlessLogin(view!, 'en', 'codex-cli-subscription')).toContain('CPU');
+    expect(renderHeadlessLogin(view!, 'tr', 'codex-cli-subscription')).toContain('CPU');
+    expect(cleanup.mock.calls.some(([path]) => typeof path === 'string' && /\/login-copy-[^/]+$/u.test(path))).toBe(true);
+  } finally { cleanup.mockRestore(); runner.mockRestore(); isolation.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('a positive status with nonzero exit cannot advance sign-in when the status lock cleanup fails', async () => {
+  const f = await project('g3-'), executable = join(f.root, 'fixture-provider');
+  await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const launcher = await files.lstat(process.execPath, { bigint: true });
+  const isolation = vi.spyOn(modelInvocation, 'configuredBubblewrap').mockReturnValue(async () => ({
+    status: 'available', rejected: [], restriction: null, detail: null,
+    launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+      identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') },
+  }));
+  const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+    schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 1, signal: null,
+    stdoutBase64: Buffer.from(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty',
+      configDirectory: input.env['CLAUDE_CONFIG_DIR'] })).toString('base64'),
+    stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+  }));
+  const remove = files.rm;
+  const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+    if (typeof args[0] === 'string' && args[0].endsWith('.lock') && runner.mock.calls.length) throw new Error('fixture status-lock cleanup failure');
+    return remove(...args);
+  });
+  try {
+    await expect(loginConfiguredHeadless({ connection: 'claude-cli-subscription', executable }, { env: f.env }, async () => true,
+      { attest: async () => true })).rejects.toMatchObject({ params: { check: 'lock-marker-remove' } });
+    expect(runner).toHaveBeenCalledOnce();
+  } finally { cleanup.mockRestore(); runner.mockRestore(); isolation.mockRestore(); }
 });
 
 it('reports a relative login directory separately from an unresolved absolute directory in both languages', async () => {
@@ -242,17 +310,32 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
 // Semantic expectations are independent of the catalog keys and of the case renderer.
 const diagnosticMeaning = new Map(`path-search-not-file	A candidate on PATH was not a regular file	PATH üzerindeki bir aday normal bir dosya değildi
 agent-path-outside-roots	The configured directory is outside the permitted installation roots.	Yapılandırılan dizin izin verilen kurulum köklerinin dışında.
-agent-resolved-path-outside-roots	The resolved directory is outside the permitted installation roots.	Çözümlenen dizin izin verilen kurulum köklerinin dışında.
+agent-resolved-path-outside-roots	The resolved directory is outside the permitted installation roots that matched the original path.	Çözümlenen dizin, özgün yolla eşleşen izinli kurulum köklerinin dışında.
 agent-readiness-verifier-unavailable	Tool readiness could not be verified here.	Araç hazırlığı burada doğrulanamadı.
 agent-readiness-query-unavailable	The tool-readiness query is unavailable for this provider profile.	Bu sağlayıcı profili için araç hazırlığı sorgusu kullanılamıyor.
 recorded-program-unverified	provider program for the recorded preflight could not be checked	kayıtlı ön denetimdeki sağlayıcı programı denetlenemedi
 recorded-program-mismatch	earlier preflight record does not establish the current program identity	önceki ön denetim kaydı güncel program kimliğini doğrulamıyor
 login-status-positive-nonzero	status check returned a nonzero exit code	durum denetimi sıfır dışı bir çıkış kodu döndürdü
+manifest-target-missing	A declared launcher path has a missing component.	Bildirilen başlatıcı yolunun bir bileşeni bulunamadı.
+manifest-target-not-directory	A declared launcher path requires a directory at one of its components.	Bildirilen başlatıcı yolunun bir bileşeninde dizin gerekiyor.
+recorded-owner-mismatch	The recorded connection owner differs from the current operating-system user.	Kayıtlı bağlantının sahibi mevcut işletim sistemi kullanıcısından farklı.
+agent-observation-identity-unverified	The recorded agent observation could not be verified against the current login metadata.	Kayıtlı ajan gözlemi mevcut oturum üstverisiyle doğrulanamadı.
+login-status-unreadable	The subscription CLI did not report its login state in a readable form.	Abonelik CLI'ı giriş durumunu okunabilir biçimde bildirmedi.
+realm-process-response	The isolated process result failed validation.	Yalıtılmış süreç sonucu doğrulamayı geçemedi.
+lock-marker-read-changed	The sign-in lock marker did not match its initial file metadata during the read.	Giriş kilidi işareti okuma sırasında ilk dosya üstverisiyle eşleşmedi.
+login-status-incomplete/timeout	The subscription status check timed out.	Abonelik durum denetimi zaman aşımına uğradı.
+login-status-incomplete/signal	The subscription status check reported termination by a signal.	Abonelik durum denetimi bir sinyalle sonlanma bildirdi.
+login-status-incomplete/cancelled	The subscription status check was cancelled.	Abonelik durum denetimi iptal edildi.
+login-status-incomplete/start-failed	The process for the subscription status check could not be started.	Abonelik durum denetiminin süreci başlatılamadı.
+login-status-incomplete/output-limit	The subscription status check exceeded its output limit.	Abonelik durum denetimi çıktı sınırını aştı.
+login-status-incomplete/line-limit	A line of the subscription status check output exceeded its limit.	Abonelik durum denetimi çıktısının bir satırı sınırı aştı.
+login-status-incomplete/stopped	The subscription status check was stopped.	Abonelik durum denetimi durduruldu.
 login-status-incomplete	subscription status check could not be completed	abonelik durum denetimi tamamlanamadı
 executable-changed/bind-race-diagnostic	process exited with a bind-race diagnostic	süreç, bağlama yarışı tanısıyla sonlandı
 path-search-execute-denied	did not pass the execute-access check	çalıştırma erişimi denetimini geçemedi
 path-search-empty	was not found in the PATH directories checked	denetlenen PATH dizinlerinde bulunamadı
 path-search-unverified	A candidate on PATH could not be checked	PATH üzerindeki bir aday denetlenemedi
+path-search-execute-unverified	A regular file was found on PATH, but its execute access could not be verified	PATH üzerinde normal bir dosya bulundu ancak çalıştırma erişimi doğrulanamadı
 path-search-incomplete	The PATH search for the provider's program could not be completed	Sağlayıcının programı için PATH araması tamamlanamadı
 recorded-path-unverified	could not be verified at its recorded path	kayıtlı yolunda doğrulanamadı
 recorded-path-missing	missing at the connected path	bağlanan yolda yok

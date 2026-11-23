@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { nativeAgentReadinessSchema, nativeWorkerReadiness, type NativeAgentExecution } from '#capabilities/core/native-agent-execution/index.js';
-import { headlessDiagnostic, t } from '#platform/index.js';
+import { headlessDiagnostic, readHeadlessDiagnosticIdentifier, t } from '#platform/index.js';
 import { subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
 import { nativeChatReasonText, nativeChatPreflightReason } from '#composition/core/agent-turn/index.js';
 import { inspectSubscriptionReadiness, type SubscriptionReadinessQuery, type SubscriptionReadinessObservations,
@@ -77,12 +77,18 @@ describe('subscription prerequisite query', () => {
     }
   });
 
-  it('preserves the worker prerequisite reason before its executable resolver runs', async () => {
+  it('preserves the precise worker prerequisite diagnosis before its executable resolver runs', async () => {
     const diagnostic = headlessDiagnostic('HEADLESS_CLI_UNAVAILABLE', { check: 'recorded-path-missing' });
     const reader = { read: async () => ({ diagnostic }) };
     const executable = vi.fn(async () => execution.executable), f08 = vi.fn(async () => null);
     const readiness = await inspectSubscriptionReadiness(query('worker'), reader);
+    const reason = 'HEADLESS_CLI_UNAVAILABLE__CHECK_RECORDED_PATH_MISSING';
     await expect(nativeWorkerReadiness({} as never, undefined, executable, { readiness: async () => readiness, f08 }))
+      .resolves.toEqual({ state: 'waiting', reason });
+    expect(readHeadlessDiagnosticIdentifier(reason, 'en')).toBe('The subscription CLI is missing at the connected path.');
+    expect(readHeadlessDiagnosticIdentifier(reason, 'tr')).toBe("Abonelik CLI'ı bağlanan yolda yok.");
+    const withoutDiagnostic = await inspectSubscriptionReadiness(query('worker'), { read: async () => null });
+    await expect(nativeWorkerReadiness({} as never, undefined, executable, { readiness: async () => withoutDiagnostic, f08 }))
       .resolves.toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' });
     expect(executable).not.toHaveBeenCalled();
     expect(f08).not.toHaveBeenCalled();
