@@ -11,6 +11,7 @@ export async function startConfiguredWorkerObservation(input: {
   readonly request: SandboxRequest; readonly backend: WorkerActivity['backend']; readonly provider: string;
   readonly heartbeatMs: number; readonly maxFileBytes: number; readonly stall: TaskStallPolicy | undefined;
   readonly gateway: { statistics(): GatewayActivityCounters } | undefined;
+  readonly refusalAuditLoss?: () => WorkerActivity['refusalAuditLoss'];
 }): Promise<{ signal: AbortSignal; close(): Promise<void> }> {
   const { request, supervisor, store, gateway } = input, silence = new AbortController();
   const watch = input.stall && gateway ? inactivityWatch(input.stall, Date.now()) : undefined;
@@ -23,8 +24,13 @@ export async function startConfiguredWorkerObservation(input: {
       const reconciled = await input.app.reconcile(request).catch(() => null);
       if (reconciled) record = reconciled.record;
     }
-    return { schemaVersion: 1, identity: request.identity, backend: input.backend, provider: input.provider, workspace: request.workspace,
+    const sample: WorkerActivity = { schemaVersion: 1, identity: request.identity, backend: input.backend, provider: input.provider, workspace: request.workspace,
       observedAt: Date.now(), process: activity.state, handle: activity.handle, terminal: record.terminal, outputRecorded: !!record.output };
+    const refusalAuditLoss = input.refusalAuditLoss?.();
+    if (!refusalAuditLoss) return sample;
+    const marked = { ...sample, refusalAuditLoss };
+    // Preserve the ordinary heartbeat and result at the writer's byte limit.
+    return Buffer.byteLength(JSON.stringify(marked) + '\n') <= input.maxFileBytes ? marked : sample;
   });
   return { signal: silence.signal, close: () => observation.close() };
 }

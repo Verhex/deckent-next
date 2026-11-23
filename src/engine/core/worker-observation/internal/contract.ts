@@ -15,6 +15,7 @@ export interface WorkerActivity {
   readonly provider: string; readonly workspace: string; readonly observedAt: number;
   readonly process: WorkerProcessState; readonly handle: string | null;
   readonly terminal: DispatchTerminal | null; readonly outputRecorded: boolean;
+  readonly refusalAuditLoss?: 'refusal-audit-loss';
 }
 export interface WorkerSidecars {
   readonly provider: string;
@@ -22,6 +23,8 @@ export interface WorkerSidecars {
   readonly log: { readonly state: string; readonly byteLength: number; readonly truncated: boolean; readonly sampledLines: number; readonly diagnostics: readonly string[]; readonly events: readonly { readonly sequence: number; readonly observedAt: number; readonly process: string; readonly exitCode: number | null }[] };
   readonly result: { readonly state: string; readonly exitCode: number | null; readonly reportedAssessment: string | null };
   readonly pid: number | null;
+  /** From the host heartbeat or result for an exact Attempt. */
+  readonly refusalAuditLoss?: WorkerActivity['refusalAuditLoss'];
   /** From worker-reported events (untrusted): what the worker is doing now and its usage so far; null without events. */
   readonly activity: (WorkerActivityPhase & { readonly receivedAt: number | null }) | null; readonly usage: WorkerEventSummary | null; readonly eventsTruncated: boolean;
 }

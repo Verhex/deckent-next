@@ -1,5 +1,5 @@
 import { SystemTrustedClock, MAX_WALL_SKEW_MS } from '#platform/index.js';
-import { attemptIdentitySchema, sameAttemptIdentity, workerEventSchema, workerActivityPhase, summarizeWorkerEvents, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, processExitCauseSchema, workerEventSchema, workerActivityPhase, summarizeWorkerEvents, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
@@ -48,7 +48,8 @@ export async function readWorkerEventTail(directory: string, stem: string, maxBy
   const root = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { return eventLines((await readObservationFile(join(`/proc/self/fd/${root.fd}`, stem + '.events'), maxBytes, true)).bytes); } finally { await root.close(); }
 }
-export async function readWorkerSidecars(directory: string, stem: string, limits: ObservationLimits, now = new SystemTrustedClock().sample().wallMs, identity?: AttemptIdentity): Promise<WorkerSidecars> {
+export async function readWorkerSidecars(directory: string, stem: string, limits: ObservationLimits, now = new SystemTrustedClock().sample().wallMs,
+  identity?: AttemptIdentity, includeRefusalAuditLoss = true): Promise<WorkerSidecars> {
   await observationDirectory(directory);
   if (!/^[a-zA-Z0-9_.:-]+$/.test(stem) || stem === '.' || stem === '..') throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
   const root = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
@@ -70,6 +71,17 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   };
   if (heartbeat && !bound(heartbeat)) { heartbeat = null; hb.state = 'identity-mismatch'; }
   if (outcome && !bound(outcome)) { outcome = null; result.state = 'identity-mismatch'; }
+  const marked = (value: Record<string, unknown> | null, terminalRequired: boolean) => {
+    if (value?.refusalAuditLoss !== 'refusal-audit-loss' || value.schemaVersion !== 1
+      || typeof value.backend !== 'string' || typeof value.provider !== 'string' || typeof value.workspace !== 'string' || !isAbsolute(value.workspace)
+      || !Number.isSafeInteger(value.observedAt) || typeof value.process !== 'string' || !catalog.phases.includes(value.process)
+      || (value.handle !== null && typeof value.handle !== 'string') || typeof value.outputRecorded !== 'boolean') return false;
+    if (value.terminal === null) return !terminalRequired;
+    const end = value.terminal as Record<string, unknown> | undefined;
+    return typeof end?.handle === 'string' && (end.interrupted === null || typeof end.interrupted === 'boolean')
+      && processExitCauseSchema.safeParse({ exitCode: end.exitCode, signal: end.signal }).success;
+  };
+  const refusalAuditLoss = identity && includeRefusalAuditLoss && (marked(outcome, true) || marked(heartbeat, false));
   const phase = heartbeat?.process ?? heartbeat?.status;
   const terminal = outcome?.terminal && typeof outcome.terminal === 'object' ? outcome.terminal as Record<string, unknown> : outcome;
   // A lower bound on age: an ahead reader must not mark another process stale early.
@@ -92,5 +104,6 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
     exitCode: typeof terminal?.exitCode === 'number' && Number.isSafeInteger(terminal.exitCode) ? terminal.exitCode : null,
     reportedAssessment: typeof outcome?.selfAssessment === 'string' && catalog.assessments.includes(outcome.selfAssessment) ? outcome.selfAssessment : null },
   pid: typeof heartbeat?.pid === 'number' && Number.isSafeInteger(heartbeat.pid) && heartbeat.pid > 0 ? heartbeat.pid : null,
+  ...(refusalAuditLoss ? { refusalAuditLoss: 'refusal-audit-loss' as const } : {}),
   activity: (() => { const phase = workerActivityPhase(workerEvents); return phase ? { ...phase, receivedAt: lastReceivedAt } : null; })(), usage: workerEvents.length ? summarizeWorkerEvents(workerEvents) : null, eventsTruncated: eventFile.truncated };
 }

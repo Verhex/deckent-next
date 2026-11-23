@@ -5,7 +5,7 @@ import { CONFIG_FIELDS, resolveLocale, createDefaultConfig, envValue, inspectPro
   resolveProductLayout, type Environment, type Locale, type ResolvedConfig } from '#platform/index.js';
 import { fullAutoGrant, isAiPrincipal, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, type WorkerSidecars, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
@@ -43,7 +43,8 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
   return { reading, async readShown(identities: readonly AttemptIdentity[], failures: readonly AttemptIdentity[] = []): Promise<MonitorLedgerReading> {
     const among = (list: readonly AttemptIdentity[], files: MonitorAttemptFiles) => list.some(identity => sameAttemptIdentity(identity, files.identity));
     const selected = scan.files.filter(files => among(identities, files) || (files.failed && among(failures, files)));
-    const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
+    type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
+    const extra = new Map<string, SelectedContent>();
     for (const files of selected) {
       const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
       try {
@@ -52,14 +53,17 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
         if (!among(identities, files)) { const failure = await failureEvidence(artifacts, files);
           extra.set(key, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}) }); continue; }
-        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace, locale) };
+        const found: SelectedContent = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace, locale) };
         if (files.failed) {
           const failure = await failureEvidence(artifacts, files);
           Object.assign(found, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files, locale) } : {}) });
         }
         else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
           .map(line => ({ atMs: line.receivedAt, event: line.event })), locale);
-        if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
+        const sidecars = files.workspace && (!run || needsEnd)
+          ? await readWorkerSidecars(dirname(files.workspace), 'worker', config.inspection.workers, undefined, files.identity, !run).catch(() => null) : null;
+        if (sidecars?.refusalAuditLoss) found.diagnostics = [sidecars.refusalAuditLoss];
+        if (needsEnd) found.observedEndAtMs = observedEnd(files, sidecars);
         if (Object.keys(found).length) extra.set(key, found);
       } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
     }
@@ -94,10 +98,9 @@ export async function readMonitorInstall(config: ResolvedConfig, env: Environmen
 const ends = new Map<string, number>();
 /** The host's own exit observation (`worker.log` `exited` event, host clock) in the attempt's sidecar directory, identity-bound through the
  * sidecar result; null when the sidecars are gone (custody released), unreadable or bound to another attempt. */
-async function observedEnd(config: ResolvedConfig, files: MonitorAttemptFiles): Promise<number | null> {
+function observedEnd(files: MonitorAttemptFiles, sidecars: WorkerSidecars | null): number | null {
   // Keyed by the sidecar directory too: equal scope/attempt ids of another installation never share an end.
   const key = `${files.workspace}\0${files.identity.scopeId}/${files.identity.attemptId}`; if (ends.has(key)) return ends.get(key)!;
-  const sidecars = await readWorkerSidecars(dirname(files.workspace!), 'worker', config.inspection.workers, undefined, files.identity).catch(() => null);
   if (!sidecars || sidecars.result.state !== 'available') return null;
   const exit = sidecars.log.events.filter(event => event.process === 'exited').at(-1)?.observedAt ?? null;
   if (exit !== null) { if (ends.size >= 1024) ends.delete(ends.keys().next().value!); ends.set(key, exit); }

@@ -412,20 +412,27 @@ describe('monitor finish/delivery/attempt diagnostics', () => {
     const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 200, ascii: false });
     expect(tr).toContain('operation: özet görme izniniz yok'); expect(tr).toContain('scope-dog kapsamının onayları gizli: görme izniniz yok');
     expect(surface.describeDiagnostic('output-denied', 'tr').text).toBe('denemenin çıktısı okunmadı: okuma izni yok');
+    expect(surface.describeDiagnostic('refusal-audit-loss', 'en')).toMatchObject({ note: false, text: 'a tool refusal could not be recorded in the audit log' });
+    expect(surface.describeDiagnostic('refusal-audit-loss', 'tr')).toMatchObject({ note: false, text: 'bir araç reddi denetim günlüğüne kaydedilemedi' });
     expect(surface.describeDiagnostic('attempt-files-unavailable:scope-a/run-x/build:EACCES', 'en').text).toBe('the files of attempt scope-a/run-x/build could not be read (EACCES)');
     expect(surface.describeDiagnostic('ledger-version-unsupported:99', 'en').text).toBe('the ledger is version 99, which this build cannot read');
   });
   it('Run detail: delivery state + commit, "no delivery recorded", unknown end, ≈ host-observed end, output-denied', async () => {
-    const view = mount({ load: async () => fullSnapshot });
+    const snapshot = structuredClone(fullSnapshot);
+    const broken = snapshot.installs.flatMap(install => install.runs).find(run => run.runId === 'run-broken')!;
+    Object.assign(broken.tasks[0]!.lastAttempt!, { diagnostics: ['refusal-audit-loss'] });
+    const view = mount({ load: async () => snapshot });
     try {
       await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
       await view.press('2'); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Run run-broken'); expect(view.stdout.frame).toContain('duration ≈ 15 min');
       expect(view.stdout.frame).toContain('Delivery/adoption: no integration, delivery or adoption recorded.');
       expect(view.stdout.frame).toContain('08:55:00Z → 09:05:00Z (≈ 10 min) · exit 1');
+      expect(view.stdout.frame).toContain('! a tool refusal could not be recorded in the audit log');
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Run run-broken-quiet'); expect(view.stdout.frame).toContain('duration unknown');
       expect(view.stdout.frame).toContain("! the attempt's output was not read: no permission to read it");
+      expect(view.stdout.frame).not.toContain('a tool refusal could not be recorded in the audit log');
       await view.press(KEY.esc);
       for (let i = 0; i < 10 && !/› │ run-done/.test(view.stdout.frame); i++) await view.press(KEY.down);
       await view.press(KEY.enter);
