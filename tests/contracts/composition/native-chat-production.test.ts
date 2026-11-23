@@ -19,7 +19,7 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { firstRunPolicyTemplate, modelInvocationProfileSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, clockText, resolveProductLayout } from '#platform/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 const closers: (() => Promise<unknown>)[] = [];
@@ -31,7 +31,7 @@ const verificationEn = 'Checking the CLI tool surface for this turn\n';
 const verificationTr = 'Bu tur için CLI araç yüzeyi doğrulanıyor.\n';
 /** Proof JSON for CI artifacts: approval decision capabilities are redacted. */
 const proofJson = (value: unknown) => JSON.stringify(value, (key, item: unknown) => key === 'decisionCapability' ? '[redacted]' : item, 2);
-async function fixture(family: string, language: 'en' | 'tr' = 'en', responseMaxBytes?: number) {
+async function fixture(family: string, language: 'en' | 'tr' = 'en', responseMaxBytes?: number, quotaResetsAt?: number) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-k16-production-'));
   closers.push(() => rm(root, { recursive: true, force: true }));
   const global = join(root, 'global'), bin = join(root, 'bin');
@@ -54,7 +54,9 @@ async function fixture(family: string, language: 'en' | 'tr' = 'en', responseMax
     { when: 'K16-REVOKE', answer: 'K16-REVOKE-DONE', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' must-not-happen > revoked.txt" } }] },
     { when: 'K16-ASK-DENY', answer: 'K16-ASK-DENY-OK', calls: [{ name: 'write_file', arguments: { path: 'ask-denied.txt', content: 'must not happen\n' } }] },
     { when: 'K16-WAIT', hang: true }, { when: 'K16-PLUGIN', pluginMismatch: true, nativeItem: true }, { when: 'after mismatch', answer: 'K16-TOOLS-AGAIN' },
-    { when: 'T237-LIMIT', failedTool: true, preamble: 'Checking the project. ', calls: [
+    { when: 'T237-LIMIT', failedTool: true, preamble: 'Checking the project. ', eventsAfterCalls: quotaResetsAt === undefined ? [] : [
+      { type: 'rate_limit_event', rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour', resetsAt: quotaResetsAt } },
+    ], calls: [
       { name: 'write_file', arguments: { path: 'admitted.txt', content: 'business result\n' } },
       ...Array.from({ length: slots - 1 }, () => ({ name: 'read_file', arguments: { path: 'input.txt' } })),
       { name: 'write_file', arguments: { path: 'refused.txt', content: 'must not happen\n' } },
@@ -82,7 +84,9 @@ async function fixture(family: string, language: 'en' | 'tr' = 'en', responseMax
   expect((await describeTerminalChat(f.project, options)).tools).toBe('unverified');
   expect(await readNativeAgentObservation(profile)).toBeNull();
   await settleOnboarding(resolveProductLayout({ projectRoot: f.project, root: f.data }));
-  const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: f.project, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], {
+    cwd: f.project, env: { ...options.env, TZ: process.env['TZ'] }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let serviceOut = '', serviceErr = '';
   child.stdout.on('data', chunk => { serviceOut += String(chunk); }); child.stderr.on('data', chunk => { serviceErr += String(chunk); });
   closers.push(async () => { if (child.exitCode !== null) return; const closed = once(child, 'close'); child.kill('SIGTERM'); await closed; });
@@ -192,15 +196,20 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
   }
 }, 150_000);
 
+const quotaResetsAt = 1792773600, quotaResetTime = clockText(quotaResetsAt * 1000);
 it.each([
-  { family: families[0]!, language: 'en' as const, banner: verificationEn,
+  { family: families[0]!, language: 'en' as const, banner: verificationEn, stop: 'tool-call limit',
     note: 'This turn reached its tool-call limit. The remaining calls did not run. The answer is incomplete.' },
-  { family: families[1]!, language: 'tr' as const, banner: verificationTr,
+  { family: families[1]!, language: 'tr' as const, banner: verificationTr, stop: 'tool-call limit',
     note: 'Bu tur araç çağrısı sınırına ulaştı. Kalan çağrılar çalıştırılmadı. Yanıt tamamlanmadı.' },
-])('compiled $family chat records the tool-call limit in $language and replays its closing without effects', async ({ family, language, banner, note }) => {
+  { family: families[0]!, language: 'en' as const, banner: verificationEn, stop: 'provider quota after the tool-call limit', quotaResetsAt,
+    note: expect.stringContaining(`The subscription's usage limit is reached (five-hour window). Resets at: ${quotaResetTime} (local time).`) },
+  { family: families[0]!, language: 'tr' as const, banner: verificationTr, stop: 'provider quota after the tool-call limit', quotaResetsAt,
+    note: expect.stringContaining(`Aboneliğinizin kullanım sınırına ulaşıldı (beş saatlik pencere). Sıfırlanma: ${quotaResetTime} (yerel saat).`) },
+])('compiled $family chat records $stop in $language and replays its closing without effects', async ({ family, language, banner, note, quotaResetsAt: reset }) => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   // The synthetic stream needs room for all tool records before it reaches the separate bridge limit.
-  const h = await fixture(family, language, nativeCliAgent(family)!.bridge.frameMaxBytes);
+  const h = await fixture(family, language, nativeCliAgent(family)!.bridge.frameMaxBytes, reset);
   const client = createTerminalRuntimeClient(h.f.project, h.options);
   await terminalRuntimePeer(client);
   const command = { schemaVersion: 1 as const, scopeId: 's', turnId: 'T237-LIMIT', messages: [{ role: 'user' as const, content: 'T237-LIMIT' }] };
@@ -212,7 +221,14 @@ it.each([
   expect(await readFile(join(h.f.project, 'admitted.txt'), 'utf8')).toBe('business result\n');
   await expect(readFile(join(h.f.project, 'refused.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   const beforeReplay = events.length, trace = await readFile(h.traceFile, 'utf8');
-  expect.soft(await client.chatTurn(command, event => events.push(event))).toMatchObject({ finish: 'error', note, recorded: true, replayed: true });
+  if (reset !== undefined) {
+    const refusal = trace.indexOf('NATIVE_BRIDGE_REPLAY_LIMIT');
+    expect(refusal).toBeGreaterThanOrEqual(0);
+    expect(trace.indexOf('"type":"rate_limit_event"')).toBeGreaterThan(refusal);
+  }
+  const replay = await client.chatTurn(command, event => events.push(event));
+  expect.soft(replay).toMatchObject({ finish: 'error', note, recorded: true, replayed: true });
+  expect(replay.note).toBe(result.note);
   expect(events.slice(beforeReplay).some(event => event.kind === 'tool.started')).toBe(false);
   expect(await readFile(h.traceFile, 'utf8')).toBe(trace);
 }, 90_000);
