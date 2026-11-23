@@ -131,7 +131,7 @@
   "headless.agent.resource.waiting": "Waiting for the shared subscription resource. No new worker has started; wait for confirmed release or cancel this task.",
   "headless.agent.resource.legacy": "Earlier execution path: this admitted task keeps its recorded profile. New work requires a governed native worker connection.",
   "headless.agent.agents.action": "prepare an agent and its pinned skills for a task (read-only)",
-  "headless.agent.readiness.verifying": "Checking the CLI tool surface in this first guarded turn.",
+  "headless.agent.readiness.verifying": "Checking the CLI tool surface for this turn",
   "headless.agent.worker.NATIVE_WORKER_VERIFICATION_WAIT": "Another verification Attempt owns this binding and seal. Wait for its retained result or custody reconciliation; a second CLI is not started.",
   "headless.agent.worker.NATIVE_WORKER_F08_INVALID": "The retained worker verification record cannot be read safely. Execution stops until the record is reconciled.",
   "headless.agent.worker.NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED": "The worker CLI tool guard refused the surface. The Attempt ended; this binding and seal will not be retried.",

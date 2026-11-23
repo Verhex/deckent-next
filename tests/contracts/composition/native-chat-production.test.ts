@@ -27,9 +27,11 @@ afterEach(async () => { for (const close of closers.splice(0).reverse()) await c
 const families = [registry.adapters.claude.capabilities.eventStream, registry.adapters.codex.headless.protocolFamily];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const execute = promisify(execFile);
+const verificationEn = 'Checking the CLI tool surface for this turn\n';
+const verificationTr = 'Bu tur için CLI araç yüzeyi doğrulanıyor.\n';
 /** Proof JSON for CI artifacts: approval decision capabilities are redacted. */
 const proofJson = (value: unknown) => JSON.stringify(value, (key, item: unknown) => key === 'decisionCapability' ? '[redacted]' : item, 2);
-async function fixture(family: string) {
+async function fixture(family: string, language: 'en' | 'tr' = 'en', responseMaxBytes?: number) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-k16-production-'));
   closers.push(() => rm(root, { recursive: true, force: true }));
   const global = join(root, 'global'), bin = join(root, 'bin');
@@ -38,6 +40,9 @@ async function fixture(family: string) {
   const credential = join(configDir, family === families[0] ? '.credentials.json' : 'auth.json');
   const canary = 'K16-LOGIN-CANARY-88e6c19'; await writeFile(credential, canary, { mode: 0o600 });
   const traceFile = join(configDir, family === families[0] ? '.claude.json' : 'config.toml');
+  const frameMaxBytes = nativeCliAgent(family)!.bridge.frameMaxBytes;
+  const replay = registry.agentBridge;
+  const slots = Math.min(replay.replayMaxEntries, Math.floor(replay.replayMaxBytes / frameMaxBytes));
   const executable = await writeFakeAgentCli(bin, family, { traceFile, turns: [
     { when: 'K16-READ', answer: 'K16-READ-OK', calls: [{ name: 'read_file', arguments: { path: 'input.txt' } }] },
     { when: 'K16-WRITE', answer: 'K16-WRITE-OK', calls: [{ name: 'write_file', arguments: { path: 'result.txt', content: 'business result\n' } }] },
@@ -49,14 +54,20 @@ async function fixture(family: string) {
     { when: 'K16-REVOKE', answer: 'K16-REVOKE-DONE', calls: [{ name: 'run_shell', arguments: { command: "printf '%s\\n' must-not-happen > revoked.txt" } }] },
     { when: 'K16-ASK-DENY', answer: 'K16-ASK-DENY-OK', calls: [{ name: 'write_file', arguments: { path: 'ask-denied.txt', content: 'must not happen\n' } }] },
     { when: 'K16-WAIT', hang: true }, { when: 'K16-PLUGIN', pluginMismatch: true, nativeItem: true }, { when: 'after mismatch', answer: 'K16-TOOLS-AGAIN' },
+    { when: 'T237-LIMIT', failedTool: true, preamble: 'Checking the project. ', calls: [
+      { name: 'write_file', arguments: { path: 'admitted.txt', content: 'business result\n' } },
+      ...Array.from({ length: slots - 1 }, () => ({ name: 'read_file', arguments: { path: 'input.txt' } })),
+      { name: 'write_file', arguments: { path: 'refused.txt', content: 'must not happen\n' } },
+    ] },
   ] });
   const owner = readLocalOsIdentity();
   const f = await brainProviderFixture({ headless: { executable, configDir, stateDir, protocolFamily: family,
     delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] } } });
   closers.push(f.close);
-  const options = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global } };
+  const options = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: global, DECKENT_LANGUAGE: language } };
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8'));
   config.provider_invocation_profiles.profiles[0].limits.timeoutMs = 120_000;
+  if (responseMaxBytes !== undefined) config.provider_invocation_profiles.profiles[0].limits.responseMaxBytes = responseMaxBytes;
   config.cancellation = { maxConcurrentDeliveries: 1 };
   config.cancellationRuntime = { scopeIds: ['s'], pollIntervalMs: 2147483647, failureBackoffMs: 1000 };
   config.runRuntime = { pollIntervalMs: 2147483647 };
@@ -104,10 +115,11 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
       return result;
     };
     expect(await call('K16-READ', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
-    expect(events.some(event => event.kind === 'text' && event.text.includes('first guarded turn'))).toBe(true);
+    expect.soft(events).toContainEqual({ kind: 'text', text: verificationEn });
     const firstSeal = await readNativeAgentObservation(h.profile);
     expect(firstSeal).toMatchObject({ cli: true, login: true, environment: true, toolSurface: true, plugins: true, bridge: true });
-    const firstRecord = JSON.parse(await readFile(join(String(h.profile.adapter.definition['stateDir']), `agent-${firstSeal!.execution.profileDigest}.json`), 'utf8'));
+    const observationPath = join(String(h.profile.adapter.definition['stateDir']), `agent-${firstSeal!.execution.profileDigest}.json`);
+    const firstRecord = JSON.parse(await readFile(observationPath, 'utf8'));
     expect(firstRecord.observed).toMatchObject(firstSeal!);
     // R8e: past its age the gate reads nothing, while /provider and /model still show the last verification.
     const later = () => Date.now() + 3_600_000;
@@ -121,16 +133,23 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     // NF-7: past the K16 age the plan stays unverified (the next turn rechecks) and names when the tools were last verified.
     const realNow = Date.now, aged = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 3_600_000);
     try { expect(await describeTerminalChat(h.f.project, h.options)).toMatchObject({ tools: 'unverified', toolsVerifiedAtMs: firstRecord.checkedAtMs }); } finally { aged.mockRestore(); }
+    const beforeFresh = events.length;
     expect(await call('K16-READ-SECOND', 'allow')).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    expect(events.slice(beforeFresh)).not.toContainEqual(expect.objectContaining({ kind: 'text', text: expect.stringContaining('Checking the CLI tool surface') }));
     const secondSeal = await readNativeAgentObservation(h.profile);
     expect(secondSeal).toMatchObject({ execution: firstSeal!.execution });
+    // The service has its own clock. Age its synthetic observation to exercise the recheck in that process.
+    const secondRecord = JSON.parse(await readFile(observationPath, 'utf8'));
+    await writeFile(observationPath, JSON.stringify({ ...secondRecord, checkedAtMs: Date.now() - nativeCliAgent(family)!.agent.observationMaxAgeMs! - 1 }));
     const idleMs = nativeEgressLimits().idleMs, keepAliveMs = Math.floor(idleMs / 2);
     const approvalWaitMs = Math.min(idleMs + keepAliveMs, h.config.approvals.requestTtlMs / 2);
     expect(approvalWaitMs).toBeGreaterThan(idleMs);
     // v19 edit rule is modeEligible (owner 2026-11-05) and the MCP actor has no mode entry: the default standart lowers an ordinary write, no card.
     const cards = () => events.filter(event => event.kind === 'approval.requested').length, beforeWrite = cards();
+    const beforeRecheck = events.length;
     const written = await call('K16-WRITE', 'allow');
     expect(written, JSON.stringify({ family, result: written })).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    expect.soft(events.slice(beforeRecheck)).toContainEqual({ kind: 'text', text: verificationEn });
     expect(cards()).toBe(beforeWrite);
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('business result\n');
     // A mutating shell call asks the person's card in standart; a denied card leaves no effect.
@@ -172,6 +191,31 @@ it('compiled service and real synthetic-person PTY use both production CLI drive
     if (process.env['K16_PROOF_DIR']) await writeFile(join(process.env['K16_PROOF_DIR'], `compiled-${nativeCliAgent(family)!.id}${process.env['CI'] === 'true' ? '-ci' : ''}.json`), proofJson({ events, decisions, firstRecord, firstSeal, secondSeal }));
   }
 }, 150_000);
+
+it.each([
+  { family: families[0]!, language: 'en' as const, banner: verificationEn,
+    note: 'This turn reached its tool-call limit. The remaining calls did not run. The answer is incomplete.' },
+  { family: families[1]!, language: 'tr' as const, banner: verificationTr,
+    note: 'Bu tur araç çağrısı sınırına ulaştı. Kalan çağrılar çalıştırılmadı. Yanıt tamamlanmadı.' },
+])('compiled $family chat records the tool-call limit in $language and replays its closing without effects', async ({ family, language, banner, note }) => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  // The synthetic stream needs room for all tool records before it reaches the separate bridge limit.
+  const h = await fixture(family, language, nativeCliAgent(family)!.bridge.frameMaxBytes);
+  const client = createTerminalRuntimeClient(h.f.project, h.options);
+  await terminalRuntimePeer(client);
+  const command = { schemaVersion: 1 as const, scopeId: 's', turnId: 'T237-LIMIT', messages: [{ role: 'user' as const, content: 'T237-LIMIT' }] };
+  const events: AgentTurnStreamEvent[] = [];
+  const result = await client.chatTurn(command, event => events.push(event));
+  expect.soft(events).toContainEqual({ kind: 'text', text: banner });
+  expect.soft(result).toMatchObject({ finish: 'error', note, recorded: true, replayed: false });
+  expect(events.filter(event => event.kind === 'tool.started' && event.name === 'write_file')).toHaveLength(1);
+  expect(await readFile(join(h.f.project, 'admitted.txt'), 'utf8')).toBe('business result\n');
+  await expect(readFile(join(h.f.project, 'refused.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  const beforeReplay = events.length, trace = await readFile(h.traceFile, 'utf8');
+  expect.soft(await client.chatTurn(command, event => events.push(event))).toMatchObject({ finish: 'error', note, recorded: true, replayed: true });
+  expect(events.slice(beforeReplay).some(event => event.kind === 'tool.started')).toBe(false);
+  expect(await readFile(h.traceFile, 'utf8')).toBe(trace);
+}, 90_000);
 
 it('compiled Workline in a real PTY cancels with Esc, stops a plugin/native-surface mismatch turn and runs the next turn with tools for both CLIs (owner 2026-11-05: no pause)', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;

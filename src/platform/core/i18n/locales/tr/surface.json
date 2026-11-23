@@ -629,6 +629,7 @@
   "agent.turn.outcome.tools": "{rounds} turda {calls} araç çağrısı çalıştırıldı; sonuçları yukarıda",
   "agent.turn.outcome.cancelled": "İptal edildi. {summary}.",
   "agent.turn.outcome.cancelledMidAnswer": "yanıt tamamlanmadan iptal edildi",
+  "agent.turn.outcome.toolCallLimit": "Bu tur araç çağrısı sınırına ulaştı. Kalan çağrılar çalıştırılmadı. Yanıt tamamlanmadı.",
   "agent.turn.outcome.serviceStopped": "deckent servisi bu tur sırasında durdu (kapatıldı; siz iptal etmediniz). {summary}. Bir sonraki iletiniz servisi yeniden başlatır.",
   "agent.turn.outcome.serviceStoppedMidAnswer": "deckent servisi yanıtın ortasında durdu",
   "agent.turn.outcome.mechanical": "Önceki iletiler model özeti olmadan kısaltıldı; modelin özeti okunamadı. İletiler kısa alıntılar olarak korunduğu için bazı ayrıntılar eksik olabilir. Hâlâ önemli olan bilgileri tekrar yazın veya yeni bir konuşma açın.",
