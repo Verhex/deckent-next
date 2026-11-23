@@ -4,7 +4,7 @@ import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { boundLine, readBoundedTextFile, sliceUtf8, splitLines } from './bounded.js';
 import { compileSearchPattern, metaPattern, renderReadFileView, resolveReadFileBudget, resolveReadFileViewRequest } from './views.js';
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
-  type WorkspacePathDiagnostic, type WorkspacePathError, type WorkspaceScope } from './scope.js';
+  type WorkspacePathFailure, type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
 import LIMITS from './limits.json' with { type: 'json' };
 
@@ -58,11 +58,11 @@ const fail = (tool: string, detail: string, kind: ToolErrorClass = 'ordinary'): 
  */
 type WorkspaceReadRefusal = 'path-outside-workspace' | 'path-denied' | 'hardlink-refused' | 'descriptor-moved';
 type ObserveRefusal = (decision: WorkspaceReadRefusal) => void;
-function pathFail(tool: string, refused: { readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic }, path: string,
+function pathFail(tool: string, refused: WorkspacePathFailure, path: string,
   observe?: ObserveRefusal): AgentToolOutcome {
   const error = refused.error;
   if (error === 'path-outside-workspace' || error === 'path-denied' || error === 'hardlink-refused') observe?.(error);
-  if (error === 'path-changed' && refused.diagnostic?.step.startsWith('verify:')) observe?.('descriptor-moved');
+  if (refused.descriptorMoved) observe?.('descriptor-moved');
   const diagnostic = refused.error === 'not-found' || refused.error === 'path-changed' ? refused.diagnostic : undefined;
   const detail = diagnostic ? ` step=${diagnostic.step}${diagnostic.errno ? ` errno=${diagnostic.errno}` : ''}` : '';
   return withToolErrorClass({ status: 'error' as const, text: `[deckent] ${tool}: error=${refused.error}${detail} path=${path}`, ...(diagnostic ? { diagnostic } : {}) }, 'ordinary');

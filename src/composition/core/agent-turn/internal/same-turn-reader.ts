@@ -33,8 +33,10 @@ export function bindRetainedTurnResponse(root: string, options: ConfigLoadOption
         if (!valid()) return refuse();
         const person = await loadPeerInvocationContext(root, scopeId, options, peer, 'read');
         if (!sameInstallation(person) || !isDeepStrictEqual(person.principal, witness.principal) || await person.path() !== path) return refuse();
-        const authorization = await new ModelInvocationPolicyAuthorization(person.policy).authorize('inspect-content', target, person.principal).catch((error: unknown) => {
-          if (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') observe?.(receipt, person.document.revision);
+        let decisionPolicy: typeof person.document | undefined;
+        const source = { load: async () => (decisionPolicy = await person.policy.load()) };
+        const authorization = await new ModelInvocationPolicyAuthorization(source).authorize('inspect-content', target, person.principal).catch((error: unknown) => {
+          if (decisionPolicy && error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') observe?.(receipt, decisionPolicy.revision);
           throw error;
         });
         if (authorization.revision !== person.document.revision) return refuse();

@@ -1,8 +1,8 @@
-import { chmod, link, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createGlobMatcher, createWorkspaceReadTools, workspaceReadResultBytes, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
   WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
@@ -10,6 +10,10 @@ import { agentToolSpecSchema } from '#domain/index.js';
 import { summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';
 
 const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readlink: vi.fn(actual.readlink) };
+});
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(async root => { execFileSync('chmod', ['-R', 'u+rwx', root]); await rm(root, { recursive: true, force: true }); })); });
 
@@ -195,6 +199,31 @@ custodyIt('[requires Linux /proc/self/fd custody] refuses a walked file whose pa
   expect(outcomes['dir/b.txt']).toBe('changed during the walk');
   expect(outcomes['later/c.txt']).toBeUndefined();
   expect(incomplete.changed).toBeGreaterThanOrEqual(1);
+});
+
+custodyIt('audits a descriptor mismatch only after a successful kernel-path comparison', async () => {
+  const { base, root } = await workspace({ 'a.txt': 'private content' });
+  const tools = await createWorkspaceReadTools(root), observe = vi.fn();
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const kernelPath = vi.mocked(readlink);
+  const target = join(root, 'a.txt');
+  kernelPath.mockImplementation(async (...args) => {
+    const resolved = await actual.readlink(...args);
+    if (resolved === target) throw Object.assign(new Error('readlink unavailable'), { code: 'EACCES' });
+    return resolved;
+  });
+  try {
+    const unavailable = await tools.execute('read_file', { path: 'a.txt' }, undefined, observe);
+    expect(unavailable).toEqual({ status: 'error', text: '[deckent] read_file: error=path-changed step=verify:1 path="a.txt"', diagnostic: { step: 'verify:1' } });
+    expect.soft(observe).not.toHaveBeenCalled();
+    observe.mockClear();
+    kernelPath.mockImplementation(async (...args) => {
+      if (await actual.readlink(...args) === target) await rename(target, join(base, 'moved.txt'));
+      return actual.readlink(...args);
+    });
+    expect(await tools.execute('read_file', { path: 'a.txt' }, undefined, observe)).toEqual(unavailable);
+    expect(observe.mock.calls).toEqual([['descriptor-moved']]);
+  } finally { kernelPath.mockReset(); }
 });
 
 it('matches the shared glob grammar without requiring descriptor custody', () => {

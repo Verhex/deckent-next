@@ -35,7 +35,7 @@ const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 const RAW = 'fixture-private-native-body-marker';
 type Card = Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
-type Outcome = 'allow' | 'deny' | 'refuse' | 'lost' | 'corrupt' | 'cancel-card' | 'masking-changed' | 'raw-masking-changed';
+type Outcome = 'allow' | 'deny' | 'refuse' | 'fresh-refusal' | 'lost' | 'corrupt' | 'cancel-card' | 'masking-changed' | 'raw-masking-changed';
 
 async function recording(cli: 'codex' | 'claude') {
   const dir = new URL('../../fixtures/same-turn-planning/' + cli + '/recorded/', import.meta.url);
@@ -99,10 +99,11 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
         { ...profile, id: chosenBrain, allocation: { ...profile.allocation, id: chosenBrain }, reference, bindingDigest }] } }));
   }
   const first = firstRunPolicyTemplate({ scopeId: 's', principal: { issuer: owner.issuer, subject: owner.subject }, ...FIRST_RUN_TOOL_NAMES });
-  const policy = decision === 'refuse' ? { ...first.policy, grants: first.policy.grants.map(grant =>
-    grant.resource.kind === 'model-invocation' ? { ...grant, actions: grant.actions.filter(action => action !== 'inspect-content') } : grant) } : first.policy;
-  await writeFile(join(f.data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
-  await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 3, revision: 'fixture', bindings: [], modes: [] }), { mode: 0o600 });
+  const deniedPolicy = { ...first.policy, grants: first.policy.grants.map(grant =>
+    grant.resource.kind === 'model-invocation' ? { ...grant, actions: grant.actions.filter(action => action !== 'inspect-content') } : grant) };
+  const policyFile = join(f.data, 'policy.json'), freshRevision = 'fresh-read-denial', bindingsRevision = 'fixture';
+  await writeFile(policyFile, JSON.stringify(decision === 'refuse' ? deniedPolicy : first.policy), { mode: 0o600 });
+  await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 3, revision: bindingsRevision, bindings: [], modes: [] }), { mode: 0o600 });
   clearConfigCache();
   const terminal = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options, personEnv(process.env)));
   const lost = new AbortController();
@@ -155,6 +156,16 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
       const result = await authorize.call(this, ...args);
       if (args[0] === 'inspect-content') lost.abort();
       return result;
+    });
+  }
+  if (decision === 'fresh-refusal') {
+    const authorize = ModelInvocationPolicyAuthorization.prototype.authorize;
+    vi.spyOn(ModelInvocationPolicyAuthorization.prototype, 'authorize').mockImplementation(async function (this: ModelInvocationPolicyAuthorization, ...args) {
+      if (args[0] === 'inspect-content' && args[2].assurance === 'os-user') {
+        expect(JSON.parse(await readFile(policyFile, 'utf8')).revision).toBe(first.policy.revision);
+        await writeFile(policyFile, JSON.stringify({ ...deniedPolicy, revision: freshRevision }), { mode: 0o600 });
+      }
+      return authorize.call(this, ...args);
     });
   }
   // The separate Brain would claim the same login. Keep the transport fenced even if the routing regresses.
@@ -301,7 +312,7 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
   expect(JSON.stringify({ trace, result })).not.toMatch(/MODEL_INVOCATION_CAPACITY_EXHAUSTED|HEADLESS_LOGIN_BUSY/u);
   expect(selected).toBe(shouldCard || decision === 'corrupt' ? 1 : 0);
   expect(settledResponse).toBe(true);
-  if (decision === 'refuse' || decision === 'corrupt') {
+  if (decision === 'refuse' || decision === 'fresh-refusal' || decision === 'corrupt') {
     expect(result).toMatchObject({ finish: 'error', note: 'The system could not verify access to the saved reply for this chat. No plan was sent for approval and no Run started. Use /do to request a separate plan.' });
   }
   snapshot(f.path, db => {
@@ -313,10 +324,13 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     const { response: stored } = JSON.parse(String(response?.record));
     expect(stored.native.choices[0].message.content).toBe(draft);
     expect(stored.native.fixtureWitness).toBe(decision === 'corrupt' ? 'altered' : RAW);
-    const readRefusals = db.prepare("SELECT record FROM audit_events WHERE kind='access-refusal-summary'").all()
-      .map(row => JSON.parse(String(row.record)).event.subject)
-      .filter(subject => subject.evidenceBasis === 'retained-response-authority');
-    if (decision === 'refuse') {
+    const readEvents = db.prepare("SELECT record FROM audit_events WHERE kind='access-refusal-summary'").all()
+      .map(row => JSON.parse(String(row.record)).event)
+      .filter(event => event.subject.evidenceBasis === 'retained-response-authority');
+    const readRefusals = readEvents.map(event => event.subject);
+    if (decision === 'refuse' || decision === 'fresh-refusal') {
+      const revision = decision === 'fresh-refusal' ? freshRevision : first.policy.revision;
+      expect(readEvents.map(event => event.policyRevision)).toEqual([`${revision}+${bindingsRevision}`]);
       expect(readRefusals).toEqual([expect.objectContaining({ turnId, count: 1, samples: [],
         invocationId: db.prepare('SELECT invocation_id FROM model_invocations').get()?.invocation_id,
         target: { role: 'stored-invocation-response', identity: { keyId: expect.any(String), digest: expect.stringMatching(/^[a-f0-9]{64}$/u) } },
@@ -423,3 +437,7 @@ it.skipIf(process.platform !== 'linux')('private read denial, lost connection an
     vi.restoreAllMocks(); vi.clearAllMocks();
   }
 }, 90_000);
+
+it.skipIf(process.platform !== 'linux')('attributes a retained read refusal to the fresh policy that denied it', async () => {
+  await run('codex', 'fresh-refusal');
+}, 45_000);

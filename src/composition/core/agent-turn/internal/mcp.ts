@@ -70,12 +70,9 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     const command = tools.command(entry, args, { scopeId, turnId, ...execution, argsDigest: agentToolArgumentsDigest(name, args) }), clock = new SystemTrustedClock();
     let ran: McpCallOutcome | null = null;
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
-      async admit(call) {
-        const reason = await authority({ ...call, binding: call.server === entry.server ? entry.binding : null });
-        if (reason && reason !== 'trust-unavailable') observe?.({ basis: 'mcp-send-trust', reason, role: 'mcp-server', operationClass: 'invoke',
-          operation: MCP_TOOL_CALL_OPERATION.operation, commandId: command.commandId });
-        return reason;
-      } });
+      admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }, reason => observe?.({
+        basis: 'mcp-send-trust', reason, role: 'mcp-server', operationClass: 'invoke', operation: MCP_TOOL_CALL_OPERATION.operation, commandId: command.commandId,
+      })) });
     const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
     const store = await openConfiguredLedger(context, { migration: 'forbid' });
     try {
