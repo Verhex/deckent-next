@@ -6,10 +6,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as observe from '#surfaces/core/cli-observe/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
-import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
+import { planSetup, SETUP_PERMISSIONS_FAMILY, SetupStageRegistry, WORK_SETUP_FAMILY, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { ErrorRegistry, MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
-import { runForegroundStage, createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { runForegroundStage, createSetupController, renderSetupLines, setupInitCommand, setupMessage, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { loadOnboardingScreens, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
@@ -110,6 +111,7 @@ describe('I-S4 setup outcomes', () => {
       expect(await controller.step('apply')).toBeNull();
       expect(await controller.runPending()).toBe(true);
       expect(controller.model().rows.join('\n')).toContain('not applied');
+      expect(controller.model().rows.join('\n')).toContain('Permissions: not applied. The confirmation step ended without approval.');
       expect(controller.model().rows.join('\n')).not.toContain('applied; observed again');
       await controller.step('later'); // defer the read-only check
       expect(controller.model().rows.join('\n')).toContain('step(s) put off');
@@ -235,6 +237,90 @@ describe('I-S4 setup outcomes', () => {
     expect(document.stages.find(stage => stage.id === 'core:policy')!.state).toBe('blocked');
     expect((await readdir(root)).sort()).toEqual(['package.json']); expect(await readdir(home)).toEqual([]);
   });
+});
+
+it('N2: name the postponed permission step and keep each earlier apply outcome separate', async () => {
+  const registry = new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, SETUP_PERMISSIONS_FAMILY]);
+  const saved: SetupObservation = { ...base, language: { configured: 'en', requested: null, system: null },
+    folder: { ...base.folder, configuredScope: 'my-erp' }, profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } },
+    sandbox: { ...base.sandbox, selfTest: 'not-run' }, families: { ...base.families, permissions: null } };
+  const installed: SetupObservation = { ...saved, folder: { ...saved.folder, installation: 'present' }, policy: { state: 'current' },
+    families: { ...saved.families, permissions: { state: 'needs-confirmation', digest: 'preview', profile: 'core:solo', principal: 'person',
+      mode: 'full-auto', effectiveMode: 'standart', selectedProfile: { id: 'core:solo', version: 1 } } } };
+  const run = harness({ apply: () => 'applied' });
+  const create = () => createSetupController({ context: { ...run.context, observeSetup: async () => ({ observation: installed, registry }) },
+    root: '/x', locale: 'en', observed: { observation: saved, registry }, flags: { json: false, yes: false } });
+  const earlier = create(), policy = await earlier.step('yes');
+  expect(policy?.rows.find(row => row.startsWith('>'))).toContain('Permissions · ready to apply');
+  await earlier.step('later');
+  const beforeApply = earlier.outcome();
+  expect(beforeApply.results).toEqual([]);
+  expect(run.applied).toEqual([]);
+  const controller = create();
+  await controller.step('yes');
+  expect(await controller.step('apply')).toBeNull();
+  await controller.runPending();
+  expect(controller.model().rows.find(row => row.startsWith('>'))).toContain('Starting permissions · ready to apply');
+  const sandbox = await controller.step('later');
+  expect(sandbox?.rows.find(row => row.startsWith('>'))).toContain('Command sandbox · ready to apply');
+  await controller.step('later');
+  const outcome = controller.outcome();
+  expect(run.applied.map(stage => stage.id)).toEqual(['core:policy']);
+  for (const [locale, applied, starting, sandboxPostponed, installing] of [
+    ['en', 'Permissions: applied; observed again.', 'You postponed “Starting permissions”. Run deckent init in this folder to continue.',
+      'You postponed “Command sandbox”.', 'You postponed “Permissions”. Run deckent init in this folder to continue.'],
+    ['tr', 'İzinler: uygulandı; yeniden gözlendi.', '“Başlangıç izinleri” adımını ertelediniz. Devam etmek için bu klasörde deckent init çalıştırın.',
+      '“Komut korumalı alanı” adımını ertelediniz.', '“İzinler” adımını ertelediniz. Devam etmek için bu klasörde deckent init çalıştırın.'],
+  ] as const) {
+    const summary = renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome);
+    expect(summary).toContain(applied);
+    expect(summary).toContain(starting);
+    expect(summary).toContain(sandboxPostponed);
+    expect(summary).not.toMatch(/you said no|vazgeçtiniz|Authority pending|Yetki onayı bekliyor/u);
+    const earlierSummary = renderSetupLines(beforeApply.plan, locale, { requested: false, results: beforeApply.results }, beforeApply);
+    expect(earlierSummary).toContain(installing);
+    expect(earlierSummary).not.toContain(starting);
+    expect(earlierSummary).not.toMatch(/you said no|vazgeçtiniz|Authority pending|Yetki onayı bekliyor/u);
+  }
+});
+
+it('N2: the open model and coding-work cards name their own next choices in EN and TR', async () => {
+  const question = await import('../../../src/surfaces/core/terminal-onboarding/internal/question.js');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  const observation: SetupObservation = { ...base, folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' },
+    policy: { state: 'current' }, families: { work: { execution: false, registry: false, pool: false, poolMissing: true } } };
+  const plan = planSetup(observation, undefined, new SetupStageRegistry([WORK_SETUP_FAMILY]), { phase: 'onboarding' });
+  const snapshot: OnboardingSnapshot = { observation, plan, configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) },
+    answers: {}, deferred: [], modelUsable: false, folder: '/fixture', folderFacts: { kind: 'coding', entries: [] }, scopeId: 'my-erp',
+    hosts: [{ id: 'codex', cli: 'found', login: 'found' }], budget: { needed: false }, permissions: { state: 'applied', reason: '' }, pending: [] };
+  const port = { observe: async () => snapshot, assertPerson: async () => {}, defer: async () => {} } as unknown as OnboardingPort;
+  const ask = vi.spyOn(question, 'askOnboardingQuestion');
+  try {
+    for (const [locale, model, work, outside] of [
+      ['en', 'Choose “Enter · Continue” here to connect a chat model.', 'Choose “Enter · Continue” to use codex for the first work kind.',
+        'The first worker cannot start because no worker pool is set up. Choose the first work kind in /setup, then set up its pool.'],
+      ['tr', 'Sohbet modeli bağlamak için bu kartta “Enter · Devam”ı seçin.', 'İlk iş türünde codex kullanmak için “Enter · Devam”ı seçin.',
+        'İşçi havuzu kurulmadığı için ilk işçi başlatılamıyor. /setup içinde ilk iş türünü seçin, ardından havuzunu kurun.'],
+    ] as const) {
+      const pool = plan.stages.find(stage => stage.id === 'work:pool')!;
+      expect(setupMessage(pool.reason.code, pool.reason.params, locale)).toBe(outside);
+      ask.mockReset().mockResolvedValueOnce({ id: 'later' }).mockResolvedValueOnce({ id: 'change' })
+        .mockResolvedValueOnce({ id: 'codex' }).mockResolvedValueOnce({ id: 'exit' });
+      await runOnboardingSession(port, { locale } as never, { locale }, true);
+      const [modelCard, workCard, picker, confirmation] = ask.mock.calls.map(([card]) => card);
+      expect(modelCard?.title).toBe(locale === 'en' ? 'Model connection' : 'Model bağlantısı');
+      expect(workCard?.title).toBe(locale === 'en' ? 'Use codex for coding work?' : 'Kodlama işlerini codex yapsın mı?');
+      const poolStep = locale === 'en' ? 'Set up its pool at “Confirm worker readiness”.' : 'Havuzu “İşçi hazırlığını onayla” adımında kurun.';
+      expect(modelCard?.body?.join(' ')).toContain(model);
+      expect(modelCard?.body?.join(' ')).toContain(poolStep);
+      expect(workCard?.body?.join(' ')).toContain(work);
+      expect(workCard?.body?.join(' ')).toContain(poolStep);
+      expect(picker?.choices.map(choice => choice.id)).toContain('codex');
+      expect(confirmation?.body?.join(' ')).toContain(work);
+      expect(confirmation?.body?.join(' ')).toContain(poolStep);
+      expect([...(modelCard?.body ?? []), ...(workCard?.body ?? [])].join(' ')).not.toContain('/setup');
+    }
+  } finally { ask.mockRestore(); }
 });
 
 describe('I-S4 setup window controller (no Ink)', () => {
@@ -534,12 +620,21 @@ it('119-F1b: one fresh execution preview feeds the witnessed apply and safe hist
     const covered = controller(); await covered.offerExecution();
     const frame = await setupWindowAt(covered.model(), { columns: 60, rows: 24 });
     try {
+      expect(frame.text()).toContain('PageUp/PageDown scroll');
       await frame.press('\u001b[F');
       const transcripts = process.env['DECKENT_I_S3_TRANSCRIPTS'];
       if (transcripts) await writeFile(join(transcripts, '119-coverage-frame.txt'), frame.screen());
       for (const id of sources) expect(frame.text().split(id)).toHaveLength(2);
       await frame.close(); expect(frame.text()).not.toMatch(/[›>] [12]\./u);
     } finally { await frame.close(); }
+    const outcome = covered.outcome();
+    for (const [locale, prefix] of [['en', 'Execution permissions are already covered:'], ['tr', 'Yürütme izinleri zaten karşılanıyor:']] as const) {
+      const summary = renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome);
+      expect(summary).toContain(`${prefix} ${sources.join(', ')}.`);
+      for (const id of sources) expect(summary.split(id)).toHaveLength(2);
+    }
+    const tall = await setupWindowAt(covered.model(), { columns: 100, rows: 40 });
+    try { expect(tall.text()).not.toContain('PageUp/PageDown'); } finally { await tall.close(); }
     delete run.context.previewSetupExecutionPermission;
     status = 'preview'; history = 'never'; requests.length = 0; applyStatus = 'conflict'; card.mockResolvedValue('grant'); await controller().offerExecution(); expect(run.out()).toContain('Policy changed; preview again'); expect(requests).toHaveLength(2);
     requests.length = 0; applyStatus = 'unavailable'; await controller().offerExecution(); expect(run.out()).toContain('Outcome could not be verified'); expect(requests).toHaveLength(2);

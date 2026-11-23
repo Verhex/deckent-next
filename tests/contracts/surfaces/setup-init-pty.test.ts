@@ -259,6 +259,12 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       expect(rules.every(rule => JSON.stringify(rule.scopes) === '["erp"]')).toBe(true);
       expect(accepted.output.match(new RegExp(title.replace('?', '\\?'), 'gu'))?.length).toBeGreaterThan(0);
       expect(accepted.output).not.toContain('Approval required');
+      const covered = await run(['init', '--lang', locale], [[profile, '\u001b']], 1);
+      const coveredFrame = terminalBuffers(covered.output.slice(0, covered.marks[0]!), 60, 24).text;
+      const heading = locale === 'en' ? 'deckent setup plan' : 'deckent kurulum planı';
+      const summary = covered.output.slice(covered.marks[0]!).split(heading)[1] ?? '';
+      expect(coveredFrame.replace(/\s+/gu, ' ')).toContain(locale === 'en' ? 'PageUp/PageDown scroll' : 'PageUp/PageDown kaydır');
+      for (const rule of rules) expect(summary.split(rule.id)).toHaveLength(2);
       const rollback = await run(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale], [[locale === 'en' ? 'Withdraw managed permission?' : 'Yönetilen izin kaldırılsın mı?', '\u001b[A'], [keys, '\r']]);
       expect(rollback.output).not.toContain(title);
       const snapshot = async () => {

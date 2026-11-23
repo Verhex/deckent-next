@@ -60,7 +60,7 @@ const errorCode = (error: unknown) => { const value = (error as { code?: unknown
  * loop). Every model has the same number of rows, so the window never changes height.
  */
 export function createSetupController(input: Readonly<{ context: SetupCommandContext; root: string; locale: Locale; observed: Observed; flags: SetupFlags }>) {
-  const { context, root, flags } = input, later = new Set<string>(), results: SetupApplyResult[] = [];
+  const { context, root, flags } = input, later = new Set<string>(), postponed = new Set<string>(), results: SetupApplyResult[] = [];
   let locale = input.locale, observed = input.observed, values = unattendedAnswers(observed.observation, flags, true, observed.registry), note = '', pending: SetupStage | null = null;
   let executionOffered = false, executionNotice: ExecutionPermissionNotice | undefined;
   const plan = () => planFor(observed, values);
@@ -91,7 +91,8 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     const offered = choices(stage);
     return { title: t('setup.window.title', {}, locale), rows, heights, wrapNotice: executionNotice?.key === 'setup.aiExecution.covered' && !!note, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
       initial: initialChoice(stage, offered),
-      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), decisionArm: decisionArmLabels(locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
+      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), scrollHint: t('setup.window.scrollHint', {}, locale),
+      decisionArm: decisionArmLabels(locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
   const settle = async (stage: SetupStage, result: SetupApplyResult) => {
@@ -105,7 +106,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     const stage = activeStage(plan(), later), picked = choices(stage).find(choice => choice.id === id);
     if (!picked || picked.action === 'close' || !stage) return null;
     note = '';
-    if (picked.action === 'later') later.add(stage.id);
+    if (picked.action === 'later') { later.add(stage.id); postponed.add(stage.id); }
     else if (picked.action === 'answer') {
       values = { ...values, [stage.id]: picked.answer };
       if (stage.id === 'core:language' && (LOCALES as readonly unknown[]).includes(picked.answer)) locale = picked.answer as Locale;
@@ -131,6 +132,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     return !executionNotice?.interrupted;
   };
   return { model, step, runPending, offerExecution, interrupted: () => executionNotice?.interrupted, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results],
+    postponed: [...postponed], executionNotice,
     ...(observed.firstJob ? { firstJob: observed.firstJob } : {}),
     model: observed.observation.model }) };
 }

@@ -3,6 +3,7 @@ import { headlessGovernedUseText, messageText, t, terminalSafeText, type Locale 
 import type { SetupObservation, SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { SetupApplyResult } from './contract.js';
+import type { ExecutionPermissionNotice } from './execution-permission.js';
 
 /** The versioned `deckent init --json` document (I-S4): locale-free (message keys and their parameters), so an AI or script reads the same
  * contract in every language. `cli` is the exact long command for a stage; `apply` lists what `--yes` tried and how each attempt ended.
@@ -66,7 +67,7 @@ export function applyLine(plan: SetupPlan, result: SetupApplyResult, locale: Loc
 
 /** Plain lines for a pipe or a dumb terminal (and the summary after the window closes): no colour, no cursor movement, one stage per block. */
 export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>,
-  readiness?: Readonly<{ firstJob?: FirstJobFacts; model?: SetupObservation['model'] }>): string {
+  details?: Readonly<{ firstJob?: FirstJobFacts; model?: SetupObservation['model']; postponed?: readonly string[]; executionNotice?: ExecutionPermissionNotice | undefined }>): string {
   const lines = [t('setup.render.header', { digest: plan.planDigest.slice(0, 12) }, locale)];
   plan.stages.forEach((stage, index) => {
     lines.push(`${index + 1}. ${stageTitle(stage, locale)} · ${stageStateLabel(stage, locale)} · ${stageText(plan, stage.reason.code, stage.reason.params, locale)}`);
@@ -75,16 +76,24 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
     if (command && stage.state !== 'done') lines.push(`   $ ${command}`);
   });
   for (const result of apply.results) lines.push(applyLine(plan, result, locale));
+  const authorityPending = setupAuthority(plan).status === 'authority-pending';
+  const postponedPermission = authorityPending ? plan.stages.find(stage =>
+    (stage.id === 'core:policy' || stage.id === 'permissions:start-mode') && details?.postponed?.includes(stage.id)) : undefined;
+  for (const stage of plan.stages) if (stage !== postponedPermission && details?.postponed?.includes(stage.id)) {
+    lines.push(t('setup.apply.postponed', { stage: stageTitle(stage, locale) }, locale));
+  }
   // BeUser S-10: a fresh installation whose encrypted key store default was refused says so and where to fix it (never silent: keys then come from
   // the environment, which the README does not lead a person to expect).
   for (const result of apply.results) if (result.secretStore?.status === 'not-set') lines.push(t('setup.secretStore.notSet', { code: terminalSafeText(result.secretStore.code ?? '-') }, locale));
   if (!apply.results.some(result => result.status === 'applied')) lines.push(apply.requested ? t('setup.render.nothingAppliedYes', {}, locale) : t('setup.render.nothingApplied', {}, locale));
-  if (setupAuthority(plan).status === 'authority-pending') lines.push('', t('setup.permissions.pending', {}, locale));
+  if (authorityPending) {
+    lines.push('', postponedPermission ? t('setup.permissions.postponed', { stage: stageTitle(postponedPermission, locale) }, locale) : t('setup.permissions.pending', {}, locale));
+  }
   // The installation is complete once the final check settled; the first open sets up the provider and the first job (onboarding).
   if (plan.stages.some(stage => stage.id === 'core:final-check' && stage.state === 'done')) lines.push('', t('setup.install.done', {}, locale));
-  if (readiness?.firstJob?.poolMissing && !plan.stages.some(stage => stage.id === 'work:pool'))
+  if (details?.firstJob?.poolMissing && !plan.stages.some(stage => stage.id === 'work:pool'))
     lines.push(t('doctor.firstWorker.pool', {}, locale), t('doctor.firstWorker.poolNext', {}, locale));
-  const model = readiness?.model;
+  const model = details?.model;
   if (model?.externalConnections?.length) {
     if (model.selection && !plan.stages.some(stage => stage.id === 'core:model'))
       lines.push(t('setup.reason.modelSelected', { model: terminalSafeText(model.selection) }, locale));
@@ -93,5 +102,7 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
       lines.push(`${connection} · ${limit.text}`, limit.next);
     }
   }
+  const notice = details?.executionNotice;
+  if (notice?.key === 'setup.aiExecution.covered') lines.push(setupMessage(notice.key, notice.params, locale));
   return lines.join('\n');
 }
