@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Locale } from '#platform/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 import { runLedgerCommand, TRANSCRIPT_PAGE_LINES } from '#surfaces/core/terminal-work/index.js';
+import type { WorkerAttemptIdentity } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
 // TUI2 L3: /transcript shows the newest lines first and says where the earlier ones are; the headline carries short identities, the details line the full ones.
@@ -15,10 +16,17 @@ const show = async (locale: Locale, args: string, count = 100) => (await runLedg
 
 describe('/transcript paging', () => {
   it('EN page 1 is the newest 40 lines with the way to the earlier ones', async () => {
-    const entry = await show('en', '1');
+    const { ports, observe } = workerSession();
+    const pagingPorts = { ...ports, inspectTranscript: ledger(100).inspectTranscript };
+    const [entry] = await runLedgerCommand('transcript', '1', pagingPorts, labelsFor('en'));
+    if (entry?.kind !== 'notice') throw new Error('Expected transcript notice');
     expect(entry.level).toBe('info');
     expect(entry.text.split('\n')).toEqual([`Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a`, `Details: task ${TASK} · attempt ${ATTEMPT}`,
       ...Array.from({ length: TRANSCRIPT_PAGE_LINES }, (_, index) => `line ${61 + index}`), 'Lines 61–100 of 100 (page 1 of 3). Earlier lines: /transcript 1 2']);
+    observe(workerB, workerA);
+    expect(await runLedgerCommand('transcript', '1 2', pagingPorts, labelsFor('en'))).toMatchObject([
+      { level: 'info', text: expect.stringContaining(`Details: task ${TASK} · attempt ${ATTEMPT}`) },
+    ]);
   });
   it('TR page 3 is the start of the transcript', async () => {
     const entry = await show('tr', '1 3');
@@ -37,5 +45,40 @@ describe('/transcript paging', () => {
   it('rejects a malformed page', async () => {
     expect((await show('en', '1 zero')).level).toBe('error');
     expect((await show('en', '1 2 3')).text).toContain('Usage: /transcript');
+  });
+});
+
+const workerA = report.sources[0]!.workers[0]!;
+const workerB = { ...workerA, identity: { ...workerA.identity!, attemptId: '6d3c1b2a-9e8f-4a7b-8c6d-0e1f2a3b4c5d', generation: 2 } };
+
+function workerSession() {
+  let workers = [workerA, workerB];
+  const inspectTranscript = vi.fn(async (attempt: WorkerAttemptIdentity) => `output from ${attempt.attemptId}`);
+  const ports = { ...ledger(1), async listWorkers() { return { ...report, sources: [{ ...report.sources[0]!, workers }] }; }, inspectTranscript };
+  return { ports, inspectTranscript, observe: (...next: typeof workers) => { workers = next; } };
+}
+
+describe('/transcript worker numbers', () => {
+  it('reads the Attempt last listed at that number even when the observation reorders', async () => {
+    const { ports, inspectTranscript, observe } = workerSession(), labels = labelsFor('en');
+    expect(await runLedgerCommand('workers', '', ports, labels)).toMatchObject([
+      { ordinal: 1, attempt: workerA.identity }, { ordinal: 2, attempt: workerB.identity },
+    ]);
+    observe(workerB, { ...workerA, identity: { ...workerA.identity! } });
+    const [entry] = await runLedgerCommand('transcript', '1', ports, labels);
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerA.identity);
+    expect(entry).toMatchObject({ level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') });
+  });
+
+  it('reports a departed Attempt in EN and TR without reading the worker now at its number', async () => {
+    const { ports, inspectTranscript, observe } = workerSession();
+    await runLedgerCommand('workers', '', ports, labelsFor('en'));
+    observe(workerB);
+    expect(await runLedgerCommand('transcript', '1', ports, labelsFor('en'))).toMatchObject([{ level: 'error', text: 'No observed worker 1 in this scope.' }]);
+    expect(await runLedgerCommand('transcript', '1', ports, labelsFor('tr'))).toMatchObject([{ level: 'error', text: 'Bu kapsamda gözlenen 1 işçisi yok.' }]);
+    expect(inspectTranscript).not.toHaveBeenCalled();
+    await runLedgerCommand('workers', '', ports, labelsFor('en'));
+    await runLedgerCommand('transcript', '1', ports, labelsFor('en'));
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerB.identity);
   });
 });
