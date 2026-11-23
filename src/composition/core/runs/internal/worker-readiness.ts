@@ -1,7 +1,7 @@
 import { executionRegistrySchema } from '#domain/index.js';
 import { inspectWorkerReadiness, composeModelRolePolicy, connectedModelProfile } from '#engine/index.js';
 import { compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCliWorkerBindingSchema, openSqliteModelCatalogReader } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { inspectNativeStateCustody, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 
@@ -16,7 +16,11 @@ export async function inspectConfiguredWorkerReadiness(root: string, scopeId: st
       { scopeId, nowMs: Date.now(), imageRefreshInProgress: await isToolchainRefreshInProgress(root, options), roles: composeModelRolePolicy(config['model_roles']) },
       (template, input, evidence) => compileNativeCodingWorkInput(template, input, undefined, evidence), async (template, model) => {
         const binding = nativeCliWorkerBindingSchema.safeParse(template.parameters['worker']);
-        return !binding.success || await connectedModelProfile(config, scopeId, binding.data, model) !== null;
+        if (!binding.success) return true;
+        const connection = await connectedModelProfile(config, scopeId, binding.data, model);
+        if (!connection) return false;
+        return await inspectNativeStateCustody(connection.definition, options.env) === 'outside-installation'
+          ? { ready: false, code: 'HEADLESS_STATE_OUTSIDE_INSTALLATION', cli: ['deckent', 'models', 'login', '--connection', model.channelId] } : true;
       }, targetKind);
   } finally { reader.close(); }
 }

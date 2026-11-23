@@ -39,7 +39,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     if (before.digest !== after.digest || JSON.stringify(before.global) !== JSON.stringify(after.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
     const configBasis = { projectDigest: after.digest, globalDigest: sha256(JSON.stringify(after.global)) };
     const coding = observed.observation.families?.['coding'] as { repository: string; hosts: { id: string; cli: string; login: string }[] } | undefined;
-    const work = observed.observation.families?.['work'] as { pendingProvider?: string; providers?: readonly string[]; connections?: readonly { id: string; provider: string }[]; connection?: { id: string; provider: string } } | undefined;
+    const work = observed.observation.families?.['work'] as { pendingProvider?: string; providers?: readonly string[];
+      connections?: readonly { id: string; provider: string; governedUse?: 'outside-installation'; channelId?: string }[]; connection?: { id: string; provider: string } } | undefined;
     const provider = work?.pendingProvider ?? affectedToolchainProfiles(config)[0]?.provider;
     const values = { ...(provider ? { 'work:kind': provider } : {}), ...answers };
     const planned = planSetup(observed.observation, { schemaVersion: 2, values }, observed.registry, { phase: 'onboarding' });
@@ -52,9 +53,9 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const visible = names.filter(name => !name.startsWith('.'));
     const kind = eligible ? 'coding' as const : !inspected ? 'unknown' as const : !visible.length ? 'empty' as const : 'documents' as const;
     // Billing comes from the connected model's exact scoped profile, never its provider name.
-    signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
+    signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options, scopeId);
     // Connection is distinct from permission/budget: the normal turn still enforces every invocation gate.
-    const modelUsable = chat?.status === 'ready' && chat.reference !== null;
+    const modelUsable = chat?.status === 'ready' && chat.reference !== null && !chat.governedUse;
     const profiles = configuredInvocationProfiles(config);
     const legacyMetered = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId)?.billing === 'metered';
     const needsAccount = onboardingNeedsBudget(profiles, scopeId, chat?.reference ?? null, legacyMetered, null);

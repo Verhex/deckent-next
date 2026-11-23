@@ -1,6 +1,6 @@
 import type { PanelLine } from '#surfaces/core/terminal-panels/index.js';
 import type { ModelConnectResult, McpCapabilityPreview, McpCapabilityRequest, McpCapabilityView } from '#domain/index.js';
-import { t, type ConfigLoadOptions, type Locale, messageText } from '#platform/index.js';
+import { headlessGovernedUseText, t, type ConfigLoadOptions, type Locale, messageText } from '#platform/index.js';
 
 export interface McpCapabilityHandlers {
   listMcpCapabilityScopes(root: string, options: ConfigLoadOptions): Promise<readonly string[]>;
@@ -44,6 +44,7 @@ function modelConnectPullWords(locale: Locale, subscription = false) {
  * PV 2d: `billing` (the registry class of the connection) words a subscription as its CLI login and usage quota, never as a local server. */
 export function modelConnectLines(result: ModelConnectResult, label: string, locale: Locale, billing?: 'subscription' | 'local' | 'metered'): PanelLine[] {
   const subscription = billing === 'subscription';
+  const limit = result.cli?.governedUse ? headlessGovernedUseText(locale, result.connection) : null;
   const step = (state: string) => state === 'written' ? t('models.connect.step.written', {}, locale) : state === 'present' ? t('models.connect.step.present', {}, locale)
     : t('models.connect.step.skipped', {}, locale);
   return [...(result.models ?? []).map(model => ({ label: '', text: modelConnectPullWords(locale, subscription)[model.state].replace('{model}', model.nativeId) })), { label: t('tui.provider.model.field.model', {}, locale), text: label },
@@ -61,5 +62,6 @@ export function modelConnectLines(result: ModelConnectResult, label: string, loc
       tone: subscription ? 'muted' as const : 'warning' as const }] : []),
     ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
     ...(result.worker === 'image-required' ? [{ label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.workerImageRequired', {}, locale), tone: 'warning' as const }] : []),
+    ...(limit ? [{ label: '', text: t('headless.connect.oneShot', {}, locale) }, { label: '', text: limit.text, tone: 'warning' as const }, { label: '', text: limit.next }] : []),
 ];
 }

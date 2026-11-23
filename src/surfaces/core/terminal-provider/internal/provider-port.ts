@@ -124,7 +124,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const done = { connected: result.status === 'connected' };
       if (kind.headlessLogin && kind.terminalTextChat && result.status === 'connected') {
         const readiness = await subscriptionReadiness.inspect('chat', result.reference);
-        lines.push({ label: '', text: subscriptionReadinessText(readiness, locale), tone: readiness.state === 'unavailable' ? 'warning' : 'success' }); return done;
+        lines.push({ label: '', text: subscriptionReadinessText(readiness, locale, kind.id), tone: readiness.state === 'unavailable' || readiness.state !== 'ready' && readiness.governedUse ? 'warning' : 'success' }); return done;
       }
       const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
       if (worker) { lines.push({ label: '', text: worker }); return done; }
@@ -167,14 +167,16 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       // The mutation already returned success. A failed observation must never turn it into an old consent result or trigger another write.
       const summary = t('tui.provider.login.appliedUnverified', {}, locale);
       return { result, observationFailed: true, outcome: { connected: true, title: summary, summary, approvalId: null,
-        lines: [{ label: '', text: summary, tone: 'warning' }, { label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' }] } };
+        lines: [...(result.cli?.governedUse ? lines : []), { label: '', text: summary, tone: 'warning' },
+          { label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' }] } };
     }
     const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
     const prerequisite = result.status === 'connected' && kind?.headlessLogin && kind.terminalTextChat
       ? await subscriptionReadiness.inspect('chat', result.reference) : null;
-    const usable = candidates.some(row => row.availability.invocable) && (!prerequisite || prerequisite.state !== 'unavailable');
+    const governedLimit = prerequisite && prerequisite.state !== 'ready' && prerequisite.governedUse;
+    const usable = candidates.some(row => row.availability.invocable) && !governedLimit && (!prerequisite || prerequisite.state !== 'unavailable');
     // PV: the readiness read is the terminal chat's (its protocol families); a CLI subscription connects for the Brain, whose check ran isolated at connect.
-    const unavailable = prerequisite && prerequisite.state === 'unavailable' ? subscriptionReadinessText(prerequisite, locale) : brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
+    const unavailable = prerequisite && (prerequisite.state === 'unavailable' || governedLimit) ? subscriptionReadinessText(prerequisite, locale, request.kind) : brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
       : t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
     const brain = !usable && brainOnly(kind, candidates.map(row => row.availability));
     if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable || brain ? 'success' : 'warning' });
@@ -277,9 +279,14 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           return entry !== undefined && entry.activation?.state !== 'active';
         };
         const open = (reading?.models ?? []).filter(model => displayReadiness.recognizes(model.reference) && !off(model)), readiness = await displayReadiness.inspectMany('chat', open.map(model => model.reference));
-        const rows = (reading?.models ?? []).map(model => { const login = displayReadiness.recognizes(model.reference), closed = login && off(model);
-          return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale) : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale) : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
-          : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) }; });
+        const rows = (reading?.models ?? []).map(model => {
+          const login = displayReadiness.recognizes(model.reference), closed = login && off(model);
+          const kind = connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId);
+          return { model, login, off: closed, text: closed ? t('tui.model.state.off', {}, locale)
+            : login ? subscriptionReadinessText(readiness[open.indexOf(model)]!, locale, kind?.id ?? model.reference.providerId)
+            : model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+            : brainOnly(kind, [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale) };
+        });
         const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.filter(kind => kind.headlessLogin || (kind.presentation !== 'hidden' && kind.presentation !== 'beta')).map(async kind => {
           const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
           // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".

@@ -31,6 +31,6 @@ export const nativeAgentReadinessReasonSchema = z.enum(['NATIVE_AGENT_CLI_UNAVAI
 export type NativeAgentReadinessReason = z.infer<typeof nativeAgentReadinessReasonSchema>;
 export const nativeAgentReadinessSchema = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('ready'), execution: nativeAgentExecutionSchema }).readonly(),
-  z.strictObject({ state: z.enum(['unavailable', 'unknown']), reason: nativeAgentReadinessReasonSchema }).readonly(),
+  z.strictObject({ state: z.enum(['unavailable', 'unknown']), reason: nativeAgentReadinessReasonSchema, governedUse: z.literal('outside-installation').optional() }).readonly(),
 ]);
 export type NativeAgentReadiness = z.infer<typeof nativeAgentReadinessSchema>;

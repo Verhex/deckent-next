@@ -8,10 +8,16 @@ import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CO
 import { ModelInvocationError, modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { modelInvocationProfileDigest, subscriptionActor, OAuthConnectionError, ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
-import { getConfigKnownSecrets, globalStateRoot, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
+import { getConfigKnownSecrets, globalStateRoot, inspectNativeStateCustody, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
 import { createCatalogTariffLookup } from './catalog-tariff.js';
 import type { loadInvocationContext } from './context.js';
+
+export async function readHeadlessGovernedUse(profile: ModelInvocationProfile, options: ConfigLoadOptions): Promise<'outside-installation' | null> {
+  if (!isNativeCliHeadlessAdapter(profile.adapter)) return null;
+  const custody = await inspectNativeStateCustody(profile.adapter.definition, options.env);
+  return custody === 'outside-installation' ? custody : null;
+}
 import { invocationEffectAuthority } from './authority.js';
 /** Internal agent transport, bound to one exact profile and invocation; never accepted from a wire request. */
 export interface ModelInvocationNativeBinding {

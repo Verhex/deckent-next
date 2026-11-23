@@ -100,6 +100,7 @@
   "coding.runtime.subscription": "Abonelik işçisi (token’sız)",
   "coding.result.runtime": "İşçi: {runtime} · {connection}",
   "coding.connections": "Bağlı abonelikler: {connections} (--connection kimlikleri: deckent coding --json)",
+  "coding.connections.unverified": "{scope} kapsamında yönetilen kullanımın hazır olup olmadığı doğrulanamadı. Bu bağlantıyı o kapsam için yetkili bir terminalden inceleyin.",
   "coding.connection.unsupported": "Bu bağlantı, seçilen sağlayıcı için uyumlu native ajan yeteneği taşımıyor. Eşleşen bağlı ajan profilini veya --docker seçin; hiçbir şey değişmedi.",
   "coding.connection.discoveryUnsupported": "Abonelik işçisi --discovery disabled gerektirir; repo talimatları deckent'in yönetimli işçi talimatları yolundan geçer. Hiçbir şey yazılmadı."
 }

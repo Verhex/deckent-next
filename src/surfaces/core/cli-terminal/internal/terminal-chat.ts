@@ -17,6 +17,7 @@ export type TerminalChatPlanView = Readonly<{
   tools?: 'available' | 'none' | 'unknown' | 'unverified';
   /** NF-7: the last tool verification's time when only its age made `tools` unverified. */
   toolsVerifiedAtMs?: number;
+  governedUse?: 'outside-installation';
 }>;
 
 /** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */
@@ -40,7 +41,7 @@ export type TerminalChatStreamHandler = (
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;
 
-export type TerminalChatPlanHandler = (root: string, options: ConfigLoadOptions) => Promise<TerminalChatPlanView>;
+export type TerminalChatPlanHandler = (root: string, options: ConfigLoadOptions, scopeId?: string) => Promise<TerminalChatPlanView>;
 /** Composer `@file` candidates (runtime v15 `findWorkspaceFiles`): paths the service's scoped read port lists for the query. */
 export type TerminalMentionFindHandler = (root: string, input: Readonly<{ scopeId: string; query: string }>, options: ConfigLoadOptions,
   signal?: AbortSignal) => Promise<readonly string[]>;

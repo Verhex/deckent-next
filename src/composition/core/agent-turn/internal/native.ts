@@ -4,10 +4,17 @@ import { modelInvocationProfileDigest, configuredInvocationProfiles, type ModelI
 import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { ClaudeRateLimit, NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
-import { type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
+import { inspectNativeStateCustody, type KnownSecretSnapshot, type DeckentConfig } from '#platform/index.js';
 /** R8b/R3a: the scope's connected subscription CLIs that can run a worker (registry capability): profile id and its CLI id. */
-export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | null | undefined) => configuredInvocationProfiles(config).filter(row => row.scopeId === scopeId && row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)
-  .flatMap(row => { const agent = nativeCliAgent(row.protocol.family); return agent ? [{ id: row.id, provider: agent.id }] : []; });
+export function connectedWorkerClis(config: DeckentConfig, scopeId: string | null | undefined, env?: NodeJS.ProcessEnv) {
+  return Promise.all(configuredInvocationProfiles(config).filter(row => row.scopeId === scopeId && row.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID)
+    .flatMap(row => {
+      const agent = nativeCliAgent(row.protocol.family);
+      if (!agent) return [];
+      return [inspectNativeStateCustody(row.adapter.definition, env).then(custody => ({ id: row.id, provider: agent.id,
+        ...(custody === 'outside-installation' ? { governedUse: custody, channelId: row.reference.providerId } : {}) }))];
+    }));
+}
 
 type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;
 /** Code-only fan-in ports. Observations never spawn or confer consent. K5b owns the opaque admission pin. */

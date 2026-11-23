@@ -10,7 +10,7 @@ import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConn
   type ProviderConnectKind } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { configuredBubblewrap } from '#composition/core/model-invocation/index.js';
-import { ErrorRegistry, automationMarker, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
+import { ErrorRegistry, automationMarker, inspectNativeStateCustody, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
   resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 
 type Env = NodeJS.ProcessEnv;
@@ -39,7 +39,8 @@ export const headlessPersonWitness = (env: Env, agents: readonly string[]): Auth
 export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>,
   ledger: () => Promise<Readonly<{ installationId: string | null; config: ResolvedConfig; path: () => Promise<string>; }>>) {
   const env = options.env ?? process.env;
-  const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>>>();
+  const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string;
+    custody: Awaited<ReturnType<typeof inspectNativeStateCustody>> }>>>();
   const prepare = (kind: ProviderConnectKind, nativeId: string) => {
     const held = prepared.get(nativeId); if (held) return held;
     const next = (async () => {
@@ -48,8 +49,10 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
     if (!protocol || !minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     const stateDir = join(stateRoot(env), 'headless', createHash('sha256').update(JSON.stringify([kind.id, command.scopeId, nativeId])).digest('hex').slice(0, 16));
     const owned = await ownedLoginDir(protocol.family, env);
-    return { protocol, owned, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
-      ownedConfigDir: owned, env, now: Date.now, isolation: configuredBubblewrap(options) }) };
+      const base = await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
+        ownedConfigDir: owned, env, now: Date.now, isolation: configuredBubblewrap(options) });
+      const custody = await inspectNativeStateCustody(base, env);
+      return Object.freeze({ protocol, owned, base, custody });
     })(); prepared.set(nativeId, next); return next;
   };
   return {
@@ -73,12 +76,13 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
         await assertAuthorityWitness('models.connect', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
           headlessPersonWitness(env, context.config.cli.agentEnvironment));
-      const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = prepareSubscriptionConsent(value.existing as never,
+      const { base, protocol, owned, custody } = await prepare(kind, value.nativeId), consent = prepareSubscriptionConsent(value.existing as never,
         command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), principal, Date.now()); // a first connect takes the owner default
       const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
       const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
       try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }
-      return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [] } };
+      return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [],
+        ...(custody === 'outside-installation' ? { governedUse: custody } : {}) } };
     },
   };
 }
@@ -92,7 +96,11 @@ export async function headlessLoginDir(connection: string, options: ConfigLoadOp
 /** The doctor's Brain-login rows (no spawn, nothing created): s3c each connection says whether it uses the Brain's own login dir. */
 export async function readConfiguredHeadlessLogins(section: unknown, scopeId: string, options: ConfigLoadOptions = {}) {
   const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
-  return readHeadlessLogins(section, scopeId, root);
+  return readHeadlessLogins(section, scopeId, root, async (definition, family) => {
+    const custody = await inspectNativeStateCustody(definition, options.env);
+    const connection = family && PROVIDER_CONNECT_REGISTRY.kinds.find(kind => kind.connect?.protocolFamily === family)?.id;
+    return { ...(custody === 'outside-installation' ? { governedUse: custody } : {}), ...(connection ? { connection } : {}) };
+  });
 }
 export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined; loginMethod?: string | undefined }>;
 /**

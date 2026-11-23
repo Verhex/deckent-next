@@ -3,6 +3,7 @@ import type { AuditListQuery, AuditListView } from '#domain/index.js';
 import type { ServiceShutdownAdmissionResult, ShutdownCommand, ToolchainCurrencyReport } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
+import type { DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import type { AuditRebaselineHandler, AuditVerifyHandler } from './audit.js';
 import type { BackupHandler, BackupSetsHandler } from './backup.js';
 import type { CodingProfilePreparationHandler, CodingTemplateHandler } from './coding.js';
@@ -17,7 +18,7 @@ import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } fr
 
 /** The host operations the administration commands use (pool, backup, secret, audit, runtime, toolchains, operation, coding);
  * the CLI's full command context satisfies it. */
-export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'runningImageBuild' | 'configChoiceSources' | 'prepareMainSecret'> {
+export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'runningImageBuild' | 'configChoiceSources' | 'prepareMainSecret' | 'inspectModelActivation'> {
   verifyAudit?: AuditVerifyHandler;
   /** BeUser S-04: one verified page of a scope's audit log (`deckent audit list`). */
   listAudit?: (root: string, query: AuditListQuery, options: ConfigLoadOptions) => Promise<AuditListView>;
@@ -41,6 +42,7 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   workerCliOf?: (protocolFamily: string) => string | null;
   inspectWorkerReadiness?: (root: string, scopeId: string, options: ConfigLoadOptions, targetKind: string) => Promise<import('#domain/index.js').WorkerReadiness | null>;
   inspectWorkerKinds?: (root: string, options: ConfigLoadOptions) => Promise<readonly import('#engine/index.js').WorkerKindAvailability[]>;
+  readHeadlessLogins?: (profiles: unknown, scopeId: string, options?: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['headlessLogins']>>;
   // alpha.53 F1: `coding instructions status|trust|revoke` — the worker instruction file a Run snapshots, trusted only at a person's terminal.
   inspectWorkerInstructions?: WorkerInstructionStatusHandler;
   changeWorkerInstructionTrust?: WorkerInstructionTrustHandler;

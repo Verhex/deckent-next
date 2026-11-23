@@ -1,6 +1,6 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { DOCS_DIR, globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, relativeInside, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { DOCS_DIR, agentGlobalStateRoots as installationStateRoots, globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, relativeInside, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
@@ -56,10 +56,7 @@ export function sealedRootEntryRefused(projectRoot: string, hardFloor: ReturnTyp
 type Environment = Readonly<Record<string, string | undefined>>;
 /** The global state roots of the configuration and process environments: each one's resolved root and the conventional `~/.deckent`, which is protected even before it exists (P5a, lead 2026-10-31: nothing can be planted for a later default-root CLI). Details: agent-turn-engine module note. */
 export function agentGlobalStateRoots(environments: readonly Environment[]): string[] {
-  return [...new Set(environments.flatMap(environment => {
-    const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
-    return [...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []];
-  }))];
+  return installationStateRoots(environments);
 }
 /** Registry-derived login identity names only; shell checks their metadata, never their contents. */
 export function agentLoginIdentityPaths(roots: readonly string[]): string[] {

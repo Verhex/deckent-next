@@ -107,8 +107,9 @@ function sandbox({ facts }: CoreStageInput): CoreStageResult {
 }
 const connection = z.strictObject({ connection: identitySchema, model: identitySchema });
 function model(input: CoreStageInput): CoreStageResult {
-  const connections = input.facts.model.connections;
-  if (connections > 0) return result({ state: 'done', reason: reason('setup.reason.modelConnected', { count: connections }) });
+  const { connections, selection, externalConnections } = input.facts.model;
+  if (selection || connections > 0) return result({ state: 'done', reason: selection ? reason('setup.reason.modelSelected', { model: selection })
+    : selection === null || externalConnections?.length ? reason('setup.reason.modelMissing') : reason('setup.reason.modelConnected', { count: connections }) });
   if (!input.scopeId || !installed(input.facts)) return waits(input.scopeId ? 'core:policy' : 'core:folder');
   const chosen = answer(input, 'core:model', connection), scopeId = input.scopeId;
   const cli = ['deckent', 'models', 'connect', '--scope', scopeId, '--connection', chosen?.connection ?? '<connection>', '--model', chosen?.model ?? '<model>', '--command-id', '<command-id>'];

@@ -201,12 +201,20 @@ describe('doctor subscription rows (pure)', () => {
   });
   it('s3c "Brain girişi" names the Brain\'s own login dir; a connection sealed to another dir keeps working and the next step is the move', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.deckent/headless/logins/claude', owned: true, consent: [] },
-      { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', owned: false, consent: [] }];
+      { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.deckent/custom', owned: false, connection: 'claude-cli-subscription', consent: [] }];
     expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/headless/logins/claude, channel open, consent none (you only); the Brain\'s own login directory', undefined],
-      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/custom, channel open, consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
         + 'Brain\'s own in, then connect again', 'deckent models login --connection claude-cli-subscription']]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain("Brain'in kendi giriş dizini değil");
+    const outside = { ...logins[1]!, configDir: '/fixture/external', governedUse: 'outside-installation' as const };
+    for (const locale of ['en', 'tr'] as const) {
+      const shown = doctorChecks(report, facts({ headlessLogins: [outside] }), locale).find(row => row.id === 'work.brainLogin')!;
+      expect(shown.state).toBe('warning');
+      expect(shown.text).toContain(locale === 'en' ? 'Governed chat and workers are not ready' : 'yönetilen sohbet ve işçiler hazır değil');
+      expect(shown.next).toContain('deckent models login --connection claude-cli-subscription');
+      expect(shown.next).toContain('--config-dir');
+    }
   });
   it('S3-5 "Brain girişi" names the isolation realm of the last passing check, or that the realm closed the channel', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: [], isolation: { launcher: 'bundled', version: '0.13.0' } },
@@ -417,7 +425,7 @@ describe('deckent doctor (command)', () => {
         .catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
       return out.join(''); };
     const grouped = await run([]);
-    expect(grouped.split('\n')[0]).toMatch(/^Status: /);
+    expect(grouped.split('\n')[0]).toMatch(/^Installation health: /u);
     expect(grouped).toContain('\nInstallation\n');
     expect(grouped).toContain('Tool versions were not checked (the check contacts the npm registry)');
     expect(grouped).not.toContain('Details (--verbose):');
@@ -432,7 +440,7 @@ describe('deckent doctor (command)', () => {
     expect(verbose).toContain('Details (--verbose):');
     expect(verbose).toContain('Platform: ');
     // C-DOCTOR follow-up (J3): one status only — the grouped summary; the old report's ready/degraded line is not repeated.
-    expect(verbose.match(/^Status: /gmu)).toHaveLength(1);
+    expect(verbose.match(/^(?:Installation health|Status): /gmu)).toHaveLength(1);
     const json = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
@@ -558,7 +566,7 @@ describe('interactive doctor (person on a terminal)', () => {
     const text = io.written.join('');
     expect(text).toContain('New worker image r9-20261019 built; profile proposal: /p.json');
     // Measured again: the summary line appears twice (before and after); the same fix is not offered a second time in one call.
-    expect(text.split('Status: ').length - 1).toBe(2);
+    expect(text.split('Installation health: ').length - 1).toBe(2);
   });
   it('negative: a hard-floor row (audit chain) is never offered, even with its operation wired', async () => {
     registerProviderConfig(); // the host registers the `terminal` section (terminal.scopeId) at ingress
@@ -578,7 +586,7 @@ describe('interactive doctor (person on a terminal)', () => {
     const error = await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} },
       ...failedImage, updateToolchains: async () => { throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); } } as never).then(() => null, (caught: unknown) => caught);
     expect(error).toMatchObject({ code: 'POLICY_DENIED' });
-    expect(io.written.join('')).toContain('Status: ');
+    expect(io.written.join('')).toContain('Installation health: ');
   });
 });
 

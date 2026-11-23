@@ -1,6 +1,8 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
-import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
+import { planSetup, SetupStageRegistry, WORK_SETUP_FAMILY, type SetupStage } from '#engine/index.js';
+import { personEnv } from '../support/person-env.js';
 import { until, settle } from '../support/workline-harness.js';
 /** Selection starts only after the visible card's registry-defined input guard. */
 async function waitForCard(frame: () => string, text: string) {
@@ -208,6 +210,83 @@ it('U4E G2 + B1-WORKERCARD: permission order, CLI setup guidance without admissi
       }
     } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
   }
+});
+
+it('CARD-156: the only subscription is outside the installation, in the choice and first work-kind plan (EN/TR)', async () => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { onboardingMessage } = await import('../../../src/surfaces/core/terminal-onboarding/internal/message.js');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  const connection = { id: 'outside-profile', provider: 'claude', governedUse: 'outside-installation' as const, channelId: 'claude-cli-subscription' };
+  const registry = new SetupStageRegistry([WORK_SETUP_FAMILY]);
+  const plan = (answers: Readonly<Record<string, unknown>>, execution: boolean) => planSetup({ ...observation,
+    families: { work: { execution, registry: false, pool: false, connections: [connection], ...(answers['work:kind'] ? { connection } : {}) } } },
+  { schemaVersion: 2, values: answers }, registry, { phase: 'onboarding' });
+  for (const [locale, reason, next, promise] of [
+    ['en', 'Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.', 'From the owning person’s terminal, run deckent models login --connection claude-cli-subscription without --config-dir. Then reconnect the same model with deckent models connect, also without --config-dir.', 'Coding work can run on your connected subscription'],
+    ['tr', 'Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.', 'Sahibin terminalinde, --config-dir vermeden deckent models login --connection claude-cli-subscription komutunu çalıştırın. Ardından aynı modeli deckent models connect ile yine --config-dir vermeden bağlayın.', 'Kodlama işleri bağlı aboneliğinle çalışabilir'],
+  ] as const) {
+    for (const execution of [false, true]) {
+      const stage = plan({ 'work:kind': { connection: connection.id } }, execution).stages.find(row => row.id === 'work:kind')!;
+      expect.soft(stage).toMatchObject({ state: 'blocked', operation: null });
+      expect.soft(onboardingMessage(stage.reason.code, stage.reason.params, locale)).toBe(`${reason} ${next}`);
+    }
+    let frame = ''; const answers: unknown[] = [], applied: string[] = [], controller = new AbortController();
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 220, rows: 40 });
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const port = { assertPerson: async () => {}, defer: async () => {}, apply: async (stage: SetupStage) => { applied.push(stage.id); },
+      observe: async (values: Readonly<Record<string, unknown>>) => {
+        if (values['work:kind']) answers.push(values['work:kind']);
+        return { ...snapshot, answers: values, hosts: [], connections: [connection], plan: plan(values, true), deferred: ['onboarding:first-task:done'],
+          modelUsable: false, budget: { ...snapshot.budget, needed: false }, folderFacts: { kind: 'coding', entries: [] } };
+      } } as unknown as OnboardingPort;
+    const run = runOnboardingSession(port, { locale } as never, { locale, env: personEnv({ TERM: 'xterm-256color' }), stdin: stdin as never, stdout: stdout as never, signal: controller.signal });
+    try {
+      await waitForCard(() => frame, reason);
+      expect.soft(frame).toContain(next);
+      expect.soft(frame).not.toContain(promise);
+      stdin.write('\r'); await settle(50);
+      expect.soft(answers).toEqual([]);
+      expect.soft(applied).toEqual([]);
+    } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
+  }
+});
+
+const reopenModelCopy = {
+  en: { step: 'Step 1/1', title: 'Model connection', selected: 'Chat model selected:',
+    reason: 'Governed chat and workers are not ready because the sign-in folder is outside deckent’s state.',
+    next: (id: string) => `From the owning person’s terminal, run deckent models login --connection ${id} without --config-dir. Then reconnect the same model with deckent models connect, also without --config-dir.`,
+    action: '> Enter · Continue', hints: 'Enter · Continue · Esc · Later · Ctrl+Y copy (card and options)' },
+  tr: { step: 'Adım 1/1', title: 'Model bağlantısı', selected: 'Seçilen sohbet modeli:',
+    reason: 'Giriş klasörü deckent durum dizininin dışında olduğu için yönetilen sohbet ve işçiler hazır değil.',
+    next: (id: string) => `Sahibin terminalinde, --config-dir vermeden deckent models login --connection ${id} komutunu çalıştırın. Ardından aynı modeli deckent models connect ile yine --config-dir vermeden bağlayın.`,
+    action: '> Enter · Devam', hints: 'Enter · Devam · Esc · Sonra · Ctrl+Y kopyala (kart ve seçenekler)' },
+};
+it.each([
+  ['en', 'outside-a/chat-model', ['outside-a', 'outside-b'], false],
+  ['tr', 'outside-a/chat-model', ['outside-a', 'outside-b'], false],
+  ['en', 'inside-a/chat-model', ['outside-b'], true],
+  ['tr', 'inside-a/chat-model', ['outside-b'], true],
+] satisfies [keyof typeof reopenModelCopy, string, string[], boolean][])('CARD-156: reopened model card in %s with %s selected', async (locale, selection, externalConnections, modelUsable) => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { runOnboardingSession } = await loadOnboardingScreens();
+  const current = { ...observation, model: { connections: 2, selection, externalConnections } };
+  const plan = planSetup(current, undefined, new SetupStageRegistry(), { phase: 'onboarding' });
+  const observe = vi.fn(async () => ({ ...snapshot, observation: current, plan, modelUsable,
+    deferred: ['onboarding:first-task:done'], budget: { ...snapshot.budget, needed: false } }));
+  const port = { observe, assertPerson: async () => {} } as OnboardingPort;
+  const controller = new AbortController(), copy = reopenModelCopy[locale];
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 240, rows: 40 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const run = runOnboardingSession(port, { locale } as never,
+    { locale, env: personEnv({ TERM: 'xterm-256color' }), stdin: stdin as never, stdout: stdout as never, signal: controller.signal }, true);
+  try {
+    await until(() => frame.includes(copy.hints), copy.title);
+    const lines = stripVTControlCharacters(frame).split('\n').map(line => line.trim()).filter(Boolean);
+    expect(lines).toEqual([copy.step, copy.title, `${copy.selected} ${selection}.`,
+      ...externalConnections.flatMap(id => [`${id} · ${copy.reason}`, copy.next(id)]), copy.action, copy.hints]);
+    expect(observe).toHaveBeenCalledTimes(1);
+  } finally { controller.abort(); await run; stdin.destroy(); stdout.destroy(); }
 });
 
 it('U6-S4: image consent immediately follows work choice, offers verified adoption first (highlighted, owner 2026-10-26) and preserves missing-only repair', async () => {

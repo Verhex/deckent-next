@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, headlessGovernedUseText, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { modelCatalogCommandSchema, modelCatalogQuerySchema, type ModelCatalogCommand, type ModelCatalogQuery } from '#domain/index.js';
 import type { ModelCatalogInspection, ModelCatalogResult } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -63,7 +63,11 @@ function renderList(value: ModelCatalogInspection, locale: Locale): string {
         vendor: metadata?.vendorId ?? '—', canonical: metadata?.canonicalModelId ?? '—',
         billing: 'billing' in channel.channel ? channel.channel.billing : '—', context: metadata?.contextWindow ?? '—',
         cli: entry.model.minCliVersion ?? '—', efforts: entry.model.efforts.join(',') || '—', aliases: entry.model.aliases.join(',') || '—',
-        state: activation(entry.activation, locale) }, locale));
+        state: entry.governedUse ? t('headless.governedUse.notReady', {}, locale) : activation(entry.activation, locale) }, locale));
+    }
+    if (channel.models.some(model => model.governedUse)) {
+      const limit = headlessGovernedUseText(locale, channel.channelId);
+      lines.push(limit.text, limit.next);
     }
   }
   return [...lines, t('models.catalog.notice', {}, locale)].join('\n');

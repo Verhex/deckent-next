@@ -46,10 +46,12 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const pending = config?.toolchains.image.consents.filter(record => record.providers.some(provider =>
       !pins.some(pin => pin.provider === provider && acquisition?.images.some(image => image.provider === provider && image.imageId === pin.imageId)))).at(-1);
     const provider = typeof options.answers?.['work:kind'] === 'string' ? options.answers['work:kind'] : pending?.providers[0];
-    // R8b/R3a: a chosen subscription connection (answer `{ connection }`), or an `execution` without Docker, runs the worker without an image or runtime.
-    const connections = config ? connectedWorkerClis(config, config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId) : [];
+    // R8b/R3a: a usable subscription connection runs the worker without an image or runtime.
+    const connections = config ? await connectedWorkerClis(config, config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, env) : [];
     const chosen = connections.find(row => row.id === (options.answers?.['work:kind'] as { connection?: unknown } | undefined)?.connection);
-    const connected = (chosen || (config?.execution && !config.execution.docker)) ? (config?.execution ? 'configured' as const : 'pending' as const) : undefined;
+    const onlyOutside = connections.length > 0 && connections.every(row => row.governedUse);
+    const connected = (chosen ? !chosen.governedUse : config?.execution && !config.execution.docker && (!onlyOutside || config.admission?.registry))
+      ? (config?.execution ? 'configured' as const : 'pending' as const) : undefined;
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
       connected && stage.id === 'execution:runtime' ? { state: 'skipped' as const, reason: { code: 'setup.execution.workerConnection', params: {} } }
@@ -60,11 +62,14 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const workerReadiness = observed.observation.folder.configuredScope && config?.admission ? await (host as Pick<KernelCommandContext, 'inspectWorkerReadiness'>).inspectWorkerReadiness?.(root, observed.observation.folder.configuredScope, options, WORK_DEFAULTS.kind)?.catch(() => null) : undefined;
     const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, ...(workerReadiness !== undefined ? { workerReadiness } : {}), execution: observed.firstJob.execution && worker?.image !== 'missing' };
     const registry = executionRegistrySchema.safeParse(config?.admission?.registry);
+    const profile = registry.data?.kinds.find(kind => kind.kind === WORK_DEFAULTS.kind)?.profile;
+    const workerTemplate = registry.data?.profiles.find(row => row.id === profile?.id && row.version === profile.version && row.parameters['worker']);
     const scope = observed.observation.folder.configuredScope;
     const permission = installed && scope ? await observeSetupPermissions(root, scope, options).catch(() => ({ state: 'blocked' as const, digest: '', profile: '-', mode: 'standart', effectiveMode: 'standart', principal: '-', selectedProfile: null })) : null;
     const permissionFacts = permission ? { state: permission.state, digest: permission.digest, profile: permission.profile, mode: permission.mode,
       effectiveMode: permission.effectiveMode, principal: permission.principal, selectedProfile: permission.selectedProfile } : null;
     const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, permissions: permissionFacts, work: { ...firstJob, ...(provider ? { pendingProvider: provider } : {}),
+      ...(workerTemplate ? { workerTemplate: workerTemplate.id, activeWorkerModels: observed.activeWorkerModels ?? [] } : {}),
       providers: [...new Set(pins.map(pin => pin.provider))], kinds: registry.success ? registry.data.kinds.map(row => row.kind) : [],
       images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])), connections,
       // NF-2: `execution` (first job) means Docker; a chosen connection's kind needs only its Git settings, planned after the kind stage.

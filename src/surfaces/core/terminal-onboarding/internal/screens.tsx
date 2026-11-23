@@ -1,7 +1,7 @@
 import { workerImageQuestion, workerImageProgress } from './worker-image.js';
 import type { WorkerImageState } from '#engine/index.js';
 import { onboardingMessage } from './message.js';
-import { t, ErrorRegistry } from '#platform/index.js';
+import { headlessGovernedUseText, t, ErrorRegistry } from '#platform/index.js';
 import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingFocus, OnboardingPort, OnboardingUi } from './contract.js';
 import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
@@ -57,11 +57,28 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     const stage = step.stages[0], pending = step.pending;
     const title = pending ? t('onboarding.parked.title', {}, locale) : stage ? onboardingMessage(stage.title, {}, locale) : '';
     const body = stage ? [onboardingMessage(stage.reason.code, stage.reason.params, locale)] : pending ? [pending.status === 'starting' ? t('onboarding.parked.unknown', {}, locale) : pending.status === 'released' ? t('onboarding.parked.released', {}, locale) : ErrorRegistry.createError(pending.fact.reason, { locale, params: pending.fact.params }).message] : [];
+    const externalConnections = model.snapshot.observation.model.externalConnections;
+    if (stage?.id === 'core:model' && externalConnections?.length) {
+      for (const id of externalConnections) {
+        const limit = headlessGovernedUseText(locale, id);
+        body.push(`${id} · ${limit.text}`, limit.next);
+      }
+    }
+    const pool = model.snapshot.plan.stages.find(row => row.id === 'work:pool');
+    if (stage?.id === 'core:model' || step.kind === 'work' || step.kind === 'ready') {
+      if (pool?.reason.code === 'setup.work.poolNeedsKind') body.push(t('setup.work.poolNeedsKind', {}, locale));
+      if (pool?.reason.code === 'setup.work.firstWorkerPool') body.push(t('doctor.firstWorker.pool', {}, locale), ...(pool.cli ? [pool.cli.join(' ')] : []));
+    }
     if (step.kind === 'ready' && model.snapshot.ready) {
       const ready = model.snapshot.ready;
       body.push(...ready.connection ? [t('onboarding.ready.connectionBody', {}, locale), t('onboarding.ready.connection', { provider: ready.provider ?? '-' }, locale)]
         : [t('onboarding.ready.body', {}, locale), t('onboarding.ready.image', { provider: ready.provider ?? '-', image: ready.imageId ?? '-' }, locale),
           t('onboarding.ready.fallback', { before: ready.fallbackBefore ?? '-', after: ready.fallbackAfter ?? '-' }, locale)]);
+      const connection = model.snapshot.connections?.find(row => row.id === ready.connection && row.governedUse);
+      if (connection) {
+        const limit = headlessGovernedUseText(locale, connection.channelId);
+        body.push(limit.text, limit.next);
+      }
     }
     const question = { title, body, step: model.completed + 1, total: model.total,
       choices: pending ? [...(pending.status === 'released' ? [{ id: 'start', label: t('onboarding.parked.start', {}, locale) }] : []),
@@ -70,8 +87,9 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
       const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
-      // F2-13: one row per subscription CLI (its first connected profile): the system assigns the worker model per WorkClass, so per-model rows only repeated the CLI.
-      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = (model.snapshot.connections ?? []).filter((row, index, all) => all.findIndex(other => other.provider === row.provider) === index);
+      // F2-13: the system assigns the worker model per WorkClass, so one eligible choice per CLI is enough.
+      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows }), connections = (model.snapshot.connections ?? []).filter((row, index, all) =>
+        row.governedUse || all.findIndex(other => !other.governedUse && other.provider === row.provider) === index);
       const uncertain = model.snapshot.hosts.some(row => row.cli === 'unknown' || row.cli === 'found' && row.login === 'unknown');
       const picker = { title: firstSignedInHost(model.snapshot) ? t('onboarding.work.none', {}, locale) : uncertain ? t('onboarding.work.notReady', {}, locale) : model.snapshot.hosts.some(row => row.cli === 'found') ? t('onboarding.work.unsigned', {}, locale) : t('onboarding.work.missing', {}, locale),
         body: [...body, t('onboarding.work.explain', {}, locale)], choices: rows.map(row => {
@@ -83,7 +101,15 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
               t('onboarding.work.signIn', { command: guidance.signIn }, locale), t('onboarding.work.return', {}, locale)] : [] };
         }) };
       // R3a: a connected subscription is offered first (a worker without Docker or a token); a host CLI on Docker stays under Change.
-      const offer = connections.length ? { title: t('onboarding.work.connection', {}, locale), body: [...body, t('onboarding.ready.connectionBody', {}, locale)], choices: connections.map(row => ({ id: `connection:${row.id}`, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale) })) }
+      const allEligible = connections.every(row => !row.governedUse), consent = t('onboarding.ready.connectionBody', {}, locale);
+      const offer = connections.length ? { title: allEligible ? t('onboarding.work.connection', {}, locale)
+        : connections.some(row => !row.governedUse) ? t('setup.work.kindTitle', {}, locale) : t('headless.governedUse.notReady', {}, locale),
+        body: allEligible ? [...body, consent] : body, choices: connections.map(row => {
+        const id = `connection:${row.id}`;
+        if (!row.governedUse) return { id, label: t('onboarding.work.useSubscription', { cli: row.provider }, locale), detail: allEligible ? [] : [consent] };
+        const limit = headlessGovernedUseText(locale, row.channelId);
+        return { id, label: `${row.id} · ${t('headless.governedUse.notReady', {}, locale)}`, disabled: true, detail: [limit.text, limit.next] };
+      }) }
         : provider ? { title: t('onboarding.work.selected', { cli: provider }, locale), body, choices: [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] } : picker;
       // BeUser M-28: a kind already set up (revisit) is kept by default; adding another CLI is the explicit second choice.
       choice = admitted.length && step.stages[0]?.state === 'done' ? await askOnboardingQuestion({ ...question, title: t('onboarding.work.configured', { cli: admitted.join(', ') }, locale),
@@ -92,7 +118,9 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
       if (choice.id === 'keep') { await session.finish(step); continue; }
       const connection = connections.find(row => choice.id === `connection:${row.id}`);
       if (connection) {
-        await session.answer('work:kind', { connection: connection.id }); await session.finish(step);
+        const answered = await session.answer('work:kind', { connection: connection.id });
+        if (answered.snapshot.plan.stages.some(row => row.id === 'work:kind' && row.reason.code === 'setup.work.governedUseBlocked')) continue;
+        await session.finish(step);
         // R8f: choosing the subscription also confirms the worker-ready writes (one card, not two in a row); a refusal leaves the ready card to show.
         const ready = session.model().steps[0];
         if (ready?.kind === 'ready' && await settleOnboardingReady(port, ui, session.refresh, async () => false, true).catch(() => false)) await session.finish(ready);

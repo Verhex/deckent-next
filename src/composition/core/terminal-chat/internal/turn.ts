@@ -27,6 +27,7 @@ type TerminalChatPlan = Readonly<{
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
   /** NF-7: with `tools: 'unverified'` only because the last verification passed the K16 age, when it was recorded (the next turn rechecks). */
   toolsVerifiedAtMs?: number;
+  governedUse?: 'outside-installation';
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
 export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}, snapshot?: ModelInspectionSnapshot): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
@@ -60,7 +61,8 @@ export async function inspectConfiguredNativeChat(projectRoot: string, query: Re
   return Promise.all(query.references.map(reference => { const profile = nativeChatProfile(profiles, query.scopeId, reference);
     return profile ? inspectNativeChat(profile, { readiness }) : { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const; }));
 }
-export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }, snapshot?: ModelInspectionSnapshot): Promise<TerminalChatPlan> {
+export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}, runtime?: { readonly readiness: SubscriptionReadinessReader }, snapshot?: ModelInspectionSnapshot,
+  scopeId?: string): Promise<TerminalChatPlan> {
   runtime ??= { readiness: configuredNativeChatReadiness(projectRoot, options, Boolean(snapshot), snapshot ? configuredInvocationProfiles(snapshot.config) : undefined) };
   const config = snapshot?.config ?? await loadComposedConfig(projectRoot, options) as Record<string, unknown>, chat = readTerminalChatConfig(config);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
@@ -68,14 +70,17 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const { choice, skipped } = await terminalModelHere(projectRoot, options, snapshot), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
   if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await (snapshot?.bindings.inspect(reference) ?? inspectModelBinding(projectRoot, reference, options));
-  const profile = nativeChatProfile(configuredInvocationProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
+  const effectiveScope = scopeId ?? snapshot?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+  const profile = nativeChatProfile(configuredInvocationProfiles(config), effectiveScope, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
-  const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
+  const verifiedAtMs = profile && native?.state === 'unknown' && !native.governedUse ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
-    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
+    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more,
+    ...(native && native.state !== 'ready' && native.governedUse ? { governedUse: native.governedUse } : {}),
+    ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
 }
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
   settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {

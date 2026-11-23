@@ -100,6 +100,7 @@
   "coding.runtime.subscription": "Subscription worker (token-free)",
   "coding.result.runtime": "Worker: {runtime} · {connection}",
   "coding.connections": "Connected subscriptions: {connections} (their --connection ids: deckent coding --json)",
+  "coding.connections.unverified": "Governed readiness could not be checked in scope {scope}. Inspect this connection from a terminal authorized for that scope.",
   "coding.connection.unsupported": "This connection has no compatible native agent capability for the selected provider. Use a matching connected agent profile, or choose --docker; nothing changed.",
   "coding.connection.discoveryUnsupported": "Subscription workers require --discovery disabled; repository instructions go through deckent's governed worker-instructions path. Nothing was written."
 }

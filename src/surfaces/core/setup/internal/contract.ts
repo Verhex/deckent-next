@@ -64,6 +64,7 @@ export interface SetupCommandContext extends CliBaseContext {
   upgradePolicyTemplateInstallation?: (root: string, scopeId: string, apply: boolean, expect?: string, person?: { readonly issuer: string; readonly subject: string }, options?: ConfigLoadOptions, baselineOnly?: boolean) => Promise<Readonly<{ status: string; expect?: string | null;
     rules?: readonly unknown[] }>>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
+  describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions, scopeId?: string) => Promise<Readonly<{ status: string; reference: Readonly<{ providerId: string; modelId: string }> | null; governedUse?: 'outside-installation' }>>;
   /** The pool ledger read doctor uses (`deckent pool status`); read-only. */
   inspectPoolCapacity?: PoolCapacityInspectHandler;
   configChoiceSources?: (root: string, options: ConfigLoadOptions) => { list(source: 'scopes', keyPath: string): Promise<readonly { readonly value: unknown }[]> };

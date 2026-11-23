@@ -10,7 +10,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 
 /** The host operations the kernel commands (doctor, paths, policy vocabulary) use; the CLI's full command context satisfies it. */
 export interface KernelCommandContext extends CliBaseContext, Pick<RunCommandContext, 'inspectRun' | 'inspectSurfaceRunIds'>, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
-  | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths' | 'inspectWorkerKinds' | 'inspectWorkerReadiness'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
+  | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths' | 'inspectWorkerKinds' | 'inspectWorkerReadiness' | 'readHeadlessLogins'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
   inspectExecutionPermission?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['executionPermission']> | null>;
   inspectLegacyProjectInstructions?: (root: string) => Promise<boolean>;
   inspectCodingRepository?: (root: string, options: ConfigLoadOptions) => Promise<ExecutionEnvironmentDoctorView>;
@@ -30,7 +30,6 @@ export interface KernelCommandContext extends CliBaseContext, Pick<RunCommandCon
   inspectModelRoles?: (root: string, query: ModelRoleQuery, options: ConfigLoadOptions) => Promise<ModelRoleInspection>;
   /** S3-3 doctor line: the scope's subscription Brain logins from the profiles section and their last preflight records (read-soft, no spawn). */
   inspectSiwcConnections?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly import('#domain/index.js').SubscriptionConnectionInspection[]>;
-  readHeadlessLogins?: (profiles: unknown, scopeId: string, options?: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['headlessLogins']>>;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<InstallationStartabilityView>;
   inspectOwnerBaseline?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly missing: number; readonly digest: string }>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;

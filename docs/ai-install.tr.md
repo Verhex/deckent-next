@@ -69,7 +69,8 @@ Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasın�
 - Kaldırmayı, kademesini, `--force`, `--disable-unit` ve yedek parolasını kendisi onaylamak. Kurulum adını bilmek yetki
   vermez; `--yes` terminalindeki kişinin yerini almaz.
 
-Kişi adımları tamamlayınca `deckent doctor --json` çalıştırıp kalan hata ve uyarıları aynen bildirin. Kapsamı,
+Kişi adımları tamamlayınca `deckent doctor --json` çalıştırıp kalan hata ve uyarıları aynen bildirin. Kurulum durumunu ve
+`summary.checks` içindeki ilk işçi denetimini ayrı okuyun. Kapsamı,
 paket dosyasının sürümünü, biten adımları, kişiyi bekleyen adımları ve sıradaki eylemi söyleyin. Doctor yeşili kurulum
 kanıtıdır; sonraki ERP/CRM operasyonunun veya işçi çıktısının kabulü değildir.
 

@@ -33,7 +33,7 @@ export async function observeSetup(context: SetupCommandContext, root: string, f
   if (context.observeSetup) return context.observeSetup(root, { env: context.env ?? process.env, person, ...optionalField('language', flagLanguage) });
   return observeCoreSetup(context, root, flagLanguage);
 }
-type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
+type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts; activeWorkerModels?: readonly string[] }>;
 /** The Core facts and the instructions family, plus the families a composition detected (`extra`: their packages and facts). */
 export async function observeCoreSetup(context: SetupCommandContext, root: string, flagLanguage: string | undefined,
   extra: Readonly<{ packages: readonly SetupFamilyPackage[]; facts: Readonly<Record<string, unknown>> }> = { packages: [], facts: {} }): Promise<Observed> {
@@ -55,8 +55,17 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
   const instructions = context.openProjectInstructions && !pending ? await context.openProjectInstructions(root, options)
     .then(port => port.preview([], projectSkeleton('en'))).catch(() => null) : null;
   // I-S7: the first-job steps after setup, from configuration and the pool ledger only (never the registry preview: it starts a container).
-  const pool = config && scopeId ? poolProvisioned((await assessPoolReadiness(root, context.inspectPoolCapacity ? { inspectPoolCapacity: context.inspectPoolCapacity } : {}, options, config.admission, scopeId)).status) : false;
-  const firstJob = { execution: !!config?.execution?.docker, registry: !!config?.admission?.registry, pool };
+  const poolStatus = config && scopeId ? (await assessPoolReadiness(root, context.inspectPoolCapacity ? { inspectPoolCapacity: context.inspectPoolCapacity } : {}, options, config.admission, scopeId)).status : null;
+  const firstJob = { execution: !!config?.execution?.docker, registry: !!config?.admission?.registry, pool: poolProvisioned(poolStatus ?? ''),
+    ...(poolStatus ? { poolMissing: poolStatus === 'missing' || poolStatus === 'unconfigured' } : {}) };
+  const catalog = scopeId && await context.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null);
+  const channels = catalog ? catalog.channels.filter(channel => channel.access === 'allowed') : [];
+  const activeWorkerModels = channels.flatMap(channel => channel.activation?.state === 'active'
+    ? channel.models.filter(model => model.activation?.state === 'active').map(model => `${channel.channelId}/${model.modelId}`) : []);
+  const chat = scopeId && await context.describeTerminalChatPlan?.(root, options, scopeId).catch(() => null);
+  const selection = chat ? chat.status === 'ready' && chat.reference ? `${chat.reference.providerId}/${chat.reference.modelId}` : null : undefined;
+  const externalConnections = new Set(channels.filter(channel => channel.models.some(model => model.governedUse)).map(channel => channel.channelId));
+  if (chat && chat.governedUse && chat.reference) externalConnections.add(chat.reference.providerId);
   const observation: SetupObservation = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION,
     environment: { platform, node: assessNodeSupport(process.version, NODE_ENGINE_RANGE).status === 'supported' ? 'supported' : 'below-floor' },
     language: { configured: locale(await loadConfigLanguage(root, options).catch(() => undefined)),
@@ -69,10 +78,10 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
     policy: { state: policy },
     sandbox: { realm: realm?.selected === 'bubblewrap' || realm?.selected === 'landlock' ? realm.selected : 'none', selfTest: realm?.selfTest?.status ?? 'not-run',
       usernsRestricted: realm?.rejected.some(row => row.restricted) ?? false },
-    // Connected models = switched-on models of this scope's catalog (what `models connect` leaves behind); unreadable → none.
-    model: { connections: scopeId && context.inspectModelCatalog ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).then(catalog => catalog.channels
-      .flatMap(channel => channel.access === 'denied' ? [] : channel.models.filter(entry => entry.activation?.state === 'active')).length, () => 0) : 0 },
+    model: { connections: channels.flatMap(channel => channel.models.filter(entry => entry.activation?.state === 'active')).length,
+      ...optionalField('selection', selection), ...(externalConnections.size ? { externalConnections: [...externalConnections] } : {}) },
     check: { state: 'not-run' },
     families: { ...extra.facts, ...(instructions ? { instructions: projectInstructionFacts(instructions) } : {}), ...(config && !pending ? { work: firstJob } : {}) } };
-  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, WORK_SETUP_FAMILY, ...extra.packages]), firstJob };
+  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, WORK_SETUP_FAMILY, ...extra.packages]), firstJob,
+    ...(catalog ? { activeWorkerModels } : {}) };
 }
