@@ -121,7 +121,9 @@ export function mcpSendAuthority(registry: McpRegistryContext) {
     if (!(await lstat(directory).then(info => info.isDirectory(), () => false))) return 'trust-revoked';
     let observed: VerifiedSendRefusal | undefined;
     const check = async (): Promise<McpSendRefusal | null> => {
-      const projectKey = await realpath(registry.projectRoot).catch(() => registry.projectRoot), paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
+      const resolvedProject = await realpath(registry.projectRoot).catch(() => null);
+      // The fallback keeps the send result, but an empty registry at that path cannot prove a revocation.
+      const projectKey = resolvedProject ?? registry.projectRoot, paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
       const read = await Promise.all([readMcpRegistryText(paths.project, 'project'), readMcpRegistryText(paths.personal, 'personal'), storeTextOf(mcpTrustDirectory(binding.scope, registry))] as const);
       const key = createHash('sha256').update(JSON.stringify([projectKey, read])).digest('hex');
       if (memo?.key !== key) memo = { key, trust: parseMcpTrust(read[2]), project: parseMcpRegistryFile(read[0], 'project'), personal: parseMcpRegistryFile(read[1], 'personal', projectKey) };
@@ -129,10 +131,10 @@ export function mcpSendAuthority(registry: McpRegistryContext) {
       const resolved = resolveFiles(registry, paths, project, personal);
       const server = resolved.servers.find(entry => entry.name === call.server);
       const verified = (reason: VerifiedSendRefusal) => {
-        if (project.ok && personal.ok) observed = reason;
+        if (resolvedProject !== null && project.ok && personal.ok) observed = reason;
         return reason;
       };
-      if (!server) return resolved.problems.some(problem => problem.name === call.server) ? 'trust-revoked' : verified('trust-revoked');
+      if (!server) return !boundTrust.ok || resolved.problems.some(problem => problem.name === call.server) ? 'trust-revoked' : verified('trust-revoked');
       const trust = (server.scope === 'user') === (binding.scope === 'user') ? boundTrust : await storeOf(mcpTrustDirectory(server.scope, registry));
       if (!trust.ok) return 'trust-unavailable';
       if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return verified('definition-changed');

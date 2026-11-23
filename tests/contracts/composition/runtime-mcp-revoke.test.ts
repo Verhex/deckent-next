@@ -1,10 +1,10 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { lstat, rm } from 'node:fs/promises';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { lstat, realpath, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { mcpTrustDirectory } from '#adapters/core/mcp-client/index.js';
+import { MCP_TRUST_FILE, mcpTrustDirectory } from '#adapters/core/mcp-client/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -16,7 +16,7 @@ import { me, runtime } from '../support/chat-turn-harness.js';
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, lstat: vi.fn(actual.lstat) };
+  return { ...actual, lstat: vi.fn(actual.lstat), realpath: vi.fn(actual.realpath) };
 });
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -209,3 +209,31 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(f.rows("SELECT sequence FROM audit_events WHERE kind='access-refusal-summary'")).toEqual([]);
   }, 60_000);
 });
+
+it.skipIf(process.platform !== 'linux')('keeps the send refused when the project moves inside the trust lock, without auditing a revocation', async () => {
+  const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+  writeRegistry(f.project, m.entry()); await approve(f);
+  const directory = await mcpTrustDirectory('project', { projectRoot: f.project, environment: f.env });
+  const owner = join(directory, `${MCP_TRUST_FILE}.write-lock`, 'owner.json');
+  const movedProject = `${f.project}-moved`;
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const move = vi.fn(() => rename(f.project, movedProject));
+  try {
+    const stale = await turn(f, 'project-moved', async () => {
+      vi.mocked(realpath).mockImplementation(async (...args) => {
+        if (args[0] === f.project && existsSync(owner) && !existsSync(movedProject)) await move();
+        return actual.realpath(...args);
+      });
+    });
+    expect(move).toHaveBeenCalledTimes(1);
+    await expect(actual.realpath(f.project)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(m.calls()).toEqual([]);
+    expect(stale.finished).toEqual([['mcp__fx__echo', 'error']]);
+    expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
+    expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    expect(refusals(f)).toEqual([]);
+  } finally {
+    vi.mocked(realpath).mockReset();
+    if (existsSync(movedProject)) await rename(movedProject, f.project);
+  }
+}, 60_000);
