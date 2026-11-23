@@ -45,7 +45,7 @@ export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale, con
  */
 export async function modelLoginCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
   const parsed = parse(argv), locale = commandLocale(context, parsed.values.get('--lang')), sinks = modelsSinks(context);
-  if (parsed.help) { emit(t('headless.help.login', {}, locale), sinks); return; }
+  if (parsed.help) { emit(`${t('headless.help.login', {}, locale)}\n${t('headless.help.login.examples', {}, locale)}`, sinks); return; }
   if (!modelsInteractive(context, parsed.json)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: argv.slice(0, 2).join(' ') } });
   const login = context.loginHeadless;
   if (!login) throw ErrorRegistry.createError('CLI_USAGE');

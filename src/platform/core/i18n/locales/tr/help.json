@@ -143,6 +143,7 @@
   "cli.help.examples": "Örnekler: deckent doctor; deckent config get",
   "cli.help.output": "--json: standart çıktıda (stdout) tek sonuç; hatalar standart hata çıktısında\n(stderr). Çıkış: 0 başarı, 1 hata, 2 kullanım, 78 yapılandırma.\nGenel bayraklar desteklenen yerde geçerli.",
   "cli.help.terminal.examples": "Örnekler: deckent terminal status; deckent terminal workline",
+  "headless.help.login.examples": "Cihaz koduyla Codex’e giriş: `deckent models login \\\n  --connection codex-cli-subscription --login-method device-auth`.",
   "cli.help.action.close": "Park edilmiş işi sonuçla kapat",
   "cli.help.action.accept": "Karar bekleyen görevi kabul et",
   "cli.help.action.reject": "Karar bekleyen görevi reddet",

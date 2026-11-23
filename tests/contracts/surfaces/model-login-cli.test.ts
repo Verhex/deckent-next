@@ -89,14 +89,19 @@ it('K3: an explicit login method follows the same person card; CI, AI and pipe c
   await expect(modelsCommand(argv, { root: f.root, env: f.env, stdin: Readable.from([]), stdout: capture().sink, ...handler(calls) } as never)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
   expect(calls).toEqual([]); expect(card.asked).toEqual([]);
   card.interactive = true; card.answers = ['apply'];
-  await modelsCommand(argv, { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handler(calls) } as never);
+  expect(await modelsCommand(argv, { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handler(calls) } as never)).toBeUndefined();
   expect(calls).toEqual([['login', { connection: 'codex-cli-subscription', loginMethod: 'device-auth' }], ['signed']]);
   expect(card.asked).toHaveLength(1);
   await expect(modelsCommand([...argv, '--login-method', 'browser'], { root: f.root, env: f.env } as never)).rejects.toMatchObject({ code: 'CLI_USAGE' });
 });
 it('help names the own dir, the account switch and the refusals', async () => {
-  const f = await project(), out = capture();
-  await modelsCommand(['models', 'login', '--help'], { root: f.root, env: f.env, stdout: out.sink } as never);
+  const f = await project(), out = capture(), tr = capture(), calls: unknown[] = [];
+  const example = 'deckent models login \\\n  --connection codex-cli-subscription --login-method device-auth';
+  await modelsCommand(['models', 'login', '--help', '--lang', 'en'], { root: f.root, env: f.env, stdout: out.sink, ...handler(calls) } as never);
+  await modelsCommand(['models', 'login', '--help', '--lang', 'tr'], { root: f.root, env: f.env, stdout: tr.sink, ...handler(calls) } as never);
+  expect(calls).toEqual([]); expect(card.asked).toEqual([]);
+  expect.soft(out.text()).toContain('Sign in to Codex with a device code: `' + example + '`.');
+  expect.soft(tr.text()).toContain('Cihaz koduyla Codex’e giriş: `' + example + '`.');
   for (const word of ['deckent models login --connection claude-cli-subscription', 'codex-cli-subscription', 'deckent models login --connection chatgpt-login', 'always prints the sign-in link',
     'never in a backup', 'switch account', '--sso', 'an AI tool, MCP, CI, a pipe or --json is refused'])
     expect(out.text()).toContain(word);
