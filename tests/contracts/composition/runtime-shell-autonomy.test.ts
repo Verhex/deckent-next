@@ -43,6 +43,19 @@ async function matrix(realm: keyof typeof REALMS, mode: Mode, commands: readonly
   return { f, results };
 }
 
+function declinedShellCall({ turnId }: { turnId: string }) {
+  const call = { turnId, round: 1, index: 0, callId: 'call_1' };
+  return {
+    kind: 'access-refusal-summary', decisionSource: 'deckent-decision', evidenceBasis: 'tool-approval',
+    reasonCode: 'AGENT_TOOL_APPROVAL_DECLINED', operationClass: 'invoke', tool: { name: 'run_shell', version: 1 },
+    target: { role: 'approval', identity: null }, count: 1, countBasis: 'exact', overflow: false, call, samples: [call], turnId,
+  };
+}
+
+const FULL_AUTO_RELAXATION = {
+  kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify', grants: { company: 'shell-tool', person: 'me-mode' },
+};
+
 describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a real sandbox (SHELL-AUTONOMY)', () => {
   it.skipIf(!bwrapReady)('bubblewrap: the owner\'s compound and expanding commands run without a card; rm -f still asks; each relaxation is audited', async () => {
     const leak = `/tmp/deckent-autonomy-${randomUUID()}`;
@@ -55,8 +68,8 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     await expect(access(leak)).rejects.toMatchObject({ code: 'ENOENT' });
     for (const result of results.slice(5)) expect(result).toMatchObject({ card: true, status: 'denied' });
     const events = f.audit().map(record => record.event.subject);
-    expect(events).toHaveLength(5);
-    for (const event of events) expect(event).toMatchObject({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify', grants: { company: 'shell-tool', person: 'me-mode' } });
+    expect(events.slice(0, 5)).toMatchObject(Array(5).fill(FULL_AUTO_RELAXATION));
+    expect(events.slice(5)).toMatchObject(results.slice(5).map(declinedShellCall));
   }, 120_000);
 
   it.skipIf(landlockAbi < 6)('enforced Landlock: the same commands run without a card (the realm refuses /tmp writes itself); rm -f asks', async () => {
@@ -69,7 +82,9 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     expect(results[0]!.status).toBe('error');
     expect(results.slice(1, 3).map(result => result.status)).toEqual(['ok', 'ok']);
     for (const result of results.slice(4)) expect(result).toMatchObject({ card: true, status: 'denied' });
-    expect(f.audit()).toHaveLength(4);
+    const events = f.audit().map(record => record.event.subject);
+    expect(events.slice(0, 4).map(event => event.kind)).toEqual(Array(4).fill('permission-mode'));
+    expect(events.slice(4)).toMatchObject(results.slice(4).map(declinedShellCall));
   }, 120_000);
 
   it('K15C: host/fallback expanding forms need a warned approval; ordinary host and degraded Landlock calls still ask', async () => {
@@ -93,7 +108,7 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     for (const mode of ['ask', 'auto-edit'] as const) {
       const { f, results } = await matrix('bubblewrap', mode, [...OWNER_UNBOUNDED, ...OWNER_DESTRUCTIVE]);
       for (const result of results) expect({ mode, ...result }).toMatchObject({ mode, card: true, status: 'denied' });
-      expect(f.audit()).toEqual([]);
+      expect(f.audit().map(record => record.event.subject)).toMatchObject(results.map(declinedShellCall));
     }
   }, 120_000);
 
