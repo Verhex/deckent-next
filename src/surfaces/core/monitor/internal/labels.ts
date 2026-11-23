@@ -1,3 +1,4 @@
+import { readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { clockText, t, type Locale } from '#platform/index.js';
 import type { ENVIRONMENT_TIMED_OUT_CODE, WorkerPhase } from '#domain/index.js';
 import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
@@ -90,6 +91,8 @@ export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['
 const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:', ENVIRONMENT_TIMED_OUT: typeof ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
 /** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
 export function blockerDetailText(detail: string, locale: Locale): string {
+  const diagnostic = readHeadlessDiagnosticIdentifier(detail, locale);
+  if (diagnostic) return diagnostic;
   // S6R-6: a system safety hold's note (the engine passes it only for a nervous/auditor hold) in its catalog words, never the raw code.
   if (/^(recovery|nervous):/u.test(detail)) return holdNoteText(detail, 'nervous', locale);
   if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);

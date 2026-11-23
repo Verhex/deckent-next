@@ -20,13 +20,25 @@ export const runDetectCommand: DetectRunner = timedAsync('child-detect', (execut
 }));
 /** The first eligible executable in bounded PATH order, with a separate result if the next directory was skipped. */
 export async function searchExecutable(name: string, env: DetectEnvironment, directories: number, signal: AbortSignal):
-Promise<{ path: string } | { path: null; completed: boolean }> {
+Promise<{ path: string } | { path: null; completed: boolean; unverified: boolean; executeDenied: boolean; notFile: boolean }> {
+  let unverified = false, executeDenied = false, notFile = false;
   for (const directory of (env['PATH'] ?? '').split(delimiter).filter(entry => isAbsolute(entry)).slice(0, directories)) {
-    if (signal.aborted) return { path: null, completed: false };
+    if (signal.aborted) return { path: null, completed: false, unverified, executeDenied, notFile };
     const candidate = join(directory, name);
-    if (await stat(candidate).then(info => info.isFile(), () => false) && await access(candidate, constants.X_OK).then(() => true, () => false)) return { path: candidate };
+    const info = await stat(candidate).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') unverified = true;
+      return null;
+    });
+    if (!info) continue;
+    if (!info.isFile()) { notFile = true; continue; }
+    const executable = await access(candidate, constants.X_OK).then(() => true, (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EACCES') executeDenied = true;
+      else if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') unverified = true;
+      return false;
+    });
+    if (executable) return { path: candidate };
   }
-  return { path: null, completed: true };
+  return { path: null, completed: true, unverified, executeDenied, notFile };
 }
 
 /** Callers which only need an executable can use the existing nullable result. */

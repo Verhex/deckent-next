@@ -250,13 +250,13 @@ export async function selectBubblewrapLauncher(options: BubblewrapSelectOptions,
  * Re-checks a measured launcher before each use (synchronous; `usable()`): the file must still be the measured one. The bundled copy is
  * re-hashed when its identity moved (it may be rewritten with the same content); a moved system file means the service must measure again.
  */
-export function verifyBubblewrapLauncher(launcher: BubblewrapLauncher): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+export function verifyBubblewrapLauncher(launcher: BubblewrapLauncher): { readonly ok: true } | { readonly ok: false; readonly reason: string; readonly check: 'unverified' | 'identity-mismatch' } {
   let identity: string;
-  try { identity = identityOf(lstatSync(launcher.path, { bigint: true })); } catch (error) { return { ok: false, reason: `bwrap at ${launcher.path} is gone (${errorText(error)})` }; }
+  try { identity = identityOf(lstatSync(launcher.path, { bigint: true })); } catch (error) { return { ok: false, check: 'unverified', reason: `bwrap at ${launcher.path} is gone (${errorText(error)})` }; }
   if (identity === launcher.identity) return { ok: true };
   if (launcher.source === 'bundled' && launcher.sha256 && verifiedCopy(launcher.path, launcher.sha256)) return { ok: true };
-  return launcher.source === 'bundled' ? { ok: false, reason: `the bundled bwrap at ${launcher.path} no longer matches the shipped build (sha256 ${launcher.sha256})` }
-    : { ok: false, reason: `bwrap at ${launcher.path} changed since the service measured it (restart the service to select again)` };
+  return launcher.source === 'bundled' ? { ok: false, check: 'identity-mismatch', reason: `the bundled bwrap at ${launcher.path} no longer matches the shipped build (sha256 ${launcher.sha256})` }
+    : { ok: false, check: 'identity-mismatch', reason: `bwrap at ${launcher.path} changed since the service measured it (restart the service to select again)` };
 }
 
 const measured = new Map<string, Promise<ShellCapabilities>>();

@@ -1,3 +1,4 @@
+import type { HeadlessDiagnosticIdentifier } from '#platform/index.js';
 import type { NativeAgentExecution, NativeAgentReadiness, ToolSessionPort } from '#capabilities/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 import type { WorkerEffort, WorkerEvent } from '#domain/index.js';
@@ -5,7 +6,7 @@ import type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/i
 import type { createNativeToolBridge, NativeToolBridgeLimits } from '#adapters/core/native-tool-bridge/index.js';
 import type { NativeCliWorkerBinding } from './profile.js';
 
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliWorkerWaitReason = 'NATIVE_PROJECTION_RETIRED' | 'NATIVE_WORKER_F08_REQUIRED' | 'NATIVE_WORKER_CAPACITY_WAIT'
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliWorkerWaitReason = HeadlessDiagnosticIdentifier | 'NATIVE_PROJECTION_RETIRED' | 'NATIVE_WORKER_F08_REQUIRED' | 'NATIVE_WORKER_CAPACITY_WAIT'
   | 'NATIVE_WORKER_VERIFICATION_WAIT' | 'NATIVE_WORKER_F08_INVALID' | 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_WORKER_PLUGIN_UNEXPECTED'
   | 'NATIVE_AGENT_CAPABILITY_UNSEALED' | 'NATIVE_AGENT_ENVIRONMENT_REFUSED' | 'NATIVE_AGENT_CLI_UNAVAILABLE'
   | 'NATIVE_AGENT_LOGIN_REQUIRED' | 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_AGENT_PLUGIN_UNEXPECTED' | 'NATIVE_AGENT_BRIDGE_UNAVAILABLE';

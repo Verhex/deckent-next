@@ -125,7 +125,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     ] as const) {
       expect.soft(error.localize?.(locale).message).toContain(selected);
       expect.soft(error.localize?.(locale).message).not.toContain(connected);
-      expect(platform.ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', locale)?.message).toContain(connected);
+      expect(platform.ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', locale, { check: 'recorded-path-missing' })?.message).toContain(connected);
     }
     expect(await h.spawns()).toEqual([]);
   });

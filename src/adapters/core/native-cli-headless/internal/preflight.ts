@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ProcessEvidence } from '#adapters/core/process-runner/index.js';
+import type { HeadlessPreflightParams } from '#platform/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
 import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
@@ -20,7 +21,7 @@ export async function privateDir(path: string, uid: number): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 }).catch(failed);
   const info = await lstat(path).catch(failed);
   if (!info.isDirectory()) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir', reason: 'not-directory' });
-  if (info.uid !== uid || (info.mode & 0o077) !== 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir' });
+  if (info.uid !== uid || (info.mode & 0o077) !== 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir', reason: 'not-private' });
 }
 
 /** A missing login directory and unsuccessful verification carry distinct evidence. */
@@ -29,8 +30,15 @@ export function configReadRefusal(error: NodeJS.ErrnoException): never {
     reason: error.code === 'ENOENT' ? 'missing' : error.code === 'ENOTDIR' ? 'not-directory' : 'unverified' });
 }
 /** Empties the connection's own run dir before a spawn (no project hooks, MCP file or instructions can accumulate in the CLI's cwd/HOME). */
-export async function emptyRunDir(runDir: string): Promise<void> {
-  for (const entry of await readdir(runDir)) await rm(join(runDir, entry), { recursive: true, force: true });
+export async function emptyRunDir(runDir: string, purpose?: 'login-status'): Promise<void> {
+  const entries = await readdir(runDir).catch((error: unknown) => {
+    if (purpose === 'login-status') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-run-list' });
+    throw error;
+  });
+  for (const entry of entries) await rm(join(runDir, entry), { recursive: true, force: true }).catch((error: unknown) => {
+    if (purpose === 'login-status') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-run-remove' });
+    throw error;
+  });
 }
 /** Field allowlist at the parser: account identity fields (email, organization) are dropped here and never reach a record or log. */
 function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number], unknown>> | null {
@@ -43,19 +51,22 @@ function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number]
 /** The CLI's own login status, by registry data: `json` (allowlisted fields on stdout, the login dir it names) or `status` (the exit code and one exact
  * line; another exit-0 login kind, such as an API key, is not a subscription login). `unreadable`: neither shape (a typed preflight refusal). */
 type HeadlessAuth = Readonly<{ state: 'signed-in'; authMethod: string; apiProvider: string | null; subscriptionType: string | null }>
-  | Readonly<{ state: 'signed-out' | 'unreadable' }>
+  | Readonly<{ state: 'signed-out'; reason: 'status-unconfirmed' | 'reported-signed-out' | 'subscription-unconfirmed' }>
+  | Readonly<{ state: 'unreadable' }>
   | Readonly<{ state: 'config-dir'; reason: 'reported-mismatch' | 'unreported' }>;
 export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Readonly<{ exitCode: number | null; stdout: string; stderr: string }>, configDir: string): HeadlessAuth {
   if ('kind' in auth) {
     const lines = (auth.stream === 'stderr' ? output.stderr : output.stdout).split(/\r?\n/u).map(line => line.trim()), match = auth.loggedIn.find(row => lines.includes(row.line));
     return output.exitCode === 0 && match ? { state: 'signed-in', authMethod: match.authMethod, apiProvider: null, subscriptionType: null }
-      : output.exitCode === 0 || output.exitCode === 1 ? { state: 'signed-out' } : { state: 'unreadable' };
+      : output.exitCode === 0 || output.exitCode === 1 ? { state: 'signed-out', reason: 'status-unconfirmed' } : { state: 'unreadable' };
   }
   const fields = authStatus(output.stdout);
   if (!fields || typeof fields.loggedIn !== 'boolean') return { state: 'unreadable' };
-  if (fields.loggedIn !== true || !auth.authMethods.includes(String(fields.authMethod)) || !auth.apiProviders.includes(String(fields.apiProvider))) return { state: 'signed-out' };
+  if (!fields.loggedIn) return { state: 'signed-out', reason: 'reported-signed-out' };
+  if (!auth.authMethods.includes(String(fields.authMethod)) || !auth.apiProviders.includes(String(fields.apiProvider)))
+    return { state: 'signed-out', reason: 'subscription-unconfirmed' };
   if (auth.configDirectoryMatch && fields.configDirectory !== configDir) return { state: 'config-dir',
-    reason: typeof fields.configDirectory === 'string' ? 'reported-mismatch' : 'unreported' };
+    reason: typeof fields.configDirectory === 'string' && fields.configDirectory !== '' ? 'reported-mismatch' : 'unreported' };
   return { state: 'signed-in', authMethod: String(fields.authMethod), apiProvider: String(fields.apiProvider), subscriptionType: typeof fields.subscriptionType === 'string' ? fields.subscriptionType : null };
 }
 /**
@@ -66,9 +77,11 @@ export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Re
  */
 export async function headlessPreflight(entry: HeadlessEntry, definition: NativeCliHeadlessDefinition, now: () => number, isolation: HeadlessIsolation,
   signal?: AbortSignal, agent?: Readonly<{ flagSetDigest: string; requiredFlags: readonly string[] }>, selection?: 'new' | 'path'): Promise<HeadlessPreflight> {
-  if (process.getuid?.() !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
+  const uid = process.getuid?.();
+  if (uid === undefined) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'program-owner-unverified' });
+  if (uid !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
   const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid, selection), { executable } = program;
-  const versionRefusal = (params: Record<string, string>) => headlessExecutableRefusal('version', program.chosen, executable, params);
+  const versionRefusal = (params: Extract<HeadlessPreflightParams, { check: 'version' }>) => headlessExecutableRefusal(params, program.chosen, executable);
   const config = await stat(definition.configDir).catch(configReadRefusal);
   if (!config.isDirectory()) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'not-directory' });
   if (config.uid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'untrusted-owner' });
@@ -106,18 +119,25 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   };
   try {
     const versionRun = await run(headless.preflight.versionArgs);
-    if (versionRun.exitCode !== 0) versionRefusal({ reason: 'exit', exitCode: String(versionRun.exitCode) });
+    if (versionRun.exitCode !== 0) versionRefusal(versionRun.exitCode !== null && versionRun.exitCode > 0 && versionRun.exitCode <= 255
+      ? { check: 'version', reason: 'exit', exitCode: String(versionRun.exitCode) } : { check: 'version', reason: 'exit-unrenderable' });
     const version = verifiedCliVersion(new RegExp(headless.preflight.versionPattern, 'u').exec(versionRun.stdout.trim())?.[1]);
-    if (version === null) return versionRefusal({ reason: 'unreadable' });
-    if (compareToolchainVersions(version, definition.minCliVersion) < 0) versionRefusal({ reason: 'too-old', version, minimum: definition.minCliVersion });
+    if (version === null) return versionRefusal({ check: 'version', reason: 'unreadable' });
+    if (compareToolchainVersions(version, definition.minCliVersion) < 0) versionRefusal(verifiedCliVersion(definition.minCliVersion) !== null ? { check: 'version', reason: 'too-old', version, minimum: definition.minCliVersion }
+      : { check: 'version', reason: 'too-old-unrenderable' });
     const help = (await run(headless.preflight.helpArgs)).stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
     // A hidden flag is proven by the parser refusing a bad value, in an empty temporary config dir: the probe never sees the person's login.
     const accepted = async (probe: NonNullable<ReturnType<typeof hidden.get>>) => {
       const capability = command.capabilities.maxTurns?.hiddenHelpProbe, shape = probe === 'max-turns-capability' ? capability && { args: capability.args, refusal: [capability.refusal] } : probe;
       if (!shape) return false;
-      const empty = await mkdtemp(join(definition.stateDir, 'probe-'));
+      const empty = await mkdtemp(join(definition.stateDir, 'probe-'))
+        .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'probe-scratch-create' }));
+      let failed = false;
       try { const output = await run(shape.args, empty, buildHeadlessEnv(headless, empty, empty), empty); return shape.refusal.every(text => `${output.stderr}\n${output.stdout}`.includes(text)); }
-      finally { await rm(empty, { recursive: true, force: true }); }
+      catch (error) { failed = true; throw error; }
+      finally { await rm(empty, { recursive: true, force: true }).catch(() => {
+        if (!failed) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'probe-scratch-remove' });
+      }); }
     };
     for (const flag of agent?.requiredFlags ?? headlessRequiredFlags(entry)) {
       const probe = hidden.get(flag);
@@ -125,11 +145,11 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
         reason: probe === undefined ? 'help-unverified' : 'parser-unverified' });
     }
     const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
-    if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED');
+    if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED', { reason: auth.reason });
     if (auth.state === 'config-dir') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state, reason: auth.reason });
     if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'auth-status' });
     const current = await resolveHeadlessExecutable(entry, program.chosen, definition.ownerUid, 'recheck');
-    if (current.identity !== program.identity) headlessExecutableRefusal('executable-changed', program.chosen, executable);
+    if (current.identity !== program.identity) headlessExecutableRefusal({ check: 'executable-changed' }, program.chosen, executable);
     const sealed = Object.freeze({ executable, program, version, flagSetDigest, runDir, env, isolation: isolated });
     // S7: the version an earlier passing check of this connection proved, kept while it differs (the doctor's "CLI updated A → B" note).
     const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8')

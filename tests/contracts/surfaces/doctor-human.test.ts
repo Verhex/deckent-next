@@ -168,7 +168,7 @@ describe('doctor rows (pure)', () => {
 });
 
 describe('doctor subscription rows (pure)', () => {
-  it('S3-3 "Brain girişi": each subscription login with its kind, plan, directory, channel state and consent; no check yet is "not tested"', () => {
+  it('S3-3 "Brain girişi": each subscription login with its kind, plan, directory, channel state and consent; unavailable verification is shown as unknown', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: ['ai', 'system'] },
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude-team', consent: [] },
       { state: 'unknown' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.other', consent: [] }];
@@ -193,8 +193,8 @@ describe('doctor subscription rows (pure)', () => {
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
-      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --scope live'],
-      ['untested', 'Brain girişi: henüz denetlenmedi (dizin /home/p/.other); ilk çağrı ya da yeniden bağlama denetimi koşar', undefined]]);
+      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', undefined],
+      ['untested', 'Brain girişi: güncel doğrulama kullanılamıyor (dizin /home/p/.other).', undefined]]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'en').find(row => row.id === 'work.brainLogin')?.text)
       .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
     for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ headlessLogins: value }), 'en').some(row => row.id === 'work.brainLogin')).toBe(false);
@@ -213,7 +213,7 @@ describe('doctor subscription rows (pure)', () => {
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: 'unavailable' as const }];
     expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text])).toEqual([
       ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); isolated by bubblewrap 0.13.0 (bundled)'],
-      ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only); isolation unavailable (no usable bubblewrap: see the sandbox rows)']]);
+      ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only). The check recorded an isolation refusal.']]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain('bubblewrap 0.13.0 (bundled) ile yalıtılmış');
   });
   it('f5 "Brain girişi" names the realm gateway refusals: counts and host names (most refused first, bounded), never a payload', () => {

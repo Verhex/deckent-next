@@ -1,15 +1,21 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as files from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, DeckentError, ErrorRegistry, productResourcePath, reportFatal, resolveProductPaths } from '#platform/index.js';
+import * as processRunner from '#adapters/core/process-runner/index.js';
+import { loginConfiguredHeadless } from '#composition/core/model-connect/index.js';
+import * as modelInvocation from '#composition/core/model-invocation/index.js';
+import { main } from '#surfaces/core/cli/index.js';
 import { modelsCommand, renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 // s3c (owner 2026-10-24): `deckent models login` is a person's terminal act: an AI tool, a pipe and --json are refused before the handler runs; a card
 // names the exact login dir before the CLI's own sign-in starts. The card is simulated as in model-roles-cli (the Ink view is PTY-proven separately).
 const card = vi.hoisted(() => ({ interactive: false, answers: [] as (string | null)[], asked: [] as CliCardRequest[] }));
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
   const real = await importOriginal<typeof import('#surfaces/core/cli-human/index.js')>();
   return { ...real,
@@ -22,8 +28,8 @@ vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
 beforeEach(() => { card.interactive = false; card.answers = []; card.asked = []; });
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function project() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-model-login-cli-')); roots.push(root);
+async function project(prefix = 'deckent-model-login-cli-') {
+  const root = await mkdtemp(join(tmpdir(), prefix)); roots.push(root);
   const home = join(root, 'home'), dir = join(root, 'project');
   await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(home, { mode: 0o700 });
   await writeFile(join(dir, '.deckent', 'config.json'), JSON.stringify({}), { mode: 0o600 });
@@ -51,6 +57,118 @@ it('negative: an AI tool, a pipe and --json are refused before the handler runs 
   await expect(modelsCommand(['models', 'login'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handler(calls) } as never)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   expect(calls).toEqual([]); expect(card.asked).toEqual([]);
 });
+
+it.skipIf(process.platform !== 'linux')('keeps private paths out of real interactive sign-in lock and record failures', async () => {
+  const launcher = await files.lstat(process.execPath, { bigint: true });
+  const isolation = vi.spyOn(modelInvocation, 'configuredBubblewrap').mockReturnValue(async () => ({
+    status: 'available', rejected: [], restriction: null, detail: null,
+    launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+      identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') },
+  }));
+  const sentinel = '/private/sign-in-fixture/never-share-2f62';
+  const ioFailure = () => Object.assign(new Error(`EIO: fixture failed at ${sentinel}`), { code: 'EIO' });
+  const isRecordTemp = (path: unknown) => typeof path === 'string' && /\.login\.[^/]+\.tmp$/u.test(path);
+  const isLock = (path: unknown) => typeof path === 'string' && path.endsWith('.lock');
+  const isLockDirectory = (path: unknown) => typeof path === 'string' && path.endsWith('/login-locks');
+  const isStatusRun = (path: unknown) => typeof path === 'string' && /\/headless\/login-[a-f0-9]+\/run$/u.test(path);
+  const isScratch = (path: unknown) => typeof path === 'string' && /\/headless\/login-[a-f0-9]+\/login-copy-/u.test(path);
+  try {
+    for (const [boundary, localExit, expected] of [
+      ['lock directory create', 0, null], ['lock directory inspect', 0, null], ['marker write', 0, null], ['marker remove', 0, null],
+      ['record write', 0, ['The sign-in command completed.', 'Giriş komutu tamamlandı.']],
+      ['record rename', 130, ['The sign-in command was interrupted.', 'Giriş komutu kesildi.']],
+      ['record write', 1, ['The sign-in command ended with a failure.', 'Giriş komutu başarısız sonuçlandı.']],
+      ['status working directory list', 0, null], ['status working directory cleanup', 0, null],
+      ['realm scratch create', 0, null], ['realm scratch cleanup', 0, null],
+    ] as const) {
+      const f = await project('g3-'), executable = join(f.root, 'fixture-provider');
+      const scratch = boundary.startsWith('realm scratch'), command = scratch ? ['models', 'login', '--connection', 'codex-cli-subscription'] : LOGIN;
+      const createRunEntry = boundary === 'status working directory cleanup' ? 'echo fixture > ./login-fixture-entry\n' : '';
+      await writeFile(executable, `#!/bin/sh\n${createRunEntry}exit ${localExit}\n`, { mode: 0o700 });
+      card.interactive = true; card.answers = ['apply']; card.asked = [];
+      const original = { mkdir: files.mkdir, mkdtemp: files.mkdtemp, lstat: files.lstat, readdir: files.readdir, write: files.writeFile, remove: files.rm, rename: files.rename };
+      const failure = ioFailure(), hit = vi.fn(() => { throw failure; });
+      const mkdirSpy = vi.spyOn(files, 'mkdir').mockImplementation((async (...args: Parameters<typeof files.mkdir>) => {
+        if (boundary === 'lock directory create' && isLockDirectory(args[0])) hit();
+        return original.mkdir(...args);
+      }) as typeof files.mkdir);
+      const lstatSpy = vi.spyOn(files, 'lstat').mockImplementation((async (...args: Parameters<typeof files.lstat>) => {
+        if (boundary === 'lock directory inspect' && isLockDirectory(args[0])) hit();
+        return original.lstat(...args);
+      }) as typeof files.lstat);
+      const writeSpy = vi.spyOn(files, 'writeFile').mockImplementation(async (...args) => {
+        if (boundary === 'marker write' && isLock(args[0]) || boundary === 'record write' && isRecordTemp(args[0])) hit();
+        return original.write(...args);
+      });
+      const removeSpy = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+        if (boundary === 'marker remove' && isLock(args[0])) hit();
+        if (boundary === 'status working directory cleanup' && typeof args[0] === 'string' && args[0].endsWith('/login-fixture-entry')) hit();
+        if (boundary === 'realm scratch cleanup' && isScratch(args[0])) hit();
+        return original.remove(...args);
+      });
+      const renameSpy = vi.spyOn(files, 'rename').mockImplementation(async (...args) => {
+        if (boundary === 'record rename' && isRecordTemp(args[0])) hit();
+        return original.rename(...args);
+      });
+      const readdirSpy = vi.spyOn(files, 'readdir').mockImplementation((async (...args: Parameters<typeof files.readdir>) => {
+        if (boundary === 'status working directory list' && isStatusRun(args[0])) hit();
+        return original.readdir(...args);
+      }) as typeof files.readdir);
+      const mkdtempSpy = vi.spyOn(files, 'mkdtemp').mockImplementation((async (...args: Parameters<typeof files.mkdtemp>) => {
+        if (boundary === 'realm scratch create' && isScratch(args[0])) hit();
+        return original.mkdtemp(...args);
+      }) as typeof files.mkdtemp);
+      const runner = scratch ? vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+        schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+      })) : undefined;
+      try {
+        let sharedError: unknown;
+        const cliError = capture();
+        expect(await main([...command, '--executable', executable], { ...f, stdin: tty(), stdout: capture().sink, stderr: cliError.sink,
+          loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, { attest: async () => true })
+            .catch((error: unknown) => { sharedError = error; throw error; }),
+        })).toBe(1);
+        expect(hit, boundary).toHaveBeenCalledOnce();
+        expect(card.asked[0]?.body?.join('\n')).toContain(f.env.DECKENT_GLOBAL_HOME);
+        expect.soft(sharedError, boundary).toBeInstanceOf(DeckentError);
+        const typed = sharedError as DeckentError;
+        expect.soft(JSON.stringify({ message: typed.message, params: typed.params, cause: typed.cause }), boundary).not.toContain(sentinel);
+        expect.soft(cliError.text(), boundary).not.toContain(sentinel);
+        if (expected) {
+          expect.soft(typed.localize?.('en').message).toBe(`${expected[0]} deckent could not save the outcome. The subscription state in this directory was not verified.`);
+          expect.soft(typed.localize?.('tr').message).toBe(`${expected[1]} deckent sonucu kaydedemedi. Bu dizindeki abonelik durumu doğrulanmadı.`);
+        }
+        const crashes = productResourcePath(resolveProductPaths(f.root, { env: f.env }), 'crashes');
+        expect.soft(await files.readdir(crashes).catch(() => []), boundary).toEqual([]);
+        const portable = capture();
+        await reportFatal(sharedError, { ...f, json: true, stderr: portable.sink });
+        expect.soft(portable.text(), boundary).not.toContain(sentinel);
+        expect.soft(await files.readdir(crashes).catch(() => []), boundary).toEqual([]);
+      } finally {
+        mkdirSpy.mockRestore(); lstatSpy.mockRestore(); writeSpy.mockRestore(); removeSpy.mockRestore(); renameSpy.mockRestore();
+        readdirSpy.mockRestore(); mkdtempSpy.mockRestore(); runner?.mockRestore();
+      }
+    }
+  } finally { isolation.mockRestore(); }
+});
+
+it('reports a relative login directory separately from an unresolved absolute directory in both languages', async () => {
+  const f = await project();
+  for (const [directory, en, tr] of [
+    ['relative-login-dir', 'The login directory must be specified with an absolute path.', 'Oturum açma dizini mutlak bir yolla belirtilmeli.'],
+    [join(f.root, 'missing-login-dir'), 'The login directory path could not be resolved.', 'Oturum açma dizininin yolu çözümlenemedi.'],
+  ] as const) {
+    const error = await loginConfiguredHeadless({ connection: 'claude-cli-subscription', configDir: directory }, { env: f.env },
+      async () => { throw new Error('confirmation reached before directory validation'); }, { attest: async () => true })
+      .catch((failure: unknown) => failure) as DeckentError;
+    expect(error).toBeInstanceOf(DeckentError);
+    expect.soft(error.localize?.('en').message).toBe(en);
+    expect.soft(error.localize?.('tr').message).toBe(tr);
+    expect(JSON.stringify(error)).not.toContain(directory);
+  }
+});
+
 it('the person sees the exact dir on a card first, then the outcome (kind and plan only); a declined card signs nothing in and exits 1', async () => {
   for (const [lang, title, words] of [['en', 'Sign the Brain in for claude-cli-subscription?', ['Login directory: ' + DIR + " (the Brain's own", 'deckent captures nothing', 'Signed in: claude.ai (max)']],
     ['tr', 'Brain claude-cli-subscription için giriş yapsın mı?', ['Giriş dizini: ' + DIR + " (Brain'in kendi", 'deckent gösterdiği hiçbir şeyi almaz', 'Giriş yapıldı: claude.ai (max)']]] as const) {
@@ -75,12 +193,12 @@ it('the person sees the exact dir on a card first, then the outcome (kind and pl
 });
 it('a stopped or unfinished sign-in says so and exits 1; another dir is named as the person\'s own', () => {
   expect(renderHeadlessLogin({ configDir: '/x', owned: false, exit: 'cancelled', signedIn: false, authMethod: null, subscriptionType: null }, 'en', 'claude-cli-subscription')).toBe(
-    'Login directory: /x (named by you; not the Brain\'s own).\nThe sign-in was stopped; nothing else was changed.\n'
-    + 'Not signed in with a subscription for claude-cli-subscription: the Brain cannot use this directory yet. Run the sign-in again.');
+    'Login directory: /x (named by you; not the Brain\'s own).\nThe sign-in command was interrupted.\n'
+    + 'A subscription was not confirmed for claude-cli-subscription.');
   expect(renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: false, authMethod: null, subscriptionType: null }, 'tr', 'claude-cli-subscription')).toContain('Giriş tamamlanmadı');
   // NF-8: a failed attempt over an existing login never says "Signed in".
   const kept = renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: true, authMethod: 'claude.ai', subscriptionType: null }, 'en', 'claude-cli-subscription');
-  expect(kept).toContain('An earlier sign-in is still in place for this directory: claude.ai'); expect(kept).not.toContain('Signed in:');
+  expect(kept).toContain('The status check reported a subscription in this directory: claude.ai'); expect(kept).not.toContain('Signed in:');
 });
 it('K3: an explicit login method follows the same person card; CI, AI and pipe cannot use it', async () => {
   const f = await project(), calls: unknown[] = [], argv = ['models', 'login', '--connection', 'codex-cli-subscription', '--login-method', 'device-auth'];
@@ -117,5 +235,239 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
       siwc: { connection: 'chatgpt-login', execute } } as never)).toBe(1);
     expect(out.text()).toContain('ChatGPT action cancelled.'); expect(out.text()).not.toMatch(/Error|OAUTH_CONNECTION_CANCELLED/u);
     expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(sigint);
+  }
+});
+
+
+// Semantic expectations are independent of the catalog keys and of the case renderer.
+const diagnosticMeaning = new Map(`path-search-not-file	A candidate on PATH was not a regular file	PATH üzerindeki bir aday normal bir dosya değildi
+agent-path-outside-roots	The configured directory is outside the permitted installation roots.	Yapılandırılan dizin izin verilen kurulum köklerinin dışında.
+agent-resolved-path-outside-roots	The resolved directory is outside the permitted installation roots.	Çözümlenen dizin izin verilen kurulum köklerinin dışında.
+agent-readiness-verifier-unavailable	Tool readiness could not be verified here.	Araç hazırlığı burada doğrulanamadı.
+agent-readiness-query-unavailable	The tool-readiness query is unavailable for this provider profile.	Bu sağlayıcı profili için araç hazırlığı sorgusu kullanılamıyor.
+recorded-program-unverified	provider program for the recorded preflight could not be checked	kayıtlı ön denetimdeki sağlayıcı programı denetlenemedi
+recorded-program-mismatch	earlier preflight record does not establish the current program identity	önceki ön denetim kaydı güncel program kimliğini doğrulamıyor
+login-status-positive-nonzero	status check returned a nonzero exit code	durum denetimi sıfır dışı bir çıkış kodu döndürdü
+login-status-incomplete	subscription status check could not be completed	abonelik durum denetimi tamamlanamadı
+executable-changed/bind-race-diagnostic	process exited with a bind-race diagnostic	süreç, bağlama yarışı tanısıyla sonlandı
+path-search-execute-denied	did not pass the execute-access check	çalıştırma erişimi denetimini geçemedi
+path-search-empty	was not found in the PATH directories checked	denetlenen PATH dizinlerinde bulunamadı
+path-search-unverified	A candidate on PATH could not be checked	PATH üzerindeki bir aday denetlenemedi
+path-search-incomplete	The PATH search for the provider's program could not be completed	Sağlayıcının programı için PATH araması tamamlanamadı
+recorded-path-unverified	could not be verified at its recorded path	kayıtlı yolunda doğrulanamadı
+recorded-path-missing	missing at the connected path	bağlanan yolda yok
+login-launch-unverified	could not be started for sign-in	oturum açmak için başlatılamadı
+executable-bind-target-mismatch	requested bind path differs from the verified CLI path	doğrulanan CLI yolundan farklı
+npm-package-directory-overlap	package directory overlaps a directory required by process isolation	süreç yalıtımı için gereken bir dizinle çakışıyor
+npm-package-runtime-overlap	package contains a program required to start process isolation	süreç yalıtımını başlatmak için gereken bir programı içeriyor
+realm-command-unverified	launch command for the isolated process could not be prepared	yalıtılmış sürecin başlatma komutu
+preflight-record-write	check result could not be saved	denetiminin sonucu kaydedilemedi
+preflight-record-unreadable	previous subscription CLI check record could not be interpreted	önceki denetim kaydı yorumlanamadı
+auth-status	did not report its login state in a readable form	giriş durumunu okunabilir biçimde bildirmedi
+agent-owner-mismatch	The operating-system user in the agent execution record differs from the configured user.	Ajan yürütme kaydındaki işletim sistemi kullanıcısı yapılandırılan kullanıcıdan farklı.
+agent-program-changed	CLI identity differs from the one recorded by the agent execution check	ajan yürütme denetiminin kaydettiği kimlikten farklı
+agent-program-path-mismatch	The verified program path differs from the path in the agent execution record.	Doğrulanan program yolu ajan yürütme kaydındaki yoldan farklı.
+agent-seal	agent execution record differs from the verified configuration	ajan yürütme kaydı doğrulanan yapılandırmadan farklı
+managed-login-dir	managed sign-in root directory could not be prepared	Yönetilen giriş kök dizini hazırlanamadı
+program-owner-unverified	operating-system user for the provider program could not be established	Sağlayıcı programının işletim sistemi kullanıcısı belirlenemedi
+probe-scratch-create	temporary parser-check directory could not be created	Geçici ayrıştırıcı denetim dizini oluşturulamadı
+probe-scratch-remove	temporary parser-check directory could not be removed after the check	Geçici ayrıştırıcı denetim dizini denetimden sonra kaldırılamadı
+login-status-run-list	working directory for the status check could not be listed	Durum denetimi için çalışma dizininin içeriği listelenemedi
+login-status-run-remove	entry in the status check's working directory could not be removed	Durum denetiminin çalışma dizinindeki bir girdi kaldırılamadı
+realm-scratch-create	temporary directory for the isolated login view could not be created	Yalıtılmış giriş görünümü için geçici dizin oluşturulamadı
+realm-scratch-remove	temporary directory for the isolated login view could not be removed	Yalıtılmış giriş görünümü için geçici dizin kaldırılamadı
+realm-program-close	program descriptor for the isolated process could not be closed	Yalıtılmış sürecin program tanıtıcısı kapatılamadı
+realm-gateway-close	isolated network gateway could not be closed	Yalıtılmış ağ geçidi kapatılamadı
+realm-process-request	isolated process request failed validation	Yalıtılmış süreç isteği doğrulamayı geçemedi
+lock-directory-create	sign-in lock directory could not be created	Giriş kilidi dizini oluşturulamadı
+lock-directory-read	sign-in lock directory could not be checked	Giriş kilidi dizini denetlenemedi
+lock-directory-type	sign-in lock path does not lead to a directory	Giriş kilidi yolu bir dizine çıkmıyor
+lock-directory-private	sign-in lock directory failed its ownership or privacy check	Giriş kilidi dizini sahiplik veya gizlilik denetimini geçemedi
+lock-marker-read	sign-in lock marker could not be read safely	giriş kilidi işareti güvenli biçimde okunamadı
+lock-marker-write	sign-in lock marker could not be created	giriş kilidi işareti oluşturulamadı
+lock-marker-parse	sign-in lock marker could not be interpreted during release	giriş kilidi işareti serbest bırakma sırasında yorumlanamadı
+lock-marker-remove	sign-in lock marker could not be removed	giriş kilidi işareti kaldırılamadı
+lock-guard-release	sign-in lock guard could not be released	Giriş kilidi koruması serbest bırakılamadı
+login-lock/guard-path	sign-in lock guard path failed validation	Giriş kilidi korumasının yolu doğrulamayı geçemedi
+login-lock/native-unavailable	Native support for the sign-in lock could not be loaded	Giriş kilidi için yerel destek yüklenemedi
+login-lock/guard-unsafe	sign-in lock guard failed its safety check	Giriş kilidi koruması güvenlik denetimini geçemedi
+login-lock/guard-acquire	sign-in lock guard could not be acquired	Giriş kilidi koruması alınamadı
+environment/probe	check environment contains a disallowed variable name	Denetim ortamında izin verilmeyen bir değişken adı var
+environment/sign-in	sign-in environment contains a disallowed variable name	Giriş ortamında izin verilmeyen bir değişken adı var
+version/exit	version check reported exit code 9	sürüm denetimi 9 çıkış kodunu bildirdi
+version/exit-unrenderable	version check reported a nonzero exit	sürüm denetimi sıfır dışı bir çıkış bildirdi
+version/unreadable	version check did not yield a readable version	sürüm denetimi okunabilir bir sürüm üretmedi
+version/too-old	reported version 1.2.3	1.2.3 sürümünü bildirdi
+version/too-old-unrenderable	version was below the configured minimum	sürümü yapılandırılan alt sınırın altında kaldı
+config-dir/relative-path	login directory must be specified with an absolute path	Oturum açma dizini mutlak bir yolla belirtilmeli
+config-dir/unresolved	login directory path could not be resolved	Oturum açma dizininin yolu çözümlenemedi
+config-dir/missing	login directory was not found	Oturum açma dizini bulunamadı
+config-dir/not-directory	login directory path requires a directory	Oturum açma yolu bir dizin gerektiriyor
+config-dir/untrusted-owner	login directory belongs to a different user	Oturum açma dizini başka bir kullanıcıya ait
+config-dir/unverified	login directory could not be verified	Oturum açma dizini doğrulanamadı
+config-dir/unreported	did not report a readable login directory	okunabilir bir oturum açma dizini bildirmedi
+config-dir/reported-mismatch	reported a login directory that differs	bildirdiği oturum açma dizini bağlı olandan farklı
+config-dir/entry-limit	login directory exceeded the limit for entries	girdi sayısı sınırını aştı
+config-dir/copy-entry-rejected	did not meet the requirements for an isolated copy	yalıtılmış kopya
+config-dir/copy-size-limit	exceeded the size limit for an isolated copy	yalıtılmış kopya
+config-dir/mask-unverified	isolated view of the login directory could not be prepared	oturum açma dizininin yalıtılmış görünümü hazırlanamadı
+config-dir/private-entry-refused	did not pass the private directory check	özel dizin denetimini geçemedi
+config-dir/lock-unverified	CLI login lock could not be checked	CLI oturum kilidi denetlenemedi
+state-dir/not-directory	working path is not a directory	çalışma yolu bir dizin değil
+state-dir/unverified	private working directory for the subscription CLI could not be prepared	özel çalışma dizini hazırlanamadı
+state-dir/not-private	working directory for the subscription Brain is not private	özel çalışma dizini yalnız size ait değil
+flags/help-unverified	required option could not be verified in the subscription CLI help output	yardım çıktısında
+flags/parser-unverified	parser check could not verify a required option	ayrıştırıcı denetimi
+spawn/timeout	exceeded its time limit	süre sınırını aştı
+spawn/start-failed	process for the subscription CLI check could not be started	denetimi için gereken süreç başlatılamadı
+spawn/output-limit	check output exceeded its limit	denetim çıktısı sınırını aştı
+spawn/line-limit	check output line limit	satır uzunluğu sınırını
+spawn/stopped	check was stopped	denetimi durduruldu
+launcher/platform	platform cannot start the process isolation	platform
+launcher/unverified	isolation launcher could not be verified	Yalıtım başlatıcısı doğrulanamadı
+launcher/identity-mismatch	no longer matches the measured identity	ölçümdeki kimlikle artık eşleşmiyor
+user-namespace	kernel does not let bubblewrap create the user namespace	kullanıcı ad alanı
+gateway	network gateway of the isolated subscription Brain could not be opened	ağ geçidi
+realm	exited with an isolation-related diagnostic	yalıtıma ilişkin bir tanıyla sonlandı
+limits/limiter-unverified	path to the program that sets isolation limits could not be resolved	yalıtım sınırlarını
+limits/limiter-unrunnable	did not pass the execute access check	çalıştırma izni denetimini
+limits/limit-application	limit-related diagnostic	sınıra ilişkin
+limits/limit-verification	limit-verification diagnostic	sınır doğrulama
+holder/cli	refresh marker was still present	yenileme işareti hâlâ duruyordu
+holder/guard	lock guard remained held	kilidi koruması hâlâ tutuluyordu
+holder/legacy-unverified	no verifiable holder	sahibi hâlâ doğrulanamamıştı
+holder/legacy-process	process ID in the sign-in lock marker still existed	kimliğe sahip bir süreç hâlâ vardı
+holder/legacy-process-unverified	process ID in the sign-in lock marker could not be checked	işaretindeki süreç kimliği denetlenemedi
+status-unconfirmed	status check did not confirm an eligible subscription	Durum denetimi uygun bir aboneliği doğrulamadı
+reported-signed-out	reported that the subscription CLI was signed out	abonelik CLI'ında oturum açılmadığını bildirdi
+subscription-unconfirmed	reported sign-in did not establish an eligible subscription	Bildirilen oturum uygun bir aboneliği doğrulamadı
+cancelled	check was cancelled	denetimi iptal edildi
+signal	check reported a signal	denetimi bir sinyal bildirdi
+executable-changed	program identity differs	daha önce denetlenen program kimliğinden farklı
+executable-bind-unverified	process exited with a bind-source diagnostic	Süreç, bağlama kaynağına ilişkin bir tanıyla sonlandı
+npm-layout-unknown	npm launcher layout is unsupported	npm başlatıcı yerleşimi desteklenmiyor
+npm-proof	native program file you have verified	Doğruladığınız bir yerel program dosyasını
+manifest-exclusion-changed	package directory or manifest changed	paket dizini veya bildirim dosyası değişti
+manifest-declares-bin	declares this file as a launcher target	bu dosyayı başlatıcı hedefi olarak belirtiyor
+manifest-exclusion-unverified	launcher declarations could not be fully checked	başlatıcı bildirimleri tam olarak denetlenemedi
+native-platform-unverified	native file check is unavailable on this platform	Yerel program dosyası bu platformda denetlenemiyor
+native-file-changed	file identity differed	dosya kimliği farklı çıktı
+native-format-unverified	file format did not pass	Dosya biçimi yerel program denetimini geçemedi
+native-read-incomplete	required bytes for the native program check could not be read completely	Yerel program denetimi için gereken baytların tamamı okunamadı
+native-proof-unavailable	native program check could not be completed	Yerel program denetimi tamamlanamadı
+npm-check	npm installation check stopped	npm kurulumu denetimi durdu
+npm-recheck	program could not be checked again	Program yeniden denetlenemedi
+npm-unverified	npm program check could not be completed	npm programı denetimi tamamlanamadı
+npm/missing	required entry is missing	Gerekli dosya veya dizin bulunamadı
+npm/not-directory	check expected a directory	Denetim bir dizin bekliyordu
+npm/not-regular-file	check expected a regular file	Denetim normal bir dosya bekliyordu
+npm/not-expected-link	not the expected symbolic link to the launcher	başlatıcıya giden beklenen sembolik bağlantı değil
+npm/untrusted-owner	outside the trusted set	sahibi güvenilen kullanıcılar arasında değil
+npm/group-or-other-writable	writable by the group or by other users	grup veya diğer kullanıcılar yazabilir
+npm/set-id	special permission bit set	özel izin biti
+npm/multiple-hard-links	more than one hard link	birden fazla sabit bağlantısı var
+npm/no-hard-links	recorded link count is zero	okunan sabit bağlantı sayısı sıfır
+npm/manifest-mismatch	manifest does not match the registered npm layout	bildirim dosyası kayıtlı npm yerleşimiyle eşleşmiyor
+npm/manifest-invalid	manifest does not contain valid JSON	bildirim dosyası geçerli JSON içermiyor
+npm/manifest-too-large	manifest is too large to check	bildirim dosyası denetim için fazla büyük
+npm/manifest-unreadable	manifest could not be read completely	bildirim dosyasının tamamı okunamadı
+npm/not-executable	execute permission check failed	Çalıştırma izni denetimi başarısız oldu
+npm/changed-during-check	file changed during the check	Dosya denetim sırasında değişti
+npm/verification-unavailable	required properties could not be verified	gerekli özellikleri doğrulanamadı
+selection/directory	path leads to a directory	yol bir dizine çıkıyor
+selection/not-regular-file	path does not lead to a regular file	yol normal bir dosyaya çıkmıyor
+selection/not-executable	regular file without execute permission	Çalıştırma izni olmayan bir normal dosya
+selected-file/unavailable	file you chose could not be verified	Seçtiğiniz dosya çalıştırılabilir bir program olarak doğrulanamadı
+selected-file/relative-path	provider program must be specified with an absolute path	Sağlayıcı programı mutlak bir yolla belirtilmeli
+path-candidate-unverified/unavailable	program found on PATH could not be verified	PATH üzerinde bulunan program doğrulanamadı
+entry-recheck	program could not be checked again	Program yeniden denetlenemedi
+login-outcome/completed	The sign-in command completed.	Giriş komutu tamamlandı.
+login-outcome/cancelled	The sign-in command was interrupted.	Giriş komutu kesildi.
+login-outcome/failed	The sign-in command ended with a failure.	Giriş komutu başarısız sonuçlandı.
+login-outcome/unsaved	deckent could not save the outcome. The subscription state in this directory was not verified.	deckent sonucu kaydedemedi. Bu dizindeki abonelik durumu doğrulanmadı.
+os-owner-mismatch	belongs to another operating-system user	başka bir işletim sistemi kullanıcısına ait
+limit/cpu-time	status reserved for the CPU-time limit	CPU süresi sınırına ayrılan çıkış kodu
+limit/processes	status reserved for the process-count limit	süreç sayısı sınırına ayrılan çıkış kodu
+limit/memory	status reserved for the data-size limit	veri boyutu sınırına ayrılan çıkış kodu
+program-definition	provider program definition is unavailable	Sağlayıcı programı tanımı kullanılamıyor
+prepared-definition	The prepared provider connection definition did not pass validation.	Hazırlanan sağlayıcı bağlantısı tanımı doğrulamayı geçemedi.
+connect-definition	connection program definition is unavailable	Bağlantı programı tanımı kullanılamıyor
+login-family	definition for this provider's sign-in is unavailable	Bu sağlayıcının giriş tanımı kullanılamıyor
+login-method	requested sign-in method is unavailable	İstenen giriş yöntemi bu sağlayıcı programı için kullanılamıyor
+sso	does not support the requested single sign-on method	istenen tek oturum açma yöntemini desteklemiyor
+gateway-provider	provider identifier failed validation for the isolated network gateway	Sağlayıcı kimliği yalıtılmış ağ geçidi için doğrulamayı geçemedi
+definition	The provider program definition did not meet the requirements.	Sağlayıcı programı tanımı koşulları karşılamadı.
+profile	The invocation profile did not meet the provider program requirements.	Çağrı profili sağlayıcı programının koşullarını karşılamadı.
+token	No valid preparation token was provided for this call.	Bu çağrı için geçerli bir hazırlık anahtarı sunulmadı.
+binding	The model binding could not be read for this provider call.	Bu sağlayıcı çağrısı için model bağı okunamadı.
+request	The request did not meet the provider program’s input requirements.	İstek sağlayıcı programının girdi koşullarını karşılamadı.
+size	The request exceeded the provider program’s input size limit.	İstek sağlayıcı programının girdi boyutu sınırını aştı.
+effort	The requested reasoning setting is unavailable for this provider program.	İstenen akıl yürütme ayarı bu sağlayıcı programında kullanılamıyor.
+agent-closed	The agent’s tool invocation is no longer accepting requests.	Ajanın araç çağrısı artık istek kabul etmiyor.
+agent-order	The agent tool request arrived outside the supported call sequence.	Ajan araç isteği desteklenen çağrı sırasının dışında geldi.
+model-alias	The provider program’s model or turn settings did not pass validation.	Sağlayıcı programının model veya tur ayarları doğrulamayı geçemedi.
+turn-bound	The provider program’s turn bound could not be established.	Sağlayıcı programının tur sınırı belirlenemedi.
+forbidden-flag	The provider program’s invocation contains an unsupported option.	Sağlayıcı programının çağrısı desteklenmeyen bir seçenek içeriyor.
+agent-profile	The connection profile is ineligible for native agent execution.	Bağlantı profili yerel ajan çalıştırmaya uygun değil.`.split('\n').map(line => {
+  const [id, en, tr] = line.split('\t');
+  return [id!, [en!, tr!] as const];
+}));
+
+function headlessExpectationIds(fields: Readonly<Record<string, string | number>>) {
+  const { check, reason, native, exit, holder, limit, recheck } = fields;
+  const entry = reason === 'missing' || reason === 'not-directory' ? 'npm/' + reason : 'selection/' + reason;
+  if (native && reason) return ['npm-proof', String(reason), String(native)];
+  if (check === 'npm-payload-missing' || check === 'npm-payload-unverified') {
+    const uncertainty = ['manifest-too-large', 'manifest-unreadable', 'changed-during-check', 'verification-unavailable'].includes(String(reason));
+    return [uncertainty ? 'npm-unverified' : recheck ? 'npm-recheck' : 'npm-check', 'npm/' + reason];
+  }
+  if (check === 'executable-recheck') return ['entry-recheck', reason === 'directory' ? 'selection/directory' : 'npm/' + reason];
+  if (exit) return ['login-outcome/' + exit, 'login-outcome/unsaved'];
+  if (holder) return ['holder/' + holder];
+  if (limit) return ['limit/' + limit];
+  switch (check) {
+    case 'recorded-path-not-directory': return ['npm/not-directory'];
+    case 'recorded-path-directory': return ['selection/directory'];
+    case 'recorded-path-not-file': return ['selection/not-regular-file'];
+    case 'recorded-path-not-executable': return ['selection/not-executable'];
+    case 'selected-file':
+      if (reason !== 'relative-path' && reason !== 'unavailable') return [entry];
+      break;
+    case 'path-candidate-unverified':
+      if (reason !== 'unavailable') return [entry];
+      break;
+  }
+  if (check && reason) return [check + '/' + reason];
+  return [String(check ?? reason ?? 'os-owner-mismatch')];
+}
+
+it('explains every provider diagnostic by operation and reason in English and Turkish', async () => {
+  const unknown = [
+    'The provider-program diagnostic could not be verified.',
+    'Sağlayıcı programına ilişkin tanı doğrulanamadı.',
+  ];
+  const locales = ['en', 'tr'] as const;
+  const external = ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: {
+    check: 'environment', reason: '/fixture/private/unknown-value',
+  } });
+  for (const [index, locale] of locales.entries()) expect.soft(external.localize?.(locale).message).toBe(unknown[index]);
+  expect.soft(JSON.stringify(external)).not.toContain('/fixture/private/unknown-value');
+
+  const { headlessDiagnosticCases } = await import('#platform/core/errors/index.js');
+  expect(headlessDiagnosticCases).toBeDefined();
+  for (const row of headlessDiagnosticCases) {
+    const fields: Readonly<Record<string, string | number>> = row.fields;
+    const example = Object.fromEntries(Object.entries(row.extras ?? {}).map(([key, field]) => [key, field.example]));
+    const proof = headlessExpectationIds(fields);
+    const label = `${row.code} ${JSON.stringify(fields)}`;
+    for (const [index, locale] of locales.entries()) {
+      const rendered = ErrorRegistry.createError(row.code, { params: { ...fields, ...example }, locale }).message;
+      expect.soft(rendered, label).not.toContain(unknown[index]);
+      for (const id of proof) {
+        const pair = diagnosticMeaning.get(id);
+        expect(pair, `${label}, expectation ${id}`).toBeDefined();
+        expect.soft(rendered.toLowerCase(), label).toContain(pair![index]!.toLowerCase());
+      }
+    }
   }
 });

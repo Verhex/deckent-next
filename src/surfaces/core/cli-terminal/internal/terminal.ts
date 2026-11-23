@@ -416,11 +416,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`. The watch is armed by the same answer.
   void settled.then(reached => { if (reached) { serviceWatch.arm(); if (context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined); } });
+  const toolsDiagnostic = chat?.toolsDiagnostic?.localize?.(locale).message;
   try { await runTerminalWorkline({
     context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)), ...(chat?.toolsVerifiedAtMs !== undefined ? { toolsUnverified: t('headless.agent.unknown.earlier', { time: clockText(chat.toolsVerifiedAtMs) }, locale) } : {}),
+      ...(toolsDiagnostic && { toolsNone: toolsDiagnostic, toolsUnverified: toolsDiagnostic }),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.

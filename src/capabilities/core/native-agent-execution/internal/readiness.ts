@@ -1,4 +1,4 @@
-import { messageText, t, type Locale, type MessageKey } from '#platform/index.js';
+import { headlessDiagnostic, messageText, type DeckentError, t, type Locale, type MessageKey } from '#platform/index.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 
 const REASON_KEYS: Readonly<Record<NativeAgentReadinessReason, { readonly known: MessageKey; readonly unknown: MessageKey }>> = {
@@ -27,4 +27,10 @@ export function nativeAgentPreflightReason(error: unknown): NativeAgentReadiness
   return code === 'HEADLESS_LOGIN_REQUIRED' ? 'NATIVE_AGENT_LOGIN_REQUIRED'
     : code === 'HEADLESS_CLI_UNAVAILABLE' ? 'NATIVE_AGENT_CLI_UNAVAILABLE'
     : 'NATIVE_AGENT_ENVIRONMENT_REFUSED';
+}
+
+export type NativeAgentDiagnostic = DeckentError;
+
+export function nativeAgentContainmentDiagnostic(resolved: boolean): NativeAgentDiagnostic {
+  return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: resolved ? 'agent-resolved-path-outside-roots' : 'agent-path-outside-roots' });
 }

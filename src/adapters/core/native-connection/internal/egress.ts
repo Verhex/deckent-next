@@ -128,11 +128,15 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     connected: () => { statistics.connected++; }, rejected: reject }));
   const close = async () => {
     if (closed) return; closed = true;
+    let failed = false;
     try { await input.mcp?.close(); }
+    catch (error) { failed = true; throw error; }
     finally {
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>(resolve => server.close(() => resolve()));
-      await rm(directory, { recursive: true, force: true });
+      await Promise.resolve().then(async () => {
+        for (const socket of sockets) socket.destroy();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+        await rm(directory, { recursive: true, force: true });
+      }).catch((error: unknown) => { if (!failed) throw error; });
     }
   };
   if (Buffer.byteLength(socketPath) > 103) { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }

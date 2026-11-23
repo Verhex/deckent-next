@@ -1,4 +1,5 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { isHeadlessDiagnosticCode, verifiedHeadlessParams } from './headless-diagnostics.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { localHeadlessPathDetail, retainHeadlessFailedCheck, retainHeadlessPaths } from './headless-paths.js';
 import { DeckentError } from './error.js';
@@ -181,7 +182,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
 }, plainErrors('error.', { INSTALLATION_ROOT_FOREIGN: 'config', INSTALLATION_ROOT_INSIDE_DATA_ROOT: 'config', INSTALLATION_ROOT_WALK_UNSUPPORTED: 'config' }), {
   INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
-  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'declined' ? t('error.PROJECT_ATTACHMENT_DENIED.declined', p, l) : p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
+  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'declined' ? t('error.PROJECT_ATTACHMENT_DENIED.declined', p, l) : p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l)
+    : p['reason'] === 'source-binding-unverified' ? t('error.PROJECT_ATTACHMENT_DENIED.sourceBindingUnverified', {}, l)
+      : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
   PROJECT_ATTACHMENT_SOURCE_REGISTERED: { category: 'config', render: (p, l) => ({ message: p['identityChoice'] === 'keep' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.keep', p, l)
     : p['identityChoice'] === 'new' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.new', p, l) : t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED', p, l) }) },
   PROJECT_ATTACHMENT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_UNAVAILABLE', p, l) }) },
@@ -707,6 +710,10 @@ export const ErrorRegistry = Object.freeze({
     return new Map(ERROR_CODES.map(code => [code, this.get(code, locale)!]));
   },
   createError(code: string, options: { message?: string; suggestion?: string; params?: Params; locale?: Locale; cause?: unknown } = {}): DeckentError {
+    if (isHeadlessDiagnosticCode(code)) options = {
+      ...(options.locale !== undefined && { locale: options.locale }),
+      params: verifiedHeadlessParams(code, options.params ?? {}) ?? {},
+    };
     const locale = options.locale ?? resolveLocale();
     const entry = this.get(code, locale, options.params);
     const category = Object.hasOwn(definitions, code) ? definitions[code]!.category : 'error';

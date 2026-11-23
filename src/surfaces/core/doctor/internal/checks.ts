@@ -1,4 +1,4 @@
-import { ErrorRegistry, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, readHeadlessDiagnosticIdentifier, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
@@ -49,6 +49,7 @@ export interface DoctorCheckFacts {
   readonly modelConnections?: readonly Readonly<{ profile: string; tools: 'available' | 'none' | 'unknown'; stale: boolean }>[] | null;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
+    diagnostic?: { localize?: ((locale: Locale) => { message: string }) | undefined }; egressUnreadable?: boolean;
     cliUpdated?: Readonly<{ cli: string; from: string; to: string }> | null;
     owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
     /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
@@ -192,8 +193,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
   // BeUser D-05: a Run the crash-loop breaker or the bounded failure path parked waits for the person; DISPATCH_PREPARATION_ABORTED means the
   // runtime service stopped repeatedly while starting its work. Each names the inspect step; resume follows once the cause is fixed.
-  for (const { runId, code } of f.stuckRuns ?? []) { const run = runId.slice(0, 12);
-    rows.push(row('work', 'work.stuckRun', 'warning', code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l) : t('doctor.check.run.parked', { run, code }, l), scoped(`deckent run inspect --id ${run}`, f))); }
+  for (const { runId, code } of f.stuckRuns ?? []) {
+    const run = runId.slice(0, 12), diagnosis = readHeadlessDiagnosticIdentifier(code, l);
+    const text = code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l)
+      : t('doctor.check.run.parked', { run, code }, l) + (diagnosis ? ' ' + diagnosis : '');
+    rows.push(row('work', 'work.stuckRun', 'warning', text, scoped(`deckent run inspect --id ${run}`, f)));
+  }
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
     ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)
@@ -250,11 +255,14 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
-    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? t('doctor.headless.notOwned', {}, l) : '';
-    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect', f);
-    rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own, login.owned === false ? next : undefined)
+    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? login.state === 'open' ? t('doctor.headless.notOwned', {}, l) : t('doctor.headless.externalDirectory', {}, l) : '';
+    const diagnosis = login.diagnostic?.localize?.(l).message;
+    const detail = diagnosis ? ' ' + diagnosis : '';
+    const gateway = login.egressUnreadable ? ' ' + t('doctor.headless.egressUnreadable', {}, l) : '';
+    const next = login.state === 'open' && login.owned === false ? 'deckent models login --connection claude-cli-subscription' : undefined;
+    rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own + detail + gateway)
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
-        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused,
+        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused + detail + gateway,
       next));
   }
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.

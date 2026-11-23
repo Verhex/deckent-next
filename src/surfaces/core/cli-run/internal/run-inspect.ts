@@ -1,3 +1,4 @@
+import { readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
@@ -105,7 +106,7 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: localTime(run.state.since, locale), deadline: localTime(run.state.deadline, locale) }, locale)] : []),
     // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
     ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
-      : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
+      : readHeadlessDiagnosticIdentifier(run.state.failureCode, locale) ?? t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
     // Crash-loop breaker: the typed park reason in words (the per-attempt count and phase are in the audit event and the service journal).
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
     // E1: a timed-out environment check holds the Run (no answer, not an installation defect); its next step is an explicit re-run.

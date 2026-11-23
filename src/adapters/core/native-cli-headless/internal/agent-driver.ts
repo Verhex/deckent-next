@@ -84,7 +84,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
-          let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
+          let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined, failed = false;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',
             evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason, reason.status,
               Buffer.from(JSON.stringify(reason.body)), complete) });
@@ -137,7 +137,12 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             // A completed, guarded turn is current surface evidence; a preflight alone never sets these facts.
             await recordNativeAgentObservation(profile, preflight, execution, input.now, true);
             emitDelta(onDelta, finishRecordStream(stream, known)); return response;
-          } finally { try { await dispose?.(); } finally { await rm(runDir, { recursive: true, force: true }); } }
+          } catch (error) { failed = true; throw error; }
+          finally {
+            await Promise.resolve().then(() => dispose?.()).catch((error: unknown) => {
+              if (!failed) { failed = true; throw error; }
+            }).finally(() => rm(runDir, { recursive: true, force: true }).catch((error: unknown) => { if (!failed) throw error; }));
+          }
         },
       });
     },

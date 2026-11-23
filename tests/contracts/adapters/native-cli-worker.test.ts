@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, rmdir, writeFile, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
@@ -108,8 +108,20 @@ it('K12: unsealed, stale F08, mismatched executable and unavailable readiness ne
   expect(await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence })).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_F08_REQUIRED' });
   f.ports.f08 = async () => ({ ...execution, cliVersion: '2.1.316' });
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_F08_REQUIRED' });
-  f.ports.readiness = async () => ({ state: 'ready', execution: { ...execution, executable: '/foreign/cli' } });
-  expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  const directory = await mkdtemp(join(tmpdir(), 'deckent-worker-recheck-'));
+  const executable = join(directory, 'program');
+  const recorded = { ...binding, definition: { ...binding.definition, executable } };
+  try {
+    f.ports.readiness = async () => ({ state: 'ready', execution: { ...execution, executable: '/foreign/cli' } });
+    expect(await inspectNativeCliWorker(recorded, f.ports)).toEqual({
+      state: 'waiting', reason: 'HEADLESS_CLI_UNAVAILABLE__CHECK_RECORDED_PATH_MISSING',
+    });
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    expect(await inspectNativeCliWorker(recorded, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  } finally {
+    await rm(executable, { force: true });
+    await rmdir(directory);
+  }
   f.ports.readiness = async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
   expect(f.ports.capacity.acquire).not.toHaveBeenCalled(); expect(f.ports.driver).not.toHaveBeenCalled();

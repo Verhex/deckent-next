@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { headlessLoginLockPath, nativeCliHeadless, withHeadlessLoginLock } from '#adapters/core/native-cli-headless/index.js';
+import { DeckentError } from '#platform/index.js';
 import { FAMILY } from '../../fixtures/native-headless/stream.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -20,7 +21,7 @@ async function fixture() {
 it.skipIf(process.platform !== 'linux')('does not reclaim an old live holder and never runs its callback', async () => {
   const f = await fixture(); await writeFile(f.marker, JSON.stringify({ pid: process.pid, atMs: 0, token: 'legacy' }), { mode: 0o600 });
   let ran = false;
-  await expect(withHeadlessLoginLock(f.entry, f.configDir, f.stateDir, () => 999_999, async () => { ran = true; })).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY', params: { holder: 'deckent' } });
+  await expect(withHeadlessLoginLock(f.entry, f.configDir, f.stateDir, () => 999_999, async () => { ran = true; })).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY', params: { holder: 'legacy-process' } });
   expect(ran).toBe(false); expect(JSON.parse(await readFile(f.marker, 'utf8')).token).toBe('legacy');
 });
 it.skipIf(process.platform !== 'linux')('holds the same kernel inode through a long approval wait, releases on cancellation, and never overlaps contenders', async () => {
@@ -36,8 +37,25 @@ it.skipIf(process.platform !== 'linux')('holds the same kernel inode through a l
 });
 it.skipIf(process.platform !== 'linux')('keeps malformed legacy custody closed rather than treating parse failure as release proof', async () => {
   const f = await fixture(); await writeFile(f.marker, '{broken', { mode: 0o600 });
-  await expect(withHeadlessLoginLock(f.entry, f.configDir, f.stateDir, () => 0, async () => { throw new Error('must not run'); })).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY' });
+  const refusal = () => withHeadlessLoginLock(f.entry, f.configDir, f.stateDir, () => 0, async () => { throw new Error('must not run'); });
+  const invalidMarker = refusal();
+  await expect(invalidMarker).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY' });
   expect(await readFile(f.marker, 'utf8')).toBe('{broken');
+  const malformed = await invalidMarker.catch((error: unknown) => error);
+  expect(malformed).toBeInstanceOf(DeckentError);
+  const unreadable = malformed as DeckentError;
+  expect.soft(unreadable.localize?.('en').message).toContain('no verifiable holder');
+  expect.soft(unreadable.localize?.('tr').message).toContain('sahibi hâlâ doğrulanamamıştı');
+  expect.soft(unreadable.localize?.('en').message).not.toContain('Another subscription Brain call');
+  expect.soft(unreadable.localize?.('tr').message).not.toContain('başka bir abonelik Brain çağrısı');
+
+  await writeFile(f.marker, JSON.stringify({ pid: process.pid, atMs: 0, token: 'live' }));
+  const live = await refusal().catch((error: unknown) => error);
+  expect(live).toBeInstanceOf(DeckentError);
+  const observed = live as DeckentError;
+  expect.soft(observed.localize?.('en').message).toContain('process ID in the sign-in lock marker still existed');
+  expect.soft(observed.localize?.('tr').message).toContain('kimliğe sahip bir süreç hâlâ vardı');
+  expect(JSON.parse(await readFile(f.marker, 'utf8')).token).toBe('live');
 });
 
 it.skipIf(process.platform !== 'linux')('releases kernel custody after the holder process crashes, preserving the same companion inode', async () => {

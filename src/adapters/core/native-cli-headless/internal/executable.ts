@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { access, lstat, open, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { ErrorRegistry, isRecord } from '#platform/index.js';
+import { ErrorRegistry, headlessDiagnostic, type HeadlessPreflightParams, type NpmCheckReason, isRecord } from '#platform/index.js';
 import { refuse } from './contract.js';
 import type { HeadlessEntry } from './env.js';
 
@@ -26,22 +26,22 @@ const ELF64 = {
 const ELF_TABLE_MAX_BYTES = 4_096;
 const BIN_MAX_TARGETS = 64, BIN_MAX_DEPTH = 32;
 
-export function headlessExecutableRefusal(check: string, chosen: string, executable?: string, params: Record<string, string> = {}): never {
-  throw ErrorRegistry.retainHeadlessPaths(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { ...params, check } }), chosen, executable);
+export function headlessExecutableRefusal(params: HeadlessPreflightParams, chosen: string, executable?: string): never {
+  throw ErrorRegistry.retainHeadlessPaths(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', params), chosen, executable);
 }
 
-type SelectionFailure = 'unavailable' | 'directory' | 'not-regular-file' | 'not-executable';
-export function headlessSelectionRefusal(chosen: string, reason: SelectionFailure): never {
-  return headlessExecutableRefusal('selected-file', chosen, undefined, { reason });
+type SelectionFailure = 'unavailable' | 'missing' | 'not-directory' | 'directory' | 'not-regular-file' | 'not-executable';
+export function executableLookupReason(error: unknown): 'missing' | 'not-directory' | 'unavailable' {
+  const reason = lookupReason(error);
+  return reason === 'verification-unavailable' ? 'unavailable' : reason;
+}
+export function headlessSelectionRefusal(chosen: string, reason: SelectionFailure | 'relative-path'): never {
+  return headlessExecutableRefusal({ check: 'selected-file', reason }, chosen);
 }
 
-type NpmCheckReason = 'missing' | 'not-directory' | 'not-regular-file' | 'not-expected-link' | 'untrusted-owner'
-  | 'group-or-other-writable' | 'set-id' | 'multiple-hard-links' | 'no-hard-links' | 'manifest-mismatch' | 'manifest-invalid' | 'manifest-too-large'
-  | 'manifest-unreadable' | 'not-executable' | 'changed-during-check' | 'verification-unavailable';
-function executableRecheckRefusal(path: string, reason: NpmCheckReason): never {
-  throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
-    params: { check: 'executable-recheck', reason },
-  }), path);
+type RecheckReason = 'missing' | 'not-directory' | 'directory' | 'not-regular-file' | 'not-executable' | 'verification-unavailable';
+function executableRecheckRefusal(path: string, reason: RecheckReason): never {
+  throw ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'executable-recheck', reason }), path);
 }
 
 class NpmCheckFailure extends Error {
@@ -75,6 +75,7 @@ async function metadata(path: string, maxBytes: number, owners?: readonly bigint
     if (error.code === 'ELOOP') throw new NpmCheckFailure('not-regular-file');
     throw error;
   });
+  let failed = false;
   try {
     const info = await file.stat({ bigint: true });
     if (!info.isFile()) throw new NpmCheckFailure('not-regular-file');
@@ -90,12 +91,11 @@ async function metadata(path: string, maxBytes: number, owners?: readonly bigint
     if (stamp(info) !== stamp(await file.stat({ bigint: true }))) throw new NpmCheckFailure('changed-during-check');
     const value = JSON.parse(data.subarray(0, bytesRead).toString('utf8')) as { name?: unknown; version?: unknown; bin?: string | Record<string, unknown>; optionalDependencies?: Record<string, unknown> } | null;
     return { value, identity: stamp(info) };
-  } finally { await file.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally { await file.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 
-function checkReason(error: unknown): NpmCheckReason {
-  if (error instanceof NpmCheckFailure) return error.reason;
-  if (error instanceof SyntaxError) return 'manifest-invalid';
+function lookupReason(error: unknown): 'missing' | 'not-directory' | 'verification-unavailable' {
   switch ((error as NodeJS.ErrnoException | null)?.code) {
     case 'ENOENT': return 'missing';
     case 'ENOTDIR': return 'not-directory';
@@ -103,10 +103,16 @@ function checkReason(error: unknown): NpmCheckReason {
   }
 }
 
+function checkReason(error: unknown): NpmCheckReason {
+  if (error instanceof NpmCheckFailure) return error.reason;
+  if (error instanceof SyntaxError) return 'manifest-invalid';
+  return lookupReason(error);
+}
+
 async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix: string, ownerUid: number, launcherInfo: BigIntStats, maxBytes: number, recheck: boolean) {
   const packageRoot = join(prefix, rule.packagePath), chosenLink = join(prefix, rule.linkPath);
   if (process.platform !== rule.platform || process.arch !== rule.arch || chosen !== launcher && chosen !== chosenLink)
-    headlessExecutableRefusal('npm-layout-unknown', chosen);
+    headlessExecutableRefusal({ check: 'npm-layout-unknown' }, chosen);
   let failedPath: string = sep, expected: string | undefined;
   const checking = (path: string) => { failedPath = path; return path; };
   try {
@@ -155,10 +161,11 @@ async function npmTarget(rule: Layout, chosen: string, launcher: string, prefix:
     });
     return { executable, packageRoot, info, packageIdentity: [rule, top.identity, platform.identity] };
   } catch (error) {
-    const reason = checkReason(error), check = reason === 'missing' ? 'npm-payload-missing' : 'npm-payload-unverified';
-    throw ErrorRegistry.retainHeadlessFailedCheck(ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
-      params: recheck ? { check, reason, recheck: 1 } : { check, reason },
-    }), failedPath, expected);
+    const reason = checkReason(error), mode = recheck ? { recheck: 1 as const } : {};
+    const failure = reason === 'missing'
+      ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'npm-payload-missing', reason, ...mode })
+      : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'npm-payload-unverified', reason, ...mode });
+    throw ErrorRegistry.retainHeadlessFailedCheck(failure, failedPath, expected);
   }
 }
 
@@ -183,7 +190,7 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
   if (typeof target !== 'string' || isAbsolute(target) || target.includes('\\') || target.includes('\0')) throw new Error();
   const parts = target.replace(/^\.\//u, '').split(sep);
   if (parts.length > BIN_MAX_DEPTH || parts.some(part => !part || part === '.' || part === '..')) throw new Error();
-  let current = root;
+  let current = root, failed = false;
   try {
     for (const [index, part] of parts.entries()) {
       const directory = index < parts.length - 1 ? constants.O_DIRECTORY : 0;
@@ -194,7 +201,8 @@ async function binTargetInfo(root: FileHandle, target: unknown) {
     const info = await current.stat({ bigint: true });
     if (!info.isFile()) throw new Error();
     return info;
-  } finally { if (current !== root) await current.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally { if (current !== root) await current.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 
 type ManifestExclusionFailure = 'manifest-exclusion-unverified' | 'manifest-exclusion-changed' | 'manifest-declares-bin';
@@ -225,6 +233,9 @@ async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIn
         return failure;
       }
       return remaining - targets.length;
+    } catch (error) {
+      if (error instanceof NpmCheckFailure && error.reason === 'changed-during-check') failure = 'manifest-exclusion-changed';
+      return failure;
     } finally { await root.close(); }
   } catch { return failure; }
 }
@@ -294,23 +305,23 @@ async function provesNativeExecutable(path: string, expected: BigIntStats): Prom
         const header = Buffer.alloc(ELF64.header.size);
         const { bytesRead } = await file.read(header, 0, header.length, 0);
         const { ident } = ELF64;
-        if (bytesRead !== header.length) return 'native-read-incomplete';
+        if (bytesRead !== header.length) return failure = 'native-read-incomplete';
         if (header.readUInt32BE(0) !== ELF64.magic
           || header[4] !== ident.elfClass || header[5] !== ident.littleEndian || header[6] !== ident.version
           || header[7] !== ident.systemV && header[7] !== ident.linux
           || header.readUInt16LE(ELF64.header.machine) !== ELF64.x86_64 || header.readUInt32LE(ELF64.header.version) !== ident.version
           || header.readUInt16LE(ELF64.header.declaredSize) !== ELF64.header.size
-          || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return 'native-format-unverified';
+          || header.readUInt16LE(ELF64.header.programSize) !== ELF64.program.size) return failure = 'native-format-unverified';
         const type = header.readUInt16LE(ELF64.header.type); // ET_EXEC or ET_DYN with DF_1_PIE
-        if (type !== ELF64.executable && type !== ELF64.dynamic) return 'native-format-unverified';
+        if (type !== ELF64.executable && type !== ELF64.dynamic) return failure = 'native-format-unverified';
         const programs = await readElfTable(file, info.size, header.readBigUInt64LE(ELF64.header.programOffset),
           header.readUInt16LE(ELF64.header.programCount) * ELF64.program.size);
-        if (typeof programs === 'string') return programs;
-        if (!hasLoadableSegment(programs, info.size)) return 'native-format-unverified';
+        if (typeof programs === 'string') return failure = programs;
+        if (!hasLoadableSegment(programs, info.size)) return failure = 'native-format-unverified';
         if (type !== ELF64.executable) {
-          if (header.readBigUInt64LE(ELF64.header.entry) === 0n) return 'native-format-unverified';
+          if (header.readBigUInt64LE(ELF64.header.entry) === 0n) return failure = 'native-format-unverified';
           const pie = await isPie(file, programs, info.size);
-          if (pie !== true) return pie;
+          if (pie !== true) return failure = pie;
         }
         if (stamp(await file.stat({ bigint: true })) !== expectedStamp) {
           failure = 'native-file-changed';
@@ -323,18 +334,17 @@ async function provesNativeExecutable(path: string, expected: BigIntStats): Prom
 }
 
 export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: string, ownerUid: number, context?: 'new' | 'path' | 'recheck'): Promise<HeadlessExecutable> {
-  const unavailable = (reason: SelectionFailure, failedPath = chosen, missing = false): never => {
+  const unavailable = (reason: SelectionFailure, failedPath = chosen): never => {
     if (context === 'new') headlessSelectionRefusal(chosen, reason);
-    if (context === 'path') headlessExecutableRefusal('path-candidate-unverified', failedPath, undefined, { reason });
-    if (context === 'recheck') {
-      const check = reason === 'directory' ? 'not-regular-file' : reason === 'unavailable' ? 'verification-unavailable' : reason;
-      executableRecheckRefusal(failedPath, check);
-    }
-    if (reason === 'unavailable' && !missing) refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'recorded-path-unverified' });
-    return refuse('HEADLESS_CLI_UNAVAILABLE');
+    if (context === 'path') headlessExecutableRefusal({ check: 'path-candidate-unverified', reason }, failedPath);
+    if (context === 'recheck') executableRecheckRefusal(failedPath, reason === 'unavailable' ? 'verification-unavailable' : reason);
+    const checks = {
+      unavailable: 'recorded-path-unverified', missing: 'recorded-path-missing', 'not-directory': 'recorded-path-not-directory',
+      directory: 'recorded-path-directory', 'not-regular-file': 'recorded-path-not-file', 'not-executable': 'recorded-path-not-executable',
+    } as const;
+    return refuse('HEADLESS_CLI_UNAVAILABLE', { check: checks[reason] });
   };
-  const unavailableAt = (path: string) => (error: NodeJS.ErrnoException) =>
-    unavailable('unavailable', path, error.code === 'ENOENT' || error.code === 'ENOTDIR');
+  const unavailableAt = (path: string) => (error: unknown) => unavailable(executableLookupReason(error), path);
   const launcher = await realpath(chosen).catch(unavailableAt(chosen));
   if (!launcher) return unavailable('unavailable');
   const launcherInfo = await infoAt(launcher).catch(unavailableAt(launcher));
@@ -349,7 +359,7 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
     const reason = await manifestsExcludeFile(position.manifestRoots, launcherInfo, entry.headless.limits.preflightOutputBytes);
     if (reason !== true) {
       const native = await provesNativeExecutable(launcher, launcherInfo);
-      if (native !== true) headlessExecutableRefusal('npm-layout-unknown', chosen, undefined, { reason, native });
+      if (native !== true) headlessExecutableRefusal({ check: 'npm-layout-unknown', reason, native }, chosen);
     }
   }
   const executable = target?.executable ?? launcher, info = target?.info ?? launcherInfo, fileStamp = stamp(info);
@@ -359,8 +369,8 @@ export async function resolveHeadlessExecutable(entry: HeadlessEntry, chosen: st
 }
 
 export async function pinHeadlessExecutable(entry: HeadlessEntry, resolution: HeadlessExecutable) {
-  const changed = () => headlessExecutableRefusal('executable-changed', resolution.chosen, resolution.executable);
-  const unreadable = (error: unknown) => executableRecheckRefusal(resolution.executable, checkReason(error));
+  const changed = () => headlessExecutableRefusal({ check: 'executable-changed' }, resolution.chosen, resolution.executable);
+  const unreadable = (error: unknown) => executableRecheckRefusal(resolution.executable, lookupReason(error));
   const file = await open(resolution.executable, O_PATH | constants.O_NOFOLLOW).catch(unreadable);
   try {
     const current = await resolveHeadlessExecutable(entry, resolution.chosen, process.getuid!(), 'recheck');

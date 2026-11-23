@@ -1,7 +1,7 @@
 import type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';
 import type { ModelReference, PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView, ScratchClearance, ScratchQuery,
   ScratchView } from '#domain/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import type { ConfigLoadOptions, DeckentError } from '#platform/index.js';
 import type { AgentChatMessage, TurnDelta, WorklineMentionAttachment } from '#surfaces/core/terminal/index.js';
 
 type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -17,6 +17,7 @@ export type TerminalChatPlanView = Readonly<{
   tools?: 'available' | 'none' | 'unknown' | 'unverified';
   /** NF-7: the last tool verification's time when only its age made `tools` unverified. */
   toolsVerifiedAtMs?: number;
+  toolsDiagnostic?: DeckentError;
 }>;
 
 /** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */

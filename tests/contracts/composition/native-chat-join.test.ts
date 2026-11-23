@@ -114,6 +114,23 @@ it('shows tools only for a matching capability, and does not spawn on inspection
   // R4b: not yet observed is "unverified" (the first turn verifies it), never "no tools"; a known refusal is "none".
   expect((await describeTerminalChat(h.f.project, h.f.options)).tools).toBe('unverified');
   expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('available');
+  const ownerUid = h.execution.ownerUid, executable = h.execution.executable;
+  h.execution.ownerUid = ownerUid + 1;
+  const differentOwner = await describeTerminalChat(h.f.project, h.f.options, h.runtime);
+  expect(differentOwner.tools).toBe('none');
+  expect.soft(differentOwner.toolsDiagnostic?.localize?.('en').message)
+    .toBe('The operating-system user in the agent execution record differs from the configured user.');
+  expect.soft(differentOwner.toolsDiagnostic?.localize?.('tr').message)
+    .toBe('Ajan yürütme kaydındaki işletim sistemi kullanıcısı yapılandırılan kullanıcıdan farklı.');
+  h.execution.ownerUid = ownerUid;
+  h.execution.executable = '/fixture/different-recorded-program';
+  const differentProgram = await describeTerminalChat(h.f.project, h.f.options, h.runtime);
+  expect(differentProgram.tools).toBe('none');
+  expect.soft(differentProgram.toolsDiagnostic?.localize?.('en').message)
+    .toBe('The verified program path differs from the path in the agent execution record.');
+  expect.soft(differentProgram.toolsDiagnostic?.localize?.('tr').message)
+    .toBe('Doğrulanan program yolu ajan yürütme kaydındaki yoldan farklı.');
+  h.execution.executable = executable;
   h.execution.profileDigest = '0'.repeat(64);
   expect(await inspectNativeChat(h.profile, h.runtime)).toMatchObject({ state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
   expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('none');

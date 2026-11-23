@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, configuredInvocationProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, type DeckentError, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -27,6 +27,7 @@ type TerminalChatPlan = Readonly<{
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
   /** NF-7: with `tools: 'unverified'` only because the last verification passed the K16 age, when it was recorded (the next turn rechecks). */
   toolsVerifiedAtMs?: number;
+  toolsDiagnostic?: DeckentError;
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
 export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}, snapshot?: ModelInspectionSnapshot): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
@@ -75,7 +76,8 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
-    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
+    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more, ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}),
+    ...(native?.diagnostic && { toolsDiagnostic: native.diagnostic }) });
 }
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
   settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {

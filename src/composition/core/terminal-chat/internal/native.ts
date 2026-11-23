@@ -1,6 +1,7 @@
+import { DeckentError, headlessDiagnostic } from '#platform/index.js';
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { nativeCliAgent, resolveHeadlessExecutable } from '#adapters/index.js';
-import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution } from '#capabilities/index.js';
+import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution, type NativeAgentReadiness } from '#capabilities/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 
 /** Compare the chat seal with the same verified program used to create it. */
@@ -9,17 +10,24 @@ async function sealedForProfile(profile: ModelInvocationProfile, execution: Nati
   const entry = nativeCliAgent(profile.protocol.family);
   if (!definition.success || !entry) return false;
   const { executable, ownerUid } = definition.data;
+  if (execution.ownerUid !== ownerUid) return headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' });
   return sealMatchesDefinition(execution, definition.data,
-    () => resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable, () => null));
+    () => resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable))
+    .then(matched => matched ? true : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-program-path-mismatch' }),
+      (error: unknown) => error instanceof DeckentError ? error : false);
 }
 
-export async function inspectNativeChat(profile: ModelInvocationProfile, runtime?: { readonly readiness: SubscriptionReadinessReader }) {
-  if (!runtime) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
+export async function inspectNativeChat(profile: ModelInvocationProfile, runtime?: { readonly readiness: SubscriptionReadinessReader }): Promise<NativeAgentReadiness & { readonly diagnostic?: DeckentError }> {
+  if (!runtime) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
+    diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) };
   const query = nativeReadinessQuery(profile, 'chat');
-  if (!query) return { state: 'unavailable', reason: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' } as const;
+  if (!query) return { state: 'unavailable', reason: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE',
+    diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-query-unavailable' }) };
   const readiness = await inspectSubscriptionReadiness(query, runtime.readiness);
   if (readiness.state !== 'ready') return readiness;
-  return await sealedForProfile(profile, readiness.execution) ? readiness : { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' } as const;
+  const seal = await sealedForProfile(profile, readiness.execution);
+  return seal === true ? readiness : { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
+    ...(seal && { diagnostic: seal }) } as const;
 }
 
 /** NF-7 (presentation only, never a gate): when the last tool verification still reads ready past the K16 age (R8e display read), its time. */
@@ -36,5 +44,5 @@ export async function nativeChatVerificationExecution(profile: ModelInvocationPr
   if (!query) return null;
   const observed = await runtime.readiness.read(query);
   const prerequisites = await inspectSubscriptionReadiness(query, { read: async () => observed }, { unknownSurfaceFacts: 'allow' });
-  return prerequisites.state === 'ready' && await sealedForProfile(profile, prerequisites.execution) ? prerequisites.execution : null;
+  return prerequisites.state === 'ready' && await sealedForProfile(profile, prerequisites.execution) === true ? prerequisites.execution : null;
 }

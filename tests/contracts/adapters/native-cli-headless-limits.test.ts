@@ -78,7 +78,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('f5 the realm bounds a
     expect(isolation).toHaveBeenCalledOnce(); expect(later.signal.aborted).toBe(true);
     await writeFile(path, JSON.stringify({ pid: process.pid, atMs: Date.now(), token: 'other' }), { mode: 0o600 });
     state.waitMs = 300;
-    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY', params: { holder: 'deckent' } });
+    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY', params: { holder: 'legacy-process' } });
     expect(await c.log()).toEqual([]);
     expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ token: 'other' });
     // A holder whose process is gone (beyond pid_max) is stale and replaced; the lock is gone again after the spawns.

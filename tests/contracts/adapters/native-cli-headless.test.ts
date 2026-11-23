@@ -114,8 +114,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     expect(missing).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
     expect(missing.localize?.('en').message).toContain('The subscription CLI is missing at the connected path');
     expect(missing.localize?.('tr').message).toContain("Abonelik CLI'ı bağlanan yolda yok");
-    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'en')?.message).toContain('Reconnect: deckent models connect --connection <connection>');
-    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'tr')?.message).toContain('Yeniden bağlanın: deckent models connect --connection <bağlantı>');
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'en', { check: 'recorded-path-missing' })?.message).toBe('The subscription CLI is missing at the connected path.');
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'tr', { check: 'recorded-path-missing' })?.message).toBe("Abonelik CLI'ı bağlanan yolda yok.");
     expect((await linked.log()).filter(entry => entry.mode === 'version')).toHaveLength(2);
   });
   it.each([
@@ -272,7 +272,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     const definition = c.profile.adapter.definition as Parameters<typeof headlessConnectionAdapter>[0];
     expect(headlessConnectionAdapter(definition, c.profile.protocol).maxInFlight).toBe(registry.adapters.claude.headless.connect.maxInFlight);
     // B2-12: no registry bound for the family is a refusal, never one assumed slot.
-    expect(() => headlessConnectionAdapter(definition, { family: 'unregistered', version: 'v1' })).toThrow(expect.objectContaining({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'definition' } }));
+    expect(() => headlessConnectionAdapter(definition, { family: 'unregistered', version: 'v1' })).toThrow(expect.objectContaining({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'connect-definition' } }));
   });
 });
 

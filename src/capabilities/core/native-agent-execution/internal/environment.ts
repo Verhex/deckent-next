@@ -5,8 +5,7 @@ import type { parseNativeCliRegistry } from './command-registry.js';
 type Command = ReturnType<typeof parseNativeCliRegistry>['adapters'][string];
 export type HeadlessEntry = Readonly<{ id: string; command: Command; headless: NativeCliHeadless }>;
 type AgentEntry = HeadlessEntry & { agent: NonNullable<Command['agent']>; bridge: NonNullable<ReturnType<typeof parseNativeCliRegistry>['agentBridge']> };
-import { ErrorRegistry } from '#platform/index.js';
-const refuse = (code: 'HEADLESS_PREFLIGHT_FAILED' | 'HEADLESS_REQUEST_INVALID', params: Record<string, string>): never => { throw ErrorRegistry.createError(code, { params }); };
+import { refuseHeadlessDiagnostic as refuse } from '#platform/index.js';
 
 /**
  * The one environment of every headless spawn (preflight probes and the call): built from registry names, never inherited. HOME and TMPDIR
@@ -20,7 +19,7 @@ export function buildHeadlessEnv(headless: NativeCliHeadless, runDir: string, co
   env[headless.env.configDir] = configDir;
   for (const name of proxy.env) env[name] = `http://${proxy.host}:${proxy.port}`;
   for (const name of proxy.clear) env[name] = '';
-  if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment' });
+  if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment', reason: 'probe' });
   return Object.freeze(env);
 }
 /** s3c: the environment of the CLI's own sign-in in the person's terminal: the registry's inherited names from the person's environment (browser opener,
@@ -29,7 +28,7 @@ export function headlessLoginEnv(headless: NativeCliHeadless, person: Readonly<R
   const env: Record<string, string> = {};
   for (const name of headless.login.env.inherit) { const value = person[name]; if (typeof value === 'string' && !value.includes('\0')) env[name] = value; }
   Object.assign(env, headless.login.env.fixed); env[headless.env.configDir] = configDir;
-  if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment' });
+  if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment', reason: 'sign-in' });
   return Object.freeze(env);
 }
 /** Every flag the call uses (fixed argv, model, turn bound, system prompt file and the effort flags); the preflight requires each one. */

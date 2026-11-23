@@ -1,3 +1,4 @@
+import { DeckentError as ProviderDiagnostic, headlessDiagnostic } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -18,7 +19,7 @@ import { headlessExecutableRefusal, resolveHeadlessExecutable, type HeadlessExec
 export function agentTarget(input: ModelInvocationProfile) {
   const profile = modelInvocationProfileSchema.parse(input), definition = nativeCliHeadlessDefinitionSchema.parse(profile.adapter.definition);
   const entry = nativeCliAgent(profile.protocol.family);
-  if (!entry || !isNativeCliHeadlessAdapter(profile.adapter) || profile.schemaVersion === 1 || profile.billingAxis !== 'subscription') refuse('HEADLESS_REQUEST_INVALID', { reason: 'profile' });
+  if (!entry || !isNativeCliHeadlessAdapter(profile.adapter) || profile.schemaVersion === 1 || profile.billingAxis !== 'subscription') refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-profile' });
   return { profile, entry, definition };
 }
 /** No model call. A separate agent flag set, never the tool-less v1 capability. Tool/plugin observations remain absent until a guarded turn. */
@@ -51,7 +52,7 @@ export async function recordNativeAgentObservation(profile: ModelInvocationProfi
   const observed = { cli: true, login: true, environment: true, execution,
     ...(surface === true ? { toolSurface: true, plugins: true, bridge: true } : surface ? {
       ...(surface === 'NATIVE_AGENT_PLUGIN_UNEXPECTED' ? { plugins: false } : { toolSurface: false }) } : {}) };
-  if (preflight.program.identity !== program.identity) headlessExecutableRefusal('agent-program-changed', program.chosen, program.executable);
+  if (preflight.program.identity !== program.identity) headlessExecutableRefusal({ check: 'agent-program-changed' }, program.chosen, program.executable);
   if (preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const path = targetPath(profile, definition.stateDir), temporary = `${path}.${randomUUID()}.tmp`;
   try {
@@ -63,7 +64,7 @@ export async function recordNativeAgentObservation(profile: ModelInvocationProfi
 /** Bounded read-only K7 input: missing/malformed/foreign/stale records are unknown. Never spawn, refresh, sign in or read credentials.
  * `display` (R8e, /provider and /model only, never a gate): the last verification counts past its age and the CLI's own login-file writes, and
  * carries `checkedAtMs` (when that verification was recorded) so a person is told its time; the K16 age still gates every turn. */
-export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now, display = false) {
+export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now, display = false, diagnosed?: (error: ProviderDiagnostic) => void) {
   try {
     const { entry, definition } = agentTarget(profile);
     if (process.getuid?.() !== definition.ownerUid || constants.O_NOFOLLOW === undefined) return null;
@@ -82,10 +83,20 @@ export async function readNativeAgentObservation(profile: ModelInvocationProfile
     const [recordedProgram] = JSON.parse(record.identity) as [unknown];
     if (!entry.agent.observationMaxAgeMs || age < 0 || !display && age > entry.agent.observationMaxAgeMs
       || record.scopeId !== profile.scopeId || !isDeepStrictEqual(record.reference, profile.reference)
-      || execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)
-      || execution.ownerUid !== definition.ownerUid || execution.executable !== program.executable || recordedProgram !== program.identity
-      || !display && record.identity !== await identity(profile, program)) return null;
+      || execution.profileDigest !== modelInvocationProfileDigest(profile) || execution.flagSetDigest !== nativeAgentFlagSetDigest(entry)) return null;
+    if (execution.ownerUid !== definition.ownerUid) {
+      diagnosed?.(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' }));
+      return null;
+    }
+    if (execution.executable !== program.executable || recordedProgram !== program.identity) {
+      diagnosed?.(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-program-changed' }));
+      return null;
+    }
+    if (!display && record.identity !== await identity(profile, program)) return null;
     return Object.freeze({ ...record.observed, toolSurface: record.observed.toolSurface ?? null,
       plugins: record.observed.plugins ?? null, bridge: record.observed.bridge ?? null, ...(display ? { checkedAtMs: record.checkedAtMs } : {}) }); // NF-7: display says when
-  } catch { return null; }
+  } catch (error) {
+    if (error instanceof ProviderDiagnostic) diagnosed?.(error);
+    return null;
+  }
 }

@@ -178,7 +178,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta, options.knownSecrets ?? EMPTY_KNOWN_SECRETS);
       let refusal: Refusal | null = null;
       const onLine = async (raw: string, lineSignal?: AbortSignal): Promise<'stop' | void> => { refusal ??= await turn.line(raw, lineSignal); return refusal ? 'stop' : undefined; };
-      let evidence;
+      let evidence, failed = false;
       try {
         await emptyRunDir(preflight.runDir);
         await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' });
@@ -189,7 +189,8 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
           stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
           stdinBase64: Buffer.from(prepared.user, 'utf8').toString('base64') }, signal, onLine);
-      } finally { await rm(promptFile, { force: true }); }
+      } catch (error) { failed = true; throw error; }
+      finally { await rm(promptFile, { force: true }).catch((error: unknown) => { if (!failed) throw error; }); }
       // f5: every settled call names what the realm's gateway did (counts and refused host names only).
       const { egress } = evidence, settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER,
         value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });

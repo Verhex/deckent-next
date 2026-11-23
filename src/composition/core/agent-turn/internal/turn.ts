@@ -9,7 +9,7 @@ import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, age
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -104,16 +104,19 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const observed = await inspectNativeChat(profile, host.nativeAgent);
     const start = async (controller?: AbortController) => {
       let readiness = observed;
+      let diagnostic = observed.diagnostic;
       let execution = readiness.state === 'ready' ? readiness.execution : null;
       if (readiness.state === 'unknown' && host.nativeAgent?.preflight) {
         try {
           await host.nativeAgent.preflight(profile, AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]));
           execution = await nativeChatVerificationExecution(profile, host.nativeAgent);
           readiness = await inspectNativeChat(profile, host.nativeAgent);
+          diagnostic = readiness.diagnostic;
           if (readiness.state === 'unavailable') execution = null;
         } catch (error) {
           if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)
             return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
+          if (error instanceof DeckentError && isHeadlessDiagnosticCode(error.code)) diagnostic = error;
           execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
         }
       }
@@ -126,7 +129,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
       const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
+      channel.emit({ kind: 'text', text: (diagnostic?.localize?.(language).message ?? nativeChatReasonText(reason, language, readiness.state === 'unknown')) + '\n' });
       await channel.drained();
       return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
     };
