@@ -34,9 +34,11 @@ it('prints the trust card in the person\'s words and the grant outcome as a sent
   expect(en.text).toContain('Headers: Authorization');
   expect(en.text).toContain('remote: an HTTP server on another machine; nothing runs here');
   expect(en.text).not.toContain('$DECK');
-  expect(en.text).toContain('Policy grant written: this server is yours to call');
+  expect(en.text).toContain('Policy grant written: this server is yours to call; standard asks every call, and tools marked "always ask" ask in every mode; every call is audited.');
   expect(en.text).not.toMatch(/grant:\s*\{/u);
   const tr = await run('tr', { status: 'refused', reason: 'administer' });
   expect(tr.text).toContain('Başlıklar: Authorization');
   expect(tr.text).toContain('Güvenildi ama politika izni yazılmadı: politikanız politika kurallarını değiştirmenize izin vermiyor');
+  const trGranted = await run('tr', { status: 'granted' });
+  expect(trGranted.text).toContain('Politika izni yazıldı: bu sunucuyu çağırabilirsiniz; standart mod her çağrıda, "her zaman sor" işaretli araçlar her modda sorar; her çağrı denetim kaydına yazılır.');
 });

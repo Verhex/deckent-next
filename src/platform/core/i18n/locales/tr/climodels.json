@@ -126,7 +126,7 @@
   "climodels.mcp.import.claudeCode": "Claude Code istemcisi",
   "climodels.mcp.import.claudeDesktop": "Claude Desktop uygulaması",
   "climodels.mcp.result.added.trusted": "{name} ({scope}) eklendi ve güvenildi; {tools} araç sabitlendi.",
-  "climodels.mcp.result.added.pending": "{name} ({scope}) eklendi; ilk kullanımda güven sorar.",
+  "climodels.mcp.result.added.pending": "{name} ({scope}) eklendi. İlk kullanımda güven onayı ister. Hemen onaylamak için deckent mcp approve {name} komutunu çalıştırın.",
   "climodels.mcp.result.added.declined": "{name} ({scope}) eklendi; güveni reddettiğiniz için başlamaz.",
   "climodels.mcp.result.added.shadowed": "{name} ({scope}) eklendi; daha yakın kapsamdaki aynı adlı sunucu kullanılır.",
   "climodels.mcp.result.approved": "{name} ({scope}) güvenilir; {tools} araç sabitlendi.",

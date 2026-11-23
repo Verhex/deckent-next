@@ -36,7 +36,7 @@ function host(listed: unknown[] = [], language = 'en', env: Record<string, strin
           headerNames: [], variables: [], posture: 'sandbox', note: null });
         return { schemaVersion: 1, approved: launch === true, name: request['name'], scope: 'local', pinnedTools: launch ? 1 : 0 };
       }
-      if (request['verb'] === 'add') { const decided = request['approve'] === false ? null : await ask({ phase: 'launch', name: request['name'], scope: request['scope'], transport: 'stdio', command: 'node',
+      if (request['verb'] === 'add') { const decided = request['scope'] === 'project' || request['approve'] === false ? null : await ask({ phase: 'launch', name: request['name'], scope: request['scope'], transport: 'stdio', command: 'node',
         args: ['srv.js'], realm: 'host', envNames: ['API_KEY'], headerNames: [], variables: [], posture: 'host', note: null });
       return { schemaVersion: 1, added: { name: request['name'], scope: request['scope'], file: '/h/.deckent/mcp.json' }, trust: decided === null ? 'pending' : decided ? 'trusted' : 'declined', pinnedTools: 0 }; }
       return { schemaVersion: 1 };
@@ -62,6 +62,15 @@ it('trust off a terminal is refused before anything is asked or written, --yes i
   const scripted = host();
   expect(await main(['mcp', 'add', '--no-approve', 'fx', '--', 'node', 'srv.js'], scripted.context)).toBe(0);
   expect(scripted.requests).toEqual([expect.objectContaining({ verb: 'add', approve: false })]);
+});
+
+it('shows the command to approve a newly added project server (EN, TR)', async () => {
+  const en = host(), tr = host([], 'tr');
+  const argv = ['mcp', 'add', '--scope', 'project', 'fx', '--', 'node', 'srv.js'];
+  expect(await main(argv, en.context)).toBe(0);
+  expect(await main(argv, tr.context)).toBe(0);
+  expect(en.out.text().trim()).toBe('Added fx (project). It asks for trust on first use. Run deckent mcp approve fx to approve it now.');
+  expect(tr.out.text().trim()).toBe('fx (proje) eklendi. İlk kullanımda güven onayı ister. Hemen onaylamak için deckent mcp approve fx komutunu çalıştırın.');
 });
 
 it('a person on a terminal decides on the card (arrow keys), --yes never skips it; the card lines are terminal-safe, one argument per line', async () => {
