@@ -7,14 +7,15 @@ import { createNativeAgentDriver, preflightNativeAgent, readNativeAgentObservati
 import { inspectNativeCliWorker } from '#adapters/core/native-cli-worker/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
-import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
+import { nativeEgressLimits, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
-import { nativeQuotaText, nativeAgentReasonText, type SameTurnPlanningPort, type SameTurnToolSessionPort, type ToolSessionPort } from '#capabilities/index.js';
+import { createClaudeAgentDriver, nativeQuotaText, nativeAgentReasonText, type SameTurnPlanningPort, type SameTurnToolSessionPort, type ToolSessionPort } from '#capabilities/index.js';
 import { snapshotKnownSecrets, clockText, t } from '#platform/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { fakeCodexNpm } from '../../fixtures/native-headless/codex.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
+import { assistantLine, initLine, PINNED, resultLine } from '../../fixtures/native-headless/stream.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 const close: (() => Promise<unknown>)[] = [];
@@ -102,6 +103,50 @@ it('runs both real isolated CLI drivers through R with exact correlation, readon
     expect(await readFile(path, 'utf8')).not.toContain(h.bridge.turnToken);
     expect(await readdir(join(f.c.root, 'state', 'run'))).toEqual([]);
   }
+});
+
+const claudeProse = (id: string, ...chunks: string[]) => ({
+  ...assistantLine(''), message: { id, type: 'message', role: 'assistant', model: PINNED, content: chunks.map(text => ({ type: 'text', text })) },
+});
+
+it('preserves Claude text block and record chunks within one message ID across a tool exchange', async () => {
+  const { entry, port } = await fixture(families[0]!);
+  const deltas: string[] = [];
+  const driver = createClaudeAgentDriver({ entry, port, model: PINNED, cliVersion: '9.1.0', runDir: '/run/dir',
+    outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy(), onDelta: delta => deltas.push(delta.text) });
+  const feed = (event: unknown) => expect(driver.line(JSON.stringify(event))).toBeUndefined();
+  const name = entry.bridge.toolPrefix + 'read_file', input = { path: 'scoped.txt' }, id = 'read-1';
+  feed(initLine({ tools: [name], mcp_servers: [{ name: entry.bridge.serverName, status: 'connected' }] }));
+  feed(claudeProse('preamble', 'I will che'));
+  feed(claudeProse('preamble', '', 'ck the ', 'file.'));
+  const tool = claudeProse('preamble');
+  feed({ ...tool, message: { ...tool.message, content: [{ type: 'tool_use', id, name, input }] } });
+  await driver.propose({ id, name: 'read_file', argumentsJson: JSON.stringify(input) },
+    { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, new AbortController().signal);
+  feed({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+  feed(claudeProse('answer', '', 'The file is ', 'readable.'));
+  feed(claudeProse('follow-up', ' Already spaced.'));
+  feed(resultLine('The file is readable. Already spaced.'));
+  expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'completed' });
+  expect(deltas).toEqual(['I will che', 'ck the ', 'file.', '\n\nThe file is ', 'readable.', ' Already spaced.']);
+});
+
+it.each(['Claude', 'Codex'] as const)('separates %s prose around a settled tool in streamed and retained text', async provider => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const canary = 'FIXTURE-LOGIN-CANARY-4cf027', masked = '‹secret:FIXTURE_LOGIN›';
+  const before = 'I will check the file.', after = 'The file is readable.';
+  const events = [claudeProse('preamble', 'I will che'), claudeProse('preamble', `ck the ${canary.slice(0, 12)}`, `${canary.slice(12)} file.`)];
+  const f = await fixture(families[provider === 'Claude' ? 0 : 1]!, {
+    calls: [{ name: 'read_file', arguments: { path: 'scoped.txt' } }],
+    ...(provider === 'Claude' ? { events } : { preamble: before }),
+    answer: after, loginCanary: canary,
+  });
+  const h = await f.start(), result = await h.run();
+  const expectedBefore = provider === 'Claude' ? `I will check the ${masked} file.` : before;
+  const expected = `${expectedBefore}\n\n${after} ${masked}`;
+  expect(f.propose).toHaveBeenCalledOnce();
+  expect(h.deltas.map(delta => delta.text).join('')).toBe(expected);
+  expect(result).toMatchObject({ native: { choices: [{ message: { content: expected } }] } });
 });
 
 it('WER-A chat continues after synthetic nonzero and sealed NO, and stops session and uncertain records', async () => {

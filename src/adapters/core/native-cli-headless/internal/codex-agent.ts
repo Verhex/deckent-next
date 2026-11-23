@@ -8,7 +8,7 @@ import { refuse } from './contract.js';
 import { headlessArgv } from './env.js';
 import { codexTurn } from './codex.js';
 import type { HeadlessPreflight } from './preflight.js';
-import { reject, type HeadlessTurn, type Prepared, type Refusal } from './turn.js';
+import { emitDelta, reject, type HeadlessTurn, type Prepared, type Refusal } from './turn.js';
 export type CodexAgentResultLookup = (deckentCallId: string) => Readonly<{ call: Parameters<ToolSessionPort['propose']>[0]; result: NativeAgentToolResult; active?: () => boolean; recordedError?: () => ReturnType<NonNullable<ToolSessionPort['recordedError']>>; selectedText?: () => string | undefined }> | undefined;
 const MILLISECONDS_PER_SECOND = 1000; // Unit conversion, never a timeout policy.
 export function codexAgentArgv(entry: NonNullable<ReturnType<typeof nativeCliAgent>>, session: ToolSession, runDir: string, model: string, effortArgs: readonly string[], bridgeUrl: string): readonly string[] {
@@ -29,8 +29,9 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
   const entry = prepared.entry.headless.protocolFamily ? nativeCliAgent(prepared.entry.headless.protocolFamily) : null;
   if (!entry || entry.agent.transport.kind !== 'codex-mcp' || !toolSessionSchema.safeParse(session).success || !('maxNotices' in entry.headless.guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const beforeDelivery = new Set<string>();
-  const base = codexTurn(prepared, preflight, '', onDelta, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
+  const base = codexTurn(prepared, preflight, '', undefined, knownSecrets, answer => wire?.active ? wire.response() : answer), active = new Map<string, Record<string, unknown>>(), seen = new Set<string>(), calls = new Set<string>(), pendingText = new Map<string, string>(), maxNotices = entry.headless.guards.maxNotices;
   let threadId: string | undefined, turnId: string | undefined, conflictingIdentity = false;
+  let proseEndsWithWhitespace = true;
   // Reserve synchronously before either driver can delegate to its tool session.
   const reserved = new WeakMap<object, string>();
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
@@ -114,7 +115,13 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
         if (!started || active.size) return fail('pending-tools'); if (pendingText.size) return fail('pending-items'); completed = true;
       } else if (wire?.active && type === 'error') return fail('planning-interrupted');
       else if (type !== 'error' && type !== 'turn.failed') return fail('event');
-      refusal = base.line(raw); return refusal;
+      refusal = base.line(raw);
+      if (!refusal && type === 'item.completed' && item?.type === 'agent_message' && typeof item.text === 'string' && item.text) {
+        const text = item.text;
+        emitDelta(onDelta, proseEndsWithWhitespace || /^\s/u.test(text) ? text : '\n\n' + text);
+        proseEndsWithWhitespace = /\s$/u.test(text);
+      }
+      return refusal;
     },
     end(exit: Parameters<HeadlessTurn['end']>[0], egress: Parameters<HeadlessTurn['end']>[1]) { return refusal ? { refusal } : completed && !active.size ? base.end(exit, egress) : null; },
   };
