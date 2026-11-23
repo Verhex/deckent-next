@@ -19,7 +19,7 @@ describe('/help grouped', () => {
     const sections = text.split('\n').slice(1).join('\n').split('\n\n');
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // /cancel is the window lane's text and is not pinned here.
-    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırla', '  /workers  İşçileri ve her birinin ne yaptığını listele',
+    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırlayın. İşçi kurulmadığında, sohbet ve politika izin verirse /do bu klasörde doğrudan çalışabilir.', '  /workers  İşçileri ve her birinin ne yaptığını listele',
       '  /tasks  Arka plan çalışmaları: işçiler ve çalışmalar tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir çalışmayı ayrıntılı gösterin',
       "  /runs  Bu kapsamın tüm çalışmaları; h bekletme, r sürdürme, c bekleyen çalışmayı kapatma, a işçinin sorusunu yanıtlama; her işlem kendi kartında y ile onaylanır", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim edin; seçilen doğrulama çalışmasıyla Git dalını teslim edilen sürüme taşıyın', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
   });

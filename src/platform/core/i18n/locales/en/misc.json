@@ -738,6 +738,8 @@
   "brain.here.cancelled": "Not run; nothing was changed.",
   "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
   "cli.help.do": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
+  "cli.help.do.workerRequired": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals. If no worker is set up, this command refuses the request.",
+  "terminal.slash.do.execution": "Plan work from your request. With no worker set up, /do can work directly in this folder when chat and policy allow it.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",
   "config.field.brain_planner": "Versioned Brain planning template registry",
   "error.BRAIN_CONTEXT_TOO_LARGE": "Planning context exceeds the {limit} {unit} limit (observed {observed}). Narrow the intent/catalog selection or use an explicitly activated model with a larger context window; no automatic retry.",

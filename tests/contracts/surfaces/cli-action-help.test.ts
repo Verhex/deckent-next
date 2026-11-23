@@ -39,6 +39,16 @@ it('uses the environment locale for scoped Turkish help', async () => {
 });
 
 it.each([
+  ['en', 'If no worker is set up, this command refuses the request.'],
+  ['tr', 'İşçi kurulmamışsa bu komut isteği reddeder.'],
+] as const)('discloses the no-worker refusal in do help (%s)', async (language, refusal) => {
+  const f = context();
+  expect(await main(['do', '--help', '--lang', language], f.context)).toBe(0);
+  expect(outputs.join('').replace(/\s+/g, ' ')).toContain(refusal);
+  expect(f.initialized()).toBe(0);
+});
+
+it.each([
   [['run', '--help', '--lang', 'tr'], 'Kullanım: deckent run'],
   [['run', 'create', '--help'], 'Usage: deckent run <action>'],
   [['task', 'execute', '--help', '--lang', 'tr'], 'Kullanım: deckent task <eylem>'],
