@@ -427,6 +427,7 @@
   "cli.audit.refusal.source.adapter-reported": "Adapter ret bildirdi (adapter-reported)",
   "cli.audit.refusal.countAtLeast": "Sayı en az {count}.",
   "cli.audit.refusal.countExact": "Sayı tam olarak {count}.",
+  "cli.audit.refusal.verifiedMatch": "Aday hedef doğrulandı.",
   "cli.audit.refusal.unresolved": "Hedef çözümlenemiyor.",
   "cli.audit.refusal.joined": "Politika izin verdi, sınırda reddedildi (ilişkili: {sequences})",
   "cli.audit.refusal.correlationLimited": "İlişkili kayıt araması sınırına ulaştı; eşleşme yokluğu doğrulanamadı.",
