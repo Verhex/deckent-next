@@ -67,6 +67,8 @@
   "monitor.human.evaluation": "Evaluation: {verdict}",
   "monitor.human.patch": "Patch: {count} files changed · {files}",
   "monitor.human.emptyPatch": "Empty patch: no file changes",
+  "monitor.human.verifiedNoFileChanges": "The worker changed no files ({files} recorded).",
+  "monitor.human.reportedChecksNotRun": "Worker report: {count} check(s) not run.",
   "monitor.human.patchMissing": "No patch record",
   "monitor.human.patchDenied": "Patch hidden: policy denied the read",
   "monitor.human.patchUnavailable": "Patch unavailable: evidence could not be read",

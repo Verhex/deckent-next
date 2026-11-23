@@ -18,11 +18,19 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallback
   const sources = { title: t('monitor.human.titleShort', {}, locale), task: t('monitor.human.titleTask', {}, locale),
     acceptance: t('monitor.human.titleAcceptance', {}, locale), missing: t('monitor.human.titleMissing', {}, locale) };
   const usage = ['denied', 'unavailable'].includes(h.transcript.state) ? null : resolveWorkerUsage(worker);
-  const report = h.finalReport?.status === 'reported' ? h.finalReport.report : null;
+  const reportEvidence = h.resultBrief ? h.resultBrief.report : h.finalReport;
+  const report = reportEvidence?.status === 'reported' ? reportEvidence.report : null;
   const checks = { passed: t('monitor.human.passed', {}, locale), failed: t('monitor.human.failed', {}, locale),
     'not-run': t('monitor.human.notRun', {}, locale), unknown: t('monitor.human.unknown', {}, locale) };
   const patchMissing = h.patch.state === 'denied' ? t('monitor.human.patchDenied', {}, locale)
     : h.patch.state === 'unavailable' ? t('monitor.human.patchUnavailable', {}, locale) : t('monitor.human.patchMissing', {}, locale);
+  const evaluationReason = h.resultBrief ? h.resultBrief.evaluation.reason : h.evaluationReason;
+  const verifiedNoChange = evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0;
+  const reportedNotRun = verifiedNoChange && report?.checks.length ? report.checks.filter(check => check.outcome === 'not-run').length : null;
+  const patchLine = h.patch.state !== 'recorded' ? line(patchMissing, 'muted')
+    : h.patch.fileCount !== 0 ? line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale))
+    : line(verifiedNoChange ? t('monitor.human.verifiedNoFileChanges', { files: h.patch.fileCount }, locale) : t('monitor.human.emptyPatch', {}, locale),
+      h.evaluation === 'rejected' ? 'warning' : undefined);
   const transcriptMissing = h.transcript.state === 'denied' ? t('monitor.human.transcriptDenied', {}, locale)
     : h.transcript.state === 'unavailable' ? t('monitor.human.transcriptUnavailable', {}, locale) : t('monitor.human.transcriptMissing', {}, locale);
   return [
@@ -31,8 +39,8 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallback
     ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
     ...(h.resultBrief ? [] : [line(evaluationText(h.taskBrief, { verdict: h.evaluation, ...(h.evaluationReason ? { reason: h.evaluationReason } : {}) }, locale),
       h.evaluation === 'rejected' ? 'warning' : undefined)]),
-    ...(h.evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
-      : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
+    patchLine,
+    ...(reportedNotRun === null ? [] : [line(t('monitor.human.reportedChecksNotRun', { count: reportedNotRun }, locale))]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
     usage ? line(usageText(Boolean(worker.model), 'human', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
       turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : formatUsd(usage.costUsd, locale) }, locale))
