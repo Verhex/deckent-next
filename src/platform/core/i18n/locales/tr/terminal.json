@@ -294,7 +294,7 @@
   "terminal.mcp.status.changed": "onaydan sonra değişti, yeniden onay gerekir",
   "terminal.mcp.status.declined": "reddedildi",
   "terminal.mcp.status.invalidLaunch": "başlatılamaz: başlatma değerleri geçersiz",
-  "terminal.mcp.status.secretUnresolved": "başlayamaz: ana kasada {key} anahtarı yok (deckent secret set {key} --main)",
+  "terminal.mcp.status.secretUnresolved": "{key} anahtarı çözümlenemediği için başlatılamıyor. Seçilen kasayı ve projenin anahtara erişimini kontrol edin. Anahtarı o kasaya yalnızca orada olmadığını doğrularsanız ekleyin.",
   "terminal.mcp.status.secretRefused": "başlayamaz: {key} anahtarı bu projeye açılmamış (deckent secret grant {key})",
   "terminal.mcp.status.secretProjectMissing": "başlayamaz: proje kasasında {key} anahtarı yok (deckent secret set {key} --project)",
   "terminal.mcp.status.secretUndeclared": "başlayamaz: {key} anahtarı .deck içinde bildirilmemiş",
