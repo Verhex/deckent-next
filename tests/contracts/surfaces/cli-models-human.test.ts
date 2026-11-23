@@ -83,6 +83,45 @@ it('F5: catalog lifecycle agrees with retirement dates and retains deprecation, 
   expect(h.out.text()).not.toContain('yaşam döngüsü active');
 });
 
+it.each([
+  { language: 'en', fallback: 'tr', heading: 'Error: Invalid arguments for deckent models.',
+    declaredScope: '--declared lists the chat models the connected providers declare for this whole installation, so it takes no --scope. Chat models: deckent models --declared. The models workers may use in one scope: deckent models --scope <id>',
+    action: 'deckent models has no such action. Chat models: deckent models --declared. The models workers may use in one scope: deckent models --scope <id>. Every form: deckent models --help' },
+  { language: 'tr', fallback: 'en', heading: 'Hata: deckent models için argümanlar geçersiz.',
+    declaredScope: '--declared, bağlı sağlayıcıların bu kurulumun tamamı için bildirdiği sohbet modellerini listeler; bu yüzden --scope almaz. Sohbet modelleri: deckent models --declared. Bir kapsamda işçilerin kullanabileceği modeller: deckent models --scope <id>',
+    action: 'deckent models komutunun böyle bir eylemi yok. Sohbet modelleri: deckent models --declared. Bir kapsamda işçilerin kullanabileceği modeller: deckent models --scope <id>. Tüm biçimler: deckent models --help' },
+])('models usage gives working commands in $language', async ({ language, fallback, heading, declaredScope, action }) => {
+  const f = await project();
+  for (const [args, usage] of [
+    [['--scope', 's', '--declared'], declaredScope],
+    [['list', '--scope', 's'], action],
+    [['--scope', 'SECRETVALUE', '--declared'], declaredScope],
+    [['SECRETWORD'], action],
+  ] as const) {
+    const h = host(f, [], { locale: fallback });
+    expect.soft(await main(['models', ...args, '--lang', language], h.context)).toBe(2);
+    expect.soft(h.err.text()).toBe(`${heading}\n${usage} [CLI_USAGE]\n`);
+    expect(h.out.text()).toBe('');
+    expect(h.calls).toEqual([]);
+  }
+});
+
+it('models keeps generic usage for other malformed forms and registered actions', async () => {
+  const f = await project();
+  for (const [args, command] of [
+    [['--declared', '--catalog'], 'models'],
+    [['--scope', 's', 'list'], 'models'],
+    [['--unknown'], 'models'],
+    [['binding', '--provider', 'prov-a', '--provider-version', '1', '--model', 'model-x', '--model-version', '2', '--unknown'], 'models binding'],
+    [['logout', '--connection', 'unconfigured'], 'models logout'],
+  ] as const) {
+    const h = host(f);
+    expect(await main(['models', ...args], h.context)).toBe(2);
+    expect(h.err.text()).toBe(`Error: Invalid arguments for deckent ${command}.\nRun deckent --help. [CLI_USAGE]\n`);
+    expect(h.calls).toEqual([]);
+  }
+});
+
 it('bare models: one table of the scope\'s models grouped by channel, state in words, retired with its date, no raw values (EN)', async () => {
   const f = await project(), h = host(f);
   expect(await main(['models'], h.context)).toBe(0);
@@ -133,6 +172,10 @@ it('--declared shows the connected providers\' declarations; --scope names anoth
   const other = host(f);
   expect(await main(['models', '--scope', 'other'], other.context)).toBe(0);
   expect(other.calls[0]).toEqual({ kind: 'catalog', value: { schemaVersion: 1, scopeId: 'other' } });
+  const scoped = host(f, [], { inspectModelCatalog: async () => ({ ...catalog, scopeId: 's' }) });
+  expect(await main(['models', '--scope', 's'], scoped.context)).toBe(0);
+  expect(scoped.out.text()).toContain('Models you can use in scope s');
+  expect(scoped.out.text()).toContain('model-a-1');
   const spending = host(f);
   expect(await main(['models', 'spending'], spending.context)).toBe(0);
   expect(spending.calls).toEqual([{ kind: 'spending', value: { schemaVersion: 1, scopeId: 'live', current: true } }]);
