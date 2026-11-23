@@ -1,4 +1,5 @@
 import { useTimingFrame } from '#surfaces/core/terminal-kit-ink/index.js';
+import type { PersonalCustodyRefusal } from '#engine/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 const SiwcWindow = lazy(loadSiwcWindow);
@@ -51,6 +52,14 @@ const grantRefusal = (error: unknown): Readonly<{ name: string; project: string 
 const API = ':api-key';
 const BUDGET = ':budget', CACHE = ':cache', LATER = ':later';
 
+type OperationCustodyRefusal = Readonly<{ id: string; code: 'SIWC_STORE_NOT_PERSONAL' | 'OAUTH_CONNECTION_STORE_REQUIRED';
+  reason: PersonalCustodyRefusal | undefined; directory: boolean; message: string }>;
+function preflightCanClear(refusal: OperationCustodyRefusal): boolean {
+  // The preflight checks the selected backend and host conditions. A generic unsafe-root can also come from the binding file.
+  return refusal.code === 'OAUTH_CONNECTION_STORE_REQUIRED' || refusal.reason === 'remote-store' || refusal.reason === 'unknown-locality'
+    || (refusal.reason === 'unsafe-root' && refusal.directory);
+}
+
 /**
  * `/provider` as a window: connect a kind (its address chosen from a list when it takes one — a typed address only as the list's last row,
  * checked and previewed — then the key, masked, with how it is kept, then the free check and its typed result; only a passing check stores the
@@ -68,7 +77,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const [refusals, setRefusals] = useState<Readonly<Record<string, string>>>({});
-  const [custody, setCustody] = useState<Readonly<{ id: string; reason: string }> | null>(null);
+  const [preflightCustody, setPreflightCustody] = useState<Readonly<{ id: string; reason: string }> | null>(null);
+  const [operationCustody, setOperationCustody] = useState<OperationCustodyRefusal | null>(null);
   const connecting = useRef<string | null>(null);
   // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
@@ -81,7 +91,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     void timing.run(() => port.inspectCustody?.()).then(result => {
       if (!active() || !result) return;
       const { id, reason } = result;
-      setCustody(previous => reason !== null ? { id, reason } : previous?.id === id ? null : previous);
+      setPreflightCustody(previous => reason !== null ? { id, reason } : previous?.id === id ? null : previous);
+      if (reason === null) setOperationCustody(previous => previous?.id === id && preflightCanClear(previous) ? null : previous);
     }).catch(() => {});
     try {
       const result = await port.inspect(publish, abort.signal);
@@ -101,12 +112,14 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); void reload(); };
   // A refused connection belongs beside the alternatives, not in the onboarding host's fatal-error path.
   const failed = (error: unknown) => {
-    const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.locale ?? port.siwc?.locale;
+    const typed = error as { code?: string; params?: Readonly<Record<string, string | number> & { reason?: PersonalCustodyRefusal }> }, locale = port.locale ?? port.siwc?.locale;
     const entry = typed?.code ? ErrorRegistry.get(typed.code, locale, typed.params) : undefined;
     const message = [errorText?.(error) ?? entry?.message ?? (error instanceof Error ? error.message : String(error)), entry?.suggestion].filter(Boolean).join('\n');
     const id = connecting.current;
     if (id && id === port.siwc?.connection && (typed?.code === 'SIWC_STORE_NOT_PERSONAL' || typed?.code === 'OAUTH_CONNECTION_STORE_REQUIRED')) {
-      setCustody({ id, reason: message });
+      const { reason, folder, path, mode } = typed.params ?? {};
+      const directory = (folder === 'root' || folder === 'parent') && typeof path === 'string' && typeof mode === 'string';
+      setOperationCustody({ id, code: typed.code, reason, directory, message });
     } else if (id) setRefusals(previous => ({ ...previous, [id]: message }));
     back();
   };
@@ -282,7 +295,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const listTitle = apiOnly ? t('tui.provider.apiTitle', {}, port.locale ?? port.siwc?.locale) : view.title;
   const shownKinds = apiOnly ? view.kinds.filter(kind => kind.billing === 'metered' || kind.billing === undefined && (kind.keyRequired || kind.keyName !== null)) : view.kinds;
   const kinds = shownKinds.map(kind => {
-    const reason = custody?.id === kind.id ? custody.reason : refusals[kind.id];
+    const reason = operationCustody?.id === kind.id ? operationCustody.message : preflightCustody?.id === kind.id ? preflightCustody.reason : refusals[kind.id];
     return reason ? { ...kind, blocked: reason } : kind;
   });
   const tree = withRows(providerPanelTree({ ...view, title: listTitle, kinds }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),

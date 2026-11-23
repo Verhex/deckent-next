@@ -1264,6 +1264,40 @@ it('N3-4: custody follows its provider and only the latest affirmative inspectio
   expect(calls.errors).toEqual([]);
 });
 
+it('N3-4-R1: the automatic ready read clears a corrected directory refusal and preserves a binding refusal on ChatGPT', async () => {
+  const [apiKind, , planKind] = KINDS.kinds, id = planKind!.id;
+  for (const [params, notice, remains] of [
+    [{ reason: 'unsafe-root', path: '/fixture/private-store', mode: '0755', folder: 'root' }, '/fixture/private-store has mode 0755', false],
+    [{ reason: 'binding-changed' }, 'Personal local custody is unverified.', true],
+  ] as const) {
+    const { port } = providerPort();
+    const refreshes: Array<(result: { id: string; reason: null }) => void> = [];
+    const operations: string[] = [];
+    let reads = 0;
+    const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [{ ...planKind!, blocked: null }, apiKind!] }),
+      inspectCustody: async () => ++reads === 1 ? { id, reason: null } : new Promise(resolve => { refreshes.push(resolve); }),
+      siwc: { locale: 'en', connection: id, execute: async ({ operation }) => {
+        operations.push(operation);
+        if (operation === 'prepare') return { apiTargets: [] };
+        throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params });
+      } } };
+    const ui = mount(createElement(ProviderPanel, { port: provider, labels: terminalPanelLabels('en'),
+      push: () => {}, onClose: () => {}, onError: error => { throw error; } }), 120);
+    const signIn = terminalPanelLabels('en').provider.actions.signIn, keys = t('siwc.card.keys', {}, 'en');
+    await enterWhenStill(ui, planKind!.label, () => ui.frame().includes(signIn), 'ChatGPT action');
+    await enterWhenStill(ui, signIn, () => ui.frame().includes(t('siwc.card.title', {}, 'en')), 'ChatGPT sign-in card');
+    await armed(ui.frame, keys); await ui.press(ENTER, 80);
+    await armed(ui.frame, keys); await ui.press(ENTER, 80);
+    await until(() => refreshes.length === 1 && ui.frame().includes(notice), 'operation refusal on the provider list during the automatic read');
+    expect(operations).toEqual(['prepare', 'connect']);
+    expect(ui.frame()).toMatch(/ChatGPT sign-in .*\[blocked\]/u);
+    refreshes[0]!({ id, reason: null });
+    await settle(80);
+    expect(ui.frame().includes(notice), notice).toBe(remains);
+    expect(/ChatGPT sign-in .*\[blocked\]/u.test(ui.frame())).toBe(remains);
+  }
+});
+
 it('K13: the provider and onboarding subscription window offers the registry methods, Esc starts nothing and device choice preserves the typed command in EN/TR', async () => {
   for (const locale of ['en', 'tr'] as const) {
     const requests: unknown[] = [], kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null };
