@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, formatDuration, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
@@ -106,24 +106,22 @@ export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen,
   readonly rows: number; readonly focused: boolean; readonly onFocus: (focused: boolean) => void; readonly onOpen: (item: ActiveWorkItem) => void;
   /** Full window (TERMINAL-SABIT-DUZEN): the list is drawn only while selected (Ctrl+T); otherwise `ActiveWorkSummary` is its one row. */
   readonly collapsed?: boolean }) {
-  const [selected, setSelected] = useState(0), glyphs = useRenderGlyphs(), known = useHumanTextSecrets(), owner = useFocusOwner(), composing = owner.composing;
-  const latest = useRef(items); latest.current = items;
-  const index = Math.min(selected, Math.max(0, items.length - 1));
+  const [selectedKey, setSelectedKey] = useState<string | null>(null), glyphs = useRenderGlyphs(), known = useHumanTextSecrets(), owner = useFocusOwner(), composing = owner.composing;
+  const index = Math.max(0, items.findIndex(item => item.key === selectedKey));
   // An emptied strip gives the input back to the composer.
   useEffect(() => { if (focused && items.length === 0) onFocus(false); }, [focused, items.length, onFocus]);
   useInput((input, key) => {
-    const count = latest.current.length;
     if (key.escape || (key.ctrl && input === 't')) { onFocus(false); return; }
-    if (key.upArrow) setSelected(Math.max(0, index - 1));
-    else if (key.downArrow) setSelected(Math.min(count - 1, index + 1));
+    if (key.upArrow) setSelectedKey(items[Math.max(0, index - 1)]?.key ?? null);
+    else if (key.downArrow) setSelectedKey(items[Math.min(items.length - 1, index + 1)]?.key ?? null);
     else if (key.return) {
-      const item = latest.current[index];
+      const item = items[index];
       if (!item) return;
       onFocus(false);
       if (item.target.kind === 'do') owner.focusTop(); else onOpen(item);
     }
   }, { isActive: focused && composing && items.length > 0 });
-  useInput((input, key) => { if (key.ctrl && !key.meta && input === 't') onFocus(true); }, { isActive: !focused && composing && items.length > 0 });
+  useInput((input, key) => { if (key.ctrl && !key.meta && input === 't') { setSelectedKey(items[index]?.key ?? null); onFocus(true); } }, { isActive: !focused && composing && items.length > 0 });
   if (items.length === 0 || (collapsed && !focused)) return null;
   const view = activeWorkWindow(items.length, index, rows), arrow = glyphs.ascii ? '>' : '›';
   const human = (text: string): readonly Span[] => projectHumanPickerText(text, known).spans;

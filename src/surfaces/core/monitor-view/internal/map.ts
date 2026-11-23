@@ -68,7 +68,8 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
         : `${t('model.invocable.unavailable', { code: 'MODEL_INVOCATION_UNAVAILABLE' }, locale)} ${t('model.invocable.unavailableNext', {}, locale)}`;
     const models: MonitorBlock = { kind: 'table', empty: none, columns: [col(t('monitor.col.state', {}, locale), 0, 6, 26), col(t('monitor.map.col.model', {}, locale), 1, 12, 44),
       col(t('monitor.map.col.channel', {}, locale), 2, 8, 28), col(t('monitor.col.scope', {}, locale), 4, 6, 20), col(t('monitor.map.col.billing', {}, locale), 3, 8, 24)],
-    rows: map.models.map((model, at) => ({ ...row(`map:${install.id}:model:${at}`, [state(model), span(`${model.modelId}${model.reference ? `@${model.reference.modelVersion}` : ''}`),
+    rows: map.models.map(model => ({ ...row(JSON.stringify(['map-model', install.id, install.path, model.scopeId ?? null, model.channelId,
+      model.reference?.providerVersion ?? null, model.modelId, model.reference?.modelVersion ?? null]), [state(model), span(`${model.modelId}${model.reference ? `@${model.reference.modelVersion}` : ''}`),
       span(`${model.channelId}${model.reference ? `@${model.reference.providerVersion}` : ''}`, 'muted'), span(model.scopeId ?? '—', 'muted'),
       span([model.vendorId, model.billing].filter(Boolean).join(` ${marks.sep} `) || '—', 'muted')]), detail: () => [[state(model), span(` ${model.modelId}`)], [span(reason(model))]] })) };
     // One line per distinct decision, in the same words every model surface uses (✓ ready, → what to do); a sentence shared by several

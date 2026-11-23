@@ -2,7 +2,7 @@ import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';
-import { Writable } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, runDetailLines } from '#surfaces/core/terminal-work/index.js';
@@ -210,4 +210,26 @@ describe('active work strip on the real Workline', () => {
     await press(h, CTRL_T); await press(h, DOWN); await press(h, CTRL_T); expect(frame(h)).toContain(EN.activeWork!.title);
     h.release();
   });
+});
+
+it('opens the highlighted active Run when the live strip loses a preceding row', async () => {
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame = chunk.toString(); done(); } }), { isTTY: true, rows: 20, columns: 120 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const items = activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine, nowMs: 0, active: null,
+    runs: ['FRONT', 'TARGET', 'AFTER'].map((title, index) => ({ run: run(RUNNING, { phase: 'active', title }, title), sinceMs: 3 - index })) });
+  const opened: string[] = [];
+  const view = (rows: typeof items) => createElement(ActiveWorkStrip, { items: rows, labels: EN.activeWork!, rows: 6, focused: true,
+    onFocus: () => undefined, onOpen: item => { opened.push(item.title); } });
+  const instance = render(view(items), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream,
+    interactive: true, debug: true, patchConsole: false });
+  mounted.push(instance);
+  await until(() => frame.includes('› FRONT'), 'first Run highlighted');
+  stdin.write(DOWN);
+  await until(() => frame.includes('› TARGET'), 'second Run highlighted');
+  instance.rerender(view(items.slice(1)));
+  await until(() => !frame.includes('FRONT'), 'preceding Run removed');
+  stdin.write('\r');
+  await until(() => opened.length > 0, 'Run opened');
+  expect(opened).toEqual(['TARGET']);
 });

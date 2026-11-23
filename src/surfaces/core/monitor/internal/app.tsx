@@ -96,7 +96,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [generation, setGeneration] = useState(0);
   const [paused, setPaused] = useState(false);
   const [tab, setTab] = useState(0);
-  const [selection, setSelection] = useState<readonly number[]>(tabs.map(() => 0));
+  const [selection, setSelection] = useState<readonly (string | null)[]>(tabs.map(() => null));
   const [detail, setDetail] = useState<string | null>(null);
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
@@ -140,7 +140,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
   const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
-  const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
+  const selected = Math.max(0, items.findIndex(item => item.row?.key === selection[tab]));
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
   // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
@@ -160,7 +160,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),
           ...(controls.group ? [span(`  ${controls.group === 'install' ? t('monitor.group.install', {}, locale) : t('monitor.group.state', {}, locale)}`, 'muted')] : [])];
   const bodyHeight = Math.max(1, height - shownHeader.length - 4);
-  const move = (delta: number) => setSelection(values => values.map((value, index) => index === tab ? Math.max(0, Math.min(items.length - 1, selected + delta)) : value));
+  const move = (delta: number) => setSelection(values => values.map((value, index) =>
+    index === tab ? items[Math.max(0, Math.min(items.length - 1, selected + delta))]?.row?.key ?? null : value));
   const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); setDetailOffset(0); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
   const pointer = ascii ? '>' : '›';
@@ -172,7 +173,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
       else if (key.escape) { setEditing(false); setControls(value => ({ ...value, filter: '' })); }
       else if (key.backspace || key.delete) setControls(value => ({ ...value, filter: value.filter.slice(0, -1) }));
       else if (input && !key.ctrl && !key.meta && !key.tab) setControls(value => ({ ...value, filter: value.filter + input }));
-      setSelection(tabs.map(() => 0));
+      setSelection(tabs.map(() => null));
       return;
     }
     if (input === 'q') { onClose(); return; }
@@ -198,7 +199,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (key.upArrow) move(-1); else if (key.downArrow) move(1);
     else if (key.pageUp) move(-bodyHeight); else if (key.pageDown) move(bodyHeight);
     else if (key.home) move(-items.length); else if (key.end) move(items.length);
-    else if (key.return) { const row = items[selected]?.row; if (row) { setDetail(row.key); setDetailOffset(0); } }
+    else if (key.return) { const row = items[selected]?.row; if (row) { move(0); setDetail(row.key); setDetailOffset(0); } }
   }, { isActive: props.active ?? true });
 
   let body: MonitorLine[];

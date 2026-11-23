@@ -297,6 +297,14 @@ describe('fullscreen monitor', () => {
       expect(view.stdout.frame).toContain(secondDetail);
       expect(view.stdout.frame).not.toContain(firstDetail);
 
+      await view.press(KEY.esc);
+      runs = [{ ...first, runId: 'newer', createdAtMs: OBSERVED_AT }, first, second];
+      await view.press('r');
+      await until(() => view.stdout.frame.includes('newer'), 'new Run above the selection');
+      expect(view.stdout.frame).toMatch(/› │ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(secondDetail);
+
       runs = [first];
       await view.press('r');
       const detailGone = t('monitor.live.detailGone', {}, 'en');
@@ -354,6 +362,46 @@ describe('fullscreen monitor', () => {
     expect(widest(frame)).toBeLessThanOrEqual(120);
     await expect(`${frame}\n`).toMatchFileSnapshot('../../fixtures/monitor/frame-full-tr-120.txt');
   });
+});
+
+it('keeps open Map model detail through earlier row removal and insertion, and shows when the model leaves', async () => {
+  const install = fullSnapshot.installs[0]!, map = install.map!;
+  const front = map.models[0]!, after = map.models[2]!;
+  const selected = { ...map.models[1]!, scopeId: 'scope-a', billing: 'subscription' as const,
+    reference: { providerId: 'subscription', providerVersion: 1, modelId: 'model-alpha-1', modelVersion: 2 } };
+  const inserted = { ...front, modelId: 'new-model' };
+  const reason = t('model.invocable.subscription', {}, 'en');
+  let models = [front, selected, after], observedAt = OBSERVED_AT;
+  const view = mount({ load: async () => ({ ...fullSnapshot, observedAt, sourcesRead: [install.id], installs: [{ ...install, map: { ...map, models } }] }) });
+  const refresh = async (next: typeof models, time: string) => {
+    models = next;
+    observedAt += 1000;
+    await view.press('r');
+    await until(() => view.stdout.frame.includes(`snapshot 2026-10-02 ${time}Z`), `refreshed Map at ${time}`);
+  };
+  try {
+    await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+    await view.press('7');
+    for (let index = 0; index < map.config.length + map.registry.kinds.length + 1; index++) await view.press(KEY.down);
+    await view.press(KEY.enter);
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+
+    await refresh([selected, after], '09:30:01');
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+    expect(view.stdout.frame).not.toContain(after.modelId);
+
+    await refresh([inserted, selected, after], '09:30:02');
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+    expect(view.stdout.frame).not.toContain(inserted.modelId);
+
+    await refresh([inserted, after], '09:30:03');
+    expect(view.stdout.frame).toContain(t('monitor.live.detailGone', {}, 'en'));
+    expect(view.stdout.frame).not.toContain(after.modelId);
+    expect(view.stdout.frame).not.toContain(reason);
+  } finally { view.instance.unmount(); }
 });
 
 describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () => {
