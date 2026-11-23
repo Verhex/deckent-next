@@ -112,6 +112,7 @@
   "terminal.render.toolSandboxDegraded": "sandbox: degraded",
   "terminal.session.banner": "deckent terminal session (line mode). Commands: /status, /help, /exit.",
   "terminal.session.help": "Line mode commands: /status (service and model), /context (instruction files in use), /help, /exit. Any other line is sent to the model as your message. Other slash commands (/model, /config, /usage …) need the full terminal: run deckent in an interactive terminal.",
+  "terminal.session.exitStatus": "Exit status: 0 completed, 1 refused, cancelled or unfinished turn, 2 unsupported command. The highest status applies to the session.",
   "terminal.session.unknown": "Unknown command in line mode: {command}. /help lists the line mode commands.",
   "terminal.service.started": "Runtime service started in the background (pid {pid}); it keeps running after the terminal closes. deckent runtime describe shows it; deckent runtime --help says how to stop it.",
   "terminal.service.connected": "Runtime service connected ({instance}). {stop}",

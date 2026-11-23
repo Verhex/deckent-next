@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, headlessGovernedUseText, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, headlessGovernedUseText, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { readInferenceServingProfile } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 
@@ -47,7 +47,7 @@ function chatPlanText(plan: ChatPlan, locale: Locale): string {
  * its next step; `status` adds, after the terminal's own lines, whether the chat model was reached (this command never contacts it: "not
  * tested") and why the context window reads "?". JSON output is the terminal's, unchanged; every other call goes to `delegate`.
  */
-export async function terminalInfoCommand(argv: readonly string[], context: TerminalInfoContext, delegate: () => Promise<void>): Promise<void> {
+export async function terminalInfoCommand(argv: readonly string[], context: TerminalInfoContext, delegate: () => Promise<ExitCode | void>): Promise<ExitCode | void> {
   const action = argv[1], flags = ACTIONS.has(action ?? '') ? scan(argv) : null;
   if (!flags || flags.help) return delegate();
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, options: ConfigLoadOptions = { env };
@@ -58,12 +58,12 @@ export async function terminalInfoCommand(argv: readonly string[], context: Term
   }
   if (flags.json) return delegate();
   if (action === 'status') {
-    await delegate();
+    const exitCode = await delegate();
     const config = await loadConfig(root, options) as Record<string, unknown> & { language?: string };
     const locale = resolveLocale(flags.language, env, config.language);
     emit([t('cli.terminalInfo.reachability', {}, locale), readInferenceServingProfile(config) ? t('cli.terminalInfo.context.profile', {}, locale)
       : t('cli.terminalInfo.context.noProfile', {}, locale)].join('\n'), { ...(context.stdout ? { stdout: context.stdout } : {}) });
-    return;
+    return exitCode;
   }
   const config = await loadConfig(root, options) as Record<string, unknown> & { language?: string };
   const locale = resolveLocale(flags.language, env, config.language);

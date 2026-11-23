@@ -1,14 +1,17 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { completeTerminalChatTurn, describeTerminalChat, assertTerminalChatReady, type TerminalChatInvocationPorts } from '#composition/core/terminal-chat/index.js';
 import { extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { composeCore } from '#composition/core/root/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/index.js';
 import { clearConfigCache, ConfigValidationError, DeckentError, resolveGlobalConfigPaths } from '#platform/index.js';
 import type { ModelInvocationCancellationCommand, ModelInvocationCommand } from '#domain/index.js';
 import { parseOpenAiChatHttpDefinition, parseOpenAiChatTextRequest } from '../../../src/adapters/core/provider-openai-chat/index.js';
+import { main } from '../../../src/surfaces/index.js';
 
 const roots: string[] = [];
 const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
@@ -26,9 +29,9 @@ async function project(config: Record<string, unknown>) {
   return { projectRoot, options: { env } };
 }
 
-function reply(content: string): ModelInvocationResult {
+function reply(content: string, finish: 'stop' | 'length' = 'stop'): ModelInvocationResult {
   return { replayed: false, receipt: {} as never, contentStatus: 'retained', purge: null,
-    response: { schemaVersion: 1, native: { choices: [{ finish_reason: 'stop', message: { content } }] }, usage: null } } as unknown as ModelInvocationResult;
+    response: { schemaVersion: 1, native: { choices: [{ finish_reason: finish, message: { content } }] }, usage: null } } as unknown as ModelInvocationResult;
 }
 
 function ports(result: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>) {
@@ -79,7 +82,8 @@ describe('terminal chat turn is one governed model invocation', () => {
     const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 256 } } });
     const p = ports(async () => reply('  merhaba  '));
     const messages = [{ role: 'system' as const, content: 'sys' }, { role: 'user' as const, content: 'hi' }];
-    await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 'team-a', messages, options: f.options }, p.value)).resolves.toBe('merhaba');
+    await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 'team-a', messages, options: f.options }, p.value))
+      .resolves.toEqual({ text: 'merhaba', truncated: false });
     const [command] = p.invoked;
     const binding = await inspectModelBinding(f.projectRoot, reference, f.options);
     expect(command).toMatchObject({ schemaVersion: 1, scopeId: 'team-a', reference, catalogRevision: 'catalog-7', expectedBinding: binding.binding });
@@ -103,6 +107,29 @@ describe('terminal chat turn is one governed model invocation', () => {
     expect(failure).toBeInstanceOf(DeckentError); expect(failure.code).toBe('TERMINAL_CHAT_CANCELLED');
     expect(p.cancelled).toEqual([expect.objectContaining({ scopeId: 'team-a', targetCommandId: p.invoked[0]!.commandId, reference,
       expectedRequestDigest: modelInvocationRequestDigest(p.invoked[0]!) })]);
+  });
+
+  it('returns 1 for a plain line session with partial text and 0 for a completed answer', async () => {
+    const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 64 } } });
+    for (const truncated of [false, true]) {
+      const p = ports(async () => p.invoked.length === 1 && truncated ? reply('partial answer', 'length') : reply('complete answer'));
+      const output: string[] = [], errors: string[] = [];
+      const code = await main(['terminal', 'session', '--scope', 'team-a', '--lang', 'en'], {
+        root: f.projectRoot, env: f.options.env, initialize: composeCore,
+        stdin: Object.assign(Readable.from(truncated ? ['first\n', 'follow-up\n'] : ['first\n']), { isTTY: false }),
+        stdout: { write: text => { output.push(text); } },
+        stderr: { write: text => { errors.push(text); } },
+        completeTerminalChat: (projectRoot, input, options) => completeTerminalChatTurn({ projectRoot, ...input, options }, p.value),
+      });
+      expect(errors).toEqual([]);
+      expect(output.join('')).toBe(truncated ? 'partial answer\ncomplete answer\n' : 'complete answer\n');
+      if (truncated) {
+        expect(p.invoked[1]!.nativeRequest['messages']).toEqual(expect.arrayContaining([
+          { role: 'user', content: 'first' }, { role: 'assistant', content: 'partial answer' }, { role: 'user', content: 'follow-up' },
+        ]));
+      }
+      expect(code).toBe(truncated ? 1 : 0);
+    }
   });
 
   it('fails typed without configuration, with an undeclared model, with empty text, and never retries', async () => {

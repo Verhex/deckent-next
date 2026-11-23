@@ -121,7 +121,7 @@ function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocat
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
  */
-export async function completeTerminalChatTurn(input: TerminalChatTurnInput, ports: TerminalChatInvocationPorts): Promise<string> {
+export async function completeTerminalChatTurn(input: TerminalChatTurnInput, ports: TerminalChatInvocationPorts) {
   const { chat, command } = await prepareTerminalChatCommand(input, false);
   let outcome: ModelInvocationResult;
   try {
@@ -132,12 +132,13 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
     throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
   }
   const text = extractOpenAiChatTextFromInvocation(outcome);
+  const truncated = openAiChatStoppedAtLength(outcome);
   if (!text) {
-    throw openAiChatStoppedAtLength(outcome)
+    throw truncated
       ? ErrorRegistry.createError('TERMINAL_CHAT_TRUNCATED', { params: { maxCompletionTokens: chat.maxCompletionTokens } })
       : ErrorRegistry.createError('TERMINAL_CHAT_EMPTY');
   }
-  return text;
+  return { text, truncated };
 }
 /**
  * The same configuration check the plain turn makes, before an agent turn contacts the service; returns the service's admission from

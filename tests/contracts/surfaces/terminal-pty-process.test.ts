@@ -403,7 +403,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
       child.on('error', reject); child.on('close', code => resolvePromise({ code, stderr, stdout })); child.stdin.end('hello\n');
     });
-    expect(line.code).toBe(0); expect(`${line.stdout}${line.stderr}`).toContain('No model is chosen');
+    expect(line.code).toBe(1); expect(`${line.stdout}${line.stderr}`).toContain('No model is chosen');
   });
 });
 

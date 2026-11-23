@@ -10,7 +10,7 @@ import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { optionalField, DeckentError, ErrorRegistry, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, headlessGovernedUseText, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, EXIT_CODES, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, headlessGovernedUseText, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
@@ -32,7 +32,7 @@ import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver, BrainPlanProgress } from '#domain/index.js';
-import type { TerminalChatPlanView } from './terminal-chat.js';
+import type { TerminalChatPlanView, TerminalChatTurnResult } from './terminal-chat.js';
 import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
@@ -138,9 +138,9 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
-async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
+async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<TerminalChatTurnResult>,
   historyMessages: number, interactive: boolean, status: () => Promise<string>, known: Parameters<typeof projectHumanText>[2],
-  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<void> {
+  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<ExitCode> {
   // The rich view's one projection (B7 record redaction, controls removed, B8 hidden marks) on every model-written line.
   const project = (text: string, kind: 'exact' | 'prose') => plainText(projectHumanText(text, kind, known).spans);
   const stdin = context.stdin ?? process.stdin;
@@ -148,6 +148,7 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
   const rl = createInterface({ input: stdin, ...(interactive ? { output: process.stdout } : {}), terminal: interactive,
     prompt: t('terminal.session.prompt', {}, locale) });
   const system = { role: 'system' as const, content: t('terminal.chat.systemPrompt', {}, locale) };
+  let unsupportedCommand = false, turnFailed = false;
   let history: readonly ChatTurnMessage[] = [system];
   // Streaming path (the service's agent turn): the history is the agent's own (tool messages included), written as the turn appends.
   let agentHistory: readonly AgentChatMessage[] = [system];
@@ -158,9 +159,11 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
-      else if (trimmed === '/help') { emit(t('terminal.session.help', {}, locale), sinks); } // KER-09: line mode's own commands, on stdout
-      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: t('terminal.session.unknown', { command: trimmed.split(/\s/u)[0]! }, locale) }, locale), { ...sinks, level: 'error' }); // local, never sent to the model
-      else if (trimmed.length > 0) {
+      else if (trimmed === '/help') { emit(`${t('terminal.session.help', {}, locale)}\n${t('terminal.session.exitStatus', {}, locale)}`, sinks); }
+      else if (trimmed.startsWith('/')) {
+        unsupportedCommand = true;
+        emit(t('terminal.notice.error', { text: t('terminal.session.unknown', { command: trimmed.split(/\s/u)[0]! }, locale) }, locale), { ...sinks, level: 'error' }); // local, never sent to the model
+      } else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
           const stop = new AbortController(), signal = context.signal ? AbortSignal.any([context.signal, stop.signal]) : stop.signal;
@@ -168,10 +171,12 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
             const turn = await streamLineTurn(stream(messages, signal), { out: context.stdout ?? process.stdout, err: context.stderr ?? process.stderr, cancel: () => stop.abort(), ...(known ? { knownSecrets: known } : {}), project,
               toolLine: call => t('terminal.line.tool', { name: call.name, target: call.target ?? '-', status: call.status ?? '-', ms: call.ms ?? 0 }, locale),
               approvalLine: summary => t('terminal.line.approvalRefused', { summary }, locale) });
+            turnFailed ||= turn.approvalRefused || turn.finish !== 'stop';
             // Only a finished turn continues the conversation; a cancelled or failed one leaves the question without an answer.
             agentHistory = turn.finish === 'stop' || turn.finish === 'length'
               ? boundAgentHistory(system, [...(turn.compacted ? [system, ...turn.compacted] : messages), ...turn.appended], historyMessages) : messages;
           } catch (error) {
+            turnFailed = true;
             agentHistory = messages;
             emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
           }
@@ -180,10 +185,12 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
         }
         const messages = boundChatHistory(system, [...history, { role: 'user', content: trimmed }], historyMessages);
         try {
-          const reply = await turn(messages, context.signal);
-          history = boundChatHistory(system, [...messages, { role: 'assistant', content: reply }], historyMessages);
-          emit(project(reply, 'prose'), sinks);
+          const { text, truncated } = await turn(messages, context.signal);
+          history = boundChatHistory(system, [...messages, { role: 'assistant', content: text }], historyMessages);
+          emit(project(text, 'prose'), sinks);
+          turnFailed ||= truncated;
         } catch (error) {
+          turnFailed = true;
           history = messages;
           emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
         }
@@ -192,9 +199,10 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
     }
   } finally { rl.close(); }
   if (interactive) emit(t('terminal.session.closed', {}, locale), sinks);
+  return unsupportedCommand ? EXIT_CODES.usage : turnFailed ? EXIT_CODES.error : EXIT_CODES.success;
 }
 
-export async function terminalCommand(argv: readonly string[], context: TerminalLaunchContext, ports: TerminalLaunchPorts): Promise<void> {
+export async function terminalCommand(argv: readonly string[], context: TerminalLaunchContext, ports: TerminalLaunchPorts): Promise<ExitCode | void> {
   const parsed = (await import('#surfaces/core/terminal-onboarding/index.js')).parseTerminalLaunch(argv);
   const root = context.root ?? process.cwd();
   const env = context.env ?? process.env;
@@ -345,17 +353,18 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     const system = { role: 'system' as const, content: t('terminal.chat.systemPrompt', {}, locale) + instructionModelContext(view) };
     return [system, ...messages.filter(message => message.role !== 'system')];
   };
-  const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
-    completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
+  const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal): Promise<TerminalChatTurnResult> => {
+    const reply = await completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
+    return typeof reply === 'string' ? { text: reply, truncated: false } : reply;
+  };
   if (parsed.action === 'session') {
     const serviceLine = service ? (await serviceNotices)[0]?.text ?? null : null;
     for (const notice of accessNotices) emit(notice.text, sinks);
     if (serviceLine) emit(serviceLine, sinks);
     const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
       (async function* () { yield* humanTurnNotes(context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal), locale); })() : undefined;
-    await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
+    return runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
       async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), getConfigKnownSecrets(config), lineStream, () => lineSources);
-    return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
@@ -441,7 +450,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // TERMINAL-SABIT-DUZEN: the full-window layout unless the person keeps the inline one (`terminal.layout: inline`).
     ...(presentation.notify !== 'off' ? { attention: true } : {}),
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
-    completeTurn: turn, errorText: error => errorText(error, locale),
+    completeTurn: async (messages, signal) => (await turn(messages, signal)).text, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { warning: async () => { const warning = await context.gitDeliveryPermission?.(root, options); return warning ? ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...warning, reason: 'git-directory-write' }, locale }).message : null; }, planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: async (code: unknown) => await context.localRunOffer?.(root, scopeId, options, code).catch(() => false) ?? false, // K2/K3: the one host answer (profile defaults, held pool)
         chatReady: async () => !context.describeTerminalChatPlan || Boolean(await context.describeTerminalChatPlan(root, options).then(plan => plan.status === 'ready' && plan.reference, () => false)),
         ...(context.workingTreeChanges ? { tree: async () => context.workingTreeChanges!(root, options) } : {}), dirty: { title: t('brain.dirty.title', {}, locale), check: async () => { const families = (await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options))?.observation.families ?? {}; const work = families['work'] as { registry?: boolean; pool?: boolean } | undefined; if ((families['coding'] as { changes?: string } | undefined)?.changes !== 'present' || work?.registry !== true || work.pool !== true) return null; // NF-4: worded for the configured delivery mode
