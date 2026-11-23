@@ -199,23 +199,23 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     { label: 'esc', key: '\u001b', lang: 'en_US.UTF-8', card: CARD, missing: MISSING },
     { label: 'no-tr', key: 'n', lang: 'tr_TR.UTF-8', card: 'Burada deckent kurulumu yok. Kuruluma başla?',
       missing: 'Bu klasörde deckent kurulumu yok. Kurmak için `deckent init` çalıştırın. [CLI_INSTALLATION_MISSING]' },
-  ])('NEGATIVE: the card, then $label: nothing is written in the folder or HOME, the human answer names `deckent init`, exit 2 as before', async ({ label, key, lang, card, missing }) => {
+  ])('NEGATIVE: the card, then $label: nothing is written in the folder or HOME, the human answer names `deckent init`, exit 1', async ({ label, key, lang, card, missing }) => {
     await access(cli);
     const f = await fixture();
     const run = await f.pty(`card-${label}`, [[card, key]], { LANG: lang });
     if (label === 'esc') { const eof = await f.pty('card-eof', [[card, '\u0004']], { LANG: lang });
-      expect(eof.timeout, eof.output.slice(-2000)).toBeUndefined(); expect(eof.status).toBe(2); expect(await f.empty()).toEqual({ root: [], home: [] }); }
+      expect(eof.timeout, eof.output.slice(-2000)).toBeUndefined(); expect(eof.status).toBe(1); expect(await f.empty()).toEqual({ root: [], home: [] }); }
     expect(run.timeout, run.output.slice(-2000)).toBeUndefined();
     expect(run.output).toContain(card);
     // alpha.59 L3: a main-screen card never takes mouse reports, so the terminal's own selection works on it; Ctrl+Y is the quick copy.
     expect(run.output).not.toContain('\u001b[?1000h'); expect(run.output).toContain(lang.startsWith('tr') ? 'Ctrl+Y kopyala' : 'Ctrl+Y copy');
     expect(run.output).toContain(missing);
-    expect(run.output).not.toMatch(/init policy|TERMINAL_SCOPE_REQUIRED|deckent setup|deckent kurulumu plan/u);
-    expect(run.status, run.output.slice(-2000)).toBe(2);
+    expect(run.output).not.toMatch(/init policy|TERMINAL_SCOPE_REQUIRED|deckent setup|deckent kurulumu plan|deckent workline/u);
+    expect(run.status, run.output.slice(-2000)).toBe(1);
     expect(await f.empty()).toEqual({ root: [], home: [] });
   }, 120_000);
 
-  it('Yes opens the guided setup window (its first question, the language); closing it with no scope gives the same human answer, exit 2', async () => {
+  it('Yes opens guided setup. Leaving it unfinished keeps the setup explanation and exits 1, even with a readable scope', async () => {
     await access(cli);
     const f = await fixture(true);
     const run = await f.pty('yes-close', [[CARD, 'y'], ['Continue in English?', '\u001b']]);
@@ -224,35 +224,48 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     // One Ink owner at a time: the card closed before the setup window drew its title.
     expect(run.output.indexOf('deckent setup')).toBeGreaterThan(run.output.indexOf(CARD));
     expect(run.output).toContain('Nothing was applied.');
-    expect(run.output.indexOf(MISSING)).toBeGreaterThan(run.output.indexOf('Nothing was applied.'));
-    expect(run.output).not.toContain('TERMINAL_SCOPE_REQUIRED');
-    expect(run.status, run.output.slice(-2000)).toBe(2);
+    expect(run.output).not.toMatch(/TERMINAL_SCOPE_REQUIRED|deckent workline/u);
     // The window applied nothing: no installation in the folder (I-S3: its observation may create HOME's instruction-trust directory only).
     expect(await readdir(f.root)).toEqual(['.git']);
+
+    const partial = await fixture(true);
+    const unfinished = await partial.pty('yes-close-with-scope', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b']]);
+    const pid = /Runtime service started in the background \(pid (\d+)/u.exec(unfinished.output)?.[1];
+    if (pid) services.push({ pid: Number(pid), root: partial.home });
+    expect(unfinished.timeout, unfinished.output.slice(-3000)).toBeUndefined();
+    expect(unfinished.output).toContain('Authority pending. Open deckent terminal');
+    expect(JSON.parse(await readFile(join(partial.root, '.deckent/config.json'), 'utf8'))).toMatchObject({ terminal: { scopeId: 'erp-demo' } });
+    expect(unfinished.output).not.toMatch(/deckent workline|Step 1\/|TERMINAL_SCOPE_REQUIRED/u);
+    expect(unfinished.status, unfinished.output.slice(-2000)).toBe(1);
+    expect(run.status, run.output.slice(-2000)).toBe(1);
   }, 180_000);
 
-  it('Yes, then the minimal setup (language, folder, solo, permissions applied, Esc): the terminal opens on the new scope; /exit leaves with 0', async () => {
+  it('Yes, then completed setup: the terminal opens once on the selected root and /exit leaves with 0', async () => {
     await access(cli);
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['Permissions: applied', '\u001b'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Let AI carry out work?', 'n'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['Confirm the previewed permissions', '1\r'], ['Starting permissions: applied', '\u001b'],
       // The Git folder offers worker setup even without a host CLI. Follow each card by title: Later can change the remaining step count.
-      // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
-      ['Permission settings', '\u001b'], ['Your management rights', '\u001b'], ['Model connection', '\u001b'],
+      ['Your management rights', '\u001b'], ['Model connection', '\u001b'],
       ['No coding CLI is installed', '\u001b'], ['First Git commit', '\u001b'], ['Project instructions', '\u001b'], ['Connect a model with /provider', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();
     expect(run.output).toContain(`Folder: ${f.root}`);
     expect(run.status, run.output.slice(-3000)).toBe(0);
-    // The setup summary (the same flow as `deckent init`), then the terminal on the scope the window wrote; no card again, no error.
-    expect(run.output).toContain('Permissions: applied');
-    expect(run.output).toContain('Authority pending. Open deckent terminal'); expect(run.output.indexOf('Permission settings')).toBeGreaterThan(run.output.indexOf('Step 1/'));
-    expect(run.output.indexOf('deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
-    expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
-    // alpha.60 B (draw first): the Workline frame comes first, the waiting setup card opens on it and the Workline returns after the last card.
-    expect(run.output.indexOf('deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('deckent workline')).toBeGreaterThan(run.output.indexOf('Project instructions'));
-    expect(run.output.slice(run.output.indexOf('Permissions: applied'))).not.toContain(CARD);
+    const complete = run.output.indexOf('Installation complete.');
+    expect(complete).toBeGreaterThan(run.output.indexOf('Starting permissions: applied'));
+    expect(run.output.indexOf('deckent workline')).toBeGreaterThan(complete);
+    expect(run.output.indexOf('deckent workline')).toBeLessThan(run.output.indexOf('Step 1/'));
+    expect(run.output.lastIndexOf('deckent workline')).toBeGreaterThan(run.output.indexOf('Project instructions'));
+    const terminal = run.output.slice(complete);
+    expect(terminal).toContain(`Project erp-demo · ${f.root}`);
+    // One launch draws the Workline, yields to onboarding, then restores the Workline.
+    expect(terminal.split('Step 1/')).toHaveLength(2);
+    expect(terminal.split('\u001b[?1049h')).toHaveLength(3);
+    expect(terminal).not.toContain(CARD);
     expect(run.output).not.toMatch(/CLI_INSTALLATION_MISSING|TERMINAL_SCOPE_REQUIRED/u);
     expect((await readdir(f.root)).sort()).toEqual(['.deckent', '.git']);
     expect(JSON.parse(await readFile(join(f.root, '.deckent/config.json'), 'utf8'))).toMatchObject({ terminal: { scopeId: 'erp-demo' } });
