@@ -4,7 +4,7 @@ import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { boundLine, readBoundedTextFile, sliceUtf8, splitLines } from './bounded.js';
 import { compileSearchPattern, metaPattern, renderReadFileView, resolveReadFileBudget, resolveReadFileViewRequest } from './views.js';
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
-  type WorkspacePathDiagnostic, type WorkspacePathError, type WorkspaceScope } from './scope.js';
+  type WorkspacePathFailure, type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
 import LIMITS from './limits.json' with { type: 'json' };
 
@@ -56,7 +56,13 @@ const fail = (tool: string, detail: string, kind: ToolErrorClass = 'ordinary'): 
  * (`realpath`, `open:<segment>`, `verify:<segment>`, `stat`) and the errno, in the text (`error=not-found step=open:2 errno=ENOENT path=…`)
  * and as the outcome's `diagnostic` (the turn's tool-call record keeps it). No path or content beyond the requested one is added.
  */
-function pathFail(tool: string, refused: { readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic }, path: string): AgentToolOutcome {
+type WorkspaceReadRefusal = 'path-outside-workspace' | 'path-denied' | 'hardlink-refused' | 'descriptor-moved';
+type ObserveRefusal = (decision: WorkspaceReadRefusal) => void;
+function pathFail(tool: string, refused: WorkspacePathFailure, path: string,
+  observe?: ObserveRefusal): AgentToolOutcome {
+  const error = refused.error;
+  if (error === 'path-outside-workspace' || error === 'path-denied' || error === 'hardlink-refused') observe?.(error);
+  if (refused.descriptorMoved) observe?.('descriptor-moved');
   const diagnostic = refused.error === 'not-found' || refused.error === 'path-changed' ? refused.diagnostic : undefined;
   const detail = diagnostic ? ` step=${diagnostic.step}${diagnostic.errno ? ` errno=${diagnostic.errno}` : ''}` : '';
   return withToolErrorClass({ status: 'error' as const, text: `[deckent] ${tool}: error=${refused.error}${detail} path=${path}`, ...(diagnostic ? { diagnostic } : {}) }, 'ordinary');
@@ -134,7 +140,7 @@ async function literalGlobNote(scope: WorkspaceScope, prefix: string, pattern: s
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface WorkspaceReadTools {
   readonly specs: readonly AgentToolSpec[];
   readonly scope: WorkspaceScope;
-  execute(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome>;
+  execute(name: string, args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal): Promise<AgentToolOutcome>;
 }
 
 export async function createWorkspaceReadTools(root: string, options: { deny?: readonly string[]; limits?: Partial<WorkspaceReadLimits> } = {}): Promise<WorkspaceReadTools> {
@@ -142,11 +148,11 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
   const scope = await createWorkspaceScope(root, options.deny ?? DEFAULT_WORKSPACE_READ_DENY);
   const cancelled = (tool: string) => fail(tool, 'cancelled', 'cancelled');
 
-  const readFileTool = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
+  const readFileTool = async (args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal): Promise<AgentToolOutcome> => {
     const target = await scope.resolve(args['path']);
-    if (!target.ok) return pathFail('read_file', target, quote(args['path']));
+    if (!target.ok) return pathFail('read_file', target, quote(args['path']), observe);
     const opened = await scope.open(target.rel, 'file');
-    if (!opened.ok) return pathFail('read_file', opened, quote(target.rel));
+    if (!opened.ok) return pathFail('read_file', opened, quote(target.rel), observe);
     const read = await readBoundedTextFile(opened.handle, limits.maxFileBytes, signal);
     if (!read.ok) return read.kind === 'cancelled' ? cancelled('read_file') : fail('read_file', `${read.kind} (${read.detail}) path=${quote(target.rel)}`, read.kind === 'too-large' ? 'limit' : 'ordinary');
     const request = resolveReadFileViewRequest(args);
@@ -161,11 +167,11 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     return { status: 'ok', text: renderReadFileView(read.text, request, resolveReadFileBudget(limits.maxResultBytes), matching) };
   };
 
-  const listDir = async (args: Record<string, unknown>): Promise<AgentToolOutcome> => {
+  const listDir = async (args: Record<string, unknown>, _signal?: AbortSignal, observe?: ObserveRefusal): Promise<AgentToolOutcome> => {
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return pathFail('list_dir', target, quote(args['path'] ?? '.'));
+    if (!target.ok) return pathFail('list_dir', target, quote(args['path'] ?? '.'), observe);
     const opened = await scope.open(target.rel, 'dir');
-    if (!opened.ok) return pathFail('list_dir', opened, quote(target.rel || '.'));
+    if (!opened.ok) return pathFail('list_dir', opened, quote(target.rel || '.'), observe);
     let entries;
     try { entries = await readdir(`/proc/self/fd/${opened.handle.fd}`, { withFileTypes: true }); }
     catch { return fail('list_dir', `unreadable path=${quote(target.rel || '.')}`); }
@@ -179,13 +185,13 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     return { status: 'ok', text: rows.length === 0 && trailer.length === 0 ? '[deckent] list_dir: empty directory' : rowsWithin(rows, trailer, limits.maxResultBytes, 'list a subdirectory') };
   };
 
-  const grep = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
+  const grep = async (args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal): Promise<AgentToolOutcome> => {
     const pattern = typeof args['pattern'] === 'string' ? args['pattern'] : '';
     if (!pattern) return fail('grep', 'empty-pattern');
     const re = compileSearchPattern(pattern, false, args['ignoreCase'] === true);
     if (!re) return fail('grep', `invalid-pattern pattern=${quote(pattern)}`);
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return pathFail('grep', target, quote(args['path'] ?? '.'));
+    if (!target.ok) return pathFail('grep', target, quote(args['path'] ?? '.'), observe);
     const only = typeof args['glob'] === 'string' && args['glob'] ? createGlobMatcher(args['glob']) : null;
     // D3 (owner): grep gains read_file's `context`/cap naming; context=0 (the default) keeps the exact old one-line-per-hit
     // shape (no separators), so every existing caller and result is unaffected.
@@ -260,12 +266,12 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     } finally { await runner.close(); }
   };
 
-  const glob = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
+  const glob = async (args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal): Promise<AgentToolOutcome> => {
     const pattern = typeof args['pattern'] === 'string' ? args['pattern'] : '';
     if (!pattern) return fail('glob', 'empty-pattern');
     if (Buffer.byteLength(pattern, 'utf8') > MAX_GLOB_ARG_BYTES) return fail('glob', `argument-too-long name=pattern limit=${MAX_GLOB_ARG_BYTES}`, 'limit');
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return pathFail('glob', target, quote(args['path'] ?? '.'));
+    if (!target.ok) return pathFail('glob', target, quote(args['path'] ?? '.'), observe);
     const matches = createGlobMatcher(pattern), matched: string[] = [];
     const prefix = target.rel === '' ? '' : `${target.rel}/`;
     let hitCapped = false;
@@ -284,10 +290,10 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     return { status: 'ok', text: rowsWithin(matched, trailer, limits.maxResultBytes, 'narrow the pattern') };
   };
 
-  const run: Record<string, (args: Record<string, unknown>, signal?: AbortSignal) => Promise<AgentToolOutcome>> = { read_file: readFileTool, list_dir: listDir, grep, glob };
+  const run: Record<string, (args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal) => Promise<AgentToolOutcome>> = { read_file: readFileTool, list_dir: listDir, grep, glob };
   return Object.freeze({
     specs: WORKSPACE_READ_TOOL_SPECS, scope,
-    async execute(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
+    async execute(name: string, args: Record<string, unknown>, signal?: AbortSignal, observe?: ObserveRefusal) {
       const label = sliceUtf8(Buffer.from(String(name), 'utf8'), 64);
       const tool = Object.hasOwn(run, name) ? run[name] : undefined;
       if (!tool) return fail(label, 'unknown-tool', 'session');
@@ -296,7 +302,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       const problem = argumentProblem(args);
       if (problem) return fail(label, problem, 'limit');
       let outcome: AgentToolOutcome;
-      try { outcome = await tool(args, signal); } catch { outcome = fail(label, 'failed', 'uncertain'); }
+      try { outcome = await tool(args, signal, observe); } catch { outcome = fail(label, 'failed', 'uncertain'); }
       return capped(signal?.aborted && outcome.status === 'ok' ? cancelled(label) : outcome, limits.maxResultBytes);
     },
   });

@@ -25,9 +25,9 @@ export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'pa
   | 'not-a-directory' | 'hardlink-refused' | 'platform-unsupported';
 /** B4 diagnosis (owner terminal test 2026-10-07): the step a `not-found` / `path-changed` came from and its system error code — never a path. */
 export interface WorkspacePathDiagnostic { readonly step: string; readonly errno?: string }
-type Refused = { readonly ok: false; readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic };
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
-type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
+export type WorkspacePathFailure = { readonly ok: false; readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic; readonly descriptorMoved?: true };
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ResolvedPath = { readonly ok: true; readonly rel: string } | WorkspacePathFailure;
+type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | WorkspacePathFailure;
 /** Why a walk did not cover everything: never reported as "not there" (Astra 2072 R4). */
 interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
 
@@ -83,11 +83,19 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
   const denied = (rel: string) => rel !== '' && denyMatchers.some(match => match(rel));
   const close = async (handle: FileHandle | undefined) => { await handle?.close().catch(() => undefined); };
   /** The descriptor must still be the workspace path it was opened as: its kernel path is re-read and compared. */
-  const verify = async (handle: FileHandle, rel: string) => {
-    try { return await readlink(fdPath(handle)) === (rel === '' ? root : join(root, rel)); } catch { return false; }
+  const compareDescriptor = async (handle: FileHandle, rel: string) => {
+    try { return await readlink(fdPath(handle)) === (rel === '' ? root : join(root, rel)) ? 'same' : 'moved'; }
+    catch { return 'unavailable'; }
+  };
+  const verifyOpened = async (handle: FileHandle, rel: string, depth: number): Promise<WorkspacePathFailure | null> => {
+    const comparison = await compareDescriptor(handle, rel);
+    if (comparison === 'same') return null;
+    await close(handle);
+    return { ok: false, error: 'path-changed', diagnostic: { step: `verify:${depth}` }, ...(comparison === 'moved' ? { descriptorMoved: true } : {}) };
   };
   return Object.freeze({
-    root, ignoredDirs, protectedAnchors, denied, verify,
+    root, ignoredDirs, protectedAnchors, denied,
+    async verify(handle: FileHandle, rel: string) { return await compareDescriptor(handle, rel) === 'same'; },
     async resolve(requested: unknown, allowRoot = false): Promise<ResolvedPath> {
       if (!supported) return { ok: false, error: 'platform-unsupported' };
       if (requested !== undefined && typeof requested !== 'string') return { ok: false, error: 'path-invalid' };
@@ -110,7 +118,8 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
       let current: FileHandle | undefined, step = 'open:0';
       try {
         current = await open(root, DIR_FLAGS);
-        if (!await verify(current, '')) { await close(current); return { ok: false, error: 'path-changed', diagnostic: { step: 'verify:0' } }; }
+        const rootRefusal = await verifyOpened(current, '', 0);
+        if (rootRefusal) return rootRefusal;
         const segments = rel === '' ? [] : rel.split('/');
         for (let i = 0; i < segments.length; i++) {
           const last = i === segments.length - 1;
@@ -118,7 +127,8 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
           const next = await open(`${fdPath(current)}/${segments[i]}`, last && kind === 'file' ? FILE_FLAGS : DIR_FLAGS);
           await close(current); current = next;
         }
-        if (!await verify(current, rel)) { await close(current); return { ok: false, error: 'path-changed', diagnostic: { step: `verify:${segments.length}` } }; }
+        const targetRefusal = await verifyOpened(current, rel, segments.length);
+        if (targetRefusal) return targetRefusal;
         step = 'stat';
         const info = await current.stat();
         if (kind === 'dir' ? !info.isDirectory() : !info.isFile()) { await close(current); return { ok: false, error: kind === 'dir' ? 'not-a-directory' : 'not-a-file' }; }

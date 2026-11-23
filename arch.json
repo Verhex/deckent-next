@@ -749,6 +749,7 @@
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/workspace-read",
         "src/composition/core/agent-turn",
+        "src/composition/core/same-turn-planning",
         "src/composition/core/approvals",
         "src/composition/core/execution",
         "src/composition/core/inventory",
@@ -2184,11 +2185,39 @@
         "src/engine/core/authentication",
         "src/domain/core/run",
         "src/engine/core/run-proposal",
-        "src/composition/core/config",
+        "src/composition/core/same-turn-planning",
         "src/engine/core/provider-spend",
         "src/engine/core/provider-catalog",
         "src/platform/core/utils",
         "src/capabilities/core/agent-tool-result"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/same-turn-planning": {
+      "dependencies": [
+        "src/capabilities/core/agent-tool-result",
+        "src/domain/core/agent-tool",
+        "src/domain/core/agent-turn",
+        "src/domain/core/run",
+        "src/engine/core/agent-turn",
+        "src/engine/core/approval",
+        "src/engine/core/run-proposal",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/platform/core/clock",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/composition/core/config",
+        "src/composition/core/model-invocation",
+        "src/domain/core/model-invocation",
+        "src/engine/core/policy",
+        "src/engine/core/model-invocation",
+        "src/adapters/core/native-cli-registry",
+        "src/capabilities/core/native-agent-execution"
       ],
       "plan": "SURFACES"
     },
@@ -5777,7 +5806,7 @@
       "engine": 60000,
       "adapters": 46400,
       "surfaces": 45000,
-      "composition": 15000
+      "composition": 15750
     },
     "totalSrcLines": 200000,
     "testCases": 9450,

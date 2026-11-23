@@ -1,9 +1,10 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { lstat, realpath, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
+import { MCP_TRUST_FILE, mcpTrustDirectory } from '#adapters/core/mcp-client/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -13,6 +14,10 @@ import { me, runtime } from '../support/chat-turn-harness.js';
 // evidence), the effect is refused before send in the ledger, and the revoked server's process does not keep serving. Trust granted again
 // (new cards) works on a new turn. Real runtime service, socket, approval journal, ledger and a real local MCP server.
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, lstat: vi.fn(actual.lstat), realpath: vi.fn(actual.realpath) };
+});
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
@@ -57,6 +62,7 @@ async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown
   return { result, tool, finished, cards: events.filter(event => event.kind === 'approval.requested').length };
 }
 const effects = (f: Harness) => f.rows("SELECT target_kind, state, json_extract(record, '$.refusal') AS refusal FROM effect_intents ORDER BY rowid");
+const refusals = (f: Harness) => f.rows("SELECT record FROM audit_events WHERE kind='access-refusal-summary'").map(row => JSON.parse(String(row['record'])).event.subject);
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const until = async (check: () => boolean, ms = 5_000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await new Promise(r => setTimeout(r, 50)); return check(); };
 
@@ -81,6 +87,9 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(stale.finished).toEqual([['mcp__fx__echo', 'error']]);
     expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
     expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    expect(refusals(f)).toContainEqual(expect.objectContaining({ evidenceBasis: 'mcp-send-trust', reasonCode: 'trust-revoked', turnId: 'reset',
+      commandId: expect.any(String), call: { turnId: 'reset', callId: 'call_1', round: 1, index: 0 },
+      target: { role: 'mcp-server', identity: null } }));
     // The service's process of the revoked server (the one started for this turn) does not keep running.
     // (A stdio start may add the SDK's short-lived version probe: every process started for this turn is checked.)
     const served = m.starts().slice(before);
@@ -108,6 +117,37 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(m.starts().length).toBe(next);
     expect(await until(() => served.every(pid => !alive(pid)))).toBe(true);
     expect(m.calls()).toHaveLength(1);
+  }, 60_000);
+
+  it('keeps the send refused when the trust directory cannot be inspected, without auditing a revocation', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+    writeRegistry(f.project, m.entry()); await approve(f);
+    const directory = await mcpTrustDirectory('project', { projectRoot: f.project, environment: f.env });
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    const denied = vi.fn(() => { throw Object.assign(new Error('directory cannot be inspected'), { code: 'EACCES' }); });
+    try {
+      const stale = await turn(f, 'unreachable', async () => {
+        vi.mocked(lstat).mockImplementation(async (...args) => args[0] === directory ? denied() : actual.lstat(...args));
+      });
+      expect(denied).toHaveBeenCalled();
+      expect(m.calls()).toEqual([]);
+      expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
+      expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+      expect(refusals(f)).toEqual([]);
+    } finally { vi.mocked(lstat).mockReset(); }
+  }, 60_000);
+
+  it('keeps the send refused when the unchanged launch no longer expands, without auditing a definition change', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants });
+    const environment: Record<string, string | undefined> = f.env;
+    environment['W_R4_LAUNCH'] = 'fixture'; await f.start();
+    const entry = { ...m.entry(), env: { FIXTURE_VALUE: '${W_R4_LAUNCH}' } };
+    expect(await witnessedMcpCommand(f.project, { verb: 'add', scope: 'user', name: 'fx', entry }, { env: f.env }, async () => true)).toMatchObject({ trust: 'trusted' });
+    const stale = await turn(f, 'unresolvable', async () => { delete environment['W_R4_LAUNCH']; });
+    expect(m.calls()).toEqual([]);
+    expect(stale.tool.join('\n')).toContain('error=definition-changed; nothing was sent');
+    expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    expect(refusals(f)).toEqual([]);
   }, 60_000);
 
   it('remove while the card waits: nothing is sent and the effect is refused before send', async () => {
@@ -138,6 +178,7 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(m.calls()).toEqual([]);
     expect(repinned.tool.join('\n')).toContain('error=pin-revoked; nothing was sent');
     expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    expect(refusals(f)).toEqual([expect.objectContaining({ evidenceBasis: 'mcp-send-trust', reasonCode: 'pin-revoked', turnId: 'repinned' })]);
   }, 60_000);
 
   it('a changed definition (arguments edited) while the card waits: nothing is sent; re-approving the new definition does not revive the stale card', async () => {
@@ -152,5 +193,47 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(m.calls()).toEqual([]);
     expect(reapproved.tool.join('\n')).toContain('error=definition-changed; nothing was sent');
     expect(effects(f).map(row => (row as { state: string }).state)).toEqual(['refused', 'refused']);
+    expect(refusals(f)).toEqual(['edited', 'reapproved'].map(turnId => expect.objectContaining({ evidenceBasis: 'mcp-send-trust', reasonCode: 'definition-changed', turnId })));
+  }, 60_000);
+
+  it('keeps HEADER_MISMATCH, an ordinary failure and an uncertain send out of the refusal audit', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+    writeRegistry(f.project, m.entry()); await approve(f);
+    for (const behavior of ['header-mismatch', 'fail', 'crash']) {
+      m.setTools([{ ...echo, behavior }]);
+      const result = await turn(f, `mcp-${behavior}`);
+      expect(result.finished).toEqual([['mcp__fx__echo', 'error']]);
+    }
+    expect(m.calls()).toHaveLength(3);
+    expect(effects(f)).toMatchObject([{ state: 'settled' }, { state: 'settled' }, { state: 'unknown' }]);
+    expect(f.rows("SELECT sequence FROM audit_events WHERE kind='access-refusal-summary'")).toEqual([]);
   }, 60_000);
 });
+
+it.skipIf(process.platform !== 'linux')('keeps the send refused when the project moves inside the trust lock, without auditing a revocation', async () => {
+  const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+  writeRegistry(f.project, m.entry()); await approve(f);
+  const directory = await mcpTrustDirectory('project', { projectRoot: f.project, environment: f.env });
+  const owner = join(directory, `${MCP_TRUST_FILE}.write-lock`, 'owner.json');
+  const movedProject = `${f.project}-moved`;
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const move = vi.fn(() => rename(f.project, movedProject));
+  try {
+    const stale = await turn(f, 'project-moved', async () => {
+      vi.mocked(realpath).mockImplementation(async (...args) => {
+        if (args[0] === f.project && existsSync(owner) && !existsSync(movedProject)) await move();
+        return actual.realpath(...args);
+      });
+    });
+    expect(move).toHaveBeenCalledTimes(1);
+    await expect(actual.realpath(f.project)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(m.calls()).toEqual([]);
+    expect(stale.finished).toEqual([['mcp__fx__echo', 'error']]);
+    expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
+    expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+    expect(refusals(f)).toEqual([]);
+  } finally {
+    vi.mocked(realpath).mockReset();
+    if (existsSync(movedProject)) await rename(movedProject, f.project);
+  }
+}, 60_000);

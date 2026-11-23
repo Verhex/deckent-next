@@ -24,6 +24,25 @@ const shell = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: boolea
   rule('shell-tool', 'agent-tool', ['run_shell'], tool, eligible.tool), rule('shell-run', 'operation', ['host.shell.run'], op, eligible.op)];
 const setA = (to: number) => ({ path: 'src/a.ts', old_string: `a = ${to - 1}`, new_string: `a = ${to}` });
 
+type ModeRuntime = Awaited<ReturnType<typeof modeRuntime>>;
+async function callCheckingRefusal(f: ModeRuntime, basis: 'tool-approval' | 'agent-tool-policy' | 'pre-effect-evidence' | null, ...args: Parameters<ModeRuntime['call']>) {
+  const summaries = () => f.audit().map(row => row.event.subject).filter(subject => subject.kind === 'access-refusal-summary');
+  const before = summaries().length;
+  const result = await f.call(...args);
+  const written = summaries().slice(before);
+  expect(written.map(subject => ({ turnId: subject.turnId, decisionSource: subject.decisionSource, evidenceBasis: subject.evidenceBasis,
+    operationClass: subject.operationClass, count: subject.count, target: subject.target }))).toEqual(basis === null ? [] : [{
+    turnId: result.turnId, decisionSource: 'deckent-decision', evidenceBasis: basis, operationClass: 'invoke', count: 1,
+    target: { role: basis === 'tool-approval' ? 'approval' : 'tool', identity: null },
+  }]);
+  const serialized = JSON.stringify(written);
+  for (const argument of [args[1]['path'], args[1]['command']]) {
+    if (typeof argument === 'string') expect(serialized).not.toContain(JSON.stringify(argument));
+  }
+  if (basis === 'pre-effect-evidence') expect(written[0]?.['reasonCode']).toBe('AGENT_TOOL_PRE_EFFECT_AUDIT_UNAVAILABLE');
+  return result;
+}
+
 it.skipIf(process.platform !== 'linux')('WER-A direct edit uncertainty requires the outer record', async () => {
   const f = await toolProducer([rule('file-write', 'operation', ['workspace.file.write'], 'allow')]);
   const edits = createAgentFileEdits({ ...f, area: projectEditArea(await createWorkspaceScope(f.project)) });
@@ -44,16 +63,16 @@ it.skipIf(process.platform !== 'linux')('WER-A direct edit uncertainty requires 
 describe.skipIf(process.platform !== 'linux')('permission modes through the runtime service (T-L4 slice 4a)', () => {
   it('lowers an eligible require-approval on an ordinary edit in auto-edit and full-auto, with one audit event each; ask still shows the card', async () => {
     const f = await modeRuntime({ ...HOST, grants: edit('require-approval', 'allow', { tool: true }), mode: 'ask' });
-    const asked = await f.call('edit_file', setA(2));
+    const asked = await callCheckingRefusal(f, 'tool-approval', 'edit_file', setA(2));
     expect(asked).toMatchObject({ card: true, status: 'denied' });
     let expected = 1;
     for (const mode of ['auto-edit', 'full-auto'] as const) {
       await f.writeAuthority(edit('require-approval', 'allow', { tool: true }), mode, mode);
-      const silent = await f.call('edit_file', setA(++expected));
+      const silent = await callCheckingRefusal(f, null, 'edit_file', setA(++expected));
       expect(silent).toMatchObject({ card: false, status: 'ok' });
       expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe(`export const a = ${expected};\n`);
     }
-    const events = f.audit();
+    const events = f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary');
     expect(events).toHaveLength(2);
     expect(events.map(record => record.event.subject)).toEqual([
       // MODES-3: a bindings v2 `auto-edit` entry reads as standart (the audit names the mode it ran in); v2 `ask` still shows the card.
@@ -68,27 +87,26 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
 
   it('never lowers a require-approval the company did not mark mode-eligible, nor lets a second allow grant pass it (M6, M7)', async () => {
     const f = await modeRuntime({ ...HOST, grants: [...edit('require-approval', 'allow'), rule('edit-allow', 'agent-tool', ['edit_file'], 'allow')], mode: 'full-auto' });
-    expect(await f.call('edit_file', setA(2))).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'edit_file', setA(2))).toMatchObject({ card: true, status: 'denied' });
     // Operation side required but not eligible, tool side eligible: the stricter side is not eligible → card.
     await f.writeAuthority(edit('require-approval', 'require-approval', { tool: true }), 'full-auto', 'r2');
-    expect(await f.call('edit_file', setA(2))).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'edit_file', setA(2))).toMatchObject({ card: true, status: 'denied' });
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
   }, 60_000);
 
-  it('answers a denied tool or operation as denied in every mode: no card, no event, nothing written (M2)', async () => {
+  it('answers a denied tool or operation as denied in every mode: no card, no relaxation event, no effect (M2)', async () => {
     const f = await modeRuntime({ ...HOST, grants: edit('deny', 'require-approval', { op: true }), mode: 'ask' });
     for (const mode of MODES) {
       await f.writeAuthority(edit('deny', 'require-approval', { op: true }), mode, `tool-${mode}`);
-      expect(await f.call('edit_file', setA(2))).toMatchObject({ card: false, status: 'denied' });
+      expect(await callCheckingRefusal(f, 'agent-tool-policy', 'edit_file', setA(2))).toMatchObject({ card: false, status: 'denied' });
       await f.writeAuthority(edit('require-approval', 'deny', { tool: true }), mode, `op-${mode}`);
-      expect(await f.call('edit_file', setA(2))).toMatchObject({ card: false, status: 'denied' });
+      expect(await callCheckingRefusal(f, 'agent-tool-policy', 'edit_file', setA(2))).toMatchObject({ card: false, status: 'denied' });
     }
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
     expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
-    // S5 D1: no per-call event, but every turn's refusal is sealed in that turn's one `policy-turn` record (a tool or an operation deny is
-    // answered by the policy question before planning).
+    // S5 D1 also seals each refusal in that turn's one `policy-turn` record. The policy question answers tool and operation denies before planning.
     expect(f.policyTurns().map(turn => turn.refused.calls.map(call => [call['decision'], call['stage']]))).toEqual(MODES.flatMap(() => [[['deny', 'policy']], [['deny', 'policy']]]));
   }, 90_000);
 
@@ -97,11 +115,11 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     for (const grants of [edit('allow', 'allow'), edit('require-approval', 'require-approval', { tool: true, op: true })]) {
       for (const mode of MODES) {
         await f.writeAuthority(grants, mode, `${mode}-${grants[0]!.effect}`);
-        expect(await f.call('write_file', { path: 'package.json', content: '{}\n' })).toMatchObject({ card: true, status: 'denied' });
+        expect(await callCheckingRefusal(f, 'tool-approval', 'write_file', { path: 'package.json', content: '{}\n' })).toMatchObject({ card: true, status: 'denied' });
       }
     }
     await expect(readFile(join(f.project, 'package.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
   }, 90_000);
 
   it('keeps a silent allow silent in every mode: no event, one summary count per call (q5)', async () => {
@@ -123,25 +141,25 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
       rule('read', 'agent-tool', ['read_file'], 'require-approval', true)], mode: 'full-auto' });
     for (const command of ['find .', 'rg a', 'git show HEAD:.env', 'rm -rf src', 'git reset --hard', 'python3 -c 1', 'sudo true', 'npm install left-pad',
       'curl http://127.0.0.1:9/', 'touch a | cat', 'touch $HOME/x', 'rm src/a.ts']) {
-      expect({ command, ...(await f.call('run_shell', { command })) }).toMatchObject({ command, card: true, status: 'denied' });
+      expect({ command, ...(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command })) }).toMatchObject({ command, card: true, status: 'denied' });
     }
-    expect(await f.call('read_file', { path: 'src/a.ts' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'read_file', { path: 'src/a.ts' })).toMatchObject({ card: true, status: 'denied' });
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
   }, 120_000);
 
   it('runs a narrow mutating command silently only in full-auto, with one audit event; auto-edit and ask show the card (q1)', async () => {
     const f = await modeRuntime({ ...HOST, grants: shell('require-approval', 'allow', { tool: true }), mode: 'auto-edit' });
-    expect(await f.call('run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
     await f.writeAuthority(shell('require-approval', 'allow', { tool: true }), 'ask', 'ask');
-    expect(await f.call('run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
     await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     await f.writeAuthority(shell('require-approval', 'allow', { tool: true }), 'full-auto', 'full');
-    expect(await f.call('run_shell', { command: 'cp src/a.ts out.ts' })).toMatchObject({ card: false, status: 'ok' });
+    expect(await callCheckingRefusal(f, null, 'run_shell', { command: 'cp src/a.ts out.ts' })).toMatchObject({ card: false, status: 'ok' });
     expect(await readFile(join(f.project, 'out.ts'), 'utf8')).toBe('export const a = 1;\n');
     // A narrow command whose target is on the write floor is not narrow.
-    expect(await f.call('run_shell', { command: 'touch package.json' })).toMatchObject({ card: true, status: 'denied' });
-    const events = f.audit();
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'touch package.json' })).toMatchObject({ card: true, status: 'denied' });
+    const events = f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary');
     expect(events.map(record => record.event.subject)).toEqual([expect.objectContaining({ mode: 'full-auto', cell: 'shell-modify',
       summary: { kind: 'shell', head: 'cp src/a.ts out.ts', argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u) } })]);
   }, 90_000);
@@ -151,28 +169,28 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
       mode: 'full-auto' });
     await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
     // Astra's case: `mkdir out` makes the copy target a directory, so `cp` would write `out/package.json` (write floor `**/package.json`).
-    expect(await f.call('run_shell', { command: 'mkdir out && cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'mkdir out && cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
     // A harmless compound asks too: the narrow set is one simple command (no `&&`, `;`, `||`, pipe).
-    expect(await f.call('run_shell', { command: 'mkdir out && cp src/a.ts out/a.ts' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'mkdir out && cp src/a.ts out/a.ts' })).toMatchObject({ card: true, status: 'denied' });
     await expect(stat(join(f.project, 'out'))).rejects.toMatchObject({ code: 'ENOENT' });
     // A directory that exists already is not a narrow target: `cp` would write into it under a path nobody checked.
     await mkdir(join(f.project, 'out'));
-    expect(await f.call('run_shell', { command: 'cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
-    expect(await f.call('run_shell', { command: 'mv src/a.ts out' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'mv src/a.ts out' })).toMatchObject({ card: true, status: 'denied' });
     expect(await readdir(join(f.project, 'out'))).toEqual([]);
     expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{"scripts":{"preinstall":"echo floor"}}\n');
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
     expect(f.rows("SELECT state FROM effect_intents WHERE target_kind='host-shell'")).toEqual([]);
   }, 90_000);
 
   it('Astra 2134 R1 repro: compound narrow commands must not bypass the package manifest write floor', async () => {
     const f = await modeRuntime({ ...HOST, grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto' });
     await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
-    const result = await f.call('run_shell', { command: 'mkdir out && cp package.json out' });
+    const result = await callCheckingRefusal(f, 'tool-approval', 'run_shell', { command: 'mkdir out && cp package.json out' });
     const content = await readFile(join(f.project, 'out/package.json'), 'utf8').catch(() => null);
     expect(result.card).toBe(true);
     expect(content).toBeNull();
-    expect(f.audit()).toEqual([]);
+    expect(f.audit().filter(row => row.event.subject.kind !== 'access-refusal-summary')).toEqual([]);
   }, 60_000);
 
   it('runs nothing when the audit event cannot be written: the relaxation is not applied (M3)', async () => {
@@ -185,6 +203,12 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
     await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
+    expect(f.audit()).toEqual([]);
+    f.exec("DROP TRIGGER audit_refuses; CREATE TRIGGER mode_evidence_refuses BEFORE INSERT ON audit_events WHEN NEW.kind = 'permission-mode' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+    const selective = await callCheckingRefusal(f, 'pre-effect-evidence', 'edit_file', setA(2));
+    expect(selective).toMatchObject({ card: false, status: 'error', text: expect.stringContaining('audit-unavailable') });
+    expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
+    expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
   }, 60_000);
 
   it('C-2 exposes a failed policy-turn audit in the result note while keeping the denied effect denied', async () => {
@@ -196,4 +220,25 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(f.policyTurns()).toEqual([]);
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).not.toBe('changed');
 }, 30_000);
+
+  it('seals verified policy, approval and floor refusals separately from ordinary invalid arguments', async () => {
+    const f = await modeRuntime({ ...HOST, dataRoot: '.deckent/live-data', grants: edit('deny', 'allow'), mode: 'ask' });
+    expect((await f.call('write_file', { path: 'hidden-target.txt', content: 'private argument' })).status).toBe('denied');
+    await f.writeAuthority(edit('require-approval', 'allow'), 'ask', 'r4-approval');
+    expect((await f.call('write_file', { path: 'hidden-target.txt', content: 'private argument' })).status).toBe('denied');
+    expect((await f.call('write_file', {})).status).toBe('invalid-arguments');
+    await f.writeAuthority([...edit('allow', 'allow'), ...shell('allow', 'allow')], 'ask', 'r4-local-floors');
+    expect((await f.call('write_file', { path: '.env', content: 'private argument' })).text).toContain('error=denied');
+    expect((await f.call('run_shell', { command: 'cat .deckent/live-data/state/ledger.db' })).text).toContain('PRODUCT_STATE_PROTECTED');
+    expect((await f.call('unoffered_name', {})).status).toBeNull();
+    const rows = f.rows("SELECT record FROM audit_events WHERE kind='access-refusal-summary' ORDER BY sequence");
+    expect(rows.map(row => JSON.parse(String((row as { record: string }).record)).event.subject)).toEqual([
+      expect.objectContaining({ evidenceBasis: 'agent-tool-policy', reasonCode: 'AGENT_TOOL_POLICY_DENIED', count: 1 }),
+      expect.objectContaining({ evidenceBasis: 'tool-approval', reasonCode: 'AGENT_TOOL_APPROVAL_DECLINED', count: 1 }),
+      expect.objectContaining({ evidenceBasis: 'workspace-edit-guard', reasonCode: 'denied', count: 1 }),
+      expect.objectContaining({ evidenceBasis: 'shell-local-guard', reasonCode: 'PRODUCT_STATE_PROTECTED', count: 1 }),
+    ]);
+    expect(JSON.stringify(rows)).not.toMatch(/hidden-target|private argument|unoffered_name|ledger\.db|\.env/u);
+    expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
+  }, 60_000);
 });

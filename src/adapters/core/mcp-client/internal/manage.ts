@@ -99,9 +99,10 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
 const resolveFiles = (context: McpRegistryContext, paths: ReturnType<typeof mcpRegistryPaths>, project: ReturnType<typeof parseMcpRegistryFile>, personal: ReturnType<typeof parseMcpRegistryFile>) =>
   resolveMcpRegistry([{ scope: 'local', file: paths.personal, servers: personal.ok ? personal.local : {} }, { scope: 'project', file: paths.project, servers: project.ok ? project.user : {} },
     { scope: 'user', file: paths.personal, servers: personal.ok ? personal.user : {} }], context.managed ?? null, context.environment, context.knownSecrets);
-/** The one status rule (`expanded`: the entry's launch values expand), and what each status means for a send: only `trusted` admits, then the pin decides. */
+/** The status rule shared by the registry view and send admission (`expanded`: the entry's launch values expand). */
 const statusOf = (trustOk: boolean, record: McpTrustRecord | null, digest: string, expanded: boolean): McpServerStatus => !trustOk ? 'trust-store-unavailable' : !record ? 'pending-approval' : record.definitionDigest !== digest ? 'changed' : record.decision === 'declined' ? 'declined' : expanded ? 'trusted' : 'invalid-launch';
 const sendRefusalOf = (status: McpServerStatus): McpSendRefusal | null => status === 'trusted' ? null : status === 'trust-store-unavailable' ? 'trust-unavailable' : status === 'pending-approval' || status === 'declined' ? 'trust-revoked' : 'definition-changed';
+type VerifiedSendRefusal = Exclude<McpSendRefusal, 'trust-unavailable'>;
 /**
  * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — both registry files and the bound scope's trust record are read again
  * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still trusted as exactly the scope and definition the turn offered it under, its entry still expands and the tool's pin is still that digest. The check runs under the
@@ -110,29 +111,44 @@ const sendRefusalOf = (status: McpServerStatus): McpSendRefusal | null => status
  */
 export function mcpSendAuthority(registry: McpRegistryContext) {
   let memo: { readonly key: string; readonly project: ReturnType<typeof parseMcpRegistryFile>; readonly personal: ReturnType<typeof parseMcpRegistryFile>; readonly trust: ReturnType<typeof parseMcpTrust> } | null = null;
-  return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
+  return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null },
+    observe?: (reason: VerifiedSendRefusal) => void): Promise<McpSendRefusal | null> => {
     const { binding } = call;
     if (!binding) return 'trust-revoked';
     const directory = await mcpTrustDirectory(binding.scope, registry).catch(() => null);
     if (directory === null) return 'trust-unavailable';
-    // No trust directory: nothing is trusted in this scope (and the lock does not create one).
+    // An absent or inaccessible trust directory keeps the existing send refusal.
     if (!(await lstat(directory).then(info => info.isDirectory(), () => false))) return 'trust-revoked';
+    let observed: VerifiedSendRefusal | undefined;
     const check = async (): Promise<McpSendRefusal | null> => {
-      const projectKey = await realpath(registry.projectRoot).catch(() => registry.projectRoot), paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
+      const resolvedProject = await realpath(registry.projectRoot).catch(() => null);
+      // The fallback keeps the send result, but an empty registry at that path cannot prove a revocation.
+      const projectKey = resolvedProject ?? registry.projectRoot, paths = mcpRegistryPaths(projectKey, mcpGlobalRoot(registry.environment));
       const read = await Promise.all([readMcpRegistryText(paths.project, 'project'), readMcpRegistryText(paths.personal, 'personal'), storeTextOf(mcpTrustDirectory(binding.scope, registry))] as const);
       const key = createHash('sha256').update(JSON.stringify([projectKey, read])).digest('hex');
       if (memo?.key !== key) memo = { key, trust: parseMcpTrust(read[2]), project: parseMcpRegistryFile(read[0], 'project'), personal: parseMcpRegistryFile(read[1], 'personal', projectKey) };
-      const server = resolveFiles(registry, paths, memo.project, memo.personal).servers.find(entry => entry.name === call.server);
-      if (!server) return 'trust-revoked';
-      const trust = (server.scope === 'user') === (binding.scope === 'user') ? memo.trust : await storeOf(mcpTrustDirectory(server.scope, registry));
+      const { project, personal, trust: boundTrust } = memo;
+      const resolved = resolveFiles(registry, paths, project, personal);
+      const server = resolved.servers.find(entry => entry.name === call.server);
+      const verified = (reason: VerifiedSendRefusal) => {
+        if (resolvedProject !== null && project.ok && personal.ok) observed = reason;
+        return reason;
+      };
+      if (!server) return !boundTrust.ok || resolved.problems.some(problem => problem.name === call.server) ? 'trust-revoked' : verified('trust-revoked');
+      const trust = (server.scope === 'user') === (binding.scope === 'user') ? boundTrust : await storeOf(mcpTrustDirectory(server.scope, registry));
       if (!trust.ok) return 'trust-unavailable';
-      if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return 'definition-changed';
-      const record = findMcpTrust(trust.state, server.scope, server.name), status = statusOf(true, record, server.definitionDigest, true);
-      const refusal = sendRefusalOf(status !== 'trusted' || (await expandMcpEntry(server.entry, server.scope, registry.environment, registry.secret, registry.knownSecrets)).ok ? status : 'invalid-launch');
-      return refusal ?? (record!.tools.some(pin => pin.name === call.tool && pin.digest === call.digest) ? null : 'pin-revoked');
+      if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return verified('definition-changed');
+      const record = findMcpTrust(trust.state, server.scope, server.name);
+      const refusal = sendRefusalOf(statusOf(true, record, server.definitionDigest, true));
+      if (refusal) return refusal === 'trust-unavailable' ? refusal : verified(refusal);
+      if (!(await expandMcpEntry(server.entry, server.scope, registry.environment, registry.secret, registry.knownSecrets)).ok) return 'definition-changed';
+      return record!.tools.some(pin => pin.name === call.tool && pin.digest === call.digest) ? null : verified('pin-revoked');
     };
-    try { return await withConfigWriteLock(join(directory, MCP_TRUST_FILE), check, MCP_STATE_LOCK_MS); }
+    let reason;
+    try { reason = await withConfigWriteLock(join(directory, MCP_TRUST_FILE), check, MCP_STATE_LOCK_MS); }
     catch { return 'trust-unavailable'; }
+    if (observed) observe?.(observed);
+    return reason;
   };
 }
 export function mcpClientSettings(view: McpRegistryView, limits: { readonly resultMaxBytes?: number; readonly inputMaxBytes?: number }): McpClientSettings | null {

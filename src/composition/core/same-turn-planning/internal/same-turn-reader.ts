@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationReceipt } from '#domain/index.js';
-import { ModelInvocationPolicyAuthorization, ModelInvocationStoreError } from '#engine/index.js';
+import { ModelInvocationPolicyAuthorization, ModelInvocationStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { withLocalPrincipalChannel, withMcpPrincipal, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { inspectionApplication, loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -8,7 +8,7 @@ import { inspectionApplication, loadPeerInvocationContext } from '#composition/c
 type InvocationContext = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
 /** Internal chat composition only. Captures the accepted socket object and the person witnessed before entering MCP. */
 export function bindRetainedTurnResponse(root: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, scopeId: string,
-  witness: InvocationContext, signal: AbortSignal) {
+  witness: InvocationContext, signal: AbortSignal, observe?: (receipt: ModelInvocationReceipt, policyRevision: string) => void) {
   const connection = peer.connection, sameInstallation = (current: InvocationContext) =>
     witness.installationId !== null && current.installationId === witness.installationId
       && current.config.company.id === witness.config.company.id && isDeepStrictEqual(current.layout, witness.layout);
@@ -33,7 +33,12 @@ export function bindRetainedTurnResponse(root: string, options: ConfigLoadOption
         if (!valid()) return refuse();
         const person = await loadPeerInvocationContext(root, scopeId, options, peer, 'read');
         if (!sameInstallation(person) || !isDeepStrictEqual(person.principal, witness.principal) || await person.path() !== path) return refuse();
-        const authorization = await new ModelInvocationPolicyAuthorization(person.policy).authorize('inspect-content', target, person.principal);
+        let decisionPolicy: typeof person.document | undefined;
+        const source = { load: async () => (decisionPolicy = await person.policy.load()) };
+        const authorization = await new ModelInvocationPolicyAuthorization(source).authorize('inspect-content', target, person.principal).catch((error: unknown) => {
+          if (decisionPolicy && error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') observe?.(receipt, decisionPolicy.revision);
+          throw error;
+        });
         if (authorization.revision !== person.document.revision) return refuse();
       }, peer), valid);
     },

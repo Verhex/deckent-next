@@ -2,9 +2,22 @@ import { z } from 'zod';
 import { counterSchema, identitySchema, persistedUuid } from '#domain/core/primitives/index.js';
 import { rebindClasses } from '#domain/core/policy/index.js';
 import { opaqueIdentitySchema } from './opaque-identity.js';
+import type { AuditSubject } from './contract.js';
 
-/** Reader-first subjects: neither application nor secondary seal producers may write them in beta.2. */
-export const AUDIT_READER_ONLY_SUBJECTS: readonly string[] = Object.freeze(['access-refusal-summary', 'installation-rebind']);
+const LOCAL_REFUSAL_BASES = [
+  'fetch-address-policy', 'fetch-redirect-policy', 'fetch-preflight-policy', 'workspace-read-guard',
+  'agent-tool-policy', 'tool-approval', 'tool-offer', 'mcp-send-trust', 'retained-response-authority', 'workspace-edit-guard', 'shell-local-guard',
+  'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence',
+] as const;
+export type LocalRefusalBasis = typeof LOCAL_REFUSAL_BASES[number];
+const localRefusalBases: ReadonlySet<string> = new Set(LOCAL_REFUSAL_BASES);
+
+/** Writer admission only. Older readers can still verify all frozen v1 subjects. */
+export function canWriteAuditSubject(subject: AuditSubject): boolean {
+  if (subject.kind === 'installation-rebind') return false;
+  return subject.kind !== 'access-refusal-summary'
+    || subject.decisionSource === 'deckent-decision' && localRefusalBases.has(subject.evidenceBasis);
+}
 export const rebindAdmissionRecordSchema = z.discriminatedUnion('basis', [
   z.strictObject({ basis: z.literal('open-class') }),
   z.strictObject({ basis: z.literal('human-tty'), witness: opaqueIdentitySchema.nullable() }),

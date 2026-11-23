@@ -182,7 +182,7 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     const decisions: Promise<unknown>[] = [];
     const path = join(roots.at(-1)!, 'ledger.db');
     const context = { principal: { ...requester, assurance: 'os-user', scopeIds: ['scope'] },
-      config: { storage: { sqlite: { busyTimeoutMs: 2000, journalMode: 'wal', durability: 'full' } },
+      config: { company: { id: 'fixture-company' }, storage: { sqlite: { busyTimeoutMs: 2000, journalMode: 'wal', durability: 'full' } },
         approvals: { requestTtlMs: 10000, keyFile: 'unused' }, service: { inputMaxBytes: 262144 } },
       layout: platform.resolveProductLayout({ projectRoot: roots.at(-1)! }), path: async () => path, policy: { load: async () => ({ revision: 'policy' }) } };
     vi.spyOn(modelInvocation, 'loadPeerInvocationContext').mockResolvedValue(context as unknown as Awaited<ReturnType<typeof modelInvocation.loadPeerInvocationContext>>);

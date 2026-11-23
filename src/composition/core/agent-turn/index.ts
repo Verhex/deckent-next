@@ -2,8 +2,8 @@ export { builtinAgentToolClass, cancelPeerConfiguredChatTurn, chatTurnApprovalPr
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn, steerPeerConfiguredChatTurn } from './internal/turn.js';
 export type { PlanServiceRun, RuntimeChatTurnHost } from './internal/turn.js';
-export type { CreateServiceSameTurnPlanning } from './internal/same-turn.js';
-export type { AgentProposalViews } from './internal/proposals.js';
+export type { CreateServiceSameTurnPlanning } from '#composition/core/same-turn-planning/index.js';
+export type { AgentProposalViews } from '#composition/core/same-turn-planning/index.js';
 export { createAgentCallDecisions, SHELL_CELLS } from './internal/mode.js';
 export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';

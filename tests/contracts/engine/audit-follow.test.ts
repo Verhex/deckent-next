@@ -88,6 +88,43 @@ it('never accepts an event attributed to the auditor principal (the auditor writ
   } finally { store.close(); }
 });
 
+it('seals and appends only supported local decision pairs and consumes no sequence on refusal', async () => {
+  const { path, store, follow } = await ledger(1);
+  try {
+    const audit = new AuditApplication(store, integrity);
+    const query = { schemaVersion: 1 as const, scopeId: 'scope', after: 0, limit: 10 };
+    const before = follow.read(query);
+    for (const [decisionSource, evidenceBasis] of [['adapter-reported', 'fetch-address-policy'], ['cli-reported', 'fetch-address-policy'],
+      ['deckent-decision', 'unlisted-local-basis']] as const) {
+      const invalid: AuditEvent = { ...event('scope', 2), subject: { ...refusalSubject, decisionSource, evidenceBasis } };
+      expect(auditEventSchema.parse(invalid)).toEqual(invalid);
+      expect(() => audit.record(invalid)).toThrow(expect.objectContaining({ code: 'AUDIT_INVALID' }));
+      expect(() => sealAuditRecord(invalid, 2, integrity)).toThrow(expect.objectContaining({ code: 'AUDIT_INVALID' }));
+    }
+    expect(follow.read(query)).toEqual(before);
+    const db = new DatabaseSync(path);
+    try {
+      db.exec("CREATE TRIGGER refuse_audit_insert BEFORE INSERT ON audit_events WHEN NEW.kind='access-refusal-summary' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+      const input: AuditEvent = { ...event('scope', 2), subject: { ...refusalSubject, decisionSource: 'deckent-decision', evidenceBasis: 'fetch-address-policy' } };
+      expect(() => audit.record(input)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
+      expect(follow.read(query)).toEqual(before);
+      db.exec('DROP TRIGGER refuse_audit_insert');
+    } finally { db.close(); }
+    for (const [index, evidenceBasis] of ['fetch-address-policy', 'fetch-redirect-policy', 'fetch-preflight-policy', 'workspace-read-guard',
+      'agent-tool-policy', 'tool-approval', 'tool-offer', 'mcp-send-trust', 'retained-response-authority', 'workspace-edit-guard', 'shell-local-guard',
+      'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence'].entries()) {
+      const sequence = index + 2;
+      const input: AuditEvent = { ...event('scope', sequence), subject: { ...refusalSubject, decisionSource: 'deckent-decision', evidenceBasis } };
+      const seal = sealAuditRecord(input, sequence, integrity);
+      expect(verifyAuditRecord(seal, integrity)).toEqual(seal);
+      expect(audit.list('scope', sequence - 1, 10)).toEqual([]);
+      expect(audit.record(input)).toEqual(seal);
+      expect(audit.record(input)).toEqual(seal);
+      expect(audit.list('scope', sequence - 1, 10)).toEqual([seal]);
+    }
+  } finally { store.close(); }
+});
+
 it('reads a future refusal beside old records without enabling any writer, and joins only the exact scoped call across pages', async () => {
   const { path, store, follow } = await ledger(1);
   try {

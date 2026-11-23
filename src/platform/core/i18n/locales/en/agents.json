@@ -83,6 +83,8 @@
   "agent.standing.redesign-required": "redesign required",
   "agent.standing.retired": "retired",
   "agent.policyTurn.auditFailed": "The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor.",
+  "agent.refusalAudit.failed": "This turn’s access-refusal audit summary could not be saved.",
+  "agent.refusalAudit.bothFailed": "This turn’s policy audit record and access-refusal audit summary could not be saved.",
   "agents.example.agent": "{\n  \"agentId\": \"invoice-reviewer\",\n  \"name\": \"Invoice reviewer\",\n  \"persona\": \"Checks each invoice against its purchase order and lists every mismatch before approval.\",\n  \"workClasses\": [\n    \"{workClass}\"\n  ],\n  \"skills\": [\n    {\n      \"skillId\": \"invoice-check\"\n    }\n  ],\n  \"parentAgentId\": null\n}",
   "agents.example.workClasses": "workClasses: one or more of this installation's WorkClasses: {list}\nskills: skills already defined here (deckent agents skills); revision is optional (latest). parentAgentId: an agent id or null.\nSave this as a file, edit it, then: deckent agents define --input <file>",
   "agents.example.skill": "{\n  \"skillId\": \"invoice-check\",\n  \"name\": \"Invoice check\",\n  \"text\": \"Compare amount, VAT and due date with the purchase order; list every mismatch with the field name.\"\n}\nSave this as a file, edit it, then: deckent agents define-skill --input <file>",

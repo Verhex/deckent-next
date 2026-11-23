@@ -49,6 +49,9 @@ export interface AgentTurnPorts {
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
    * call's position in the turn (the identity the turn's decision record names; never used for authority). */
   authorize(tool: AgentToolSpec, args?: Record<string, unknown>, call?: { readonly round: number; readonly index: number; readonly callId: string }): Promise<'allow' | 'deny' | 'require-approval'>;
+  /** Host observation of a coordinator decision after its position is allocated. */
+  refusal?(decision: 'AGENT_TOOL_NOT_OFFERED' | 'AGENT_TOOL_ARGUMENT_QUARANTINED' | 'AGENT_TOOL_APPROVAL_UNAVAILABLE' | 'AGENT_TOOL_APPROVAL_DECLINED' | 'AGENT_TOOL_APPROVAL_EXPIRED',
+    tool: AgentToolSpec | undefined, args: Record<string, unknown> | undefined, position: { round: number; index: number; callId: string }): void;
   /** Optional validation before authority is asked (an edit that cannot apply is an error, never an approval prompt). */
   prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true; readonly requireApproval?: boolean } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
@@ -196,12 +199,19 @@ function canonical(value: unknown): string {
 export const agentToolArgumentsDigest = (name: string, args: Record<string, unknown>) => createHash('sha256').update(`agent-tool-args:1\0${name}\0${canonical(args)}`).digest('hex');
 
 /** Arguments against the tool's declared JSON schema subset: an object, required keys present, declared primitive types. */
-async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurnPorts): Promise<{ ok: true; args: Record<string, unknown> } | { ok: false; detail: string; kind: ToolErrorClass }> {
+async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurnPorts, quarantine: () => void): Promise<{ ok: true; args: Record<string, unknown> } | { ok: false; detail: string; kind: ToolErrorClass }> {
   let parsed: unknown;
   try { parsed = JSON.parse(raw === '' ? '{}' : raw); } catch { return { ok: false, kind: 'session', detail: 'arguments are not valid JSON' }; }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, kind: 'session', detail: 'arguments must be a JSON object' };
-  const ingress = await checkModelIngressArguments(parsed, ports.recordIngress?.bind(ports));
-  if (!ingress.ok) return { ok: false, kind: toolErrorClass(ingress), detail: ingress.text };
+  let quarantined = false;
+  const ingress = await checkModelIngressArguments(parsed, async notice => {
+    quarantined ||= notice.disposition === 'quarantine';
+    await ports.recordIngress?.(notice);
+  });
+  if (!ingress.ok) {
+    if (quarantined) quarantine();
+    return { ok: false, kind: ports.recordIngress ? toolErrorClass(ingress) : 'uncertain', detail: ingress.text };
+  }
   const args = parsed as Record<string, unknown>, properties = tool.inputSchema.properties as Record<string, { type?: unknown }>;
   for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, kind: 'ordinary', detail: `missing required argument "${key}"` };
   for (const [key, value] of Object.entries(args)) {
@@ -298,8 +308,11 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled'); }
     // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
     if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens), undefined, undefined, 'limit'); }
-    if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('error', `[deckent] ${call.name}: error=unknown-tool`, undefined, undefined, 'session'); }
-    const checked = await checkArguments(tool, call.argumentsJson, ports);
+    const observe = (decision: Parameters<NonNullable<AgentTurnPorts['refusal']>>[0]) => {
+      try { ports.refusal?.(decision, tool, pauseArgs, { round, index, callId: call.id }); } catch { /* the refusal takes precedence */ }
+    };
+    if (!tool) { observe('AGENT_TOOL_NOT_OFFERED'); emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); return result('error', `[deckent] ${call.name}: error=unknown-tool`, undefined, undefined, 'session'); }
+    const checked = await checkArguments(tool, call.argumentsJson, ports, () => observe('AGENT_TOOL_ARGUMENT_QUARANTINED'));
     targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
     emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
     if (!checked.ok) { return result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`, undefined, undefined, checked.kind); }
@@ -319,17 +332,17 @@ function createAgentToolCoordinator(input: AgentTurnInput, ports: AgentTurnPorts
     }
     if (decision === 'require-approval') {
       // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
-      if (!ports.requestApproval) { return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`, undefined, undefined, 'ordinary'); }
+      if (!ports.requestApproval) { observe('AGENT_TOOL_APPROVAL_UNAVAILABLE'); return result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`, undefined, undefined, 'ordinary'); }
       let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
       try { const owner = ownerOutcome(await ports.requestApproval({ round, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf,
           personDenied: proof => { if (matchesDenial(proof)) personDecision = proof; } }, signal));
         answer = owner.outcome; noteOf = owner.note; }
       catch { answer = null; }
-      if (answer === null && !signal.aborted) { return result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); }
+      if (answer === null && !signal.aborted) { observe('AGENT_TOOL_APPROVAL_UNAVAILABLE'); return result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); }
       if (signal.aborted || answer === 'cancelled') { return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled'); }
-      if (answer === 'deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, presentationPorts)}`, undefined, undefined, personDecision ? 'ordinary' : 'uncertain'); }
+      if (answer === 'deny') { if (personDecision) observe('AGENT_TOOL_APPROVAL_DECLINED'); return result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, presentationPorts)}`, undefined, undefined, personDecision ? 'ordinary' : 'uncertain'); }
       if (answer === 'policy-deny') { return result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); }
-      if (answer === 'expired') { return result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); }
+      if (answer === 'expired') { observe('AGENT_TOOL_APPROVAL_EXPIRED'); return result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); }
     }
     if (signal.aborted) return result('cancelled', `[deckent] ${call.name}: error=cancelled`, undefined, undefined, 'cancelled');
     toolCalls++;

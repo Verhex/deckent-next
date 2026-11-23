@@ -1,3 +1,4 @@
+import type { LocalRefusal } from './refusal-audit.js';
 import { effectToolError, isRecordedTargetFailure } from './effect-error.js';
 import { agentToolResult } from '#engine/index.js';
 import { realpath } from 'node:fs/promises';
@@ -84,13 +85,15 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   // MCP-REVOKE: every call re-reads the current registry and trust at its send (the same registry context the turn opened with).
   const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered), authority = mcpSendAuthority(registry);
   return { ...tools, async apply(name: string, args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number },
-    gate: EffectApprovalGate): Promise<AgentToolOutcome> {
+    gate: EffectApprovalGate, observe?: (decision: LocalRefusal) => void): Promise<AgentToolOutcome> {
     const entry = tools.entry(name);
     if (!entry) return agentToolResult({ status: 'error' as const, text: `[deckent] ${name}: error=unknown-tool` }, 'session');
     const command = tools.command(entry, args, { scopeId, turnId, ...execution, argsDigest: agentToolArgumentsDigest(name, args) }), clock = new SystemTrustedClock();
     let ran: McpCallOutcome | null = null;
     const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
-      admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }) });
+      admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }, reason => observe?.({
+        basis: 'mcp-send-trust', reason, role: 'mcp-server', operationClass: 'invoke', operation: MCP_TOOL_CALL_OPERATION.operation, commandId: command.commandId,
+      })) });
     const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
     const store = await openConfiguredLedger(context, { migration: 'forbid' });
     try {

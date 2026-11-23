@@ -106,9 +106,6 @@ describe('the model cannot reach a config write', () => {
       .map(path => path.replaceAll('\\', '/')).sort();
     // COLDSTART: the human CLI entry's host wiring lives in its host module (loaded only when a command runs).
     expect(writers).toEqual([
-      // alpha.64 C (owner S5/S6 2026-11-09): the chat AI's `propose_setting` submits one of three registry keys as the AI actor through the same governed
-      // writer; its v20 `require-approval` rule (no `modeEligible`) opens the person's before/after card in every mode and only their yes writes.
-      'src/composition/core/agent-turn/internal/proposals.ts',
       // B1 (11978e6db): person-witnessed setup, through the same policy/approval/digest/audit writer; AI and MCP are refused before reads.
       'src/composition/core/beuser/internal/setup.ts',
       'src/composition/core/cli/internal/host.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
@@ -122,6 +119,9 @@ describe('the model cannot reach a config write', () => {
       'src/composition/core/model-connect/internal/connect.ts',
       'src/composition/core/model-use-grant/internal/configured.ts', // ONCE: person-witnessed attachment, same governed config writer.
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
+      // alpha.64 C (owner S5/S6 2026-11-09): the chat AI's `propose_setting` submits one of three registry keys as the AI actor through the same governed
+      // writer; its v20 `require-approval` rule (no `modeEligible`) opens the person's before/after card in every mode and only their yes writes.
+      'src/composition/core/same-turn-planning/internal/proposals.ts',
       // alpha.56 U4E (G2): the install permission carrier saves a missing identity profile through the same governed writer after the
       // `policyPermissionModes` person witness; reached from init and terminal onboarding only, never from the SDK, MCP or an agent unit.
       'src/composition/core/setup/internal/permissions.ts',
@@ -143,32 +143,32 @@ describe('the model cannot reach a config write', () => {
       'src/surfaces/core/config/internal/brain-offer.ts',
       'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
       'src/surfaces/core/config/internal/records.ts', 'src/surfaces/core/monitor/internal/command.ts']); // records.ts: the /config window's selection-only record editors (8ce20e6f)
-    // The one agent-turn writer is the AI proposal above (its card decides); no other agent tool and no MCP unit composes it.
-    for (const path of writers.filter(path => path !== 'src/composition/core/agent-turn/internal/proposals.ts')) expect(path).not.toMatch(/agent-turn|agent-tool|\/mcp\//);
+    // The one agent writer is the AI proposal above (its card decides); no other agent tool and no MCP unit composes it.
+    for (const path of writers.filter(path => path !== 'src/composition/core/same-turn-planning/internal/proposals.ts')) expect(path).not.toMatch(/agent-turn|agent-tool|same-turn-planning|\/mcp\//);
     const beuserSetup = readFileSync('src/composition/core/beuser/internal/setup.ts', 'utf8');
     expect(beuserSetup.indexOf("await configPersonWitness()('beuser setup')")).toBeGreaterThan(-1);
     expect(beuserSetup.indexOf("await configPersonWitness()('beuser setup')")).toBeLessThan(beuserSetup.indexOf('await snapshotConfiguredConfig('));
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /setupConfiguredBeuser|beuserSetup/.test(readFileSync(path, 'utf8')))).toEqual([]);
     expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/setupConfiguredBeuser|beuserSetup|configuredBeuserPanelPort/);
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /configuredBeuserPanelPort|writeLimit/.test(readFileSync(path, 'utf8')))).toEqual([]);
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
-    expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /consentConfiguredWorkerImage/.test(readFileSync(path, 'utf8')))).toEqual([]);
     expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/consentConfiguredWorkerImage/);
     // M2: the tier/role write is composed only by the human CLI host; no MCP, agent or SDK unit names it (the SDK exports the read view only).
     expect(files('src').filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/model-activation/'))
       .filter(path => /assignConfiguredModelRole/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())
       .toEqual(['src/composition/core/cli/internal/host.ts', 'src/composition/index.ts']);
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /assignConfiguredModelRole|assignModelRole/.test(readFileSync(path, 'utf8')))).toEqual([]);
     expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/assignConfiguredModelRole|assignModelRole/);
     expect(readFileSync('src/composition/core/model-activation/internal/model-roles.ts', 'utf8')).toMatch(/assertAuthorityWitness\('models\.roles\.set'/);
     // Coding-template configuration remains internal to the human CLI; neither agent nor MCP dispatch can reach it.
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /configureNativeCodingTemplate|configureCodingTemplate|native-coding/.test(readFileSync(path, 'utf8')))).toEqual([]);
     // POLICY-V12: the installer's identity write is reachable from the human CLI entry only — neither the SDK nor MCP nor an agent unit names it.
     const installer = /PolicyTemplateInstallation|composition\/core\/installation\/internal\/policy-template/;
@@ -181,7 +181,7 @@ describe('the model cannot reach a config write', () => {
         'src/composition/core/setup/internal/wiring.ts',
         'src/surfaces/core/cli-installation/internal/context.ts', 'src/surfaces/core/cli-installation/internal/init.ts',
         'src/surfaces/core/setup/internal/contract.ts', 'src/surfaces/core/setup/internal/foreground.ts']);
-    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+    expect(files('src').filter(path => /agent-turn|agent-tool|same-turn-planning|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /surfaces\/core\/setup|setupInitCommand/.test(readFileSync(path, 'utf8')))).toEqual([]);
     expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(installer);
     // I-S3: the setup wiring is composed only by the CLI entry; no SDK/composition export and no agent or MCP unit names it.

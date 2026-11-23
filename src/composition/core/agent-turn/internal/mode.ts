@@ -3,7 +3,7 @@ import { EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent
 import { AuditApplication, recordAuditSummary, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, PolicyTurnRecord, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
-import { optionalField, t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type TrustedClock } from '#platform/index.js';
+import { optionalField, t, resolveLocale, getConfigKnownSecrets, redactForRecord, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -11,6 +11,8 @@ import type { createAgentFileEdits } from './edits.js';
 import type { createAgentShell } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
+import { createRefusalAudit, type LocalRefusal } from './refusal-audit.js';
+import type { AgentTurnPorts } from '#engine/index.js';
 import type { createAgentMcp } from './mcp.js';
 type Execution = { readonly round: number; readonly index: number }; type Context = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
 export const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell>> = { 'read-none': 'shell-read-none', 'read-low': 'shell-read-low',
@@ -27,9 +29,12 @@ type Shell = AgentToolCallRequest['shell']; type CallRef = { readonly round: num
 const hostOf = (args: Record<string, unknown>) => { try { return new URL(String(args['url'])).hostname || 'unknown'; } catch { return 'unknown'; } };
 
 /** One use of the Core audit port for a turn (the integrity key is created on first use, like an approval's). */
-export async function withAgentAudit<T>(context: Context, work: (audit: AuditApplication) => T): Promise<T> {
+export async function withAgentAudit<T>(context: Context, work: (audit: AuditApplication, integrity: IntegrityAuthority) => T): Promise<T> {
   const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-  try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true))); }
+  try {
+    const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
+    return work(new AuditApplication(store, integrity), integrity);
+  }
   finally { store.close(); }
 }
 
@@ -42,7 +47,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   /** This conversation's "this session" memory (a service-process map). */
   readonly standing?: { readonly memory: SessionStanding; readonly session: string };
   /** MODES-3: the turn was launched in full access (admitted and audited by the turn); every decision asks the company grant again. */
-  readonly fullAccess?: boolean; /** R4a: the person who started a native turn; the AI actor follows their mode. */ readonly person?: VerifiedPrincipal; /** R9: a Run worker's call and its plan ceiling. */ readonly origin?: AgentToolCallRequest['origin'] }) {
+  readonly fullAccess?: boolean; /** R4a: the person who started a native turn; the AI actor follows their mode. */ readonly person?: VerifiedPrincipal; /** R9: a Run worker's call and its plan ceiling. */ readonly origin?: AgentToolCallRequest['origin'];
+  readonly attempt?: Parameters<typeof createRefusalAudit>[0]['attempt'] }) {
   const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input, mcp = input.mcp ?? null;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name, mcps = (tool: AgentToolSpec) => tool.toolClass === 'mcp';
   const stored = new Map<string, Stored>(), knownSecrets = getConfigKnownSecrets(context.config), turnRecord = new PolicyTurnRecord({ scopeId, turnId, principal: context.principal });
@@ -51,6 +57,18 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? edits(tool.name)?.operation ?? WORKSPACE_FILE_WRITE_OPERATION.operation
     : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : fetches(tool) ? NETWORK_FETCH_OPERATION.operation
     : mcps(tool) ? MCP_TOOL_CALL_OPERATION.operation : null;
+  const refusalAudit = createRefusalAudit({ scopeId, turnId, principal: { issuer: context.principal.issuer, subject: context.principal.subject },
+    installationId: context.installationId, companyId: context.config.company.id, clock,
+    ...(input.attempt ? { attempt: input.attempt } : {}), write: work => withAgentAudit(context, work) });
+  const observed = (decision: LocalRefusal, policyRevision: string, tool?: AgentToolSpec, call?: CallRef) => refusalAudit.observe({
+    ...decision, policyRevision, ...(tool && !mcps(tool) ? { tool: { name: tool.name, version: tool.version } } : {}),
+    ...(call ? { call: { ...call, turnId } } : {}),
+  });
+  const policyRefused = (tool: AgentToolSpec, call: CallRef | undefined, revision: string, reason = 'AGENT_TOOL_POLICY_DENIED', commandId?: string) => {
+    const operation = operationOf(tool);
+    if (call) observed({ basis: 'agent-tool-policy', reason, role: mcps(tool) ? 'mcp-server' : 'tool',
+      ...(operation ? { operation } : {}), ...optionalField('commandId', commandId) }, revision, tool, call);
+  };
   // Standing approvals (G6) cover only the edit and shell cells a standing pattern names; any other cell (fetch, MCP) has none.
   const standingOf = (tool: AgentToolSpec, cell: AgentToolCallCell, args: Record<string, unknown> | undefined) => !args ? null : standingCallKey({ tool: tool.name, cell,
     path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : cell === 'edit-self-source' && typeof args['path'] === 'string' ? args['path'] : null, command: typeof args['command'] === 'string' ? args['command'] : null },
@@ -93,12 +111,16 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
    * counted; anything that still asks (the write floor, the configuration file, `askEdits`, a company rule no mode lowers) or denies is not
    * applied. The entry's effect gate decides again and admits only the audited decision (as `execute` does for the call itself).
    */
-  const writeSet = (tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string): SandboxWriteDecider => ({
+  const observeWriteSet = (decision: AgentToolCallDecision, tool: AgentToolSpec, call: CallRef) =>
+    observed({ basis: 'shell-write-set', reason: decision.decision === 'deny' ? 'AGENT_TOOL_POLICY_DENIED' : 'AGENT_TOOL_APPROVAL_REQUIRED',
+      role: 'workspace-file', operationClass: 'write', operation: WORKSPACE_FILE_WRITE_OPERATION.operation }, decision.revision, tool, call);
+  const writeSet = (tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cardApproved = false): SandboxWriteDecider => ({
     async decide(rel: string, cell: SandboxWriteCell) {
       const writeOperation = WORKSPACE_FILE_WRITE_OPERATION.operation;
       const again = () => decide(tool, cell, undefined, { path: rel }, undefined, writeOperation);
       const fresh = await again();
       if (!fresh || fresh.decision !== 'allow') {
+        if (fresh && (!cardApproved || fresh.decision === 'deny')) observeWriteSet(fresh, tool, { ...execution, callId });
         turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`));
         const reason = !fresh || fresh.decision === 'deny' ? 'denied-by-policy' : cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor';
         return { ok: false, reason, evidenceMissing: true };
@@ -130,9 +152,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     async decide(rel: string, cell: SandboxWriteCell) {
       if (cell === 'edit-authority') return { ok: false, reason: 'configuration-file' };
       if (cell !== 'edit' && rel.endsWith('/')) return { ok: false, reason: 'write-floor' };
-      const first = await writeSet(tool, args, execution, callId).decide(rel, cell);
+      const first = await writeSet(tool, args, execution, callId, true).decide(rel, cell);
       if (first.ok || (first.reason !== 'approval-required' && first.reason !== 'write-floor')) return first;
       const again = () => decide(tool, cell, undefined, { path: rel }, undefined, WORKSPACE_FILE_WRITE_OPERATION.operation), fresh = await again();
+      if (fresh?.decision === 'deny') observeWriteSet(fresh, tool, { ...execution, callId });
       if (!fresh || fresh.decision === 'deny') { turnRecord.note(tool, { ...execution, callId }, cell, fresh, 'effect', sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`)); return { ok: false, reason: 'denied-by-policy', evidenceMissing: true }; }
       const event = approvedWriteEntryAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: redactForRecord(rel, knownSecrets).slice(0, 4096) },
         eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write-approved'),
@@ -147,6 +170,20 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     },
   });
   return {
+    observe: observed,
+    flushRefusals: refusalAudit.flush,
+    observeCall(tool: AgentToolSpec, args: Record<string, unknown>, call: CallRef, decision: LocalRefusal) {
+      const prior = stored.get(keyOf(tool, args));
+      observed(decision, prior && 'cell' in prior ? prior.decision.revision : context.document.revision, tool, call);
+    },
+    coordinatorRefusal: ((decision, tool, args, call) => {
+      const prior = tool && args && stored.get(keyOf(tool, args));
+      const revision = prior && 'cell' in prior ? prior.decision.revision : context.document.revision;
+      const boundary = decision === 'AGENT_TOOL_NOT_OFFERED' ? { basis: 'tool-offer', role: 'tool-surface' } as const
+        : decision === 'AGENT_TOOL_ARGUMENT_QUARANTINED' ? { basis: 'model-ingress-quarantine', role: 'tool-input' } as const
+        : { basis: 'tool-approval', role: 'approval' } as const;
+      observed({ ...boundary, reason: decision }, revision, tool, call);
+    }) satisfies NonNullable<AgentTurnPorts['refusal']>,
     /** `call` (its position in the turn) is what the `policy-turn` record names. */ async authorize(tool: AgentToolSpec, args: Record<string, unknown> | undefined, call?: CallRef): Promise<'allow' | 'deny' | 'require-approval'> {
       if (!args) return (await decide(tool, 'read'))?.decision === 'deny' ? 'deny' : 'require-approval';
       const key = keyOf(tool, args);
@@ -155,16 +192,21 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       // before its target is planned (no content leaks).
       const snapshot = await load();
       const first = await decide(tool, 'read', snapshot);
-      if (!first || first.decision === 'deny') { turnRecord.note(tool, call, null, first, 'policy', key); return 'deny'; }
+      if (!first || first.decision === 'deny') {
+        if (first) policyRefused(tool, call, first.revision);
+        turnRecord.note(tool, call, null, first, 'policy', key); return 'deny';
+      }
       if (tool.toolClass === 'read') { stored.set(key, { cell: 'read', shell: undefined, decision: first }); if (first.decision !== 'allow') turnRecord.note(tool, call, 'read', first, 'cell', key); return first.decision; }
       const area = tool.toolClass === 'edit' ? edits(tool.name) : null;
-      const planned = area ? await area.plan(tool.name, args).then(plan => plan.ok ? null : agentToolResult({ ok: false as const, text: `[deckent] ${tool.name}: error=${plan.error}` }, plan))
-        : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args).then(plan => plan.ok ? null : plan)
-        : fetches(tool) && fetch ? (plan => plan.ok ? null : agentToolResult({ ok: false as const, text: `[deckent] ${tool.name}: error=${plan.error}` }, plan))(fetch.plan(args))
+      const note = (decision: LocalRefusal) => { if (call) observed(decision, first.revision, tool, call); };
+      const planned = area ? await area.plan(tool.name, args, note).then(plan => plan.ok ? null : agentToolResult({ ok: false as const, text: `[deckent] ${tool.name}: error=${plan.error}` }, plan))
+        : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args, note).then(plan => plan.ok ? null : plan)
+        : fetches(tool) && fetch ? (plan => plan.ok ? null : agentToolResult({ ok: false as const, text: `[deckent] ${tool.name}: error=${plan.error}` }, plan))(fetch.plan(args, note))
         : mcps(tool) && mcp ? mcp.prepare(tool.name, args) : agentToolResult({ ok: false as const, text: `[deckent] ${tool.name}: error=unknown-tool` }, 'session');
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? { ok: false, text: `[deckent] ${tool.name}: error=failed` } }); return 'require-approval'; }
       const shellInput = tool.toolClass === 'shell' ? shell?.containment(tool.name, args) : undefined, decision = await decide(tool, cell, snapshot, args, shellInput);
+      if (decision?.decision === 'deny') policyRefused(tool, call, decision.revision);
       if (!decision || decision.decision !== 'allow') turnRecord.note(tool, call, cell, decision, 'cell', key); if (!decision) return 'deny';
       stored.set(key, { cell, shell: shellInput, decision });
       return decision.decision;
@@ -216,17 +258,21 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
       run: (gate: EffectApprovalGate, authority: ShellCallAuthority, writes?: SandboxWriteDecider,
-        track?: (change: { readonly deleted: TrackedFilesAuditList; readonly overwritten: TrackedFilesAuditList }) => Promise<boolean>) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
-      const key = keyOf(tool, args), kept = stored.get(key);
+        track?: (change: { readonly deleted: TrackedFilesAuditList; readonly overwritten: TrackedFilesAuditList }) => Promise<boolean>,
+        observe?: (decision: LocalRefusal) => void) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      const key = keyOf(tool, args), kept = stored.get(key), position = { ...execution, callId };
+      const observe = (revision: string) => (decision: LocalRefusal) => observed(decision, revision, tool, position);
       const { gate: inner, close, approvalId } = approvals.gate(tool, args, execution);
       try {
         if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') {
           // SBX-05 x company policy (lead 2026-10-09): the card lifts only the destructive-risk gate; outside full access the call's writes are kept
           // aside and decided (`approvedWriteSet`) wherever the realm can keep them aside.
           const approved = approvalId !== null && input.fullAccess !== true && kept !== undefined && 'cell' in kept && kept.cell === 'shell-destructive';
-          return await run(inner, 'owner-approved', approved ? approvedWriteSet(tool, args, execution, callId, approvalId) : undefined);
+          return await run(inner, 'owner-approved', approved ? approvedWriteSet(tool, args, execution, callId, approvalId) : undefined,
+            undefined, kept && 'cell' in kept ? observe(kept.decision.revision) : undefined);
         }
-        const fresh = await decide(tool, kept.cell, undefined, args, kept.shell), position = { ...execution, callId }; if (!fresh || fresh.decision !== 'allow') turnRecord.note(tool, position, kept.cell, fresh, 'effect', key);
+        const fresh = await decide(tool, kept.cell, undefined, args, kept.shell); if (!fresh || fresh.decision !== 'allow') turnRecord.note(tool, position, kept.cell, fresh, 'effect', key);
+        if (fresh && fresh.decision !== 'allow') policyRefused(tool, position, fresh.revision, fresh.decision === 'deny' ? 'AGENT_TOOL_POLICY_DENIED' : 'AGENT_TOOL_APPROVAL_REQUIRED');
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };
         const { relaxation, standing, fullAccess } = fresh;
@@ -234,7 +280,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
           if (!fetches(tool) && !mcps(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
-          return await run(inner, 'unattended');
+          return await run(inner, 'unattended', undefined, undefined, observe(fresh.revision));
         }
         // A mode relaxation or a full-access call (MODES-3: every effect call of a full-access turn, lowered or not) is its own event.
         const event: AuditEvent = relaxation || fullAccess ? agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: callSummary(tool, args),
@@ -243,7 +289,9 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           : standingEvent('used', tool, args, execution, callId, standingOf(tool, kept.cell, args)!.cell, fresh.revision, standing!, null);
         // No audit, no relaxation: the event is durable before anything is written or spawned.
         try { await withAudit(audit => audit.record(event)); }
-        catch { return { status: 'error', text: `[deckent] ${tool.name}: error=audit-unavailable (the permission mode's decision could not be recorded; nothing ran)` }; }
+        catch {
+          observed({ basis: 'pre-effect-evidence', reason: 'AGENT_TOOL_PRE_EFFECT_AUDIT_UNAVAILABLE', role: 'tool' }, fresh.revision, tool, position);
+          return { status: 'error', text: `[deckent] ${tool.name}: error=audit-unavailable (the permission mode's decision could not be recorded; nothing ran)` }; }
         let policyChanged = false;
         const outcome = await run({
           async admit(descriptor, decision, command, principal, context) {
@@ -253,8 +301,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
               // The same decision again on the policy as it is now: a deny since wins; anything but the audited relaxation (a lost one,
               // another mode or revision, a plain allow) asks, and nothing runs here.
               const again = await decide(tool, kept.cell, undefined, args, kept.shell);
+              if (again?.decision === 'deny') policyRefused(tool, position, again.revision, 'AGENT_TOOL_POLICY_DENIED', command.commandId);
               if (!again || again.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
               if (!(relaxation || fullAccess ? isAuditedDecision(fresh, again) : isAuditedStanding(standing!, fresh.revision, again))) {
+                policyRefused(tool, position, again.revision, 'AGENT_TOOL_APPROVAL_REQUIRED', command.commandId);
                 policyChanged = true; throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               }
               return inner.admit(descriptor, 'allow', command, principal, context);
@@ -269,7 +319,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
         fullAccess && tool.toolClass === 'shell' ? change => withAudit(audit => audit.record(trackedFilesAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool,
           summary: callSummary(tool, args), eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args), 'tracked-files-changed'),
           call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, { deleted: { ...change.deleted, paths: change.deleted.paths.map(path => redactForRecord(path, knownSecrets).slice(0, 4096)) },
-            overwritten: { ...change.overwritten, paths: change.overwritten.paths.map(path => redactForRecord(path, knownSecrets).slice(0, 4096)) } }))).then(() => true, () => false) : undefined);
+            overwritten: { ...change.overwritten, paths: change.overwritten.paths.map(path => redactForRecord(path, knownSecrets).slice(0, 4096)) } }))).then(() => true, () => false) : undefined,
+        observe(fresh.revision));
         return policyChanged ? agentToolResult(outcome, 'uncertain') : outcome;
       } finally { await close(); }
     },

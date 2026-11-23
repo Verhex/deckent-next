@@ -1,3 +1,4 @@
+import type { LocalRefusal } from './refusal-audit.js';
 import { effectToolError, isRecordedTargetFailure } from './effect-error.js';
 import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
@@ -67,18 +68,23 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const card = cardView(tool, args);
     return card ? `${card.planned.warning ? `${card.planned.warning}\n` : ''}$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})${posture || card.view.open === true ? `\n${card.realm.posture(card.view)}` : ''}` : undefined;
   };
-  const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
+  const plan = async (tool: string, args: Record<string, unknown>, observe?: (refusal: LocalRefusal) => void): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return agentToolResult({ ok: false as const, text: '[deckent] run_shell: error=empty-command' }, 'ordinary');
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` }, 'limit');
+    const refusal = (reason: 'PRODUCT_STATE_PROTECTED' | 'SUBSCRIPTION_HOST_SHELL_REFUSED', result: ShellPlan): ShellPlan => {
+      observe?.({ basis: 'shell-local-guard', reason, role: reason === 'PRODUCT_STATE_PROTECTED' ? 'protected-state' : 'shell-realm',
+        operationClass: 'execute', operation: HOST_SHELL_RUN_OPERATION.operation });
+      return result;
+    };
     const scan = scanShellCommand(command);
     const globalName = await globalState;
     for (const name of shellNamedPaths(command, () => true, scan).flatMap(word => word.split(/[<>]/u))) {
-      if (await globalName(name)) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` }, 'ordinary');
+      if (await globalName(name)) return refusal('PRODUCT_STATE_PROTECTED', agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED; ${t('agent.shell.productStateProtected', {}, input.language)}` }, 'ordinary'));
     }
     const realm = await resolveRealm();
     if (!realm.ok) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` }, 'ordinary');
-    if (subscription && realm.containment === 'host') return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` }, 'ordinary');
+    if (subscription && realm.containment === 'host') return refusal('SUBSCRIPTION_HOST_SHELL_REFUSED', agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=SUBSCRIPTION_HOST_SHELL_REFUSED; ${t('agent.shell.subscriptionHostRefused', {}, input.language)}` }, 'ordinary'));
     const warning = realm.containment === 'host' && await hostGlobalStateUnresolved(command, globalRoots, scan) ? t('headless.agent.host.chatWarning', {}, input.language) : null;
     if (input.fullAccess === true && !callRealm(realm, true).ok) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` }, 'ordinary');
     const paths = createShellPathContext(scope, undefined, roots);
@@ -89,7 +95,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor), 'posix', scan);
     // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
     for (const verdict of [readOnly, mutation]) {
-      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); deckent's own state is not opened by any approval; nothing was run` }, 'ordinary');
+      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return refusal('PRODUCT_STATE_PROTECTED', agentToolResult({ ok: false as const, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); deckent's own state is not opened by any approval; nothing was run` }, 'ordinary'));
     }
     const tier = shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command, scan));
     const planned: ShellPlan = { ok: true, realm, command, risk, warning, tier: warning !== null && tier !== 'destructive' && tier !== 'authority' ? 'always-ask' : tier, contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined, scan).contained };

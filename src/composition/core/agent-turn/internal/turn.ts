@@ -4,7 +4,7 @@ export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
   type ChatTurnCommand, type ModelInvocationProfile,
-  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
+  type ModelInvocationContentDescriptor, type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
@@ -22,8 +22,8 @@ import { nativeQuotaText, type ClaudeRateLimit, type NativeAgentExecution } from
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
-import { createAgentProposals, type AgentProposalViews } from './proposals.js';
-import { createChatSameTurnPlanning, type CreateServiceSameTurnPlanning } from './same-turn.js';
+import { createAgentProposals, type AgentProposalViews } from '#composition/core/same-turn-planning/index.js';
+import { createChatSameTurnPlanning, type CreateServiceSameTurnPlanning } from '#composition/core/same-turn-planning/index.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -32,6 +32,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
+import { withRefusalAuditLoss, type LocalRefusal } from './refusal-audit.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiProviderRefusal, providerRequestDiagnosis,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
@@ -50,6 +51,9 @@ export interface RuntimeChatTurnHost {
   /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
   /** alpha.64 B: the service's plan application `propose_work` runs (the CLI host binds it; absent: the tool is not offered). */ readonly planWork?: PlanServiceRun; /** The proposal card and choice views the CLI host lends (absent: the proposal tools answer unavailable). */ readonly proposalViews?: () => Promise<AgentProposalViews>;
   readonly planSameTurn?: CreateServiceSameTurnPlanning;
+  readonly signRefusalTarget?: (target: { readonly installationId: string; readonly companyId: string; readonly scopeId: string;
+    readonly invocationId: string; readonly reference: NonNullable<ChatTurnCommand['reference']>; readonly descriptor: ModelInvocationContentDescriptor },
+    authority: import('#platform/index.js').IntegrityAuthority) => NonNullable<Extract<import('#domain/index.js').AuditSubject, { kind: 'access-refusal-summary' }>['target']['identity']>;
 }
 /** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
 export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal,
@@ -190,6 +194,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
   const emitApproval = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' }>) => channel.emit(event.kind === 'approval.settled' ? (host.decisions.revoke(command.scopeId,
     event.approvalId), event) : { ...event, decisionCapability: host.decisions.mint({ scopeId: command.scopeId, approvalId: event.approvalId, principal: native?.witness ?? context.principal, peerPid: peer.pid, expiresAt: event.expiresAt }, clock.sample().wallMs) });
   let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false, flushPolicy: (() => Promise<boolean>) | null = null;
+  let flushRefusals: ReturnType<typeof createAgentCallDecisions>['flushRefusals'] | undefined;
   try {
     // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and, v6, no network at all unless the shell's posture reaches it).
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
@@ -205,7 +210,15 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     const sameTurn = native && runtime && host.planSameTurn && host.proposalViews
       ? createChatSameTurnPlanning({ root: projectRoot, options, actor: context, witness: loaded.witness, peer, profile: native.profile,
-        signal, locale: language, turnId: command.turnId, bridgeMaxBytes: runtime.limits.replayMaxBytes, create: host.planSameTurn, recheck: recheckNative }) : null;
+        signal, locale: language, turnId: command.turnId, bridgeMaxBytes: runtime.limits.replayMaxBytes, create: host.planSameTurn, recheck: recheckNative,
+        observe(receipt, policyRevision) {
+          const role = 'stored-invocation-response', { installationId } = context, signer = host.signRefusalTarget;
+          const { invocationId, scopeId } = receipt.claim, descriptor = receipt.outcome?.state === 'responded' ? receipt.outcome.content : null;
+          decisions.observe({ basis: 'retained-response-authority', reason: 'POLICY_DENIED', role, operationClass: 'read',
+            ...(installationId && descriptor && signer ? { keyed: authority => ({ invocationId, target: { role, identity: signer({
+              installationId, companyId: context.config.company.id, scopeId, invocationId, reference: receipt.request.reference, descriptor,
+            }, authority) } }) } : {}) }, policyRevision);
+        } }) : null;
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
@@ -263,7 +276,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, ...(native ? { person: native.witness } : {}), standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, ...(native ? { person: native.witness } : {}), standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush; flushRefusals = decisions.flushRefusals;
     // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh; a native turn's mode is the witnessed person's (R5c).
     const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: native?.witness ?? context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
       thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool).then(decided => decided.decision) : decisions.probe(policy, tool, cell, shellInput) }); };
@@ -396,6 +409,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       // alpha.64: the proposal tools are decided by the AI actor's v20 rules; the turn's `policy-turn` record names them like every other call.
       authorize: (tool, args, call) => agentProposals?.owns(tool.name) ? agentProposals.authorize(tool).then(decided => { decisions.proposal(tool, args, call, decided); return decided.decision; }) : decisions.authorize(tool, args, call),
+      refusal: decisions.coordinatorRefusal,
       async prepare(tool, args) {
         if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
@@ -473,11 +487,13 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           return decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'
             ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, authority, writes, track));
         }
-        if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
-        if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
+        const observe = (observation: LocalRefusal) => decisions.observeCall(tool, args, { ...execution, callId }, observation);
+        if (fetches(tool)) return decisions.execute(tool, args, execution, callId, (gate, _authority, _writes, _track, report) => fetcher!.apply(args, toolSignal, execution, gate, report));
+        if (mcps(tool)) return decisions.execute(tool, args, execution, callId, (gate, _authority, _writes, _track, report) => mcp!.apply(tool.name, args, toolSignal, execution, gate, report));
         if (proposals?.owns(tool.name)) return proposals.apply(args);
         if (agentProposals?.owns(tool.name)) { decisions.ranAllowed(tool, args, execution, callId); return agentProposals.apply(tool.name, args, callId); }
-        decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
+        decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal,
+          reason => observe({ basis: 'workspace-read-guard', reason, role: 'workspace-path', operationClass: 'read' }));
       },
       // v30 steer: the engine takes a line only at its model-call boundary; taking is synchronous, so a line joins once or stays pending.
       steer: { pending: () => [...steer.pending], join: steerId => { const at = steer.pending.findIndex(line => line.steerId === steerId);
@@ -496,11 +512,13 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     const policyRecorded = await flushPolicy?.(); flushPolicy = null;
     const note = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), result.note].filter(Boolean).join(' ') : result.note;
     // The answer came as text events; the result repeats it only while the whole serialized result (JSON escaping included) fits the delivery.
-    return fitChatTurnResult(Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds, toolCalls: result.toolCalls,
+    const fitted = fitChatTurnResult(Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds, toolCalls: result.toolCalls,
       answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? answer : null, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: result.steer }),
     delivery.maxResultBytes);
+    return await flushRefusals?.() === 'refusal-audit-loss'
+      ? withRefusalAuditLoss(fitted, result.note, policyRecorded === false, language, delivery.maxResultBytes) : fitted;
   } finally {
-    /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();
+    /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); await flushRefusals?.(); connection.stop();
     if (registered) host.running.delete(key);
     scratch?.release();
     store?.close();

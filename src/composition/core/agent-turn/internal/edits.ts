@@ -1,3 +1,4 @@
+import type { LocalRefusal } from './refusal-audit.js';
 import { effectToolError } from './effect-error.js';
 import { agentToolResult } from '#engine/index.js';
 import { openConfiguredLedger } from '#composition/core/scoped-request/index.js';
@@ -22,9 +23,12 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
   const { area, context, scopeId, turnId } = input, descriptor = area.operation;
   const plans = new Map<string, WorkspaceEditPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
-  const plan = async (tool: string, args: Record<string, unknown>) => {
+  const plan = async (tool: string, args: Record<string, unknown>, observe?: (refusal: LocalRefusal) => void) => {
     const planned = await area.plan(tool, args);
     if (planned.ok) plans.set(key(tool, args), planned);
+    else if (['denied', 'outside-workspace', 'parent-path-denied', 'parent-path-outside-workspace', 'parent-is-link', 'is-link', 'hard-linked'].includes(planned.error))
+      observe?.({ basis: 'workspace-edit-guard', reason: planned.error, role: tool === 'scratch_write' ? 'session-scratch' : 'workspace-path',
+        operationClass: 'write', operation: descriptor.operation });
     return planned;
   };
   return {

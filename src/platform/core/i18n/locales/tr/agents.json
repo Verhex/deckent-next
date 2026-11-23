@@ -83,6 +83,8 @@
   "agent.standing.redesign-required": "yeniden tasarım gerekli",
   "agent.standing.retired": "emekli",
   "agent.policyTurn.auditFailed": "Turun politika denetim kaydı yazılamadı (policy-turn). Kararlar ve tamamlanmış etkiler değişmedi; hizmetin denetim deposunu deckent doctor ile inceleyin.",
+  "agent.refusalAudit.failed": "Bu turun erişim reddi denetim özeti yazılamadı.",
+  "agent.refusalAudit.bothFailed": "Bu turun politika denetim kaydı ve erişim reddi denetim özeti yazılamadı.",
   "agents.example.agent": "{\n  \"agentId\": \"fatura-denetci\",\n  \"name\": \"Fatura denetçisi\",\n  \"persona\": \"Her faturayı satın alma siparişiyle karşılaştırır ve onaydan önce her uyuşmazlığı listeler.\",\n  \"workClasses\": [\n    \"{workClass}\"\n  ],\n  \"skills\": [\n    {\n      \"skillId\": \"fatura-kontrol\"\n    }\n  ],\n  \"parentAgentId\": null\n}",
   "agents.example.workClasses": "workClasses: bu kurulumun WorkClass'larından bir ya da daha fazlası: {list}\nskills: burada tanımlı beceriler (deckent agents skills); revision isteğe bağlı (en son). parentAgentId: bir ajan kimliği ya da null.\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent agents define --input <dosya>",
   "agents.example.skill": "{\n  \"skillId\": \"fatura-kontrol\",\n  \"name\": \"Fatura kontrolü\",\n  \"text\": \"Tutarı, KDV'yi ve vade tarihini satın alma siparişiyle karşılaştır; her uyuşmazlığı alan adıyla listele.\"\n}\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent agents define-skill --input <dosya>",
