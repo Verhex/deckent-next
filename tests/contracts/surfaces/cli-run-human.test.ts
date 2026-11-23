@@ -137,6 +137,21 @@ it('TTY control: the picker offers only Runs whose state allows it; declined or 
   }
 });
 
+it('TTY cancel and close show a named cancelled Run without a card or write', async () => {
+  const root = await project();
+  for (const [action, locale, notice] of [
+    ['cancel', 'en', 'Run a1b2c3d4 is cancelled. No action was sent.'],
+    ['close', 'tr', 'a1b2c3d4 işinin durumu: iptal edildi. İşlem gönderilmedi.'],
+  ] as const) {
+    const s = store([view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } })]);
+    const printed: string[] = [], cards = scripted(['yes']);
+    await runControlFlow(action, s.context as never, { locale, root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: LONG });
+    expect.soft(cards.asked, action).toHaveLength(0);
+    expect.soft(s.calls, action).toEqual(['ids:s', 'inspect:a1b2c3']);
+    expect.soft(printed, action).toEqual([notice]);
+  }
+});
+
 it('TTY hold: the revision is read just before the card, the card names scope and Run, the command id comes from the system; a stale Run is read again and asked again', async () => {
   const root = await project();
   const s = store([view([{ taskBrief: { ...brief('Close the books'), title: 'Month-end close' } }])]);
@@ -164,7 +179,8 @@ it('TTY hold: the revision is read just before the card, the card names scope an
 it('TTY cancel and close: a yes sends one command with a system command id at the revision read before the card; close advances the revision', async () => {
   const root = await project();
   for (const action of ['cancel', 'close'] as const) {
-    const s = store([view()]), printed: string[] = [], cards = scripted(['yes']);
+    const target = action === 'close' ? view([{ phase: 'pending' }], { state: { kind: 'parked', reason: 'operator-hold', note: 'Release window', since: 1, deadline: 2 } }) : view();
+    const s = store([target]), printed: string[] = [], cards = scripted(['yes']);
     await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
     expect(cards.asked).toHaveLength(1);
     const writes = s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'));

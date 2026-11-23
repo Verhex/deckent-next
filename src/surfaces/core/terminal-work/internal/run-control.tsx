@@ -131,8 +131,8 @@ async function runAnswerFlow(panel: WorklinePanel, execution: LocalExecution, le
 }
 
 /**
- * `/runs` with control keys: the list is read fresh each time it opens; a key re-reads the chosen Run (its revision is what the card shows
- * and what the command carries) and opens the card; `y` sends the control, anything else keeps the Run. The list then reopens with the
+ * `/runs` with control keys: the list is read fresh each time it opens; a key re-reads the chosen Run and opens the card if it still offers
+ * the action. `y` sends the control at the revision shown, anything else keeps the Run. The list then reopens with the
  * result as its status, until Esc. Returns the transcript summary: every result, or the window's closed line.
  */
 export async function runRunsControl(panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
@@ -169,6 +169,10 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId); selection.current = chosen.runId;
     if (execution.signal.aborted) break;
     if (!fresh) { status = fillTemplate(words.gone, { run: shortId(chosen.runId) }); results.push(status); continue; }
+    if (!runControlActions(fresh).includes(action)) {
+      status = t('run.control.noActionInState', { run: shortId(fresh.runId), state: runStateText(fresh, jobs) }, jobs.locale);
+      results.push(status); continue;
+    }
     const answer = await panel.pick(execution, { kind: 'run-control', run: fresh, action }, ['allow', 'deny']);
     if (execution.signal.aborted) break;
     if (answer !== 'allow') status = fillTemplate(words.kept, { run: shortId(fresh.runId) });

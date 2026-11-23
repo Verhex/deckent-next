@@ -204,3 +204,18 @@ describe('SW-2 job windows', () => {
     await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
 });
+
+it('/runs shows the fresh cancelled state without a close card or control write', async () => {
+  const parked: RunView = { ...run, state: { kind: 'parked', reason: 'operator-hold', since: 1, deadline: 2 } };
+  const cancelled: RunView = { ...run, revision: 8, state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } };
+  const inspectRun = vi.fn(async () => cancelled), controlRun = vi.fn();
+  const view = await open('/runs', ports({ inspectRunObservation: async () => inspectRun.mock.calls.length ? cancelled : parked, inspectRun, controlRun }));
+  await until(() => view.stdout.frame.includes(EN.runControl!.keyClose), 'parked row offers close');
+  view.stdin.write('c');
+  const card = 'Close parked run 3f2a9c1e', notice = 'Run 3f2a9c1e is cancelled. No action was sent.';
+  await until(() => view.stdout.frame.includes(card) || view.stdout.frame.includes(notice), 'result of selecting close');
+  expect(inspectRun).toHaveBeenCalledExactlyOnceWith(runId);
+  expect(view.stdout.frame).not.toContain(card);
+  expect(view.stdout.frame).toContain(notice);
+  expect(controlRun).not.toHaveBeenCalled();
+});
