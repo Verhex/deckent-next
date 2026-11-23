@@ -1,4 +1,4 @@
-import { optionalField, DeckentError, ErrorRegistry, formatHumanError, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { optionalField, DeckentError, ErrorRegistry, EXIT_CODES, formatHumanError, emit, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, type SetupPhase, type SetupObservation, type SetupPlan, SetupStageRegistry } from '#engine/index.js';
 import { askCliCard, directoryPermissionCard, cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -57,7 +57,7 @@ export const planFor = (observed: Readonly<{ observation: SetupObservation; regi
  * composition/core/setup) calls each stage's existing owner; a refused stage stops the call with SETUP_STAGE_REFUSED naming it, and a build
  * without that port says so with SETUP_APPLY_UNAVAILABLE. A person on a real terminal gets the window instead.
  */
-export async function setupInitCommand(argv: readonly string[], context: SetupCommandContext): Promise<void> {
+export async function setupInitCommand(argv: readonly string[], context: SetupCommandContext): Promise<void | ExitCode> {
   let flags = parseSetupFlags(argv); const locale: Locale = commandLocale(context, flags.lang);
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, format = setupFormat(context, flags.json);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
@@ -100,7 +100,11 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     } finally { release(); stdin.pause(); }
     const outcome = controller.outcome();
     emit(renderSetupLines(outcome.plan, controller.locale(), { requested: false, results: outcome.results }, outcome), sinks);
-    return;
+    const finalCheck = outcome.plan.stages.find(stage => stage.id === 'core:final-check');
+    if (outcome.results.some(result => result.status === 'refused' || result.status === 'not-wired') || (finalCheck && finalCheck.state !== 'done')) {
+      return EXIT_CODES.error;
+    }
+    return EXIT_CODES.success;
   }
   let plan = planFor(observed, unattendedAnswers(observed.observation, flags, false, observed.registry), flags.phase);
   const results: SetupApplyResult[] = [], apply = context.applySetupStage ?? notWiredApply;

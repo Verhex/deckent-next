@@ -49,7 +49,7 @@ it.skipIf(process.platform !== 'linux')('ATTACH review F1 (verify-not-run outsid
     expect(result.answered.slice(0, 5)).toEqual(['> 1. Language', '> 3. Folder', '> 5. Who uses', 'No (n)', 'Apply now (y)']);
     expect(result.output, result.output).toContain(question);
     expect(result.answered.filter(prompt => prompt === question)).toHaveLength(1);
-    expect(result.code, result.output).toBe(0);
+    expect(result.code, result.output).toBe(1);
     expect((await lstat(project)).mode & 0o777).toBe(answer === 'yes' ? 0o755 : 0o775);
     if (answer === 'yes') {
       expect(result.output).toContain('Permissions: applied');

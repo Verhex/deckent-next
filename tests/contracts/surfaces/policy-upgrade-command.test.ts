@@ -112,11 +112,30 @@ it.each([
   expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--lang', locale], installed.ctx)).toBe(0);
   expect(installed.out.join('')).toContain(fresh); expect(installed.out.join('')).toContain('deckent policy status --scope scope');
   const missing = context({ ...PREVIEW, status: 'unavailable', revision: 'a-x+b', summary: null, reason: 'history-unavailable', conflicts: [] });
-  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--lang', locale], missing.ctx)).toBe(0);
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--lang', locale], missing.ctx)).toBe(1);
   expect(missing.out.join('')).toContain(refused); expect(missing.out.join('')).toContain('deckent policy status --scope scope');
   for (const out of [installed.out, missing.out]) expect(out.join('')).not.toMatch(/not a first-run policy|ilk kurulum policy'si değil/u);
 });
 
+it('owner 155: a stale apply fails with the same JSON result', async () => {
+  const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'scope'];
+  const conflict = { ...PREVIEW, status: 'conflict', reason: 'revision-changed', summary: null };
+  const calls: unknown[] = [], stale = context(conflict, calls);
+  const code = await main([...args, '--apply', '--expect', 'stale', '--json'], stale.ctx);
+  expect(calls).toEqual([['scope', { mode: 'apply', expect: 'stale', reason: expect.any(String) }]]);
+  expect(JSON.parse(stale.out.join(''))).toEqual(conflict);
+  expect(code).toBe(1);
+});
+
+it('owner 155: both preview modes succeed when policy upgrade is unavailable', async () => {
+  const result = { ...PREVIEW, status: 'unavailable', reason: 'not-first-run', summary: null };
+  const { out, ctx } = context(result);
+  for (const mode of [[], ['--preview'], ['--rollback', '--preview']]) {
+    expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', ...mode, '--json'], ctx)).toBe(0);
+    expect(JSON.parse(out.join(''))).toEqual(result);
+    out.length = 0;
+  }
+});
 
 it('3286 F4: rollback preview is an explicit read in either flag order, with full EN/TR records and unchanged JSON', async () => {
   const scopes = ['scope', 'team,west', 'team\u202eabc', 'team\u200babc', 'team\\u202eabc'];
@@ -165,7 +184,7 @@ it('binds a person decision to the reviewed mixed plan and leaves automation on 
       const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--expect', 'r1', '--lang', locale];
       const invoke = () => main(args, host as never);
       card.mockResolvedValue('not-now');
-      expect(await invoke()).toBe(0); expect(calls.splice(0)).toEqual(['preview']); expect(revision).toBe('r1');
+      expect(await invoke()).toBe(1); expect(calls.splice(0)).toEqual(['preview']); expect(revision).toBe('r1');
       const request = card.mock.lastCall![0], body = request.body!.join('\n');
       expect(request.initial).toBe(history === 'never' ? 'grant' : 'not-now');
       expect(request.title).toBe(locale === 'en' ? 'Apply these policy changes?' : 'Bu politika değişiklikleri uygulansın mı?');
@@ -175,7 +194,7 @@ it('binds a person decision to the reviewed mixed plan and leaves automation on 
       if (directory && history === 'never') writeFileSync(join(directory, `119-mixed-${locale}.json`), JSON.stringify(request, null, 2));
       const mixedReview = review;
       review = { ...review, rules: [...execution], summary: describePolicyChange(template, { schemaVersion: 1, changes: execution.map(grant => ({ kind: 'grant.add', grant })) })! };
-      expect(await invoke()).toBe(0); expect(calls.splice(0)).toEqual(['preview']);
+      expect(await invoke()).toBe(1); expect(calls.splice(0)).toEqual(['preview']);
       const fresh = card.mock.lastCall![0];
       expect(fresh.title).toBe(locale === 'en' ? 'Let AI carry out work?' : 'Yapay zekâya işleri yürütme izni verilsin mi?');
       expect(fresh.initial).toBe(request.initial);
@@ -184,9 +203,9 @@ it('binds a person decision to the reviewed mixed plan and leaves automation on 
       card.mockClear(); status = 'current';
       expect(await invoke()).toBe(0); expect(card).not.toHaveBeenCalled(); expect(revision).toBe('r1');
       status = 'preview'; revision = 'other'; calls.length = 0;
-      expect(await invoke()).toBe(0); expect(card).not.toHaveBeenCalled(); expect(calls.splice(0)).toEqual(['preview']);
+      expect(await invoke()).toBe(1); expect(card).not.toHaveBeenCalled(); expect(calls.splice(0)).toEqual(['preview']);
       revision = 'r1'; card.mockImplementationOnce(async () => { revision = 'other'; return 'grant'; });
-      expect(await invoke()).toBe(0); expect(revision).toBe('other'); expect(calls.splice(0)).toEqual(['preview', 'apply']);
+      expect(await invoke()).toBe(1); expect(revision).toBe('other'); expect(calls.splice(0)).toEqual(['preview', 'apply']);
       revision = 'r1'; card.mockResolvedValue('grant');
       expect(await invoke()).toBe(0); expect(revision).toBe('written'); expect(calls.splice(0)).toEqual(['preview', 'apply']);
       out.length = 0; revision = 'r1'; card.mockClear();
@@ -220,7 +239,7 @@ it('3349 partial apply shows only the added execution authority and the whole-pl
       expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--apply', '--lang', locale], {
         ...ctx, stdin: { isTTY: true }, stdout: { isTTY: true, write: (value: string) => out.push(value) },
         env: { ...ctx.env, ...personMarkersUnset(), TERM: 'xterm' },
-      } as never)).toBe(0);
+      } as never)).toBe(1);
       const request = card.mock.lastCall![0], body = request.body!.join('\n');
       const directory = process.env['DECKENT_I_S3_TRANSCRIPTS'];
       if (directory) writeFileSync(join(directory, `3349-partial-${locale}.json`), JSON.stringify(request, null, 2));

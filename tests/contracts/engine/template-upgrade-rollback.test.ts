@@ -799,7 +799,7 @@ it.skipIf(process.platform !== 'linux').each(['card', 'cardless batch'] as const
       upgradePolicyTemplate: (_root: string, _scope: string, input: { mode: 'preview' | 'apply'; reason: string; expect?: string },
         _options: unknown, reviewedRules?: readonly unknown[]) => app(input.mode === 'preview' ? 'old-service' : 'new-service', reviewedRules)
         .run({ ...input, principal: f.principal, scopeId }),
-    } as never)).toBe(0);
+    } as never)).toBe(1);
     expect(card).toHaveBeenCalledTimes(scenario === 'card' ? 1 : 0);
     expect(output.join('')).toContain('preview again');
     expect((await f.source.load()).revision).toBe(shown.revision);

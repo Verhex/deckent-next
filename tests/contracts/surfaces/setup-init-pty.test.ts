@@ -109,7 +109,7 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
       const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--lang', locale]), root],
         { env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
       const run = JSON.parse(stdout) as { status?: number | string; output: string; marks: number[]; timeout?: string };
-      expect(run.timeout, run.output?.slice(-3000)).toBeUndefined(); expect(run.status, run.output?.slice(-2000)).toBe(0);
+      expect(run.timeout, run.output?.slice(-3000)).toBeUndefined(); expect(run.status, run.output?.slice(-2000)).toBe(1);
       const screen = (mark: number) => terminalBuffers(run.output.slice(0, run.marks[mark]!), COLUMNS, ROWS).text;
       expect(screen(1)).toContain(copy.folder); expect(screen(1)).toContain(copy.yes);
       expect(screen(2)).toContain(copy.folder); expect(screen(2)).toContain(copy.hint); expect(screen(2)).toContain(copy.yes);
@@ -132,7 +132,7 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
       { env: { ...env, PATH: process.env['PATH'] ?? '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as { status?: number | string; output: string; marks: number[]; timeout?: string };
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
-    expect(run.status, run.output.slice(-2000)).toBe(0);
+    expect(run.status, run.output.slice(-2000)).toBe(1);
     expect(run.output).not.toContain('^[[B');
     // Cut at the last complete frame (synchronized-output end) before the mark: a mark can fall inside a frame being written.
     const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
@@ -159,11 +159,11 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       const home = await mkdtemp(join(tmpdir(), 'deckent-init-execution-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-execution-root-'));
       roots.push(home, root);
       const env = personEnv({ PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
-      const run = async (args: string[], steps: unknown[], size = [24, 60], argv = [process.execPath, cli, ...args]) => {
+      const run = async (args: string[], steps: unknown[], expectedStatus = 0, size = [24, 60], argv = [process.execPath, cli, ...args]) => {
         const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify(argv), root, JSON.stringify(size)],
           { env, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
         const result = JSON.parse(stdout) as { status: number; output: string; marks: number[]; snapshots: Record<string, string | null>[]; timeout?: string };
-        expect(result.timeout, result.output?.slice(-4000)).toBeUndefined(); expect(result.status, result.output?.slice(-4000)).toBe(0);
+        expect(result.timeout, result.output?.slice(-4000)).toBeUndefined(); expect(result.status, result.output?.slice(-4000)).toBe(expectedStatus);
         return result;
       };
       await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp', '--lang', locale, '--json'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000 });
@@ -223,7 +223,7 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       }
       const interruptible = `process.once('SIGUSR1', () => process.stdin.push(null)); const { main } = await import(${JSON.stringify(resolve('dist/composition/core/cli/internal/cli-main.js'))}); process.exitCode = await main(${JSON.stringify(governed)});`;
       for (const key of ['n', '\u001b', '\u0003', 'SIGNAL:10']) {
-        const cancelled = await run(governed, [[keys, key]], [24, 60], key === 'SIGNAL:10' ? [process.execPath, '--input-type=module', '-e', interruptible] : undefined);
+        const cancelled = await run(governed, [[keys, key]], 1, [24, 60], key === 'SIGNAL:10' ? [process.execPath, '--input-type=module', '-e', interruptible] : undefined);
         const frame = terminalBuffers(cancelled.output.slice(0, cancelled.marks[0]!), 60, 24).text;
         expect(frame).toContain(title); expect(frame.match(/[›>] 1\./gu)).toHaveLength(1);
         expect(cancelled.output).toContain(locale === 'en' ? 'Cancelled; nothing was written.' : 'İptal edildi; hiçbir şey yazılmadı.');
@@ -236,7 +236,7 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       // No input, buffered Return/repeat/burst/paste, and text+Enter must all leave this very same card open.
       const accepted = await run(['init', '--lang', locale], [[title, '\r\r\r\r', 0], [keys, 'RAW:\r\r'], ['', 'RAW:\u001b[200~grant\r\u001b[201~'],
         [typed, '\r'], [unchosen, '\u001b[A'], ['', '/policy'], [typed, '\r'], [unchosen, '\u001b[A'],
-        ['', '\u001b[6~'], ['', '\u001b[5~'], ['', '\u001b[F'], ['', '\u001b[H'], ['', 'RESIZE:[30,90]'], ['', '\r'], [profile, '\u001b']]);
+        ['', '\u001b[6~'], ['', '\u001b[5~'], ['', '\u001b[F'], ['', '\u001b[H'], ['', 'RESIZE:[30,90]'], ['', '\r'], [profile, '\u001b']], 1);
       const transcripts = process.env['DECKENT_I_S3_TRANSCRIPTS'];
       if (transcripts) await writeFile(join(transcripts, `119-execution-${locale}.json`), JSON.stringify(accepted));
       const first = terminalBuffers(accepted.output.slice(0, accepted.marks[1]!), 60, 24).text;
@@ -273,16 +273,16 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
         await walk(join(root, '.deckent')); return result;
       };
       const withdrawn = locale === 'en' ? 'This permission was withdrawn on this installation earlier.' : 'Bu izin bu kurulumda daha önce geri alınmıştı.';
-      const skipped = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']]);
+      const skipped = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']], 1);
       const screen = terminalBuffers(skipped.output.slice(0, skipped.marks[0]!), 60, 24).text;
       expect(screen).toContain(withdrawn.slice(0, 35)); expect(screen).toMatch(/[›>] 2\./u); expect(await snapshot()).toEqual(skipped.snapshots[0]);
       // Esc, Ctrl+C and the raw terminal's Ctrl+D cancel without touching any retained installation state.
       for (const key of ['\u001b', '\u0003', '\u0004']) {
-        const cancelled = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', key], [profile, '\u001b']]);
+        const cancelled = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', key], [profile, '\u001b']], 1);
         expect(await snapshot()).toEqual(cancelled.snapshots[0]);
       }
       await rm(join(root, '.deckent', 'audit', 'authority-revisions'), { recursive: true, force: true });
-      const unknown = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']]);
+      const unknown = await run(['init', '--lang', locale], [[title, 'SNAPSHOT'], ['', '\r'], [profile, '\u001b']], 1);
       const unknownScreen = terminalBuffers(unknown.output.slice(0, unknown.marks[0]!), 60, 24).text;
       expect(unknownScreen).toMatch(/[›>] 2\./u);
       const unknownWords = unknownScreen.split('\n').map(line => line.replace(/^│\s*|\s*│$/gu, '').trim()).join(' ').replace(/\s+/gu, ' ');
@@ -299,10 +299,10 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
         host.initialize();
         await setupInitCommand(['init', '--lang', ${JSON.stringify(locale)}], host);
       `;
-      const eof = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:10']], [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
+      const eof = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:10']], 0, [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
       expect(eof.output).toContain(locale === 'en' ? 'Setup interrupted; the first policy was kept.' : 'Kurulum kesildi; ilk politika korundu.');
       expect(await snapshot()).toEqual(eof.snapshots[0]);
-      const aborted = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:12'], [profile, '\u001b']], [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
+      const aborted = await run([], [[title, 'SNAPSHOT'], ['', 'SIGNAL:12'], [profile, '\u001b']], 0, [24, 60], [process.execPath, '--input-type=module', '-e', interrupted]);
       expect(await snapshot()).toEqual(aborted.snapshots[0]);
     }
   }, 240_000);
@@ -317,7 +317,7 @@ it.skipIf(process.platform !== 'linux')('walk 119: the inline wizard yields its 
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init', '--here', '--lang', 'en']), root, '[24,60]'],
     { env, timeout: 100_000, maxBuffer: 8 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '{}') }));
   const result = JSON.parse(stdout);
-  expect(result.timeout, result.output?.slice(-2500)).toBeUndefined(); expect(result.status).toBe(0);
+  expect(result.timeout, result.output?.slice(-2500)).toBeUndefined(); expect(result.status).toBe(1);
   const frame = terminalBuffers(result.output.slice(0, result.marks[5]), 60, 24).text;
   expect(frame).toContain('Grant permission and continue'); expect(frame.match(/[›>] [12]\./gu)).toHaveLength(1);
   expect(frame).not.toContain('Apply now');
@@ -335,11 +335,11 @@ it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long aff
     await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp', '--lang', locale, '--json'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000 });
     const policyPath = join(root, '.deckent/policy.json'), baseline = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { scopes: 'all' | string[] }[] };
     await writeFile(policyPath, JSON.stringify({ ...baseline, revision: 'a-long-baseline', grants: baseline.grants.map(rule => rule.scopes === 'all' ? rule : { ...rule, scopes }) }));
-    const drive = async (args: string[], steps: unknown[]) => {
+    const drive = async (args: string[], steps: unknown[], expectedStatus = 0) => {
       const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, ...args]), root],
         { env, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
       const result = JSON.parse(stdout) as { status: number; output: string; timeout?: string; snapshots: Record<string, string | null>[] };
-      expect(result.timeout, result.output).toBeUndefined(); expect(result.status, result.output).toBe(0);
+      expect(result.timeout, result.output).toBeUndefined(); expect(result.status, result.output).toBe(expectedStatus);
       return result;
     };
     expect((await drive(['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--apply', '--lang', locale], [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']])).output)
@@ -357,7 +357,7 @@ it.skipIf(process.platform !== 'linux')('3280 F4: real CLI prints every long aff
     const title = locale === 'en' ? 'Withdraw managed permission?' : 'Yönetilen izin kaldırılsın mı?';
     const args = ['policy', 'upgrade', '--template', 'current', '--scope', 'erp', '--rollback', '--lang', locale];
     // The snapshot step already consumed the armed hint; its next frame need not repeat that hint.
-    const declined = await drive(args, [[title, 'SNAPSHOT'], ['', '\r']]);
+    const declined = await drive(args, [[title, 'SNAPSHOT'], ['', '\r']], 1);
     const card = declined.output.indexOf(title);
     expect(card).toBeGreaterThan(0);
     for (const scope of scopes) {
