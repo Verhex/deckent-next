@@ -16,15 +16,24 @@ export async function openWorkerEventSink(directory: string, openFile: EventFile
   const handle = await openFile(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
   const events: WorkerEvent[] = [];
   let writes: Promise<void> = Promise.resolve(), healthy = true;
+  let closing: Promise<void> | undefined;
   return {
     accept(batch: readonly WorkerEvent[], receivedAt = clock.sample().wallMs) {
+      if (closing) return;
       events.push(...batch);
       const bytes = Buffer.from(batch.map(event => JSON.stringify({ receivedAt, event })).join('\n') + '\n');
       writes = writes.then(async () => { if (healthy) healthy = await writeAll(handle, bytes).catch(() => false); });
     },
     /** The received events and whether the live `worker.events` projection holds all of them (any write or close failure marks it partial). */
-    async close(): Promise<{ readonly events: readonly WorkerEvent[]; readonly projectionComplete: boolean }> {
-      await writes; await handle.close().catch(() => { healthy = false; });
+    async close(remainingMs?: number): Promise<{ readonly events: readonly WorkerEvent[]; readonly projectionComplete: boolean }> {
+      closing ??= writes.then(() => handle.close()).catch(() => { healthy = false; });
+      if (remainingMs === undefined) await closing;
+      else {
+        let timer: ReturnType<typeof setTimeout>;
+        await Promise.race([closing, new Promise<void>(resolve => {
+          timer = setTimeout(() => { healthy = false; resolve(); }, remainingMs);
+        })]).finally(() => clearTimeout(timer));
+      }
       return Object.freeze({ events: Object.freeze([...events]), projectionComplete: healthy });
     },
   };
@@ -45,33 +54,41 @@ async function writeAll(handle: EventFile, bytes: Buffer) {
   return offset === bytes.length;
 }
 
-/** Covers the schema's largest host verdict (34 model entries, admitted model, JSON escaping) and two loss markers.
+/** Covers the schema's largest host verdict (34 model entries, admitted model, JSON escaping) two loss markers and one protected observation.
  * The config check adds this reserve to the gateway's registry event budget; it is an invariant, not mutable policy. */
 export const WORKER_EVENT_SEAL_RESERVE_BYTES = 32768;
 
 /** Retain a prefix of received events only after reserving the host verdict and all loss markers. Host evidence is never truncated.
  * The byte-cap marker precedes the host verdict when a received suffix was dropped; sequences remain strictly increasing. */
-export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | SealedWorkerModelVerification | null, unreported: number, maxBytes: number): string[] {
+export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | SealedWorkerModelVerification | null, unreported: number, maxBytes: number,
+  observation?: Extract<WorkerEvent, { kind: 'cli.observation' }>): string[] {
   const serialize = (event: unknown) => JSON.stringify(event) + '\n';
   const suffix = (sequence: number, atMs: number, dropped: number): string[] => {
     const lines: string[] = [];
     if (dropped > 0) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'dropped', reason: 'byte-cap', count: dropped }));
     if (verification) lines.push(serialize({ schemaVersion: modelVerificationSchemaVersion(verification), sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
-    if (unreported > 0) lines.push(serialize({ schemaVersion: 1, sequence: sequence + 1, atMs, kind: 'dropped', reason: 'event-cap', count: unreported }));
+    if (unreported > 0) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'dropped', reason: 'event-cap', count: unreported }));
+    if (observation) lines.push(serialize({ ...observation, sequence: sequence + 1 }));
     return lines;
   };
-  const received = events.map(serialize), last = events.at(-1);
-  const complete = [...received, ...suffix(last?.sequence ?? 0, last?.atMs ?? 0, 0)];
-  if (Buffer.byteLength(complete.join('')) <= maxBytes) return complete;
-  // The original last sequence/time bound every retained prefix; dropped count is bounded by the entire received list.
-  const reserve = Buffer.byteLength(suffix(last?.sequence ?? 0, last?.atMs ?? 0, events.length).join(''));
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < reserve) throw new RangeError('WORKER_EVENT_SEAL_BUDGET');
+  const last = events.at(-1), lastTime = last?.atMs ?? 0;
+  const fixedRows = Number(!!verification) + Number(unreported > 0) + Number(!!observation);
+  const safeMax = Number.MAX_SAFE_INTEGER;
+  if (!Number.isSafeInteger(maxBytes)) throw new RangeError('WORKER_EVENT_SEAL_BUDGET');
+  if ((last?.sequence ?? 0) <= safeMax - fixedRows) {
+    const complete = [...events.map(serialize), ...suffix(last?.sequence ?? 0, lastTime, 0)];
+    if (Buffer.byteLength(complete.join('')) <= maxBytes) return complete;
+  }
+  // Reserve one extra sequence for the loss marker whenever the prefix is shortened.
+  const tailLimit = safeMax - fixedRows - 1;
+  const reserve = Buffer.byteLength(suffix(Math.min(last?.sequence ?? 0, tailLimit), lastTime, events.length).join(''));
+  if (maxBytes < reserve) throw new RangeError('WORKER_EVENT_SEAL_BUDGET');
   const lines: string[] = []; let bytes = 0;
-  for (const line of received) {
-    const size = Buffer.byteLength(line);
-    if (bytes + size > maxBytes - reserve) break;
+  for (const event of events) {
+    const line = serialize(event), size = Buffer.byteLength(line);
+    if (event.sequence > tailLimit || bytes + size > maxBytes - reserve) break;
     lines.push(line); bytes += size;
   }
   const tail = events[lines.length - 1];
-  return [...lines, ...suffix(tail?.sequence ?? 0, last?.atMs ?? 0, events.length - lines.length)];
+  return [...lines, ...suffix(tail?.sequence ?? 0, lastTime, events.length - lines.length)];
 }

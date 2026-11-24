@@ -121,6 +121,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
       let worker: Extract<Awaited<ReturnType<typeof prepareNativeCliWorker>>, { state: 'ready' }> | undefined;
       let nativeEvents: ReturnType<typeof createNativeWorkerEvents> | undefined;
+      let releaseNative = false;
       function prepareNativeWorkerBackend() {
         return {
           async prepare() {
@@ -157,7 +158,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             await preparation.enter('dispatch');
             const prepared = await prepareNativeCliWorker({
               profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
-              onEvents: batch => nativeEvents!.accept(batch),
+              onEvents: batch => nativeEvents!.accept(batch), holdEventSeal: true,
               ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), language, knownSecrets: getConfigKnownSecrets(config),
               toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
               fence: () => nativeCliWorkerFence(store, identity)
@@ -234,15 +235,24 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           outcome = { ...outcome, waiting: held.execution.waiting };
         }
       }
-      if (result.kind === 'terminal' && worker) await worker.supervisor.release(request);
+      releaseNative = result.kind === 'terminal';
       } finally {
         await connection?.close(); await relay?.close();
+        const protectedObservation = connection?.protectedObservation() ?? nativeEvents?.protectedObservation();
+        const required = !!protectedObservation || worker?.supervisor.offeredObservation();
+        const deadline = required ? performance.now() + profile.options.controlTimeoutMs : undefined;
+        const closedSink = await events?.close(required ? profile.options.controlTimeoutMs : undefined);
+        // The Attempt's protected copy survives an absent or partial live projection.
+        sealing = await sealAttemptWorkerEvents(identity, artifacts, store, { events: closedSink?.events ?? [],
+          observation: protectedObservation, ...(deadline === undefined ? {} : { deadline }), unconfirmedObservation: !!required && !protectedObservation,
+          verification: connection?.modelVerification() ?? nativeEvents?.modelVerification() ?? null,
+          unreported: connection?.statistics().eventsUnreported ?? nativeEvents?.statistics().eventsUnreported ?? 0,
+          projectionComplete: closedSink?.projectionComplete ?? (protectedObservation ? false : undefined), maxBytes: config.artifacts.maxBytes });
+        if (sealing.status !== 'failed') {
+          worker?.supervisor.confirmEventSeal();
+          if (releaseNative) await worker?.supervisor.release(request);
+        }
         await worker?.supervisor.close();
-        // Seal the event log once the gateway is closed; a sealing failure never changes the execution outcome and is returned typed.
-        const closedSink = await events?.close();
-        // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
-        sealing = await sealAttemptWorkerEvents(identity, artifacts, store, { events: closedSink?.events ?? [], verification: connection?.modelVerification() ?? nativeEvents?.modelVerification() ?? null,
-          unreported: connection?.statistics().eventsUnreported ?? nativeEvents?.statistics().eventsUnreported ?? 0, projectionComplete: closedSink?.projectionComplete, maxBytes: config.artifacts.maxBytes });
       }
       // Only a sealing failure is reported: the replay of a settled execution (above) keeps the same shape as a successful first call.
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, ...outcome, ...(sealing.status === 'failed' ? { eventLog: sealing } : {}) }) });

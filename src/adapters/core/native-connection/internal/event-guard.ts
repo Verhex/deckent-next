@@ -1,4 +1,4 @@
-import type { WorkerEvent } from '#domain/index.js';
+import { workerEventSchema, type WorkerEvent } from '#domain/index.js';
 import { redactBounded, type KnownSecretSnapshot } from '#platform/index.js';
 
 /**
@@ -28,4 +28,13 @@ export function scrubWorkerEvent(event: WorkerEvent, known: KnownSecretSnapshot)
     case 'unmapped': return { ...event, nativeType: red(event.nativeType, 64) };
     default: return event;
   }
+}
+
+
+export function protectedWorkerObservation(event: Extract<WorkerEvent, { kind: 'cli.observation' }>, known: KnownSecretSnapshot) {
+  const plugins = event.observation.builtinPlugins;
+  const scrubbed = scrubWorkerEvent(plugins ? { ...event, observation: { ...event.observation,
+    builtinPlugins: { names: [], omitted: plugins.omitted + plugins.names.length } } } : event, known);
+  const parsed = workerEventSchema.safeParse(scrubbed);
+  return parsed.success && parsed.data.kind === 'cli.observation' ? parsed.data : undefined;
 }

@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, nativeLoginUseAllowed, type NativeSubscription } from './credential.js';
-import { scrubWorkerEvent } from './event-guard.js';
+import { protectedWorkerObservation, scrubWorkerEvent } from './event-guard.js';
 import { EMPTY_KNOWN_SECRETS, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit, knownSecretValues } from '#platform/index.js';
-import { secretValues, type QuotaPolicy } from './worker.js';
+import { secretValues, WORKER_OBSERVATION_BYTES, WORKER_OBSERVATION_HELD, type QuotaPolicy } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { privateSocketDirectory, tunnelNativeConnect } from './egress.js';
 import { createNativeRelay, type NativeRelayUpstream } from './relay.js';
@@ -22,7 +22,9 @@ export { isPublicNativeAddress } from './egress.js';
 type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 /** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
-  onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }>; /** D4: the person's report language (ISO 639-1). */ language?: string;
+  onEvents?: WorkerEventSink;
+  /** Isolated experiment. Installed custody needs a trusted positive/negative terminal announcement before enabling this slot. */
+  retainObservation?: boolean; dependencyContext?: Readonly<{ text: string; sha256: string }>; /** D4: the person's report language (ISO 639-1). */ language?: string;
   /** Test seam for a `relayed` CLI's provider origin (default: fresh TLS to the registry origin, public addresses only). */ relayUpstream?: NativeRelayUpstream;
   /** The Run's admission principal; a `relayed` login serves only its owner (owner 2026-11-08). */ principal?: Readonly<{ issuer: string; subject: string }> | null }) {
   if (input.dependencyContext && (Buffer.byteLength(input.dependencyContext.text) > workerReportLimits.promptBytes
@@ -51,6 +53,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   let relayCredential = relaySpec && typeof tokens?.access_token === 'string' ? { accessToken: tokens.access_token, accountId: typeof tokens.account_id === 'string' ? tokens.account_id : null } : undefined;
   if (relaySpec && !relayCredential) throw new NativeConnectionError('NATIVE_CREDENTIAL_UNAVAILABLE');
   let closed = false; let transferred = 0; let timer: ReturnType<typeof setTimeout>;
+  let closing: Promise<void> | undefined;
   const sockets = new Set<Socket>();
   const statistics = { connected: 0, rejected: 0, bootstrapReads: 0, bytes: 0, events: 0, eventBytes: 0, eventsDropped: 0, eventsUnreported: 0 };
   const relayStatistics = { relayed: 0, refused: 0 };
@@ -58,35 +61,54 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   const relay = relaySpec ? createNativeRelay({ spec: relaySpec, credential: () => closed ? undefined : relayCredential, capability: () => closed ? undefined : relayCapability,
     model: binding.model?.modelId ?? null, count, statistics: relayStatistics, ...(input.relayUpstream ? { upstream: input.relayUpstream } : {}) }) : undefined;
   let secrets: string[] = [...secretValues(projected), capability], known = knownSecretValues(secrets);
-  let lastSequence = 0;
+  let lastSequence = 0, lastWorkerSequence = 0, sourceSeen = false;
+  let held: { digest: string; event: NonNullable<ReturnType<typeof protectedWorkerObservation>> } | undefined;
   const reported: { startSeen: boolean; started: string | null; used: readonly string[] | null; ended: boolean } = { startSeen: false, started: null, used: null, ended: false };
   const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
-    if (statistics.events >= limits.maxEvents - 1 || statistics.eventBytes >= limits.maxEventBytes - 256) {
-      statistics.rejected++; statistics.eventsUnreported++; response.writeHead(429).end(); request.resume(); return;
-    }
+    const refuseFull = () => { statistics.rejected++; statistics.eventsUnreported++; response.writeHead(429).end(); };
     const declared = Number(request.headers['content-length']);
+    const canOffer = input.retainObservation === true && declared > 0 && declared <= WORKER_OBSERVATION_BYTES;
+    let saturated = false;
+    if (statistics.events >= limits.maxEvents - 1 || statistics.eventBytes >= limits.maxEventBytes - 256) {
+      if (!canOffer) { refuseFull(); request.resume(); return; }
+      saturated = true;
+    }
     if (!Number.isSafeInteger(declared) || declared <= 0 || declared > limits.eventBatchBytes) { statistics.rejected++; response.writeHead(413).end(); request.resume(); return; }
     let body = ''; let received = 0;
     request.setEncoding('utf8');
-    request.on('data', (part: string) => { received += Buffer.byteLength(part); if (received > limits.eventBatchBytes) request.destroy(); else body += part; });
+    request.on('data', (part: string) => { received += Buffer.byteLength(part); if (received > limits.eventBatchBytes || canOffer && received > declared) request.destroy(); else body += part; });
     request.on('end', () => {
+      if (closed) { response.writeHead(403).end(); return; }
       const packet = body.split('\n').filter(Boolean).map(line => { try { return JSON.parse(line) as unknown; } catch { return null; } });
       if (!inputWithinValidationLimit(packet, INPUT_VALIDATION_LIMITS.worker)) { statistics.rejected++; response.writeHead(413).end(); return; }
+      const candidate = canOffer && received === declared && packet.length === 1 ? workerEventSchema.safeParse(packet[0]) : undefined;
+      if (candidate?.success && candidate.data.kind === 'cli.observation') {
+        const digest = createHash('sha256').update(body).digest('hex');
+        if (held) { response.writeHead(digest === held.digest ? WORKER_OBSERVATION_HELD : 409).end(); return; }
+        const event = sourceSeen && !reported.ended && candidate.data.sequence > lastWorkerSequence
+          ? protectedWorkerObservation(candidate.data, known) : undefined;
+        if (!event || Buffer.byteLength(JSON.stringify(event) + '\n') > WORKER_OBSERVATION_BYTES) {
+          statistics.rejected++; response.writeHead(422).end(); return;
+        }
+        held = { digest, event }; lastWorkerSequence = event.sequence; lastSequence = Math.max(lastSequence, event.sequence);
+        response.writeHead(WORKER_OBSERVATION_HELD).end(); return;
+      }
+      if (saturated) { refuseFull(); return; }
       const accepted: WorkerEvent[] = []; let dropped = 0;
       for (const value of packet) {
         const parsed = workerEventSchema.safeParse(value);
         const event = parsed?.success ? scrubWorkerEvent(parsed.data, known) : null;
         const bytes = event ? Buffer.byteLength(JSON.stringify(event) + '\n') : 0;
         if (!parsed?.success || parsed.data.kind === 'cli.observation' || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
-        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
-        if (parsed.data.kind === 'session.started' && !reported.startSeen) { reported.startSeen = true; reported.started = parsed.data.model; }
+        lastWorkerSequence = lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
+        if (parsed.data.kind === 'session.started' && !reported.startSeen) { reported.startSeen = true; reported.started = parsed.data.model; sourceSeen = parsed.data.provider === binding.provider; }
         else if (parsed.data.kind === 'session.ended') { reported.ended = true; reported.used = parsed.data.models ?? null; }
       }
       statistics.eventsDropped += dropped;
       if (dropped) {
         const marker: WorkerEvent = { schemaVersion: 1, sequence: lastSequence + 1, atMs: accepted.at(-1)?.atMs ?? 0, kind: 'dropped', reason: 'invalid', count: dropped };
         const markerBytes = Buffer.byteLength(JSON.stringify(marker) + '\n');
-        if (statistics.events < limits.maxEvents - 1 && statistics.eventBytes + markerBytes <= limits.maxEventBytes - 256) {
+        if (Number.isSafeInteger(marker.sequence) && statistics.events < limits.maxEvents - 1 && statistics.eventBytes + markerBytes <= limits.maxEventBytes - 256) {
           lastSequence = marker.sequence; statistics.events++; statistics.eventBytes += markerBytes; accepted.push(marker);
         } else statistics.eventsUnreported += dropped;
       }
@@ -124,18 +146,19 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   server.on('connect', (request, client, head) => { if (relaySpec) { statistics.rejected++; client.destroy(); return; } tunnelNativeConnect(request, client as Socket, head, { destinations: spec.destinations, closed: () => closed, sockets,
     count,
     connected: () => { statistics.connected++; }, rejected: () => { statistics.rejected++; } }); });
-  const close = async () => {
-    if (closed) return; closed = true; credential = undefined; relayCredential = undefined; relayCapability = undefined; secrets = []; known = EMPTY_KNOWN_SECRETS; clearTimeout(timer);
+  const close = () => closing ??= (async () => {
+    closed = true; credential = undefined; relayCredential = undefined; relayCapability = undefined; secrets = []; known = EMPTY_KNOWN_SECRETS; clearTimeout(timer);
     for (const socket of sockets) socket.destroy();
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
-  };
+  })();
   try {
     await writeFile(capabilityPath, capability, { mode: 0o600, flag: 'wx' });
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
     await chmod(socketPath, 0o600);
     timer = setTimeout(() => { void close().catch(() => undefined); }, input.deadlineMs); timer.unref();
     return Object.freeze({ descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, capabilityPath, bootstrapPath, bootstrapSha256, provider: binding.provider }),
+      protectedObservation: () => held?.event,
       statistics: () => Object.freeze({ ...statistics, ...(relay ? { relay: Object.freeze({ ...relayStatistics }) } : {}), closed }), close,
       /** Host verdict over the accepted worker events against the admitted model (null until the session ended). */
       modelVerification: () => reported.ended ? Object.freeze({ ...verifyWorkerModels({ evidenceCapability: capabilities.modelUsageEvidence, admitted: binding.model ?? null,

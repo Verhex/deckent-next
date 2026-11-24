@@ -796,23 +796,113 @@ export function flushUnmapped(state: NormalizerState, now = Date.now()): BridgeE
   state.unmapped.clear();
   return events;
 }
-/** Best-effort, bounded delivery of event batches to the attempt gateway. Observation never changes execution. */
+// The largest count-only observation row, including its NDJSON delimiter.
+export const WORKER_OBSERVATION_BYTES = 727;
+export const WORKER_OBSERVATION_HELD = 201;
+
+const hasOnlyFields = (value: Record<string, unknown>, fields: readonly string[]) =>
+  Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field));
+
+// The mounted sender checks the already-normalized row without a host package dependency.
+function protectedObservationBody(event: BridgeEvent): string | undefined {
+  if (!hasOnlyFields(event, ['schemaVersion', 'sequence', 'atMs', 'kind', 'observation'])
+    || event.schemaVersion !== 1 || typeof event.sequence !== 'number' || !Number.isSafeInteger(event.sequence) || event.sequence < 1
+    || typeof event.atMs !== 'number' || !Number.isSafeInteger(event.atMs) || event.atMs < 0) return;
+  const observation = record(event.observation);
+  if (!observation || !hasOnlyFields(observation, ['schemaVersion', 'cliVersion', 'builtinPlugins', 'paidExtraUsage'])
+    || observation.schemaVersion !== 1) return;
+  if (observation.cliVersion !== null && (typeof observation.cliVersion !== 'string'
+    || !observation.cliVersion.length || observation.cliVersion.length > 64)) return;
+  const plugins = record(observation.builtinPlugins), paid = record(observation.paidExtraUsage);
+  if (observation.builtinPlugins !== null && !plugins || observation.paidExtraUsage !== null && !paid || !plugins && !paid) return;
+  if (paid && (!hasOnlyFields(paid, ['kind', 'status', 'window', 'resetsAtMs']) || typeof paid.kind !== 'string'
+    || !['allowed', 'overage', 'quota', 'credits-required', 'unknown'].includes(paid.kind)
+    || typeof paid.status !== 'string' || !/^(?:\?|[A-Za-z0-9_.:-]{1,16})$/u.test(paid.status)
+    || typeof paid.window !== 'string' || !/^(?:\?|[A-Za-z0-9_.:-]{1,24})$/u.test(paid.window)
+    || paid.resetsAtMs !== null && (typeof paid.resetsAtMs !== 'number' || !Number.isSafeInteger(paid.resetsAtMs) || paid.resetsAtMs < 0))) return;
+  let countOnly = null;
+  if (plugins) {
+    const names = plugins.names, omitted = plugins.omitted;
+    if (!hasOnlyFields(plugins, ['names', 'omitted']) || !Array.isArray(names) || names.length > 32) return;
+    if (new Set(names).size !== names.length || names.some(name => typeof name !== 'string' || !name.length || name.length > 256
+      || ![...name].every(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127))) return;
+    if (typeof omitted !== 'number' || !Number.isSafeInteger(omitted) || omitted < 0 || omitted > Number.MAX_SAFE_INTEGER - names.length
+      || omitted + names.length < 1) return;
+    countOnly = { names: [], omitted: omitted + names.length };
+  }
+  const body = JSON.stringify({ ...event, observation: { ...observation, builtinPlugins: countOnly } }) + '\n';
+  return Buffer.byteLength(body) <= WORKER_OBSERVATION_BYTES ? body : undefined;
+}
+
+/** One protected offer shares the existing request and drain order with ordinary events. */
 function eventChannel(socketPath: string, capability: string, maxQueued = 4000, batch = 64) {
-  const queue: BridgeEvent[] = []; let dropped = 0, sending: Promise<void> = Promise.resolve();
-  const post = (events: BridgeEvent[]) => new Promise<void>(resolve => {
-    const body = events.map(event => JSON.stringify(event)).join('\n') + '\n';
-    const request = httpRequest({ socketPath, path: '/events', method: 'POST', timeout: 5000,
-      headers: { authorization: capability, 'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); response.on('error', () => resolve()); });
-    request.on('error', () => resolve()); request.on('timeout', () => { request.destroy(); resolve(); }); request.end(body);
+  const queue: BridgeEvent[] = [];
+  let dropped = 0, sending: Promise<void> | undefined, closed = false;
+  let pending: { body: string; sequence: number } | undefined;
+  let disposition: 'none' | 'held' | 'unconfirmed' = 'none';
+  let closeStarted = Infinity;
+  const post = (body: string, started = performance.now()) => new Promise<number | undefined | 'drained'>(resolve => {
+    const request = { socketPath, path: '/events', method: 'POST', timeout: 5000,
+      headers: { authorization: capability, 'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(body) } };
+    const now = performance.now(), timeLeft = Math.floor(closeStarted + request.timeout - now);
+    if (timeLeft <= 0) { resolve('drained'); return; }
+    const timeout = Math.min(timeLeft, Math.floor(started + request.timeout - now));
+    if (timeout <= 0) { resolve(undefined); return; }
+    const settle = (status?: number) => { clearTimeout(timer); resolve(status); };
+    const transport = httpRequest({ ...request, timeout }, response => {
+      response.on('end', () => settle(response.statusCode));
+      response.on('error', () => settle());
+      response.on('close', () => settle());
+      response.resume();
+    });
+    const abort = () => { transport.destroy(); settle(); };
+    const timer = setTimeout(abort, timeout);
+    transport.on('error', () => settle()); transport.on('close', () => settle()); transport.on('timeout', abort); transport.end(body);
   });
-  const flush = () => { sending = sending.then(async () => { while (queue.length) { const next = queue.splice(0, batch); await post(next); } }); return sending; };
+  const flush = () => sending ??= Promise.resolve().then(async () => {
+    while (queue.length || pending) {
+      let status: Awaited<ReturnType<typeof post>>;
+      if (pending && (!queue.length || Number(queue[0]!.sequence) >= pending.sequence)) {
+        const { body } = pending, started = performance.now();
+        status = await post(body, started);
+        if (status === undefined) status = await post(body, started);
+        if (status === WORKER_OBSERVATION_HELD) disposition = 'held';
+        pending = undefined;
+      } else {
+        let count = Math.min(queue.length, batch);
+        if (pending) {
+          const nextSequence = pending.sequence;
+          const after = queue.slice(0, count).findIndex(event => Number(event.sequence) >= nextSequence);
+          if (after > 0) count = after;
+        }
+        status = await post(queue.splice(0, count).map(event => JSON.stringify(event)).join('\n') + '\n');
+      }
+      if (status === 'drained') { queue.length = 0; pending = undefined; return; }
+    }
+  }).finally(() => { sending = undefined; });
   const timer = setInterval(() => { void flush(); }, 500); timer.unref();
   return {
-    push(events: BridgeEvent[]) { for (const event of events) { if (queue.length >= maxQueued) dropped++; else queue.push(event); } if (queue.length >= batch) void flush(); },
+    push(events: BridgeEvent[]) {
+      if (closed) return;
+      for (const event of events) {
+        if (event.kind === 'cli.observation') {
+          if (disposition !== 'none') continue;
+          const body = protectedObservationBody(event);
+          if (!body) continue;
+          pending = { body, sequence: Number(event.sequence) }; disposition = 'unconfirmed';
+        } else if (queue.length >= maxQueued) dropped++;
+        else queue.push(event);
+      }
+      if (queue.length >= batch || pending) void flush();
+    },
     async close(state: NormalizerState) {
-      clearInterval(timer);
-      if (dropped) queue.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), kind: 'dropped', reason: 'event-cap', count: dropped });
-      await flush();
+      if (!closed) {
+        closed = true; closeStarted = performance.now(); clearInterval(timer);
+        if (dropped) queue.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), kind: 'dropped', reason: 'event-cap', count: dropped });
+      }
+      // A push can land after the drain's last await and before its promise clears.
+      do { await flush(); } while (queue.length || pending);
+      return disposition;
     },
   };
 }
