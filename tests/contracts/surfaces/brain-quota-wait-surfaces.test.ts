@@ -22,7 +22,7 @@ it('the active work strip names the quota wait and its local reset time (EN/TR f
   for (const locale of ['en', 'tr'] as const) {
     const labels = workSurfaceLabels(locale);
     const [item] = activeWorkItems({ labels: labels.activeWork!, jobs: labels.jobs!, duration: labels.workerLine, nowMs: 100_000, runs: [],
-      active: { title: 'order', phase: 'quota-wait', sinceMs: 40_000, untilText: clockText(untilMs) } });
+      active: { commandId: 'quota-request', title: 'order', phase: 'quota-wait', sinceMs: 40_000, untilText: clockText(untilMs) } });
     expect(item!.state).toBe(t('brainwait.activeWork', { time: clockText(untilMs) }, locale));
     expect(item!.role).toBe('warning');
   }

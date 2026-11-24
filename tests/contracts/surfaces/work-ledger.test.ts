@@ -57,5 +57,6 @@ describe('work ledger', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]!.kind).toBe('worker');
     expect(entries[0]!.taskId).toBe('task-1');
+    expect(entries[0]!.sourceId).toBe('src');
   });
 });

@@ -61,6 +61,8 @@ export type WorkLedgerWorkerEntry = Readonly<{
   readonly process: string;
   readonly provider: string;
   readonly authority: string;
+  /** Source identity for selecting an observation without an Attempt. */
+  readonly sourceId?: string;
   readonly observedAtMs?: number;
   /** 1-based position in the observation report; `/transcript <n>` resolves against the same numbering. */
   readonly ordinal?: number;
@@ -117,7 +119,7 @@ function workerLive(files: WorkerSidecars | null): WorkerLiveActivity | null {
 }
 
 function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId: string,
-  context: { readonly ordinal?: number; readonly observedAtMs?: number } = {}): WorkLedgerWorkerEntry {
+  context: { readonly sourceId: string; readonly ordinal: number; readonly observedAtMs?: number }): WorkLedgerWorkerEntry {
   const live = workerLive(worker.files);
   return Object.freeze({
     schemaVersion: WORK_LEDGER_SCHEMA_VERSION,
@@ -128,8 +130,9 @@ function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId
     process: worker.process,
     provider: worker.provider,
     authority: worker.authority,
+    ...(!worker.identity && context.sourceId !== undefined ? { sourceId: context.sourceId } : {}),
     ...(context.observedAtMs === undefined ? {} : { observedAtMs: context.observedAtMs }),
-    ...(context.ordinal === undefined ? {} : { ordinal: context.ordinal }),
+    ordinal: context.ordinal,
     ...(worker.identity === undefined ? {} : { attempt: worker.identity }),
     ...(live ? { live } : {}),
   });
@@ -142,7 +145,7 @@ export function workerReportToLedgerEntries(report: WorkerObservationReport, idP
     for (const worker of source.workers) {
       const ordinal = index + 1;
       entries.push(workerToLedgerEntry(report.scopeId, worker, `${idPrefix}-w-${index++}`,
-        { ordinal, ...(Number.isSafeInteger(report.observedAt) ? { observedAtMs: report.observedAt } : {}) }));
+        { sourceId: source.id, ordinal, ...(Number.isSafeInteger(report.observedAt) ? { observedAtMs: report.observedAt } : {}) }));
     }
   }
   return entries;

@@ -1,7 +1,7 @@
-import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, WindowOpeningContext, WindowStackProvider, useWindowLayer } from '#surfaces/core/terminal-window/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import { render } from 'ink';
+import { Text, render } from 'ink';
 import { PassThrough, Writable } from 'node:stream';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -31,14 +31,14 @@ describe('active work items (pure projection)', () => {
   it('orders /do first, then a Run that needs the person, running/evaluating, parked and finished; EN and TR words come from the catalog', () => {
     for (const labels of [EN, TR]) {
       const items = activeWorkItems({ labels: labels.activeWork!, jobs: labels.jobs!, duration: labels.workerLine, nowMs: 100_000,
-        active: { title: 'process order', phase: 'waiting', sinceMs: 40_000, expiresAtMs: 190_000 },
+        active: { commandId: 'order-request', title: 'process order', phase: 'waiting', sinceMs: 40_000, expiresAtMs: 190_000 },
         runs: [{ run: run(COMPLETED, { phase: 'accepted', title: 'DONE' }, 'a'), sinceMs: 1 }, { run: run(RUNNING, { phase: 'evaluating', title: 'EVAL' }, 'b'), sinceMs: 2 },
           { run: run(NEEDS, { phase: 'pending', title: 'ASK' }, 'c'), sinceMs: 3 }] });
       expect(items.map(item => item.title)).toEqual([`/do process order`, 'ASK', 'EVAL', 'DONE']);
       expect(items.map(item => item.state)).toEqual([labels.activeWork!.waiting.replace('{remaining}', labels.workerLine.durationMinutes.replace('{n}', '1')), labels.activeWork!.needsYou, labels.activeWork!.evaluating, labels.jobs!.runStates['completed']]);
       expect(items[0]!.elapsed).toBe(labels.workerLine.durationMinutes.replace('{n}', '1'));
     }
-    const expired = activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine, nowMs: 10, runs: [], active: { title: 'x', phase: 'waiting', sinceMs: 0, expiresAtMs: 5 } });
+    const expired = activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine, nowMs: 10, runs: [], active: { commandId: 'expired-request', title: 'x', phase: 'waiting', sinceMs: 0, expiresAtMs: 5 } });
     expect(expired[0]!.state).toBe(EN.activeWork!.expired);
     expect(activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine, nowMs: 0, runs: [], active: null })).toEqual([]);
   });
@@ -143,6 +143,9 @@ describe('active work strip on the real Workline', () => {
     // The strip appearing never takes input: typing continues in the composer.
     await press(h, 'next idea'); expect(frame(h)).toContain('next idea'); expect(frame(h)).toContain('INPUT-FOCUS');
     await press(h, '\u0015'); // Ctrl+U clears the draft
+    await press(h, CTRL_T); expect(frame(h)).toContain('› /do process order');
+    await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]);
+    await press(h, CTRL_O); expect(frame(h)).toContain('INPUT-FOCUS');
     h.release();
     await until(() => frame(h).includes('Create proposed Run') && frame(h).includes('waiting for you'), 'waiting row with the card');
     expect(frame(h)).toMatch(/waiting for you · \d+ min left/u);
@@ -212,15 +215,22 @@ describe('active work strip on the real Workline', () => {
   });
 });
 
-it('opens the highlighted active Run when the live strip loses a preceding row', async () => {
+it('keeps the selected work identity through a live strip refresh, even when two requests have the same title', async () => {
   let frame = '';
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame = chunk.toString(); done(); } }), { isTTY: true, rows: 20, columns: 120 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const items = activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine, nowMs: 0, active: null,
     runs: ['FRONT', 'TARGET', 'AFTER'].map((title, index) => ({ run: run(RUNNING, { phase: 'active', title }, title), sinceMs: 3 - index })) });
   const opened: string[] = [];
-  const view = (rows: typeof items) => createElement(ActiveWorkStrip, { items: rows, labels: EN.activeWork!, rows: 6, focused: true,
-    onFocus: () => undefined, onOpen: item => { opened.push(item.title); } });
+  function BackgroundWindow({ commandId, request }: { readonly commandId: string; readonly request: boolean }) {
+    const focused = useWindowLayer(request ? `do:${commandId}` : commandId);
+    return createElement(Text, null, `${focused ? 'FOCUSED' : 'BACKGROUND'} ${request ? commandId : `unrelated ${commandId}`}`);
+  }
+  const view = (rows: typeof items, top?: string, request = true) => createElement(WindowStackProvider, { composerDefault: true, children: [
+    createElement(ActiveWorkStrip, { key: 'strip', items: rows, labels: EN.activeWork!, rows: 6, focused: true,
+      onFocus: () => undefined, onOpen: item => { opened.push(item.title); } }),
+    top ? createElement(WindowOpeningContext.Provider, { key: 'window', value: 'background' }, createElement(BackgroundWindow, { commandId: top, request })) : null,
+  ] });
   const instance = render(view(items), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream,
     interactive: true, debug: true, patchConsole: false });
   mounted.push(instance);
@@ -243,4 +253,31 @@ it('opens the highlighted active Run when the live strip loses a preceding row',
   stdin.write('\r');
   await until(() => opened.length === 2, 'newly selected Run opened');
   expect(opened).toEqual(['TARGET', 'FRONT']);
+
+  const request = (commandId: string, phase: 'planning' | 'waiting') => activeWorkItems({ labels: EN.activeWork!, jobs: EN.jobs!, duration: EN.workerLine,
+    nowMs: 0, runs: [], active: { commandId, title: 'same title', phase, sinceMs: 0 } });
+  instance.rerender(view(request('request-a', 'planning'), 'request-a'));
+  await until(() => frame.includes('BACKGROUND request-a'), 'first planning window');
+  stdin.write(DOWN);
+  await until(() => frame.includes('› /do same title'), 'first request selected');
+  instance.rerender(view(request('request-a', 'waiting'), 'request-a'));
+  await until(() => /› \/do same title[^\n]*waiting for you/u.test(frame), 'same request stays selected while waiting');
+
+  instance.rerender(view(request('request-b', 'planning'), 'request-b'));
+  await until(() => frame.includes('BACKGROUND request-b'), 'replacement window with equal title');
+  stdin.write('\r'); await settle(60);
+  expect(frame).toContain('Selected work is no longer in the list.');
+  expect(frame).toContain('BACKGROUND request-b');
+
+  stdin.write(DOWN);
+  await until(() => frame.includes('› /do same title'), 'replacement explicitly selected');
+  instance.rerender(view(request('request-b', 'planning'), 'request-b', false));
+  await until(() => frame.includes('BACKGROUND unrelated request-b'), 'unrelated top window with the raw command ID');
+  stdin.write('\r'); await settle(60);
+  expect(frame).toContain('BACKGROUND unrelated request-b');
+  expect(frame).toContain('› /do same title');
+  instance.rerender(view(request('request-b', 'planning'), 'request-b'));
+  await until(() => frame.includes('BACKGROUND request-b'), 'selected request is top');
+  stdin.write('\r');
+  await until(() => frame.includes('FOCUSED request-b'), 'Enter focuses the explicitly selected request');
 });

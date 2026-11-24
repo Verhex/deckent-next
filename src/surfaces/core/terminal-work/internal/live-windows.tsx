@@ -112,7 +112,8 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
   const [selectedId, setSelectedId] = useState<string | typeof LOST_TARGET | null>(null);
   const targets = [...data.workers, ...data.runs];
   const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
-    : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
+    : target.attempt ? `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt)}`
+      : `worker-observation:${JSON.stringify([target.scopeId, target.taskId, target.provider, target.sourceId ?? null])}`;
   const selected = selectedId === null ? 0 : targets.findIndex(target => keyOf(target) === selectedId);
   if (selected < 0 && selectedId !== LOST_TARGET) setSelectedId(LOST_TARGET);
   if (covered) return null;

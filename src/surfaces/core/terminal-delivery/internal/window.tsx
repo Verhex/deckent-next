@@ -255,7 +255,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
 
   const visible = order.current.map(key => entries.current.get(key)).find((entry): entry is Entry => Boolean(entry && !entry.closed)) ?? null;
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
-    <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
+    <Window key={`${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
       body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
       inputRevision={visible.inputRevision}
       onInput={(text, key) => {
@@ -331,7 +331,11 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const pending = [...entries.current.values()].filter(entry => !entry.settled).map(entry => Object.freeze({ key: entry.target.key, title: entry.target.title, sinceMs: entry.sinceMs }));
   return { available: Boolean(port && labels), open, element, visible: visible !== null, pending, candidates: (runs: readonly RunView[]) => {
     // The first view of a Run wins (callers pass the fresh read model first); a task delivered in this session is never offered again.
-    const fresh = new Map<string, RunView>(); for (const run of runs) if (!fresh.has(`${run.scopeId}:${run.runId}`)) fresh.set(`${run.scopeId}:${run.runId}`, run);
+    const fresh = new Map<string, RunView>();
+    for (const run of runs) {
+      const key = JSON.stringify([run.scopeId, run.runId]);
+      if (!fresh.has(key)) fresh.set(key, run);
+    }
     if (!labels) return [];
     const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
     // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).

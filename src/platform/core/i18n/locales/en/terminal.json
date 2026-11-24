@@ -452,6 +452,7 @@
   "terminal.info.usage.key.revision": "Budget revision",
   "terminal.info.usage.key.remaining": "Available after reservations",
   "terminal.live.tasksHints": "↑↓ selects · Enter transcript · x cancel (approval) · Esc closes",
+  "terminal.live.workerCancelUnavailable": "Cancellation can't start from this worker row. Select the Run's row.",
   "terminal.info.usage.key.cacheRead": "Cache read",
   "terminal.info.usage.key.cacheWrite": "Cache write",
   "terminal.info.usage.key.cacheHit": "Cache hit ratio",
