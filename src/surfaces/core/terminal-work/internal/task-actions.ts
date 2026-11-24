@@ -10,10 +10,11 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
   work: WorkSurfaceLabels, cancel: (runId: string) => Promise<void>): Promise<void> {
   if (execution.signal.aborted) return;
   if (action.target.scopeId !== ledger.scopeId) return;
-  const runs = await loadRunViewsForWatch(ledger);
   const target = action.target;
-  const run = target.kind === 'run' ? runs.find(run => run.runId === target.runId)
-    : runs.find(run => (target.attempt ? run.runId === target.attempt.runId : run.tasks.some(task => task.id === target.taskId)));
+  const runId = target.kind === 'run' ? target.runId : target.attempt?.runId;
+  if (action.action === 'cancel' && runId === undefined) return;
+  const runs = await loadRunViewsForWatch(ledger);
+  const run = runs.find(run => run.scopeId === target.scopeId && run.runId === runId);
   if (action.action === 'run') {
     // The same read model and window as `/run`: the Run is read again here, so the window never shows a stale strip copy.
     await panel.pick(execution, run ? { kind: 'job-window', title: runTitle(run, work.jobs!), lines: [...runDetailLines(run, work, await queueRowSummaries(run, ledger.queueSummaryLines)), ...await workerApprovalWaitLines(ledger, run.runId, work)] }

@@ -177,10 +177,20 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
       for (let i = 0; i < 100 && !frame.includes('Stuck or waiting'); i++) await new Promise(resolve => setTimeout(resolve, 10));
       await press('8');
       expect(frame).toContain('(max_workers)'); expect(frame).not.toContain('(backup)'); expect(frame).toContain('a all/changed');
+      await press('\u001b[F]');
+      expect(frame).toMatch(/›[ +*]│ brand_new_field/u);
       await press('a'); expect(frame).toContain('(backup)'); expect(frame).toContain('Showing all 7 settings');
+      expect(frame).toMatch(/›[ +*]│ brand_new_field/u);
+      await press('2'); await press('/'); await press('\r'); await press('8');
+      expect(frame).toMatch(/›[ +*]│ brand_new_field/u);
+      await press('2'); await press('/'); await press('backup'); await press('\r');
+      await press('\u001b'); await press('8'); await press('\r');
+      expect(frame).toContain('This item is no longer in the latest snapshot.');
       await press('/'); await press('backup'); await press('\r');
       expect(frame).toContain('(backup)'); expect(frame).not.toContain('(max_workers)');
+      await press('\u001b[B]'); expect(frame).toMatch(/›[ +*]│.*\(backup\)/u);
       await press('\u001b'); await press('a'); expect(frame).not.toContain('(backup)');
+      await press('\r'); expect(frame).toContain('This item is no longer in the latest snapshot.');
     } finally { instance.unmount(); }
   });
 });

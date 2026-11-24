@@ -868,8 +868,8 @@ export function WorklineApp(props: WorklineProps) {
     {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
       position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
     </WindowOpeningContext.Provider>
-    {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-    {othersOpen || deliveryShown ? null : liveWin.element}
+    {/* A covering window takes the screen and keyboard without discarding the live window's selection. */}
+    {liveWin.renderWindow(othersOpen || deliveryShown)}
     {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
     {deliveryShown ? deliveries.element : null}
     <QueuedListOpeningContext.Provider key={state.picker?.pickerHandle} value={queuedListOpening.current}>
