@@ -8,15 +8,3 @@ export function runControlActions(run: RunView): readonly RunControlAction[] {
   const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
   return [...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' || run.state.reason === 'environment-not-ready' ? ['resume' as const] : []), 'close'];
 }
-
-/** Card eligibility from the current view; the lifecycle service still validates the write. */
-export function openTaskQuestion(run: RunView, taskId?: string): Readonly<{ taskId: string; question: string }> | null {
-  const now = Date.now();
-  if (run.cancellationRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && run.state.deadline <= now)) return null;
-  for (const task of run.tasks ?? []) {
-    const decision = task.decision;
-    if ((taskId === undefined || task.id === taskId) && task.phase === 'awaiting-decision'
-      && decision?.reason === 'needs-input' && decision.question && decision.deadline > now) return { taskId: task.id, question: decision.question };
-  }
-  return null;
-}

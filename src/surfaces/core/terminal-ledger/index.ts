@@ -17,4 +17,5 @@ export {
   type WorklineBridgeSink,
 } from './internal/bridge-snapshot.js';
 export { transcriptPage, TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels, type TranscriptPage } from './internal/transcript-page.js';
-export { openTaskQuestion, runControlActions } from './internal/run-controls.js';
+export { openTaskQuestion } from '#engine/index.js';
+export { runControlActions } from './internal/run-controls.js';

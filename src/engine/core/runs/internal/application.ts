@@ -3,7 +3,7 @@ import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { readWorkerTreeExclusions, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
-import { projectRunView } from './view.js';
+import { openTaskQuestion, projectRunView } from './view.js';
 import { z } from 'zod';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { describeRunWorkerModels, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
@@ -25,15 +25,15 @@ export class RunInspectionApplication {
     protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }, private readonly costs?: WorkCostEvidence) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
-  async inspectWithModels(input: unknown, credential?: unknown, answerTaskId?: string) {
+  async inspectWithModels(input: unknown, credential?: unknown, answerTaskId?: string | null) {
     const { run, snapshot, principal, evaluations } = await this.load(input, credential);
     const models = run && this.models ? await describeRunWorkerModels(parseRun(snapshot), principal, this.models.store, this.models.artifacts,
       this.models.authorization) : Object.freeze([]);
     const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(parseRun(snapshot), evaluations ?? [], principal, this.costs,
       (identity, actor) => this.models!.authorization.authorizeIdentity('read-output', identity, actor)) : undefined;
     // The local answer flow needs the binding from the same snapshot as the question and revision.
-    const answerSource = answerTaskId === undefined || !run ? undefined
-      : parseRun(snapshot).bindings.find(binding => binding.identity.taskId === answerTaskId)?.identity;
+    const question = answerTaskId === undefined || !run ? null : openTaskQuestion(run, answerTaskId ?? undefined);
+    const answerSource = question ? parseRun(snapshot).bindings.find(binding => binding.identity.taskId === question.taskId)?.identity : undefined;
     return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models, ...(answerSource ? { answerSource } : {}) });
   }
   private async load(input: unknown, credential?: unknown) {

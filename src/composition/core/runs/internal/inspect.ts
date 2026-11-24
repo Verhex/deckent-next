@@ -13,7 +13,17 @@ async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['
   const db = openSqliteLedgerReadOnly(await path(), config.storage.sqlite), queue = new SqliteTargetQueue(db), limit = config.targetQueue.perTarget;
   try { return await observeRunQueue(queue.forRun(query.scopeId, query.runId, queueObservationReadLimit(limit)), queue, limit, principal, authorization, GIT_QUEUE_DISPLAY); } finally { db.close(); }
 }
-export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}, answerTaskId?: string) {
+export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
+  return (await readConfiguredRun(projectRoot, input, options)).result;
+}
+
+/** The local answer cards read the question and its source at the same Run revision. Null selects the first open question. */
+export async function inspectConfiguredRunAnswer(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, taskId: string | null) {
+  const { result, answerSource } = await readConfiguredRun(projectRoot, input, options, taskId);
+  return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}) });
+}
+
+async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) {
   try {
     const query = runQuerySchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
@@ -22,8 +32,8 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
-    const inspected = await app.inspectWithModels(query, undefined, answerTaskId);
-    if (!inspected.run) return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected });
+    const { answerSource, ...inspected } = await app.inspectWithModels(query, undefined, answerTaskId);
+    if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected }), answerSource };
     // BeUser M-33: the tasks of this Run a person set aside (the same records /deliver and the monitor read).
     const dismissed = (limit: number) => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options)
       .then(rows => new Set(rows.filter(row => row.runId === query.runId).map(row => row.taskId)));
@@ -31,6 +41,6 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
     const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options, principal);
-    return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) });
+    return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) }), answerSource };
   } catch (error) { throw queryFailure(error); }
 }

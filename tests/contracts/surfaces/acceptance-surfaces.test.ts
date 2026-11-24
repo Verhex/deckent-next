@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
-import { applyTaskEvaluation, bindTaskAcceptance, deriveAcceptanceView } from '#domain/index.js';
+import { applyTaskEvaluation, bindTaskAcceptance, deriveAcceptanceView, reconcileRunLifecycle } from '#domain/index.js';
 import { describeTaskEvaluationReceipt, dispatchRecordSchema, projectRunView, projectMonitorRun } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
@@ -26,6 +26,73 @@ it('the evaluation response, shared Run view and monitor use the same acceptance
   const recorded = projectMonitorRun({ run: { snapshot: f.snapshot, evaluations: [f.evaluation], poolId: null, admitted: true, createdAtMs: null, attempts: [] }, pool: null, approvals: [], workers: new Map(), observedAt: 100 });
   expect(recorded.tasks[0]!.acceptance).toEqual(exact);
   expect(() => deriveAcceptanceView(f.snapshot, identity.taskId, { ...f.evaluation, identity: { ...identity, generation: 2 } })).toThrow('TASK_EVALUATION_PROFILE_MISMATCH');
+});
+
+it.skipIf(process.platform === 'win32')('keeps the open question source inside the answer card on the same configured Run', async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir, hostname, userInfo } = await import('node:os');
+  const { join } = await import('node:path');
+  const { DatabaseSync } = await import('node:sqlite');
+  const { inspectRun } = await import('../../../src/index.js');
+  const { createCliHost } = await import('#composition/core/cli/internal/host.js');
+  const { createConfiguredRuntimeOperations } = await import('#composition/core/runtime-service/internal/operations.js');
+  const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
+  const { clearConfigCache } = await import('#platform/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-answer-source-')), project = join(root, 'project'), data = join(root, 'data');
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
+  const query = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId };
+  const bound = evaluating().run, now = Date.now(), timeoutMs = 60_000, question = 'Which region should I use?';
+  const parked = reconcileRunLifecycle({ ...bound, revision: bound.revision + 1,
+    progress: bound.progress.map(task => ({ ...task, phase: 'awaiting-decision', decision: { reason: 'needs-input', since: now, deadline: now + timeoutMs, question } })),
+  }, now, timeoutMs);
+  const runtime = createConfiguredRuntimeOperations(project, options);
+  const host = createCliHost({ root: project, locale: 'en', signal: new AbortController().signal });
+  const server = createMcpServer({ inspectRun: runtime.inspectRun, async inspectInventory() { return {}; } }, { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
+  const client = new Client({ name: 'answer-source-contract', version: '1' });
+  try {
+    await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
+    const opened = await openConfiguredAttemptStore(project, options);
+    opened.store.close();
+    const db = new DatabaseSync(opened.path);
+    try {
+      db.prepare('INSERT INTO execution_pools VALUES(?,?)').run('pool', JSON.stringify({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 } }));
+      db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run(query.scopeId, query.runId, parked.revision, JSON.stringify(parked),
+        JSON.stringify({ schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] }));
+      await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'fixture-read', restrictions: [], grants: [
+        { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: [query.scopeId], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: [query.runId] } },
+      ] }), { mode: 0o600 });
+      clearConfigCache();
+      const [ct, st] = InMemoryTransport.createLinkedPair();
+      await server.connect(st); await client.connect(ct);
+      const mcp = await client.callTool({ name: 'inspect_run', arguments: query });
+      expect(mcp.isError).not.toBe(true);
+      const mcpRun = JSON.parse((mcp.content as { type: string; text?: string }[]).find(row => row.type === 'text')!.text!);
+      for (const result of [
+        await inspectRun(project, query, options),
+        await Reflect.apply(inspectRun, undefined, [project, query, options, identity.taskId]),
+        await runtime.inspectRun(query),
+        await Reflect.apply(runtime.inspectRun, undefined, [query, undefined, undefined, identity.taskId]),
+        mcpRun,
+      ]) {
+        expect(result.run).toMatchObject({ runId: query.runId, revision: parked.revision, tasks: [{ decision: { question } }] });
+        expect.soft(result).not.toHaveProperty('answerSource');
+      }
+      const answer = await host.inspectRun!(project, query, options, identity.taskId);
+      expect(answer.run).toMatchObject({ revision: parked.revision, tasks: [{ decision: { question } }] });
+      expect(answer.answerSource).toEqual(identity);
+      const terminalAnswer = await host.inspectRun!(project, query, options, null);
+      expect(terminalAnswer.run).toMatchObject({ revision: parked.revision, tasks: [{ decision: { question } }] });
+      expect(terminalAnswer.answerSource).toEqual(identity);
+      db.prepare('UPDATE runs SET revision=?, snapshot=? WHERE scope_id=? AND run_id=?')
+        .run(bound.revision, JSON.stringify(bound), query.scopeId, query.runId);
+      const noQuestion = await host.inspectRun!(project, query, options, identity.taskId);
+      expect(noQuestion.run).toMatchObject({ revision: bound.revision, tasks: [{ phase: 'evaluating' }] });
+      expect.soft(noQuestion).not.toHaveProperty('answerSource');
+    } finally { db.close(); }
+  } finally {
+    await client.close(); await server.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
+  }
 });
 it('CLI JSON and the real MCP in-memory transport preserve the canonical evaluation response acceptance bytes', async () => {
   const f = fixture(), query = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId };

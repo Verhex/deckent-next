@@ -184,10 +184,15 @@ describe('needs-input answer from the Runs window (BR2)', () => {
     return h;
   }
   it('a opens the card with the question; y with no answer sends nothing; a written answer goes with one y at the shown revision', async () => {
-    const answer = vi.fn(async () => 'ANSWER-RESULT'), h = await openAsking(answerPorts(answer));
+    const answer = vi.fn(async () => 'ANSWER-RESULT');
+    const inspectRunAnswer = vi.fn(async () => ({ run: asking(), answerSource: {
+      scopeId: 'scope-a', runId: ASKING, taskId: 'task-ask', attemptId: 'attempt-ask', layoutRevision: 'layout', generation: 1,
+    } }));
+    const h = await openAsking({ ...answerPorts(answer), inspectRunAnswer });
     expect(h.stdout.frame).toContain(EN.runControl!.keyAnswer!);
     for (const keys of [`${ESC}a`, 'aa']) { await press(h, keys); expect(h.stdout.frame).not.toContain('Answer run'); } // Alt+a, coalesced
     await press(h, 'a', 120); await until(() => h.stdout.frame.includes('Answer run 9c8b7a6d: Pick a branch?'), 'answer card');
+    expect(inspectRunAnswer).toHaveBeenCalledExactlyOnceWith(ASKING);
     expect(h.stdout.frame).toContain('The worker asks: Which branch should I use?'); expect(h.stdout.frame).toContain('State parked · revision 5');
     await press(h, 'y', 150);
     await until(() => h.stdout.frame.includes('Run 9c8b7a6d: no answer was written; nothing was sent.'), 'empty answer refused here');

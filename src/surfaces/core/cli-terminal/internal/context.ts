@@ -22,7 +22,7 @@ import type { TerminalSessionStoreView, WorklineProps } from '#surfaces/core/ter
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 /** Same handlers as `deckent run` and `deckent run cancel`; the terminal's run card and `/cancel` use them through the ledger ports. */
-export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions, answerTaskId?: string) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
+export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic }>
   & Pick<Awaited<ReturnType<RunInspectionApplication['inspectWithModels']>>, 'answerSource'>>;
 /** Same handler as `deckent run hold|resume|close` (the CLI's in-process lifecycle application); the terminal's Runs window keys use it through the ledger ports. */

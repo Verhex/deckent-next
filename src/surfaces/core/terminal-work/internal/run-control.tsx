@@ -108,9 +108,10 @@ async function runAnswerFlow(panel: WorklinePanel, execution: LocalExecution, le
   errorText: (error: unknown) => string, answer: () => string | undefined): Promise<string | null> {
   const words = work.runAnswer!;
   for (let round = 0; ; round++) {
-    const fresh = await ledger.inspectRun(runId);
+    const { run: fresh, answerSource } = ledger.inspectRunAnswer
+      ? await ledger.inspectRunAnswer(runId) : { run: await ledger.inspectRun(runId), answerSource: undefined };
     if (execution.signal.aborted) return null;
-    const waiting = fresh ? openTaskQuestion(fresh) : null;
+    const waiting = fresh ? openTaskQuestion(fresh, answerSource?.taskId) : null;
     if (!fresh || !waiting) return fillTemplate(words.none, { run: shortId(runId) });
     const decision = await panel.pick(execution, { kind: 'run-answer', run: fresh, question: waiting.question, ...(round ? { reread: words.reread } : {}) }, ['allow', 'deny']);
     if (execution.signal.aborted) return null;
