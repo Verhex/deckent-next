@@ -69,19 +69,20 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
       const bindings = prepared.targets.find(target => target.resource === 'bindings')!;
       const policyDigest = changed === 'policy' ? digest : (await inspectInstallationFile(file(policy))).digest;
       const bindingsDigest = changed === 'bindings' ? digest : (await inspectInstallationFile(file(bindings))).digest;
-      const current = await contextPolicySource({ layout, config }).load();
-      if (current.schemaVersion !== 2) return false;
+      const current = await contextPolicySource({ layout, config }).load(), first = prepared.resolvedPolicy;
+      if (current.schemaVersion !== 2 || first.schemaVersion !== 2) return false;
       const { bindings: liveBindings, policyRevision, revision: effectiveRevision, ...policyBody } = current;
       void effectiveRevision;
-      // Match the writer's exact bytes, or prove that the file still has its original publication bytes.
+      // The sealed chain must attest an advanced revision of each file whose bytes differ.
       const byteDigest = (content: string) => createHash('sha256').update(content).digest('hex');
-      const matchesBytes = (doc: unknown, observed: string | null, target: PolicyTemplatePublishTarget) =>
-        observed === byteDigest(`${JSON.stringify(doc, null, 2)}\n`)
-        || (observed === target.digest && observed === byteDigest(`${JSON.stringify(immutableJsonObjectSchema.parse(doc))}\n`));
-      if (!matchesBytes(policyFileSchema.parse({ ...policyBody, revision: policyRevision }), policyDigest, policy)) return false;
+      const matchesBytes = (doc: { readonly revision: string }, observed: string | null, target: PolicyTemplatePublishTarget, firstRevision: string) =>
+        observed === target.digest
+          ? observed === byteDigest(`${JSON.stringify(immutableJsonObjectSchema.parse(doc))}\n`)
+          : doc.revision !== firstRevision && observed === byteDigest(`${JSON.stringify(doc, null, 2)}\n`);
+      if (!matchesBytes(policyFileSchema.parse({ ...policyBody, revision: policyRevision }), policyDigest, policy, first.policyRevision)) return false;
       const bound = bindingsFileSchema.parse({ schemaVersion: 3, revision: liveBindings.revision, bindings: liveBindings.entries, modes: liveBindings.modes });
-      if (!matchesBytes(bound, bindingsDigest, bindings)) return false;
-      const initial = auditPolicyDigest(prepared.resolvedPolicy), observed = auditPolicyDigest(current);
+      if (!matchesBytes(bound, bindingsDigest, bindings, first.bindings.revision)) return false;
+      const initial = auditPolicyDigest(first), observed = auditPolicyDigest(current);
       if (initial === observed) return false;
       const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
       const store = await openReadOnlyAuditStore(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite);
