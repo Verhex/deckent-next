@@ -122,7 +122,7 @@ function workerNumbering(entries: readonly WorkLedgerEntry[], listed: boolean) {
   return { listed, attempts, ordinals };
 }
 
-// The ledger port identifies the session. Keep the first observation's numbering until a complete list replaces it.
+// The ledger port identifies the session. A complete list replaces earlier bindings.
 const shownWorkerAttempts = new WeakMap<WorklineLedgerPorts, ReturnType<typeof workerNumbering>>();
 
 export function showWorkerNumbering(ledger: WorklineLedgerPorts, entries: readonly WorkLedgerEntry[]): void {
@@ -130,10 +130,10 @@ export function showWorkerNumbering(ledger: WorklineLedgerPorts, entries: readon
 }
 
 export function presentWorkerRef(ledger: WorklineLedgerPorts, attempt: WorkerAttemptIdentity, ordinal: number | undefined,
-  entries: readonly WorkLedgerEntry[]): string {
+  firstObservation: readonly WorkLedgerEntry[] = []): string {
   let shown = shownWorkerAttempts.get(ledger);
   if (!shown) {
-    shown = workerNumbering(entries, false);
+    shown = workerNumbering(firstObservation, false);
     shownWorkerAttempts.set(ledger, shown);
   }
   const key = attemptKey(attempt);
@@ -165,7 +165,7 @@ async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: Wor
   const pageRef = ordinal === undefined ? name : presentWorkerRef(ledger, target.attempt, ordinal, workers);
   const result = work.transcriptPage ? transcriptPage(text, page, pageRef, work.transcriptPage) : { ok: true as const, text };
   if (!result.ok) return [notice('error', result.text)];
-  const headerRef = ordinal === undefined ? presentWorkerRef(ledger, target.attempt, target.ordinal, workers) : pageRef;
+  const headerRef = ordinal === undefined ? presentWorkerRef(ledger, target.attempt, target.ordinal) : pageRef;
   const header = [fillTemplate(work.transcriptHeader, { n: headerRef, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
     ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
   return [notice('info', `${header}\n${result.text}`)];
