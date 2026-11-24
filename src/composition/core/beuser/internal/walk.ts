@@ -13,8 +13,7 @@ import { evaluateConfiguredBeuserTask } from './evaluate.js';
 import { validateBeuserSupervisorProfile, pinBeuserProfile, beuserProfileLimits } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
 import { BEUSER_PACKAGE_ROOT } from './setup.js';
-import { withConfiguredBeuserWalkCustody } from './custody.js';
-import { beuserMonitorName } from './monitor.js';
+import { beuserMonitorName, withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
 export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },

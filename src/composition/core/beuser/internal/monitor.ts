@@ -2,12 +2,12 @@ import { join } from 'node:path';
 import controller from '../../../../../assets/beuser/controller.json' with { type: 'json' };
 import { beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, beuserMonitorRecord } from '#engine/index.js';
-import { isCodedError, ErrorRegistry, globalStateRoot, loadConfig, inspectProductDirectory, sha256, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, globalStateRoot, loadConfig, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { readConfiguredBeuserReport } from './application.js';
+import { beuserMonitorName } from './custody.js';
 
-export const beuserMonitorName = (scopeId: string, principal: { issuer: string; subject: string }) => `beuser-monitor-${sha256(JSON.stringify([scopeId, principal.issuer, principal.subject]))}`;
 export async function inspectConfiguredBeuserMonitor(options: ConfigLoadOptions = {}) {
   const state = globalStateRoot(options.env ?? process.env);
   if (!state) return null;

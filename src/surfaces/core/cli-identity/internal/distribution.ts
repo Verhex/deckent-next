@@ -58,13 +58,18 @@ export async function identityDistributionCommand(argv: readonly string[], conte
     const choices = await context.listIdentityDistributionChoices(root, scope, options);
     emit(choices, { ...sinks, render: value => renderChoices(value, locale, context) }); return;
   }
-  if (!context.previewIdentityDistribution || !context.applyIdentityDistribution || (expect && !apply)) throw usage();
-  const result = (value: { outcome: { status: string } }) => t('identity.distributionResult', { status: value.outcome.status }, locale);
+  const applyDistribution = context.applyIdentityDistribution;
+  if (!context.previewIdentityDistribution || !applyDistribution || (expect && !apply)) throw usage();
+  const distribute = async (submission: unknown, digest: string): Promise<void | ExitCode> => {
+    const result = await applyDistribution(root, submission, digest, options);
+    emit(result, { ...sinks, render: value => t('identity.distributionResult', { status: value.outcome.status }, locale) });
+    if (result.outcome.status === 'approval-pending') return EXIT_CODES.error;
+  };
   if (path) {
     if (scope || (apply && !expect)) throw usage();
     const body = await readJsonInput(path, IDENTITY_PROFILE_LIMITS.maxInputBytes,
       { subject: 'cli.input.subject.identity', limit: 'IDENTITY_PREVIEW_LIMIT', invalid: 'IDENTITY_PREVIEW_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'IDENTITY_PREVIEW_UNAVAILABLE' }, stdin);
-    if (apply) { emit(await context.applyIdentityDistribution(root, body, expect!, options), { ...sinks, render: result }); return; }
+    if (apply) return distribute(body, expect!);
     emit(await context.previewIdentityDistribution(root, body, options), { ...sinks, render: value => `${renderIdentityPreview(value.preview, locale)}\n${t('identity.distributionExpect', { digest: value.digest }, locale)}` }); return;
   }
   // Every interactive input is a selection on a card (arrow keys; owner 2026-10-08): no typed principal, role or policy is accepted. Only a person at a
@@ -93,5 +98,5 @@ export async function identityDistributionCommand(argv: readonly string[], conte
   const answer = await ask(context, locale, { title: t('climodels.identity.card.apply', { profile: profileLabel(profile, locale) }, locale), body: shown.split('\n'),
     options: [{ id: 'apply', label: t('identity.approveDistribution', {}, locale), role: 'yes' }, { id: 'cancel', label: t('identity.cancelDistribution', {}, locale), role: 'no' }] });
   if (answer !== 'apply') return cancelled();
-  emit(await context.applyIdentityDistribution(root, prepared.submission, prepared.digest, options), { ...sinks, render: result });
+  return distribute(prepared.submission, prepared.digest);
 }

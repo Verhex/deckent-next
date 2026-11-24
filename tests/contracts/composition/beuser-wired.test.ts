@@ -151,6 +151,26 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
       expect((await f.records()).custody).toEqual(custody);
     } finally { stored.store.close(); }
     expect(await readConfiguredBeuserReport(f.root, 'scope', undefined, f.options)).toEqual(report);
+    const { scopeId, runId } = terminal.binding.identity;
+    const crashes = join(config.productLayout.root, 'crashes'), reports = join(crashes, 'beuser-reports');
+    const { issuer, subject } = adapters.readLocalOsIdentity();
+    const latest = adapters.beuserPrivateRecord(reports, sha256(JSON.stringify([scopeId, issuer, subject])), config.artifacts.maxBytes);
+    const previous = await latest.read();
+    expect(previous).toMatchObject({ kind: 'ready', value: { runId } });
+    const monitor = adapters.beuserPrivateRecord(crashes, `beuser-monitor-${sha256(JSON.stringify([scopeId, issuer, subject]))}`, config.artifacts.maxBytes);
+    const held = await monitor.read();
+    if (held.kind !== 'ready') throw new Error('Expected the walk monitor');
+    const olderRun = 'previous-walk', olderReport = { ...report, elapsedMs: null };
+    await adapters.beuserPrivateRecord(reports, sha256(JSON.stringify([scopeId, olderRun])), config.artifacts.maxBytes)
+      .write({ schemaVersion: 1, scopeId, runId: olderRun, report: olderReport });
+    await latest.write({ schemaVersion: 1, scopeId, runId: olderRun });
+    await monitor.write({ ...(held.value as object), runId: 'started-without-a-report' });
+    expect(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(olderReport);
+    await monitor.write(held.value);
+    expect(await readConfiguredBeuserReport(f.root, scopeId, runId, f.options)).toEqual(report);
+    expect.soft(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(report);
+    await latest.remove();
+    await expect.soft(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).resolves.toEqual(report);
     for (const language of ['tr', 'en'] as const) {
       const text = formatBeuserReport(report, { locale: language, json: false });
       expect(text).toContain('BEUSER_CANDIDATE_MISMATCH'); expect(text).not.toContain(f.root); expect(text).not.toContain(f.candidate);

@@ -95,7 +95,9 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
       : value('--model') ? { nativeId: value('--model') } : { pull: 'available' } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
-  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale, command.data, billingOf(context, item.connection)) });
+  const result = await context.connectModel(root, command.data, { env });
+  emit(result, { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale, command.data, billingOf(context, item.connection)) });
+  if (result.status === 'approval-pending') return EXIT_CODES.error;
 }
 
 /** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
@@ -149,4 +151,5 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   const result = await context.connectModel(root, command, options);
   emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale, command, kind.billing),
     ...(item.credentialRef && item.keyStored === false ? [t('climodels.models.connect.storeKey', { name: terminalSafeText(item.credentialRef) }, locale)] : [])].join('\n') });
+  if (result.status === 'approval-pending') return EXIT_CODES.error;
 }
