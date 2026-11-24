@@ -1,13 +1,13 @@
-import { timedSync } from '#platform/index.js';
-import { CodedError } from '#platform/index.js';
+import { CodedError, isCodedError, timedSync } from '#platform/index.js';
 import { configuredInvocationProfiles, ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { admittedToolchains, compareToolchainVersions, extractToolchainVersion, type ToolchainAdmissionSource } from '#engine/core/toolchain-currency/index.js';
 import { ModelActivationStoreError } from './port.js';
+import { isRetiredCatalogModel, refuseRetiredModelActivation, type ModelCatalogChannelView } from './catalog.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, modelCatalogTargets, parseProviderCatalog as parseProviderCatalogRaw, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
-  type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
+import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, ModelCatalogError, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, modelCatalogTargets, parseProviderCatalog as parseProviderCatalogRaw, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
+  type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelInvocationProfile, type ModelReference,
   type CatalogModel, type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
 export type ModelConnectLayer = 'project' | 'global';
@@ -38,15 +38,16 @@ export interface ModelConnectPorts {
   workerActivate?(reference: ModelReference, commandId: string): Promise<boolean | void>;
   preflight?(scopeId: string, principal: VerifiedPrincipal, target?: Readonly<{ reference: ModelReference; nativeId: string }>): Promise<void>;
   beforeDiscovery?(command: ModelConnectCommand, kind: ModelConnectKind, base: string | null, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
-  beforeProbes?(kind: ModelConnectKind, base: string, nativeIds: readonly string[]): Promise<void>;
+  beforeProbes?(kind: ModelConnectKind, base: string, nativeIds: readonly string[], layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
   authorizePlan?(plan: {
     profiled: boolean;
     delegationOnly: boolean;
+    observation?: true;
     registrationTargets: ReturnType<typeof modelCatalogTargets>;
     writes: readonly { layer: ModelConnectLayer; keyPath: string }[];
     selections: readonly { reference: ModelReference; activate: boolean; worker: boolean }[];
   }): Promise<void>;
-  beforeAdapter?(plan: Pick<Parameters<NonNullable<ModelConnectPorts['authorizePlan']>>[0], 'registrationTargets' | 'profiled' | 'selections'>): Promise<void>;
+  beforeAdapter?(plan: Pick<Parameters<NonNullable<ModelConnectPorts['authorizePlan']>>[0], 'registrationTargets' | 'profiled' | 'selections' | 'writes'>): Promise<void>;
   authorizeCarry?(reference: ModelReference, binding: Extract<ModelConnectBinding, { status: 'declared' }>): Promise<void>;
   workerNeeded?(reference: ModelReference, registering: ProviderCatalogDocument | null): Promise<boolean>;
   beforeWrite?(): Promise<void>;
@@ -57,17 +58,19 @@ export interface ModelConnectPorts {
    * the layer being written (null: a new profile), so the adapter keeps the person's own choices in it (CACHE-SLICE1: the cache TTL). */
   adapter(kind: string, input: Readonly<{ endpoint: string | null; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; workspaceId?: string; existing?: JsonObject | null;
     catalog?: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>): ConnectedAdapter | Promise<ConnectedAdapter>;
+  /** Optional observation of an already prepared local subscription. No adapter effects are permitted here. */
+  observeAdapter?(nativeId: string, existing: ModelInvocationProfile): Promise<ConnectedAdapter | null>;
   /** Trusted composition's person witness; required before extending delegated use, never supplied by the command. */
   authorizeDelegation?(): Promise<void>;
   principal(): Promise<VerifiedPrincipal>;
   /** The two authored layer documents and the merged configuration, read fresh. */
   layers(): Promise<Readonly<{ global: Record<string, unknown>; project: Record<string, unknown>; effective: Record<string, unknown> }>>;
   /** The governed config writer (policy, approval, audit): applied, or the pending approval that stopped it. */
-  write(input: Readonly<{ keyPath: string; value: unknown; layer: ModelConnectLayer; commandId: string }>): Promise<null | Readonly<{ approvalId: string; keyPath?: string } | { reboundProfile: ModelReference }>>;
+  write(input: Readonly<{ keyPath: string; value: unknown; layer: ModelConnectLayer; commandId: string; capabilityProfile?: ReturnType<typeof configuredInvocationProfiles>[number] }>): Promise<null | Readonly<{ approvalId: string; keyPath?: string } | { reboundProfile: ModelReference }>>;
   catalogHas(channelId: string, nativeId: string): Promise<boolean>;
   register(catalog: ProviderCatalogDocument, commandId: string): Promise<void>;
   binding(reference: ModelReference): Promise<ModelConnectBinding>;
-  activation(reference: ModelReference): Promise<ModelActivationRecord | null>;
+  activation(reference: ModelReference, fresh?: boolean): Promise<ModelActivationRecord | null>;
   activate(input: Readonly<{ commandId: string; reference: ModelReference; expectedRevision: number; catalogRevision: string; digest: string }>): Promise<void>;
   carryActivate?: ModelConnectPorts['activate'];
   /** Whether a profile's worst-case answer fits every result frame of this installation with `spareBytes` left over (activation refuses one that
@@ -131,6 +134,70 @@ export function declareConnectedModel(current: ProviderCatalog | null, declare: 
  */
 export class ModelConnectApplication {
   constructor(private readonly ports: ModelConnectPorts, private readonly now: () => number = Date.now) {}
+
+  static knownWrites({ global, project }: Awaited<ReturnType<ModelConnectPorts['layers']>>, scopeId: string,
+    reference: ModelReference, declare: boolean, profiled: boolean): Parameters<NonNullable<ModelConnectPorts['authorizePlan']>>[0]['writes'] {
+    const writes: { layer: ModelConnectLayer; keyPath: string }[] = [];
+    const catalogLayer = project['provider_catalog'] !== undefined || global['provider_catalog'] === undefined ? 'project' : 'global';
+    const current = (catalogLayer === 'project' ? project : global)['provider_catalog'];
+    const catalog = !declare || current === undefined ? null : parseProviderCatalog(current);
+    if (declare && !catalog?.providers.find(row => row.id === reference.providerId && row.version === reference.providerVersion)
+      ?.models.some(row => row.id === reference.modelId && row.version === reference.modelVersion))
+      writes.push({ layer: catalogLayer, keyPath: 'provider_catalog' });
+    if (profiled) for (const [layer, authored] of [['global', global], ['project', project]] as const) {
+      if (authored['provider_invocation_profiles'] === undefined && (layer === 'global' || global['provider_invocation_profiles'] !== undefined)) continue;
+      if (!configuredInvocationProfiles(authored).some(profile => profile.scopeId === scopeId && sameReference(profile.reference, reference)))
+        writes.push({ layer, keyPath: 'provider_invocation_profiles' });
+    }
+    return writes;
+  }
+
+  static workerFacts(channel: ModelCatalogChannelView | undefined, reference: ModelReference, registering: ProviderCatalogDocument | null, now: number) {
+    const model = channel?.access === 'allowed' && channel.providerVersion === reference.providerVersion
+      ? channel.models.find(item => item.model.id === reference.modelId && item.model.version === reference.modelVersion) : undefined;
+    if (model && channel?.access === 'allowed') refuseRetiredModelActivation(channel.models, model.modelId, now);
+    const pending = registering?.providers.find(item => item.id === reference.providerId && item.version === reference.providerVersion)
+      ?.models.find(item => item.id === reference.modelId && item.version === reference.modelVersion);
+    return { channel, model, modelId: model?.modelId ?? pending?.nativeId };
+  }
+
+  static workerTargets(expected: ReturnType<typeof ModelConnectApplication.workerFacts>, current: ReturnType<typeof ModelConnectApplication.workerFacts>,
+    authorize: boolean, opensChannel: boolean, now: number): (string | null)[] {
+    if (!isDeepStrictEqual(expected.channel, current.channel) || !isDeepStrictEqual(expected.model, current.model))
+      throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+    const modelId = current.modelId ?? expected.modelId;
+    if (!authorize || modelId === undefined) return [];
+    const siblings = opensChannel && current.channel?.access === 'allowed' && current.channel.activation?.state !== 'active'
+      ? current.channel.models.filter(entry => entry.activation?.state === 'active' && !isRetiredCatalogModel(entry, now)).map(entry => entry.modelId) : [];
+    return [null, modelId, ...siblings];
+  }
+
+  static assertWorkerWrite(expected: ReturnType<typeof ModelConnectApplication.workerFacts> | undefined,
+    actual: ReturnType<typeof ModelConnectApplication.workerFacts>, written: { state: 'active'; revision: number } | undefined) {
+    const sameModel = expected?.model ? expected.model.revision === actual.model?.revision && isDeepStrictEqual(expected.model.activation, actual.model?.activation)
+      : actual.model?.activation === null && expected?.modelId === actual.model?.modelId;
+    const parent = written ?? (expected?.channel?.access === 'allowed' ? expected.channel.activation : null);
+    if (!sameModel || actual.channel?.access !== 'allowed' || !isDeepStrictEqual(parent, actual.channel.activation))
+      throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+    return parent;
+  }
+
+  static narrowsDelegation(command: ModelConnectCommand, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>,
+    plan: Parameters<NonNullable<ModelConnectPorts['beforeAdapter']>>[0], owner: ReturnType<typeof delegationOwner>,
+    sameSource: (definition: unknown) => boolean) {
+    if (plan.registrationTargets.length || plan.selections.some(item => item.activate || item.worker)) return false;
+    const authored = [layers.global, layers.project].filter(layer => layer['provider_invocation_profiles'] !== undefined);
+    let narrowed = false;
+    for (const layer of authored) for (const { reference } of plan.selections) {
+      const profile = configuredInvocationProfiles(layer).find(row => row.scopeId === command.scopeId && sameReference(row.reference, reference));
+      if (!sameSource(profile?.adapter.definition)) return false;
+      const consent = delegatedUseConsentSchema.safeParse(profile?.adapter.definition['delegatedUse']);
+      const classes = consent.success && isDeepStrictEqual(consent.data.consentedBy, owner) ? consent.data.classes : [];
+      if (!command.delegate!.every(value => classes.includes(value))) return false;
+      if (classes.some(value => !command.delegate!.includes(value))) narrowed = true;
+    }
+    return narrowed;
+  }
 
   private async delegation(command: ModelConnectCommand, definitions: readonly (JsonObject | null)[], principal: VerifiedPrincipal): Promise<void> {
     if (!command.delegate?.length) return;
@@ -211,7 +278,7 @@ export class ModelConnectApplication {
     let layers = await ports.layers();
     await ports.beforeDiscovery?.(command, kind, base, layers);
     await this.delegationDiscovery(kind, command, layers, principal);
-    const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
+    const effective = layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
     const models: NonNullable<ModelConnectResult['models']>[number][] = [];
     const commands: ModelConnectCommand[] = [];
     let workerIds: readonly string[] | null = null, worker: ModelConnectResult['worker'];
@@ -233,8 +300,8 @@ export class ModelConnectApplication {
       const listed = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
       if (kind.connect.headless) workerIds = listed; else if (listed && !listed.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
     if (!kind.connect.seed && ports.beforeProbes)
-      await ports.beforeProbes(kind, base ?? '', commands.flatMap(item => 'nativeId' in item.model ? [item.model.nativeId] : []));
-    const targets = await Promise.all(commands.map(item => this.target(kind, item, effective(), base ?? '')));
+      await ports.beforeProbes(kind, base ?? '', commands.flatMap(item => 'nativeId' in item.model ? [item.model.nativeId] : []), layers);
+    const targets = await Promise.all(commands.map(item => this.target(kind, item, effective, base ?? '')));
     const target = targets[0];
     if (!target) throw new ModelConnectError('MODEL_CONNECT_NO_AVAILABLE', models);
     if (!ports.beforeDiscovery && isAiPrincipal(principal)) for (const target of targets) await ports.preflight!(scopeId, principal, target);
@@ -248,7 +315,9 @@ export class ModelConnectApplication {
       scopeId, connection: command.connection, status, reference: target.reference, ...('pull' in command.model ? { models: [...models] } : {}), credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), carriedModels: Object.freeze([...carriedModels]), tariff, ...(cli ? { cli } : {}), ...(worker ? { worker } : {}), approval, service });
     const write = async (keyPath: string, value: unknown, layer: ModelConnectLayer, id: string) => {
       await ports.beforeWrite?.();
-      const pending = await ports.write({ keyPath, value, layer, commandId: id });
+      const capabilityProfile = keyPath === 'provider_catalog' && !kind.connect!.seed && 'nativeId' in command.model
+        ? configuredInvocationProfiles(layers[layer]).find(profile => profile.scopeId === scopeId && sameReference(profile.reference, target.reference)) : undefined;
+      const pending = await ports.write({ keyPath, value, layer, commandId: id, ...(capabilityProfile ? { capabilityProfile } : {}) });
       layers = await ports.layers();
       if (pending && 'reboundProfile' in pending) { reboundProfile = pending.reboundProfile; steps.profile = 'written'; return null; }
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath: pending.keyPath ?? keyPath, layer }) : null;
@@ -271,8 +340,9 @@ export class ModelConnectApplication {
     let next = layers[layer]['provider_catalog'] === undefined ? null : parseProviderCatalog(layers[layer]['provider_catalog']);
     let changed = false;
     for (const target of targets) if (profiled && target.declare) { const declared = declareConnectedModel(next, target.declare); if (declared) { next = declared; changed = true; } }
-    const carry = changed ? await this.carryable(effective(), targets.map(target => target.reference)) : [];
-    const forward = new ModelBindingApplication({ async read() { return changed ? next ?? undefined : effective() ?? undefined; } });
+    const destination = changed ? next : effective;
+    const forward = new ModelBindingApplication({ async read() { return undefined; } }, destination);
+    const carry = changed ? await this.carryable(effective, destination, targets.map(target => target.reference)) : [];
     const exact = async (reference: ModelReference) => {
       const binding = await forward.inspect(reference);
       if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
@@ -306,12 +376,21 @@ export class ModelConnectApplication {
         steps.declaration = 'written';
         for (const [index, item] of carryPlan.entries()) {
           try {
-            const binding = await ports.binding(item.reference);
+            const bindingCheck = ports.binding(item.reference);
+            const [binding] = await Promise.all([bindingCheck, ports.beforeWrite?.()]);
             if (item.binding && !isDeepStrictEqual(item.binding, binding)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
             if (binding.status !== 'declared' || binding.binding.digest !== item.digest) { notCarried.push({ reference: item.reference, code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }); continue; }
-            await ports.beforeWrite?.();
-            await (ports.carryActivate ?? ports.activate)({ commandId: step(command.commandId, 'carry', String(index)), reference: item.reference, expectedRevision: item.revision,
-              catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
+            try {
+              await (ports.carryActivate ?? ports.activate)({ commandId: step(command.commandId, 'carry', String(index)), reference: item.reference,
+                expectedRevision: item.revision, catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
+            } catch (error) {
+              if (!ports.authorizePlan || !isCodedError(error, 'MODEL_ACTIVATION_UNAVAILABLE') && !isCodedError(error, 'ATTEMPT_STORE_BUSY')) throw error;
+              await ports.beforeWrite?.();
+              if (!isDeepStrictEqual(binding, await ports.binding(item.reference))
+                || !isDeepStrictEqual(item.activation, await ports.activation(item.reference, true))) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+              notCarried.push({ reference: item.reference, code: error.code });
+              continue;
+            }
             steps.carried++; carriedModels.push(item.reference);
           } catch (error) {
             if (ports.authorizePlan) throw error;
@@ -322,62 +401,82 @@ export class ModelConnectApplication {
       return null;
     };
     const registrationTargets = registration ? modelCatalogTargets({ schemaVersion: 1, commandId: command.commandId, scopeId, action: 'register', catalog: registration }) : [];
-    await ports.beforeAdapter?.({ registrationTargets, profiled, selections: selection });
-    // Validate every tariff before the first write. One catalog and declaration change for the entire connection.
-    const adapters = !profiled ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
-      maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}), existing: null })));
-    tariff = adapters.some(adapter => adapter.tariff === 'published') ? 'published' : 'unmetered'; cli = adapters[0]?.cli;
+    const adapterInput = (target: Target) => ({ endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens,
+      currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) });
+    const authored = new Map(profileLayers.map(layer => [layer, configuredInvocationProfiles(layers[layer])]));
+    const planProfiles = async (observe?: NonNullable<ModelConnectPorts['observeAdapter']>) => {
+      const planned = new Map<ModelConnectLayer, Record<string, unknown>[]>([...authored].map(([layer, profiles]) => [layer, [...profiles]]));
+      for (const [index, target] of (profiled ? targets : []).entries()) {
+        if (reboundProfile && sameReference(target.reference, reboundProfile)) continue; // The atomic capability write kept this profile's authored limits.
+        const input = adapterInput(target);
+        const binding = selection[index]?.binding ?? await ports.binding(target.reference);
+        if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+        const id = profileId(target);
+        const build = (version: number, responseMaxBytes: number, shaped: ConnectedAdapter, contextWindow: unknown, known: Record<string, unknown> | undefined) => {
+          const value = { schemaVersion: 1, id, version, scopeId, reference: target.reference, bindingDigest: binding.binding.digest, protocol: shaped.protocol,
+            adapter: shaped.adapter, allocation: { id, maxCalls: null, maxInFlight: shaped.maxInFlight ?? ports.defaults.maxInFlight },
+            limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
+            ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) };
+          // Reconnect preserves authored v1 and an explicit v2 path.
+          return known?.['schemaVersion'] === 1 && !shaped.billingAxis ? value : { ...value, schemaVersion: 2,
+            billingAxis: shaped.billingAxis ?? modelInvocationBillingAxis(parseModelInvocationProfile(known ?? value)) };
+        };
+        for (const layer of profileLayers) {
+          const profiles = planned.get(layer)!;
+          const existing = profiles.find(item => mine(target, item)), version = typeof existing?.['version'] === 'number' ? existing['version'] : 1;
+          // A missing layer takes the other authored layer's definition, with the user layer first.
+          const known = existing ?? profileLayers.map(other => planned.get(other)!.find(profile => mine(target, profile))).find(Boolean);
+          const definition = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
+          const previous = definition && typeof definition === 'object' ? definition as JsonObject : undefined;
+          const shaped = observe ? existing && await observe(target.nativeId, parseModelInvocationProfile(existing))
+            : known ? await ports.adapter(kind.id, { ...input, existing: previous ?? {} }) : adapters[index];
+          if (!shaped) return null;
+          cli = shaped.cli ?? cli;
+          const contextWindow = known?.['contextWindowTokens'] ?? target.contextWindow;
+          const responseMaxBytes = Math.min((existing?.['limits'] as { responseMaxBytes?: number } | undefined)?.responseMaxBytes ?? ports.defaults.responseMaxBytes,
+            this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow, known), binding, ports.defaults.deliveryHeadroomBytes)));
+          if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow, known))) continue;
+          if (observe) return null;
+          planned.set(layer, [...profiles.filter(item => !mine(target, item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow, known)]);
+        }
+      }
+      return planned;
+    };
+    let adapters: ConnectedAdapter[] = [];
+    let planned = ports.observeAdapter && !('pull' in command.model) && !changed && !registration
+      && selection.every(item => !item.activate && !item.worker) ? await planProfiles(ports.observeAdapter) : null;
+    if (planned) {
+      await ports.authorizePlan?.({ registrationTargets, profiled, delegationOnly: false, observation: true, writes: [], selections: selection });
+      for (const item of selection) if (!isDeepStrictEqual(item.binding, await ports.binding(item.reference))
+        || !isDeepStrictEqual(item.activation, await ports.activation(item.reference, true)))
+        throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+      if (target.declare) steps.declaration = 'present';
+      if (kind.connect.headless) worker = workerIds?.includes(target.nativeId) ? 'present' : 'image-required';
+      return result('connected', null, null, await ports.service());
+    }
+    await ports.beforeAdapter?.({ registrationTargets, profiled, selections: selection, writes: [
+      ...(changed ? [{ layer, keyPath: 'provider_catalog' }] : []),
+      ...selection.flatMap(item => ModelConnectApplication.knownWrites(layers, scopeId, item.reference, false, profiled)),
+    ] });
+    // Validate tariffs before publication, even for a model with an existing definition.
+    adapters = profiled ? await Promise.all(targets.map(target => ports.adapter(kind.id, { ...adapterInput(target), existing: null }))) : [];
+    tariff = adapters.some(adapter => adapter.tariff === 'published') ? 'published' : 'unmetered';
+    cli = adapters[0]?.cli;
     if (!ports.authorizePlan) {
       const stopped = await publish();
       if (stopped) return stopped;
+      for (const layer of profileLayers) authored.set(layer, configuredInvocationProfiles(layers[layer]));
     }
-    const planned = new Map<ModelConnectLayer, Record<string, unknown>[]>(profileLayers.map(layer => [layer, [...configuredInvocationProfiles(layers[layer])]]));
-    for (const [index, target] of (!profiled ? [] : targets).entries()) {
-    if (reboundProfile && sameReference(target.reference, reboundProfile)) continue; // The atomic capability write preserved this profile's authored limits.
-    const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) };
-    const adapter = adapters[index]!;
-    const binding = selection[index]?.binding ?? await ports.binding(target.reference);
-    if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
-    // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
-    const id = profileId(target);
-    const build = (version: number, responseMaxBytes: number, shaped: ConnectedAdapter, contextWindow: unknown, known: Record<string, unknown> | undefined) => {
-      const value = { schemaVersion: 1, id, version, scopeId, reference: target.reference,
-      bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id, maxCalls: null, maxInFlight: shaped.maxInFlight ?? ports.defaults.maxInFlight },
-      limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
-      ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) };
-      // Reconnect preserves authored v1 and an explicit v2 path; new profiles take the validated transport's actual axis.
-      return known?.['schemaVersion'] === 1 && !shaped.billingAxis ? value : { ...value, schemaVersion: 2,
-        billingAxis: shaped.billingAxis ?? modelInvocationBillingAxis(parseModelInvocationProfile(known ?? value)) };
-    };
-    const layerProfiles = (layer: ModelConnectLayer) => planned.get(layer)!;
-    for (const layer of profileLayers) {
-      const profiles = layerProfiles(layer);
-      const existing = profiles.find(item => mine(target, item)), version = typeof existing?.['version'] === 'number' ? existing['version'] : 1;
-      // An existing profile keeps what the person chose in its definition (CACHE-SLICE1: no silent cache migration on a re-run). A layer without
-      // its own copy takes the other authored layer's (the user layer first), so a project copy stays equal to the user-layer profile.
-      const known = existing ?? profileLayers.map(item => layerProfiles(item).find(profile => mine(target, profile))).find(Boolean);
-      // Reconnecting an exact reference has no seed metadata: keep the authored window, falling back to the seed for a missing value.
-      const contextWindow = known?.['contextWindowTokens'] ?? target.contextWindow;
-      const previous = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
-      const shaped = known ? await ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
-      cli = shaped.cli ?? cli;
-      // Sized on the profile as this layer writes it (its kept definition, its next version), with the registry's headroom left over.
-      const responseMaxBytes = Math.min((existing?.['limits'] as { responseMaxBytes?: number } | undefined)?.responseMaxBytes ?? ports.defaults.responseMaxBytes,
-        this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow, known), binding, ports.defaults.deliveryHeadroomBytes)));
-      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow, known))) continue;
-      planned.set(layer, [...profiles.filter(item => !mine(target, item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow, known)]);
-    }
-    }
+    planned = (await planProfiles())!;
     if (ports.authorizePlan) {
-      const writes = profileLayers.filter(layer => !isDeepStrictEqual(planned.get(layer), configuredInvocationProfiles(layers[layer])))
+      const writes = profileLayers.filter(layer => !isDeepStrictEqual(planned.get(layer), authored.get(layer)))
         .map(layer => ({ layer, keyPath: 'provider_invocation_profiles' }));
       if (changed) writes.unshift({ layer, keyPath: 'provider_catalog' });
       const delegationOnly = command.delegate !== undefined && !changed && profileLayers.every(layer =>
-        isDeepStrictEqual(withoutDelegation(planned.get(layer)!), withoutDelegation(configuredInvocationProfiles(layers[layer]))));
+        isDeepStrictEqual(withoutDelegation(planned.get(layer)!), withoutDelegation(authored.get(layer)!)));
       await ports.authorizePlan({ registrationTargets, profiled, delegationOnly, writes, selections: selection });
       if (registration || writes.length || selection.some(item => item.activate || item.worker) || ports.commitAdapter) {
-        await ports.beforeWrite?.();
-        await ports.commitAdapter?.();
+        if (ports.commitAdapter) { await ports.beforeWrite?.(); await ports.commitAdapter(); }
         const stopped = await publish();
         if (stopped) return stopped;
       } else {
@@ -406,7 +505,7 @@ export class ModelConnectApplication {
     const binding = await ports.binding(target.reference);
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 4. The chat activation at the current revision (after the profile: activation checks the profile's delivery).
-    const activation = await ports.activation(target.reference);
+    const activation = await ports.activation(target.reference, true);
     const expected = selection[index];
     if (expected && (!isDeepStrictEqual(expected.binding, binding) || !isDeepStrictEqual(expected.activation, activation)))
       throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
@@ -475,14 +574,18 @@ export class ModelConnectApplication {
       catalog: row && { channelId: reference.providerId, modelRevision: row.modelRevision, model: row.model } };
   }
   /** This scope's other models active under the catalog revision being replaced (re-activated afterwards when their binding is unchanged). */
-  private async carryable(before: ProviderCatalog | null, skip: readonly ModelReference[]) {
-    const carry: { reference: ModelReference; revision: number; digest: string }[] = [];
+  private async carryable(before: ProviderCatalog | null, after: ProviderCatalog | null, skip: readonly ModelReference[]) {
+    const carry: { reference: ModelReference; revision: number; digest: string; activation: ModelActivationRecord }[] = [];
     for (const provider of before?.providers ?? []) for (const model of provider.models) {
       const reference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
       if (skip.some(item => sameReference(reference, item))) continue;
+      // A catalog revision is shared across providers. A different revision can affect every active row.
+      if (before!.revision === after?.revision && isDeepStrictEqual(model,
+        after.providers.find(row => row.id === provider.id && row.version === provider.version)?.models
+          .find(row => row.id === model.id && row.version === model.version))) continue;
       const pending = this.ports.activation(reference);
       const activation = await (this.ports.authorizePlan ? pending : pending.catch(() => null));
-      if (activation?.state === 'active' && activation.catalogRevision === before!.revision) carry.push({ reference, revision: activation.revision, digest: activation.binding.digest });
+      if (activation?.state === 'active' && activation.catalogRevision === before!.revision) carry.push({ reference, revision: activation.revision, digest: activation.binding.digest, activation });
     }
     return carry;
   }

@@ -1,6 +1,6 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { randomUUID } from 'node:crypto';
-import { type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
+import { type ModelConnectCommand, type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
 import { configuredInvocationProfiles, subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, policySecretChangeAuthorization, policyVerdictRefusal, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, installationSecretRoot, unsafeStoreDirectory, SIWC_PROTOCOL } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -82,15 +82,18 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
   const view = await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.inspect(definition.connectionId));
   return { models, ...view, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
 };
-
-
-/** The known OAuth policy targets are decided before the OAuth owner opens its write scope. */
-export async function authorizeSiwcConnect(context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, scopeId: string, connectionId?: string) {
-  const authorize = policySecretChangeAuthorization(context.document, context.principal);
-  const names = connectionId ? [`${SIWC_PROTOCOL.connectionSecretPrefix}${connectionId.replaceAll('-', '').toUpperCase()}`] : [SIWC_PROTOCOL.hostSecretName];
-  for (const name of names) {
-    const { effect } = await authorize({ principal: context.principal, scopeId, name, action: 'set' });
-    const refusal = policyVerdictRefusal(effect, { deny: 'OAUTH_CONNECTION_DENIED' });
-    if (refusal) throw new OAuthConnectionError(refusal);
+/** A connected account's lease authorizes a refresh only if one is due; reauthorization requires that exact account's set permission. */
+export async function authorizeSiwcConnect(context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, scopeId: string, connectionId?: string,
+  request?: { root: string; options: ConfigLoadOptions; command: ModelConnectCommand }) {
+  if (request && context.installationId) {
+    if (request.command.subscription?.newAccount) return;
+    const rows = await withConfiguredSiwc(request.root, scopeId, request.options, 'inspect', app => app.list()).catch(() => null);
+    const selected = connectionId ? rows?.find(row => row.connectionId === connectionId) : rows?.length === 1 ? rows[0] : undefined;
+    if (rows && (!selected || selected.state === 'connected' && selected.planUse)) return;
+    connectionId = selected?.connectionId ?? connectionId;
   }
+  const name = connectionId ? `${SIWC_PROTOCOL.connectionSecretPrefix}${connectionId.replaceAll('-', '').toUpperCase()}` : SIWC_PROTOCOL.hostSecretName;
+  const { effect } = await policySecretChangeAuthorization(context.document, context.principal)({ principal: context.principal, scopeId, name, action: 'set' });
+  const refusal = policyVerdictRefusal(effect, { deny: 'OAUTH_CONNECTION_DENIED' });
+  if (refusal) throw new OAuthConnectionError(refusal);
 }

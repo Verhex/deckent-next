@@ -1,5 +1,6 @@
 // S3-3 `models connect claude-cli-subscription` through the real configured paths (governed config writer, ledger catalog, activation, audit) with
 // a scripted fake CLI: no real CLI and no model call. Model ids come from the packaged seed, never from this file.
+import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
@@ -424,6 +425,23 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.connect('c-3')).toMatchObject({ steps: { profile: 'present' }, cli: { delegate: ['ai', 'system'] } });
     expect(await h.connect('c-4', { delegate: ['ai', 'system'] })).toMatchObject({ steps: { profile: 'present' } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toEqual(consent);
+    const globalPath = platform.resolveGlobalConfigPaths(h.f.env).platformPath;
+    const durable = async () => ({ project: await readFile(path), global: await readFile(globalPath), ledger: await readFile(h.f.ledger), spawns: await h.spawns() });
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
+    const exact = await durable();
+    expect(await h.connect('c-read', { delegate: ['ai', 'system'] })).toMatchObject({ status: 'connected', reference: first.reference,
+      cli: first.cli && { ...first.cli, delegate: ['ai', 'system'] }, steps: { catalog: 'present', declaration: 'present', profile: 'present', activation: 'present', carried: 0 } });
+    expect(await durable()).toEqual(exact);
+    const db = new DatabaseSync(h.f.ledger);
+    try { db.prepare('DELETE FROM model_activations WHERE scope_id=? AND provider_id=? AND provider_version=? AND model_id=? AND model_version=?')
+      .run('scope', first.reference.providerId, first.reference.providerVersion, first.reference.modelId, first.reference.modelVersion); }
+    finally { db.close(); }
+    const incomplete = await durable();
+    expect(incomplete.ledger).not.toEqual(exact.ledger);
+    await expect(h.connect('c-read', { delegate: ['ai', 'system'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await durable()).toEqual(incomplete);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
+    await h.connect('c-repair');
     expect(await h.connect('c-shrink', { delegate: ['ai'] })).toMatchObject({ cli: { delegate: ['ai'] } });
     vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
     const beforeExpand = await readFile(path, 'utf8');

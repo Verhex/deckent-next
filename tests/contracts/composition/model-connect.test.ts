@@ -3,13 +3,13 @@ import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
 import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { describe, expect, it, vi } from 'vitest';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, readProviderConnectSeed, parseProviderConnectRegistry } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation as admit, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { connectConfiguredModel as connect } from '#composition/core/model-connect/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { modelActivationTargetId, modelCatalogTargetId } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
@@ -208,6 +208,39 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
       endpoint: 'https://openrouter.ai/api/v1/chat/completions', dialect: { tokenLimitField: 'max_tokens', streamUsage: 'omit', finalUsageChoice: 'repeat-finish' },
       tariff: { kind: 'openrouter-endpoint', currency: 'USD' } } });
   }, 60_000);
+
+  it('connects without write access to an untouched global layer', async () => {
+    const f = await harness([], true), nativeId = 'local-untouched-global', requests: string[] = [];
+    const host = { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      requests.push(String(init.method));
+      return Response.json(init.method === 'GET' ? { data: [{ id: nativeId }] } : { choices: [] });
+    } } };
+    const command = { schemaVersion: 1, commandId: 'connect-global-layer', scopeId: 'scope',
+      connection: 'local-openai', endpoint: f.base, model: { nativeId } };
+    const initial = await connectConfiguredModel(f.project, command, f.options, host);
+    const global = resolveGlobalConfigPaths(f.env).platformPath;
+    const config = await f.config(), contents = JSON.stringify({ provider_invocation_profiles: config.provider_invocation_profiles });
+    await mkdir(dirname(global), { recursive: true, mode: 0o700 });
+    await writeFile(global, contents, { mode: 0o600 });
+    await f.writePolicy([...f.grants, { id: 'deny-global-profile', effect: 'deny', actions: ['write'], scopes: 'all', principals: me,
+      resource: { kind: 'config', ids: ['global:provider_invocation_profiles'] } }]);
+    clearConfigCache();
+    const before = await readFile(f.ledger);
+    expect(await connectConfiguredModel(f.project, { ...command, commandId: 'connect-global-repeat' }, f.options, host))
+      .toMatchObject({ status: 'connected', steps: { profile: 'present', activation: 'present' } });
+    expect(requests).toEqual(['GET', 'POST', 'GET', 'POST']);
+    expect(await readFile(global, 'utf8')).toBe(contents);
+    expect(await readFile(f.ledger)).toEqual(before);
+    config.provider_invocation_profiles.profiles = config.provider_invocation_profiles.profiles
+      .filter(profile => JSON.stringify(profile.reference) !== JSON.stringify(initial.reference));
+    await writeFile(f.path, JSON.stringify(config)); clearConfigCache();
+    const activation = f.rows('SELECT * FROM model_activation_receipts');
+    expect(await connectConfiguredModel(f.project, { ...command, commandId: 'connect-project-profile' }, f.options, host))
+      .toMatchObject({ status: 'connected', steps: { profile: 'written', activation: 'present' } });
+    expect(requests).toEqual(['GET', 'POST', 'GET', 'POST', 'GET', 'POST']);
+    expect(await readFile(global, 'utf8')).toBe(contents);
+    expect(f.rows('SELECT * FROM model_activation_receipts')).toEqual(activation);
+  });
 
   it('a require-approval config rule stops explicit and pulled connections; after allow the same command finishes', async () => {
     for (const model of [{ nativeId: 'gpt-6.1-sol' }, { pull: 'available' }]) {

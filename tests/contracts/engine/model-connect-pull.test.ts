@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
-import { workerConnectionModelIds, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
+import { workerConnectionModelIds, declareConnectedModel, ModelBindingApplication, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import { parseProviderCatalogDocument, type AuditEvent } from '#domain/index.js';
+import { parseProviderCatalogDocument, type AuditEvent, type ModelActivationRecord, type ModelReference } from '#domain/index.js';
 
 it('pull intersects a fresh key list with active priced seed rows, writes each layer once, and preflights AI before any write', async () => {
   const seed = parseProviderCatalogDocument({ schemaVersion: 2, revision: 'seed', providers: [{ id: 'vendor', version: 1,
@@ -114,7 +114,6 @@ it('worker-only connection uses admitted CLI versions, writes no chat config, an
 });
 
 it('BeUser AYSE-16: a reconnect that only adds a proven capability updates the declaration; any other difference stays a conflict', async () => {
-  const { declareConnectedModel } = await import('../../../src/engine/core/model-activation/index.js');
   const model = (capabilities: unknown[], nativeId = 'n') => ({ id: 'm', version: 1, nativeId, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities }] });
   const declare = (m: ReturnType<typeof model>) => ({ provider: { id: 'p', version: 1 }, model: m }) as never;
   const tool = { id: 'tool-calls', version: 1, state: 'supported' };
@@ -145,4 +144,74 @@ it('BeUser M-01: a headless CLI pull connects the models with an admitted CLI ve
   const result = await new ModelConnectApplication(ports).connect({ schemaVersion: 1, commandId: 'pull', scopeId: 's', connection: 'brain', model: { pull: 'available' } });
   expect(adapted).toEqual(['new']);
   expect(result.models).toEqual(expect.arrayContaining([{ nativeId: 'old', state: 'notInCatalog', code: 'MODEL_CONNECT_MODEL_UNKNOWN' }, expect.objectContaining({ nativeId: 'new', state: 'connected' })]));
+});
+
+it('reads only affected siblings and preserves carry drift refusals', async () => {
+  const provider = { id: 'vendor', version: 1 }, protocol = { family: 'responses', version: 'v1' };
+  const model = (id: string) => ({ id, version: 1, nativeId: id, protocols: [{ ...protocol, capabilities: [] }] });
+  const start = declareConnectedModel(null, { provider, model: model('sibling') })!;
+  const end = declareConnectedModel(start, { provider, model: model('selected') })!;
+  const reference = (modelId: string): ModelReference => ({ providerId: provider.id, providerVersion: 1, modelId, modelVersion: 1 });
+  const seed = parseProviderCatalogDocument({ ...end, schemaVersion: 2, providers: [{ ...provider,
+    channel: { kind: 'http-api', cli: null, aliases: [] }, models: end.providers[0]!.models.map(row => ({ ...row, minCliVersion: null,
+      efforts: [], aliases: [], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null } })) }] });
+  const principal = { id: 'local', issuer: 'host', subject: 'owner', assurance: 'os-user' as const, scopeIds: ['s'] };
+  const command = { schemaVersion: 1, commandId: 'selected', scopeId: 's', connection: 'vendor', model: { nativeId: 'selected' } };
+  const scenarios = [
+    { name: 'unaffected', sameRevision: true, readError: 'MODEL_ACTIVATION_UNAVAILABLE' },
+    { name: 'affected', readError: 'MODEL_ACTIVATION_UNAVAILABLE' },
+    { name: 'technical', writerError: 'MODEL_ACTIVATION_UNAVAILABLE' },
+    { name: 'revision drift', writerError: 'MODEL_ACTIVATION_REVISION_CONFLICT' },
+    { name: 'policy drift', writerError: 'POLICY_DENIED' },
+    { name: 'binding drift', writerError: 'MODEL_ACTIVATION_CATALOG_CONFLICT' },
+  ] as const;
+  const observed: Record<string, unknown> = {};
+  for (const scenario of scenarios) {
+    const existing = 'sameRevision' in scenario ? { ...start, revision: end.revision } : start;
+    const project: Record<string, unknown> = { provider_catalog: existing };
+    const binding = (target: ModelReference) => new ModelBindingApplication({ read: async () => project['provider_catalog'] }).inspect(target);
+    const record = async (target: ModelReference): Promise<ModelActivationRecord> => {
+      const state = await binding(target);
+      if (state.status !== 'declared') throw new Error('fixture binding missing');
+      return { schemaVersion: 1, scopeId: 's', reference: target, revision: 1, state: 'active', catalogRevision: state.catalogRevision,
+        definition: state.definition, binding: state.binding };
+    };
+    const sibling = await record(reference('sibling'));
+    const writes: string[] = [];
+    const workerNeeded = vi.fn(async () => true);
+    const ports: ModelConnectPorts = {
+      defaults: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000, maxInFlight: 1, maxOutputTokens: 100, currency: 'USD', deliveryHeadroomBytes: 512 },
+      kind: () => ({ id: 'vendor', available: true, endpoint: { default: 'https://example.test', editable: false }, keyRequired: false, connect: { chatPath: '/chat', seed: 'vendor' } }),
+      endpoint: text => text, secretName: () => null, seed: async () => seed, principal: async () => principal,
+      layers: async () => ({ global: {}, project, effective: project }), catalogHas: async () => true,
+      register: async () => { throw new Error('unexpected registration'); },
+      authorizePlan: async () => {}, workerNeeded, workerActivate: async () => { writes.push('worker'); return true; },
+      adapter: () => ({ adapter: { id: 'adapter', version: 1, definition: {} }, protocol, tariff: 'unmetered' }),
+      binding, activation: async target => {
+        if (target.modelId === 'selected') return null;
+        if ('readError' in scenario) throw ErrorRegistry.createError(scenario.readError);
+        return sibling;
+      },
+      activate: async input => {
+        if (input.reference.modelId === 'sibling' && 'writerError' in scenario) throw ErrorRegistry.createError(scenario.writerError);
+        writes.push(input.reference.modelId);
+      },
+      write: async change => { writes.push(change.keyPath); project[change.keyPath] = change.value; return null; },
+      delivers: () => true, audit: async () => { writes.push('audit'); }, policyRevision: async () => 'policy',
+      keyStored: async () => null, service: async () => null,
+    };
+    const result = await new ModelConnectApplication(ports).connect(command)
+      .then(value => ({ status: value.status, carried: value.steps.carried, notCarried: value.notCarried }),
+        (error: { code: string }) => ({ code: error.code }));
+    observed[scenario.name] = { result, writes, workerChecks: workerNeeded.mock.calls.length };
+  }
+  const full = ['provider_catalog', 'provider_invocation_profiles', 'selected', 'worker', 'audit'];
+  expect(observed).toEqual({
+    unaffected: { result: { status: 'connected', carried: 0, notCarried: [] }, writes: full, workerChecks: 1 },
+    affected: { result: { code: 'MODEL_ACTIVATION_UNAVAILABLE' }, writes: [], workerChecks: 0 },
+    technical: { result: { status: 'connected', carried: 0, notCarried: [{ reference: reference('sibling'), code: 'MODEL_ACTIVATION_UNAVAILABLE' }] }, writes: full, workerChecks: 1 },
+    'revision drift': { result: { code: 'MODEL_ACTIVATION_REVISION_CONFLICT' }, writes: ['provider_catalog'], workerChecks: 1 },
+    'policy drift': { result: { code: 'POLICY_DENIED' }, writes: ['provider_catalog'], workerChecks: 1 },
+    'binding drift': { result: { code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }, writes: ['provider_catalog'], workerChecks: 1 },
+  });
 });

@@ -162,21 +162,36 @@ it('requires an explicit disconnected old account for new authorization and writ
       // Person witness reaches real SIWC models/ensure and real OAuth effects; only network/model listing is synthetic.
       state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
       await expect(connectConfiguredModel(f.project, request, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
-      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['connect'], ['lease']]);
+      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['inspect'], ['connect'], ['lease']]);
       expect(state.connect).toHaveBeenCalledTimes(1); expect(state.catalog).toHaveBeenCalledTimes(1);
       expect(storeSet).toHaveBeenCalled(); expect(audit).toHaveBeenCalled(); expect(browser).toHaveBeenCalledTimes(1);
       console.info('F11-R3 local OAuth positive:', JSON.stringify({ model, storeSet: storeSet.mock.calls.length, audit: audit.mock.calls.length, browser: browser.mock.calls.length }));
       expect(await readFile(path, 'utf8')).toBe(before);
     }
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    const secretName = `${SIWC_PROTOCOL.connectionSecretPrefix}${connected.connectionId.replaceAll('-', '').toUpperCase()}`;
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'oauth-unused-secret', grants: [...policy.grants,
+      { id: 'deny-account-secret', effect: 'deny', scopes: ['scope'], principals: me, actions: ['set'],
+        resource: { kind: 'secret', ids: [secretName] } }] }));
+    const named = { ...command, connection: 'chatgpt-login', model: { nativeId: 'a' }, delegate: ['ai'], subscription: { connectionId: connected.connectionId } };
+    for (const spy of [state.models, state.connect, state.custody, state.catalog, storeSet, audit, browser]) spy.mockClear();
+    state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
+    await expect(connectConfiguredModel(f.project, named, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    expect(state.models).toHaveBeenCalledTimes(1);
+    for (const spy of [state.connect, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
     await oauth.disconnect(connected.connectionId);
-    for (const spy of [state.connect, state.custody, state.catalog, storeSet, audit, browser]) spy.mockClear();
+    for (const spy of [state.models, state.connect, state.custody, state.catalog, storeSet, audit, browser]) spy.mockClear();
+    await expect(connectConfiguredModel(f.project, named, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_DENIED' });
+    expect(state.custody.mock.calls).toEqual([['inspect']]);
+    for (const spy of [state.models, state.connect, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
+    await writeFile(policyPath, JSON.stringify(policy));
+    state.custody.mockClear();
     const beforeFresh = await readFile(f.ledger), freshRequest = { operation: 'login', scopeId: 'scope', newAccount: true } as const;
     await expect(executeConfiguredSiwc(f.project, freshRequest, { env: { ...f.env, CLAUDECODE: '1' } }))
       .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     for (const spy of [state.connect, state.custody, state.catalog, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
     expect(await readFile(f.ledger)).toEqual(beforeFresh);
 
-    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
     await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'late-oauth-deny', grants: [...policy.grants,
       { id: 'late-deny', effect: 'deny', scopes: ['scope'], principals: me, actions: ['activate'],
         resource: { kind: 'model-activation', ids: [modelActivationTargetId(a)] } }] }));
