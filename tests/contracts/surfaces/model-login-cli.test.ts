@@ -128,17 +128,15 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
 
 it('F1-MSG: the subscription CLI explains the failed store check and reserves reconnect advice for a connection record mismatch', async () => {
   const f = await project(); card.interactive = true;
-  for (const [locale, paused, noRestore, admin, reconnect] of [
-    ['en', 'Access to this subscription connection is paused because deckent could not verify that the personal store is the one the connection was enrolled in.',
-      'Disconnecting and connecting again does not restore access in this release.', 'Ask the installation administrator to check the personal store folder, its backing device and its binding record.',
+  for (const [locale, unverified, reconnect] of [
+    ['en', 'Subscription access is unavailable because deckent could not verify the personal store. Disconnecting and reconnecting does not fix the store verification problem. Ask the installation administrator to check the personal store folder, its backing device and its binding record.',
       "The connection's saved binding does not match the verified personal store. Disconnect the connection and then connect it again from your own terminal."],
-    ['tr', 'deckent, kişisel deponun bağlantının kaydedildiği depo olduğunu doğrulayamadığı için bu abonelik bağlantısına erişim durduruldu.',
-      'Bu sürümde bağlantıyı kesip yeniden bağlamak erişimi geri getirmez.', 'Kurulum yöneticisinden kişisel deponun klasörünü, bağlı olduğu disk aygıtını ve bağ kaydını kontrol etmesini isteyin.',
+    ['tr', 'deckent kişisel depoyu doğrulayamadığı için aboneliğe erişilemiyor. Bağlantıyı kesip yeniden bağlamak depo doğrulama sorununu gidermez. Kurulum yöneticisinden kişisel depo klasörünü, bağlı olduğu aygıtı ve bağ kaydını kontrol etmesini isteyin.',
       'Bağlantının kayıtlı bağı, doğrulanan kişisel depoyla eşleşmiyor. Bağlantıyı kesin ve kendi terminalinizden yeniden bağlanın.'],
   ] as const) {
     for (const [command, reason, message, answers] of [
-      ['connect', 'binding-changed', `${paused} ${noRestore} ${admin}`, ['no', 'no']],
-      ['login', 'binding-changed', `${paused} ${noRestore} ${admin}`, ['yes']],
+      ['connect', 'binding-changed', unverified, ['no', 'no']],
+      ['login', 'binding-changed', unverified, ['yes']],
       ['login', 'connection-binding-changed', reconnect, ['yes']],
     ] as const) {
       const out = capture(), err = capture(); card.answers = [...answers];

@@ -154,6 +154,7 @@ function siwcCustodyMessage(p: Params, l: Locale): string {
   if (reason === 'shared-store' || reason === 'foreign-os-owner') return t('siwc.custody.personalRequired', p, l);
   if (reason === 'binding-changed') return t('siwc.custody.bindingChanged', p, l);
   if (reason === 'connection-binding-changed') return t('siwc.custody.connectionBindingChanged', p, l);
+  if (p['operation'] === 'switchSecretStore') return t('siwc.custody.storeRelocation', p, l);
   return reason === 'profile-unresolved' ? t('siwc.custody.profileRequired', p, l) : reason === 'cleanup-pending' ? t('siwc.custody.cleanupPending', p, l)
     : reason === 'non-person-owner' ? t('siwc.custody.nonPersonOwner', p, l) : t('error.SIWC_STORE_NOT_PERSONAL', p, l);
 }

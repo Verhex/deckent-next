@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
 import { SecretStoreAdministration, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization, RENEWABLE_SECRET_PREFIX, type SecretStore, type SecretStoreSwitchPorts } from '#engine/index.js';
 import { firstRunPolicyTemplate, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { DeckentError, ErrorRegistry } from '#platform/index.js';
 
 // SECRET-STORE-SWITCH (owner 2026-10-08, option B): one governed operation moves every secret into another registered store and selects it.
 // Synthetic values only.
@@ -53,7 +54,13 @@ describe('secret store switch', () => {
     const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, enterprise = 'enterprise.secret-store.vault@1';
     const sealed = memoryStore(SEALED, { [name]: 'synthetic-renewable' }, { encryptedAtRest: true });
     const target = memoryStore(enterprise, {}, { encryptedAtRest: true }), h = harness(SEALED, { [SEALED]: sealed, [enterprise]: target });
-    expect(await code(h.application.switch(request(enterprise, true)))).toBe('SIWC_STORE_NOT_PERSONAL');
+    const failure = await h.application.switch(request(enterprise, true)).catch((error: unknown) => error);
+    assert(failure instanceof DeckentError);
+    expect(failure.code).toBe('SIWC_STORE_NOT_PERSONAL');
+    expect(failure.localize?.('en').message).toBe('Subscription session records cannot be moved to another store.');
+    expect(failure.localize?.('tr').message).toBe('Abonelik oturum kayıtları başka bir depoya taşınamaz.');
+    expect(ErrorRegistry.get(failure.code, 'en')?.message).toBe('Personal local custody is unverified.');
+    expect(ErrorRegistry.get(failure.code, 'tr')?.message).toBe('Kişisel yerel depo kontrolü doğrulanamadı.');
     expect(h.selection()).toBe(SEALED); expect(target.data.size).toBe(0); expect(sealed.data.get(name)).toBe('synthetic-renewable');
     expect(h.audits).toHaveLength(0); expect(h.log).toEqual(['enter', 'leave']);
   });

@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, lstat, writeFile, unlink } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
 import { OAuthConnectionApplication, OAuthConnectionError, oauthConnectionRecordSchema, type OAuthConnectionPorts, personalCustodyEvidenceSchema, PersonalCustodyError, IdentityProfileRegistry } from '#engine/index.js';
 import { SIWC_PROTOCOL, createEncryptedFileSecretStore, rememberPersonalStoreInstance, personalStoreAssertion } from '#adapters/index.js';
 import { auditEventSchema, recoveryPrincipalRef } from '#domain/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 const OWNER = { installationId: 'installation-fixture', companyId: 'company-fixture', scopeId: 'scope-fixture',
   principal: { issuer: 'os-fixture', subject: 'person-fixture' } };
@@ -421,12 +423,31 @@ it('leases only a current binding for the verified person and actual store; ordi
     actor = { ...actor, ...owner.principal };
     await proof(store.descriptor, owner);
     expect(await lstat(join(root, 'secrets.key'))).toMatchObject({ size: 32 });
-    await unlink(join(root, 'personal-store-binding.v1.json')); // no OAuth record exists; ordinary API keys may precede first binding
-    await store.set('NORMAL_API_KEY', SECRET);
     rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {} });
-    const f = fixture({ owner, store: opened, now: Date.now });
+    let observedInFuture = false;
+    const f = fixture({ owner, store: opened, now: () => observedInFuture ? 0 : Date.now() });
     f.ports.custody.assertPersonal = proof;
+    const expectStoreVerification = async (attempt: Promise<unknown>) => {
+      const failure = await attempt.catch((error: unknown) => error);
+      assert(failure instanceof OAuthConnectionError);
+      expect(failure).toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' });
+      const refusal = ErrorRegistry.createError(failure.code, { params: failure.reason ? { reason: failure.reason } : {} });
+      expect(refusal.localize?.('en').message).toBe('Subscription access is unavailable because deckent could not verify the personal store. Disconnecting and reconnecting does not fix the store verification problem. Ask the installation administrator to check the personal store folder, its backing device and its binding record.');
+      expect(refusal.localize?.('tr').message).toBe('deckent kişisel depoyu doğrulayamadığı için aboneliğe erişilemiyor. Bağlantıyı kesip yeniden bağlamak depo doğrulama sorununu gidermez. Kurulum yöneticisinden kişisel depo klasörünü, bağlı olduğu aygıtı ve bağ kaydını kontrol etmesini isteyin.');
+    };
+    expect(await store.listNames()).toEqual([]);
+    locationDigest = 'd'.repeat(64);
+    await expectStoreVerification(f.app.list()); // first sign-in lists before looking up or creating an OAuth record
+    expect(await store.listNames()).toEqual([]);
+    expect(f.urls).toHaveLength(0);
+    locationDigest = 'a'.repeat(64);
+    await unlink(join(root, 'personal-store-binding.v1.json')); // ordinary API keys may precede first binding
+    await store.set('NORMAL_API_KEY', SECRET);
     const connected = await f.app.connect({ planUse: true });
+    observedInFuture = true;
+    await expectStoreVerification(f.app.list());
+    observedInFuture = false;
+    await expect(f.app.list()).resolves.toEqual([connected]);
     expect(await store.get('NORMAL_API_KEY')).toBe(SECRET);
     const baselineReads = reads;
     const saved = JSON.parse((await store.get(`${SIWC_PROTOCOL.connectionSecretPrefix}${connected.connectionId.replaceAll('-', '').toUpperCase()}`))!);
@@ -462,7 +483,7 @@ it('leases only a current binding for the verified person and actual store; ordi
     locationDigest = 'd'.repeat(64);
     await expect(f.app.disconnect(connected.connectionId)).resolves.toMatchObject({ state: 'disconnected' });
     const browserVisits = f.urls.length;
-    await expect(f.app.list()).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' });
+    await expectStoreVerification(f.app.list());
     await expect(f.app.connect(reconnect)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' });
     expect(f.urls).toHaveLength(browserVisits);
   } finally { await rm(root, { recursive: true, force: true }); }

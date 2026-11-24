@@ -692,7 +692,9 @@ it('shows scoped ChatGPT custody refusals without account labels, tokens or host
   for (const locale of ['en', 'tr'] as const) {
     const refused = doctorChecks(report, facts({ siwcConnections: [{ reference, connection: 'fixture-subscription', state: 'unavailable', planUse: false,
       code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' }] }), locale).find(row => row.id === 'work.chatgptConnection');
-    expect(refused?.text).toContain(locale === 'en' ? 'does not restore access in this release' : 'erişimi geri getirmez');
+    expect(refused?.text).toContain(locale === 'en'
+      ? 'Subscription access is unavailable because deckent could not verify the personal store. Disconnecting and reconnecting does not fix the store verification problem. Ask the installation administrator to check the personal store folder, its backing device and its binding record.'
+      : 'deckent kişisel depoyu doğrulayamadığı için aboneliğe erişilemiyor. Bağlantıyı kesip yeniden bağlamak depo doğrulama sorununu gidermez. Kurulum yöneticisinden kişisel depo klasörünü, bağlı olduğu aygıtı ve bağ kaydını kontrol etmesini isteyin.');
     expect(refused).not.toHaveProperty('next');
   }
 });
