@@ -144,7 +144,8 @@ describe('live windows in the workline', () => {
       };
       const view = mountWorkline({ pollMs: 20, ledger, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, unavailable: EN.unavailable } } });
       mounted.push(view.instance);
-      await settle(20); view.stdin.write('/tasks\r');
+      await until(() => view.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && view.stdin.listenerCount('readable') > 0, 'English composer ready for input');
+      view.stdin.write('/tasks\r');
       await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'observed worker and the active Run');
       view.stdin.write('\u001b[B');
       await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run highlighted');
@@ -164,29 +165,25 @@ describe('live windows in the workline', () => {
       view.stdin.write('\u001b[A');
       await until(() => />[^\n]*Task 1 · observed-worker/u.test(view.stdout.frame), 'other project worker explicitly selected');
 
-      view.stdin.write('x'); await settle(100);
-      expect.soft(view.stdout.text).toContain("Cancellation can't start from this worker row. Select the Run's row.");
+      const cancelRefusal = "Cancellation can't start from this worker row. Select the Run's row.";
+      view.stdin.write('x');
+      await until(() => view.stdout.text.includes(cancelRefusal) || view.stdout.frame.includes('C-PROMPT'), 'foreign worker cancellation response');
+      expect.soft(view.stdout.text).toContain(cancelRefusal);
       expect(t('terminal.live.workerCancelUnavailable', {}, 'tr')).toBe('Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.');
       expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
       expect(view.stdout.text).not.toContain('C-PROMPT');
       expect(cancelRun).not.toHaveBeenCalled();
-      if (view.stdout.frame.includes('C-PROMPT')) {
-        view.stdin.write('n');
-        await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected cancellation confirmation');
-      }
 
       const beforeForeignEnter = view.stdout.text.length;
-      view.stdin.write('\r'); await settle(100);
+      const transcriptRefusal = "This worker belongs to another project. Its transcript can't be opened here.";
+      view.stdin.write('\r');
+      await until(() => view.stdout.text.slice(beforeForeignEnter).includes(transcriptRefusal) || view.stdout.frame.includes(EN.jobs!.transcriptTitle), 'foreign worker transcript response');
       expect.soft(inspectTranscript).not.toHaveBeenCalled();
-      expect.soft(view.stdout.text).toContain("This worker belongs to another project. Its transcript can't be opened here.");
+      expect.soft(view.stdout.text).toContain(transcriptRefusal);
       expect(t('terminal.live.workerTranscriptUnavailable', {}, 'tr')).toBe('Bu işçi başka bir projeye ait. İşçi kaydı burada açılamaz.');
       expect(view.stdout.frame).toContain(EN.live!.tasksHints!);
       expect.soft(view.stdout.frame).not.toContain(EN.jobs!.transcriptTitle);
       expect(view.stdout.text.slice(beforeForeignEnter)).not.toContain(EN.jobs!.transcriptTitle);
-      if (view.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
-        view.stdin.write(ESC);
-        await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected transcript');
-      }
       inspectTranscript.mockClear();
 
       sources = [active, other];
@@ -195,23 +192,24 @@ describe('live windows in the workline', () => {
       sources = [active];
       await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'the observed project disappears');
       expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
-      view.stdin.write('\r'); await settle(100);
+      const beforeLostInput = view.stdout.text.length;
+      view.stdin.write('\r');
+      await until(() => view.stdin.readableLength === 0, 'Enter consumed with no selection');
+      view.stdin.write('x');
+      await until(() => view.stdin.readableLength === 0, 'x consumed with no selection');
+      // The next selection proves the same key flow progressed past both lost-target actions.
+      view.stdin.write('\u001b[B');
+      await until(() => />[^\n]*local-worker/u.test(view.stdout.frame)
+        || view.stdout.frame.includes(EN.jobs!.transcriptTitle) || view.stdout.frame.includes('C-PROMPT'), 'selection after lost-target input');
+      const lostInputOutput = view.stdout.text.slice(beforeLostInput);
       expect.soft(inspectTranscript).not.toHaveBeenCalled();
-      if (view.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
-        view.stdin.write(ESC);
-        await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected inherited transcript');
-      }
-      view.stdin.write('x'); await settle(100);
+      expect.soft(lostInputOutput).not.toContain(EN.jobs!.transcriptTitle);
+      expect.soft(lostInputOutput).not.toContain('C-PROMPT');
       expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
       expect(cancelRun).not.toHaveBeenCalled();
-      if (view.stdout.frame.includes('C-PROMPT')) {
-        view.stdin.write('n');
-        await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected inherited confirmation');
-      }
 
       inspectTranscript.mockClear();
-      view.stdin.write('\u001b[B');
-      await until(() => />[^\n]*local-worker/u.test(view.stdout.frame), 'active worker explicitly selected');
+      expect(view.stdout.frame).toMatch(/>[^\n]*local-worker/u);
       view.stdin.write('\r');
       await until(() => view.stdout.frame.includes('ACTIVE-PROJECT-TRANSCRIPT'), 'active worker transcript');
       expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempt);
@@ -243,7 +241,8 @@ describe('live windows in the workline', () => {
       } }, async () => ({ binding: 'test-session', kinds: ['approval', 'run', 'worker'] }));
       const tr = mountWorkline({ pollMs: 20, ledger: snapshot, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live, unavailable: TR.unavailable } } });
       mounted.push(tr.instance);
-      await settle(20); tr.stdin.write('/tasks\r');
+      await until(() => tr.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && tr.stdin.listenerCount('readable') > 0, 'Turkish composer ready for input');
+      tr.stdin.write('/tasks\r');
       await until(() => tr.stdout.frame.includes('2 işçi · 1 iş'), 'both project sources through the Turkish snapshot');
       tr.stdin.write('\u001b[B');
       await until(() => />[^\n]*observed-worker/u.test(tr.stdout.frame), 'other project worker selected in Turkish');
