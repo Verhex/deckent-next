@@ -39,7 +39,7 @@ import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConf
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, headlessIsolationRefusal, headlessLoginDir, headlessPersonWitness, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
+import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold, inspectConfiguredRun,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
@@ -282,6 +282,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(), runtimeServiceManager: managerRunning,
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input), inspectRun: (_root, input) => runtime.inspectRun(input),
+    inspectRunControl: (root, input, options) => inspectConfiguredRun(root, input, options, true),
     deliverRunCancellation: (_root, input) => runtime.deliverRunCancellation(input),
     reserveRunTasks: (_root, input) => runtime.reserveRunTasks(input),
     proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),

@@ -471,6 +471,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   RUN_APPROVAL_REQUIRED: 'error',
 }), {
   RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l), suggestion: t('remedy.RUN_STORE_CONFLICT', p, l) }) },
+  RUN_CONTROL_BINDING_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_CONTROL_BINDING_CHANGED', p, l) }) },
 }, plainErrors('error.', {
   HANDOFF_SOURCE_NOT_ACCEPTED: 'error', HANDOFF_ARTIFACT_MISMATCH: 'error', HANDOFF_PATCH_UNAPPLICABLE: 'error', HANDOFF_INVALID: 'error',
   HANDOFF_LIMIT_EXCEEDED: 'error', RUN_NOT_FOUND: 'error', RUN_COMMAND_CONFLICT: 'error', RUN_POOL_REQUIRED: 'error', RUN_POOL_CONFLICT: 'error', RUN_POOL_FULL: 'error',

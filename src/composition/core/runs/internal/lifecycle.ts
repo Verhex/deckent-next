@@ -1,9 +1,10 @@
-import { ErrorRegistry, resolveLocale, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, resolveLocale, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteInventoryReader, type SqliteInventoryReader } from '#adapters/index.js';
 import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { withLayoutPolicyLock } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, false);
+export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}, binding?: string) => applyLifecycle(root, command, options, false, binding);
 export const parkConfiguredRunProgression = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, 'park');
 export const advanceConfiguredRunLifecycle = (root: string, query: RunQuery, options: ConfigLoadOptions = {}) => applyLifecycle(root, query, options, true);
 /** S6R-3: the Nervous broker's safety hold (source bound here, never by a caller; not exported to any surface). */
@@ -12,34 +13,51 @@ export const holdConfiguredRunForNervous = (root: string, command: unknown, opti
 const controlOnly = new Proxy({} as ConstructorParameters<typeof RunDecisionApprovalBroker>[0] & IntegrityAuthority, {
   get() { throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); },
 });
-async function applyLifecycle(projectRoot: string, input: unknown, options: ConfigLoadOptions, maintain: boolean | 'park' | 'nervous') {
+async function applyLifecycle(projectRoot: string, input: unknown, options: ConfigLoadOptions, maintain: boolean | 'park' | 'nervous', selected?: string) {
   try {
     const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain === 'nervous' ? runSafetyHoldOnceSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
-    const channel = !maintain && 'action' in command && (command.action === 'hold' || command.action === 'resume') ? localPrincipalChannel() : undefined;
-    const access = channel === 'mcp' ? 'read' : 'write';
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, access);
-    const source = { async load() { return (await loadConfiguredScopeContext(projectRoot, command.scopeId, options, access)).document; } }, verifier = verifiedPrincipal(principal), authorization = new RunPolicyAuthorization(source);
+    const control = !maintain && 'action' in command && (command.action === 'hold' || command.action === 'resume'), channel = control ? localPrincipalChannel() : undefined;
+    const verifyBinding = (expected: string | undefined, actual: string) => {
+      if (expected !== actual) throw ErrorRegistry.createError(channel ? 'POLICY_DENIED' : 'RUN_CONTROL_BINDING_CHANGED');
+    };
+    const loadContext = async (expected?: string) => {
+      const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, control ? 'read' : 'write', undefined,
+        expected === undefined || channel ? undefined : location => verifyBinding(expected.split(':')[0], location));
+      if (expected !== undefined) verifyBinding(expected, context.runControlBinding());
+      return context;
+    };
+    const initial = await loadContext(control && !channel ? selected : undefined), { config, layout, document, principal, path } = initial;
+    const binding = control ? initial.runControlBinding() : undefined, boundContext = () => loadContext(binding);
+    const source = { async load() { return (await boundContext()).document; } }, verifier = verifiedPrincipal(principal), authorization = new RunPolicyAuthorization(source);
     let store: SqliteInventoryReader | undefined;
     const reader = async () => store ??= await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     try {
       if (!channel) await reader();
-      let integrity = maintain === true || channel ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
-      const approvals = maintain || channel ? null : openSqliteApprovalStore(await path(), config.storage.sqlite);
+      let integrity = maintain === true || control ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
+      const approvals = maintain || control ? null : openSqliteApprovalStore(await path(), config.storage.sqlite);
       const peer = localPrincipalPeer();
       const decisions = maintain ? undefined : new RunDecisionApprovalBroker(approvals?.store ?? controlOnly, integrity ?? controlOnly, source,
-        // The MCP channel carries no terminal witness.
         () => channel ? Promise.resolve(false) : attestLocalInteractiveTerminal(peer?.pid, peer?.uid), Date.now, config.approvals.requestTtlMs, config.approvals.requestTtlMs, resolveLocale(undefined, options.env ?? process.env, config.language));
       try {
       const policy = new DispatchPolicyAuthorization(source);
       const app = new RunLifecycleApplication({ loadRun: async (scope, run) => (await reader()).loadRun(scope, run), hasTaskEvaluation: async (identity, revision) => (await reader()).hasTaskEvaluation(identity, revision),
         loadRunReceipt: async (scope, commandId) => (await reader()).loadRunReceipt(scope, commandId),
-        async commitRunLifecycle(write, audit) {
-          if (channel) {
-            await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
-            integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
-          }
-          const writer = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
-          try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
+        async commitRunLifecycle(write, audit, recheck) {
+          const commit = async () => {
+            const admitted = control ? await boundContext() : initial;
+            if (recheck) write = await recheck(admitted.document);
+            if (control) {
+              await admitted.admitWrite();
+              integrity = await openLocalIntegrityAuthority(admitted.layout, admitted.config.approvals.keyFile, true);
+            }
+            const writer = await openConfiguredLedger(admitted, { migration: 'forbid' });
+            try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
+          };
+          if (!channel) return commit();
+          let entered = false;
+          return withLayoutPolicyLock(layout, () => { entered = true; return commit(); }).catch((error: unknown) => {
+            throw entered || error instanceof DeckentError ? error : ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error });
+          });
         } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
         Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions,

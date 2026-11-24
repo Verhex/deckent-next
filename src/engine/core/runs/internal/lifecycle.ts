@@ -1,10 +1,10 @@
-import { CodedError } from '#platform/index.js';
+import { CodedError, DeckentError } from '#platform/index.js';
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerRunQuotaWrite, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
   deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, parseRun, runSnapshotSchema, RunError, type AttemptIdentity, type VerifiedPrincipal,
-  type TaskProgress, type RunSnapshot, type SafetyHoldSource, type RunQuotaAskPolicy } from '#domain/index.js';
+  type TaskProgress, type Policy, type RunSnapshot, type SafetyHoldSource, type RunQuotaAskPolicy } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
@@ -68,7 +68,8 @@ export function matchRunLifecycleCommand(prior: string, current: string): boolea
 export interface RunLifecycleStore extends Pick<RunStore, 'loadRun'> {
   loadRunReceipt?(scopeId: string, commandId: string): Promise<RunReceipt | null>;
   hasTaskEvaluation?(identity: AttemptIdentity, revision: number): Promise<boolean>;
-  commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: RunSnapshot) => void): Promise<RunReceipt>;
+  commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: RunSnapshot) => void,
+    recheck?: (policy: Policy) => Promise<RunLifecycleWrite>): Promise<RunReceipt>;
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
 export class RunLifecycleError extends CodedError {
@@ -77,7 +78,7 @@ export class RunLifecycleError extends CodedError {
 }
 export type RunDecisionEvidence = NonNullable<RunLifecycleWrite['decision']>;
 export interface RunDecisionAuthorization {
-  authorize(command: RunLifecycleCommand, principal: VerifiedPrincipal, run: RunSnapshot, replay?: RunLifecycleWrite): Promise<RunDecisionEvidence>;
+  authorize(command: RunLifecycleCommand, principal: VerifiedPrincipal, run: RunSnapshot, replay?: RunLifecycleWrite, snapshot?: Policy): Promise<RunDecisionEvidence>;
 }
 /** Trusted ledger transition proposal; the adapter owns CAS, receipt and atomic audit persistence. */
 export function proposeRunLifecycleWrite(current: RunSnapshot, write: RunLifecycleWrite, audited: boolean, evidence?: readonly string[]): RunSnapshot {
@@ -195,7 +196,7 @@ export class RunLifecycleApplication {
       const replay = receipt && (!control || operation === 'run-lifecycle') ? runLifecycleWriteSchema.parse(payload) : undefined;
       if (!this.decisions && command.action !== 'hold' && !(command.action === 'resume' && run.state.kind === 'parked' && run.state.reason === 'operator-hold'))
         throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
-      const decision = this.decisions ? await this.decisions.authorize(command, principal, run, replay) : undefined;
+      let decision = this.decisions ? await this.decisions.authorize(command, principal, run, replay) : undefined;
       if (!decision && command.action === 'resume' && isAiPrincipal(principal)) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
       const lifted = command.action === 'resume' ? readRunHold(run.state)?.source : undefined;
       const now = counterSchema.parse(this.now());
@@ -210,6 +211,15 @@ export class RunLifecycleApplication {
         // Check the same transition before write admission. The ledger rechecks current state and revision.
         proposeRunLifecycleWrite(run, write, true);
       }
+      const recheck = control && this.decisions ? async (policy: Policy) => {
+        try { decision = await this.decisions!.authorize(command, principal, run, undefined, policy); }
+        catch (error) {
+          if (error instanceof PolicyAuthorizationError || error instanceof RunLifecycleError && error.code === 'TASK_DECISION_HUMAN_REQUIRED')
+            throw new PolicyAuthorizationError('POLICY_DENIED');
+          throw error;
+        }
+        return { ...write, decision };
+      } : undefined;
       return await this.store.commitRunLifecycle(write, (store, snapshot) => {
         this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
           principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: decision?.policyRevision ?? this.policyRevision, atMs: now,
@@ -219,17 +229,19 @@ export class RunLifecycleApplication {
             ...(command.action === 'hold' || command.action === 'answer' ? { inputDigest: createHash('sha256').update(command.action === 'hold' ? command.holdReason : command.answer).digest('hex') } : {}),
             taskId: 'taskId' in command ? command.taskId : null, revision: snapshot.revision,
             evidence: command.action === 'accept' ? 'model-unverified' : null } });
-      });
+      }, recheck);
     } catch (error) {
       if (control && (error instanceof RunLifecycleError && ['RUN_NOT_FOUND', 'RUN_HOLD_PERSON_REQUIRED', 'TASK_DECISION_HUMAN_REQUIRED'].includes(error.code)
         || error instanceof RunError && ['RUN_REVISION_CONFLICT', 'RUN_PARKED', 'RUN_TERMINAL', 'RUN_NOT_PARKED', 'RUN_DECISION_NOT_READY'].includes(error.code)
         || error instanceof RunStoreError && ['RUN_STORE_CONFLICT', 'RUN_COMMAND_CONFLICT'].includes(error.code)
-        || error instanceof PolicyAuthorizationError && error.code === 'POLICY_APPROVAL_UNSUPPORTED')) {
+        || error instanceof PolicyAuthorizationError && error.code === 'POLICY_APPROVAL_UNSUPPORTED'
+        || error instanceof DeckentError && ['CONFIG_WRITE_LOCKED', 'CONFIG_READ_IO_HOLD', 'CONFIG_CONCURRENT_REVISION_HOLD'].includes(error.code))) {
         try { await this.runAuthorization.authorize('inspect', { schemaVersion, scopeId, runId }, principal); }
         catch (refusal) {
           if (refusal instanceof PolicyAuthorizationError && refusal.code === 'POLICY_APPROVAL_UNSUPPORTED') throw new PolicyAuthorizationError('POLICY_DENIED');
           throw refusal;
         }
+        if (error instanceof RunError && error.code === 'RUN_REVISION_CONFLICT') throw new RunStoreError('RUN_STORE_CONFLICT');
       }
       throw error;
     }
