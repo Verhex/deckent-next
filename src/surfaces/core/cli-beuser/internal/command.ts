@@ -12,10 +12,11 @@ type SetupInput = { scopeId: string; profile: string; apply: boolean; expect?: s
   | { journey: string; candidate?: string | undefined; walkers?: readonly Model[] | undefined; evaluator?: Model | undefined; apply: boolean; expect?: string | undefined };
 const MS_PER_MINUTE = 60_000;
 type Card = (request: Parameters<typeof askCliCard>[0]) => Promise<string | null>;
+type WalkResult = { report: BeuserReport; failureStage: 'reservation' | undefined };
 export interface BeuserCommandContext extends CliBaseContext {
   listBeuserJourneys?: () => Promise<readonly { id: string; recommended: boolean }[]>;
   setupBeuser?: (root: string, input: SetupInput, options: ConfigLoadOptions) => Promise<SetupResult>;
-  walkBeuser?: (root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined }, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<BeuserReport>;
+  walkBeuser?: (root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined }, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<WalkResult>;
   readBeuserReport?: (root: string, scopeId: string, runId: string | undefined, options: ConfigLoadOptions) => Promise<BeuserReport>;
 }
 export function parseBeuserArguments(argv: readonly string[]) {
@@ -74,16 +75,15 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
     if (args.apply && result.status !== 'applied' && result.status !== 'current') return 1;
     return;
   }
-  let report;
   if (args.action === 'walk') {
     if (!context.walkBeuser) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    report = await context.walkBeuser(root, { scopeId, journey: args.journey!, candidate: args.candidate }, options, context.signal);
-  } else {
-    if (!context.readBeuserReport) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    report = await context.readBeuserReport(root, scopeId, args.runId, options);
+    const walk = await context.walkBeuser(root, { scopeId, journey: args.journey!, candidate: args.candidate }, options, context.signal);
+    emit(formatBeuserReport(walk.report, { json: args.json, locale }), sinks);
+    return walkExit(walk);
   }
+  if (!context.readBeuserReport) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
+  const report = await context.readBeuserReport(root, scopeId, args.runId, options);
   emit(formatBeuserReport(report, { json: args.json, locale }), sinks);
-  if (args.action === 'walk') return walkExit(report);
 }
 
 const preWalkRefusals = new Set([
@@ -91,10 +91,12 @@ const preWalkRefusals = new Set([
   'EXECUTION_NOT_CONFIGURED', 'RUN_POOL_FULL',
 ]);
 
-function walkExit(report: BeuserReport): ExitCode | undefined {
+function walkExit({ report, failureStage }: WalkResult): ExitCode | undefined {
   if (report.unwalked.some(row => row.reason === 'cancelled') || report.unknown.some(row => row.reason === 'cancelled')) return 1;
-  if (report.counts.walked === 0 && report.unknown.some(({ reason }) =>
-    preWalkRefusals.has(reason) || isAuthorizationRefusal(reason, { include: ['policy-denied', 'approval-unsupported'] }))) return 1;
+  if (report.counts.walked !== 0) return;
+  if (failureStage === 'reservation' && report.reliability.attempted === 0) return 1;
+  if (report.unknown.some(({ reason }) => preWalkRefusals.has(reason) ||
+    isAuthorizationRefusal(reason, { include: ['policy-denied', 'approval-unsupported'] }))) return 1;
 }
 
 /** Journey beuser-one-command B1/B2/B4: controller → the person's model choice → setup card → walk → report, from any folder. A refused card applies nothing. */
@@ -148,10 +150,14 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
   if (applied.status !== 'applied' && applied.status !== 'current') {
     emit(setupResultText(applied, locale), sinks); return 1;
   }
-  const report = await context.walkBeuser(controller.root, { scopeId: controller.scopeId, journey, candidate: chosen.root }, options, context.signal);
+  const walk = await context.walkBeuser(controller.root, { scopeId: controller.scopeId, journey, candidate: chosen.root }, options, context.signal);
+  const { report } = walk;
   emit(formatBeuserReport(report, { json, locale }), sinks);
-  if (!json) emit(t('beuser.walk.next', { ...at, revision: terminalSafeText(chosen.revision) }, locale), sinks);
-  return walkExit(report);
+  if (!json) {
+    const next = t('beuser.walk.next', at, locale);
+    emit(report.counts.walked > 0 ? `${t('beuser.walk.revision', { revision: terminalSafeText(chosen.revision) }, locale)} ${next}` : next, sinks);
+  }
+  return walkExit(walk);
 }
 
 function setupResultText(result: SetupResult, locale: ReturnType<typeof commandLocale>) {

@@ -136,11 +136,21 @@ it('reports retained cancellations and refusals on both BeUser walk paths and ke
     slots: { before: null, after: { executionSlots: 1, inFlightSlots: 1 } } };
   const setup = vi.fn().mockResolvedValueOnce(preview).mockResolvedValueOnce(preview).mockResolvedValueOnce({ status: 'applied' });
   const output: string[] = [];
+  const walkResult = (report: unknown) => ({ report, failureStage: undefined });
   const context = {
     env: { HOME: '/nonexistent-beuser-presentation-fixture' },
     stdout: { isTTY: true, write(text: string) { output.push(text); return true; } }, stdin: { isTTY: true } as never,
-    setupBeuser: setup, walkBeuser: vi.fn().mockResolvedValue(value), readBeuserReport: vi.fn().mockResolvedValue(value),
+    setupBeuser: setup, walkBeuser: vi.fn().mockResolvedValue(walkResult(value)), readBeuserReport: vi.fn().mockResolvedValue(value),
   };
+  const oneCommand = async (language: 'en' | 'tr') => {
+    ask.mockReset().mockResolvedValueOnce('continue').mockResolvedValueOnce('0').mockResolvedValueOnce('apply');
+    setup.mockReset().mockResolvedValueOnce(preview).mockResolvedValueOnce(preview).mockResolvedValueOnce({ status: 'applied' });
+    output.length = 0;
+    return (await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--lang', language], context)) ?? 0;
+  };
+  const next = { en: 'Controller: fixture. To read this report again: cd fixture && deckent beuser report',
+    tr: 'Denetleyici: fixture. Bu raporu yeniden okumak için: cd fixture && deckent beuser report' };
+  const revision = { en: 'Walked revision fixture.', tr: 'Yürünen revizyon fixture.' };
   try {
     expect.soft(await beuserCommand(['beuser', 'walk', '--scope', 'fixture', '--journey', 'fixture', '--lang', 'en'], context)).toBe(1);
     expect(output.join('')).toContain('Unwalked systemd: cancelled.');
@@ -152,25 +162,27 @@ it('reports retained cancellations and refusals on both BeUser walk paths and ke
     output.length = 0;
     expect((await beuserCommand(['beuser', 'report', '--scope', 'fixture', '--lang', 'tr'], context)) ?? 0).toBe(0);
     expect(output.join('')).toContain('Yürünmeyen systemd: cancelled.');
-    context.walkBeuser.mockResolvedValueOnce({ ...value, unwalked: [], unknown: [{ branch: 'systemd', reason: 'cancelled' }] });
+    context.walkBeuser.mockResolvedValueOnce(walkResult({ ...value, unwalked: [], unknown: [{ branch: 'systemd', reason: 'cancelled' }] }));
     expect.soft(await beuserCommand(['beuser', 'walk', '--scope', 'fixture', '--journey', 'fixture', '--json'], context)).toBe(1);
     const refused = { ...report(), unwalked: [], unknown: [{ branch: 'onboarding', reason: 'BEUSER_CANDIDATE_MISMATCH' },
       { branch: 'onboarding', reason: 'BEUSER_CLEANUP_UNPROVEN' }] };
-    context.walkBeuser.mockResolvedValue(refused);
+    context.walkBeuser.mockResolvedValue(walkResult(refused));
     context.readBeuserReport.mockResolvedValue(refused);
-    ask.mockReset().mockResolvedValueOnce('continue').mockResolvedValueOnce('0').mockResolvedValueOnce('apply');
-    setup.mockReset().mockResolvedValueOnce(preview).mockResolvedValueOnce(preview).mockResolvedValueOnce({ status: 'applied' });
-    output.length = 0;
-    expect.soft(await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--lang', 'en'], context)).toBe(1);
-    expect(output.join('')).toContain('The candidate manifest or package identity does not match the admitted reference.');
+    for (const language of ['en', 'tr'] as const) {
+      expect.soft(await oneCommand(language)).toBe(1);
+      expect(output.join('')).toContain(language === 'en' ? 'The candidate manifest or package identity does not match the admitted reference.'
+        : 'Aday manifesti veya paket kimliği kabul edilen referansla eşleşmiyor.');
+      expect(output.join('')).toContain(next[language]);
+      expect.soft(output.join('')).not.toContain(revision[language]);
+    }
     output.length = 0;
     expect((await beuserCommand(['beuser', 'report', '--scope', 'fixture', '--json'], context)) ?? 0).toBe(0);
     expect(JSON.parse(output.join(''))).toEqual(refused);
 
     const scopedWalk = ['beuser', 'walk', '--scope', 'fixture', '--journey', 'fixture', '--json'];
-    context.walkBeuser.mockResolvedValueOnce({ ...refused, unknown: [{ branch: 'onboarding', reason: 'unknown' }] });
+    context.walkBeuser.mockResolvedValueOnce(walkResult({ ...refused, unknown: [{ branch: 'onboarding', reason: 'unknown' }] }));
     expect((await beuserCommand(scopedWalk, context)) ?? 0).toBe(0);
-    for (const outcome of ['GREEN', 'FRICTION', 'RED'] as const) {
+    for (const outcome of ['GREEN', 'FRICTION', 'RED', 'unknown'] as const) {
       const digest = 'a'.repeat(64);
       const verdict = { schemaVersion: 1, outcome, authorization: 'pass', safety: 'pass', experience: 'pass', validity: 'valid',
         independence: 'independent', evidenceRefs: ['observed'], transcriptDigest: digest,
@@ -179,12 +191,23 @@ it('reports retained cancellations and refusals on both BeUser walk paths and ke
           candidateDigest: digest, personaDigest: digest, journeyDigest: digest, rubricDigest: digest,
           nonce: '12345678-1234-4234-8234-123456789abc', realmId: 'realm', transcriptId: 'transcript' } };
       const observed = { ...refused, counts: { ...refused.counts, walked: 1, concurrent: 1 },
-        unknown: [], segments: [{ ...refused.segments[0], verdict }], reliability: { attempted: 1, completed: 1 } };
-      context.walkBeuser.mockResolvedValueOnce(observed);
+        unknown: [], segments: [{ ...refused.segments[0], verdict }], reliability: { attempted: 1, completed: outcome === 'unknown' ? 0 : 1 } };
+      context.walkBeuser.mockResolvedValueOnce(walkResult(observed));
       output.length = 0;
       expect((await beuserCommand(scopedWalk, context)) ?? 0).toBe(0);
       expect(JSON.parse(output.join(''))).toEqual(observed);
+      if (outcome === 'GREEN') {
+        context.walkBeuser.mockResolvedValue(walkResult(observed));
+        for (const language of ['en', 'tr'] as const) {
+          expect(await oneCommand(language)).toBe(0);
+          expect(output.join('')).toContain(`${revision[language]} ${next[language]}`);
+        }
+      }
     }
+    context.walkBeuser.mockResolvedValueOnce(walkResult({ ...refused, counts: { ...refused.counts, walked: 1, concurrent: 1 },
+      unknown: [{ branch: 'onboarding', reason: 'BEUSER_SURFACE_INVALID' }], reliability: { attempted: 1, completed: 0 } }));
+    expect(await oneCommand('en')).toBe(0);
+    expect(output.join('')).toContain('BEUSER_SURFACE_INVALID');
   } finally { ask.mockRestore(); }
 });
 
