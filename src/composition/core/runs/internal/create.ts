@@ -16,6 +16,7 @@ import { configuredAgentSelection, type TaskAgentUse } from '#composition/core/a
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
 import { executionTask, executionTaskSilenceDeadline } from '#adapters/index.js';
 import { nativeWorkerAdmission } from './native-worker.js';
+import { nativeInputAdmission } from './native-inputs.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
   work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>,
@@ -51,7 +52,7 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
             const profile = compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra], task?.agent);
             return isNativeCliWorkerProfile(profile) ? profile : bindSiwcWorker(profile, siwc, scopeId ?? '');
           } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } }); } } })),
-      ...nativeWorkerAdmission(projectRoot, scopeId ?? '', options),
+      ...nativeWorkerAdmission(projectRoot, scopeId ?? '', options), inputs: nativeInputAdmission(projectRoot, context, options),
       ...(session ? { session: async (command: import('#engine/index.js').BoundRunAdmission) => {
         sessionPin = await beginRunSession(session, { ledger: sha256(await path()), companyId: config.company.id, scopeId: command.scopeId,
           runId: command.runId, commandId: command.commandId, actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject } }, principal);

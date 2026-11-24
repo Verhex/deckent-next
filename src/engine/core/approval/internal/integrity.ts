@@ -1,4 +1,4 @@
-import { asPolicy, approvalDecisionClass, approvalDecisionAssurance, requiresPersonProposalDecision, approvalSubject, mcpPrincipalRef, isWorkloadPrincipalRef, samePrincipalRef, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
+import { asPolicy, approvalDecisionClass, approvalDecisionAssurance, requiresPersonProposalDecision, requiresPersonPackageConsent, requiresPersonRunInputDecision, approvalSubject, mcpPrincipalRef, isWorkloadPrincipalRef, samePrincipalRef, approvalRecordSchema, ApprovalError, encodeCommandProjection, type ApprovalRecord, type ApprovalRequest,
   type RunSnapshot, type ApprovalActor } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
@@ -33,8 +33,9 @@ export function proposalProposer(request: ApprovalRequest): ApprovalActor {
   const actor = request.requester, ref = approvalSubject(request).kind === 'agent-tool-call' && !isWorkloadPrincipalRef(actor) ? mcpPrincipalRef(actor) : actor;
   return { id: `${actor.id}${ref.issuer.slice(actor.issuer.length)}`, issuer: ref.issuer, subject: ref.subject };
 }
-export const witnessedPersonDecision = (record: ApprovalRecord): boolean => record.decision !== null && approvalDecisionClass(record.decision) === 'human-tty'
-  && approvalDecisionAssurance(record.decision) !== 'ai-policy' && !isWorkloadPrincipalRef(record.decision.actor) && !samePrincipalRef(record.decision.actor, proposalProposer(record.request));
+export const witnessedPersonDecision = (record: ApprovalRecord, distinctRequester = true): boolean => record.decision !== null && approvalDecisionClass(record.decision) === 'human-tty'
+  && approvalDecisionAssurance(record.decision) !== 'ai-policy' && !isWorkloadPrincipalRef(record.decision.actor)
+  && (!distinctRequester || !samePrincipalRef(record.decision.actor, proposalProposer(record.request)));
 /**
  * KG4 F2 (S1-D1): why a stored record does not admit its command, or null: not decided, not an allow, a decision on another request, a decider
  * the caller does not accept; then the time. A decision dated beyond the clock skew is a conflict everywhere (owner B2-2; another process may
@@ -47,6 +48,7 @@ export function decidedRefusal(record: ApprovalRecord, at: { readonly now: numbe
   if (decision.decision !== 'allow') return 'APPROVAL_DENIED' as const;
   if (decision.requestDigest !== approvalRequestDigest(record.request)) return 'APPROVAL_INTEGRITY' as const;
   if (requiresPersonProposalDecision(record.request) && !witnessedPersonDecision(record)) return 'APPROVAL_DENIED' as const;
+  if ((requiresPersonRunInputDecision(record.request) || requiresPersonPackageConsent(record.request)) && !witnessedPersonDecision(record, false)) return 'APPROVAL_DENIED' as const;
   if (!accepted) return 'APPROVAL_DENIED' as const;
   if (at && decision.decidedAt > at.now + MAX_WALL_SKEW_MS) return 'APPROVAL_CONFLICT' as const;
   return at && at.now > decision.decidedAt + at.window ? 'APPROVAL_EXPIRED' as const : null;

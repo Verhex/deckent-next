@@ -144,6 +144,22 @@ describe('bubblewrap argument contract (S9, pure)', () => {
     expect(args.at(-1)).not.toBe('--');
     expect(BUBBLEWRAP_KNOWN_PATHS).toContain('/usr/bin/bwrap');
   });
+  it('places the sealed package mount over the writable checkout and keeps the view offline', () => {
+    const source = '/tmp/x/data/inputs/sealed/packages', target = `${view.projectRoot}/node_modules`;
+    const sealed = { ...view, sealedNodeModules: source };
+    const mounted = bubblewrapArguments(sealed);
+    const exact = ['--ro-bind', source, target];
+    const index = mounted.findIndex((_, pos) => exact.every((part, offset) => mounted[pos + offset] === part));
+    expect(index).toBeGreaterThan(mounted.indexOf('--bind'));
+    expect(index).toBeLessThan(mounted.indexOf('--chdir'));
+    expect(mounted).not.toContain('--share-net');
+    expect(mounted).toContain('67108864');
+  });
+  it('refuses an overlapping mount, a writable alias, or sharing the network with sealed packages', () => {
+    const source = '/tmp/x/data/inputs/sealed/packages', target = `${view.projectRoot}/node_modules`;
+    for (const conflict of [{ maskedDirectories: [target] }, { writablePaths: ['/tmp/x/data/inputs'] }, { network: true }])
+      expect(() => bubblewrapArguments({ ...view, sealedNodeModules: source, ...conflict })).toThrow('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+  });
 });
 
 describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; requires POSIX filesystem permissions and paths)', () => {

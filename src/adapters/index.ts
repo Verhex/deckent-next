@@ -16,10 +16,14 @@ export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
-export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
+export { gitRefFileSource, gitCommittedInputSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
+export { gitInputMountTracked } from '#adapters/core/git-workspace/index.js';
+export { nativeCodingDependencyLayout } from '#adapters/core/native-coding/index.js';
+export { codingPreparedInput, produceCodingPackageList } from '#adapters/core/setup-detect-coding/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
 export { scanWorkerTree, workerTreeDenied, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
+export { reopenWorkerTree, sealedWorkerTreeLocation, verifySealedWorkerTree } from '#adapters/core/worker-tree-gate/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
 export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';

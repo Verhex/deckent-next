@@ -9,3 +9,4 @@ export { configServiceState } from './internal/service-state.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ConfigServiceState, DescribeService } from './internal/service-state.js';
 export { restartConfigDigest, runtimeConfigFreshness } from './internal/restart-digest.js';
 export { publishedConfigProgress } from './internal/publication-progress.js';
+export { packageConsentDigest, samePackagePerson, isConfigConsentPerson, isPackageScopeAdministrator } from './internal/worker-consent.js';

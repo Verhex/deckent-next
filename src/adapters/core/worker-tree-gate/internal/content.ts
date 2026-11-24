@@ -91,3 +91,12 @@ export async function contentRule(runner: RegexRunner, path: string, texts: read
   }
   return configLike && texts.some(configSecretHit) ? config.id : null;
 }
+
+export async function matchingContentRules(runner: RegexRunner, path: string, texts: readonly string[]): Promise<readonly string[]> {
+  const matches = new Set<string>();
+  for (const group of combined) if ((await runner.match(group.source, group.flags, texts)).length) {
+    for (const row of WORKER_TREE_PATTERN_RULES) if (row.flags === group.flags && (await runner.match(row.source, row.flags, texts)).length) matches.add(row.id);
+  }
+  if (isConfigFile(path) && texts.some(configSecretHit)) matches.add(config.id);
+  return [...matches].sort();
+}

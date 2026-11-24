@@ -34,6 +34,10 @@ describe('CS-1 registry coverage and selection contract', () => {
     // f5 item 2: the S3-3 preview switch is retired (S3-5 removed its only reader): still declared so old configs parse, never offered as a choice.
     const preview = await configValueModel(field('models.headless.preview', { type: 'boolean' }, false), '/project', 'en');
     expect(preview.hidden).toBe(true); expect(preview.free).toBe(false);
+    for (const key of ['toolchains.packageAllowances', 'toolchains.packageAllowances.0.generation']) {
+      const managed = await configValueModel(field(key, { type: 'string' }), '/project', 'en');
+      expect(managed.choices).toEqual([]); expect(managed.free).toBe(false); expect(managed.readOnly).toBeTruthy();
+    }
   });
   it('steps stay inside integer/float/exclusive bounds and display human units', () => {
     const declaration = configChoiceDeclaration('execution.docker.cpus');

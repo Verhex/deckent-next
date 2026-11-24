@@ -1,13 +1,14 @@
+import type { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { approvalRequestSchema, approvalSubject, encodeCommandProjection, samePrincipalRef, ApprovalError,
-  type ApprovalActor, type ApprovalSubject, type AuthorityAdmission } from '#domain/index.js';
+  approvalPreviewSchema, type ApprovalActor, type ApprovalSubject, type AuthorityAdmission } from '#domain/index.js';
 import { sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
 import { admitDecided, approvalActorRef, approvalRequestDigest, expireApproval, expireDue, sealApproval, verifyApproval, witnessedPersonDecision } from './integrity.js';
 import { minimumApprovalAssurance } from './assurance.js';
 type Subject = Extract<ApprovalSubject, { kind: 'run-create' }>;
 export interface RunCreateApprovalInput { readonly scopeId: string; readonly subject: Subject; readonly requester: ApprovalActor;
-  readonly policyRevision: string; readonly policy: unknown; readonly summary?: string; readonly personDecision?: boolean }
+  readonly preview?: z.infer<typeof approvalPreviewSchema>; readonly policyRevision: string; readonly policy: unknown; readonly summary?: string; readonly personDecision?: boolean; readonly personInput?: boolean }
 export const RUN_CREATE_SUBJECT_PROTOCOL_VERSION = 27;
 export class RunCreateApprovalBroker {
   constructor(private readonly store: ApprovalStore, private readonly integrity: IntegrityAuthority, private readonly clock: TrustedClock,
@@ -24,8 +25,8 @@ export class RunCreateApprovalBroker {
     let record = this.store.findRunCreate(input.scopeId, input.subject.commandId);
     const fresh = () => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId,
         subject: input.subject, requester: input.requester, policyRevision: input.policyRevision, actionDigest: digest,
-        summary: input.summary ?? `${input.subject.runId} · ${input.subject.inputDigest.slice(0, 12)} · ${input.subject.decisionRecordId}`, createdAt: now,
-        expiresAt: now + this.options.requestTtlMs, facts: { risk: input.personDecision ? { source: 'effect-class', effectClass: 'write', authority: true } : null, reversibility: null, onExpiry: 'nothing-runs',
+        ...(input.preview ? { preview: input.preview } : {}), summary: input.summary ?? `${input.subject.runId} · ${input.subject.inputDigest.slice(0, 12)} · ${input.subject.decisionRecordId}`, createdAt: now,
+        expiresAt: now + this.options.requestTtlMs, facts: { risk: input.personDecision || input.personInput ? { source: 'effect-class', effectClass: input.personDecision ? 'write' : 'read', authority: true } : null, reversibility: null, onExpiry: 'nothing-runs',
           requiredAssurance: minimumApprovalAssurance(input.policy, input.scopeId, 'run-create', null) } }), revision: 0, status: 'pending', decision: null }, this.integrity);
     if (!record) try { record = this.store.create(fresh()); } catch (error) { const winner = this.store.findRunCreate(input.scopeId, input.subject.commandId); if (!winner) throw error; record = winner; }
     record = verifyApproval(record, this.integrity);
@@ -38,6 +39,8 @@ export class RunCreateApprovalBroker {
     if (record.request.actionDigest !== digest || record.request.policyRevision !== input.policyRevision
       || encodeCommandProjection('run-create-subject:1', approvalSubject(record.request)) !== encodeCommandProjection('run-create-subject:1', input.subject)
       || !samePrincipalRef(approvalActorRef(record.request.requester), approvalActorRef(input.requester))) throw new ApprovalError('APPROVAL_CONFLICT');
+    if (input.personInput && (record.request.schemaVersion !== 3 || !record.request.preview || record.request.preview.cut
+      || record.request.preview.argsDigest !== input.subject.admissionDigest || !record.request.preview.text)) throw new ApprovalError('APPROVAL_CONFLICT');
     record = expireDue(this.store, this.integrity, record, now);
     if (record.status === 'pending') return { pending: { approvalId: record.request.approvalId, expiresAt: record.request.expiresAt } };
     const decision = admitDecided(record, { now, window: this.options.admitWithinMs }, !input.personDecision || witnessedPersonDecision(record));

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,9 +6,12 @@ import { initializeNativeCodingRegistry, configureNativeCodingTemplate } from '#
 import { configureNativeTemplate, initializeNativeRegistry, type NativeTemplatePorts } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { NATIVE_NODE_DEPENDENCY_LAYOUT } from '#domain/index.js';
+import { reviewSealedWorkerTree } from '#adapters/core/worker-tree-gate/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { main } from '#surfaces/core/cli/index.js';
+import { personEnv } from '../support/person-env.js';
 
 /**
  * alpha.55.1 (same class as functest B P1): `deckent init registry --apply` and `deckent coding template --apply` write the protected
@@ -80,5 +83,49 @@ describe.skipIf(process.platform === 'win32')('native registry and template writ
       expect(error).toContain('AUTHORITY_WITNESS_REQUIRED');
     }
     expect(handlers.initializeNativeCodingRegistry).not.toHaveBeenCalled(); expect(handlers.configureCodingTemplate).not.toHaveBeenCalled();
+  });
+  it('renders the declared mount and approval route in English and Turkish with the ordinary template command', async () => {
+    const f = await setup(), env = personEnv({ ...f.options.env, TERM: 'xterm-256color' });
+    const configureCodingTemplate = vi.fn(async () => ({ status: 'preview', profile: { id: 'pkg-template', version: 1,
+      adapter: { id: 'native-coding-template', version: 3 }, parameters: { dependencyLayout: 'node-npm' } },
+      kind: { kind: 'coding' }, registry: { revision: 'r' }, expect: null, write: null }));
+    for (const [lang, text] of [['en', 'Read-only mount at ./node_modules in the worker checkout'], ['tr', 'İşçi çalışma kopyasında ./node_modules salt okunur bağlanır']]) {
+      let shown = '';
+      const code = await main(['coding', 'template', '--provider', 'codex', '--kind', 'coding', '--connection', 'selected', '--node-dependencies', '--preview', '--lang', lang],
+        { root: f.root, env, stdout: { isTTY: false, write: (chunk: string) => { shown += chunk; return true; } }, configureCodingTemplate } as never);
+      expect(code).toBe(0); expect(shown).toContain(text); expect(shown).toContain('--inspect-dependencies');
+      expect(configureCodingTemplate).toHaveBeenLastCalledWith(f.root, expect.objectContaining({ nodeDependencies: true, apply: false }), expect.any(Object));
+    }
+  });
+  it.skipIf(process.platform !== 'linux')('renders every pattern rule in the native list preview without the synthetic matched text', async () => {
+    const f = await setup(), source = join(f.root, 'node_modules'), pkg = join(source, 'example');
+    await mkdir(source); await mkdir(pkg);
+    const value = 'fixture-person:fixture-preview-value';
+    await writeFile(join(pkg, 'check.js'), `https://${value}@example.invalid\n-----BEGIN PRIVATE KEY-----`);
+    const review = await reviewSealedWorkerTree(source, 'node_modules',
+      { maxFiles: 10, maxFileBytes: 1024, maxTotalBytes: 4096, timeoutMs: 20_000, allowPatternPaths: [], acknowledgedDenyPaths: [] }, EMPTY_KNOWN_SECRETS);
+    const inspectCodingDependencies = async () => ({ kind: 'prepared', project: f.root, workTarget: f.root, platform: 'linux-x64',
+      layout: NATIVE_NODE_DEPENDENCY_LAYOUT, listDigest: review.digest, lockfileDigest: 'a'.repeat(64), manifest: review.manifest });
+    const produceCodingDependencies = vi.fn(async () => ({ ...await inspectCodingDependencies(), written: NATIVE_NODE_DEPENDENCY_LAYOUT.fileList }));
+    const configureCodingTemplate = () => { throw Error('inspection cannot apply the template'); };
+    for (const [lang, warning] of [['en', 'You may decline.'], ['tr', 'Onayı reddedebilirsiniz.']]) {
+      async function command(args: string[]) {
+        let shown = '';
+        const code = await main(['coding', 'template', ...args, '--scope', 's', '--lang', lang],
+          { root: f.root, env: f.options.env, stdout: { isTTY: false, write: (chunk: string) => { shown += chunk; return true; } },
+            configureCodingTemplate, inspectCodingDependencies, produceCodingDependencies } as never);
+        expect(code).toBe(0);
+        expect(shown).toContain(warning);
+        expect(shown).toContain('example/check.js · pattern:private-key-block');
+        expect(shown).toContain('example/check.js · pattern:url-userinfo');
+        expect(shown).not.toContain(value);
+        expect(shown).not.toContain('-----BEGIN PRIVATE KEY-----');
+        return shown;
+      }
+      await command(['--inspect-dependencies']);
+      const shown = await command(['--produce-dependencies', '--npm-cache', '/fixture/npm-cache']);
+      expect(produceCodingDependencies).toHaveBeenLastCalledWith(f.root, 's', expect.any(Object), '/fixture/npm-cache');
+      expect(shown).toContain(NATIVE_NODE_DEPENDENCY_LAYOUT.fileList);
+    }
   });
 });

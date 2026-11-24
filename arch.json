@@ -455,7 +455,9 @@
         "src/composition/core/agent-turn",
         "src/composition/core/root",
         "src/engine/core/model-invocation",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/composition/core/workspace-patch",
+        "src/engine/core/config"
       ],
       "plan": "EXECUTION"
     },
@@ -2515,6 +2517,8 @@
     },
     "src/composition/core/workspace-patch": {
       "dependencies": [
+        "src/adapters/core/contract",
+        "src/engine/core/secret-store",
         "src/platform/core/host",
         "src/platform/core/config-fields",
         "src/adapters/core/setup-detect-coding",
@@ -2546,7 +2550,24 @@
         "src/adapters/core/native-cli-worker",
         "src/engine/core/working-tree-rollback",
         "src/engine/core/workspace-adoption",
-        "src/engine/core/workspace-patch-contract"
+        "src/engine/core/workspace-patch-contract",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/domain/core/audit",
+        "src/domain/core/worker-event",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/config-file",
+        "src/adapters/core/native-coding",
+        "src/adapters/core/worker-tree-gate",
+        "src/engine/core/config",
+        "src/engine/core/approval",
+        "src/platform/core/utils",
+        "src/platform/core/redaction",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/composition/core/config",
+        "src/composition/core/approvals"
       ],
       "plan": "ISOLATION"
     },

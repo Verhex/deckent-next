@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { userInfo } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
-import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, relativeInside, resolveLocale, t, type ConfigLoadOptions, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
-import { verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
+import { packageConsentDigest, verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
+import { readPackageSecrets, withPackageSecretCustody, withPackageUse } from '#composition/core/workspace-patch/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
@@ -19,6 +21,7 @@ import { NATIVE_CLI_WORKER_ADAPTER, isNativeCliWorkerProfile, resolveNativeCliWo
   createNativeWorkerEvents, nativeWorkerCustodyFile, executionTaskHiddenPaths, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from './native-runtime.js';
 import { startConfiguredWorkerObservation } from './observation.js';
+import { openSealedNativeInput } from './sealed-input.js';
 /** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
 type NativeCliWorkerOptions = ConfigLoadOptions & { nativeCliWorker?: Readonly<{ ports?: NativeCliWorkerPorts; runtime?: NativeCliWorkerRuntime; projectionRetired: boolean }> };
 /** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
@@ -37,7 +40,8 @@ async function nativeWorkerWaiting(projectRoot: string, identity: AttemptIdentit
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: NativeCliWorkerOptions = {}, signal: AbortSignal = new AbortController().signal) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, ownerUid, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
+    const scope = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
+    const { config, layout, installationLayout, ownerUid, principal, path, document } = scope;
     const language = resolveLocale(undefined, options.env ?? process.env, config.language); // D4: the person's report language for every worker path
     const os = userInfo(); const verifier = verifiedPrincipal(principal);
     const policy = contextPolicySource({ layout, config, ownerUid }), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
@@ -61,8 +65,42 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const startContext = await new TaskStartApplication(store, verifier, authorization).open(identity);
       const { run, profile: selected } = startContext;
       const native = isNativeCliWorkerProfile(selected) ? resolveNativeCliWorkerProfile(selected) : null;
-      const nativePorts = options.nativeCliWorker?.ports ?? (options.nativeCliWorker?.runtime
+      const dependencies = native?.dependencies;
+      if (dependencies) {
+        if (dependencies.state !== 'sealed' || !run?.authority || dependencies.approval.scopeId !== identity.scopeId) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+        if (!dependencies.allowance) {
+          const receipt = await store.loadRunReceipt(identity.scopeId, dependencies.approval.commandId);
+          if (!run.authority.approval || receipt?.snapshot.identity.runId !== identity.runId
+            || receipt.snapshot.authority?.approval?.approvalId !== run.authority.approval.approvalId)
+            throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+        }
+      }
+      const configuredPorts = options.nativeCliWorker?.ports ?? (options.nativeCliWorker?.runtime
         ? createConfiguredNativeCliWorkerPorts(projectRoot, identity.scopeId, store, options, options.nativeCliWorker.runtime) : undefined);
+      let scannedPackages: Awaited<ReturnType<typeof readPackageSecrets>> | undefined;
+      const reopen = async <T>(stage: string, validate: (() => Promise<void>) | undefined, work: () => Promise<T>) => {
+        if (dependencies?.state !== 'sealed' || !validate) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+        // Compare the completed scan's snapshot under custody through each managed handover.
+        if (!dependencies.allowance) return withPackageSecretCustody(options, async custody => {
+          const { registered } = await readPackageSecrets(config, options, await custody.selected());
+          if (!isDeepStrictEqual(scannedPackages?.registered, registered)) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+          await validate();
+          return work();
+        });
+        const useId = packageConsentDigest('worker-package-attempt:1', { identity, stage });
+        return withPackageUse(projectRoot, scope, options, [{ reference: dependencies, profile: selected }], 'open', useId, work, async fresh => {
+          const policy = contextPolicySource(fresh, fresh.document);
+          await new DispatchPolicyAuthorization(policy).authorizeIdentity('execute', identity, fresh.principal);
+          await validate();
+        });
+      };
+      const nativePorts = dependencies?.state === 'sealed' && configuredPorts ? {
+        ...configuredPorts,
+        openTools: (...args: Parameters<NativeCliWorkerPorts['openTools']>) =>
+          reopen('tools', args[3].sealedNodeModules?.validate, () => configuredPorts.openTools(...args)),
+        ...(configuredPorts.checkEnvironment ? { checkEnvironment: (...args: Parameters<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>) =>
+          reopen('environment', args[3].sealedNodeModules?.validate, () => configuredPorts.checkEnvironment!(...args)) } : {}),
+      } : configuredPorts;
       const docker = native ? null : resolveDockerTaskProfile(selected), profile = native ?? docker!, relayed = profile.siwcWorker && profile.nativeSubscription;
       const waiting = (reason: string) => nativeWorkerWaiting(projectRoot, identity, layout, store, options, reason, !native);
       // Existing dispatch replay above is deliberately outside the new-dispatch retirement/readiness gates.
@@ -79,7 +117,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (profile.options.outputFiles && profile.options.outputFiles.maxBytes > config.artifacts.maxBytes) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
       /* R8b: Docker and relay workers need the Docker settings; a connected CLI worker runs in the host sandbox. */ const executable = config.execution?.docker?.executable; if (!config.execution || !native && !executable) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED'); if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
       await preparation.begin(run!); const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
-      const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
+      const sharedPackagesRoot = dependencies?.state === 'sealed' && installationLayout.root !== layout.root ? [installationLayout.root] : [];
+      const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root, ...sharedPackagesRoot,
         ...(Object.keys(layout.resources) as ProductResource[]).map(resource => productResourcePath(layout, resource))]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       let start = await prepareTaskStart(startContext, store, artifacts, authorization, config);
@@ -96,7 +135,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const configured = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
       const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId), recorded = await store.loadRunWorkspaceCustody(identity.scopeId, identity.runId);
       // R9n: a working-tree Run starts from the person's current files, committed in its own private base repository; the Run keeps the mode it began with.
-      const product = [layout.root, dirname(layout.bootstrapConfigPath)].flatMap(root => relativeInside(configured.sourceRoot, root) || []);
+      const product = [layout.root, dirname(layout.bootstrapConfigPath), ...sharedPackagesRoot].flatMap(root => relativeInside(configured.sourceRoot, root) || []);
       const base = !queue && (recorded ? workingTreeSource(recorded.source) : configured.workingTree) ? await captureWorkingTreeBase(configured, identity, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes },
         path => workerTreeDenied(path) ?? (product.some(root => path === root || path.startsWith(root + '/')) ? 'product-state' : null)) : undefined, git = base?.options ?? configured;
       if (base?.count) { await audit(withheldBaseEvent({ identity, principal, policyRevision: document.revision, now: Date.now }, base.count, base.excluded)); start = withheldBaseStart(start, base.count, base.excluded, WORKER_TREE_SHOWN_PATHS); }
@@ -107,12 +146,23 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const hidden = queue ? undefined : executionTaskHiddenPaths(selected) ?? undefined;
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker, hidden)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches, hidden); await preparation.enter('secret-gate');
+      const release = () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit });
+      const sealedNodeModules = dependencies?.state === 'sealed' ? await openSealedNativeInput(dependencies, { root: projectRoot, workTarget: git.sourceRoot,
+        checkout: lease.workspace, scopeId: identity.scopeId, config, layout: installationLayout })
+        .catch(async (error: unknown) => { await release().catch(() => undefined); throw error; }) : undefined;
+      const packageContext = sealedNodeModules ? t('coding.dependencies.worker', { mount: sealedNodeModules.target, digest: sealedNodeModules.digest }, language) : undefined;
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
-      const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } }); await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), settings: gate, fingerprint: [config, git.sourceRoot], lockfile, sharesTree: pathsShareTree,
-        refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
+      const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } });
+      const sealedViews = sealedNodeModules && packageContext ? [sealedNodeModules.scanView, { text: packageContext, label: 'prompt:sealed-dependencies' }] : [];
+      if (sealedNodeModules) scannedPackages = await readPackageSecrets(config, options)
+        .catch(async (error: unknown) => { await release().catch(() => undefined); throw error; });
+      const known = scannedPackages?.known ?? getConfigKnownSecrets(config);
+      await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv).concat(sealedViews), settings: gate,
+        fingerprint: [config, git.sourceRoot, scannedPackages?.registered], lockfile, sharesTree: pathsShareTree,
+        refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, known) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, release);
       // PRE-7: Deckent's own preflight of the declared environment on the worker's floor, without its connection (no credential, no model); an unmet
       // requirement refuses the launch typed below (the Run parks naming it) and releases the checkout, as the secret gate does.
-      const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv }, release = () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit });
+      const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
       const environment = await backend.checkEnvironment();
       if (environment === 'prevented') return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: 'prevented' as const, terminal: null, outputRecorded: false }) });
       if (environment) return await waiting(environment);
@@ -143,7 +193,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
               })();
               try {
                 await nativePorts.checkEnvironment(request, native!.binding, profile.environment,
-                  { ...(readOnlyMounts ? { readOnlyMounts } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, probeSignal);
+                  { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(sealedNodeModules ? { sealedNodeModules } : {}), inputs: start.inputs, handoffInputs: start.handoffInputs }, probeSignal);
                 if (probeSignal.aborted) throw ErrorRegistry.createError('DISPATCH_FENCED');
               } catch (error) {
                 if (!probeSignal.aborted || queryFailure(error).code === 'NATIVE_WORKER_CUSTODY_UNKNOWN') throw error;
@@ -155,11 +205,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           async open() {
             nativeEvents = createNativeWorkerEvents(native!.nativeSubscription!, batch => events?.accept(batch));
             await preparation.enter('dispatch');
+            const dependencyContext = [start.dependencyContext?.text, packageContext].filter(value => value !== undefined).join('\n\n');
             const prepared = await prepareNativeCliWorker({
               profile: selected, request, ports: nativePorts!, custody: nativeWorkerCustodyFile(request),
               onEvents: batch => nativeEvents!.accept(batch),
-              ...(start.dependencyContext ? { dependencyContext: start.dependencyContext.text } : {}), language, knownSecrets: getConfigKnownSecrets(config),
-              toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
+              ...(dependencyContext ? { dependencyContext } : {}), language, knownSecrets: known,
+              toolContext: { ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(sealedNodeModules ? { sealedNodeModules } : {}), ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}) },
               fence: () => nativeCliWorkerFence(store, identity)
             });
             if (prepared.state !== 'ready') { await release(); return { reason: prepared.reason }; }

@@ -605,6 +605,8 @@
   "config.field.cancellationRuntime": "Otomatik iptal kurtarma kapsamları, tarama aralığı ve hata sonrası bekleme süresi",
   "config.field.reconciliationRuntime": "Otomatik uzlaştırma kapsamları, sayfa boyutu, eşzamanlılık, tarama ve hata sonrası bekleme",
   "config.field.installation": "Kurulum girdi sınırları",
+  "config.field.installation.npmPackageCache": "Paket kanıtları için npm _cacache dizininin mutlak yolu",
+  "config.field.installation.sealedPackageStoreMaxBytes": "Kurulum başına mühürlü paket deposu sınırı, bayt cinsinden (genel yapılandırma)",
   "config.field.runRuntime": "Kabul edilen iş otomatik ilerleme taraması, sayfa boyutu, azami eşzamanlı iş sayısı (varsayılanı etkin servis yürütme tavanı), tur başına rezervasyon bütçesi, hata sonrası bekleme ve sürümlü iş/görev park zaman aşımı",
   "cli.runtime.runProgression": "İş {runId}: {count} deneme ilerletildi",
   "cli.runtime.runProgressionFailed": "İş ilerlemesi sürdürülemedi: {code}",

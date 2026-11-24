@@ -2,7 +2,7 @@ import { readWorkerToolCard, workerToolPreviewComplete } from '#capabilities/ind
 import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { aiAuthorityFloor, aiMayNotAllow, requiresPersonProposalDecision, approvalFacts, approvalRenewalRefusal, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema,
+import { aiAuthorityFloor, aiMayNotAllow, requiresPersonProposalDecision, requiresPersonPackageConsent, requiresPersonRunInputDecision, approvalFacts, approvalRenewalRefusal, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema,
   encodeCommandProjection, evaluatePolicy, samePrincipalRef, separationOfDutiesViolation, principalGrants, APPROVAL_ASSURANCE, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type OperationDescriptor,
   type Policy, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
@@ -65,9 +65,14 @@ export class ApprovalApplication {
   private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: Policy, decision: 'allow' | 'deny'): Promise<boolean> {
     const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true, worker = readWorkerToolCard(record.request);
     const subject = approvalSubject(record.request), proposal = requiresPersonProposalDecision(record.request);
-    if ((worker || proposal || subject.kind === 'run-create' && this.store.hasRunProposal(record.request.scopeId, subject.commandId, subject.runId)) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
+    if ((worker || proposal || requiresPersonPackageConsent(record.request) || requiresPersonRunInputDecision(record.request) || subject.kind === 'run-create' && this.store.hasRunProposal(record.request.scopeId, subject.commandId, subject.runId)) && !interactive) throw new ApprovalError(isAiPrincipal(principal) ? 'AI_AUTHORITY_NON_DELEGABLE' : 'APPROVAL_DENIED');
     if (proposal && samePrincipalRef(approvalActorRef(principal), proposalProposer(record.request))) throw new ApprovalError('APPROVAL_DENIED');
-    if (decision === 'allow' && (worker || record.request.schemaVersion === 3 && record.request.preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
+    if (decision === 'allow') {
+      const preview = record.request.schemaVersion === 3 ? record.request.preview : undefined;
+      if (subject.kind === 'run-create' && (preview || requiresPersonRunInputDecision(record.request))) {
+        if (!preview || preview.cut || !preview.text || preview.argsDigest !== subject.admissionDigest) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
+      } else if ((worker || preview) && !workerToolPreviewComplete(record)) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
+    }
     const facts = approvalFacts(record.request);
     if (!interactive) {
       const risk = facts?.risk;

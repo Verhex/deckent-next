@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { openSqliteAttemptStore, readMonitorLedger, type SqliteAttemptStore } from '#adapters/index.js';
 import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, parseRunProposal, runProposalDigest, sealApproval, type BoundRunAdmission, type RunCreate } from '#engine/index.js';
 import { SqliteRunProposals } from '#adapters/core/run-proposal-store/index.js';
@@ -115,6 +115,44 @@ it('an AI mode or policy change retires an unused yes, preserves its sealed summ
   expect(f.approvals.load('s', first.request.approvalId)!.request).toEqual(first.request);
   await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: fresh.request.approvalId, commandId: 'decide-new-mode', expectedRevision: 0, decision: 'allow', reason: 'Reviewed current ceiling' });
   await admit(); expect((await f.store.loadRun('s', 'r'))!.execution.workerMode).toEqual({ mode: 'standart', askEdits: true });
+});
+it('requires the person card for package input and supersedes it when the effective lockfile changes', async () => {
+  const f = await fixture('allow'), publish = vi.fn(async () => {});
+  let lockfileDigest = 'b'.repeat(64), findings = Array.from({ length: 200 }, (_, index) => ({ path: `package/check-${index}.js`, rule: 'pattern:url-userinfo', digest: 'd'.repeat(64) }));
+  const app = new RunAdmissionApplication(f.store, { verify: async () => actor }, f.authority, { authorize: async () => {} }, {
+    async resolve() { return { now: f.state.now, layoutRevision: f.state.layout, execution: fixtureExecution(command.graph),
+      policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['task'] } }; },
+    inputs: { async pin(create) {
+      const reference = { state: 'sealed', layout: 'node-npm', platform: 'linux-x64', project: '/fixture/project', workTarget: '/fixture/target',
+        lockfileDigest, listDigest: 'a'.repeat(64), approval: { scopeId: create.identity.scopeId, commandId: create.commandId } };
+      return { packageRows: findings,
+        execution: { ...create.execution, tasks: create.execution.tasks.map(task => ({ ...task, profile: { ...task.profile,
+        adapter: { id: 'native-cli-worker', version: 2 }, parameters: { schemaVersion: 2, base: task.profile, binding: {}, dependencies: reference } } })) } };
+    }, publish },
+  });
+  await expect(app.create(command)).rejects.toMatchObject({ code: 'NATIVE_WORKER_DEPENDENCIES_REFUSED', params: { preview: 'over-limit' } });
+  expect(f.approvals.findRunCreate('s', 'create')).toBeNull();
+  findings = [{ path: 'package/check.js', rule: 'pattern:url-userinfo', digest: 'd'.repeat(64) }];
+  await expect(app.create(command)).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' });
+  const before = f.approvals.findRunCreate('s', 'create')!;
+  expect(before.request.summary).toContain(lockfileDigest); expect(before.request.summary).toContain('a'.repeat(64));
+  expect(before.request.summary).toContain('/fixture/target');
+  expect(before.request).toMatchObject({ preview: { cut: null, text: expect.stringContaining(`package/check.js · pattern:url-userinfo · SHA-256 ${'d'.repeat(64)}`) } });
+  expect(JSON.stringify(before.request)).not.toContain('fixture-user:fixture-pass');
+  await expect(app.create(command)).rejects.toMatchObject({ params: { approvalId: before.request.approvalId } });
+  await f.decide();
+  lockfileDigest = 'c'.repeat(64);
+  await expect(app.create(command)).rejects.toMatchObject({ code: 'RUN_APPROVAL_REQUIRED' });
+  const after = f.approvals.findRunCreate('s', 'create')!;
+  expect(after.request.approvalId).not.toBe(before.request.approvalId); expect(after.request.summary).toContain(lockfileDigest);
+  expect(publish).not.toHaveBeenCalled(); noEffects(f);
+  await f.approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: after.request.approvalId, commandId: 'approve-reprepared-input',
+    expectedRevision: 0, decision: 'allow', reason: 'Reviewed the new lockfile and package list' });
+  const created = await app.create(command);
+  expect(created.run.authority?.approval?.approvalId).toBe(after.request.approvalId);
+  expect(publish).toHaveBeenCalledOnce();
+  expect(await app.create(command)).toEqual(created);
+  expect(publish).toHaveBeenCalledOnce();
 });
 it('seals an allow before the Run and exposes the identical durable reference in its view and receipt', async () => {
   const f = await fixture('allow'), result = await f.app().create(command), receipt = (await f.store.loadRunReceipt('s', 'create'))!;

@@ -1,13 +1,24 @@
-import { isAiPrincipal } from '#domain/index.js';
-import { ErrorRegistry, type DeckentConfig } from '#platform/index.js';
+import { encodeCommandProjection, isAiPrincipal, samePrincipalRef, usablePolicyAdmins, type Policy, type VerifiedPrincipal } from '#domain/index.js';
+import { ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import type { ConfigWriteInput } from './contract.js';
+export const packageConsentDigest = (tag: string, data: unknown) => sha256(encodeCommandProjection(tag, data));
+type Person = Readonly<{ issuer: string; subject: string }>;
+export function samePackagePerson(first: Person, second: Person) {
+  return samePrincipalRef({ issuer: first.issuer, subject: first.subject }, { issuer: second.issuer, subject: second.subject });
+}
+export const isConfigConsentPerson = (principal: VerifiedPrincipal) => !isAiPrincipal(principal) && principal.assurance === 'os-user';
+export const isPackageScopeAdministrator = (policy: Policy, scopeId: string, principal: VerifiedPrincipal) =>
+  usablePolicyAdmins(policy, scopeId).some(actor => samePackagePerson(actor, principal));
+
 /** Consent stays in the existing config transaction: immutable records, person witness and the same policy/approval/CAS/audit owner. */
 export async function assertWorkerConsentChange(input: ConfigWriteInput, before: DeckentConfig, after: DeckentConfig,
   witness: ((operation: string) => Promise<void>) | undefined) {
   const previous = before.toolchains.image, next = after.toolchains.image;
+  if (JSON.stringify(before.toolchains.packageAllowances) !== JSON.stringify(after.toolchains.packageAllowances))
+    throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
   if (JSON.stringify(previous.providers) !== JSON.stringify(next.providers)) throw ErrorRegistry.createError('WORKER_IMAGE_PROVIDERS_READ_ONLY');
   if (JSON.stringify(previous.consents) === JSON.stringify(next.consents)) return;
-  if (isAiPrincipal(input.principal) || input.principal.assurance !== 'os-user') throw ErrorRegistry.createError('TOOLCHAIN_UPDATE_TERMINAL_ONLY');
+  if (!isConfigConsentPerson(input.principal)) throw ErrorRegistry.createError('TOOLCHAIN_UPDATE_TERMINAL_ONLY');
   if (!witness) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'workerImage' } });
   await witness('workerImage');
   const added = next.consents.slice(previous.consents.length);
