@@ -176,7 +176,11 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
 }
 
 export function isIdentifiedOpenPreflight(record: unknown): record is Record<string, unknown> {
-  return isRecord(record) && record['state'] === 'open' && (typeof record['revision'] === 'string' || typeof record['executable'] === 'string');
+  return isRecord(record) && record['state'] === 'open'
+    && typeof record['revision'] === 'string' && record['revision'].trim().length > 0
+    && typeof record['executable'] === 'string' && record['executable'].trim().length > 0
+    && typeof record['size'] === 'number' && Number.isSafeInteger(record['size']) && record['size'] >= 0
+    && typeof record['mtimeMs'] === 'number' && Number.isFinite(record['mtimeMs']);
 }
 
 // The record's existing revision field binds registry semantics to this installation's identity.

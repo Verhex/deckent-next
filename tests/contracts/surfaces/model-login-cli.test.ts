@@ -417,6 +417,7 @@ version/exit-unrenderable	version check reported a nonzero exit	sürüm denetimi
 version/unreadable	version check did not yield a readable version	sürüm denetimi okunabilir bir sürüm üretmedi
 version/too-old	reported version 1.2.3	1.2.3 sürümünü bildirdi
 version/too-old-unrenderable	version was below the configured minimum	sürümü yapılandırılan alt sınırın altında kaldı
+version/legacy-unverified	The previous check concerned the CLI version. The specific cause could not be determined.	Önceki denetim CLI sürümüyle ilgiliydi. Kesin neden belirlenemedi.
 config-dir/relative-path	login directory must be specified with an absolute path	Oturum açma dizini mutlak bir yolla belirtilmeli
 config-dir/unresolved	login directory path could not be resolved	Oturum açma dizininin yolu çözümlenemedi
 config-dir/missing	login directory was not found	Oturum açma dizini bulunamadı
@@ -436,6 +437,7 @@ state-dir/unverified	private working directory for the subscription CLI could no
 state-dir/not-private	working directory for the subscription Brain is not private	özel çalışma dizini yalnız size ait değil
 flags/help-unverified	required option could not be verified in the subscription CLI help output	yardım çıktısında
 flags/parser-unverified	parser check could not verify a required option	ayrıştırıcı denetimi
+flags/legacy-unverified	The previous check concerned CLI options. The specific cause could not be determined.	Önceki denetim CLI seçenekleriyle ilgiliydi. Kesin neden belirlenemedi.
 spawn/timeout	exceeded its time limit	süre sınırını aştı
 spawn/start-failed	process for the subscription CLI check could not be started	denetimi için gereken süreç başlatılamadı
 spawn/output-limit	check output exceeded its limit	denetim çıktısı sınırını aştı
@@ -451,6 +453,7 @@ limits/limiter-unverified	path to the program that sets isolation limits could n
 limits/limiter-unrunnable	did not pass the execute access check	çalıştırma izni denetimini
 limits/limit-application	limit-related diagnostic	sınıra ilişkin
 limits/limit-verification	limit-verification diagnostic	sınır doğrulama
+limits/legacy-unverified	The previous check concerned isolation limits. The specific cause could not be determined.	Önceki denetim yalıtım sınırlarıyla ilgiliydi. Kesin neden belirlenemedi.
 holder/cli	refresh marker was still present	yenileme işareti hâlâ duruyordu
 holder/guard	lock guard remained held	kilidi koruması hâlâ tutuluyordu
 holder/legacy-family-unverified	The previous check recorded a busy sign-in lock. The holder could not be verified.	Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.

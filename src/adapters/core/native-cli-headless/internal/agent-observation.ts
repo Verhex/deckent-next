@@ -37,6 +37,25 @@ const observedSchema = z.strictObject({ cli: z.boolean(), login: z.boolean(), en
 const recordSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.string(), reference: z.unknown(), checkedAtMs: z.number().int().nonnegative(),
   identity: z.string(), observed: observedSchema });
 const targetPath = (profile: ModelInvocationProfile, stateDir: string) => join(stateDir, `agent-${modelInvocationProfileDigest(profile)}.json`);
+const publications = new Map<string, Promise<void>>();
+
+async function readObservationRecord(path: string, ownerUid: number, bound: number) {
+  if (process.getuid?.() !== ownerUid || constants.O_NOFOLLOW === undefined) return null;
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (!file) return null;
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.nlink !== 1 || info.uid !== ownerUid || (info.mode & 0o077) !== 0 || info.size > bound) return null;
+    const bytes = Buffer.alloc(bound + 1), read = await file.read(bytes, 0, bytes.length, 0);
+    if (read.bytesRead > bound) return null;
+    try { return recordSchema.safeParse(JSON.parse(bytes.subarray(0, read.bytesRead).toString('utf8'))).data ?? null; }
+    catch { return null; }
+  } finally { await file.close(); }
+}
+
 /** Metadata only: no login-file contents. An executable/config/login-marker replacement makes the retained observation stale. */
 async function identity(profile: ModelInvocationProfile, program: HeadlessExecutable) {
   const { definition, entry } = agentTarget(profile);
@@ -57,11 +76,23 @@ export async function prepareNativeAgentObservation(profile: ModelInvocationProf
   const path = targetPath(profile, definition.stateDir), temporary = `${path}.${randomUUID()}.tmp`;
   const record = recordSchema.parse({ schemaVersion: 1, scopeId: profile.scopeId, reference: profile.reference,
     checkedAtMs: now(), identity: await identity(profile, program), observed });
-  return async () => {
+  const publish = async () => {
     try {
       await writeFile(temporary, JSON.stringify(record), { mode: 0o600, flag: 'wx' });
+      const current = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid, 'recheck').catch(() => null);
+      if (!current || record.identity !== await identity(profile, current)) return;
+      const stored = await readObservationRecord(path, definition.ownerUid, entry.headless.limits.preflightOutputBytes).catch(() => undefined);
+      if (stored === undefined || stored && stored.checkedAtMs > record.checkedAtMs && stored.scopeId === profile.scopeId
+        && isDeepStrictEqual(stored.reference, profile.reference) && stored.observed.execution.profileDigest === execution.profileDigest) return;
       await rename(temporary, path);
     } finally { await rm(temporary, { force: true }); }
+  };
+  return async () => {
+    const previous = publications.get(path) ?? Promise.resolve();
+    const pending = previous.then(publish, publish);
+    publications.set(path, pending);
+    try { await pending; }
+    finally { if (publications.get(path) === pending) publications.delete(path); }
   };
 }
 
@@ -75,17 +106,9 @@ async function recordNativeAgentObservation(...args: Parameters<typeof prepareNa
 export async function readNativeAgentObservation(profile: ModelInvocationProfile, now: () => number = Date.now, display = false, diagnosed?: (error: ProviderDiagnostic) => void) {
   try {
     const { entry, definition } = agentTarget(profile);
-    if (process.getuid?.() !== definition.ownerUid || constants.O_NOFOLLOW === undefined) return null;
-    const file = await open(targetPath(profile, definition.stateDir), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    let value: unknown;
-    try {
-      const info = await file.stat(), bound = entry.headless.limits.preflightOutputBytes;
-      if (!info.isFile() || info.nlink !== 1 || info.uid !== definition.ownerUid || (info.mode & 0o077) !== 0 || info.size > bound) return null;
-      const bytes = Buffer.alloc(bound + 1), read = await file.read(bytes, 0, bytes.length, 0);
-      if (read.bytesRead > bound) return null;
-      value = JSON.parse(bytes.subarray(0, read.bytesRead).toString('utf8'));
-    } finally { await file.close(); }
-    const record = recordSchema.parse(value), execution = record.observed.execution;
+    const record = await readObservationRecord(targetPath(profile, definition.stateDir), definition.ownerUid, entry.headless.limits.preflightOutputBytes);
+    if (!record) return null;
+    const execution = record.observed.execution;
     const age = now() - record.checkedAtMs;
     const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid);
     const [recordedProgram] = JSON.parse(record.identity) as [unknown];

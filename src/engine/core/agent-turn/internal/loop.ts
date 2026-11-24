@@ -121,6 +121,10 @@ function failedRoundNote(outcome: Extract<AgentRoundOutcome, { status: 'failed' 
   return agentSpendFailureNote(outcome.state, language)
     ?? t('agent.turn.outcome.failed', { state: outcomeState(outcome.state, language), summary }, language);
 }
+function roundFailureDiagnosis(failure: Extract<AgentRoundOutcome, { status: 'failed' }>, language?: Locale): string | undefined {
+  return failure.diagnosis ?? (!['cancelled', 'unknown', 'rejected', 'pending', 'unavailable'].includes(failure.state)
+    ? outcomeState(failure.state, language) : undefined);
+}
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
@@ -396,7 +400,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const session = input.nativeSession ? toolSessionSchema.parse(input.nativeSession) : null;
   if (session && canonical(session.tools) !== canonical(input.tools)) throw new Error('TOOL_SESSION_TOOLS_CONFLICT');
   const native = session ? createNativeToolSession(Object.freeze({ ...session, tools: Object.freeze(tools) }), input, coordinator, push, () => agentHistoryBytes(messages)) : null;
-  const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
+  const finish = (value: AgentTurnFinish, closure: string | null, diagnosis?: string): AgentTurnResult => {
+    const cancelledEnding = value === 'cancelled';
     if (value === 'cancelled' && ports.serviceStopping?.()) { value = 'error'; closure = t('agent.turn.outcome.serviceStopped', { summary: summary() }, input.language); }
     const deliveryFailure = ports.contextFailure?.();
     if (deliveryFailure) { value = 'error'; closure = agentContextFailureNote(deliveryFailure, input.language); }
@@ -406,7 +411,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
     const host = ports.hostNote?.() ?? null;
-    const extra = [...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : []), ...(host ? [host] : [])];
+    const extra = [...(diagnosis && (cancelledEnding || deliveryFailure) ? [diagnosis] : []),
+      ...(coordinator.cut ? [agentTurnTruncatedCallsNote(coordinator.cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : []), ...(host ? [host] : [])];
     const joined = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
     // Keep closure diagnostics first and the joined host observations inside the existing durable note budget.
     const noteLimit = chatTurnResultSchema.unwrap().shape.note.unwrap().maxLength!;
@@ -459,7 +465,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       let summaryOf: Awaited<ReturnType<NonNullable<AgentTurnPorts['summarize']>>>;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
       const diagnosis = summaryOf && summaryOf !== 'unreadable' && 'diagnosis' in summaryOf ? summaryOf.diagnosis : undefined;
-      if (signal.aborted) return finish('cancelled', [cancelled(), diagnosis].filter(Boolean).join(' '));
+      if (signal.aborted) return finish('cancelled', cancelled(), diagnosis);
       if (summaryOf && summaryOf !== 'unreadable' && 'cancelled' in summaryOf)
         return finish('cancelled', t('agent.turn.outcome.compactionCancelled', { summary: summary() }, input.language));
       if (!summaryOf || summaryOf !== 'unreadable' && 'diagnosis' in summaryOf) {
@@ -467,7 +473,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
           : t('agent.turn.outcome.requestLimit', { bytes: byteBound ?? '?' }, input.language);
         return finish('error', diagnosis
           ? t('agent.turn.outcome.compactionFailedDiagnosis', { reached, diagnosis, summary: summary() }, input.language)
-          : t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language));
+          : t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language), diagnosis);
       }
       if (summaryOf === 'unreadable') mechanical++;
       const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
@@ -507,9 +513,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         }
         if (joinFailure && primary.status !== 'failed') throw joinFailure.error;
         outcome = primary;
-        const failure = outcome.status === 'failed' ? outcome : null;
-        const diagnosis = failure?.diagnosis ?? (failure && !['cancelled', 'unknown', 'rejected', 'pending', 'unavailable'].includes(failure.state)
-          ? outcomeState(failure.state, input.language) : undefined);
+        const diagnosis = outcome.status === 'failed' ? roundFailureDiagnosis(outcome, input.language) : undefined;
         if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown',
           ...(diagnosis && { diagnosis: `${t('agent.turn.failure.toolSettlementUnknown', {}, input.language)} ${diagnosis}` }) };
         else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled', ...(diagnosis && { diagnosis }) };
@@ -523,12 +527,13 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (split.reasoning) outcome = { ...outcome, content: split.content, reasoning: `${outcome.reasoning}${split.reasoning}` };
     }
     if (outcome.status === 'failed') {
+      const diagnosis = roundFailureDiagnosis(outcome, input.language);
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.
         if (streamed) push({ role: 'assistant', content: `${streamed}\n${ports.serviceStopping?.() ? `[deckent] ${t('agent.turn.outcome.serviceStoppedMidAnswer', {}, input.language)}` : cancelledMidAnswer(input.language)}`, toolCalls: [] });
-        return finish('cancelled', [cancelled(), outcome.diagnosis].filter(Boolean).join(' '));
+        return finish('cancelled', cancelled(), diagnosis);
       }
-      return finish('error', failedRoundNote(outcome, summary(), input.language));
+      return finish('error', failedRoundNote(outcome, summary(), input.language), diagnosis);
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });
     if (outcome.content.trim() || outcome.toolCalls.length) push({ role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls,

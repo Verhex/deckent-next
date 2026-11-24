@@ -271,6 +271,14 @@ it('K17: K1 effects-settled closure and separate confirmed CLI termination can f
   const q = await prepared(refused);
   expect(await q.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } });
   await expect(q.supervisor.release(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL'); expect(refused.release).not.toHaveBeenCalled();
+  const cleanup = fixture();
+  cleanup.run.mockResolvedValue({ termination: 'unverified', status: 'failed', text: '',
+    refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED',
+    cleanupError: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'lock-marker-remove' } }) });
+  const unresolved = await prepared(cleanup);
+  expect(await unresolved.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' },
+    stdout: '', stderr: '', outputCompleteness: 'unavailable' });
+  await expect(unresolved.supervisor.release(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
 });
 it('K17: confirmed redacted output survives owner release; restored control never spawns and rejects changed custody', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'native-worker-custody-')), f = fixture();

@@ -104,6 +104,34 @@ it('does not mark the guarded surface ready when native run-file removal fails',
   } finally { cleanup.mockRestore(); runner.mockRestore(); }
 });
 
+it('keeps a newer observation and skips a readiness write prepared for a changed program', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  for (const change of ['newer observation', 'program identity'] as const) {
+    const f = await fixture(families[1]!), h = await f.start();
+    const stateDir = join(f.c.root, 'state');
+    const names = (await readdir(stateDir)).filter(name => name.startsWith('agent-'));
+    expect(names).toHaveLength(1);
+    const path = join(stateDir, names[0]!);
+    const original = await readFile(path, 'utf8');
+    const checkedAtMs = Date.now() + 60_000;
+    const expected = change === 'newer observation' ? JSON.stringify({ ...JSON.parse(original), checkedAtMs }) : original;
+    const remove = files.rm, duringDisposal = vi.fn();
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      await remove(...args);
+      if (typeof args[0] !== 'string' || !/\/agent-run-[^/]+$/u.test(args[0])) return;
+      duringDisposal();
+      if (change === 'newer observation') await writeFile(path, expected, { mode: 0o600 });
+      else await writeFile(f.program, '\n', { flag: 'a' });
+    });
+    try {
+      expect(await h.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+      expect(duringDisposal).toHaveBeenCalledOnce();
+      expect(await readFile(path, 'utf8'), change).toBe(expected);
+      expect((await readdir(stateDir)).filter(name => name.startsWith('agent-'))).toEqual(names);
+    } finally { cleanup.mockRestore(); }
+  }
+});
+
 it('runs both real isolated CLI drivers through R with exact correlation, readonly MCP config and no token/login canary in deltas or receipts', async () => {
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {

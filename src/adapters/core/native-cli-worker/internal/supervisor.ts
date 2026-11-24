@@ -120,7 +120,8 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       await guard(); this.started = true;
       const result = await this.driver.run(this.bridge, combined);
       if (result.cleanupError) {
-        headlessFailure = headlessDiagnosticIdentifier(result.cleanupError.code, result.cleanupError.params ?? {}) ?? 'NATIVE_WORKER_STOP_UNCONFIRMED';
+        headlessFailure = result.refusal ?? result.failureCode
+          ?? headlessDiagnosticIdentifier(result.cleanupError.code, result.cleanupError.params ?? {}) ?? 'NATIVE_WORKER_STOP_UNCONFIRMED';
         outcome = this.unknown(headlessFailure); break work;
       }
       if (result.termination !== 'confirmed') { outcome = this.unknown('NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }

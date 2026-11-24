@@ -282,6 +282,7 @@ export const headlessDiagnosticCases = Object.freeze([
   ...classified(preflight, 'reason', { check: 'flags' }, {
     'help-unverified': 'error.headless.probe.help-unverified',
     'parser-unverified': 'error.headless.probe.parser-unverified',
+    'legacy-unverified': 'error.headless.flagsLegacyUnverified',
   }),
   ...classified(preflight, 'reason', { check: 'spawn' }, {
     timeout: 'error.headless.probe.timeout',
@@ -296,6 +297,7 @@ export const headlessDiagnosticCases = Object.freeze([
     'exit-unrenderable': 'error.headless.versionExitUnrenderable',
     unreadable: 'error.HEADLESS_PREFLIGHT_FAILED.version-unreadable',
     'too-old-unrenderable': 'error.headless.versionTooOldUnrenderable',
+    'legacy-unverified': 'error.headless.versionLegacyUnverified',
   }),
   ...unsavedCases('login-record-write'),
   ...unsavedCases('login-record-rename'),
@@ -314,6 +316,7 @@ export const headlessDiagnosticCases = Object.freeze([
     'limiter-unrunnable': 'error.headless.isolation.limiter-unrunnable',
     'limit-application': 'error.headless.isolation.limit-application',
     'limit-verification': 'error.headless.isolation.limit-verification',
+    'legacy-unverified': 'error.headless.limitsLegacyUnverified',
   }),
   ...classified(isolation, 'reason', { check: 'login-lock' }, {
     'legacy-unverified': 'error.headless.lockLegacyUnverified',

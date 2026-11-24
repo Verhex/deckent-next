@@ -283,6 +283,24 @@ it('keeps the summary refusal before and after claim in the final note in EN and
       expect.soft(bounded.note).toContain(language === 'en' ? 'The isolated process returned a status reserved for the CPU-time limit.'
         : 'Yalıtılmış süreç, CPU süresi sınırına ayrılan çıkış kodunu döndürdü.');
       expect.soft(bounded.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin/u);
+      for (const [scenario, body, reason, complete, en, tr] of [
+        ['guard', { schemaVersion: 1, refusal: 'guard', field: '/fixture/private-guard' }, 'invalid-response', true,
+          'A safety check refused the subscription CLI result.', "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti."],
+        ['output', { schemaVersion: 1, refusal: 'response-limit' }, 'response-limit', true,
+          'An output limit was reached while processing the subscription CLI call.', 'Abonelik CLI çağrısı işlenirken bir çıktı sınırına ulaşıldı.'],
+        ['signal', { schemaVersion: 4, refusal: 'process-exit', exitCode: null, signal: 'SIGTERM', stderrSummary: '/fixture/private-stderr' }, 'interrupted', false,
+          'A signal was observed for the launched isolation command. The invocation outcome is unknown.', 'Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.'],
+        ['code', { code: 'HEADLESS_PREFLIGHT_FAILED' }, 'interrupted', false,
+          'The record contains the error code HEADLESS_PREFLIGHT_FAILED. The specific cause could not be determined.',
+          'Kayıtta HEADLESS_PREFLIGHT_FAILED hata kodu var. Hatanın kesin nedeni belirlenemedi.'],
+      ] as const) {
+        send.mockResolvedValueOnce({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(h.profile.adapter,
+          reason, null, Buffer.from(JSON.stringify(body)), complete) });
+        const result = await h.run(`summary-${scenario}`, history);
+        expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0 });
+        expect.soft(result.note).toContain(language === 'en' ? en : tr);
+        expect.soft(result.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin|\/fixture\/|SIGTERM/u);
+      }
       expect(h.events.some(event => event.kind === 'compacted')).toBe(false);
       expect(h.state.calls).toBe(0);
     } finally { port.mockRestore(); }
