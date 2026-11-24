@@ -1,5 +1,5 @@
 import { mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
-import { ErrorRegistry, emit, loadConfig, terminalSafeText } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, terminalSafeText, type ExitCode } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -9,7 +9,7 @@ import { mcpTable, toggleMcp } from './policy-toggle.js';
  * `deckent policy mcp` without an action: on a person's terminal the groups with on/off → pick → preview card → apply (the same governed change as
  * `grant|revoke|narrow --apply --expect`); anywhere else the read-only `list`. `list|grant|revoke|narrow` keep their explicit flags.
  */
-export async function policyMcpCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function policyMcpCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   const bare = argv[2] === undefined || argv[2].startsWith('-'), action = bare ? 'list' : argv[2];
   if (!['list', 'grant', 'revoke', 'narrow'].includes(action ?? '') || !context.mcpCapabilities) throw ErrorRegistry.createError('CLI_USAGE');
   let scope: string | undefined, group: string | undefined, expect: string | undefined, language: string | undefined, json = false;

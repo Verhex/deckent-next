@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ExitCode, type Locale } from '#platform/index.js';
 import type { DecisionDelegationView, McpCapabilityState, McpCapabilityView } from '#domain/index.js';
 import { delegationWords, mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
 import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
@@ -57,7 +57,7 @@ export async function toggleScope(context: ApprovalCommandContext, locale: Local
  * change (`policy.administer`, attested terminal, audit); a declined or cancelled card changes nothing.
  */
 export async function toggleDelegations(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, ttlMs: number,
-  ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void> {
+  ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void | ExitCode> {
   const host = context.delegations; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, print = (text: string) => emit(text, sinksOf(context));
   const scope = await toggleScope(context, locale, explicit, 'deckent policy delegations', ask); if (!scope) return;
@@ -71,6 +71,7 @@ export async function toggleDelegations(context: ApprovalCommandContext, locale:
     (await ask({ title: toggleTitle(action, words.step[row.step.id] ?? row.step.id, locale),
       body: delegationCardLines(reviewed, row.step.id, action, locale), options: applyOptions(locale) })) === APPLY, options);
   print([words.result[result.status], delegationTable(result.view, locale, cliTableStyle(context))].join('\n'));
+  if (result.status === 'cancelled') return EXIT_CODES.error;
 }
 
 /**
@@ -78,7 +79,7 @@ export async function toggleDelegations(context: ApprovalCommandContext, locale:
  * with that preview's digest on "yes". The same `changeMcpCapabilities` as `policy mcp grant|revoke --apply --expect` and the terminal's `/policy`.
  */
 export async function toggleMcp(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, ttlMs: number,
-  ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void> {
+  ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void | ExitCode> {
   const host = context.mcpCapabilities; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, print = (text: string) => emit(text, sinksOf(context));
   const scope = await toggleScope(context, locale, explicit, 'deckent policy mcp', ask); if (!scope) return;
@@ -89,11 +90,16 @@ export async function toggleMcp(context: ApprovalCommandContext, locale: Locale,
   const state: McpCapabilityState | undefined = view.groups.find(entry => entry.group.id === picked); if (!state) return;
   const action = state.managed === 'wider-earlier' ? 'narrow' : state.managed === 'granted' ? 'revoke' : 'grant', selection = { action, scopeId: scope.scopeId, groupId: state.group.id } as const;
   const preview = await host.changeMcpCapabilities(root, { ...selection, mode: 'preview' }, options);
-  if (preview.status !== 'preview' || preview.missing.length) { print([words.result[preview.missing.length ? 'refused' : preview.status], ...mcpCapabilityPreviewLines(preview, locale)].join('\n')); return; }
+  if (preview.status !== 'preview' || preview.missing.length) {
+    print([words.result[preview.missing.length ? 'refused' : preview.status], ...mcpCapabilityPreviewLines(preview, locale)].join('\n'));
+    if (preview.missing.length || preview.status === 'conflict' || preview.status === 'refused') return EXIT_CODES.error;
+    return;
+  }
   const answer = await ask({ title: toggleTitle(action, words.label(state.group.labelKey, state.group.id), locale),
     body: mcpCapabilityPreviewLines(preview, locale), options: applyOptions(locale) });
-  if (answer !== APPLY) { print(t('cli.policy.toggle.unchanged', {}, locale)); return; }
+  if (answer !== APPLY) { print(t('cli.policy.toggle.unchanged', {}, locale)); return EXIT_CODES.error; }
   const result = await host.changeMcpCapabilities(root, { ...selection, mode: 'apply', expect: preview.digest }, options);
   print([words.result[result.status], ...(result.status === 'applied' ? [] : mcpCapabilityPreviewLines(result, locale))].join('\n'));
   if (result.status === 'conflict' || result.status === 'refused') throw ErrorRegistry.createError('POLICY_DENIED');
+  if (result.status === 'preview') return EXIT_CODES.error;
 }

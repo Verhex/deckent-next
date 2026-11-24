@@ -37,6 +37,7 @@ it('prints the trust card in the person\'s words and the grant outcome as a sent
   expect(en.text).toContain('Policy grant written: this server is yours to call; standard asks every call, and tools marked "always ask" ask in every mode; every call is audited.');
   expect(en.text).not.toMatch(/grant:\s*\{/u);
   const tr = await run('tr', { status: 'refused', reason: 'administer' });
+  expect.soft(tr.code).toBe(1);
   expect(tr.text).toContain('Başlıklar: Authorization');
   expect(tr.text).toContain('Güvenildi ama politika izni yazılmadı: politikanız politika kurallarını değiştirmenize izin vermiyor');
   const trGranted = await run('tr', { status: 'granted' });
@@ -47,10 +48,11 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
   const receipt = { schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } };
   const revoke = async (locale: 'en' | 'tr', result: unknown, json = false) => {
     const out: string[] = [];
-    await main(['mcp', 'revoke', 'fx', '--lang', locale, ...(json ? ['--json'] : [])], {
+    const code = await main(['mcp', 'revoke', 'fx', '--lang', locale, ...(json ? ['--json'] : [])], {
       root: '/p', env: {}, stdout: { write(value: string) { out.push(value); } },
       async runMcpCommand(_root: string, request: unknown) { expect(request).toEqual({ verb: 'revoke', name: 'fx' }); return result; },
     } as never);
+    expect.soft(code, JSON.stringify(result)).toBe((result as typeof receipt).grant?.status === 'refused' ? 1 : 0);
     return out.join('').trimEnd();
   };
   const enTrust = 'Trust for fx was revoked. Approve it again before starting the server.';
@@ -62,8 +64,46 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
   expect(trJson).toBe(enJson);
   expect(JSON.parse(enJson)).toEqual(receipt);
   const trustOnly = { schemaVersion: 1, revoked: receipt.revoked };
-  expect.soft(await revoke('en', trustOnly)).toBe(`${enTrust}\nNo policy grant removal was recorded.`);
+  expect.soft(await revoke('en', trustOnly)).toBe(enTrust);
+  expect.soft(await revoke('tr', trustOnly)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.');
   expect(JSON.parse(await revoke('en', trustOnly, true))).toEqual(trustOnly);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'revoked' } })).toBe(`${enTrust}\nPolicy grant removed: calls to this server follow your company policy again.`);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'delegation' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
+  expect(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'not-settled' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
+});
+
+it('reports an unfinished requested trust step while retaining the registration receipt', async () => {
+  const approve = { schemaVersion: 1, name: 'web', scope: 'local', pinnedTools: 0 };
+  const grant = { status: 'refused', reason: 'administer' };
+  const registered = (trust: string, scope = 'local') => ({ schemaVersion: 1, added: { name: 'web', scope, file: '/p/mcp.json' }, trust });
+  const add = ['add', 'web', 'https://mcp.example.com/mcp'], addJson = ['add-json', 'web', '{"command":"fixture"}'];
+  for (const [argv, receipt, expected] of [
+    [['approve', 'web'], { ...approve, approved: false }, 1],
+    [['approve', 'web'], { ...approve, approved: true }, 0],
+    [['approve', 'web'], { ...approve, approved: true, pinnedTools: 1, grant }, 1],
+    [add, { ...registered('declined'), pinnedTools: 0 }, 1],
+    [addJson, { ...registered('unanswered'), pinnedTools: 0 }, 1],
+    [addJson, registered('shadowed'), 1],
+    [add, { ...registered('trusted'), pinnedTools: 1 }, 0],
+    [add, { ...registered('trusted'), pinnedTools: 1, grant }, 1],
+    [addJson, { ...registered('trusted'), pinnedTools: 1, grant }, 1],
+    [['remove', 'web'], { schemaVersion: 1, removed: registered('trusted').added, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } }, 1],
+    [['remove', 'web'], { schemaVersion: 1, removed: registered('trusted').added, grant: { status: 'revoked' } }, 0],
+    [[...add, '--no-approve'], registered('pending'), 0],
+    [[...addJson, '--scope', 'project'], registered('pending', 'project'), 0],
+  ] as const) {
+    const out: string[] = [];
+    const code = await main(['mcp', ...argv, '--json'], {
+      root: '/p', env: {}, stdout: { write(value: string) { out.push(value); } }, runMcpCommand: async () => receipt,
+    } as never);
+    expect.soft(code, argv.join(' ')).toBe(expected);
+    expect(JSON.parse(out.join(''))).toEqual(receipt);
+  }
+  const out: string[] = [];
+  const code = await main(['mcp', 'remove', 'web', '--lang', 'en'], {
+    root: '/p', env: {}, stdout: { write(value: string) { out.push(value); } },
+    runMcpCommand: async () => ({ removed: registered('trusted').added, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } }),
+  } as never);
+  expect.soft(code).toBe(1);
+  expect(out.join('').trimEnd()).toBe("Removed web (local)\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.");
 });

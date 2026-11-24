@@ -118,11 +118,16 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
     const withoutGrant = f.policyRecords();
     f.env[agentMarker] = '1';
-    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
     expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
-      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+    expect(await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => true))
+      .toEqual({ schemaVersion: 1, reset: { name: 'fx', scope: 'local' } });
     expect(f.policyRecords()).toEqual(withoutGrant);
     delete f.env[agentMarker];
+    expect(await f.run({ verb: 'reset', name: 'fx' }, true, 'mcp'))
+      .toEqual({ schemaVersion: 1, reset: { name: 'fx', scope: 'local' }, grant: refused });
+    expect(f.policyRecords()).toEqual(withoutGrant);
     // Decision 14 (b): `reset` forgets the decision and takes the grant exactly as `revoke` does (keeping it would be a separate product decision).
     expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, grant: { status: 'granted' } });
     expect(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
@@ -291,6 +296,9 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
       expect(await new McpToolGrants({ policy: { load }, administration: { submit: unreached }, approve: unreached })
         .grant({ scopeId: 'proj', principal: me, server: { scope: 'local', name: 'fx' }, tools: ['echo'], reason: 'Trusted' })).toEqual({ status: 'refused', reason: 'unsupported' });
     }
+    const policy = { load: async () => { throw new Error('POLICY_FILE_UNSAFE'); } };
+    expect(await new McpToolGrants({ policy, administration: { submit: unreached }, approve: unreached })
+      .revoke({ scopeId: 'proj', principal: me, server: { scope: 'local', name: 'fx' }, reason: 'Withdrawn' })).toEqual({ status: 'refused', reason: 'POLICY_UNAVAILABLE' });
   }, 90_000);
 });
 

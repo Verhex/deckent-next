@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
 import { toggleDelegations } from '#surfaces/core/cli-approval/index.js';
+import * as cards from '#surfaces/core/cli-human/index.js';
 import { getDecisionSteps, type DelegationCommand, type DecisionDelegationView } from '#domain/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 const roots: string[] = [];
@@ -46,6 +47,23 @@ it('grant/revoke bind the revision, resource and MCP actor; non-TTY refuses and 
     expect(f.text.err).toContain('APPROVAL_INTERACTIVE_REQUIRED');
     expect(f.seen.at(-1)).toMatchObject({ schemaVersion: 1, scopeId: 's', step: 'run-resume', resourceId: 'r', actor: 'mcp', expectedRevision: 'p+b', action: action === 'delegate' ? 'grant' : 'revoke' });
   }
+  const ask = vi.spyOn(cards, 'askCliCard');
+  try {
+    const context = { ...f.context, stdin: { isTTY: true }, stdout: { ...f.context.stdout, isTTY: true },
+      delegations: { ...f.context.delegations,
+        async change(_root: string, _command: DelegationCommand, confirm: (view: DecisionDelegationView) => Promise<boolean>) {
+          return { status: await confirm(f.view) ? 'current' as const : 'cancelled' as const, view: f.view };
+        } } };
+    for (const action of ['delegate', 'undelegate']) {
+      const argv = ['policy', action, '--scope', 's', '--step', 'run-resume', '--json'];
+      for (const [answer, status, expected] of [['no', 'cancelled', 1], ['apply', 'current', 0]] as const) {
+        f.text.out = '';
+        ask.mockResolvedValueOnce(answer);
+        expect.soft(await main(argv, context), `${action} ${status}`).toBe(expected);
+        expect(JSON.parse(f.text.out)).toEqual({ status, view: f.view });
+      }
+    }
+  } finally { ask.mockRestore(); }
   for (const locale of ['tr', 'en'] as const) {
     const context = { ...f.context, delegations: { ...f.context.delegations,
       async change(_root: string, _command: DelegationCommand, confirm: (view: DecisionDelegationView) => Promise<boolean>) {

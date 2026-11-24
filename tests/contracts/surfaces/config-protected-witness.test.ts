@@ -6,6 +6,8 @@ import { ConfigApplication } from '#engine/index.js';
 import { createConfigFileDocuments } from '#adapters/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { configCommand, configPanelPort, configSlash, type ConfigCommandContext } from '#surfaces/core/config/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import * as cards from '#surfaces/core/cli-human/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 
 /**
@@ -142,5 +144,42 @@ describe('alpha.56 recovery cards: the blind review and a recovery policy change
     expect(calls).toEqual([]);
     await policyRecoveryCommand(['policy', 'recovery', '--scope', 's'], ctx(person.env, PIPE));
     expect(calls).toEqual(['inspect']); // a pipe reads the card; it never changes a row
+  });
+
+  it('preserves completed recovery actions and returns 1 for a selected write left unresolved', async () => {
+    const { root } = await terminalRoot();
+    const row = { id: 'hold-run', kind: 'action', managed: 'none', available: true, effective: 'denied', exits: null };
+    const view = { scopeId: 's', revision: 'r', rows: [row] };
+    const cases = ['case-one', 'case-two'].map(caseId => ({ caseId, gate: { result: 'settled', settled: 0, intents: 0 }, runId: 'r', taskId: 't' }));
+    const changePolicy = vi.fn(async () => ({ status: 'current', view }));
+    const reviewAnswer = vi.fn(async () => ({ status: 'recorded', model: { action: 'escalate-human' }, agreed: true }));
+    const reviewPending = vi.fn(async () => cases);
+    const output: string[] = [];
+    const context = { root, env: { HOME: root, TERM: person.env.TERM }, stdin: TTY,
+      stdout: { ...TTY, write: (value: string) => { output.push(value); } },
+      recovery: { inspectPolicy: async () => view, changePolicy, reviewPending, reviewAnswer } } as never;
+    const policy = ['policy', 'recovery', '--scope', 's', '--lang', 'en'], review = ['recovery', 'review', '--scope', 's', '--lang', 'en'];
+    const ask = vi.spyOn(cards, 'askCliCard');
+    try {
+      ask.mockResolvedValueOnce('-leave');
+      expect(await main(policy, context)).toBe(0);
+      ask.mockResolvedValueOnce('action:hold-run').mockResolvedValueOnce(null);
+      expect.soft(await main(policy, context), 'selected policy change cancelled').toBe(1);
+      expect(changePolicy).not.toHaveBeenCalled();
+      ask.mockResolvedValueOnce('action:hold-run').mockResolvedValueOnce('apply');
+      expect(await main(policy, context)).toBe(0);
+      expect(changePolicy).toHaveBeenCalledTimes(1);
+      reviewPending.mockResolvedValueOnce([]);
+      expect(await main(review, context)).toBe(0);
+      ask.mockResolvedValueOnce('escalate').mockResolvedValueOnce('stop');
+      expect.soft(await main(review, context), 'second case stopped').toBe(1);
+      expect(reviewAnswer).toHaveBeenCalledExactlyOnceWith(root, expect.objectContaining({ caseId: 'case-one' }), expect.anything());
+      reviewAnswer.mockClear();
+      ask.mockResolvedValueOnce('skip').mockResolvedValueOnce('escalate');
+      expect.soft(await main(review, context), 'first case skipped').toBe(1);
+      expect(reviewAnswer).toHaveBeenCalledExactlyOnceWith(root, expect.objectContaining({ caseId: 'case-two' }), expect.anything());
+      ask.mockResolvedValueOnce(null);
+      expect.soft(await main(review, context), 'first case cancelled').toBe(1);
+    } finally { ask.mockRestore(); }
   });
 });
