@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { unifiedDiff } from '../../../src/adapters/core/workspace-write/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
@@ -217,18 +217,27 @@ it('accept: the revision is read before the card; declining writes nothing; a st
   const target = { scopeId: 's', runId: LONG, taskId: 't' };
   // Declined: no write.
   const declined = scripted(['accept', 'no', 'exit']), printed: string[] = [];
-  await taskMenu(context as never, ioFor(declined.ask, printed) as never, target);
+  expect.soft(await taskMenu(context as never, ioFor(declined.ask, printed) as never, target)).toBe(1);
   expect(writes).toEqual([]); expect(printed).toContain('Nothing was changed.');
   // Stale, then re-read and confirmed again on the current revision.
   const accepted = scripted(['accept', 'yes', 'yes', 'exit']);
-  await taskMenu(context as never, ioFor(accepted.ask, printed) as never, target);
+  expect((await taskMenu(context as never, ioFor(accepted.ask, printed) as never, target)) ?? 0).toBe(0);
   expect(writes.map(write => [write.action, write.expectedRevision])).toEqual([['accept', 7], ['accept', 8]]);
   expect(writes[0]!.commandId).not.toBe(writes[1]!.commandId);
   expect(accepted.cards[2]!.body).toContain('The Run changed meanwhile; this card shows its current state.');
   expect(printed.some(line => /not independently verified|unverified/i.test(line))).toBe(true);
+  const human = await import('#surfaces/core/cli-human/index.js');
+  const ask = vi.spyOn(human, 'askCliCard').mockResolvedValueOnce('reject').mockResolvedValueOnce('no').mockResolvedValueOnce('exit');
+  try {
+    const root = await project(), result = await run(['task', '--scope', 's', '--run', LONG, '--task', 't'], {
+      ...context, stdin: { isTTY: true }, stdout: { isTTY: true, write() { return true; } },
+    }, root);
+    expect(writes).toHaveLength(2);
+    expect(result.code).toBe(1);
+  } finally { ask.mockRestore(); }
 });
 
-function fakePort(log: string[], options: { queue?: boolean; targets?: string[]; summary?: boolean; workingTree?: boolean } = {}) {
+function fakePort(log: string[], options: { queue?: { state?: string; outcome?: string; item?: 'settled' | 'refused' | 'unknown' }; targets?: string[]; summary?: boolean; workingTree?: boolean } = {}) {
   const deliverView = { operation: 'deliver-integration', scopeId: 's', runId: LONG, taskId: 't', commandId: 'd', title: 'Add the file', resource: 'refs/deckent/delivery/x',
     from: 'base', to: 'cand', files: ['src/a.ts'], added: 1, removed: 0 };
   const preview = { target: { key: 'k', scopeId: 's', runId: LONG, taskId: 't', title: 'Add the file' }, identity: {}, files: [{ path: 'src/a.ts', added: 1, removed: 0 }], added: 1, removed: 0,
@@ -247,12 +256,14 @@ function fakePort(log: string[], options: { queue?: boolean; targets?: string[];
     },
     async verificationRuns() { return []; },
     ...(options.queue ? { queue: {
-      async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: 'awaiting-confirmation', target: { kind: 'git-ref', id: 'refs/heads/main' },
+      async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: options.queue?.state ?? 'awaiting-confirmation', target: { kind: 'git-ref', id: 'refs/heads/main' },
         display: { labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.next.prepare-current' }, basis: null,
-        position: 1, outcome: null, reason: null, responsibility: 'human', nextAction: 'confirm-batch' }; },
+        position: 1, outcome: options.queue?.outcome ?? null, reason: null, responsibility: 'human', nextAction: 'confirm-batch' }; },
       async reattempt() { return false; }, async inspect() { return null; },
-      async confirm(_s: string, _c: string, ask: (view: unknown, summaries: readonly unknown[]) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { kind: 'git-ref', id: 'refs/heads/main' }, display: { labelKey: 'queue.git.target' }, digest: 'd'.repeat(64),
-        expiresAt: 0, items: [] }, options.summary ? [deliverySummaryFixture()] : [])) throw refuse(); log.push('confirmed'); return {}; },
+      async confirm(_s: string, commandId: string, ask: (view: unknown, summaries: readonly unknown[]) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { kind: 'git-ref', id: 'refs/heads/main' }, display: { labelKey: 'queue.git.target' }, digest: 'd'.repeat(64),
+        expiresAt: 0, items: [] }, options.summary ? [deliverySummaryFixture()] : [])) throw refuse(); log.push('confirmed');
+        const state = options.queue?.item;
+        return { settledPrefix: state === 'settled' ? 1 : 0, items: state ? [{ commandId, state, published: state === 'settled' }] : [] }; },
       ...(options.summary ? { async summary() { return deliverySummaryFixture(); } } : {}),
     } } : {}),
   };
@@ -264,11 +275,14 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   const target = { scopeId: 's', runId: LONG, taskId: 't' };
   const run = async (answers: (string | null)[], options: Parameters<typeof fakePort>[1] = {}) => {
     const log: string[] = [], printed: string[] = [], script = scripted(answers);
-    await taskMenu(delivering as never, ioFor(script.ask, printed, { deliveryPort: fakePort(log, options) }) as never, target).catch((error: { code?: string }) => log.push(`error:${error.code}`));
-    return { log, printed, cards: script.cards };
+    const status = await taskMenu(delivering as never, ioFor(script.ask, printed, { deliveryPort: fakePort(log, options) }) as never, target)
+      .catch((error: { code?: string }) => { log.push(`error:${error.code}`); });
+    return { status: status ?? 0, log, printed, cards: script.cards };
   };
   // Preview card declined: nothing prepared.
-  expect((await run(['deliver', 'no', 'exit'])).log).toEqual(['preview']);
+  expect.soft(await run(['deliver', 'no', 'exit'])).toMatchObject({ status: 1, log: ['preview'] });
+  expect(await run(['deliver', 'deliver', 'yes', 'no', 'exit'], { targets: ['refs/heads/main'] }))
+    .toMatchObject({ status: 0, log: ['preview', 'delivered'] });
   // Delivery confirmation card (the port's exact card) declined: the port refuses, nothing delivered.
   const declined = await run(['deliver', 'deliver', 'no']);
   expect(declined.log).toEqual(['preview', 'error:DELIVERY_CONFIRMATION_DECLINED']);
@@ -285,13 +299,22 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   expect(files.log).toEqual(['preview', 'delivered']); expect(files.printed.join('\n')).toContain('Written into your files. No commit was made; index and branches are unchanged.');
   expect(files.cards.some(card => card.title.startsWith('Adopt'))).toBe(false);
   // A queue target: enqueue, then the exact batch card; declining it publishes nothing.
-  const queued = await run(['deliver', 'deliver', 'no'], { queue: true });
+  const queued = await run(['deliver', 'deliver', 'no'], { queue: {} });
+  for (const [state, outcome, status] of [
+    ['queued', undefined, 1], ['reconciling', undefined, 1], ['settled', 'verification-failed', 1],
+    ['settled', 'adopted', 0], ['settled', 're-prepared+adopted', 0],
+  ] as const) {
+    expect.soft(await run(['deliver', 'deliver', 'exit'], { queue: { state, ...(outcome ? { outcome } : {}) } }), `${state}/${outcome}`).toMatchObject({ status, log: ['preview', 'enqueued'] });
+  }
+  for (const [item, status] of [['settled', 0], ['refused', 1], ['unknown', 1]] as const) {
+    expect.soft(await run(['deliver', 'deliver', 'yes', 'exit'], { queue: { item } }), item).toMatchObject({ status, log: ['preview', 'enqueued', 'confirmed'] });
+  }
   expect(queued.log).toEqual(['preview', 'enqueued', 'error:DELIVERY_CONFIRMATION_DECLINED']);
   expect(queued.printed.join('\n')).toContain('Awaiting human confirmation');
   expect(queued.cards[2]!.body).toContain('Write refs/heads/main?');
   // alpha.53 A3: the same flow with summaries: the preview card names claim/acceptance/risk (files stay its own), the status carries the ticket summary,
   // and the exact batch card keeps its title with the summary block first in its body (no shadow line).
-  const summarized = await run(['deliver', 'deliver', 'no'], { queue: true, summary: true });
+  const summarized = await run(['deliver', 'deliver', 'no'], { queue: {}, summary: true });
   const previewBody = summarized.cards[1]!.body.join('\n');
   expect(previewBody).toContain("Worker's own report (a claim, not checked): Banner fixed."); expect(previewBody).not.toContain('Work: Login banner fix');
   expect(summarized.printed.join('\n')).toMatch(/Work: Login banner fix[\s\S]*Awaiting human confirmation/u);
@@ -325,6 +348,24 @@ it('D4: task changes without --scope name the valid scopes (CLI_SCOPE_REQUIRED),
   const noCommand = await run(['task', 'reject', '--scope', 's', '--run', 'r', '--task', 't', '--expected-revision', '1', '--json'], context, root);
   expect(noCommand.code).toBe(2); expect(JSON.parse(noCommand.err)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(noCommand.err).toContain('--command-id');
   expect(calls).toEqual([]);
+  const args = (taskId: string) => ['--scope', 's', '--run', 'r', '--task', taskId, '--command-id', 'c', '--expected-revision', '7'];
+  for (const action of ['accept', 'reject']) {
+    const phase = action === 'accept' ? 'accepted' : 'rejected';
+    const receipt = { schemaVersion: 1, lifecycle: { run: view([{ phase }]) } };
+    const handlers = { applyRunLifecycle: vi.fn().mockResolvedValue(receipt) };
+    const missing = await run(['task', action, ...args('selected'), '--json', '--lang', 'tr'], handlers, root);
+    expect.soft(missing.code).toBe(1);
+    expect(JSON.parse(missing.text)).toEqual(receipt);
+    expect(handlers.applyRunLifecycle.mock.calls[0]![1]).toMatchObject({ taskId: 'selected', action, expectedRevision: 7 });
+    for (const [locale, line] of [['en', 'Task selected: -.'], ['tr', 'selected görevi: -.']] as const) {
+      const human = await run(['task', action, ...args('selected'), '--lang', locale], handlers, root);
+      expect.soft(human.code, `${action}/${locale}`).toBe(1);
+      expect.soft(human.text, `${action}/${locale}`).toBe(`${line}\n`);
+    }
+    const matching = await run(['task', action, ...args('t')], handlers, root);
+    expect(matching.code).toBe(0);
+    expect(matching.text.trim()).toBe(phase);
+  }
 });
 
 it('BeUser M-25/DR2-07: `task integration-adopt --scope --run --target` finds the delivered task, its attempt and delivery command; no delivered task is refused', async () => {

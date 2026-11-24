@@ -100,7 +100,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     expect(pickedJourney.output).toContain('onboarding (recommended)'); expect(pickedJourney.output).toContain('BEUSER_MODEL_UNAVAILABLE');
     const cancelledJourney = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--lang', 'en'], elsewhere, env,
       [{ when: card, send: '\u001b' }]);
-    expect(cancelledJourney.code, cancelledJourney.output).toBe(0); expect(cancelledJourney.output).toContain('cancelled');
+    expect(cancelledJourney.code, cancelledJourney.output).toBe(1); expect(cancelledJourney.output).toContain('cancelled');
     expect(noModel.code).toBe(1); expect(noModel.output).toContain('BEUSER_MODEL_UNAVAILABLE'); expect(noModel.output).toContain(`cd ${root} && deckent, then /provider`);
     expect(badJourney.code).toBe(1); expect(badJourney.output).toContain('BEUSER_INPUT_INVALID');
     expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined(); expect(await readdir(elsewhere)).toEqual([]);
@@ -278,7 +278,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const before = await readFile(configPath, 'utf8');
     const refusedCard = await oneCommand('onboarding', ['--candidate', candidate], [{ when: card, send: '\r' },
       { when: card, send: '\r' }, { when: card, send: '\u001b' }]);
-    expect(refusedCard.code, refusedCard.output).toBe(0); expect(refusedCard.output).toContain('fixture-channel / fixture-model (recommended)');
+    expect(refusedCard.code, refusedCard.output).toBe(1); expect(refusedCard.output).toContain('fixture-channel / fixture-model (recommended)');
     expect(refusedCard.output).toContain('Start BeUser walk'); expect(refusedCard.output).toContain('nothing was applied'); expect(await readFile(configPath, 'utf8')).toBe(before);
     const fromPackage = await oneCommand('onboarding', [], [{ when: card, send: '\r' }, { when: card, send: '\r' }]);
     expect(fromPackage.code).toBe(1); expect(fromPackage.output).toContain('BEUSER_CANDIDATE_MISMATCH'); expect(await readFile(configPath, 'utf8')).toBe(before);
@@ -308,13 +308,13 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     await writeFile(configPath, JSON.stringify(multiConfig)); clearConfigCache();
     const multiBefore = await readFile(configPath, 'utf8'), answer = (send: string) => ({ when: card, send });
     const over = await oneCommand('onboarding', ['--candidate', candidate], [answer('\r'), answer('\u001b')]);
-    expect(over.code, over.output).toBe(0); expect(over.output).toContain('Selected 5; choose 1–4'); expect(over.output).not.toContain('Judge for this journey');
+    expect(over.code, over.output).toBe(1); expect(over.output).toContain('Selected 5; choose 1–4'); expect(over.output).not.toContain('Judge for this journey');
     const empty = await oneCommand('onboarding', ['--candidate', candidate], ['1', '2', '3', '4', '5', '\r', '\u001b'].map(answer));
-    expect(empty.code, empty.output).toBe(0); expect(empty.output).toContain('Selected 0; choose 1–4'); expect(empty.output).not.toContain('Judge for this journey');
+    expect(empty.code, empty.output).toBe(1); expect(empty.output).toContain('Selected 0; choose 1–4'); expect(empty.output).not.toContain('Judge for this journey');
     // Keep first two walkers; choose third model as a distinct judge; Esc applies nothing, including pool capacity.
     const chooseTwo = ['3', '4', '5', '\r'].map(answer);
     const twoCancelled = await oneCommand('onboarding', ['--candidate', candidate], [...chooseTwo, answer('3'), answer('\u001b[6~'), answer('\u001b')]);
-    expect(twoCancelled.code, twoCancelled.output).toBe(0); expect(twoCancelled.output).toContain('Walker 2: fixture-extra-1');
+    expect(twoCancelled.code, twoCancelled.output).toBe(1); expect(twoCancelled.output).toContain('Walker 2: fixture-extra-1');
     expect(twoCancelled.output).toContain('Judge: fixture-extra-2'); expect(twoCancelled.output).toContain('independence: unknown');
     expect(twoCancelled.output).toContain('1/1 → 2/2'); expect(twoCancelled.output).toContain('at most 6 USD'); expect(await readFile(configPath, 'utf8')).toBe(multiBefore);
     const runCount = () => { const db = new DatabaseSync(storage.path, { readOnly: true });

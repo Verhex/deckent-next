@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { t, type Locale } from '#platform/index.js';
+import { t, type ExitCode, type Locale } from '#platform/index.js';
 import type { DeliverySummary, EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
 import { consentSummaryLines, renderDeliverySummary, ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
@@ -55,23 +55,26 @@ function previewCard(preview: DeliveryPreview, locale: Locale): CliCardRequest {
  * candidate + delivery behind the confirmation port's own card, then an optional adoption (target, verification Run, its own card).
  * Attempt, command ids and revisions come from the system. A declined card writes nothing; the applications re-check everything.
  */
-export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTarget, io: TaskDeliveryIo): Promise<void> {
+export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTarget, io: TaskDeliveryIo): Promise<void | ExitCode> {
   const { locale, ask, print } = io;
   const answer = async (view: EffectConfirmationView) => await ask(deliveryConsentCard(view, locale)) === 'yes';
   const preview = await port.preview(target);
   let choice: string | null;
   // Viewing the diff is read-only and returns to the same card.
   while ((choice = await ask(previewCard(preview, locale))) === 'diff') await io.diff(preview);
-  if (choice !== 'deliver') { print(t('cli.task.menu.deliver.left', {}, locale)); return; }
+  if (choice !== 'deliver') { print(t('cli.task.menu.deliver.left', {}, locale)); return 1; }
   if (preview.queueTarget && port.queue) {
     const queue = port.queue, status = async (view: TargetQueueView) => print([...ticketSummaryBlock(queue.summary ? await queue.summary(view) : undefined, undefined, locale),
       renderQueueStatus(view, locale)].join('\n'));
-    let view = await queue.prepareCurrent(target, `cli-queue-${randomUUID()}`);
+    const delivered = (view: TargetQueueView) => view.state === 'settled' && (view.outcome === 'adopted' || view.outcome === 're-prepared+adopted');
+    const view = await queue.prepareCurrent(target, `cli-queue-${randomUUID()}`);
     await status(view);
-    if (view.state !== 'awaiting-confirmation') return;
-    await queue.confirm(target.scopeId, view.commandId, async (consent, summaries) => await ask(queueConsentCard(consent, locale, summaries)) === 'yes');
-    view = await queue.inspect(target.scopeId, view.commandId) ?? view;
-    await status(view); return;
+    if (view.state !== 'awaiting-confirmation') return delivered(view) ? undefined : 1;
+    const execution = await queue.confirm(target.scopeId, view.commandId, async (consent, summaries) => await ask(queueConsentCard(consent, locale, summaries)) === 'yes');
+    const after = await queue.inspect(target.scopeId, view.commandId);
+    await status(after ?? view);
+    const completed = after ? delivered(after) : execution.items.some(item => item.commandId === view.commandId && item.state === 'settled');
+    return completed ? undefined : 1;
   }
   const delivered = await port.deliver(preview, { candidate: `cli-candidate-${randomUUID()}`, delivery: `cli-delivery-${randomUUID()}` }, answer, async (path, before, after, command) => await ask(directoryPermissionCard(path, before, after, locale, command)) === 'yes');
   print(preview.workingTree ? t('cli.task.integration.written', {}, locale) : t('cli.task.integration.delivered', { ref: delivered.ref, commit: delivered.commit }, locale));

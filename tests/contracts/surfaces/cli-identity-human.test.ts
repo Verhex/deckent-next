@@ -8,6 +8,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { main } from '#surfaces/index.js';
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
+import type { EffectOutcome } from '#engine/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 registerProviderConfig(); // the `terminal` and `identity` sections are registered by the composed entry
@@ -43,7 +44,10 @@ const listing = listIdentityProfiles([]);
 const person = { id: 'os-1234', label: 'user-1@host-1', kind: 'human' as const, principal: { issuer: 'os', subject: '1000' } };
 const choices = { schemaVersion: 1 as const, profiles: listing.profiles, principals: [person], scopeIds: ['live'],
   bindings: [{ id: 'owner', principals: [{ issuer: 'os', subject: '1000' }], roles: ['admin', 'operator'], scopes: { values: ['live'] } }] };
-function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; value: unknown }[] = []) {
+const effect = { commandId: 'distribution', scopeId: 'live', operation: { id: 'policy.administer', version: 1 },
+  target: { kind: 'authority-documents', id: 'installation' } };
+const settled: EffectOutcome = { ...effect, schemaVersion: 1, status: 'settled', sequence: 1, version: 'p2', compensates: null, evidence: 'fence' };
+function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; value: unknown }[] = [], outcome: EffectOutcome = settled) {
   const out = capture(), err = capture();
   const context = { root: f.root, env: f.env, stdin: Object.assign(Readable.from([]), { isTTY: false }), stdout: out.sink, stderr: err.sink,
     configChoiceSources: () => ({ list: async () => [{ value: 'live' }] }),
@@ -56,7 +60,7 @@ function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; val
         draft: { profile: { id: 'core:team', version: 1 }, projectScopeIds: ['live'], addedBindings: [{}], removedBindings: [], addedRoles: [{}], currentSeparationOfDuties: [],
           futureProjects: { requested: false }, unresolvedRequirements: [], unsupportedHierarchyNodeIds: [] } } }; },
     applyIdentityDistribution: async (_root: string, submission: unknown, expect: string) => { calls.push({ kind: 'apply', value: { submission, expect } });
-      return { schemaVersion: 1, profile: { id: 'core:team', version: 1 }, digest: expect, outcome: { status: 'committed' } }; } };
+      return { schemaVersion: 1, profile: { id: 'core:team', version: 1 }, digest: expect, outcome }; } };
   return { out, err, calls, context: context as never };
 }
 
@@ -126,8 +130,18 @@ it('distribute on a terminal: arrow-key picks (profile, person, role, project), 
   expect(h.calls.find(call => call.kind === 'apply')!.value).toMatchObject({ expect: 'e'.repeat(64) });
   card.answers = ['core:team@1', 'os-1234', 'profile-contributor', 'live', 'cancel'];
   const cancelled = host(f);
-  await main(['identity', 'distribute', '--scope', 'live', '--apply'], cancelled.context);
+  expect(await main(['identity', 'distribute', '--scope', 'live', '--apply'], cancelled.context)).toBe(1);
   expect(cancelled.calls.some(call => call.kind === 'apply')).toBe(false);
+  const pending = { ...effect, schemaVersion: 2, status: 'approval-pending', approval: { approvalId: 'identity-ap-1', revision: 1, expiresAt: 60_000, summary: 'Distribute identity profile' } } satisfies EffectOutcome;
+  card.answers = ['core:team@1', 'os-1234', 'profile-contributor', 'live', 'apply'];
+  const interactive = host(f, [], pending);
+  const input = host(f, [], pending);
+  Object.assign(input.context, { stdin: Readable.from(['{}']) });
+  const interactiveExit = await main(['identity', 'distribute', '--scope', 'live', '--apply'], interactive.context);
+  const inputExit = await main(['identity', 'distribute', '--input', '-', '--expect', 'digest', '--apply', '--json'], input.context);
+  expect(JSON.parse(input.out.text())).toMatchObject({ digest: 'digest', outcome: pending });
+  expect(interactive.out.text()).toContain('approval-pending');
+  expect([interactiveExit, inputExit]).toEqual([1, 1]);
 });
 
 it('D4: choices without --scope reads the configured default and names it; with none it refuses with the valid scopes (CLI_SCOPE_REQUIRED, exit 2)', async () => {

@@ -81,13 +81,22 @@ it('shows EN/TR walk/report help without a host effect and refuses incomplete, d
     .mockResolvedValueOnce({ status: 'applied-unverified', digest: 'a'.repeat(64), errorCode: 'POLICY_DENIED' });
   try {
     chunks.length = 0;
-    await beuserCommand(['beuser', 'setup', '--profile', 'p', '--scope', 'scope', '--apply', '--lang', 'en'], {
+    const setupExit = await beuserCommand(['beuser', 'setup', '--profile', 'p', '--scope', 'scope', '--apply', '--lang', 'en'], {
       root: '/nonexistent-beuser-presentation-fixture', env,
       stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: partial,
     });
     expect(approved).toHaveBeenCalledOnce(); expect(partial.mock.calls[1]![1]).toMatchObject({ apply: true, expect: 'a'.repeat(64) });
     expect(chunks.join('')).toContain('Applied, not verified'); expect(chunks.join('')).toContain('config was written');
     expect(chunks.join('')).toContain('POLICY_DENIED'); expect(chunks.join('')).not.toContain('nothing was applied');
+    expect.soft(setupExit).toBe(1);
+    approved.mockReset().mockResolvedValueOnce('cancel');
+    chunks.length = 0;
+    const setup = vi.fn().mockResolvedValue({ status: 'preview', digest: 'x', admission: {} });
+    expect.soft(await beuserCommand(['beuser', 'setup', '--profile', 'p', '--scope', 'scope', '--apply', '--json'], {
+      env, stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: setup,
+    })).toBe(1);
+    expect(JSON.parse(chunks.join(''))).toEqual({ status: 'cancelled', digest: 'x', admission: {} });
+    expect(setup).toHaveBeenCalledOnce();
     // Every pre-admission cancellation has the same typed JSON result, including the journey picker and the final No choice.
     for (const answers of [[null], ['continue', null], ['continue', '0', 'cancel']] as const) {
       approved.mockReset(); for (const answer of answers) approved.mockResolvedValueOnce(answer);
@@ -100,17 +109,53 @@ it('shows EN/TR walk/report help without a host effect and refuses incomplete, d
           slots: { before: null, after: { executionSlots: 1, inFlightSlots: 1 } } };
       }), walk = vi.fn();
       chunks.length = 0;
-      await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never,
+      const code = await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never,
         env, setupBeuser: preview, walkBeuser: walk });
+      expect.soft(code, answers.join('/')).toBe(1);
       expect(JSON.parse(chunks.join(''))).toEqual({ status: 'cancelled' }); expect(walk).not.toHaveBeenCalled();
     }
     approved.mockReset().mockResolvedValueOnce(null); chunks.length = 0;
-    await beuserCommand(['beuser', 'walk', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never, env,
-      listBeuserJourneys: async () => [{ id: 'fixture', recommended: true }] });
+    expect.soft(await beuserCommand(['beuser', 'walk', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never, env,
+      listBeuserJourneys: async () => [{ id: 'fixture', recommended: true }] })).toBe(1);
     expect(JSON.parse(chunks.join(''))).toEqual({ status: 'cancelled' });
   } finally { approved.mockRestore(); }
   if (process.platform === 'linux') await cancellationPty();
 }, 60_000);
+
+it('returns failure for a retained cancellation after launch on both BeUser walk paths and success when reading it', async () => {
+  const { beuserCommand } = await import('#surfaces/core/cli-beuser/index.js');
+  const human = await import('#surfaces/core/cli-human/index.js');
+  const ask = vi.spyOn(human, 'askCliCard').mockResolvedValueOnce('continue')
+    .mockResolvedValueOnce('0').mockResolvedValueOnce('apply');
+  const value = { ...report(), unwalked: [{ branch: 'systemd', reason: 'cancelled' }] };
+  const controller = { root: 'fixture', scopeId: 'fixture' };
+  const preview = { status: 'preview', controller, digest: 'fixture', ceiling: 1,
+    models: [{ channelId: 'fixture', modelId: 'fixture', recommended: true }],
+    candidate: { root: 'fixture', version: 'fixture', revision: 'fixture' },
+    limits: { maxSteps: 1, maxWallMs: 1, maxCalls: 1, maxTokens: 1, maxCost: 0, currency: 'USD' },
+    slots: { before: null, after: { executionSlots: 1, inFlightSlots: 1 } } };
+  const setup = vi.fn().mockResolvedValueOnce(preview).mockResolvedValueOnce(preview).mockResolvedValueOnce({ status: 'applied' });
+  const output: string[] = [];
+  const context = {
+    env: { HOME: '/nonexistent-beuser-presentation-fixture' },
+    stdout: { isTTY: true, write(text: string) { output.push(text); return true; } }, stdin: { isTTY: true } as never,
+    setupBeuser: setup, walkBeuser: vi.fn().mockResolvedValue(value), readBeuserReport: vi.fn().mockResolvedValue(value),
+  };
+  try {
+    expect.soft(await beuserCommand(['beuser', 'walk', '--scope', 'fixture', '--journey', 'fixture', '--lang', 'en'], context)).toBe(1);
+    expect(output.join('')).toContain('Unwalked systemd: cancelled.');
+    output.length = 0;
+    expect.soft(await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json', '--lang', 'tr'], context)).toBe(1);
+    expect(JSON.parse(output.join(''))).toEqual(value);
+    expect(setup.mock.calls[2]![1]).toMatchObject({ apply: true, expect: 'fixture' });
+    expect(context.walkBeuser).toHaveBeenCalledTimes(2);
+    output.length = 0;
+    expect((await beuserCommand(['beuser', 'report', '--scope', 'fixture', '--lang', 'tr'], context)) ?? 0).toBe(0);
+    expect(output.join('')).toContain('Yürünmeyen systemd: cancelled.');
+    context.walkBeuser.mockResolvedValueOnce({ ...value, unwalked: [], unknown: [{ branch: 'systemd', reason: 'cancelled' }] });
+    expect.soft(await beuserCommand(['beuser', 'walk', '--scope', 'fixture', '--journey', 'fixture', '--json'], context)).toBe(1);
+  } finally { ask.mockRestore(); }
+});
 
 it('reports a critical persona refused before its first screen as unknown, with the safe root reason in EN/TR and JSON', () => {
   const value = { ...report(), unknown: [{ branch: 'Ayse', reason: 'BEUSER_TARGET_NOT_SANDBOX' },
@@ -144,7 +189,7 @@ async function cancellationPty() {
   const script = `const { beuserCommand } = await import(${JSON.stringify(command)});
 const model = { channelId: 'fixture', modelId: 'fixture', recommended: true };
 let applies = 0, walks = 0;
-await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json', '--lang', 'en'], {
+process.exitCode = await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json', '--lang', 'en'], {
   env: process.env, setupBeuser: async (_root, input) => { if (input.apply) applies++;
     return { status: 'preview', controller: { root: process.cwd(), scopeId: 'fixture' }, models: [model], ceiling: 1 }; },
   walkBeuser: async () => { walks++; throw new Error('unexpected walk'); }
@@ -200,7 +245,7 @@ finally:
       const { stdout } = await promisify(execFile)('python3', ['-c', driver, JSON.stringify([process.execPath, '--input-type=module', '-e', script]), moment], {
         cwd: root, env: { PATH: process.env['PATH'], HOME: root, DECKENT_GLOBAL_HOME: join(root, 'global'), TERM: 'xterm-256color', FORCE_COLOR: '3' }, timeout: 30_000 });
       const run = JSON.parse(stdout) as { automatic: boolean; code: number; output: string };
-      expect(run.automatic, run.output).toBe(false); expect(run.code, run.output).toBe(0);
+      expect(run.automatic, run.output).toBe(false); expect.soft(run.code, run.output).toBe(1);
       expect(run.output).toContain('{"status":"cancelled"}'); expect(run.output).toContain('EFFECTS={"applies":0,"walks":0}');
     }
   } finally { await rm(root, { recursive: true, force: true }); }

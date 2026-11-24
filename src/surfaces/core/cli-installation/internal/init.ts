@@ -133,6 +133,7 @@ export async function initCommand(argv: readonly string[], context: Installation
         : value.reason === 'invalid-admission' ? t('cli.init.pool.noAdmission', params, locale) // BeUser re-walk: the field and the managed first step
         : t('cli.init.pool.unavailable', params, locale);
     } });
+    if (policyApply && (result.status === 'conflict' || result.status === 'unavailable')) return 1;
     return;
   }
   if (action === 'resume') {
@@ -159,6 +160,8 @@ export async function initCommand(argv: readonly string[], context: Installation
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
       const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply, expect, person, { env: context.env ?? process.env });
       emit(result, { ...sinks, json, render: value => policyUpgradeText(value, scopeId!, locale, typedMode(policyApply, expect)) });
+      if (policyApply && ((result.status !== 'upgraded' && result.status !== 'current')
+        || result.publicationStatus === 'unknown' || result.executionStatus === 'not-added' || result.executionStatus === 'unknown')) return 1;
       return;
     }
     if (policyApply) {

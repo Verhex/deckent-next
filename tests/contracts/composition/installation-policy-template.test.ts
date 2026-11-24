@@ -304,7 +304,7 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   expect(token).toBeDefined();
   output.length = 0;
   // Negative (Astra 2596): the bare policy revision binds no service identity, so nothing is written.
-  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v10', '--json'], ctx)).toBe(0);
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v10', '--json'], ctx)).toBe(1);
   expect(JSON.parse(output.join(''))).toMatchObject({ status: 'conflict', reason: 'service-identity-unbound', rules: [] });
   expect(await readFile(path, 'utf8')).toBe(before);
   output.length = 0;

@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, t, loadConfig, terminalSafeText, redactSensitive, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, emit, t, loadConfig, terminalSafeText, redactSensitive, type ConfigLoadOptions, type ExitCode } from '#platform/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { BeuserReport } from '#engine/index.js';
@@ -34,7 +34,7 @@ export function parseBeuserArguments(argv: readonly string[]) {
     journey: values.get('--journey'), candidate: values.get('--candidate'), runId: values.get('--run') };
 }
 /** Help and parsing have no host effects. Only the composition's typed callbacks can admit work or open a retained report. */
-export async function beuserCommand(argv: readonly string[], context: BeuserCommandContext = {}) {
+export async function beuserCommand(argv: readonly string[], context: BeuserCommandContext = {}): Promise<void | ExitCode> {
   const args = parseBeuserArguments(argv), locale = commandLocale(context, args.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'setup' ? t('beuser.help.setup', {}, locale) : args.action === 'walk' ? t('beuser.help.walk', {}, locale) : t('beuser.help.report', {}, locale), sinks); return; }
@@ -52,7 +52,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
     const recommended = journeys.find(row => row.recommended)?.id;
     const picked = await card({ title: t('beuser.walk.journey', {}, locale), body: [], ...(recommended ? { initial: recommended } : {}),
       options: journeys.map(row => ({ id: row.id, label: row.recommended ? t('beuser.walk.recommended', { model: row.id }, locale) : row.id })) });
-    if (picked === null) { emit(args.json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks); return; }
+    if (picked === null) { emit(args.json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks); return 1; }
     args.journey = picked;
   }
   if (oneCommand) return walkOneCommand(args.journey!, args.candidate, args.json, context, card, locale, sinks, options);
@@ -70,7 +70,9 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
       if (answer === 'apply') result = await context.setupBeuser(root, { ...input, apply: true, ...(preview.digest ? { expect: preview.digest } : {}) }, options);
       else result = { ...preview, status: 'cancelled' };
     }
-    emit(args.json ? JSON.stringify(result) : setupResultText(result, locale), sinks); return;
+    emit(args.json ? JSON.stringify(result) : setupResultText(result, locale), sinks);
+    if (args.apply && result.status !== 'applied' && result.status !== 'current') return 1;
+    return;
   }
   let report;
   if (args.action === 'walk') {
@@ -81,15 +83,24 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
     report = await context.readBeuserReport(root, scopeId, args.runId, options);
   }
   emit(formatBeuserReport(report, { json: args.json, locale }), sinks);
+  if (args.action === 'walk') return walkExit(report);
+}
+
+function walkExit(report: BeuserReport): ExitCode | undefined {
+  if (report.unwalked.some(row => row.reason === 'cancelled') || report.unknown.some(row => row.reason === 'cancelled')) return 1;
 }
 
 /** Journey beuser-one-command B1/B2/B4: controller → the person's model choice → setup card → walk → report, from any folder. A refused card applies nothing. */
 async function walkOneCommand(journey: string, candidate: string | undefined, json: boolean, context: BeuserCommandContext, card: Card,
-  locale: ReturnType<typeof commandLocale>, sinks: Parameters<typeof emit>[1], options: ConfigLoadOptions) {
+  locale: ReturnType<typeof commandLocale>, sinks: Parameters<typeof emit>[1], options: ConfigLoadOptions): Promise<void | ExitCode> {
   if (!context.setupBeuser || !context.walkBeuser) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
   // The controller comes from the person's global state root, never from the current folder.
   const input = { journey, candidate, apply: false }, step = await context.setupBeuser('', input, options), models = step.models ?? [], controller = step.controller;
-  const at = { controller: terminalSafeText(controller?.root ?? '') }, cancelled = () => emit(json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks);
+  const at = { controller: terminalSafeText(controller?.root ?? '') };
+  const cancelled = (): ExitCode => {
+    emit(json ? JSON.stringify({ status: 'cancelled' }) : t('beuser.walk.cancelled', {}, locale), sinks);
+    return 1;
+  };
   if (!controller?.scopeId || !models.length) { emit(t('beuser.walk.connect', at, locale), { ...sinks, level: 'warning' }); throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE'); }
   const label = (model: Model) => terminalSafeText(`${model.channelId} / ${model.modelId}`);
   const selected = new Set(models.flatMap((model, index) => model.recommended ? [index] : []));
@@ -100,7 +111,7 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
       body: [t('beuser.walk.modelBody', { ...at, ceiling }, locale), ...(selectionError ? [selectionError] : [])], initial: 'continue',
       options: [...models.map((model, index) => ({ id: String(index), label: `${selected.has(index) ? '[x]' : '[ ]'} ${model.recommended ? t('beuser.walk.recommended', { model: label(model) }, locale) : label(model)}` })),
         { id: 'continue', label: t('beuser.walk.continue', {}, locale) }] });
-    if (picked === null) { cancelled(); return; }
+    if (picked === null) return cancelled();
     if (picked === 'continue') {
       if (selected.size > 0 && selected.size <= ceiling) break;
       selectionError = t('beuser.walk.selectionLimit', { ceiling, count: selected.size }, locale); continue;
@@ -113,7 +124,7 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
   const judge = await card({ title: t('beuser.walk.judge', {}, locale), body: [t('beuser.walk.judgeBody', {}, locale)], initial: String(preferred >= 0 ? preferred : Math.max(0, first)),
     options: models.map((model, index) => ({ id: String(index), label: label(model) })) });
   const choice = judge === null ? undefined : models[Number(judge)];
-  if (!choice) { cancelled(); return; }
+  if (!choice) return cancelled();
   const evaluator = { channelId: choice.channelId, modelId: choice.modelId };
   const preview = await context.setupBeuser('', { ...input, walkers, evaluator }, options), limits = preview.limits!, chosen = preview.candidate!, slots = preview.slots!;
   const answer = await card({ title: t('beuser.walk.card', {}, locale), body: [t('beuser.walk.cardBody', { journey: terminalSafeText(journey), version: terminalSafeText(chosen.version),
@@ -125,14 +136,15 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
     t('beuser.walk.slots', { before: slots.before ? `${slots.before.executionSlots}/${slots.before.inFlightSlots}` : t('beuser.walk.newPool', {}, locale),
       after: `${slots.after.executionSlots}/${slots.after.inFlightSlots}`, ceiling }, locale)],
     options: [{ id: 'apply', role: 'yes', label: t('beuser.setup.apply', {}, locale) }, { id: 'cancel', role: 'no', label: t('beuser.setup.cancel', {}, locale) }] });
-  if (answer !== 'apply') { cancelled(); return; }
+  if (answer !== 'apply') return cancelled();
   const applied = await context.setupBeuser('', { ...input, walkers, evaluator, apply: true, expect: preview.digest }, options);
   if (applied.status !== 'applied' && applied.status !== 'current') {
-    emit(setupResultText(applied, locale), sinks); return;
+    emit(setupResultText(applied, locale), sinks); return 1;
   }
   const report = await context.walkBeuser(controller.root, { scopeId: controller.scopeId, journey, candidate: chosen.root }, options, context.signal);
   emit(formatBeuserReport(report, { json, locale }), sinks);
   if (!json) emit(t('beuser.walk.next', { ...at, revision: terminalSafeText(chosen.revision) }, locale), sinks);
+  return walkExit(report);
 }
 
 function setupResultText(result: SetupResult, locale: ReturnType<typeof commandLocale>) {

@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
@@ -24,9 +24,9 @@ it('119-F1b: words separate publications, proven refusal and unknown outcomes in
         absent: 'Yapay zekâ yürütme izni eklenmedi', unknown: 'Yapay zekâ yürütme izninin durumu doğrulanamadı', firstUnknown: 'ikinci yayın başlatılmadı' };
     let value: Record<string, unknown> = { status: 'preview', revision: 'r0', publications: [20, 21], publicationsAtomic: false, rules: [] };
     const ctx = context({ async upgradePolicyTemplateInstallation() { return value; }, stdout: { write(text: string) { output.push(text); } } });
-    const run = async (preview = false) => {
+    const run = async (preview = false, exit = 0) => {
       output.length = 0;
-      expect(await main(['init', 'policy', '--scope', 's', '--upgrade', preview ? '--preview' : '--apply', '--lang', locale], ctx)).toBe(0);
+      expect.soft(await main(['init', 'policy', '--scope', 's', '--upgrade', preview ? '--preview' : '--apply', '--lang', locale], ctx)).toBe(exit);
       return output.join('');
     };
     expect(await run(true)).toContain(copy.separate);
@@ -34,15 +34,15 @@ it('119-F1b: words separate publications, proven refusal and unknown outcomes in
     let text = await run();
     expect(text).toContain(copy.baseline); expect(text).toContain(copy.added); expect(text).toContain('r2'); expect(text).not.toContain(copy.absent);
     value = { status: 'unavailable', revision: 'r1', baselineRevision: 'r1', executionStatus: 'not-added', person: { issuer: 'person', subject: 'one' } };
-    text = await run();
+    text = await run(false, 1);
     expect(text).toContain(copy.baseline); expect(text).toContain(copy.absent);
     expect(text).toContain('deckent init policy --scope s --upgrade --preview --person person/one'); expect(text).not.toContain(copy.added);
     value = { status: 'unavailable', revision: 'r1', baselineRevision: 'r1', executionStatus: 'unknown', publicationStatus: 'unknown', publicationKey: 'same-operation-key' };
-    text = await run();
+    text = await run(false, 1);
     expect(text).toContain(copy.baseline); expect(text).toContain(copy.unknown); expect(text).toContain('same-operation-key');
     expect(text).toContain('deckent policy status --scope s'); expect(text).not.toContain('--apply'); expect(text).not.toContain(copy.absent); expect(text).not.toContain(copy.added);
     value = { status: 'unavailable', publicationStatus: 'unknown', publicationKey: 'first-key' };
-    text = await run();
+    text = await run(false, 1);
     expect(text).toContain(copy.firstUnknown); expect(text).toContain('first-key'); expect(text).toContain('deckent policy status --scope s');
     expect(text).not.toContain(copy.baseline); expect(text).not.toContain(copy.absent);
     value = { status: 'upgraded', revision: 'r2', executionStatus: 'added' };
@@ -118,7 +118,7 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
   expect(text).toContain('Kept as they are (same id, other content; review them): first-run-approvals');
   expect(text).toContain('no longer used for MCP calls');
   output.length = 0; result = { status: 'unavailable', reason: 'not-this-person' };
-  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v4', '--lang', 'tr'], ctx)).toBe(0);
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v4', '--lang', 'tr'], ctx)).toBe(1);
   expect(output.join('')).toContain('değiştirilmedi');
   expect(calls).toEqual([['/project', 'installation', false, undefined, undefined, { env: ctx.env }], ['/project', 'installation', true, 'first-run-template-v4', undefined, { env: ctx.env }]]);
   // Exactly one of --preview/--apply; --expect only with --upgrade --apply; the handler must be wired.
@@ -138,7 +138,7 @@ it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with 
   expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person host-1/user-1');
   expect(output.join('')).toContain('hand-built policy');
   output.length = 0;
-  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--person', 'https://idp.example/realm/42'], ctx)).toBe(0);
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--person', 'https://idp.example/realm/42'], ctx)).toBe(1);
   expect(calls.at(-1)).toEqual(['/project', 'live', true, 'a-419c', { issuer: 'https://idp.example/realm', subject: '42' }, { env: ctx.env }]);
   // A hand-built policy without --person: the refusal points to --person and names the people it already names (terminal-safe).
   output.length = 0; result = { status: 'unavailable', reason: 'not-first-run', people: [person, { issuer: 'evil\u001b[2J', subject: '7' }] };
@@ -162,13 +162,46 @@ it('alpha.56.1: a hand-built policy refusal repeats the mode the person typed (-
   const output: string[] = [], person = { issuer: 'host-1', subject: 'user-1' }, refused = { status: 'unavailable', reason: 'not-first-run', people: [person] };
   const ctx = context({ async upgradePolicyTemplateInstallation() { return refused; }, async openPermissionModesInstallation() { return refused; },
     stdin: { isTTY: true }, stdout: { isTTY: true, write(value: string) { output.push(value); return true; } }, agentEnvironment: [], env: { HOME: tmpdir(), TERM: 'xterm' } });
-  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--lang', 'en'], ctx)).toBe(0);
+  expect.soft(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--lang', 'en'], ctx)).toBe(1);
   expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --person <issuer>/<subject>');
   output.length = 0;
-  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--lang', 'tr'], ctx)).toBe(0);
+  expect.soft(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--lang', 'tr'], ctx)).toBe(1);
   expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person <issuer>/<subject>');
   output.length = 0;
-  expect(await main(['init', 'policy', '--scope', 'live', '--modes', 'full-auto', '--apply', '--lang', 'en'], ctx)).toBe(0);
+  expect.soft(await main(['init', 'policy', '--scope', 'live', '--modes', 'full-auto', '--apply', '--lang', 'en'], ctx)).toBe(1);
   expect(output.join('')).toContain('deckent init policy --scope live --modes full-auto --apply --person <issuer>/<subject>');
   expect(output.join('')).not.toContain('--preview');
+  const human = await import('#surfaces/core/cli-human/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-init-policy-apply-')), home = join(root, 'home');
+  await mkdir(home);
+  const errors: string[] = [];
+  const tty = { ...ctx, root, env: { ...homeEnv(home), TERM: 'xterm' }, stderr: { write(value: string) { errors.push(value); } } };
+  const ask = vi.spyOn(human, 'askCliCard');
+  try {
+    const preview = { status: 'preview', principal: person, revision: 'r1', expect: 'r1', added: [], removed: [], remaining: 0, cells: [], conflicts: [] };
+    for (const [flags, port] of [[['--modes', 'full-auto'], 'openPermissionModesInstallation'],
+      [['--owner-baseline', 'none'], 'openOwnerBaselineInstallation']] as const) {
+      const argv = ['init', 'policy', '--scope', 'live', ...flags];
+      for (const [answer, status, exit] of [
+        [null, 'preview', 1], ['apply', 'conflict', 1], ['apply', 'applied', 0], ['apply', 'current', 0],
+      ] as const) {
+        ask.mockReset().mockResolvedValue(answer);
+        const write = vi.fn(async (_root: string, _scope: string, input: { apply: boolean }) => input.apply ? { ...preview, status } : preview);
+        output.length = 0;
+        expect.soft(await main([...argv, '--apply', '--json'], { ...tty, [port]: write }), `${port}: ${answer} / ${status} ${errors.join('')}`).toBe(exit);
+        const expected = answer === null && port === 'openPermissionModesInstallation' ? 'cancelled' : status;
+        expect(JSON.parse(output.join(''))).toEqual({ ...preview, status: expected });
+        expect(write.mock.calls.map(call => call[2].apply)).toEqual(answer === null ? [false] : [false, true]);
+      }
+      ask.mockReset();
+      output.length = 0;
+      expect.soft(await main([...argv, '--apply', '--expect', 'stale', '--json'], { ...tty, [port]: async () => preview }), port).toBe(1);
+      expect(JSON.parse(output.join(''))).toMatchObject({ status: 'conflict', reason: 'revision-changed' });
+      expect(ask).not.toHaveBeenCalled();
+    }
+  } finally {
+    ask.mockRestore();
+    await rmdir(home);
+    await rmdir(root);
+  }
 });

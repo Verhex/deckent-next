@@ -1,6 +1,8 @@
 import { join } from 'node:path';
-import { isCodedError, ErrorRegistry, prepareProductDirectory, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, prepareProductDirectory, sha256, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+
+export const beuserMonitorName = (scopeId: string, principal: { issuer: string; subject: string }) => `beuser-monitor-${sha256(JSON.stringify([scopeId, principal.issuer, principal.subject]))}`;
 
 /** Existing exclusive custody, generation-safe release and dead-owner recovery; a second walk never queues. */
 export async function withConfiguredBeuserWalkCustody<T>(root: string, scopeId: string, options: ConfigLoadOptions, work: () => Promise<T>) {
