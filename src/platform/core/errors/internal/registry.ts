@@ -152,6 +152,8 @@ function siwcCustodyMessage(p: Params, l: Locale): string {
   if (reason === 'unsafe-root') return typeof p['path'] !== 'string' ? t('siwc.custody.unsafeRoot', p, l) : p['folder'] === 'parent' ? t('siwc.custody.privateParent', p, l) : t('siwc.custody.privateFolder', p, l);
   if (reason === 'unknown-locality' || reason === 'remote-store') return t('siwc.custody.localDisk', p, l);
   if (reason === 'shared-store' || reason === 'foreign-os-owner') return t('siwc.custody.personalRequired', p, l);
+  if (reason === 'binding-changed') return t('siwc.custody.bindingChanged', p, l);
+  if (reason === 'connection-binding-changed') return t('siwc.custody.connectionBindingChanged', p, l);
   return reason === 'profile-unresolved' ? t('siwc.custody.profileRequired', p, l) : reason === 'cleanup-pending' ? t('siwc.custody.cleanupPending', p, l)
     : reason === 'non-person-owner' ? t('siwc.custody.nonPersonOwner', p, l) : t('error.SIWC_STORE_NOT_PERSONAL', p, l);
 }

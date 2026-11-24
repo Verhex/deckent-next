@@ -1268,7 +1268,7 @@ it('N3-4-R1: the automatic ready read clears a corrected directory refusal and p
   const [apiKind, , planKind] = KINDS.kinds, id = planKind!.id;
   for (const [params, notice, remains] of [
     [{ reason: 'unsafe-root', path: '/fixture/private-store', mode: '0755', folder: 'root' }, '/fixture/private-store has mode 0755', false],
-    [{ reason: 'binding-changed' }, 'Personal local custody is unverified.', true],
+    [{ reason: 'binding-changed' }, 'Access to this subscription connection is paused', true],
   ] as const) {
     const { port } = providerPort();
     const refreshes: Array<(result: { id: string; reason: null }) => void> = [];

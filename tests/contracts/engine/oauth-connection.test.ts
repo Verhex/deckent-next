@@ -396,6 +396,7 @@ it('leases only a current binding for the verified person and actual store; ordi
   const store = createEncryptedFileSecretStore({ root, platform: process.platform });
   try {
     let reads = 0, witness = true, hostFailure: 'remote-store' | 'unknown-locality' | null = null;
+    let locationDigest = 'a'.repeat(64);
     const opened = { ...store, get: async (name: string) => { reads++; return store.get(name); } };
     rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {} });
     const profileRegistry = new IdentityProfileRegistry();
@@ -408,7 +409,7 @@ it('leases only a current binding for the verified person and actual store; ordi
     }, async () => ({ store: store.descriptor.id, digest: null }), async () => {
       if (hostFailure) throw new PersonalCustodyError(hostFailure);
       const key = await lstat(join(root, 'secrets.key')).catch(() => null);
-      return { locationDigest: 'a'.repeat(64), keyIdentityDigest: key ? String(key.ino).padStart(64, '0') : null,
+      return { locationDigest, keyIdentityDigest: key ? String(key.ino).padStart(64, '0') : null,
         mountEvidenceDigest: 'c'.repeat(64), pairPresent: key !== null };
     });
     // Only the host-observation seam is synthetic; the absent key/envelope and binding use the real registered writer.
@@ -453,7 +454,16 @@ it('leases only a current binding for the verified person and actual store; ordi
     await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
     expect(reads).toBe(before);
     await writeFile(path, JSON.stringify({ ...binding, generation: 2 }, null, 2) + '\n', { mode: 0o600 });
-    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'connection-binding-changed' });
     expect(f.forms).toHaveLength(exchanges);
+    await expect(f.app.disconnect(connected.connectionId)).resolves.toMatchObject({ state: 'disconnected' });
+    const reconnect = { connectionId: connected.connectionId, planUse: true };
+    await expect(f.app.connect(reconnect)).resolves.toMatchObject({ state: 'connected', planUse: true });
+    locationDigest = 'd'.repeat(64);
+    await expect(f.app.disconnect(connected.connectionId)).resolves.toMatchObject({ state: 'disconnected' });
+    const browserVisits = f.urls.length;
+    await expect(f.app.list()).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' });
+    await expect(f.app.connect(reconnect)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' });
+    expect(f.urls).toHaveLength(browserVisits);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

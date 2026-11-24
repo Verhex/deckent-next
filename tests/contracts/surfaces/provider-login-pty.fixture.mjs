@@ -39,7 +39,8 @@ const host = { providerConnect: { kinds, endpoint: text => ({ ok: true, base: te
   inspectInvocableModels: async () => ({ models: [{ reference: ref, nativeId: 'Fixture', availability: { invocable: true, reason: null } }] }),
   siwc: { connection: 'chatgpt-login', execute: async (_root, request) => {
     if (request.operation === 'prepare') return { apiTargets: [] };
-    process.stdout.write('\nFIXTURE-OAUTH-CONNECT-REACHED\n'); throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason: 'unknown-locality' } });
+    const reason = mode.startsWith('chatgpt-binding-') ? 'binding-changed' : 'unknown-locality';
+    process.stdout.write('\nFIXTURE-OAUTH-CONNECT-REACHED\n'); throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason } });
   } } };
 const port = providerPanelPort(process.env.HOME, 'scope', host, {}, locale, error => error.message);
 const view = createElement(SettingsPanel, { kind: 'provider', ports: { provider: port }, labels: terminalPanelLabels(locale), push: () => {},

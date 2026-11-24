@@ -689,6 +689,12 @@ it('shows scoped ChatGPT custody refusals without account labels, tokens or host
   expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ state: 'warning', next: 'deckent models connect --connection fixture-subscription --scope live' });
   expect(rows[0]!.text).toContain('kimlik profili');
   expect(JSON.stringify(rows)).not.toContain('/home/');
+  for (const locale of ['en', 'tr'] as const) {
+    const refused = doctorChecks(report, facts({ siwcConnections: [{ reference, connection: 'fixture-subscription', state: 'unavailable', planUse: false,
+      code: 'SIWC_STORE_NOT_PERSONAL', reason: 'binding-changed' }] }), locale).find(row => row.id === 'work.chatgptConnection');
+    expect(refused?.text).toContain(locale === 'en' ? 'does not restore access in this release' : 'erişimi geri getirmez');
+    expect(refused).not.toHaveProperty('next');
+  }
 });
 
 it('names an open secret folder ssh-style with chmod 700 and says when ChatGPT sign-in custody would refuse (FIX8b E01, R22)', () => {

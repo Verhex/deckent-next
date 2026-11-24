@@ -9,7 +9,7 @@ import type { SecretChangeAudit, SecretChangeAuthorization, SecretCustody, Secre
   | 'SIWC_ACCOUNT_STILL_CONNECTED' | 'SIWC_STORE_NOT_PERSONAL' | 'OAUTH_CONNECTION_INTERACTIVE_REQUIRED' | 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' | 'POLICY_APPROVAL_UNSUPPORTED';
 /** No vendor text, callback, token, URL or nested cause enters an error. */
 export class OAuthConnectionError extends CodedError {
-  constructor(override readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal) { super(code); this.name = 'OAuthConnectionError'; }
+  constructor(override readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal | 'connection-binding-changed') { super(code); this.name = 'OAuthConnectionError'; }
 }
 const text = persistedString(z.string().min(1).max(256)), time = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export const oauthConnectionOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,

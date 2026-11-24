@@ -255,7 +255,9 @@ export class OAuthConnectionApplication {
       if (this.evidence) {
         if (record.schemaVersion === 1) {
           if (!reconnect || record.tokens !== null || !['registration', 'disconnected'].includes(record.state)) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
-        } else if (!isDeepStrictEqual(record.custody, this.binding(this.evidence)) && (!reconnect || record.tokens !== null || !['registration', 'disconnected'].includes(record.state))) throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL');
+        } else if (!isDeepStrictEqual(record.custody, this.binding(this.evidence)) && (!reconnect || record.tokens !== null || !['registration', 'disconnected'].includes(record.state))) {
+          throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL', 'connection-binding-changed');
+        }
       }
       return record;
     } catch (error) {

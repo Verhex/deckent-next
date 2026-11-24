@@ -3,7 +3,8 @@ import { PassThrough, Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
+import { main } from '#surfaces/core/cli/index.js';
 import { modelsCommand, renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
@@ -122,5 +123,33 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
       siwc: { connection: 'chatgpt-login', execute } } as never)).toBe(1);
     expect(out.text()).toContain('ChatGPT action cancelled.'); expect(out.text()).not.toMatch(/Error|OAUTH_CONNECTION_CANCELLED/u);
     expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(sigint);
+  }
+});
+
+it('F1-MSG: the subscription CLI explains the failed store check and reserves reconnect advice for a connection record mismatch', async () => {
+  const f = await project(); card.interactive = true;
+  for (const [locale, paused, noRestore, admin, reconnect] of [
+    ['en', 'Access to this subscription connection is paused because deckent could not verify that the personal store is the one the connection was enrolled in.',
+      'Disconnecting and connecting again does not restore access in this release.', 'Ask the installation administrator to check the personal store folder, its backing device and its binding record.',
+      "The connection's saved binding does not match the verified personal store. Disconnect the connection and then connect it again from your own terminal."],
+    ['tr', 'deckent, kişisel deponun bağlantının kaydedildiği depo olduğunu doğrulayamadığı için bu abonelik bağlantısına erişim durduruldu.',
+      'Bu sürümde bağlantıyı kesip yeniden bağlamak erişimi geri getirmez.', 'Kurulum yöneticisinden kişisel deponun klasörünü, bağlı olduğu disk aygıtını ve bağ kaydını kontrol etmesini isteyin.',
+      'Bağlantının kayıtlı bağı, doğrulanan kişisel depoyla eşleşmiyor. Bağlantıyı kesin ve kendi terminalinizden yeniden bağlanın.'],
+  ] as const) {
+    for (const [command, reason, message, answers] of [
+      ['connect', 'binding-changed', `${paused} ${noRestore} ${admin}`, ['no', 'no']],
+      ['login', 'binding-changed', `${paused} ${noRestore} ${admin}`, ['yes']],
+      ['login', 'connection-binding-changed', reconnect, ['yes']],
+    ] as const) {
+      const out = capture(), err = capture(); card.answers = [...answers];
+      const execute = async (_root: string, request: { operation: string }) => {
+        if (request.operation === 'prepare') return { apiTargets: [] };
+        throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason } });
+      };
+      expect(await main(['models', command, '--connection', 'chatgpt-login', '--scope', 'scope'], { ...f, locale, stdin: tty(), stdout: out.sink, stderr: err.sink,
+        siwc: { connection: 'chatgpt-login', execute } } as never)).toBe(1);
+      expect(err.text()).toContain(`${message} [SIWC_STORE_NOT_PERSONAL]`);
+      if (reason === 'binding-changed') expect(err.text()).not.toMatch(/Disconnect the connection|Bağlantıyı kesin|deckent (?:models|init|secret|recovery)\b|`/u);
+    }
   }
 });

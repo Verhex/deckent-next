@@ -1,6 +1,6 @@
 {
   "error.SECRET_SESSION_RESERVED": "Session credentials cannot be read, granted, set or deleted by name. Use models login or models logout.",
-  "error.SIWC_STORE_NOT_PERSONAL": "Personal local custody is unverified. Disconnect the connection; do not move its session records by changing stores.",
+  "error.SIWC_STORE_NOT_PERSONAL": "Personal local custody is unverified.",
   "error.SUBSCRIPTION_RAW_USE_REFUSED": "Only deckent features may use this subscription for an AI caller. Raw model access from other tools is refused.",
   "siwc.card.title": "Continue with ChatGPT",
   "siwc.card.body": "Eligible requests use your ChatGPT plan. deckent does not charge for this connection. Authorize deckent in your browser.",
@@ -33,6 +33,8 @@
   "siwc.status.usingPlan": "Using ChatGPT plan · manage usage",
   "siwc.help": "models connect|login|logout --connection <ChatGPT connection> --scope <scope> [--connection-id <id>] (person TTY only). Reconnect to change or revoke background/API consent. Use --new-account after logout to authorize a different account; it never rotates on limits.",
   "siwc.custody.personalRequired": "Use your own local store, then reconnect ChatGPT.",
+  "siwc.custody.bindingChanged": "Access to this subscription connection is paused because deckent could not verify that the personal store is the one the connection was enrolled in. Disconnecting and connecting again does not restore access in this release. Ask the installation administrator to check the personal store folder, its backing device and its binding record.",
+  "siwc.custody.connectionBindingChanged": "The connection's saved binding does not match the verified personal store. Disconnect the connection and then connect it again from your own terminal.",
   "siwc.custody.cleanupPending": "Previous credential cleanup is incomplete. Reconcile it before reconnecting.",
   "siwc.custody.nonPersonOwner": "A person must sign in from their own terminal.",
   "siwc.notEligible": "This ChatGPT plan cannot be used here. Choose another connection or manage your plan.",
