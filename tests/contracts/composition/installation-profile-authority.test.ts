@@ -7,13 +7,14 @@ import { applySuppliedInstallation } from '#composition/core/installation/index.
 import { evaluatePolicy, firstRunPolicyTemplate, mcpPrincipalRef, policyFileSchema, resolvePolicyBindings } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, hashInstallationProfilePayload, InstallationPreviewApplication, installationPublishTargets } from '#engine/core/installation/index.js';
 import { main } from '#surfaces/index.js';
+import { getConfigFieldDefault } from '#platform/index.js';
 import { installationProfile } from '../support/installation-profile.js';
 
 // H (owner 2026-10-29): `init apply --profile` publishes the SUPPLIED policy verbatim. Content the unwitnessed first-run template would not give the
 // installing person (here: edit/shell tools as `allow` where the template says `require-approval`, i.e. full-auto without a mode) is an authority
 // write and needs the SEC-1 witness, exactly as `init policy --modes|--upgrade --apply`; a profile inside the template keeps working headless.
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const person = adapters.readLocalOsIdentity(), local = { issuer: person.issuer, subject: person.subject };
 const widened = { id: 'widened-edit-shell', effect: 'allow' as const, actions: ['invoke'], scopes: ['scope-1'], principals: [local],
   resource: { kind: 'agent-tool', ids: [...FIRST_RUN_TOOL_NAMES.editShellToolNames] } };
@@ -60,10 +61,17 @@ describe.skipIf(process.platform !== 'linux')('supplied installation profile aut
     const narrow = await apply(profile());
     expect(narrow).toBe('INSTALLATION_PROFILE_CONFIG');
     // A person at the terminal passes the gate (then the same evidence step); the MCP actor never does.
-    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+    const markers = getConfigFieldDefault('cli').agentEnvironment;
+    for (const marker of markers) vi.stubEnv(marker, undefined);
+    vi.stubEnv('CI', undefined);
+    const terminal = vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     const witnessed = await apply(profile([widened]));
     expect(witnessed).toBe('INSTALLATION_PROFILE_CONFIG');
     // Under MCP the installer's principal is the MCP actor: a profile naming it passes preview, and the witness refuses it even though it would attest.
     expect(await adapters.withLocalPrincipalChannel('mcp', () => apply(profile([widened], mcpPrincipalRef(local))))).toBe('AUTHORITY_WITNESS_REQUIRED');
+    vi.stubEnv(markers[0]!, '1');
+    terminal.mockClear();
+    expect(await apply(profile([widened]))).toBe('AUTHORITY_WITNESS_REQUIRED');
+    expect(terminal).not.toHaveBeenCalled();
   });
 });

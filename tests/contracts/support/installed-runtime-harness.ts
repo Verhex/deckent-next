@@ -5,16 +5,16 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, expect, vi } from 'vitest';
+import { afterEach, expect } from 'vitest';
 import { applyInstallation, createConfiguredRuntimeClient, inspectInstallation } from '../../../src/index.js';
 import { hashInstallationProfilePayload } from '#engine/index.js';
-import * as adapters from '#adapters/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { installationProfile } from './installation-profile.js';
 import { terminalProgram } from './approval-terminal.js';
 import { createTerminalRuntimeClient } from './terminal-runtime-client.js';
+import { lastJson, runInTerminal } from './terminal-cli.js';
 
 const exec = promisify(execFile), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const roots: string[] = [];
@@ -185,9 +185,10 @@ export async function installedScenario(mode: string, observed: { root?: string;
   // H (owner 2026-10-29): the MCP actor's run/pool/attempt grants (and approval renew, the held-task approval) exceed the first-run template, so the
   // supplied profile is an authority write: refused off a terminal (vitest has none), then applied as the person at the terminal.
   await expect(applyInstallation(project, profile, control)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-  const witness = vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
-  const installed = await applyInstallation(project, profile, control).finally(() => witness.mockRestore());
-  expect(installed).toMatchObject({ status: 'installed', trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
+  const installed = await runInTerminal([process.execPath, cli, 'init', 'apply', '--profile', profilePath, '--allow-shutdown',
+    '--docker-executable', control.dockerExecutable, '--proposal', control.proposalDigest, '--accept-custom', '--json'], project, env);
+  expect(installed.code, installed.output).toBe(0);
+  expect(lastJson(installed.output)).toMatchObject({ status: 'installed', trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
 
   let service: ChildProcessWithoutNullStreams | undefined, serviceClosed: Promise<number | null> | undefined, serviceErr = '';
   let runtime: Awaited<ReturnType<typeof openConfiguredExecution>> | undefined;
