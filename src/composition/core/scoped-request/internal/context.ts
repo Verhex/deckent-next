@@ -4,7 +4,8 @@ import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, isCodedError, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
 import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
-import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
+import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError,
+  sameProjectAttachmentAuthority, type ScopeAccess } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
@@ -22,13 +23,18 @@ export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeI
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess, inspected?: ScopeReadInputs) {
   const reading = access === 'read' ? inspected : undefined;
   const config = reading?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
-  let document; try { document = reading?.document ?? await contextPolicySource({ layout, config, ownerUid }).load(); }
-  catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+  const loadPolicy = async () => {
+    try { return await contextPolicySource({ layout, config, ownerUid }).load(); }
+    catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+  };
+  const document = reading?.document ?? await loadPolicy();
   const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
   let writeAdmitted = false;
-  const admitWrite = async () => {
-    if (!writeAdmitted) await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'write');
+  const admitWrite = async (checkpoint?: 'target-publication') => {
+    if (writeAdmitted && !checkpoint) return;
+    const current = checkpoint === 'target-publication' ? await loadPolicy() : document;
+    await resolveConfiguredScopeMembership(config, current, identity, [scopeId], 'write');
     writeAdmitted = true;
   };
   const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId,
@@ -130,16 +136,26 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
     }) : keep();
   }, choice);
 }
-/** Only an interactive terminal writer defers a potentially repairable registered-source observation. */
+/** Only an interactive terminal writer defers a potentially repairable registered attachment observation. */
 export async function preflightConfiguredTerminalIdentity(root: string, options: ConfigLoadOptions, scopeId?: string) {
   try {
     const observed = await loadConfiguredInstallationIdentity(root, options);
     if (observed.status === 'unavailable' && observed.reason === 'unsupported') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   } catch (error) {
-    if (!isCodedError(error, 'INSTALLATION_IDENTITY_RELOCATED') && !isCodedError(error, 'PROJECT_ATTACHMENT_UNAVAILABLE')) throw error;
+    const targetRepair = isCodedError(error, 'PROJECT_ATTACHMENT_CHANGED') || isCodedError(error, 'PROJECT_ATTACHMENT_DENIED');
+    if (!targetRepair && !isCodedError(error, 'INSTALLATION_IDENTITY_RELOCATED') && !isCodedError(error, 'PROJECT_ATTACHMENT_UNAVAILABLE')) throw error;
     const config = await loadComposedConfig(root, { ...options, heal: false });
     const store = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
     const registered = await store.registration().catch(() => null);
+    if (targetRepair) {
+      if (!registered || registered.unregistered || config.installation.sharedRegistrationId !== registered.registrationId
+        || config.company.id !== registered.source.companyId) throw error;
+      const local = await store.attachment();
+      const entry = registered.entries.find(item => item.attachment.projectId === local?.projectId);
+      if (!local || entry?.state !== 'active' || local.registrationId !== registered.registrationId
+        || (scopeId !== undefined && local.scopeId !== scopeId) || !sameProjectAttachmentAuthority(entry.attachment, local)) throw error;
+      return;
+    }
     if (!registered || registered.unregistered || (config.installation.sharedRegistrationId !== registered.registrationId
       && (registered.source.projectRoot !== config.projectRoot || (scopeId !== undefined && registered.source.scopeId !== scopeId)))) throw error;
   }

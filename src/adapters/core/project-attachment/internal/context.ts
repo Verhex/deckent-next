@@ -2,6 +2,7 @@ import { delegationOwner, installationSourceSchema } from '#domain/index.js';
 import { attachmentFailure, type InstallationContextPorts, type InstallationIdentityRead, type RegisteredInstallationBinding } from '#engine/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { FileProjectAttachmentStore, captureAttachmentLocation, observeAttachmentFilesystemIdentity } from './store.js';
+import { repairAttachedProject, repairRegisteredInstallationSource, type AttachmentContextWrite } from './relocation.js';
 import type { ResolvedConfig, ConfigLoadOptions } from '#platform/index.js';
 /** Reconstruct the selected source from its current configuration and policy, never from a caller-supplied layout alone. */
 export async function inspectInstallationSourceFiles(config: ResolvedConfig, scopeId: string, actor: { readonly issuer: string; readonly subject: string },
@@ -22,13 +23,22 @@ export async function inspectInstallationSourceFiles(config: ResolvedConfig, sco
   return { source, identity, config };
 }
 export function localInstallationProjectContextPorts(config: ResolvedConfig, options: ConfigLoadOptions, source: InstallationContextPorts['source'],
-  beforeLegacyRead?: () => Promise<void>): InstallationContextPorts {
+  write?: AttachmentContextWrite): InstallationContextPorts {
   const store = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
-  return { registration: () => store.registration(), attachment: () => store.attachment(), source, observeFilesystemIdentity: observeAttachmentFilesystemIdentity,
+  const ports: InstallationContextPorts = { registration: () => store.registration(), attachment: () => store.attachment(), source, observeFilesystemIdentity: observeAttachmentFilesystemIdentity,
     target: async () => { const project = await new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs).read();
       return { ...await captureAttachmentLocation(config.projectRoot), projectId: project.status === 'available' ? project.value.projectId : null }; },
     legacy: async () => {
-      await beforeLegacyRead?.();
+      const scope = write?.scopeId;
+      if (write && scope) await repairRegisteredInstallationSource(config, options, write.actor, scope, write.inspectSource,
+        () => write.admitSource(config, scope));
       return new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
     } };
+  if (!write) return ports;
+  return { ...ports, repairSource: async (selected, requireActiveTarget) => {
+    const sourceConfig = await write.loadSource(selected.projectRoot);
+    await repairRegisteredInstallationSource(sourceConfig, options, write.actor, selected.scopeId, write.inspectSource,
+      () => write.admitSource(sourceConfig, selected.scopeId), requireActiveTarget);
+  }, repairTarget: (reference, requireActiveTarget, refusal) =>
+    repairAttachedProject(store, ports.target, reference, requireActiveTarget, refusal, write) };
 }

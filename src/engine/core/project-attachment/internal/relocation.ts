@@ -1,7 +1,58 @@
-import { installationRegistrationSchema, projectAttachmentSchema, isNewAttachmentRegistration, isNewAttachment, type ReadableInstallationRegistration, type ProjectAttachment, type AttachmentLocation, type AttachmentPerson } from '#domain/index.js';
+import { isDeepStrictEqual } from 'node:util';
+import { assessAttachmentLocation, installationRegistrationSchema, projectAttachmentSchema, readableInstallationRegistrationSchema, readableProjectAttachmentSchema,
+  isNewAttachmentRegistration, isNewAttachment, type ReadableInstallationRegistration, type ProjectAttachment, type AttachmentLocation, type AttachmentPerson,
+  type ReadableInstallationSource, type ReadableProjectAttachment, type FilesystemIdentity } from '#domain/index.js';
 import type { ResolvedConfig } from '#platform/index.js';
+import type { RegisteredInstallationBinding } from '#engine/core/bootstrap-identity/index.js';
 import type { AttachmentRegistryPort } from './application.js';
 import { attachmentFailure, sameAttachmentPerson, sameProjectAttachmentAuthority } from './context.js';
+import { bindingKey } from './source-repair.js';
+
+export function planTargetRepair(registration: ReadableInstallationRegistration, local: ReadableProjectAttachment,
+  identity: Pick<RegisteredInstallationBinding, 'binding' | 'capture' | 'outcome' | 'identity'>, source: ReadableInstallationSource,
+  target: AttachmentLocation & { readonly projectId: string | null; readonly filesystemIdentity: FilesystemIdentity | null },
+  fits: (reference: ReadableProjectAttachment, registration: ReadableInstallationRegistration) => boolean) {
+  const lineage = registration.schemaVersion === 3 ? registration.lineage : undefined;
+  const entry = registration.entries.find(item => item.attachment.projectId === local.projectId);
+  if (!lineage || !entry || entry.state !== 'active' || registration.unregistered || !identity.binding || identity.outcome !== 'match'
+    || identity.identity.installationId !== registration.source.installationId || identity.identity.realmSeal
+    || lineage.toBinding !== bindingKey(identity.binding) || target.projectId !== local.projectId
+    || !sameProjectAttachmentAuthority(entry.attachment, local)) return null;
+  const { location: retainedSource, ...expected } = registration.source, { location: freshSource, ...observed } = source;
+  const filesystemIdentity = lineage.filesystemIdentity;
+  if (!isDeepStrictEqual(expected, observed)
+    || !assessAttachmentLocation(retainedSource, { ...freshSource, filesystemIdentity: identity.capture.filesystemIdentity ?? null })
+    || (filesystemIdentity !== null && (!isDeepStrictEqual(filesystemIdentity, identity.capture.filesystemIdentity)
+      || !isDeepStrictEqual(filesystemIdentity, target.filesystemIdentity)))
+    || (filesystemIdentity === null && target.device !== lineage.headDevice)) return null;
+
+  const { canonicalRoot, device, inode } = target, previous = entry.attachment;
+  const decimalDevice = /^\d{1,20}$/u;
+  const proved = new Set([...lineage.pastDevices, lineage.headDevice, identity.binding.device]);
+  if (previous.location.canonicalRoot !== canonicalRoot || previous.location.inode !== inode || !decimalDevice.test(device)
+    || (previous.schemaVersion === 1 && (!decimalDevice.test(previous.location.device) || !proved.has(previous.location.device)))) return null;
+  if (assessAttachmentLocation(previous.location, target)) {
+    if (!fits(previous, registration)) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+    return { attachment: previous, registration: null, operationId: lineage.headIntentId };
+  }
+  if (previous.schemaVersion !== 1) return null;
+
+  const candidate = (attachment: ReadableProjectAttachment) => {
+    const entries = registration.entries.map(item => item === entry ? { ...item, attachment } : item);
+    const referenced = new Set(entries.map(item => item.attachment.location.device));
+    const devices = attachment.schemaVersion === 1 ? [...proved, device] : [...proved];
+    const pastDevices = [...new Set(devices)].filter(value => value !== lineage.headDevice && decimalDevice.test(value) && referenced.has(value));
+    const next = readableInstallationRegistrationSchema.parse({ ...registration, entries, lineage: { ...lineage, pastDevices } });
+    return { attachment, registration: next, operationId: lineage.headIntentId };
+  };
+  const location = { canonicalRoot, device, inode };
+  if (filesystemIdentity) {
+    const stronger = candidate(readableProjectAttachmentSchema.parse({ ...previous, schemaVersion: 2, location: { ...location, filesystemIdentity } }));
+    if (fits(stronger.attachment, stronger.registration)) return stronger;
+  }
+  const fallback = candidate(projectAttachmentSchema.parse({ ...previous, location }));
+  return fits(fallback.attachment, fallback.registration) ? fallback : attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+}
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttachmentRelocationPorts {
   readonly config: ResolvedConfig; readonly store: AttachmentRegistryPort & { attachment(): Promise<import('#domain/index.js').ReadableProjectAttachment | null> }; readonly actor: AttachmentPerson;
   authorize(): Promise<void>; location(): Promise<AttachmentLocation>; projectId(): Promise<string | null>; exists(root: string): Promise<boolean>;

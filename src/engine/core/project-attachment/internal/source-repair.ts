@@ -5,7 +5,7 @@ import { assessAttachmentLocation, encodeCommandProjection,
 import { classifyInstallationRebinding, type RegisteredInstallationBinding } from '#engine/core/bootstrap-identity/index.js';
 
 const decimalDevice = /^\d{1,20}$/u;
-const bindingKey = (binding: InstallationBinding) => createHash('sha256').update(encodeCommandProjection('installation-binding-key:1', {
+export const bindingKey = (binding: InstallationBinding) => createHash('sha256').update(encodeCommandProjection('installation-binding-key:1', {
   machineDigest: 'machineDigest' in binding ? binding.machineDigest : null, canonicalRoot: binding.canonicalRoot, device: binding.device, inode: binding.inode,
 })).digest('hex');
 
