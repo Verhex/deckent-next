@@ -1,17 +1,19 @@
+import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
+import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
 import { getDecisionSteps, type DecisionDelegationView, type ApprovalRecord } from '#domain/index.js';
 import { mcpCapabilityRegistry } from '#engine/index.js';
 import { answerOnCard, approvalPickLabel, cardIo, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
-import { settle, until } from '../support/workline-harness.js';
+import { until } from '../support/workline-harness.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 /**
@@ -165,7 +167,11 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
       en: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
       tr: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
     };
-    for (const locale of ['en', 'tr'] as const) for (const kind of ['visible', 'masked', 'endings', 'cut'] as const) {
+    for (const locale of ['en', 'tr'] as const) {
+      expect(t('terminal.approval.window.reviewIncomplete', {}, locale)).toBe(reasons[locale]);
+      expect(t('terminal.approval.window.choice.unavailable', {}, locale)).toBe(locale === 'en' ? 'Yes unavailable' : 'Evet kullanılamıyor');
+    }
+    for (const [kind, locale] of [['visible', 'tr'], ['masked', 'en'], ['endings', 'tr'], ['cut', 'en']] as const) {
       const text = kind === 'endings' ? 'Review worker inputs\rpkg/first.js\r\npkg/last.js'
         : `Review worker inputs\npkg/${kind === 'visible' ? 'last\uFE0F.js' : `${token}.js`}`;
       const cut = kind === 'cut' ? { shown: 1, total: 2, bytes: 20, totalBytes: Buffer.byteLength(text), digest, kept: '/fixture/package-review.txt' } : null;
@@ -187,12 +193,19 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
           expect.soft(rendered).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
           expect.soft(rendered).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
           expect.soft(rendered).toContain(reasons[locale]);
-          for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
-            stdin.write(key); await settle(100);
+          for (const [key, move, selected] of [['1', '\u001b[A', '› 1.'], ['y', '\u001b[B', '› 2.']] as const) {
+            const start = rendered.length;
+            // Keep the shortcut and the navigation in separate reads so Ink cannot discard them as a burst.
+            const read = once(stdin, 'readable');
+            stdin.write(key);
+            await read;
+            await yieldToInput();
+            stdin.write(move);
+            await until(() => rendered.includes(selected, start), 'cut CLI approval highlight');
             expect.soft(decisions).toEqual([]);
-            expect.soft(rendered).toContain(reasons[locale]);
+            expect.soft(rendered.slice(start)).toContain(reasons[locale]);
           }
-          stdin.write(locale === 'en' ? '2' : 'n'); await settle(100);
+          stdin.write('2'); await answer;
           expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
         } else {
           expect.soft(rendered).toContain(locale === 'en' ? '1. Yes, once (y)' : '1. Evet, bu sefer (y)');

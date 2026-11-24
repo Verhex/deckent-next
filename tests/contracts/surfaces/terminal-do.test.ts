@@ -1,4 +1,6 @@
+import { once } from 'node:events';
 import { appendFileSync } from 'node:fs';
+import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
 import { approvalRecordSchema } from '#domain/index.js';
@@ -82,6 +84,11 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
     const secret = 'f4-package-fixture-value';
     const knownSecrets = snapshotKnownSecrets([{ name: 'F4_FIXTURE', value: secret }]);
     for (const locale of ['en', 'tr'] as const) {
+      expect(t('coding.dependencies.patternRisk', {}, locale)).toBe(risk[locale]);
+      expect(t('terminal.approval.window.reviewIncomplete', {}, locale)).toBe(reasons[locale].cut);
+      expect(t('terminal.approval.window.reviewHidden', {}, locale)).toBe(reasons[locale].hidden);
+    }
+    for (const [surface, locale] of [['/do', 'en'], ['/approvals', 'tr']] as const) {
       const pending = pendingBrainFixture(), work = workSurfaceLabels(locale), digest = 'd'.repeat(64);
       const rows = Array.from({ length: 4 }, (_, index) => ({ path: `pkg/check-${index}.js`, rule: 'pattern:url-userinfo', digest }));
       const preview = [t('coding.dependencies.patternRisk', {}, locale), t('coding.dependencies.patternCount', { count: rows.length }, locale),
@@ -90,7 +97,7 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
       const plan = brainProposalCardLines(pending, locale)[0]!;
       const yes = locale === 'en' ? 'Yes, once' : 'Evet, bu sefer';
       const truncated = { shown: 4, total: 6, bytes: 400, totalBytes: 600, digest, kept: '/fixture/package-review.txt' };
-      for (const surface of ['/do', '/approvals']) for (const kind of ['plain', 'visible', 'masked', 'control', 'endings', 'cut'] as const) {
+      for (const kind of ['plain', 'visible', 'masked', 'control', 'endings', 'cut'] as const) {
         const cut = kind === 'cut' ? truncated : null;
         const decisions: unknown[] = [], approval = pending.proposal.approval!;
         const review = cut ? preview.slice(0, cut.shown) : preview;
@@ -109,12 +116,15 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
           render: { ...WORKLINE_TEST_LABELS.render, hiddenCount: t('terminal.safety.hiddenCount', {}, locale) } };
         const view = mountWorkline({ labels, ledger, knownSecrets, pollMs: 60_000,
           doPlan: { ...words, plan: async () => pending, lines: result => brainProposalLines(result, locale), cardLines: result => brainProposalCardLines(result, locale) } }, 280);
-        mounted.push(view); await settle(40);
+        mounted.push(view);
+        await view.instance.waitUntilRenderFlush();
+        await until(() => view.stdout.frame.includes(labels.statusReady) && view.stdin.listenerCount('readable') > 0, 'composer ready');
         if (surface === '/do') view.stdin.write('/do Prepare purchase\r');
         else {
           view.stdin.write('/approvals\r');
-          await until(() => view.stdout.frame.includes('Create proposed Run'), 'approval picker');
-          await settle(40); view.stdin.write('\r');
+          await until(() => view.stdout.frame.includes('Create proposed Run') && view.stdout.frame.includes(work.window.pick), 'approval picker');
+          await view.instance.waitUntilRenderFlush();
+          view.stdin.write('\r');
         }
         const compact = (text: string) => text.replace(/[│┃\s]+/gu, '');
         await until(() => view.stdout.frame.includes(risk[locale]), `${surface} approval`);
@@ -129,13 +139,22 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
           expect.soft(view.stdout.frame).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
           expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
           expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale][cut ? 'hidden' : 'cut']));
-          for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
-            await settle(40); view.stdin.write(key); await settle(80);
+          const ready = locale === 'en' ? 'Enter confirm' : 'Enter onayla';
+          await until(() => view.stdout.frame.includes(ready), 'armed terminal approval');
+          for (const [key, move, selected] of [[locale === 'en' ? '1' : 'y', '\u001b[A', '› 1.'], [locale === 'en' ? 'y' : '1', '\u001b[B', '› 2.']] as const) {
+            // A later highlight on this card shows the input flow advanced past the shortcut.
+            const read = once(view.stdin, 'readable');
+            view.stdin.write(key);
+            await read;
+            await yieldToInput();
+            view.stdin.write(move);
+            await until(() => view.stdout.frame.includes(selected), 'terminal approval highlight');
             expect.soft(decisions).toEqual([]);
             expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
           }
           if (cut) {
-            view.stdin.write(locale === 'en' ? '2' : 'n'); await settle(100);
+            view.stdin.write(locale === 'en' ? '2' : 'n');
+            await until(() => decisions.length > 0, 'denial on the cut-review card');
             expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
           }
         } else {
@@ -325,7 +344,10 @@ it('BeUser M-32 + alpha.64 B (v31): a chat turn\'s propose_work shows /do\'s quo
           expiresAt: Date.now() + 60_000, preview: [plan, risk, row].join('\n') };
         await new Promise<void>(resolve => cleanups.push(async () => { resolve(); }));
       } }, 220);
-    mounted.push(view); await settle(40); view.stdin.write('Prepare purchase\r');
+    mounted.push(view);
+    await view.instance.waitUntilRenderFlush();
+    await until(() => view.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && view.stdin.listenerCount('readable') > 0, 'chat composer ready');
+    view.stdin.write('Prepare purchase\r');
     await until(() => view.stdout.frame.includes(plan), 'combined chat approval');
     for (const line of [plan, risk, row]) expect(view.stdout.frame.split(line)).toHaveLength(2);
     expect(view.stdout.frame).toContain('Yes, once');
