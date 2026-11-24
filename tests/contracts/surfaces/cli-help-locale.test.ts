@@ -158,7 +158,9 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
         confirm.mockClear(); let errors = '';
         const context = { root, env, projectAttachment, stdin: { isTTY: true } as NodeJS.ReadStream,
           stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
-        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(0);
+        const attach = args.includes('--command-id');
+        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(attach ? 1 : 0);
+        if (attach) expect(errors).toContain('[CLI_INSTALLATION_MISSING]');
         expect(confirm).toHaveBeenCalledOnce();
         const card = confirm.mock.calls[0]![0];
         expect(card.title).toBe(language === 'en' ? en : tr); expect(card.initial).toBe('no');

@@ -56,7 +56,10 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       options: [{ id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'no' },
     { locale, ...(context.env ? { env: context.env } : {}), ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
       ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
-    if (answer !== 'yes') return;
+    if (answer !== 'yes') {
+      if (action === 'apply') return (await import('./setup-offer.js')).reportSetupCancellation(context, locale);
+      return;
+    }
   }
   const result = await context.projectAttachment(root, parsed.data, options, interaction);
   emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value => {
