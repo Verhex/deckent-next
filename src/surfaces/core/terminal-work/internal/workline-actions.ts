@@ -111,29 +111,64 @@ export function resolveWorkerRef(ref: string, workers: readonly WorkLedgerWorker
 const attemptKey = (attempt: WorkerAttemptIdentity): string =>
   JSON.stringify([attempt.scopeId, attempt.runId, attempt.taskId, attempt.attemptId, attempt.generation, attempt.layoutRevision]);
 
-// The compatibility commands share one ledger port object per session. Only displayed numbers become references.
-const shownWorkerAttempts = new WeakMap<WorklineLedgerPorts, ReadonlyMap<number, string | null>>();
+function workerNumbering(entries: readonly WorkLedgerEntry[], listed: boolean) {
+  const attempts = new Map<number, string | null>(), ordinals = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.kind !== 'worker' || entry.ordinal === undefined) continue;
+    const key = entry.attempt ? attemptKey(entry.attempt) : null;
+    attempts.set(entry.ordinal, key);
+    if (key !== null && !ordinals.has(key)) ordinals.set(key, entry.ordinal);
+  }
+  return { listed, attempts, ordinals };
+}
+
+// The ledger port identifies the session. Keep the first observation's numbering until a complete list replaces it.
+const shownWorkerAttempts = new WeakMap<WorklineLedgerPorts, ReturnType<typeof workerNumbering>>();
+
+export function showWorkerNumbering(ledger: WorklineLedgerPorts, entries: readonly WorkLedgerEntry[]): void {
+  shownWorkerAttempts.set(ledger, workerNumbering(entries, true));
+}
+
+export function presentWorkerRef(ledger: WorklineLedgerPorts, attempt: WorkerAttemptIdentity, ordinal: number | undefined,
+  entries: readonly WorkLedgerEntry[]): string {
+  let shown = shownWorkerAttempts.get(ledger);
+  if (!shown) {
+    shown = workerNumbering(entries, false);
+    shownWorkerAttempts.set(ledger, shown);
+  }
+  const key = attemptKey(attempt);
+  if (ordinal !== undefined && shown.attempts.get(ordinal) === key) return String(ordinal);
+  const bound = shown.ordinals.get(key);
+  if (bound !== undefined) return String(bound);
+  if (ordinal === undefined || shown.listed || shown.attempts.has(ordinal)) return attempt.attemptId;
+  shown.attempts.set(ordinal, key);
+  shown.ordinals.set(key, ordinal);
+  return String(ordinal);
+}
 
 /** Read-only: checks the selected Attempt against a fresh observation and shows its sealed transcript. */
 async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<readonly WorkLedgerEntry[]> {
   const [name, pageText, ...extra] = ref.split(/\s+/u), page = pageText === undefined ? 1 : /^[1-9][0-9]{0,5}$/u.test(pageText) ? Number(pageText) : 0;
   if (!name || page === 0 || extra.length > 0) return [notice('error', work.transcriptUsage)];
   const ordinal = workerOrdinal(name);
-  const shown = ordinal === undefined ? undefined : shownWorkerAttempts.get(ledger);
-  const key = ordinal === undefined ? undefined : shown?.get(ordinal);
+  const shown = shownWorkerAttempts.get(ledger);
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
+  const numbering = shown ?? shownWorkerAttempts.get(ledger);
+  const key = ordinal === undefined ? undefined : numbering?.attempts.get(ordinal);
   if (key === null) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
-  const target = shown === undefined ? resolveWorkerRef(name, workers)
-    : workers.find(worker => worker.attempt && attemptKey(worker.attempt) === key);
+  const target = key !== undefined ? workers.find(worker => worker.attempt && attemptKey(worker.attempt) === key)
+    : ordinal !== undefined && numbering?.listed ? null : resolveWorkerRef(name, workers);
   if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref: name }))];
   if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
   const text = await ledger.inspectTranscript!(target.attempt);
-  // Before /workers, the transcript shows just this number, including in any paging instructions.
-  if (ordinal !== undefined && !shownWorkerAttempts.has(ledger)) shownWorkerAttempts.set(ledger, new Map([[ordinal, attemptKey(target.attempt)]]));
-  const header = [fillTemplate(work.transcriptHeader, { n: ordinal ?? target.ordinal ?? name, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
+  // The list or another transcript can finish while the transcript port is reading.
+  const pageRef = ordinal === undefined ? name : presentWorkerRef(ledger, target.attempt, ordinal, workers);
+  const result = work.transcriptPage ? transcriptPage(text, page, pageRef, work.transcriptPage) : { ok: true as const, text };
+  if (!result.ok) return [notice('error', result.text)];
+  const headerRef = ordinal === undefined ? presentWorkerRef(ledger, target.attempt, target.ordinal, workers) : pageRef;
+  const header = [fillTemplate(work.transcriptHeader, { n: headerRef, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
     ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
-  const result = work.transcriptPage ? transcriptPage(text, page, name, work.transcriptPage) : { ok: true as const, text };
-  return [notice(result.ok ? 'info' : 'error', result.ok ? `${header}\n${result.text}` : result.text)];
+  return [notice('info', `${header}\n${result.text}`)];
 }
 
 export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'transcript', args: string, ledger: WorklineLedgerPorts,
@@ -145,8 +180,7 @@ export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'tr
   }
   if (command === 'workers') {
     const cards = await ledgerEntriesForWorkers(ledger, 'workers');
-    shownWorkerAttempts.set(ledger, new Map(cards.flatMap(card => card.kind === 'worker' && card.ordinal !== undefined
-      ? [[card.ordinal, card.attempt ? attemptKey(card.attempt) : null] as const] : [])));
+    showWorkerNumbering(ledger, cards);
     return cards.length ? cards : [notice('info', labels.workersEmpty)];
   }
   const runId = args.trim();

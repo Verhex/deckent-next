@@ -219,3 +219,39 @@ it('/runs shows the fresh cancelled state without a close card or control write'
   expect(view.stdout.frame).toContain(notice);
   expect(controlRun).not.toHaveBeenCalled();
 });
+
+it('keeps a listed worker number in the transcript picker and uses the full identity for a replacement', async () => {
+  const initial = await ports().listWorkers();
+  const source = initial.sources[0]!, first = source.workers[0]!;
+  const second = { ...first, identity: { ...first.identity!, attemptId: '5b0c9811-1b2c-4d3e-8f90-a1b2c3d4e5f6', generation: 2 } };
+  const replacement = { ...first, identity: { ...first.identity!, attemptId: '6b0c9811-1b2c-4d3e-8f90-a1b2c3d4e5f6', generation: 3 } };
+  for (const locale of ['en', 'tr'] as const) {
+    let workers = [first, second];
+    const inspectTranscript = vi.fn(async () => 'SEALED OUTPUT');
+    const view = await open('/workers', ports({ listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }), inspectTranscript }), locale, 60, true);
+    const task = locale === 'en' ? 'Task' : 'Görev';
+    const summaryCount = captured.entries.length;
+    await until(() => view.stdout.frame.includes(`${task} 2`), 'listed worker 2'); await settle(40); view.stdin.write(ESC);
+    await until(() => captured.entries.length === summaryCount + 1, 'workers summary'); await settle(40);
+
+    workers = [second, first];
+    view.stdin.write('/transcript\r');
+    await until(() => view.stdout.frame.includes(`> ${task} 2`), 'picker preserves worker 2'); await choose(view);
+    await until(() => view.stdout.frame.includes('SEALED OUTPUT'), 'worker 2 output');
+    expect(view.stdout.frame).toContain(locale === 'en' ? 'Transcript · worker 2 · task task-id · attempt 5b0c9811' : 'Döküm · işçi 2 · görev task-id · deneme 5b0c9811');
+    await settle(40); view.stdin.write(ESC);
+    await until(() => captured.entries.length === summaryCount + 2, 'worker 2 summary'); await settle(40);
+    expect(captured.entries.at(-1)).toMatchObject({ text: expect.stringContaining(`${task} 2`) });
+
+    workers = [replacement, first];
+    view.stdin.write('/transcript\r');
+    await until(() => view.stdout.frame.includes(`> ${task} ${replacement.identity.attemptId}`), 'picker shows full Attempt ID'); await choose(view);
+    await until(() => view.stdout.frame.includes('SEALED OUTPUT'), 'replacement output');
+    const heading = locale === 'en' ? 'Transcript · worker' : 'Döküm · işçi';
+    expect(view.stdout.frame).toContain(`${heading} ${replacement.identity.attemptId}`);
+    expect(inspectTranscript.mock.calls).toEqual([[second.identity], [replacement.identity]]);
+    await settle(40); view.stdin.write(ESC);
+    await until(() => captured.entries.length === summaryCount + 3, 'replacement summary');
+    expect(captured.entries.at(-1)).toMatchObject({ text: expect.stringContaining(replacement.identity.attemptId) });
+  }
+});

@@ -17,7 +17,8 @@ const show = async (locale: Locale, args: string, count = 100) => (await runLedg
 describe('/transcript paging', () => {
   it('EN page 1 is the newest 40 lines with the way to the earlier ones', async () => {
     const { ports, observe } = workerSession();
-    const pagingPorts = { ...ports, inspectTranscript: ledger(100).inspectTranscript };
+    const inspectTranscript = vi.fn<typeof ports.inspectTranscript>(async () => lines(100));
+    const pagingPorts = { ...ports, inspectTranscript };
     const [entry] = await runLedgerCommand('transcript', '1', pagingPorts, labelsFor('en'));
     if (entry?.kind !== 'notice') throw new Error('Expected transcript notice');
     expect(entry.level).toBe('info');
@@ -27,6 +28,14 @@ describe('/transcript paging', () => {
     expect(await runLedgerCommand('transcript', '1 2', pagingPorts, labelsFor('en'))).toMatchObject([
       { level: 'info', text: expect.stringContaining(`Details: task ${TASK} · attempt ${ATTEMPT}`) },
     ]);
+    expect(await runLedgerCommand('transcript', '2', pagingPorts, labelsFor('en'))).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 2 · task a1b2c3d4 · attempt 6d3c1b2a') },
+    ]);
+    observe(workerA, { ...workerB, identity: { ...workerB.identity, generation: 3 } });
+    expect(await runLedgerCommand('transcript', '2', pagingPorts, labelsFor('tr'))).toMatchObject([
+      { level: 'error', text: 'Bu kapsamda gözlenen 2 işçisi yok.' },
+    ]);
+    expect(inspectTranscript.mock.calls).toEqual([[workerA.identity], [workerA.identity], [workerB.identity]]);
   });
   it('TR page 3 is the start of the transcript', async () => {
     const entry = await show('tr', '1 3');
@@ -68,6 +77,28 @@ describe('/transcript worker numbers', () => {
     const [entry] = await runLedgerCommand('transcript', '1', ports, labels);
     expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerA.identity);
     expect(entry).toMatchObject({ level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') });
+    expect(await runLedgerCommand('transcript', workerB.identity.attemptId, ports, labels)).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 2 · task a1b2c3d4 · attempt 6d3c1b2a') },
+    ]);
+    await runLedgerCommand('transcript', '2', ports, labels);
+    expect(inspectTranscript).toHaveBeenNthCalledWith(2, workerB.identity);
+    expect(inspectTranscript).toHaveBeenNthCalledWith(3, workerB.identity);
+  });
+
+  it('keeps the number in an explicit Attempt transcript header before the first workers list', async () => {
+    const { ports, inspectTranscript, observe } = workerSession(), labels = labelsFor('en');
+    expect(await runLedgerCommand('transcript', ATTEMPT, ports, labels)).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') },
+    ]);
+    observe(workerB, workerA);
+    expect(await runLedgerCommand('transcript', '1', ports, labels)).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') },
+    ]);
+    expect(await runLedgerCommand('transcript', workerB.identity.attemptId, ports, labels)).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 2 · task a1b2c3d4 · attempt 6d3c1b2a') },
+    ]);
+    await runLedgerCommand('transcript', '1', ports, labels);
+    expect(inspectTranscript.mock.calls).toEqual([[workerA.identity], [workerA.identity], [workerB.identity], [workerA.identity]]);
   });
 
   it('reports a departed Attempt in EN and TR without reading the worker now at its number', async () => {
@@ -80,5 +111,14 @@ describe('/transcript worker numbers', () => {
     await runLedgerCommand('workers', '', ports, labelsFor('en'));
     await runLedgerCommand('transcript', '1', ports, labelsFor('en'));
     expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerB.identity);
+
+    observe();
+    await runLedgerCommand('workers', '', ports, labelsFor('en'));
+    observe(workerB);
+    expect(await runLedgerCommand('transcript', workerB.identity.attemptId, ports, labelsFor('en'))).toMatchObject([
+      { level: 'info', text: expect.stringContaining(`Transcript · worker ${workerB.identity.attemptId} · task a1b2c3d4 · attempt 6d3c1b2a`) },
+    ]);
+    expect(await runLedgerCommand('transcript', '1', ports, labelsFor('en'))).toMatchObject([{ level: 'error', text: 'No observed worker 1 in this scope.' }]);
+    expect(inspectTranscript.mock.calls).toEqual([[workerB.identity], [workerB.identity]]);
   });
 });

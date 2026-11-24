@@ -11,7 +11,7 @@ import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#s
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { liveWindowLines } from './live-windows.js';
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
-import type { WorkSurfaceLabels } from './workline-actions.js';
+import { presentWorkerRef, showWorkerNumbering, type WorkSurfaceLabels } from './workline-actions.js';
 
 export interface JobWindowLabels {
   readonly locale: Locale; readonly completed: string; readonly deliveryCounts: string; readonly deliveryPatch: string; readonly deliveryNext: string; readonly detailsUnavailable: string; readonly acceptanceEvidence: string; readonly trackingFull: string;
@@ -131,6 +131,7 @@ const listWindow: JobWindowOpen = async (command, panel, execution, ledger, work
   const lines = command === 'workers' ? liveWindowLines('workers', { workers, runs: [] }, { live: work.live!, panel: work.panel, workerLine: work.workerLine }, Number.POSITIVE_INFINITY)
     : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), ...runProgressionLines(run, run.progression, labels.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
   const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
+  if (command === 'workers' && !execution.signal.aborted) showWorkerNumbering(ledger, workers);
   await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
   if (command === 'runs') onSeen?.();
   return `${title}: ${command === 'workers' ? workers.length : runs.length}`;
@@ -141,18 +142,20 @@ const runWindow: JobWindowOpen = async (_command, panel, execution, ledger, work
   return run ? `${labels.runTitle}: ${runTitle(run, labels)} [${runStateText(run, labels)}]` : fillTemplate(labels.closed, { title: labels.runTitle });
 };
 const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledger, work) => {
-  const labels = work.jobs!, workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));
-  if (!workers.length) {
+  const labels = work.jobs!, observed = await ledgerEntriesForWorkers(ledger, 'transcript');
+  const workers = observed.filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));
+  if (!workers.length || execution.signal.aborted) {
     await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']);
     return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   }
-  const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle, rows: workers.map(worker => [span(fillTemplate(work.workerLine.ordinal, { n: worker.ordinal ?? 1 }), { bold: true }),
+  const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle, rows: workers.map(worker => [span(fillTemplate(work.workerLine.ordinal, { n: presentWorkerRef(ledger, worker.attempt!, worker.ordinal, observed) }), { bold: true }),
     span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })]) }, workers.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   const worker = workers[Number(choice)]!, text = await ledger.inspectTranscript!(worker.attempt!);
-  await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: worker.ordinal ?? 1, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
+  const ref = presentWorkerRef(ledger, worker.attempt!, worker.ordinal, observed);
+  await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: ref, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
     ...text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true }))] }, ['close']);
-  return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: worker.ordinal ?? 1 })}`;
+  return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: ref })}`;
 };
 /** `onSeen`: the person opened a Run window (its id) or the Run list (no id); the session's active-work strip drops finished Runs then. */
 export const runJobWindow = (command: JobWindowCommand, panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
