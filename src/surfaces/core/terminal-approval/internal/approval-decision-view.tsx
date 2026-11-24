@@ -1,7 +1,7 @@
 import { readWorkerToolCard } from '#capabilities/index.js';
 import { t } from '#platform/index.js';
 import { useEffect, useState } from 'react';
-import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
+import { plainText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine, type ApprovalDecisionLabels, type ApprovalDecisionLine, ApprovalProjectedPicker, DecisionCard, decisionWindowLines } from '#surfaces/core/approval-presentation-ink/index.js';
@@ -22,13 +22,13 @@ const SECOND = 1000;
 type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
   risk: string | null | undefined; undo: string | null | undefined; requiredAssurance: string | undefined; expiresAt: number; hasDecisionCapability: boolean;
   tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined;
-  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; preview: string | undefined; config: WorklineApproval['config']; displayAttempt: string | null; displayArgsDigest: string | null }>;
+  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; preview: string | undefined; packageReview: boolean; config: WorklineApproval['config']; displayAttempt: string | null; displayArgsDigest: string | null }>;
 export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => {
   const worker = item.worker ?? readWorkerToolCard(item.summary);
   return { displayId: item.approvalId, displayRun: worker?.identity.runId ?? item.runId, displayTask: worker?.identity.taskId ?? item.taskId,
     displayRequester: item.requester, summary: worker ? `${worker.tool} · ${worker.resource} · ${worker.argsDigest.slice(0, 12)}` : item.summary,
     risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),
-    tool: worker?.tool ?? item.tool, target: worker?.resource ?? item.target, posture: item.posture, call: item.call, previewCut: item.previewCut, preview: item.preview, config: item.config,
+    tool: worker?.tool ?? item.tool, target: worker?.resource ?? item.target, posture: item.posture, call: item.call, previewCut: item.previewCut, preview: item.preview, packageReview: item.packageReview === true, config: item.config,
     displayAttempt: worker?.identity.attemptId ?? null, displayArgsDigest: worker?.argsDigest ?? null };
 };
 /** The list row's "what": the tool's sentence with its target (a task approval keeps its summary). */
@@ -63,14 +63,18 @@ type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labe
 export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: ApprovalSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
   known?: KnownSecretSnapshot, context: ApprovalWindowContext = {}, now = Date.now()) {
   const p = (text: string) => projectApprovalDecisionText(text, known), card = work.approvalCard, required = approval.requiredAssurance;
+  const packagePreview = approval.packageReview && approval.preview ? p(approval.preview) : null;
+  const canAllow = !approval.packageReview || Boolean(packagePreview && !approval.previewCut && plainText(packagePreview.spans) === approval.preview);
+  const previewText = preview === approval.preview && approval.packageReview ? undefined : preview ?? (approval.packageReview ? undefined : approval.preview);
   const assurance = approval.displayAttempt !== null && required === 'turn-bound' ? approvalTemplateLine(t('terminal.approval.background.assurance', {}, work.jobs?.locale), {})
     : required === undefined ? null : required === 'peer-session' ? approvalTemplateLine(card.assurancePeer, {}) : required === 'turn-bound'
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
   const lines = approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
-    expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview: preview ?? approval.preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
-    standing, project: context.project, home: context.home, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
-  return approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.background.call', {}, work.jobs?.locale),
-    { attempt: p(approval.displayAttempt), digest: p(approval.displayArgsDigest ?? '') }), exact: true }];
+    expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview: previewText, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
+    standing: canAllow ? standing : null, project: context.project, home: context.home, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config,
+    packagePreview, ...(!canAllow && !approval.previewCut?.kept ? { previewNotice: t('cli.approval.tableDetails', {}, work.jobs?.locale) } : {}) }, work.approvalWindow, now, known);
+  return { canAllow, lines: approval.displayAttempt === null ? lines : [...lines, { ...approvalTemplateLine(t('terminal.approval.background.call', {}, work.jobs?.locale),
+    { attempt: p(approval.displayAttempt), digest: p(approval.displayArgsDigest ?? '') }), exact: true }] };
 }
 function useNow(until: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -89,13 +93,14 @@ function useNow(until: number): number {
 export function ApprovalDecisionCard({ presentation, work, labels, preview, scoped, pending, context, onDecide }: { readonly presentation: ApprovalCardPresentation; readonly work: ApprovalSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly preview: string | undefined;
   readonly pending?: boolean; readonly scoped: Scoped | null; readonly context?: ApprovalWindowContext; readonly onDecide: (yes: boolean, standing?: StandingScope, reason?: string) => void }) {
   const known = useHumanTextSecrets(), now = useNow(presentation.expiresAt), win = work.approvalWindow, left = presentation.expiresAt - now;
-  const decide = (yes: boolean, standing?: StandingScope, reason?: string) => { if (Date.now() < presentation.expiresAt) onDecide(yes, standing, reason); };
+  const { canAllow, lines } = approvalDecisionCardLines(presentation, work, preview, scoped, known, context, now);
+  const decide = (yes: boolean, standing?: StandingScope, reason?: string) => { if ((!yes || canAllow) && Date.now() < presentation.expiresAt) onDecide(yes, standing, reason); };
   return <DecisionCard title={approvalWindowTitle({ approvalId: presentation.displayId, summary: presentation.summary, requester: presentation.displayRequester, runId: presentation.displayRun,
       taskId: presentation.displayTask, expiresAt: presentation.expiresAt, tool: presentation.tool, config: presentation.config }, win, known)}
-    projectedLines={approvalDecisionCardLines(presentation, work, preview, scoped, known, context, now)} decisionLabels={labels}
+    projectedLines={lines} decisionLabels={labels}
     status={[span(left > 0 ? countdownClock(left) : win.expired, { role: left > 0 ? 'accent' : 'error' })]} priority={WINDOW_PRIORITY.approval} position={work.window.position}
     reason={win.reason} prompt={approvalWindowHints(win)} pendingText={work.approvalPending} {...(pending === undefined ? {} : { pending })} scopes={scoped?.scopes ?? []}
-    choices={win.choices} onDecide={decide} />;
+    choices={win.choices} canAllow={canAllow} onDecide={decide} />;
 }
 type CancellationCardPresentation = Readonly<{ displayRun: string; displayScope: string; displayRevision: number; displayPhases: string; cancellationRequested: boolean }>;
 export function cancellationCardPresentation(run: RunView): CancellationCardPresentation {

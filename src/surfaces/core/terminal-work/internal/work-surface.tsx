@@ -204,6 +204,6 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {
-  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { scopes: ['session'], pattern: covers }, undefined, context, now)
+  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { scopes: ['session'], pattern: covers }, undefined, context, now).lines
     .map(line => [plainText(line.label ?? []), plainText(line.spans)].filter(Boolean).join(' '));
 }

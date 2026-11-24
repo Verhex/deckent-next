@@ -1,7 +1,8 @@
 import { appendFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
-import { DeckentError, formatHumanError } from '#platform/index.js';
+import { approvalRecordSchema } from '#domain/index.js';
+import { DeckentError, formatHumanError, t } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -10,6 +11,7 @@ import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 const mounted: ReturnType<typeof mountWorkline>[] = [];
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount();
@@ -63,6 +65,67 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   if (key === 'y') await until(() => view.stdout.frame.includes('Watching'), 'tasks observation after result');
   else { await until(() => !view.stdout.frame.includes('Rejected'), 'closed'); view.stdin.write('/do Revised request\r');
     await until(() => plans.length === 3, 'new request'); expect(plans[2]!.id).not.toBe(plans[0]!.id); }
+});
+it('/do makes every sealed package row readable before Yes and withholds Yes for a cut preview in EN and TR', async () => {
+  const risk = {
+    en: 'A path and rule name do not show whether the content is safe. If you approve an unregistered real secret, the worker can read it and send it to the model provider. You may decline.',
+    tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
+  };
+  for (const locale of ['en', 'tr'] as const) {
+    const pending = pendingBrainFixture(), work = workSurfaceLabels(locale), digest = 'd'.repeat(64);
+    const rows = Array.from({ length: 4 }, (_, index) => ({ path: `pkg/check-${index}.js`, rule: 'pattern:url-userinfo', digest }));
+    const preview = [t('coding.dependencies.patternRisk', {}, locale), t('coding.dependencies.patternCount', { count: rows.length }, locale),
+      ...rows.map(row => t('coding.dependencies.pattern', row, locale))];
+    const expectedRows = rows.map(row => `${row.path} · pattern:url-userinfo · ${locale === 'en' ? 'SHA-256' : 'SHA-256 özeti'} ${digest}`);
+    const plan = brainProposalCardLines(pending, locale)[0]!;
+    const yes = locale === 'en' ? 'Yes, once' : 'Evet, bu sefer';
+    for (const cut of [null, { shown: 4, total: 6, bytes: 400, totalBytes: 600, digest, kept: '/fixture/package-review.txt' }]) {
+      const decisions: unknown[] = [], approval = pending.proposal.approval!;
+      const text = (cut ? preview.slice(0, cut.shown) : preview).join('\n');
+      const request = { schemaVersion: 3, approvalId: approval.approvalId, scopeId: 's', createdAt: Date.now(), expiresAt: approval.expiresAt,
+        policyRevision: 'p', actionDigest: digest, requester: { id: 'owner', issuer: 'fixture', subject: 'owner' }, summary: 'Create proposed Run',
+        subject: { kind: 'run-create', runId: 'r', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: approval.decisionRecordId },
+        facts: { risk: { source: 'effect-class', effectClass: 'read', authority: true }, reversibility: { kind: 'none' }, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' },
+        preview: { schemaVersion: 1, argsDigest: digest, text, cut } };
+      const record = approvalRecordSchema.parse({ revision: 0, status: 'pending', request, decision: null, keyId: 'fixture', mac: digest });
+      const ledger = createWorklineLedgerPorts({ root: '/fixture', scopeId: 's', options: {}, locale, inspectWorkers: (async () => ({})) as never,
+        inspectRun: (async () => ({ run: null })) as never, listApprovals: async () => [record],
+        decideApproval: async input => { decisions.push(input); throw new Error('decision captured'); } })!;
+      const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work }, ledger, pollMs: 60_000,
+        doPlan: { ...words, plan: async () => pending, lines: result => brainProposalLines(result, locale), cardLines: result => brainProposalCardLines(result, locale) } }, 220);
+      mounted.push(view); await settle(40); view.stdin.write('/do Prepare purchase\r');
+      await until(() => view.stdout.frame.includes(plan), 'non-empty plan in the /do approval').catch(error => { throw new Error(view.stdout.frame, { cause: error }); });
+      if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## /do package ${locale} ${cut ? 'cut' : 'full'}\n${view.stdout.frame}\n`);
+      expect.soft(view.stdout.frame.split(plan)).toHaveLength(2);
+      expect.soft(view.stdout.frame.split(risk[locale])).toHaveLength(2);
+      if (cut) {
+        expect.soft(view.stdout.frame).toContain(cut.kept);
+        expect.soft(view.stdout.frame).not.toContain(yes);
+        await settle(40); view.stdin.write('y'); await settle(80);
+        expect.soft(decisions).toEqual([]);
+      } else {
+        for (const row of expectedRows) expect.soft(view.stdout.frame.split(row)).toHaveLength(2);
+        expect.soft(view.stdout.frame).toContain(yes);
+        expect.soft(decisions).toEqual([]);
+      }
+      view.instance.unmount();
+    }
+  }
+});
+
+it('shows the already combined chat plan and sealed package rows once in the decision window', async () => {
+  const plan = 'Review this purchase plan', risk = t('coding.dependencies.patternRisk', {}, 'en');
+  const row = `pkg/last.js · pattern:url-userinfo · SHA-256 ${'d'.repeat(64)}`;
+  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en') },
+    async *streamTurn() {
+      yield { kind: 'approval', phase: 'requested', callId: 'propose-work', approvalId: 'chat-approval', revision: 0, summary: 'Create proposed Run',
+        expiresAt: Date.now() + 60_000, preview: [plan, risk, row].join('\n') };
+      await new Promise<void>(resolve => cleanups.push(async () => { resolve(); }));
+    } }, 220);
+  mounted.push(view); await settle(40); view.stdin.write('Prepare purchase\r');
+  await until(() => view.stdout.frame.includes(plan), 'combined chat approval');
+  for (const line of [plan, risk, row]) expect(view.stdout.frame.split(line)).toHaveLength(2);
+  expect(view.stdout.frame).toContain('Yes, once');
 });
 it('/do planning keeps composer input; Ctrl+C aborts that request before any approval or Run path', async () => {
   let signal: AbortSignal | undefined, aborts = 0, approvals = 0;

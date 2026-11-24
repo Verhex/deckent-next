@@ -138,6 +138,20 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
   const label = approvalPickLabel(approval('secret-1', { summary: `curl -H "x-api-key: ${token}" https://api.example` }), 'en');
   expect(label).not.toContain('sk-ant-api03-AAAA'); expect(label).toContain('curl');
   expect(requests[0]!.body!.join('\n')).not.toContain('sk-ant');
+
+  const pending = approval('packages'), text = `Review worker inputs\npkg/last.js · pattern:url-userinfo · SHA-256 ${digest}`;
+  if (pending.request.schemaVersion !== 3) throw new Error('Expected a v3 approval');
+  const subject = { kind: 'run-create', runId: 'run-1', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: 'd' } as const;
+  const cut = { shown: 1, total: 2, bytes: 20, totalBytes: Buffer.byteLength(text), digest, kept: '/fixture/package-review.txt' };
+  for (const incomplete of [false, true]) {
+    const record = { ...pending, request: { ...pending.request, subject,
+      preview: { schemaVersion: 1 as const, argsDigest: digest, text: incomplete ? 'Review worker inputs' : text, cut: incomplete ? cut : null } } };
+    await answerOnCard(record, undefined, 'live', context as never, ask('once'), 'tr');
+    const card = requests.at(-1)!;
+    expect(card.options.map(option => option.id)).toEqual(incomplete ? ['no'] : ['once', 'no']);
+    expect(card.body).toContain(incomplete ? 'Tam metin: /fixture/package-review.txt' : text.split('\n')[1]);
+    expect(sent).toHaveLength(4);
+  }
 });
 
 it('an approval card closes at the earlier deadline and sends nothing for an answer at expiry', async () => {

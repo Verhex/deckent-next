@@ -17,7 +17,7 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
   // J2e (lead, C-APPROVE note): option labels are drawn through the terminal-safe text rule like the title and body, so a label built from a stored
   // record (a server, Run or approval name) can never carry a control sequence onto the person's terminal, whatever the caller did.
   const options = request.options.map(option => ({ ...option, label: terminalSafeText(option.label) }));
-  return <Window title={[span(humanRecordText(request.title, known))]} body={(request.body ?? []).map(line => ({ spans: [span(humanRecordText(line, known))] }))}
+  return <Window title={[span(humanRecordText(request.title, known))]} body={(request.body ?? []).map(line => ({ spans: [span(humanRecordText(line, known))], exact: request.exactBody === true }))}
     hints={request.hints === undefined ? hints : humanRecordText(hints, known)} position="{from}-{to}/{total}" decision priority={WINDOW_PRIORITY.approval} footerRows={request.options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={state} focused={owns} />} onClose={() => answer(null)}
     onInput={(input, key, meta) => {

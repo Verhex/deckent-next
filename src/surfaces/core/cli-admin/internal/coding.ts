@@ -180,7 +180,7 @@ async function changeDependencies(root: string, config: DeckentConfig, values: M
   const commandId = values.get('--command-id'), sinks = sinksOf(context);
   const result = await context.changeCodingAllowance(root, { scopeId, kind, action: operation, locale, ...(commandId ? { commandId } : {}) }, { env, heal: false }, async ({ title, lines }) => {
     if (operation === 'grant') emit(lines.join('\n'), sinks);
-    const chosen = await askCliCard({ title, body: operation === 'grant' ? [lines[0]!] : lines, options: [
+    const chosen = await askCliCard({ title, body: lines, exactBody: operation === 'grant', options: [
       { id: 'yes', role: 'yes', label: operation === 'grant' ? t('coding.dependencies.allowance.grant', {}, locale) : t('coding.dependencies.allowance.withdraw', {}, locale) },
       { id: 'no', role: 'no', label: t('clisetup.coding.card.cancel', {}, locale) },
     ] }, io);
