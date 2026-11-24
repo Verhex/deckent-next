@@ -84,7 +84,7 @@ esac
         : await resumeInstallation(process.cwd(), choices);
       console.log(JSON.stringify({ status: result.status, proposalDigest: result.proposalDigest }));
     }
-    catch (error) { console.log(JSON.stringify({ code: error.code })); process.exitCode = 1; }
+    catch (error) { console.log(JSON.stringify({ code: error.code, params: error.params, message: error.message })); process.exitCode = 1; }
   `, action, f.profilePath, dockerExecutable, proposalDigest], f.project, environment);
   const resume = (environment: NodeJS.ProcessEnv = env) => runInTerminal([process.execPath, cli, 'init', 'resume', '--docker-executable', dockerExecutable,
     '--proposal', proposalDigest, '--accept-custom', '--json'], f.project, environment);
@@ -144,15 +144,17 @@ esac
   const defaults = markerConfig([...getConfigFieldDefault('cli').agentEnvironment]);
   await writeFile(globalConfig, defaults, { mode: 0o600 });
   const malformed = '{';
+  const corruptError = { code: 'CONFIG_READ_IO_HOLD', params: { reason: 'installation-authority-global-config', path: globalConfig },
+    message: `The general settings file "${globalConfig}" could not be used for the authority check. Restore it as a valid JSON settings object while preserving your organization's automation markers, then run the same command again.` };
   await writeFile(nextGlobalConfig, malformed, { mode: 0o600 });
   const corruptUnderLock = await resume();
   expect(corruptUnderLock.code, corruptUnderLock.output).toBe(78);
-  expect(corruptUnderLock.output).toContain('CONFIG_READ_IO_HOLD');
+  expect(lastJson(corruptUnderLock.output)).toEqual(corruptError);
   expect(await footprint()).toEqual({ ...partial, globalConfig: malformed });
 
   const corruptBeforeLock = await sdkRun('resume');
   expect(corruptBeforeLock.code, corruptBeforeLock.output).toBe(1);
-  expect(lastJson(corruptBeforeLock.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD' });
+  expect(lastJson(corruptBeforeLock.output)).toEqual(corruptError);
   expect(await footprint()).toEqual({ ...partial, globalConfig: malformed });
   await rm(policyPath);
   await writeFile(globalConfig, before.globalConfig, { mode: 0o600 });
@@ -189,6 +191,6 @@ esac
   await writeFile(globalConfig, '[]', { mode: 0o600 });
   const refusedReplay = await sdkRun('apply');
   expect(refusedReplay.code, refusedReplay.output).toBe(1);
-  expect(lastJson(refusedReplay.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD' });
+  expect(lastJson(refusedReplay.output)).toEqual(corruptError);
   expect(await footprint()).toEqual({ ...committed, globalConfig: '[]' });
 }, 90_000);

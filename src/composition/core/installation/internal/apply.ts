@@ -70,7 +70,9 @@ async function assertSuppliedAuthority(projectRoot: string, prepared: PreparedIn
       // Both authority checks need the current trusted marker basis.
       force: true, globalOnly: pending, pendingBootstrap: 'config-settled', heal: false, secretResolver: async () => undefined,
       onWarning: warning => {
-        if (warning.code === 'CONFIG_GLOBAL_CORRUPT') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
+        if (warning.code === 'CONFIG_GLOBAL_CORRUPT') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', {
+          params: { reason: 'installation-authority-global-config', path: warning.path },
+        });
       },
     })).cli.agentEnvironment;
   await assertAuthorityWitness('installationProfilePolicy', localPrincipalChannel(), { attest: async () =>

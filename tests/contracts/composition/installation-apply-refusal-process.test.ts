@@ -102,30 +102,36 @@ it.skipIf(unsupported)('refuses witnessed widening when the separate general set
   const before = await readdir(env.HOME, { recursive: true });
   const cliRun = (language: string) => runInTerminal([process.execPath, cli, 'init', 'apply', '--profile', f.profilePath,
     '--docker-executable', dockerExecutable, '--proposal', proposalDigest, '--accept-custom', '--lang', language], f.project, env);
-  const sdkRun = () => runInTerminal([process.execPath, '--input-type=module', '-e', `
+  const sdkRun = (language: string) => runInTerminal([process.execPath, '--input-type=module', '-e', `
     import { readFile } from 'node:fs/promises';
     import { applyInstallation } from ${JSON.stringify(sdk)};
-    const [profile, dockerExecutable, proposalDigest] = process.argv.slice(1);
+    const [profile, dockerExecutable, proposalDigest, language] = process.argv.slice(1);
     try {
       await applyInstallation(process.cwd(), JSON.parse(await readFile(profile)), { allowShutdown: false, dockerExecutable, proposalDigest, acceptCustom: true });
-    } catch (error) { console.log(JSON.stringify({ code: error.code })); process.exitCode = 1; }
-  `, f.profilePath, dockerExecutable, proposalDigest], f.project, env);
+    } catch (error) {
+      console.log(JSON.stringify({ code: error.code, params: error.params, message: error.localize?.(language).message }));
+      process.exitCode = 1;
+    }
+  `, f.profilePath, dockerExecutable, proposalDigest, language], f.project, env);
+  const authorityParams: Record<string, string> = { reason: 'installation-authority-global-config', path: globalConfig };
   const cases = [
-    { contents: '{', mode: 0o600, language: 'en', message: 'Configuration could not be read; the file was preserved.' },
-    { contents: '[]', mode: 0o600, language: 'tr', message: 'Config okunamadı; dosya korundu.' },
+    { contents: '{', mode: 0o600, language: 'en', heading: 'Error', params: authorityParams,
+      message: `The general settings file "${globalConfig}" could not be used for the authority check. Restore it as a valid JSON settings object while preserving your organization's automation markers, then run the same command again.` },
+    { contents: '[]', mode: 0o600, language: 'tr', heading: 'Hata', params: authorityParams,
+      message: `Genel ayar dosyası "${globalConfig}" yetki kontrolünde kullanılamadı. Kuruluşunuzun otomasyon işaretlerini koruyarak dosyayı geçerli bir JSON ayar nesnesi olarak geri yükleyin, ardından aynı komutu yeniden çalıştırın.` },
   ];
-  if (userInfo().uid !== 0) cases.push({ contents: '{}', mode: 0o000, language: 'en', message: cases[0]!.message });
-  for (const { contents, mode, language, message } of cases) {
+  if (userInfo().uid !== 0) cases.push({ contents: '{}', mode: 0o000, language: 'en', heading: 'Error', params: {},
+    message: 'Configuration could not be read; the file was preserved.' });
+  for (const { contents, mode, language, heading, params, message } of cases) {
     await writeFile(globalConfig, contents, { mode: 0o600 });
     await chmod(globalConfig, mode);
     try {
       const cliResult = await cliRun(language);
       expect(cliResult.code, cliResult.output).toBe(78);
-      expect(cliResult.output).toContain(message);
-      expect(cliResult.output).toContain('CONFIG_READ_IO_HOLD');
-      const sdkResult = await sdkRun();
+      expect(cliResult.output).toContain(`${heading}: ${message} [CONFIG_READ_IO_HOLD]`);
+      const sdkResult = await sdkRun(language);
       expect(sdkResult.code, sdkResult.output).toBe(1); // The child harness maps a rejected SDK promise to 1.
-      expect(lastJson(sdkResult.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD' });
+      expect(lastJson(sdkResult.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD', params, message });
       expect(await readdir(f.project, { recursive: true })).toEqual([]);
       await expect(readdir(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
       expect((await readdir(env.HOME, { recursive: true })).sort()).toEqual([...before, relative(env.HOME, globalConfig)].sort());
