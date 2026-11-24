@@ -128,6 +128,40 @@ describe('live windows in the workline', () => {
     await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.text.includes('NO-LEDGER') || view.stdout.text.includes('UNWIRED'), 'refused');
     expect(view.stdout.frame).not.toContain(EN.live!.tasksTitle);
   });
+
+  it('/tasks leaves Enter and x without a target when the selected worker disappears', async () => {
+    const attempts = ['a', 'b', 'c'].map(id => ({ scopeId: 'scope-a', runId: `run-${id}`, taskId: `task-${id}`, attemptId: `attempt-${id}` }));
+    let visible = attempts;
+    const inspectTranscript = vi.fn(async () => 'NEIGHBOUR-TRANSCRIPT'), cancelRun = vi.fn(async () => 'CANCELLED');
+    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a',
+      listWorkers: async () => ({ scopeId: 'scope-a', sources: [{ workers: visible.map(identity =>
+        ({ taskId: identity.taskId, process: 'running', provider: 'docker', authority: 'next-ledger', identity })) }] }) as never,
+      listRunIds: async () => attempts.map(item => item.runId), inspectRun: async runId =>
+        ({ runId, scopeId: 'scope-a', revision: 3, tasks: [{ phase: 'active' }], state: { kind: 'running' } }) as never,
+      inspectTranscript, cancelRun,
+    } }); mounted.push(view.instance);
+    await settle(20); view.stdin.write('/tasks\r');
+    await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial live list');
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 2/u.test(view.stdout.frame), 'middle worker selected');
+    visible = [attempts[0]!, attempts[2]!];
+    await until(() => view.stdout.frame.includes('2 workers · 3 runs'), 'selected worker leaves');
+    view.stdin.write('\r'); await settle(80);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    if (view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT')) {
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks window after unexpected transcript');
+    }
+    view.stdin.write('x'); await settle(80);
+    expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(view.stdout.frame).toContain('Selected item is no longer in the task list.');
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 1/u.test(view.stdout.frame), 'explicit new worker selection');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT'), 'newly selected transcript');
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempts[0]);
+  });
 });
 
 class Screen extends Writable {

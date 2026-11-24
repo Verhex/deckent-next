@@ -311,8 +311,30 @@ describe('fullscreen monitor', () => {
       await until(() => view.stdout.frame.includes(detailGone), 'selected Run removed');
       expect(view.stdout.frame).not.toContain(firstDetail);
       expect(view.stdout.frame).not.toContain(secondDetail);
+
+      const third = { ...first, runId: 'third', createdAtMs: OBSERVED_AT - 3 };
+      const thirdDetail = 'Run third · scope s ·';
+      await view.press(KEY.esc);
+      runs = [first, second, third];
+      await view.press('r');
+      await until(() => view.stdout.frame.includes('third'), 'three Runs in the list');
+      await view.press('\u001b[H'); await view.press(KEY.down);
+      expect(view.stdout.frame).toMatch(/›[ +*]│ b\s/);
+      runs = [first, third];
+      await view.press('r');
+      await until(() => !/│ b\s/.test(view.stdout.frame), 'selected middle Run leaves the list');
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).not.toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(thirdDetail);
+      expect(view.stdout.frame).toContain(detailGone);
+      await view.press('\u001b[F'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(thirdDetail);
+      expect(view.stdout.frame).not.toContain(firstDetail);
     } finally { view.instance.unmount(); }
   });
+});
+
+describe('fullscreen monitor refresh and layout', () => {
   it('refreshes in place every interval, single-flight; r refreshes now; p pauses; a failure keeps the last snapshot with a warning', async () => {
     const builds = vi.mocked(surface.buildMonitorView); builds.mockClear();
     let calls = 0, fail = false, release: (() => void) | null = null;

@@ -232,4 +232,15 @@ it('opens the highlighted active Run when the live strip loses a preceding row',
   stdin.write('\r');
   await until(() => opened.length > 0, 'Run opened');
   expect(opened).toEqual(['TARGET']);
+
+  instance.rerender(view([items[0]!, items[2]!]));
+  await until(() => !frame.includes('TARGET') && frame.includes('FRONT'), 'selected Run removed');
+  stdin.write('\r'); await settle(60);
+  expect(opened).toEqual(['TARGET']);
+  expect(frame).toContain('Selected work is no longer in the list.');
+  stdin.write(DOWN);
+  await until(() => frame.includes('› FRONT'), 'explicit new selection');
+  stdin.write('\r');
+  await until(() => opened.length === 2, 'newly selected Run opened');
+  expect(opened).toEqual(['TARGET', 'FRONT']);
 });

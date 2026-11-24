@@ -4,10 +4,10 @@ import { t, type Locale } from '#platform/index.js';
 import { type WorklineInkPalette, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
 import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
-import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
+import { clockText, durationText, MONITOR_TABS, tabLabel, type MonitorTab } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
-import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, signatures, SORT_CYCLE, type MonitorControls } from './controls.js';
+import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, rowMatches, signatures, SORT_CYCLE, type MonitorControls } from './controls.js';
 import { CHANGE_GLYPHS, legendLines } from './legend.js';
 
 export interface MonitorAppProps {
@@ -57,6 +57,7 @@ function detailBody(row: MonitorRow | null, width: number, requestedOffset: numb
   return body;
 }
 interface Failure { readonly text: string; readonly at: number }
+const LOST_ROW = Symbol('lost monitor row');
 /** MON-CPU-FIX: the Config tab's read, one at a time; the view calls it only while that tab is shown (on entering it and with each heartbeat there). */
 function useConfigRead(load: MonitorAppProps['loadConfigView'], errorText: (error: unknown) => string, alive: { readonly current: boolean }) {
   const [view, setView] = useState<ConfigMonitorInspection | null>(null), [failure, setFailure] = useState<string | null>(null), inFlight = useRef(false);
@@ -74,6 +75,27 @@ interface Received { readonly snapshot: MonitorSnapshot; readonly view: ReturnTy
 function receive(snapshot: MonitorSnapshot, project: Received['project'], at: number): Received {
   const view = project(snapshot), current = signatures(view.tabs);
   return { snapshot, view, project, at, signatures: current, marks: new Map() };
+}
+
+function useMonitorSelection(tabs: readonly (MonitorTab | 'config')[], tab: number, items: readonly MonitorFlatLine[], view: Received['view'] | null, filter: string) {
+  const [selection, setSelection] = useState<readonly (string | typeof LOST_ROW | null)[]>(tabs.map(() => null));
+  const selectedKey = selection[tab] ?? null;
+  const selected = selectedKey === null ? 0 : items.findIndex(item => item.row?.key === selectedKey);
+  const nextSelection = selection.map((key, index) => {
+    if (typeof key !== 'string') return key;
+    if (index === tab) return selected < 0 ? LOST_ROW : key;
+    const name = tabs[index];
+    if (!view || !name || name === 'config') return key;
+    const matches = (row: MonitorRow) => row.key === key && (!filter || rowMatches(row, filter));
+    return view.tabs[name].some(block => block.kind === 'table' ? block.rows.some(matches) : block.kind === 'card' && block.row && matches(block.row)) ? key : LOST_ROW;
+  });
+  if (nextSelection.some((key, index) => key !== selection[index])) setSelection(nextSelection);
+  const move = (delta: number) => {
+    const row = items[Math.max(0, Math.min(items.length - 1, selected + delta))]?.row;
+    if (row) setSelection(values => values.map((value, index) => index === tab ? row.key : value));
+  };
+  const resetForFilter = () => setSelection(values => values.map(value => value === LOST_ROW ? value : null));
+  return { selected, move, resetForFilter };
 }
 
 /**
@@ -96,7 +118,6 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [generation, setGeneration] = useState(0);
   const [paused, setPaused] = useState(false);
   const [tab, setTab] = useState(0);
-  const [selection, setSelection] = useState<readonly (string | null)[]>(tabs.map(() => null));
   const [detail, setDetail] = useState<string | null>(null);
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
@@ -140,7 +161,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
   const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
-  const selected = Math.max(0, items.findIndex(item => item.row?.key === selection[tab]));
+  const { selected, move, resetForFilter } = useMonitorSelection(tabs, tab, items, view, controls.filter);
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
   // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
@@ -154,14 +175,13 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const lastRead = received ? clockText(received.at).slice(11) : '—';
   const sortWord = (key: 'age' | 'state' | 'name') => key === 'age' ? t('monitor.sort.age', {}, locale) : key === 'state' ? t('monitor.sort.state', {}, locale) : t('monitor.sort.name', {}, locale);
   const status: MonitorLine = editing ? [span(`/${controls.filter}${ascii ? '_' : '▏'}`, 'accent'), span(`  ${t('monitor.filter.hint', {}, locale)}`, 'muted')]
-    : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
+    : detail === null && selected < 0 ? [span(t('monitor.live.detailGone', {}, locale), 'warning')]
+      : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
       : paused ? [span(t('monitor.live.paused', {}, locale), 'warning')]
         : [span(t('monitor.live.every', { every: durationText(intervalMs, locale), time: snapshot ? clockText(snapshot.observedAt) : '—' }, locale), 'muted'),
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),
           ...(controls.group ? [span(`  ${controls.group === 'install' ? t('monitor.group.install', {}, locale) : t('monitor.group.state', {}, locale)}`, 'muted')] : [])];
   const bodyHeight = Math.max(1, height - shownHeader.length - 4);
-  const move = (delta: number) => setSelection(values => values.map((value, index) =>
-    index === tab ? items[Math.max(0, Math.min(items.length - 1, selected + delta))]?.row?.key ?? null : value));
   const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); setDetailOffset(0); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
   const pointer = ascii ? '>' : '›';
@@ -173,7 +193,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
       else if (key.escape) { setEditing(false); setControls(value => ({ ...value, filter: '' })); }
       else if (key.backspace || key.delete) setControls(value => ({ ...value, filter: value.filter.slice(0, -1) }));
       else if (input && !key.ctrl && !key.meta && !key.tab) setControls(value => ({ ...value, filter: value.filter + input }));
-      setSelection(tabs.map(() => null));
+      resetForFilter();
       return;
     }
     if (input === 'q') { onClose(); return; }
@@ -182,7 +202,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
     if (input === 'r') { memo.current = null; void refresh(); return; }
-    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
+    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); if (selected >= 0) move(-items.length); } return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }

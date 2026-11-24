@@ -3,7 +3,7 @@ import type { JobWindowLabels } from './job-windows.js';
 import { runViewToLedgerEntry, LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { useState, type ReactElement } from 'react';
 import { useWindowSize } from 'ink';
-import { shortId } from '#platform/index.js';
+import { resolveLocale, shortId, t } from '#platform/index.js';
 import { span, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, WINDOW_RESERVED_ROWS, useWindowReserve, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 
@@ -98,6 +98,7 @@ export function liveWindowClosedText(data: LiveWindowData, labels: LiveWindowLab
 
 /** Frame rows around a window body (two borders, title row, hint row) and the border/padding columns: the same numbers `Window` lays out with. */
 const FRAME_ROWS = 4, FRAME_COLUMNS = 4, MONITOR_MIN_ROWS = 6, FALLBACK_COLUMNS = 80, FALLBACK_ROWS = 24;
+const LOST_TARGET = Symbol('lost task window target');
 
 /**
  * The `/tasks` window updates in place and takes the keys: Up/Down select a worker or Run, Enter opens its transcript, x its existing
@@ -107,13 +108,15 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
   readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly statusText?: string | undefined; readonly statusLines?: readonly string[] | undefined; readonly onClose: () => void;
   readonly onAction?: ((action: TaskWindowAction) => void) | undefined;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | typeof LOST_TARGET | null>(null);
   const targets = [...data.workers, ...data.runs];
   const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
     : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
-  const selected = Math.max(0, targets.findIndex(target => keyOf(target) === selectedId));
+  const selected = selectedId === null ? 0 : targets.findIndex(target => keyOf(target) === selectedId);
+  if (selected < 0 && selectedId !== LOST_TARGET) setSelectedId(LOST_TARGET);
   const status: readonly Span[] = [span([liveWindowStatus(data, labels), statusText].filter(Boolean).join(' · '))];
   const notes = (statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] }));
+  if (selected < 0) notes.unshift({ spans: [span(t('terminal.live.selectionGone', {}, resolveLocale(labels.jobs?.locale ?? labels.workerLine.numberLocale)), { role: 'warning' })] });
   const taskRows = targets.map((target, index) => ({ spans: [span(`${index === selected ? '>' : ' '} `),
     ...(target.kind === 'worker' ? workerLines([target], labels, 1)[0]!.spans : runLines([target], labels, 1)[0]!.spans)] }));
   const taskBody = [{ spans: [span(labels.panel.title, { bold: true })] }, ...taskRows.slice(0, data.workers.length),
@@ -121,14 +124,16 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
   return <Window title={[span(labels.live.tasksTitle)]} status={status}
     body={[...notes, ...(targets.length ? taskBody : liveWindowLines('tasks', data, labels))]}
     hints={labels.live.tasksHints ?? labels.live.hints} position={position} onClose={onClose}
-    reveal={notes.length + selected + (selected >= data.workers.length ? 3 : 1)} onInput={(input, key) => {
+    reveal={selected < 0 ? 0 : notes.length + selected + (selected >= data.workers.length ? 3 : 1)} onInput={(input, key) => {
       if (key.ctrl || key.meta || key.shift) return false;
       if ((key.upArrow || key.downArrow) && targets.length) {
-        const next = (selected + (key.upArrow ? -1 : 1) + targets.length) % targets.length;
+        const next = key.upArrow ? (Math.max(0, selected) + targets.length - 1) % targets.length : (selected + 1) % targets.length;
         setSelectedId(keyOf(targets[next]!)); return true;
       }
-      if ((key.return || input === 'x') && targets[selected]) {
-        onAction?.({ action: key.return ? 'transcript' : 'cancel', target: targets[selected]! }); return true;
+      if (key.return || input === 'x') {
+        const target = targets[selected];
+        if (target) onAction?.({ action: key.return ? 'transcript' : 'cancel', target });
+        return true;
       }
       return false;
     }} />;
