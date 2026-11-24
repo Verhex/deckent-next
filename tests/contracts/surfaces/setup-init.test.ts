@@ -94,6 +94,31 @@ describe('I-S4 bare deckent init', () => {
 
 });
 
+it('projects the approved policy change in localized setup output and as a safe JSON reason', async () => {
+  const result = { stage: 'core:policy', operation: 'installation.policy-template', status: 'refused',
+    code: 'INSTALLATION_PUBLICATION_CHANGED', reason: 'governed-policy-advanced' } as const;
+  const messages = [
+    ['en', 'After setup, deckent recorded approved changes to the installed policy. The initial template was not reapplied. Run `deckent policy status --scope <id>` to inspect the current policy.'],
+    ['tr', 'Kurulumdan sonra deckent politikada yapılan onaylı değişiklikleri kaydetti. İlk kurulum şablonu yeniden uygulanmadı. Geçerli politikayı görmek için `deckent policy status --scope <id>` komutunu kullanın.'],
+  ] as const;
+  for (const [locale, message] of messages) {
+    const plain = harness(), args = ['init', '--yes', '--scope', 'my-erp', '--lang', locale];
+    expect(await failure(setupInitCommand(args, { ...plain.context, applySetupStage: async () => result }))).toBe('SETUP_STAGE_REFUSED');
+    expect(plain.out()).toContain(message);
+    const json = harness();
+    expect(await failure(setupInitCommand([...args, '--json'], { ...json.context, applySetupStage: async () => result }))).toBe('SETUP_STAGE_REFUSED');
+    expect(JSON.parse(json.out()).apply.results).toEqual([result]);
+
+    const window = createSetupController({ context: { ...plain.context, applySetupStage: async () => result }, root: '/x', locale,
+      observed: { observation: base, registry }, flags: { json: false, yes: false, scope: 'my-erp' } });
+    await window.step(locale); await window.step('core:solo'); await window.step('yes');
+    expect(await window.step('apply')).toBeNull();
+    expect(await window.runPending()).toBe(true);
+    expect(window.model().rows.at(-1)).toContain(message);
+    expect(window.model().wrapNotice).toBe(true);
+  }
+});
+
 describe('I-S4 setup outcomes', () => {
   it('U3-2: language switches immediately, declined foreground stays unapplied, warnings do not enter a repeated --yes loop', async () => {
     const fresh = harness(), first = createSetupController({ context: fresh.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });

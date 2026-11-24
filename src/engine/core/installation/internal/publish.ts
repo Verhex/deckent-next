@@ -23,7 +23,7 @@ export interface InstallationPublishTarget {
 }
 export class InstallationPublicationError extends CodedError {
   constructor(override readonly code: 'INSTALLATION_PUBLICATION_INVALID' | 'INSTALLATION_PUBLICATION_CONFLICT'
-    | 'INSTALLATION_PUBLICATION_CHANGED') { super(code); this.name = 'InstallationPublicationError'; }
+    | 'INSTALLATION_PUBLICATION_CHANGED', readonly reason?: 'governed-policy-advanced') { super(code); this.name = 'InstallationPublicationError'; }
 }
 function canonical(input: unknown): string {
   const result = immutableJsonObjectSchema.safeParse(input);

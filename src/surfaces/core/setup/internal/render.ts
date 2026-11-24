@@ -1,5 +1,5 @@
 import { workerReadinessText, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
-import { headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupObservation, SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { SetupApplyResult } from './contract.js';
@@ -61,7 +61,12 @@ export function applyLine(plan: SetupPlan, result: SetupApplyResult, locale: Loc
   const found = plan.stages.find(item => item.id === result.stage), stage = found ? stageTitle(found, locale) : terminalSafeText(result.stage);
   if (result.status === 'not-wired') return t('setup.apply.notWired', { stage }, locale);
   if (result.status === 'declined') return t('setup.apply.declined', { stage }, locale);
-  if (result.status === 'refused') return t('setup.apply.refused', { stage, code: terminalSafeText(result.code ?? '-') }, locale);
+  if (result.status === 'refused') {
+    const line = t('setup.apply.refused', { stage, code: terminalSafeText(result.code ?? '-') }, locale);
+    const detail = result.code === 'INSTALLATION_PUBLICATION_CHANGED' && result.reason
+      ? ErrorRegistry.get(result.code, locale, { reason: result.reason })?.message : undefined;
+    return detail ? `${line} ${detail}` : line;
+  }
   return found?.state === 'done' ? t('setup.apply.applied', { stage }, locale) : t('setup.summary.state', { stage, state: stateLabel(found?.state ?? 'blocked', locale) }, locale);
 }
 

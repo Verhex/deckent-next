@@ -1,13 +1,13 @@
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js';
 import { lstat, readFile, stat } from 'node:fs/promises';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
-import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
-import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
+import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
+import { createHash, randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
+import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, auditPolicyDigest, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { optionalField, automationMarker, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { optionalField, automationMarker, getConfigFieldDefault, inspectProductFile, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { immutableJsonObjectSchema, asPolicy, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
+import { immutableJsonObjectSchema, asPolicy, bindingsFileSchema, policyFileSchema, type AuditEvent, type ProjectAttachment } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -62,6 +62,56 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
   const result = await withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
     const current = await prepare(projectRoot, scopeId, options, layout, shared);
     if (current.prepared.preview.planDigest !== prepared.preview.planDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+    // Diagnose a committed replay only when the live authority files match a sealed chain from the initial policy.
+    const governedPolicyAdvanced = async (changed: 'policy' | 'bindings', digest: string) => {
+      if ((await journal.observe()).record?.phase !== 'committed') return false;
+      const policy = prepared.targets.find(target => target.resource === 'policy')!;
+      const bindings = prepared.targets.find(target => target.resource === 'bindings')!;
+      const policyDigest = changed === 'policy' ? digest : (await inspectInstallationFile(file(policy))).digest;
+      const bindingsDigest = changed === 'bindings' ? digest : (await inspectInstallationFile(file(bindings))).digest;
+      const current = await contextPolicySource({ layout, config }).load();
+      if (current.schemaVersion !== 2) return false;
+      const { bindings: liveBindings, policyRevision, revision: effectiveRevision, ...policyBody } = current;
+      void effectiveRevision;
+      // Match the writer's exact bytes, or prove that the file still has its original publication bytes.
+      const byteDigest = (content: string) => createHash('sha256').update(content).digest('hex');
+      const matchesBytes = (doc: unknown, observed: string | null, target: PolicyTemplatePublishTarget) =>
+        observed === byteDigest(`${JSON.stringify(doc, null, 2)}\n`)
+        || (observed === target.digest && observed === byteDigest(`${JSON.stringify(immutableJsonObjectSchema.parse(doc))}\n`));
+      if (!matchesBytes(policyFileSchema.parse({ ...policyBody, revision: policyRevision }), policyDigest, policy)) return false;
+      const bound = bindingsFileSchema.parse({ schemaVersion: 3, revision: liveBindings.revision, bindings: liveBindings.entries, modes: liveBindings.modes });
+      if (!matchesBytes(bound, bindingsDigest, bindings)) return false;
+      const initial = auditPolicyDigest(prepared.resolvedPolicy), observed = auditPolicyDigest(current);
+      if (initial === observed) return false;
+      const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
+      const store = await openReadOnlyAuditStore(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite);
+      let proved: boolean;
+      try {
+        const audit = new AuditApplication(store, integrity);
+        proved = store.snapshot(false, () => {
+          const seed = prepared.preview.systemRows;
+          let digest = initial, cursor = 0, anchored = seed === undefined;
+          for (;;) {
+            const page = audit.list(scopeId, cursor, config.audit.pageSize);
+            for (const { event: { subject }, sequence } of page) {
+              if (sequence > config.audit.maxRecords) return false;
+              cursor = sequence;
+              if (subject.kind !== 'authority-change' && (subject.kind !== 'permission-mode-change' || subject.bindingsRevision.after === null)) continue;
+              if (!anchored) {
+                if (subject.kind !== 'authority-change' || subject.commandId !== seed?.key || subject.policyDigest !== initial) return false;
+                anchored = true;
+                continue;
+              }
+              if (subject.policyDigestBefore !== digest || !subject.policyDigest) return false;
+              digest = subject.policyDigest;
+            }
+            if (page.length < config.audit.pageSize) return anchored && digest === observed;
+          }
+        });
+      } finally { store.close(); }
+      return proved && (await inspectInstallationFile(file(policy))).digest === policyDigest
+        && (await inspectInstallationFile(file(bindings))).digest === bindingsDigest;
+    };
     return new PolicyTemplateInstallationApplication({
     journal,
     async inspectPreimage(target) { return (await inspectInstallationFile(file(target))).digest; },
@@ -83,7 +133,13 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
     async verify(target) {
       if (target.resource === 'config' || target.resource === 'ledger') await firstSession.verify((await journal.observe()).record?.phase === 'committed'
         ? await committedConfigTarget(target, scopeId, layout, config, maxBytes) : target);
-      else if ((await inspectInstallationFile(file(target))).digest !== target.digest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+      else {
+        const digest = (await inspectInstallationFile(file(target))).digest;
+        if (digest === target.digest) return;
+        const explained = (target.resource === 'policy' || target.resource === 'bindings') && digest !== null
+          && await governedPolicyAdvanced(target.resource, digest).catch(() => false);
+        throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED', explained ? 'governed-policy-advanced' : undefined);
+      }
     },
     now: () => clock.sample().wallMs,
   }).apply(prepared); });

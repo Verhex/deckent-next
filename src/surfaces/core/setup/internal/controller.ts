@@ -62,7 +62,7 @@ const errorCode = (error: unknown) => { const value = (error as { code?: unknown
 export function createSetupController(input: Readonly<{ context: SetupCommandContext; root: string; locale: Locale; observed: Observed; flags: SetupFlags }>) {
   const { context, root, flags } = input, later = new Set<string>(), postponed = new Set<string>(), results: SetupApplyResult[] = [];
   let locale = input.locale, observed = input.observed, values = unattendedAnswers(observed.observation, flags, true, observed.registry), note = '', pending: SetupStage | null = null;
-  let executionOffered = false, executionNotice: ExecutionPermissionNotice | undefined;
+  let executionOffered = false, executionNotice: ExecutionPermissionNotice | undefined, wrapApplyNote = false;
   const plan = () => planFor(observed, values);
   const canOfferExecution = () => !executionOffered && !!context.upgradePolicyTemplate && !!scopeId()
     && plan().stages.some(stage => stage.id === 'core:policy' && (stage.state === 'done' || stage.state === 'skipped'));
@@ -89,7 +89,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     // R05: the reason and the question wrap (not cut) inside a fixed row count each; the stage rows and the command keep one row.
     const heights = rows.map((_row, index) => index === rows.length - 3 ? registry.windowTextRows.reason : index === rows.length - 2 ? registry.windowTextRows.question : 1);
     const offered = choices(stage);
-    return { title: t('setup.window.title', {}, locale), rows, heights, wrapNotice: executionNotice?.key === 'setup.aiExecution.covered' && !!note, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
+    return { title: t('setup.window.title', {}, locale), rows, heights, wrapNotice: !!note && (wrapApplyNote || executionNotice?.key === 'setup.aiExecution.covered'), options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
       initial: initialChoice(stage, offered),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), scrollHint: t('setup.window.scrollHint', {}, locale),
       decisionArm: decisionArmLabels(locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
@@ -100,12 +100,14 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     if (result.status === 'applied') observed = await observeSetup(context, root, locale, true);
     const current = plan();
     note = applyLine(current, result, locale);
+    wrapApplyNote = result.reason !== undefined;
     if (result.status !== 'applied' || current.stages.find(item => item.id === stage.id)?.state !== 'done') later.add(stage.id);
   };
   const step = async (id: string): Promise<SetupWindowModel | null> => {
     const stage = activeStage(plan(), later), picked = choices(stage).find(choice => choice.id === id);
     if (!picked || picked.action === 'close' || !stage) return null;
     note = '';
+    wrapApplyNote = false;
     if (picked.action === 'later') { later.add(stage.id); postponed.add(stage.id); }
     else if (picked.action === 'answer') {
       values = { ...values, [stage.id]: picked.answer };

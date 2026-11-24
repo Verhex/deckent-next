@@ -618,8 +618,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
 }, plainErrors('error.', {
   UNINSTALL_UNCERTAIN_EFFECTS: 'error', UNINSTALL_UNCERTAIN_MANAGED: 'error', UNINSTALL_DELIVERY_QUEUED: 'error', UNINSTALL_DELIVERY_TARGET_REQUIRED: 'error',
   UNINSTALL_RETIRED: 'error', UNINSTALL_FLAG_MOVED: 'error', INSTALLATION_PUBLICATION_INVALID: 'config', INSTALLATION_PUBLICATION_CONFLICT: 'config',
-  INSTALLATION_PUBLICATION_CHANGED: 'config',
 }), {
+  INSTALLATION_PUBLICATION_CHANGED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'governed-policy-advanced'
+    ? t('error.INSTALLATION_PUBLICATION_CHANGED.governedPolicy', {}, l) : t('error.INSTALLATION_PUBLICATION_CHANGED', {}, l) }) },
   WORKER_VERSION_COUNTER_TAKEN: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_VERSION_COUNTER_TAKEN', { detail: '', ...p }, l) }) },
   WORKER_VERSION_TAKEN: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_VERSION_TAKEN', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_VERSION_CHECK_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_VERSION_CHECK_FAILED', { detail: '', ...p }, l) }) },
