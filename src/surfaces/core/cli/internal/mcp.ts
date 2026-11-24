@@ -226,7 +226,8 @@ function mcpResultText(value: unknown, verb: McpCommandRequest['verb'], locale: 
       : t('climodels.mcp.result.importedNone', {}, locale));
     for (const skipped of result.skipped ?? []) lines.push(`  ${t('climodels.mcp.result.skipped', { name: mcpSafe(skipped.name ?? '-'), reason: mcpSafe(skipped.reason) }, locale)}`);
   } else return formatValue(value);
-  const grant = mcpGrantLine(result.grant, locale);
+  const withdrawal = result.approved === false || result.trust === 'declined' || result.trust === 'unanswered';
+  const grant = mcpGrantLine(result.grant, locale, withdrawal ? 'withdrawal' : 'write');
   return [...lines, ...(grant ? [grant] : [])].join('\n');
 }
 

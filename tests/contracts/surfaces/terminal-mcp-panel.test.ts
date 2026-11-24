@@ -96,6 +96,10 @@ describe('/mcp window port', () => {
     expect.soft(lines).toEqual(['Added files (user): /g/mcp.json', 'files is trusted; 1 tool pinned.', GRANT_REFUSAL_EN]);
     expect.soft(await mcpPanelPort('/p', host({ add }, cards).run, {}, 'tr').add(draft, async () => true)).toEqual([
       'files eklendi (kullanıcı): /g/mcp.json', 'files güvenilir; 1 araç sabitlendi.', GRANT_REFUSAL_TR]);
+    const unanswered = { ...add, trust: 'unanswered', pinnedTools: 0, grant: { status: 'revoked' } };
+    expect.soft(await mcpPanelPort('/p', host({ add: unanswered }, cards).run, {}, 'tr').add(draft, async () => null)).toEqual([
+      'files eklendi (kullanıcı): /g/mcp.json', 'Henüz güvenilmedi: bir mesaj onu ilk kullandığında güven ister.',
+      'Politika izni kaldırıldı: bu sunucuya çağrılar yeniden şirket politikanıza bağlı.']);
   });
   it('an HTTP draft is one `add` of a `type: http` entry with its headers (the registry validates the URL); revoke, reconnect and remove are their own requests', async () => {
     const grant = { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' };
@@ -119,6 +123,9 @@ describe('/mcp window port', () => {
     const refused = host({ approve: { approved: true, pinnedTools: 2, grant: REFUSED_GRANT } });
     expect.soft(await mcpPanelPort('/p', refused.run, {}, 'en').approve('files', async () => true)).toEqual(['files is trusted; 2 tools pinned.', GRANT_REFUSAL_EN]);
     expect.soft(await mcpPanelPort('/p', refused.run, {}, 'tr').approve('files', async () => true)).toEqual(['files güvenilir; 2 araç sabitlendi.', GRANT_REFUSAL_TR]);
+    const declined = host({ approve: { approved: false, pinnedTools: 0, grant: REFUSED_GRANT } });
+    expect.soft(await mcpPanelPort('/p', declined.run, {}, 'en').approve('files', async () => false)).toEqual([
+      'files was not trusted; it asks again before it starts.', 'The policy grant could not be removed. Review the scope’s policy before trying again.']);
   });
   it('K4 realms: the networked sandbox comes first (the default of an entry without a realm), host last with its warning; an HTTP server runs nowhere here', async () => {
     const port = mcpPanelPort('/p', host({}).run, {}, 'en');

@@ -19,8 +19,7 @@ export type McpPanelRun = (root: string, request: McpPanelRequest, options: Conf
 export function mcpRevokeLines(value: unknown, locale: Locale): string[] {
   const { revoked } = (value ?? {}) as { revoked?: { name: string } };
   const lines = revoked ? [t('cli.mcp.revoke.trustRemoved', { name: revoked.name }, locale)] : [];
-  const withdrawal = mcpGrantWithdrawalLine(value, locale);
-  if (withdrawal) lines.push(withdrawal);
+  lines.push(mcpGrantWithdrawalLine(value, locale) ?? t('cli.mcp.revoke.grantUnchanged', {}, locale));
   return lines;
 }
 
@@ -42,9 +41,11 @@ export function mcpGrantWithdrawalLine(value: unknown, locale: Locale): string |
 }
 
 /** The K1 grant outcome in the person's words (null: none to say). */
-export function mcpGrantLine(grant: unknown, locale: Locale): string | null {
+export function mcpGrantLine(grant: unknown, locale: Locale, context: 'write' | 'withdrawal' = 'write'): string | null {
   const value = grant as { status?: unknown; reason?: unknown } | null | undefined;
   if (!value || typeof value !== 'object') return null;
+  if (context === 'withdrawal') return value.status === 'none'
+    ? t('cli.mcp.revoke.grantUnchanged', {}, locale) : mcpGrantWithdrawalLine({ grant }, locale);
   if (value.status === 'granted') return t('cli.mcp.grant.granted', {}, locale);
   if (value.status === 'revoked') return t('cli.mcp.grant.revoked', {}, locale);
   if (value.status !== 'refused') return null;
@@ -181,7 +182,9 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
     async approve(name, ask) {
       const result = (await call({ verb: 'approve', name }, asking(ask))) as { approved?: boolean; pinnedTools?: number; grant?: McpGrantOutcome };
       const trust = result.approved ? t('tui.panel.mcp.approved', { name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale) : t('tui.panel.mcp.notApproved', { name }, locale);
-      const grant = result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null;
+      const grant = result.approved
+        ? result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null
+        : mcpGrantLine(result.grant, locale, 'withdrawal');
       return grant ? [trust, grant] : [trust];
     },
     ...(card ? { async grantKey(name: string, key: string, ask: McpTrustAsk) { if (!await card.offer()) return [t('terminal.mcp.status.secretRefused', { key }, locale)]; // KER-17 audit: the person-only first-use card
@@ -198,7 +201,8 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
       const trust = result.trust === 'trusted' ? t('tui.panel.mcp.approved', { name: draft.name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale)
         : result.trust === 'declined' ? t('tui.panel.mcp.addedDeclined', {}, locale) : t('tui.panel.mcp.addedPending', {}, locale);
       const added = t('tui.panel.mcp.added', { name: draft.name, scope: scopeWord(draft.scope, locale), file: result.added?.file ?? '-' }, locale);
-      const grant = result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null;
+      const grant = result.trust === 'declined' || result.trust === 'unanswered' ? mcpGrantLine(result.grant, locale, 'withdrawal')
+        : result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null;
       return grant ? [added, trust, grant] : [added, trust];
     },
     transports: [choice('stdio', t('tui.panel.mcp.transport.stdio', {}, locale), t('tui.panel.mcp.transport.stdioDetail', {}, locale)),

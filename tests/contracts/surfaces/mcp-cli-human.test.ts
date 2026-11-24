@@ -64,8 +64,8 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
   expect(trJson).toBe(enJson);
   expect(JSON.parse(enJson)).toEqual(receipt);
   const trustOnly = { schemaVersion: 1, revoked: receipt.revoked };
-  expect.soft(await revoke('en', trustOnly)).toBe(enTrust);
-  expect.soft(await revoke('tr', trustOnly)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.');
+  expect.soft(await revoke('en', trustOnly)).toBe(`${enTrust}\nNo policy grant removal was recorded.`);
+  expect.soft(await revoke('tr', trustOnly)).toBe('fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.\nPolitika izni kaldırma işlemi kaydedilmedi.');
   expect(JSON.parse(await revoke('en', trustOnly, true))).toEqual(trustOnly);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'revoked' } })).toBe(`${enTrust}\nPolicy grant removed: calls to this server follow your company policy again.`);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'delegation' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
@@ -106,4 +106,18 @@ it('reports an unfinished requested trust step while retaining the registration 
   } as never);
   expect.soft(code).toBe(1);
   expect(out.join('').trimEnd()).toBe("Removed web (local)\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.");
+  for (const [argv, locale, receipt, expected] of [
+    [['approve', 'web'], 'en', { ...approve, approved: false, grant: { status: 'revoked' } },
+      'web (local) was not approved; nothing is trusted.\nPolicy grant removed: calls to this server follow your company policy again.'],
+    [add, 'en', { ...registered('declined'), grant: { status: 'none' } },
+      'Added web (local); you declined its trust, so it does not start.\nNo policy grant removal was recorded.'],
+    [addJson, 'tr', { ...registered('unanswered'), grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } },
+      'web (yerel) eklendi. İlk kullanımda güven onayı ister. Hemen onaylamak için deckent mcp approve web komutunu çalıştırın.\nBu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.'],
+  ] as const) {
+    out.length = 0;
+    expect.soft(await main(['mcp', ...argv, '--lang', locale], {
+      root: '/p', env: {}, stdout: { write(value: string) { out.push(value); } }, runMcpCommand: async () => receipt,
+    } as never)).toBe(1);
+    expect.soft(out.join('').trimEnd()).toBe(expected);
+  }
 });

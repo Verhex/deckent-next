@@ -281,7 +281,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     let decided: Awaited<ReturnType<typeof decideMcpTrust>> | null = null;
     if (request.scope !== 'project' && request.approve !== false && !outranked)
       decided = await decideMcpTrust({ ...target, file: path, entry: entry.data, trust: null }, trustContext, context.ask);
-    if (!decided || decided.decision === 'unanswered') await recordMcpTrust(target, trustContext, 'reset', () => null);
+    const resetGrant = !decided || decided.decision === 'unanswered' ? await recordMcpTrust(target, trustContext, 'reset', () => null) : null;
     try {
       await mutateRegistry(path, mode, raw => {
         const servers = serversOf(raw, request.scope, view.projectKey, true)!;
@@ -294,7 +294,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     }
     const added = { name: request.name, scope: request.scope, file: path };
     if (!decided) return { schemaVersion: 1, added, trust: outranked ? 'shadowed' : 'pending' };
-    return { schemaVersion: 1, added, trust: decided.decision, pinnedTools: decided.pinned, ...(decided.grant ? { grant: decided.grant } : {}) };
+    const grant = decided.grant ?? resetGrant;
+    return { schemaVersion: 1, added, trust: decided.decision, pinnedTools: decided.pinned, ...(grant ? { grant } : {}) };
   }
   if (request.verb === 'remove') {
     const holders: Exclude<McpScope, 'managed'>[] = [];
@@ -405,8 +406,10 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
       if (known?.phase === 'launch') { await remember(server, known, mcpStartFailedNotice(server.name, known)); continue; }
       try {
         const decided = await decideMcpTrust(server, trust, ask, { pool, moved: server.reason === 'trust-moved' });
-        if (decided.grant?.status === 'refused') notices.push({ kind: 'grant-refused', name: server.name, reason: decided.grant.reason });
-        if (decided.decision === 'trusted' && failures.some(failure => failure.scope === server.scope && failure.name === server.name)) await remember(server, null);
+        if (decided.decision === 'trusted') {
+          if (decided.grant?.status === 'refused') notices.push({ kind: 'grant-refused', name: server.name, reason: decided.grant.reason });
+          if (failures.some(failure => failure.scope === server.scope && failure.name === server.name)) await remember(server, null);
+        }
       } catch (error) {
         const failure = mcpStartFailureOf(error);
         if (!failure) { const code = modelTextPrefix(String((error as { code?: unknown })?.code ?? 'failed'), 64), reason = (error as { params?: { reason?: unknown } })?.params?.reason;

@@ -52,7 +52,7 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
   const args = ['--realm', 'host', '--', process.execPath, FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log];
   const entry = { command: process.execPath, args: args.slice(4), realm: 'host' };
   const peer = options.headless ? undefined : await terminalRuntimePeer(createTerminalRuntimeClient(project, { env }));
-  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1], answer = true, channel?: 'mcp') => withLocalPrincipalChannel(channel,
+  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1], answer: boolean | null = true, channel?: 'mcp') => withLocalPrincipalChannel(channel,
     () => runConfiguredMcpCommand(project, request, { env }, async () => answer), peer) as Promise<Record<string, unknown>>;
   const policy = () => JSON.parse(readFileSync(join(data, 'policy.json'), 'utf8')) as { revision: string; grants: { id: string; scopes: unknown; principals: unknown; resource: { kind: string; ids: string[] } }[] };
   const mcpGrants = () => policy().grants.filter(grant => grant.id.startsWith('mcp-'));
@@ -98,7 +98,7 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     ]);
     expect.soft(f.policyRecords()).toEqual(before);
     expect.soft(await f.run({ verb: 'reset', name: 'fx' })).toMatchObject({ reset: { name: 'fx', scope: 'local' }, grant: refused });
-    expect(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false });
+    expect.soft(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false, grant: refused });
     expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'declined' } });
     expect.soft(await f.run({ verb: 'remove', name: 'fx' })).toMatchObject({ removed: { name: 'fx', scope: 'local' }, grant: refused });
     expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [] });
@@ -118,11 +118,11 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
     const withoutGrant = f.policyRecords();
     f.env[agentMarker] = '1';
-    expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
-    expect(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
-      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
-    expect(await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => true))
-      .toEqual({ schemaVersion: 1, reset: { name: 'fx', scope: 'local' } });
+    expect.soft(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect.soft(await runConfiguredMcpCommand(f.project, { verb: 'revoke', name: 'fx' }, { env: f.env }, async () => true))
+      .toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' }, grant: refused });
+    expect.soft(await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => true))
+      .toEqual({ schemaVersion: 1, reset: { name: 'fx', scope: 'local' }, grant: refused });
     expect(f.policyRecords()).toEqual(withoutGrant);
     delete f.env[agentMarker];
     expect(await f.run({ verb: 'reset', name: 'fx' }, true, 'mcp'))
@@ -146,6 +146,19 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect.soft(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'local' } });
+  }, 90_000);
+
+  it('keeps the grant removed by reset when personal add registers a server after an unanswered card', async () => {
+    const f = await fixture();
+    const add = { verb: 'add', scope: 'local', name: 'fx', entry: f.entry } as const;
+    expect(await f.run(add)).toMatchObject({ trust: 'trusted', grant: { status: 'granted' } });
+    expect(await f.run({ verb: 'remove', name: 'fx' }, true, 'mcp')).toMatchObject({
+      removed: { name: 'fx' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' },
+    });
+    expect(f.mcpGrants()).toHaveLength(1);
+    expect.soft(await f.run(add, null)).toMatchObject({ added: { name: 'fx', scope: 'local' }, trust: 'unanswered', pinnedTools: 0, grant: { status: 'revoked' } });
+    expect(f.mcpGrants()).toEqual([]);
+    expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', trust: null } });
   }, 90_000);
 
   it('keeps the parent receipt for headless CI-only and unmarked calls with no grant, and refuses removal of an existing grant', async () => {
@@ -261,7 +274,8 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry });
     await f.run({ verb: 'approve', name: 'fx', alwaysAsk: ['echo'] });
     f.setTools([{ ...echo, description: 'Echo, changed.' }, other]);
-    expect(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false });
+    expect.soft(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false, grant: { status: 'revoked' } });
+    expect(f.mcpGrants()).toEqual([]);
     const detail = (await f.run({ verb: 'get', name: 'fx' })) as { server: { status: string; pinnedTools: number; trust: { decision: string; tools: { name: string; alwaysAsk: boolean }[] } } };
     expect(detail.server).toMatchObject({ status: 'declined', pinnedTools: 0, trust: { decision: 'declined', tools: [{ name: 'echo', alwaysAsk: true }] } });
     expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, pinnedTools: 2 });
@@ -298,7 +312,7 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     }
     const policy = { load: async () => { throw new Error('POLICY_FILE_UNSAFE'); } };
     expect(await new McpToolGrants({ policy, administration: { submit: unreached }, approve: unreached })
-      .revoke({ scopeId: 'proj', principal: me, server: { scope: 'local', name: 'fx' }, reason: 'Withdrawn' })).toEqual({ status: 'refused', reason: 'POLICY_UNAVAILABLE' });
+      .revoke({ scopeId: 'proj', principal: me, server: { scope: 'local', name: 'fx' }, reason: 'Withdrawn' })).toEqual({ status: 'none' });
   }, 90_000);
 });
 
