@@ -1,7 +1,8 @@
 import { appendFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
-import { DeckentError, formatHumanError } from '#platform/index.js';
+import { approvalRecordSchema } from '#domain/index.js';
+import { DeckentError, formatHumanError, snapshotKnownSecrets, t } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -10,6 +11,7 @@ import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 const mounted: ReturnType<typeof mountWorkline>[] = [];
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount();
@@ -30,7 +32,7 @@ it.skipIf(process.platform === 'win32').each(['en', 'tr'] as const)('/do display
   expect(view.stdout.text).toContain('deckent models activate'); expect(f.posts).toBe(0);
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO inactive ${locale}\n${view.stdout.frame}\n`);
 });
-it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval card %s precedes replay and Run navigation', async key => {
+it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval card %s precedes replay and Run navigation; stored reviews govern /do and /approvals decisions', async key => {
   const pending = pendingBrainFixture(), plans: { intent: string; id: string }[] = [], decisions: string[] = [];
   const history: string[] = [];
   let decision: 'allow' | 'deny' | null = null;
@@ -63,6 +65,103 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   if (key === 'y') await until(() => view.stdout.frame.includes('Watching'), 'tasks observation after result');
   else { await until(() => !view.stdout.frame.includes('Rejected'), 'closed'); view.stdin.write('/do Revised request\r');
     await until(() => plans.length === 3, 'new request'); expect(plans[2]!.id).not.toBe(plans[0]!.id); }
+
+  // Run the stored-review cases once across the two keyboard cases.
+  if (key === 'y') {
+    view.instance.unmount();
+    const risk = {
+      en: 'A path and rule name do not show whether the content is safe. If you approve an unregistered real secret, the worker can read it and send it to the model provider. You may decline.',
+      tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
+    };
+    const reasons = {
+      en: { cut: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+        hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review. Keep this card open and, while the request is pending, use /approvals or deckent approval decide in another terminal to decide. Leaving this decision card with Esc sends a denial.' },
+      tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+        hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz. Karar vermek için bu kartı açık tutun ve istek hâlâ beklerken başka bir terminalde /approvals ya da deckent approval decide komutunu kullanın. Bu karar kartından Esc ile çıkmak ret gönderir.' },
+    };
+    const secret = 'f4-package-fixture-value';
+    const knownSecrets = snapshotKnownSecrets([{ name: 'F4_FIXTURE', value: secret }]);
+    for (const locale of ['en', 'tr'] as const) {
+      const pending = pendingBrainFixture(), work = workSurfaceLabels(locale), digest = 'd'.repeat(64);
+      const rows = Array.from({ length: 4 }, (_, index) => ({ path: `pkg/check-${index}.js`, rule: 'pattern:url-userinfo', digest }));
+      const preview = [t('coding.dependencies.patternRisk', {}, locale), t('coding.dependencies.patternCount', { count: rows.length }, locale),
+        ...rows.map(row => t('coding.dependencies.pattern', row, locale))];
+      const expectedRows = rows.map(row => `${row.path} · pattern:url-userinfo · ${locale === 'en' ? 'SHA-256' : 'SHA-256 özeti'} ${digest}`);
+      const plan = brainProposalCardLines(pending, locale)[0]!;
+      const yes = locale === 'en' ? 'Yes, once' : 'Evet, bu sefer';
+      const truncated = { shown: 4, total: 6, bytes: 400, totalBytes: 600, digest, kept: '/fixture/package-review.txt' };
+      for (const surface of ['/do', '/approvals']) for (const kind of ['plain', 'visible', 'masked', 'control', 'endings', 'cut'] as const) {
+        const cut = kind === 'cut' ? truncated : null;
+        const decisions: unknown[] = [], approval = pending.proposal.approval!;
+        const review = cut ? preview.slice(0, cut.shown) : preview;
+        const text = (kind === 'endings' ? review[0] + '\r' + review.slice(1).join('\r\n') : review.join('\n')).replace('pkg/check-3.js',
+          kind === 'visible' ? 'pkg/check-3\uFE0F.js' : kind === 'masked' ? `pkg/${secret}.js` : kind === 'control' ? 'pkg/check-3\u001b[0m.js' : 'pkg/check-3.js');
+        const request = { schemaVersion: 3, approvalId: approval.approvalId, scopeId: 's', createdAt: Date.now(), expiresAt: approval.expiresAt,
+          policyRevision: 'p', actionDigest: digest, requester: { id: 'owner', issuer: 'fixture', subject: 'owner' }, summary: 'Create proposed Run',
+          subject: { kind: 'run-create', runId: 'r', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: approval.decisionRecordId },
+          facts: { risk: { source: 'effect-class', effectClass: 'read', authority: true }, reversibility: { kind: 'none' }, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' },
+          preview: { schemaVersion: 1, argsDigest: digest, text, cut } };
+        const record = approvalRecordSchema.parse({ revision: 0, status: 'pending', request, decision: null, keyId: 'fixture', mac: digest });
+        const ledger = createWorklineLedgerPorts({ root: '/fixture', scopeId: 's', options: {}, locale, inspectWorkers: (async () => ({})) as never,
+          inspectRun: (async () => ({ run: null })) as never, listApprovals: async () => [record],
+          decideApproval: async input => { decisions.push(input); throw new Error('decision captured'); } })!;
+        const labels = { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work,
+          render: { ...WORKLINE_TEST_LABELS.render, hiddenCount: t('terminal.safety.hiddenCount', {}, locale) } };
+        const view = mountWorkline({ labels, ledger, knownSecrets, pollMs: 60_000,
+          doPlan: { ...words, plan: async () => pending, lines: result => brainProposalLines(result, locale), cardLines: result => brainProposalCardLines(result, locale) } }, 280);
+        mounted.push(view); await settle(40);
+        if (surface === '/do') view.stdin.write('/do Prepare purchase\r');
+        else {
+          view.stdin.write('/approvals\r');
+          await until(() => view.stdout.frame.includes('Create proposed Run'), 'approval picker');
+          await settle(40); view.stdin.write('\r');
+        }
+        const compact = (text: string) => text.replace(/[│┃\s]+/gu, '');
+        await until(() => view.stdout.frame.includes(risk[locale]), `${surface} approval`);
+        if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## ${surface} package ${locale} ${kind}\n${view.stdout.frame}\n`);
+        if (surface === '/do') expect.soft(view.stdout.frame.split(plan)).toHaveLength(2);
+        expect.soft(view.stdout.frame.split(risk[locale])).toHaveLength(2);
+        const hidden = surface === '/do' && (kind === 'masked' || kind === 'control');
+        if (cut || hidden) {
+          if (cut) expect.soft(view.stdout.frame).toContain(cut.kept);
+          expect.soft(view.stdout.frame).not.toContain(yes);
+          expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
+          expect.soft(view.stdout.frame).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
+          expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
+          expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale][cut ? 'hidden' : 'cut']));
+          for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
+            await settle(40); view.stdin.write(key); await settle(80);
+            expect.soft(decisions).toEqual([]);
+            expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
+          }
+          if (cut) {
+            view.stdin.write(locale === 'en' ? '2' : 'n'); await settle(100);
+            expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
+          }
+        } else {
+          expect.soft(view.stdout.frame).toContain(`1. ${yes} (y)`);
+          expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale].hidden));
+          expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale].cut));
+          if (kind === 'plain' || kind === 'endings') for (const row of expectedRows) expect.soft(view.stdout.frame.split(row)).toHaveLength(2);
+          if (kind === 'visible') {
+            expect.soft(view.stdout.frame).toContain('pkg/check-3<U+FE0F>.js');
+            expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1 hidden characters' : '1 gizli karakter');
+          }
+          expect.soft(decisions).toEqual([]);
+        }
+        if (kind === 'masked') {
+          expect.soft(view.stdout.text).not.toContain(secret);
+          expect.soft(view.stdout.frame).toContain('‹secret:F4_FIXTURE›');
+        }
+        if (hidden) {
+          view.stdin.write('\u001b');
+          await until(() => decisions.length > 0, 'Esc decision on the hidden-review card');
+          expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
+        }
+        view.instance.unmount();
+      }
+    }
+  }
 });
 it('/do planning keeps composer input; Ctrl+C aborts that request before any approval or Run path', async () => {
   let signal: AbortSignal | undefined, aborts = 0, approvals = 0;
@@ -184,7 +283,7 @@ it('BeUser M-07: a plan rejected because no worker can run it shows its refusal 
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?');
 });
 
-it('BeUser M-32 + alpha.64 B (v31): a chat turn\'s propose_work shows /do\'s quota wait, its one Run card carries /do\'s uncommitted-changes line, and its admitted Run goes to /tasks', async () => {
+it('BeUser M-32 + alpha.64 B (v31): a chat turn\'s propose_work shows /do\'s quota wait, its one Run card carries /do\'s uncommitted-changes line, and its admitted Run goes to /tasks; combined package rows appear once', async () => {
   // Lead 2026-11-09: the uncommitted-changes text is one line on the one Run card (no card of its own), for /do (the y/n test above) and the chat AI alike.
   const dirty = { check: async () => 'STARTS FROM LAST COMMIT', title: 'UNCOMMITTED' }, plans: string[] = [], decided: string[] = [];
   let waited!: () => void, answered!: () => void; const wait = new Promise<void>(resolve => { waited = resolve; }), answer = new Promise<void>(resolve => { answered = resolve; });
@@ -214,6 +313,23 @@ it('BeUser M-32 + alpha.64 B (v31): a chat turn\'s propose_work shows /do\'s quo
   expect(view.stdout.frame).toContain('Proposed by the AI'); expect(view.stdout.frame).not.toContain('WAITING 2/3');
   await settle(40); view.stdin.write('y'); await until(() => decided.length === 1, 'decided'); expect(decided).toEqual(['run-card:allow']);
   await until(() => view.stdout.frame.includes('Watching'), 'the admitted Run handed to /tasks'); expect(plans).toEqual([]); // the chat path never runs /do's own plan
+
+  view.instance.unmount();
+  // Render an already combined plan and package review on a fresh chat surface.
+  {
+    const plan = 'Review this purchase plan', risk = t('coding.dependencies.patternRisk', {}, 'en');
+    const row = `pkg/last.js · pattern:url-userinfo · SHA-256 ${'d'.repeat(64)}`;
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en') },
+      async *streamTurn() {
+        yield { kind: 'approval', phase: 'requested', callId: 'propose-work', approvalId: 'chat-approval', revision: 0, summary: 'Create proposed Run',
+          expiresAt: Date.now() + 60_000, preview: [plan, risk, row].join('\n') };
+        await new Promise<void>(resolve => cleanups.push(async () => { resolve(); }));
+      } }, 220);
+    mounted.push(view); await settle(40); view.stdin.write('Prepare purchase\r');
+    await until(() => view.stdout.frame.includes(plan), 'combined chat approval');
+    for (const line of [plan, risk, row]) expect(view.stdout.frame.split(line)).toHaveLength(2);
+    expect(view.stdout.frame).toContain('Yes, once');
+  }
 });
 
 it('RC-C1: a company/pool stop during the model preflight cancels before the local turn', async () => {

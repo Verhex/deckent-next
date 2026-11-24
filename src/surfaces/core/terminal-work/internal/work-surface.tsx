@@ -117,7 +117,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       }
       while (!execution.signal.aborted) {
         pickedReason.current = undefined;
-        const answer = await panel.pick(execution, { kind: 'approval', approval: target, remaining: pending.length - 1, ...(preview ? { preview } : {}) }, ['allow', 'deny']);
+        const answer = await panel.pick(execution, { kind: 'approval', approval: target, remaining: pending.length - 1, ...(preview === undefined ? {} : { preview, requireVisiblePackageReview: true }) }, ['allow', 'deny']);
         if (answer === null || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
         try { await decideApproval(target, pending.length - 1, answer === 'allow', undefined, pickedReason.current); return; }
         catch (error) {
@@ -170,6 +170,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     // The scopes are offered only when the service named them AND the labels exist: a card never shows a key it cannot explain.
     const scoped = modal.standing && work.approvalStanding && modal.standing.scopes.length > 0 ? { labels: work.approvalStanding, ...modal.standing } : null;
     card = <ApprovalDecisionCard key={`approval:${state.approval?.cardHandle ?? state.picker?.pickerHandle ?? state.active?.inputId}`} presentation={approvalCardPresentation(approval)} work={work} labels={labels.render ?? {}} preview={preview} scoped={scoped}
+      requireVisiblePackageReview={modal.requireVisiblePackageReview === true}
       pending={state.approval ? state.approval.phase !== 'pending' : !state.picker} {...(context ? { context } : {})}
       onDecide={(yes, standing, reason) => {
         if (state.approval) panel.decide(state.approval.cardHandle, yes, standing, reason ?? '');
@@ -204,6 +205,6 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {
-  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { scopes: ['session'], pattern: covers }, undefined, context, now)
+  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { scopes: ['session'], pattern: covers }, undefined, context, now).lines
     .map(line => [plainText(line.label ?? []), plainText(line.spans)].filter(Boolean).join(' '));
 }

@@ -343,10 +343,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const coded = (body: Record<string, unknown>): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, ...body }) }] });
   // Ek A: the localized catalog message rides with the code, like the CLI (installation language; DeckentError text through its own localizer,
   // redacted; a zod or unexpected failure gets catalog text only, never its own message). An answer that would not fit drops back to the code.
-  const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; message?: string } = {}): CallToolResult => {
+  const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; message?: string; narrowCode?: string } = {}): CallToolResult => {
     const message = extra.message ?? (extra.error ? extra.error.localize?.(locale).message ?? extra.error.message : ErrorRegistry.get(code, locale)?.message);
     const full = coded({ code, ...(extra.note ? { note: extra.note } : {}), ...(message ? { message: redactSensitive(message) } : {}) });
-    return toolResultFits(id, full, limits.responseMaxBytes) ? full : coded({ code });
+    return toolResultFits(id, full, limits.responseMaxBytes) ? full : coded({ code: extra.narrowCode ?? code });
   };
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
@@ -399,6 +399,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
         const result = coded({ code: error.code, ...(params ? { params } : {}), message });
         return toolResultFits(id, result, limits.responseMaxBytes) ? result : failure(id, 'MCP_RESPONSE_LIMIT');
       }
+      if (tool.name === 'create_run' && error instanceof DeckentError && error.code === 'NATIVE_WORKER_DEPENDENCIES_REFUSED' && error.params?.['preview'] === 'over-limit')
+        return failure(id, error.code, { error, narrowCode: 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT' });
       return error instanceof DeckentError ? failure(id, error.code, { error }) : failure(id, error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');
     }
     finally { active--; }

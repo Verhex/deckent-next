@@ -13,7 +13,7 @@ import type { Span } from '#surfaces/core/terminal-render/index.js';
 import type { TurnApprovalRequest } from './work-surface.js';
 export type LocalExecution = PanelExecution<TerminalLocalContext>;
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
-type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>;
+type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; requireVisiblePackageReview?: boolean; standing?: TurnApprovalRequest['standing'] }>;
 /** A generic bounded window (TS-WINDOW): a titled body; `confirm` asks y/N (picker items `allow`/`deny`), otherwise it closes (`close`). */
 /** T3 L4: an open `/mode`, `/config` or `/mcp` window; it holds the command (queued lines wait) until it closes (item `close`). */
 export type SettingsPanelPresentation = Readonly<{ kind: 'settings'; panel: 'beuser' | 'hub' | 'mode' | 'config' | 'theme' | 'mcp' | 'model' | 'provider' | 'policy' }>;

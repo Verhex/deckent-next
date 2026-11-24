@@ -4,7 +4,7 @@ import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, 
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { optionalField, shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
+import { approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, requiresPersonRunInputDecision, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
@@ -33,6 +33,7 @@ function approvalView(record: ApprovalRecord, locale?: Locale): WorklineApproval
     ...(record.decision ? { deciderLabel: approvalDeciderLabel(record, locale) } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),
     ...(request.schemaVersion === 3 && request.preview ? { preview: request.preview.text, ...(request.preview.cut ? { previewCut: request.preview.cut } : {}) } : {}),
+    ...(subject.kind === 'run-create' && (requiresPersonRunInputDecision(request) || request.schemaVersion === 3 && request.preview) ? { packageReview: true } : {}),
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
 }
 

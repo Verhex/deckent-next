@@ -69,7 +69,7 @@ export function approvalLines(record: ApprovalRecord, nowMs: number, locale: Loc
     t('cli.approval.line.what', { what: approvalWhat(record, locale) }, locale),
     // The bounded sealed summary is a card body, not a 256-character table cell: keep the full breadth, redacting before and after terminal scrubbing.
     ...redactForRecord(terminalSafeText(redactForRecord(record.request.summary))).split('\n').map((line, index) => index === 0 ? t('cli.approval.line.summary', { summary: line }, locale) : `  ${line}`),
-    ...(record.request.schemaVersion === 3 && record.request.preview ? record.request.preview.text.split('\n').map(line => terminalSafeText(line)) : []),
+    ...(record.request.schemaVersion === 3 && record.request.preview ? terminalSafeText(record.request.preview.text).split('\n') : []),
     t('cli.approval.line.requester', { requester: actor(record), scope: terminalSafeText(record.request.scopeId), at: formatClock(record.request.createdAt, locale) }, locale),
     t('cli.approval.line.risk', { risk: terminalSafeText(risk), undo: terminalSafeText(undo) }, locale),
     ...(onHardFloor(record) ? [t('cli.approval.line.floor', {}, locale)] : []),
