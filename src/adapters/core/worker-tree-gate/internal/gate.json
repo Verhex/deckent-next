@@ -47,6 +47,7 @@
       "hex": "7573746172"
     }
   ],
+  "maxSealedListBytes": 33554432,
   "yamlBlockIndicator": "^[|>](?:[1-9][+-]?|[+-][1-9]?)?$",
   "yamlAlias": "^\\*[^\\s*]+$"
 }

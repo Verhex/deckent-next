@@ -31,7 +31,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
   const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
-  return Object.freeze({ config, layout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
+  return Object.freeze({ config, layout, installationLayout: installationContext.installationLayout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
 }
 /** Key creation and ledger access are independent: producers may require an existing key; observers open read-only without creating one. */

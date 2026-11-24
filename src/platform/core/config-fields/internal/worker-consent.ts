@@ -14,3 +14,15 @@ export const workerImageConsentSchema = z.strictObject({ get operation() { retur
   }); }, get recipeDigest() { return z.string().regex(/^[a-f0-9]{64}$/u); }, get baseRef() { return persistedString(z.string().min(1).max(255)); }, get createdAt() { return persistedDateTime(); },
 });
 export type WorkerImageConsent = z.infer<typeof workerImageConsentSchema>;
+
+const packageDigest = z.string().regex(/^[a-f0-9]{64}$/u);
+export const WORKER_PACKAGE_ALLOWANCE_KEY = 'toolchains.packageAllowances';
+export const WORKER_PACKAGE_CONSENT = 'worker-dependencies.consent@1';
+export const workerPackageAllowanceSchema = z.strictObject({
+  operation: z.literal(WORKER_PACKAGE_CONSENT), partition: packageDigest,
+  generation: z.uuid(), version: z.number().int().positive(),
+  decisionId: z.uuid(), lockfileDigest: packageDigest, listDigest: packageDigest,
+});
+export const workerPackageAllowancesSchema = z.array(workerPackageAllowanceSchema)
+  .refine(rows => new Set(rows.map(row => row.partition)).size === rows.length);
+export type WorkerPackageAllowance = z.infer<typeof workerPackageAllowanceSchema>;

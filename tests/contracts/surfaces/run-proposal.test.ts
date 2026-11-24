@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/core/mcp/index.js';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { runProposalDigest, type RunProposalResult, type RunView } from '#engine/index.js';
 import { runStatusKey } from '#surfaces/core/cli-human/index.js';
@@ -54,12 +54,16 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: CLI JSON file 
 it('MCP wire submits and inspects the same contract, rejects forged fields and exposes no approval mutator', async () => {
   const calls: unknown[] = [];
   let response = receipt;
-  const server = createMcpServer({ inspectRun: async () => ({}), inspectInventory: async () => ({}),
-    proposeRun: async input => { calls.push(input); return response; }, inspectRunProposal: async query => { calls.push(query); return response; } },
-    { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'tr');
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); await server.connect(serverTransport);
-  const client = new Client({ name: 'proposal-test', version: '1' }); await client.connect(clientTransport);
-  cleanup.push(async () => { await client.close(); await server.close(); });
+  const applications: McpApplications = { inspectRun: async () => ({}), inspectInventory: async () => ({}),
+    planRun: async () => response, proposeRun: async input => { calls.push(input); return response; }, inspectRunProposal: async query => { calls.push(query); return response; } };
+  const connect = async (responseMaxBytes: number, locale: 'en' | 'tr') => {
+    const server = createMcpServer(applications, { maxConcurrentCalls: 2, responseMaxBytes }, locale);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); await server.connect(serverTransport);
+    const client = new Client({ name: 'proposal-test', version: '1' }); await client.connect(clientTransport);
+    cleanup.push(async () => { await client.close(); await server.close(); });
+    return client;
+  };
+  const client = await connect(65536, 'tr');
   const tools = (await client.listTools()).tools;
   expect(tools.find(t => t.name === 'propose_run')!.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
   expect(tools.find(t => t.name === 'inspect_run_proposal')!.annotations).toMatchObject({ readOnlyHint: true });
@@ -77,6 +81,22 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
     admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
   expect((await client.callTool({ name: 'propose_run', arguments: proposal })).structuredContent).toEqual(response);
   expect((await client.callTool({ name: 'inspect_run_proposal', arguments: query })).structuredContent).toEqual(response);
+  response = { ...receipt, reasonParams: { preview: 'over-limit' },
+    proposal: { ...receipt.proposal, status: 'rejected', reason: 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT', approval: null } };
+  const bounded = await connect(768, 'en');
+  for (const request of [
+    { name: 'propose_run', arguments: proposal },
+    { name: 'plan_run', arguments: { schemaVersion: 1, commandId: 'plan', scopeId: 's', intent: 'Review the package' } },
+    { name: 'inspect_run_proposal', arguments: query },
+  ]) {
+    const result = await client.callTool(request);
+    expect(result.structuredContent).toEqual(response);
+    expect.soft(result.content, request.name).toContainEqual({ type: 'text', text: expect.stringContaining('yeniden kullanılabilir paket izni verebilir') });
+    expect.soft(await bounded.callTool(request), request.name).toMatchObject({ isError: true, content: [{ type: 'text', text: JSON.stringify({
+      schemaVersion: 1, code: 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT',
+      message: 'The complete package review is too large for a per-Run approval. An authorized person may grant a reusable package allowance with deckent coding template --allow-dependencies --kind <kind> --scope <scope>. Without that allowance, the Run cannot start with this package list.',
+    }) }] });
+  }
 });
 
 it.each(['en', 'tr'] as const)('non-metered proposal and /do preview explicitly waive only money checks (%s)', async locale => {

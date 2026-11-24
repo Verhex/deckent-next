@@ -124,7 +124,8 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
   const sourcePath = (definition.derivedFrom?.[keyPath] ?? keyPath).split('.');
-  const source = env ? 'env' : atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
+  const projectValue = keyPath === 'installation.sealedPackageStoreMaxBytes' ? undefined : atConfigPath(snapshot.project, sourcePath);
+  const source = env ? 'env' : projectValue !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);

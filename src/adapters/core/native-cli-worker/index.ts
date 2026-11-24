@@ -1,4 +1,4 @@
-export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, nativeCliWorkerTaskBase, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeCliWorkerStoredBase,
+export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, selectNativePackageProfile, nativeCliWorkerTaskBase, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeCliWorkerStoredBase,
   isNativeCliWorkerProfile, NativeCliWorkerError } from './internal/profile.js';
 export type { NativeCliWorkerBinding } from './internal/profile.js';
 export { nativeWorkerEvidenceFile } from './internal/evidence.js';

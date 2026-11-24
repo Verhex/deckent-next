@@ -318,6 +318,65 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   bileşimi daha güçlü tanık verebilir); yapay zekâ ajanının kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder.
   Bir kipi kapatmak kişinin kayıtlı tam otomatik seçimini bağlarda tutar ama geçerli kılmaz: her çağrı izni yeniden denetler.
 
+- **Native Node bağımlılık girdileri.** Seçili Git çalışma hedefinde npm v3 paketlerini kurun ve
+  `package-lock.json` dosyasını commit edin. `deckent coding template --produce-dependencies` komutu
+  `deckent-package-files.json` dosyasını yazar. Deckent çevrimdışı çalışır. npm arşivlerini commit edilmiş kilit
+  dosyasıyla, kurulu dosyaları arşivlerin içeriğiyle doğrular. Varsayılan dizin `~/.npm/_cacache` konumudur.
+  Başka bir `_cacache` dizini için `--npm-cache <dizin>` kullanın. Sonraki inceleme ve kabulde bu dizini kullanmak için
+  yetkili operatör mutlak yolu `installation.npmPackageCache` ayarına yazar. Arşiv eksikse veya eşleşmiyorsa paket
+  kurulumunuzu yeniden çalıştırıp tekrar deneyin. Liste npm kayıt dosyalarını ve test önbelleklerini dışarıda tutar.
+  Kanıtlanan çalıştırılabilir bağları listeler ve mühürleme sırasında her sabit bağ adı için ayrı bir dosya oluşturur.
+  Çıktıda tam listeyi ve her eşleşme satırını inceleyip üretilen listeyi commit edin. Listeyi üreten ve kabulde
+  denetleyen Deckent aynı doğrulayıcıyı kullanır. Ortak bir uygulama hatası her iki denetimden de geçebilir.
+  Kişinin onayı incelediği seçimi kayda geçirir.
+
+  Yerleşimi `deckent coding template --connection <profil-id> --kind <tür> --node-dependencies` ile bildirin.
+  `deckent coding template --inspect-dependencies` ile tam listeyi ve iki SHA-256 özetini inceleyin. Run kartı
+  her kalıp eşleşmesinin yolunu, kuralını ve içerik özetini gösterir. Yol ve kural adı içeriğin güvenli olup
+  olmadığını göstermez. Deckent’te kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına
+  gönderebilir. Onayı reddedebilirsiniz. Kayıtlı sır, güvenli olmayan yol, okunamayan dosya, arşiv veya eksik tarama
+  onayı engeller. İçerik veya eşleşen kurallar değişirse yeniden onay gerekir. Yetkili operatör geçerli yürütme
+  yapılandırmasında `execution.secretGate.maxFileBytes` değerini yükseltebilir. Bu değişiklik aynı yapılandırmayı
+  kullanan bütün taramalara uygulanır. Toplam bayt, dosya sayısı ve süre sınırları da geçerlidir.
+
+  Mühürlü paket deposunun kurulum başına ortak sınırı 2 GiB’dir. Saklanan kopyalar, özel hazırlama alanları ve
+  yarım kalmış kopyalar bu sınıra dahildir. Yeni kopya sığmadığında Deckent sınırı, kullanılan alan hesabını ve
+  gereken bayt sayısını gösterir. Yetkili kişi `deckent config set --global` ile
+  `installation.sealedPackageStoreMaxBytes` değerini yükseltebilir. Doğrulanmış bir kopya alan sınırında da yeniden
+  kullanılabilir. Deckent saklanan kopyaları korur.
+
+  Her kabuk denetimi kendi onayından geçer. İşçi salt okunur `node_modules` bağını ve geçici dosyalar ile önbellek
+  için kendi sınırlı `/tmp` alanını kullanır. Kaydedilen bağlama yerini ve özetleri görmek için inceleme komutuna
+  `--run <id>` ekleyin. Denetimleri çalışma kopyasından çalıştırın. Dosya sistemi modül önbelleği olan Vitest için
+  `--configLoader runner --no-cache --fsModuleCachePath /tmp/vitest-fs` kullanın. Gerekli bir denetim çalışmazsa
+  nedenini belirterek `not-run` olarak kaydedin. Kayıp kopya veya değişen kilit dosyası yeni kabul gerektirir.
+
+- **Yeniden kullanılabilir paket onayı.** Projede
+  `deckent coding template --allow-dependencies --kind <tür> --scope <id>` komutunu çalıştırın. Yapılandırma ve
+  çalışma hedefi yetkisi bulunan, terminalde doğrulanmış bir kişi tam listeyi ve her kalıp eşleşmesini inceler.
+  İzin, aynı kurulum, şirket, kapsam, proje, Git hedefi ve profil içindeki tam sürüm için geçerlidir. İzin yoksa
+  paket onayı Run kartında alınır. Her Run ve Attempt kendi yetki kontrollerinden geçer. Yanlışlıkla onaylanan
+  kayıtsız bir sırrı sonraki yetkili işçiler okuyabilir ve model sağlayıcısına gönderebilir.
+
+  İşe özel onay, paket incelemesi için en fazla 16.384 UTF-16 birimi alır. İncelemenin tamamı bu sınırı aşarsa
+  yetkili bir kişi yukarıdaki yeniden kullanılabilir izni verebilir. Bu izin olmadan iş o listeyle başlamaz.
+  Yalnızca plan ve incelemenin toplamı sohbet kartının 65.536 birimlik sınırını aşarsa sohbet onay kaydı açmadan
+  durur. Kendi yetkinizle `deckent do --scope <scope> --request "<request>"` veya `/do <request>` komutuyla yeni
+  bir istek başlatın. Onay istenirse paket risk uyarısını ve tüm eşleşme satırlarını `/approvals` ya da
+  `deckent approval inspect` ile okuyun.
+
+  Yetkisi süren onaylayan veya kapsam yöneticisi izni geri çekebilir. Bu izne dayanan sonraki kabul ve paket
+  açılışı durur. Çalışan süreçler ve geçmiş kanıt korunur.
+  `deckent coding template --inspect-dependencies --scope <id> --run <id>` kayıtlı kararı ve varsa sürümün
+  sonlandırılma nedenini ve zamanını gösterir. Son kontroller, yönetilen politika yazıcısı ve kurulumun yönettiği,
+  seçili ve listelenebilir sır deposuyla sıralanır. Proje kasası değişiklikleri, dış depoya yönetim yolu dışından
+  yapılan yazımlar, elle dosya düzenleme ve süreç ortamı değişiklikleri bu sıranın kapsamı dışındadır.
+
+  Yetkili Git kaynağında doğrulanan değişiklik, sonlandırma olayı yazılınca onay neslini kalıcı olarak bitirir.
+  Uyumsuz bir revizyona sabitlenmiş istek kendi başına reddedilir. deckent değişikliği doğruladıktan sonra
+  kayıt yazılmadan kesilirse ve yeniden denemeden önce onaylı sürüm geri gelirse, güncel politika ve sır
+  kontrolleri geçildiğinde aynı sürüm kullanılabilir. Kaynak değişik kalırsa yeniden deneme reddedilir.
+  Sonlandırma kaydından sonra eski sürüme dönmek yeni bir onay gerektirir.
 - **İşçi, proje talimat özetini ancak bir kişi güvenince görür.** Bir çalışma, Git çalışma hedefinin kökündeki tek bir proje talimat dosyasının
   özetini alır (varsayılan `.deckent/worker-instructions.md`; ya da `AGENTS.md`, ya da hiçbiri; `execution.workerInstructions.source`).
   Yapılandırılmış bir iş hedefi varsa dosya klasörden değil, hedefin temel ref'inin gösterdiği commit'ten okunur (alpha.54): commit
@@ -904,35 +963,21 @@ denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde 
 
 ## Kurtarma ve yükseltme
 
-### beta.2.1 yükseltmesinden sonra yapay zekâ işi (119)
+- **beta.2.1’den beta.2’ye dönmeden önce, hâlâ beta.2.1’deyken yeniden kullanılabilir paket izinlerini geri çekin.**
+  Etkilenen her projede onaylı çalışma hedefi ve profil seçiliyken, ilgili kapsam ve görev türüyle aşağıdaki
+  komutları çalıştırın. Geri çekme kartını onaylayın ve her izin için tekrarlayın.
 
-İlk politika yapay zekâ yürütme izni vermez. Servisin iş tanısı bu iznin eksik olduğunu söylüyorsa,
-kişi kendi sade terminalinde (bir yapay zekâ aracının terminali dışında) önizlemeyi açmalıdır:
+  ```sh
+  deckent config get toolchains.packageAllowances --json
+  deckent coding template --withdraw-dependencies --kind <tür> --scope <id>
+  deckent config get toolchains.packageAllowances --json
+  ```
 
-```sh
-deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
-```
-
-Aynı komutta `--preview` yerine `--apply` kullanmadan önce adı verilen yapay zekâ
-kimliğini, kapsamları ve geniş izni inceleyin. Açık şirket yasağı veya onay gereği yetkili yöneticiyle incelenmelidir;
-allow eklemek sorunu çözmeyebilir. Bu izin yalnız yapay zekânın kendi önerileriyle sınırlı değildir.
-
-Güncel servis gözlemini `/runs` (ayrıntı için Enter), `deckent run inspect --scope SCOPE_ID --id RUN_ID` veya
-`deckent doctor` ile okuyun. Sebep, aktörü, kapsamı ve eksik izin hücrelerini içerir. `attempt/all`, henüz ayrılmamış
-denemeler için bütün kimlikleri kapsayan izindir; uydurma deneme kimliği değildir. Eksik, eski veya okunamayan gözlem
-bilinmiyor der; kayıtlı iş durumu ayrıdır. Gözlem iş kaydına yazılmaz. Uygunluk, güncel ilerletme önkoşuludur;
-başlangıç veya kabul kanıtı değildir. Model, giriş ve ağ kontrolleri ayrı kalır.
-
-Servis yeniden başlamadan önce onaylanmış ama başlamamış yapay zekâ önerisi yeniden önerilmelidir. İş kaydı varsa
-`deckent run cancel --scope SCOPE_ID --id RUN_ID` ile kendi izinlerinizle iptal edin, ardından servis üzerinden yeni
-öneri oluşturup yeni kartı cevaplayın. Servis oturumunun başlangıç kaydının bulunmaması, işin ne zaman oluşturulduğunu
-kanıtlamaz. Daha önce açılmış ama yeni servis üzerinden gerçekten taze cevaplanmış kart yeni işi kabul edebilir.
-Yapay zekânın iptal izni de yoksa servis işi kalıcı olarak beklemeye alamayabilir; yalnız izni uygulamak o durdurulmuş
-işi yeniden başlatmaz. Bekletme (`h` veya `deckent run hold --scope SCOPE_ID --id RUN_ID`) ve iptal kendi güncel
-izinlerinizi kullanır; bunlar da reddedilebilir. Başlamış veya belirsiz iş bakımda kalır; iptal, işçinin sonlandırıldığını
-kanıtlamaz ve belirsiz etkileri uzlaştırmaz. İzni geri almak geçmiş etkileri geri almaz.
-Birleşik sürüm ve gerçek hesap yolculuğunun kabulü açıktır.
-
+  Son geri çekme `toolchains.packageAllowances` anahtarını yönetilen proje ayarından kaldırır. Sürümü
+  değiştirmeden önce anahtarın kaldırıldığını doğrulayın. Aynı geri çekmeyi yeniden denemek için
+  `--command-id <uuid>` ile aynı UUID’yi verin. Ayar kalırsa veya asıl hedef ya da profil seçilemiyorsa
+  temizlik tamamlanana kadar beta.2.1’de kalın. beta.2 yeni ayarla açılmaz. Temizlik sonrası açık Run ve
+  geçmiş kanıt korunur, paket girdili Attempt beta.2’de çalıştırılamaz.
 
 - **beta.2’den beta.1.2’ye dönmeden önce, hâlâ beta.2’deyken ücretli kullanım anahtarını kaldırın.** Ayarı yazdığınız her projede çalıştırın:
 
@@ -1075,6 +1120,35 @@ Birleşik sürüm ve gerçek hesap yolculuğunun kabulü açıktır.
   bırakın (klonları seyrektir); alpha.52 Codex ve Cursor `disabled` türlerini reddeder; geçişte teslim kuyruğu boş olsun (biletlerin
   başlığı farklı); alpha.52'nin denetim doğrulaması gölge deposunu görmez (zincirin dışındadır). Cursor kataloğu alpha.53 profilleri
   için kaydedildiyse yedeği geri yükleyin. Defter v59 ve çalışma protokolü v29 değişmedi.
+
+### beta.2.1 yükseltmesinden sonra yapay zekâ işi (119)
+
+İlk politika yapay zekâ yürütme izni vermez. Servisin iş tanısı bu iznin eksik olduğunu söylüyorsa,
+kişi kendi sade terminalinde (bir yapay zekâ aracının terminali dışında) önizlemeyi açmalıdır:
+
+```sh
+deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
+```
+
+Aynı komutta `--preview` yerine `--apply` kullanmadan önce adı verilen yapay zekâ
+kimliğini, kapsamları ve geniş izni inceleyin. Açık şirket yasağı veya onay gereği yetkili yöneticiyle incelenmelidir;
+allow eklemek sorunu çözmeyebilir. Bu izin yalnız yapay zekânın kendi önerileriyle sınırlı değildir.
+
+Güncel servis gözlemini `/runs` (ayrıntı için Enter), `deckent run inspect --scope SCOPE_ID --id RUN_ID` veya
+`deckent doctor` ile okuyun. Sebep, aktörü, kapsamı ve eksik izin hücrelerini içerir. `attempt/all`, henüz ayrılmamış
+denemeler için bütün kimlikleri kapsayan izindir; uydurma deneme kimliği değildir. Eksik, eski veya okunamayan gözlem
+bilinmiyor der; kayıtlı iş durumu ayrıdır. Gözlem iş kaydına yazılmaz. Uygunluk, güncel ilerletme önkoşuludur;
+başlangıç veya kabul kanıtı değildir. Model, giriş ve ağ kontrolleri ayrı kalır.
+
+Servis yeniden başlamadan önce onaylanmış ama başlamamış yapay zekâ önerisi yeniden önerilmelidir. İş kaydı varsa
+`deckent run cancel --scope SCOPE_ID --id RUN_ID` ile kendi izinlerinizle iptal edin, ardından servis üzerinden yeni
+öneri oluşturup yeni kartı cevaplayın. Servis oturumunun başlangıç kaydının bulunmaması, işin ne zaman oluşturulduğunu
+kanıtlamaz. Daha önce açılmış ama yeni servis üzerinden gerçekten taze cevaplanmış kart yeni işi kabul edebilir.
+Yapay zekânın iptal izni de yoksa servis işi kalıcı olarak beklemeye alamayabilir; yalnız izni uygulamak o durdurulmuş
+işi yeniden başlatmaz. Bekletme (`h` veya `deckent run hold --scope SCOPE_ID --id RUN_ID`) ve iptal kendi güncel
+izinlerinizi kullanır; bunlar da reddedilebilir. Başlamış veya belirsiz iş bakımda kalır; iptal, işçinin sonlandırıldığını
+kanıtlamaz ve belirsiz etkileri uzlaştırmaz. İzni geri almak geçmiş etkileri geri almaz.
+Birleşik sürüm ve gerçek hesap yolculuğunun kabulü açıktır.
 
 ## Çekirdek katmanlar
 

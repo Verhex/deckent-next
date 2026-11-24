@@ -1,4 +1,5 @@
 import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, isAiPrincipal, standingAgentsChanged, AuditError,
+  nativeCliWorkerWrapperSchema, NATIVE_CLI_WORKER_ADAPTER_ID,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
@@ -6,11 +7,15 @@ import { RunCreateApprovalBroker, type RunCreateApprovalInput } from '#engine/co
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import { runCreateSchema, RunStoreError, type RunCreate } from './store.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
-import type { BoundRunAdmission } from './admission.js';
-import { renderRunCreateApprovalSummary } from './approval-summary.js';
+import type { BoundRunAdmission, PackageApprovalRow } from './admission.js';
+import { renderRunCreateApprovalSummary, renderPackageApprovalPreview } from './approval-summary.js';
 /** `askedAtExecution`: tasks whose task restriction requires approval; TaskApprovalAdmission asks for each once, when it runs. Never sealed. */
 export type RunAdmissionEvaluation = { readonly policy: Policy; readonly verdict: PolicyDecision; readonly askedAtExecution?: readonly string[] };
 const hash = (tag: string, input: unknown) => sha256(encodeCommandProjection(tag, input));
+const hasSealedInputs = (create: RunCreate) => create.execution.tasks.some(({ profile }) => {
+  const parsed = profile.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID ? nativeCliWorkerWrapperSchema.safeParse(profile.parameters).data : undefined;
+  return parsed?.schemaVersion === 2 && (parsed.dependencies.state !== 'sealed' || !parsed.dependencies.allowance);
+});
 /** Run's first consumer of general sealed authority decisions; only evaluatePolicy owns policy semantics. */
 export class RunCreationAuthority {
   constructor(private readonly source: PolicySource, private readonly records: AuthorityDecisionRecords,
@@ -44,31 +49,55 @@ export class RunCreationAuthority {
     if (verdict.decision === 'deny') { this.seal(command, principal, { ...evaluation, verdict }, null); throw new PolicyAuthorizationError('POLICY_DENIED'); }
     return { ...evaluation, verdict, askedAtExecution };
   }
-  async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate, workspace?: RunWorkspaceCustody) {
+  async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate,
+    workspace?: RunWorkspaceCustody, packageRows?: readonly PackageApprovalRow[], withCurrentInputs?: <T>(work: () => Promise<T>) => Promise<T>,
+    beforeRecord?: (card?: Readonly<{ summary: string; review: string }>) => Promise<void>) {
     // Resolution may have awaited catalogs or workspace custody; never apply a stale sampled policy.
-    const current = await this.source.load();
-    if (hash('policy:1', current) !== hash('policy:1', evaluation.policy)) {
+    const policyDigest = hash('policy:1', evaluation.policy);
+    if (hash('policy:1', await this.source.load()) !== policyDigest) {
       this.recordUnapplied(command, principal, evaluation);
       throw ErrorRegistry.createError('APPROVAL_STALE');
     }
     if (command.proposal && !command.proposal.admission) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    const personInput = hasSealedInputs(create), personProposal = !!command.proposal && isAiPrincipal(principal);
     // Owner S4/S6: AI proposals always need the person card; D2b and S8-1b (N29) retain the delivery and changed-agent gates.
-    if (command.proposal && (isAiPrincipal(principal) || !command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks)) && evaluation.verdict.decision === 'allow') {
+    if ((personInput || personProposal || command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks))) && evaluation.verdict.decision === 'allow') {
       evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
     // R9 (owner 2026-11-05): the worker ceiling belongs to a plan the person approves on its card (shown there, sealed in its basis); a Run admitted without a card keeps the current mode alone.
     if (evaluation.verdict.decision === 'allow' && create.execution.workerMode) create = { ...create, execution: Object.fromEntries(Object.entries(create.execution).filter(([key]) => key !== 'workerMode')) as RunCreate['execution'] };
-    const record = this.seal(command, principal, evaluation, this.basis(create, workspace)), reference = { eventId: record.event.eventId, sequence: record.sequence };
-    const approvalInput = { ...this.approvalInput(record, evaluation.policy, !!command.proposal && isAiPrincipal(principal)), summary: renderRunCreateApprovalSummary(command, create,
-      evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
-    if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
-    const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
-      : { decision: reference, approval: this.approve(approvalInput) };
-    return { authority, create, assert: () => {
-      this.records.verify(record);
-      if (!authority.approval) this.approvals.assertUnrequested(command.scopeId, command.commandId);
-      if (authority.approval && encodeCommandProjection('approval-reference:1', this.approve(approvalInput)) !== encodeCommandProjection('approval-reference:1', authority.approval)) throw new AuditError('AUDIT_INTEGRITY');
-    } };
+    // Custody covers publication of the approval request. The person answers the recorded request separately.
+    const admit = async () => {
+      const basisDigest = hash('run-admission-basis:1', this.basis(create, workspace));
+      const presentation = () => ({
+        preview: personInput ? renderPackageApprovalPreview(packageRows, basisDigest, this.presentation.locale, this.presentation.known) : undefined,
+        summary: renderRunCreateApprovalSummary(command, create, evaluation.verdict, this.presentation.locale, this.presentation.known,
+          this.presentation.registry, evaluation.askedAtExecution),
+      });
+      const seal = () => this.seal(command, principal, evaluation, basisDigest);
+      let prepared: ReturnType<typeof presentation> | undefined;
+      if (beforeRecord) {
+        try { if (personInput) prepared = presentation(); }
+        catch (error) { await beforeRecord(); seal(); throw error; }
+        await beforeRecord(prepared?.preview ? { summary: prepared.summary, review: prepared.preview.text } : undefined);
+        if (hash('policy:1', await this.source.load()) !== policyDigest) throw ErrorRegistry.createError('APPROVAL_STALE');
+      }
+      const record = seal(), reference = { eventId: record.event.eventId, sequence: record.sequence };
+      const input = this.approvalInput(record, evaluation.policy, personProposal);
+      const { preview, summary } = prepared ?? presentation();
+      const approvalInput = { ...input, personInput, ...(preview ? { preview } : {}), summary };
+      if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
+      const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
+        : { decision: reference, approval: this.approve(approvalInput) };
+      return { authority, create, recheckPolicy: async () => {
+        if (hash('policy:1', await this.source.load()) !== policyDigest) throw ErrorRegistry.createError('APPROVAL_STALE');
+      }, assert: () => {
+        this.records.verify(record);
+        if (!authority.approval) this.approvals.assertUnrequested(command.scopeId, command.commandId);
+        if (authority.approval && encodeCommandProjection('approval-reference:1', this.approve(approvalInput)) !== encodeCommandProjection('approval-reference:1', authority.approval)) throw new AuditError('AUDIT_INTEGRITY');
+      } };
+    };
+    return withCurrentInputs ? withCurrentInputs(admit) : admit();
   }
   /** A evaluated Run policy remains evidence even when another admission prerequisite refuses the effect. */
   recordUnapplied(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): void { this.seal(command, principal, evaluation, null); }
@@ -87,11 +116,11 @@ export class RunCreationAuthority {
   private basis(create: RunCreate, workspace?: RunWorkspaceCustody) {
     return { create: runCreateSchema.omit({ now: true, authority: true }).strip().parse(create), workspace: workspace ?? null };
   }
-  private seal(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, basis: unknown) {
+  private seal(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, basisDigest: string | null) {
     const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: command.commandId, scopeId: command.scopeId,
       principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: sha256(command.commandId) });
     return this.records.record({ kind: 'authority-decision', schemaVersion: 1, envelope, action: 'create', resource: { kind: 'run', id: command.runId },
-      inputDigest: hash('run-admission:1', command), basisDigest: basis === null ? null : hash('run-admission-basis:1', basis),
+      inputDigest: hash('run-admission:1', command), basisDigest,
       policyDigest: hash('policy:1', evaluation.policy), verdict: evaluation.verdict }, this.clock.sample().wallMs);
   }
   private approvalInput(record: AuditRecord, policy: unknown, personDecision: boolean): RunCreateApprovalInput {

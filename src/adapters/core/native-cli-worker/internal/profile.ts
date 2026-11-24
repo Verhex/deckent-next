@@ -1,5 +1,5 @@
-import type { ExecutionProfileDefinition } from '#domain/index.js';
-import { nativeCliWorkerParameters, nativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
+import type { ExecutionProfileDefinition, NativeNodeDependencyParameters, NativeNodeDependencyReference } from '#domain/index.js';
+import { isNativeCliWorkerProfile, nativeCliWorkerParameters, nativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
 import { resolveHostSandboxTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 export { NATIVE_CLI_WORKER_ADAPTER, nativeCliWorkerBindingSchema, isNativeCliWorkerProfile, NativeCliWorkerError, type NativeCliWorkerBinding } from '#capabilities/index.js';
@@ -14,13 +14,19 @@ export function nativeCliWorkerStoredBase(base: ExecutionProfileDefinition): Exe
 /** Base is immutable task data, never an execution alternative. R8b (owner D1b): it runs in the host sandbox, so its image is optional.
  * `maxTurns` is read once here from the sealed argv (the CLI's turn-limit flag), for the driver. */
 export function resolveNativeCliWorkerProfile(input: ExecutionProfileDefinition) {
-  const { base, binding } = nativeCliWorkerParameters(input), task = resolveHostSandboxTaskProfile(base), entry = nativeCliAgent(binding.protocolFamily);
+  const parameters = nativeCliWorkerParameters(input), { base, binding } = parameters, task = resolveHostSandboxTaskProfile(base), entry = nativeCliAgent(binding.protocolFamily);
   if (!entry || task.siwcWorker || task.nativeSubscription?.provider !== entry.id || task.nativeSubscription.schemaVersion !== 2
     || !task.nativeSubscription.promptDelivery || !task.nativeSubscription.model || task.nativeSubscription.model.auxiliaryModelIds.length
     || task.nativeSubscription.preflight?.discovery !== 'disabled') throw new NativeCliWorkerError('NATIVE_CLI_WORKER_PROFILE_INVALID');
   const flag = entry.command.capabilities.maxTurns?.flag, turns = flag ? task.argv.indexOf(flag) : -1;
-  return Object.freeze({ base, binding, entry, ...task, ...(turns >= 0 ? { maxTurns: Number(task.argv[turns + 1]) } : {}) });
+  return Object.freeze({ base, binding, entry, ...task, ...(parameters.schemaVersion === 2 ? { dependencies: parameters.dependencies } : {}), ...(turns >= 0 ? { maxTurns: Number(task.argv[turns + 1]) } : {}) });
 }
-export function createNativeCliWorkerProfile(base: ExecutionProfileDefinition, binding: NativeCliWorkerBinding): ExecutionProfileDefinition {
-  const profile = nativeCliWorkerProfile(base, binding); resolveNativeCliWorkerProfile(profile); return profile;
+export function createNativeCliWorkerProfile(base: ExecutionProfileDefinition, binding: NativeCliWorkerBinding, dependencies?: NativeNodeDependencyParameters): ExecutionProfileDefinition {
+  const profile = nativeCliWorkerProfile(base, binding, dependencies); resolveNativeCliWorkerProfile(profile); return profile;
+}
+
+export function selectNativePackageProfile(profile: ExecutionProfileDefinition) {
+  if (!isNativeCliWorkerProfile(profile)) return null;
+  const { base, binding, dependencies } = resolveNativeCliWorkerProfile(profile);
+  return { ...(dependencies ? { dependencies } : {}), bind: (reference: NativeNodeDependencyReference) => createNativeCliWorkerProfile(base, binding, reference) };
 }

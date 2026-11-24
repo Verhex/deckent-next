@@ -4,6 +4,7 @@ export { workerFinalReportSchema, /** @deprecated No importer in Core; barrel na
   workerReportEvidenceSchema, workerReportEvidence, workerReportRefusal } from './internal/report.js';
 export type { WorkerFinalReportResult, WorkerFinalReport, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerHandoffNote, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerReportLesson, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerReportLimits, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerReportEvidence } from './internal/report.js';
 export { workerModelPinSchema, NATIVE_CLI_WORKER_ADAPTER_ID, NATIVE_CODING_TEMPLATE_ADAPTER_ID, nativeCliWorkerWrapperSchema, workerTaskParameters, readWorkerModelPin, viewWorkerModels } from './internal/models.js';
+export { NATIVE_NODE_DEPENDENCY_LAYOUT, type NativeNodeDependencyReference, type NativeNodeDependencyParameters } from './internal/models.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerModelPin, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ WorkerProvider, WorkerModelEvidence, WorkerModelVerdict, WorkerModelView } from './internal/models.js';
 export { quotaExhaustedSchema, QUOTA_RESET_EVIDENCE } from './internal/quota.js';
 export type { QuotaExhausted } from './internal/quota.js';

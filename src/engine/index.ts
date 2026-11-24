@@ -63,6 +63,7 @@ export * from '#engine/core/worker-observation/index.js';
 export * from '#engine/core/monitor/index.js';
 export * from '#engine/core/toolchain-currency/index.js';
 export * from '#engine/core/approval/index.js';
+export * from '#engine/core/standing-grants/index.js';
 export * from '#engine/core/audit/index.js';
 export * from '#engine/core/nervous/index.js';
 export * from '#engine/core/recovery/index.js';
@@ -109,3 +110,5 @@ export type { RunSessionIdentity, RunSessionState, RunSessionRead, RunSessionPin
 
 export { runProgressionDiagnosticSchema, runProgressionMissingPermissions, runProgressionEvaluationUnverified, runProgressionUnreservedCoverage, runProgressionObservation, withRunProgressionObservation } from '#engine/core/run-progression/index.js';
 export type { RunProgressionDiagnostic } from '#engine/core/run-progression/index.js';
+export { assertAttemptPackageInput, capturePackageSecrets, changePackageAllowance, inspectNativePackageInputs, nativePackageAdmission, reopenAttemptPackage, scanPackageSecrets, withPackageUse,
+  type PackageBinding, type PackageConsentCard, type PackageConsentRequest, type PackageKnownSecrets, type PackageSecretPort, type PackageSecretSnapshot, type WorkerPackagePorts } from '#engine/core/worker-packages/index.js';

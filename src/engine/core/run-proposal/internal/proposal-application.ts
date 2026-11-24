@@ -21,8 +21,7 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
   readonly planningSpending?: Readonly<{ billingAxis?: ModelInvocationBillingAxis; class: 'metered' | 'not-metered' | 'unknown'; currency: string | null;
     amountMinorUnits: number | null; evidence: 'measured-tariff' | 'measured-tariff-upper-bound' | 'provider-reported' | 'settled-local' | 'plan-usage' | 'held' | 'unknown' }>;
   readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false;
-  /** A budget refusal's money left (and declared ceiling), or a worker assignment refusal's task, WorkClass and skipped candidates, on the
-   * response that recorded it only: never stored, and a replay renders the refusal without it. Work-class refusals name the current registry's classes, including on replay. */
+  /** Safe refusal details. Budget and assignment details are response-only. Work-class and package-review-limit details are derived on replay too. */
   readonly reasonParams?: Readonly<Record<string, string | number>>;
   /** Advisory entries this installation's vocabulary and registry do not recognise, each once (accept_mark, owner 2026-10-18). Response-only and
    * derived from the current registry: never stored, never evaluated, never a grant; absent when every entry is recognised. */
@@ -34,10 +33,13 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
   /** Owner 2026-11-06: the planning model is below the built-in recommended Brain class (response-only, never stored; a replay carries none). */
   readonly brainBelowRecommended?: true }
 export type PlanningMemoryNote = Readonly<{ mode: 'shadow' | 'on'; selected: number; omitted: number; withheld: number; reason: 'policy' | 'contests' | 'template' | null }>;
+/** Trusted chat presentation checks a complete package card before Run admission writes. */
+export type RunPackageCardCheck = (result: RunProposalResult, card: Readonly<{ summary: string; review: string }>) => void | Promise<void>;
 const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => {
   const unrecognised = unrecognisedRunProposalPermissions(proposal.proposal, registry);
   return Object.freeze({ schemaVersion: 1, proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
     ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}),
+    ...(proposal.reason === 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT' ? { reasonParams: { preview: 'over-limit' } } : {}),
     // ATAMA-1: which task, which WorkClass list and why each listed worker was skipped; response-only, like the budget detail.
     ...(error instanceof WorkerModelAdmissionError && error.code === proposal.reason && error.detail.workClass !== undefined
       ? { reasonParams: { taskId: error.detail.taskId, workClass: error.detail.workClass, skipped: error.detail.skipped ?? '-', ...(error.detail.skippedMore ? { skippedMore: error.detail.skippedMore } : {}) } } : {}),
@@ -60,7 +62,7 @@ export class RunProposalApplication {
     const snapshot = loaded && 'checkpoint' in loaded ? loaded : { checkpoint: loaded };
     return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined, await this.context.selectAgents?.(proposal));
   }
-  async propose(input: unknown, credential?: unknown): Promise<RunProposalResult> {
+  async propose(input: unknown, credential?: unknown, checkPackageCard?: RunPackageCardCheck): Promise<RunProposalResult> {
     const proposal = parseRunProposal(input), principal = await authenticate(this.verifier, credential, proposal.scopeId);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     if (encodeCommandProjection('actor', actor) !== encodeCommandProjection('actor', proposal.proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_ACTOR_MISMATCH');
@@ -87,7 +89,7 @@ export class RunProposalApplication {
     };
     if (record && record.digest !== digest) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
     if (record && ['rejected', 'parked'].includes(record.status)) return result(this.context.registry, record);
-    const unrecorded = !record;
+    let unrecorded = !record;
     if (!record) {
       record = { schemaVersion: 2, kind: 'planned', origin, proposal, digest, revision: origin ? origin.revision + 1 : 0, recordedAt: origin?.recordedAt ?? this.context.clock.sample().wallMs,
         status: 'recorded', binding: command.proposal!, reason: null, approval: null, authority: null };
@@ -103,10 +105,15 @@ export class RunProposalApplication {
     }
     // Capacity refuses before even the proposal outcome is written; this command remains retryable.
     const producer = await this.runs.beginSession(command, principal);
+    const saveInitial = async () => {
+      if (!unrecorded) return;
+      record = await save(record!);
+      unrecorded = false;
+    };
     let failed = false;
     try {
     // A failed receipt write stops before sealing/approval/Run admission.
-    if (unrecorded) record = await save(record);
+    if (!checkPackageCard) await saveInitial();
     const bound = { ...command, proposal: record.binding };
     try {
       // Reconcile an already committed admission before consulting mutable registry/budget/model state.
@@ -119,7 +126,12 @@ export class RunProposalApplication {
           throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
         }
       }
-      const admitted = await this.runs.admitEvaluated(bound, principal, evaluation, undefined, producer);
+      const admitted = await this.runs.admitEvaluated(bound, principal, evaluation, undefined, producer, checkPackageCard && (async card => {
+        if (card) await checkPackageCard(result(this.context.registry, record!), card);
+        await saveInitial();
+        if (encodeCommandProjection('proposal-binding', record!.binding) !== encodeCommandProjection('proposal-binding', bound.proposal))
+          throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+      }));
       const completed = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
       if (!completed || isRunIntent(completed) || completed.status !== 'accepted' || completed.digest !== digest
         || encodeCommandProjection('authority', completed.authority) !== encodeCommandProjection('authority', admitted.run.authority)) throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
@@ -128,10 +140,14 @@ export class RunProposalApplication {
       const code = codeOf(error);
       const pending = error instanceof DeckentError && code === 'RUN_APPROVAL_REQUIRED' ? error.params : undefined;
       // Unknown I/O/commit outcomes cannot be laundered into a rejection or a safe retry claim.
-      if (!code || !ErrorRegistry.has(code) || ['AI_RUN_SESSION_CAPACITY', 'RUN_PROPOSAL_OUTCOME_UNKNOWN', 'RUN_COMMAND_CONFLICT', 'RUN_PROPOSAL_COMMAND_CONFLICT'].includes(code)
+      if (!code || !ErrorRegistry.has(code) || ['AI_RUN_SESSION_CAPACITY', 'RUN_PROPOSAL_OUTCOME_UNKNOWN', 'RUN_COMMAND_CONFLICT', 'RUN_PROPOSAL_COMMAND_CONFLICT',
+        'RUN_PROPOSAL_STORE_UNAVAILABLE', 'CHAT_PACKAGE_APPROVAL_CARD_TOO_LARGE'].includes(code)
         || code.startsWith('ATTEMPT_STORE_') || code.startsWith('AUDIT_')) throw error;
+      await saveInitial();
       const status = pending ? 'pending' : ['APPROVAL_EXPIRED', 'APPROVAL_STALE', 'APPROVAL_CONFLICT', 'RUN_PROPOSAL_BASIS_STALE'].includes(code) ? 'parked' : 'rejected';
-      const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason: code, authority: null,
+      const reason = code === 'NATIVE_WORKER_DEPENDENCIES_REFUSED' && error instanceof DeckentError && error.params?.preview === 'over-limit'
+        ? 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT' : code;
+      const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason, authority: null,
         approval: pending ? { approvalId: String(pending.approvalId), expiresAt: Number(pending.expiresAt), decisionRecordId: String(pending.decisionRecordId) } : null };
       const stored = await this.store.transitionProposal(record, next);
       if (isRunIntent(stored)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');

@@ -455,7 +455,9 @@
         "src/composition/core/agent-turn",
         "src/composition/core/root",
         "src/engine/core/model-invocation",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/composition/core/workspace-patch",
+        "src/engine/core/worker-packages"
       ],
       "plan": "EXECUTION"
     },
@@ -715,7 +717,8 @@
         "src/adapters/core/native-cli-registry",
         "src/engine/core/workspace-adoption",
         "src/domain/core/approval",
-        "src/engine/core/run-progression"
+        "src/engine/core/run-progression",
+        "src/engine/core/worker-packages"
       ],
       "plan": "EXECUTION"
     },
@@ -2544,6 +2547,7 @@
     },
     "src/composition/core/workspace-patch": {
       "dependencies": [
+        "src/adapters/core/contract",
         "src/platform/core/host",
         "src/platform/core/config-fields",
         "src/adapters/core/setup-detect-coding",
@@ -2575,7 +2579,16 @@
         "src/adapters/core/native-cli-worker",
         "src/engine/core/working-tree-rollback",
         "src/engine/core/workspace-adoption",
-        "src/engine/core/workspace-patch-contract"
+        "src/engine/core/workspace-patch-contract",
+        "src/domain/core/worker-event",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/config-file",
+        "src/adapters/core/worker-tree-gate",
+        "src/platform/core/utils",
+        "src/composition/core/config",
+        "src/composition/core/approvals",
+        "src/engine/core/worker-packages"
       ],
       "plan": "ISOLATION"
     },
@@ -2671,7 +2684,13 @@
         "src/platform/core/common",
         "src/platform/core/redaction",
         "src/platform/core/utils",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/worker-packages",
+        "src/domain/core/worker-event",
+        "src/adapters/core/git-workspace",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/platform/core/config"
       ],
       "plan": "ISOLATION"
     },
@@ -2749,6 +2768,45 @@
         "src/domain/core/primitives",
         "src/domain/core/agent-turn",
         "src/domain/core/attempt"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/worker-packages": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/worker-event",
+        "src/domain/core/run",
+        "src/engine/core/config",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/domain/core/audit",
+        "src/platform/core/config-fields",
+        "src/engine/core/approval",
+        "src/engine/core/audit",
+        "src/domain/core/primitives",
+        "src/platform/core/utils",
+        "src/platform/core/redaction",
+        "src/platform/core/clock",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/engine/core/secret-store",
+        "src/domain/core/principal",
+        "src/platform/core/integrity",
+        "src/platform/core/host"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/engine/core/standing-grants": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/platform/core/redaction",
+        "src/engine/core/policy",
+        "src/engine/core/effect",
+        "src/engine/core/approval"
       ],
       "plan": "SECURITY"
     },
@@ -2834,7 +2892,8 @@
         "src/domain/core/effect",
         "src/engine/core/authentication",
         "src/platform/core/integrity",
-        "src/engine/core/run-progression"
+        "src/engine/core/run-progression",
+        "src/engine/core/standing-grants"
       ],
       "plan": "SECURITY"
     },
@@ -4114,7 +4173,8 @@
         "src/domain/core/recovery",
         "src/engine/core/recovery",
         "src/platform/core/utils",
-        "src/domain/core/policy-template"
+        "src/domain/core/policy-template",
+        "src/engine/core/standing-grants"
       ],
       "plan": "SURFACES",
       "ink": false
@@ -4281,7 +4341,13 @@
         "src/engine/core/effect",
         "src/platform/core/integrity",
         "src/platform/core/host",
-        "src/platform/core/validate"
+        "src/platform/core/validate",
+        "src/domain/core/principal",
+        "src/adapters/core/git-workspace",
+        "src/engine/core/policy",
+        "src/engine/core/worker-packages",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
       ],
       "plan": "INSTALLATION"
     },
@@ -5809,7 +5875,7 @@
       "composition": 15750
     },
     "totalSrcLines": 200000,
-    "testCases": 9450,
+    "testCases": 9600,
     "designTargetLines": 800,
     "fileRoots": [
       "src",

@@ -24,6 +24,8 @@ export function configChangeApprovalFacts(policy: unknown, scopeId: string, pers
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ConfigChangeApprovalRequest {
   readonly scopeId: string; readonly requester: ApprovalActor; readonly subject: ConfigChangeSubject;
   readonly policy: unknown; readonly policyRevision: string; readonly personDecision?: boolean;
+  /** A witnessed consent may require the same requester to review and answer its exact preview. */
+  readonly witnessedConsent?: boolean;
   /** The card's bounded, human-readable sentence (the producer's words in the requester's language). */
   readonly summary: string;
 }
@@ -51,14 +53,15 @@ export class ConfigChangeApprovalBroker {
     if (!found) return { pending: this.pending(this.open(input, actionDigest, now)) };
     const current = expireDue(this.store, this.integrity, verifyApproval(found, this.integrity), now);
     if (current.status === 'pending') return { pending: this.pending(current) };
-    admitDecided(current, { now, window: this.options.admitWithinMs }, !input.personDecision || witnessedPersonDecision(current));
+    admitDecided(current, { now, window: this.options.admitWithinMs }, input.witnessedConsent
+      ? witnessedPersonDecision(current, false) : !input.personDecision || witnessedPersonDecision(current));
     return { approved: { approvalId: current.request.approvalId, actionDigest } };
   }
 
   private open(input: ConfigChangeApprovalRequest, actionDigest: string, now: number): ApprovalRecord {
     const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject, requester: input.requester,
       actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048), createdAt: now, expiresAt: now + this.options.requestTtlMs,
-      facts: configChangeApprovalFacts(input.policy, input.scopeId, input.personDecision) });
+      facts: configChangeApprovalFacts(input.policy, input.scopeId, input.personDecision || input.witnessedConsent) });
     // `create` is idempotent on the digest: a concurrent open of the same change returns the one stored request.
     return verifyApproval(this.store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, this.integrity)), this.integrity);
   }

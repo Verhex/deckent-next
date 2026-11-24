@@ -973,7 +973,11 @@ HTTP/TLS, provider live acceptance and independent review remain separate). Resp
 
 ## Packages (current implementation)
 
-Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versioned contracts) → `capabilities` → `engine` (transitions, ports) → `adapters` (SQLite, Git/Docker, sockets, MCP) / `surfaces` (SDK, CLI, MCP, terminal) → `composition` (explicit wiring). Gates: `arch.json` + `scripts/lint-arch.mjs`. Full per-area text:
+Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versioned contracts) → `capabilities` → `engine` (transitions, ports) → `adapters` (SQLite, Git/Docker, sockets, MCP) / `surfaces` (SDK, CLI, MCP, terminal) → `composition` (explicit wiring). Gates: `arch.json` + `scripts/lint-arch.mjs`.
+
+Worker package decisions and ports live in `engine/core/worker-packages`. The `setup-detect-coding` and `worker-tree-gate` adapters hold the prepared and sealed inputs. Standing grant inspection lives in `engine/core/standing-grants`.
+
+Full per-area text:
 
 | Module note | Scope |
 |---|---|

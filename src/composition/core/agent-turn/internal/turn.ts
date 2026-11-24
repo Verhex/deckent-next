@@ -57,7 +57,8 @@ export interface RuntimeChatTurnHost {
 }
 /** The service's own plan call (`planServiceRun`): the same application as /do, its Brain call through the given invoke. */
 export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>>, signal?: AbortSignal,
-  /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
+  /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver,
+  checkPackageCard?: import('#engine/index.js').RunPackageCardCheck) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
   fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>, planSameTurn?: CreateServiceSameTurnPlanning): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
@@ -224,9 +225,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       proposer: `model ${reference.modelId}`, locale: language }) : null;
     // alpha.64 B + C (owner S4/S5): work and setting proposals, decided and applied as the AI actor in both loops; the person's card decides.
     const agentProposals = workspace ? createAgentProposals({ projectRoot, options, peer, scopeId: command.scopeId, turnId: command.turnId, signal, locale: language, sameTurn, ...(host.proposalViews ? { views: host.proposalViews } : {}),
-      emit: event => event.kind === 'work' ? channel.emit(event) : emitApproval(event),
-      ...(host.planWork ? { plan: (plan: BrainPlanCommand, planSignal: AbortSignal, observe: BrainPlanObserver) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
-        undefined, invokeSignal ?? planSignal), planSignal, observe) } : {}) }) : null;
+      emit: event => event.kind === 'work' || event.kind === 'text' ? channel.emit(event) : emitApproval(event),
+      ...(host.planWork ? { plan: (plan, planSignal, observe, checkPackageCard) => host.planWork!(projectRoot, plan, options, (invocation, invokeSignal) => invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model,
+        undefined, invokeSignal ?? planSignal), planSignal, observe, checkPackageCard) } : {}) }) : null;
     // NATIVE-BAGLAM: `session_state` is offered only where policy allows it now (decided like every call; never a default grant).
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy), tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...mcpTools.specs, PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await agentProposals?.offered() ?? []), ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];

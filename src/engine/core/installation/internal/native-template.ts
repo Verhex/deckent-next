@@ -1,4 +1,4 @@
-import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
+import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, NATIVE_NODE_DEPENDENCY_LAYOUT, persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { isCodedError, ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -12,7 +12,7 @@ export interface NativeTemplatePorts {
   snapshot(): Promise<ConfigSnapshot>;
   principal(scopeId: string): Promise<VerifiedPrincipal>;
   writer(guard: (snapshot: ConfigSnapshot) => void): Pick<ConfigApplication, 'set'>;
-  template(resources: unknown, invocation: unknown, worker?: NativeCliWorkerBinding): ExecutionProfileDefinition;
+  template(resources: unknown, invocation: unknown, worker?: NativeCliWorkerBinding, dependencyLayout?: typeof NATIVE_NODE_DEPENDENCY_LAYOUT.id): ExecutionProfileDefinition;
   connection?(snapshot: ConfigSnapshot, id: string, provider: string): Promise<NativeCliWorkerBinding>; observed?(worker: NativeCliWorkerBinding): Promise<string | null>; // R8: last proved CLI
   detect(provider: string, settings: NonNullable<NonNullable<DeckentConfig['execution']>['docker']>): Promise<string>;
   beforeWrite?: () => void | Promise<void>;
@@ -25,7 +25,8 @@ const discoveryModeSchema = z.enum(['disabled', 'repository']);
 /** `discovery` omitted: `coding template` keeps the mode of the admitted profiles it derives from, `init registry` takes the adapter default
  * (`disabled`, owner 2026-10-23 Q2); a connected worker requires disabled. Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
 const requestSchema = z.strictObject({ provider: nativeCliIdSchema, kind: identitySchema,
-  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), connection: identitySchema.optional(), detach: z.boolean().optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
+  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), connection: identitySchema.optional(), detach: z.boolean().optional(), discovery: discoveryModeSchema.optional(),
+  nodeDependencies: z.literal(true).optional(), apply: z.boolean() });
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CodingTemplateRequest = z.infer<typeof requestSchema>;
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
@@ -42,6 +43,13 @@ function discoveryRefusal(error: unknown, provider: string, fallback: string): n
   refuse(fallback);
 }
 const connectionBasis = (snapshot: ConfigSnapshot, catalog = true) => JSON.stringify({ profiles: snapshot.effective['provider_invocation_profiles'], ...(catalog ? { catalog: snapshot.effective['provider_catalog'] } : {}) });
+function dependencyLayout(snapshot: ConfigSnapshot, request: CodingTemplateRequest, worker?: NativeCliWorkerBinding) {
+  if (!worker) return undefined;
+  const registry = executionRegistrySchema.safeParse(snapshot.effective.admission?.registry).data;
+  const bound = registry?.kinds.find(entry => entry.kind === request.kind)?.profile;
+  const profile = registry?.profiles.find(entry => entry.id === bound?.id && entry.version === bound?.version);
+  return request.nodeDependencies || profile?.parameters['dependencyLayout'] === NATIVE_NODE_DEPENDENCY_LAYOUT.id ? NATIVE_NODE_DEPENDENCY_LAYOUT.id : undefined;
+}
 function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template'], discovered?: ExecutionProfileDefinition, worker?: NativeCliWorkerBinding) {
   const admission = snapshot.effective.admission;
   if (!admission?.poolId || !admission.executionSlots || !admission.inFlightSlots) refuse('CODING_TEMPLATE_ADMISSION_REQUIRED');
@@ -63,7 +71,7 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
     const discovery = discoveryMode ? { schemaVersion: 1, mode: discoveryMode }
       : invocation?.discovery ?? (preflight?.discovery ? { schemaVersion: 1, mode: preflight.discovery } : null);
     if (!discovery) return { status: 'no-toolchain' as const };
-    try { candidates.push(template(resourceLimits, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }, worker)); }
+    try { candidates.push(template(resourceLimits, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }, worker, dependencyLayout(snapshot, request, worker))); }
     catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); }
   }
   if (new Set(candidates.map(candidate => JSON.stringify(candidate))).size !== 1) return { status: 'no-toolchain' as const };
@@ -80,7 +88,7 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   return { status: 'ready' as const, profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
 }
 export async function addNativeProfile(input: unknown, ports: NativeTemplatePorts) {
-  const parsed = requestSchema.omit({ connection: true, detach: true }).extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  const parsed = requestSchema.omit({ connection: true, detach: true, nodeDependencies: true }).extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict().safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
@@ -120,7 +128,7 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
 
 export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult & Readonly<{ status: 'preview' | 'applied' | 'unchanged' }>> {
   const parsed = requestSchema.safeParse(input);
-  if (!parsed.success || parsed.data.connection && parsed.data.detach) refuse('CODING_TEMPLATE_INPUT_INVALID');
+  if (!parsed.success || parsed.data.connection && parsed.data.detach || parsed.data.nodeDependencies && !parsed.data.connection) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
   if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
   const read = await ports.snapshot().catch((error: unknown) => {
@@ -134,7 +142,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const cliVersion = worker ? await ports.observed?.(worker) ?? worker.definition.minCliVersion : undefined; // Owner R8: the CLI its connection last proved, read once
   const own = (snapshot: ConfigSnapshot) => {
     try { return ports.template(limits(snapshot, worker, request.image, 'CODING_TEMPLATE_IMAGE_REQUIRED'), { provider: request.provider, cliVersion: cliVersion!,
-      discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
+      discovery: { schemaVersion: 1, mode: request.discovery ?? 'disabled' }, permissionMode: 'unattended' }, worker, dependencyLayout(snapshot, request, worker)); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } };
   const planFor = (snapshot: ConfigSnapshot) => {
     const found = proposal(snapshot, request, ports.template, undefined, worker),
       plan = found.status === 'no-toolchain' && worker ? proposal(snapshot, request, ports.template, own(snapshot), worker) : found;
@@ -158,7 +166,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     layer: 'project', principal, scopeId, commandId: randomUUID(), expect: read.digest });
   return { ...result, status: 'applied', write };
 }
-const initializeSchema = requestSchema.omit({ detach: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
+const initializeSchema = requestSchema.omit({ detach: true, nodeDependencies: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
   expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(),
   poolId: identitySchema, executionSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   discovery: discoveryModeSchema.optional() }).strict();
