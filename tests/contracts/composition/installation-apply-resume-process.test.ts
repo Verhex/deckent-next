@@ -3,6 +3,7 @@ import { userInfo } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
+import { immutableJsonObjectSchema } from '#domain/index.js';
 import { getConfigFieldDefault, resolveGlobalConfigPaths } from '#platform/index.js';
 import { applyInstallation, inspectInstallation, resumeInstallation } from '../../../src/index.js';
 import { lastJson, runInTerminal } from '../support/terminal-cli.js';
@@ -92,13 +93,17 @@ esac
   expect(interrupted.code, interrupted.output).toBe(1);
   const journalPath = join(f.project, '.deckent/installation/journal.json');
   const pending = await readFile(journalPath, 'utf8');
-  const { transactionId } = JSON.parse(pending);
+  const { transactionId, resources } = JSON.parse(pending) as { transactionId: string; resources: { path: string }[] };
   expect(JSON.parse(pending)).toMatchObject({ phase: 'pending', recovery: { consent: { proposalDigest } },
     resources: expect.arrayContaining(['config', 'policy', 'ledger'].map(resource => expect.objectContaining({ resource, state: 'pending' }))) });
   await chmod(f.data, 0o700);
   const footprint = async () => ({
     journal: await readFile(journalPath, 'utf8'),
     globalConfig: await readFile(globalConfig, 'utf8'),
+    targets: await Promise.all(resources.map(({ path }) => readFile(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }))),
     project: (await readdir(f.project, { recursive: true })).sort(),
     data: (await readdir(f.data, { recursive: true })).sort(),
     home: await readdir(env.HOME, { recursive: true }).then(files => files.sort(), (error: NodeJS.ErrnoException) => {
@@ -128,6 +133,30 @@ esac
     expect(await footprint()).toEqual(before);
   } finally { terminal.mockRestore(); vi.unstubAllEnvs(); }
 
+  // Model an interruption after the approved policy bytes reached disk but before journal progress.
+  const policyPath = join(f.data, 'policy.json');
+  const policyBytes = Buffer.from(`${JSON.stringify(immutableJsonObjectSchema.parse(f.profile.policy))}\n`);
+  await writeFile(policyPath, policyBytes, { mode: 0o600 });
+  const partial = await footprint();
+  expect(partial.targets).toContainEqual(policyBytes);
+
+  // Valid marker membership matches the registry defaults, so the old fallback would pass both checks.
+  const defaults = markerConfig([...getConfigFieldDefault('cli').agentEnvironment]);
+  await writeFile(globalConfig, defaults, { mode: 0o600 });
+  const malformed = '{';
+  await writeFile(nextGlobalConfig, malformed, { mode: 0o600 });
+  const corruptUnderLock = await resume();
+  expect(corruptUnderLock.code, corruptUnderLock.output).toBe(78);
+  expect(corruptUnderLock.output).toContain('CONFIG_READ_IO_HOLD');
+  expect(await footprint()).toEqual({ ...partial, globalConfig: malformed });
+
+  const corruptBeforeLock = await sdkRun('resume');
+  expect(corruptBeforeLock.code, corruptBeforeLock.output).toBe(1);
+  expect(lastJson(corruptBeforeLock.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD' });
+  expect(await footprint()).toEqual({ ...partial, globalConfig: malformed });
+  await rm(policyPath);
+  await writeFile(globalConfig, before.globalConfig, { mode: 0o600 });
+
   await writeFile(drift, '', { mode: 0o600 });
   const changed = await resume();
   expect(changed.code, changed.output).not.toBe(0);
@@ -156,4 +185,10 @@ esac
   expect(markedReplay.code, markedReplay.output).toBe(1);
   expect(markedReplay.output).toContain('AUTHORITY_WITNESS_REQUIRED');
   expect(await footprint()).toEqual(committed);
+
+  await writeFile(globalConfig, '[]', { mode: 0o600 });
+  const refusedReplay = await sdkRun('apply');
+  expect(refusedReplay.code, refusedReplay.output).toBe(1);
+  expect(lastJson(refusedReplay.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD' });
+  expect(await footprint()).toEqual({ ...committed, globalConfig: '[]' });
 }, 90_000);
