@@ -34,11 +34,13 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
     return;
   }
   let worker: WorkLedgerWorkerEntry | undefined;
+  let unavailable = work.unavailable;
   if (action.target.kind === 'worker') worker = action.target;
   else if (run) {
     const workers = (await ledgerEntriesForWorkers(ledger, 'tasks')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker' && Boolean(entry.attempt) && localWorker(entry)
       && entry.attempt?.runId === run.runId && run.tasks.some(task => task.id === entry.taskId));
-    if (workers.length === 1) worker = workers[0];
+    if (workers.length === 0 && ledger.inspectTranscript) unavailable = t('terminal.live.runTranscriptNoLocalWorker', {}, locale);
+    else if (workers.length === 1) worker = workers[0];
     else if (workers.length > 1) {
       const picked = await panel.pick(execution, { kind: 'job-picker', title: work.jobs!.transcriptTitle,
         rows: workers.map(worker => [span(`${worker.ordinal ?? ''} · ${worker.live?.model ?? worker.provider}`)]) }, workers.map((_, index) => String(index)));
@@ -46,7 +48,7 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
     }
   }
   if (execution.signal.aborted) return;
-  const text = worker?.attempt && ledger.inspectTranscript ? await ledger.inspectTranscript(worker.attempt) : work.unavailable;
+  const text = worker?.attempt && ledger.inspectTranscript ? await ledger.inspectTranscript(worker.attempt) : unavailable;
   await panel.pick(execution, { kind: 'job-window', title: work.jobs!.transcriptTitle,
     lines: text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true })) }, ['close']);
 }

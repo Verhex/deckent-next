@@ -454,6 +454,7 @@
   "terminal.live.tasksHints": "↑↓ seçer · Enter konuşma kaydı · x iptal (onay) · Esc kapatır",
   "terminal.live.workerCancelUnavailable": "Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.",
   "terminal.live.workerTranscriptUnavailable": "Bu işçi başka bir projeye ait. İşçi kaydı burada açılamaz.",
+  "terminal.live.runTranscriptNoLocalWorker": "Bu iş için bu projede işçi kaydı yok. İş başka bir projede çalışıyorsa o projeyi açın.",
   "terminal.info.usage.key.cacheRead": "Önbellekten okunan",
   "terminal.info.usage.key.cacheWrite": "Önbelleğe yazılan",
   "terminal.info.usage.key.cacheHit": "Önbellek isabet oranı",

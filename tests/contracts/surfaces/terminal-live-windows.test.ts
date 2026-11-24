@@ -140,12 +140,25 @@ describe('live windows in the workline', () => {
         revision: 3, cancellationRequested: false, tasks: [{ id: attempt.taskId, phase: 'active' }], state: { kind: 'running' } }) as never,
       inspectTranscript, cancelRun,
     };
-    const view = mountWorkline({ pollMs: 20, ledger });
+    const view = mountWorkline({ pollMs: 20, ledger, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, unavailable: EN.unavailable } } });
     mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r');
     await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'observed worker and the active Run');
     view.stdin.write('\u001b[B');
     await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run highlighted');
+    for (const workers of [1, 0]) {
+      if (workers === 0) sources = [{ ...active, workers: [] }];
+      await until(() => view.stdout.frame.includes(`${workers} workers · 1 runs`), 'Run without a local worker');
+      view.stdin.write('\r');
+      await until(() => view.stdout.frame.includes(EN.jobs!.transcriptTitle), 'Run transcript window without a local worker');
+      expect.soft(view.stdout.frame).toContain('No local worker record for this Run. If the work runs in another project, open that project.');
+      expect.soft(view.stdout.frame).not.toContain(EN.unavailable);
+      expect(inspectTranscript).not.toHaveBeenCalled();
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back to tasks after the unavailable transcript');
+    }
+    sources = [{ ...active, workers: [] }, other];
+    await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'other project worker returns');
     view.stdin.write('\u001b[A');
     await until(() => />[^\n]*Task 1 · observed-worker/u.test(view.stdout.frame), 'other project worker explicitly selected');
 
@@ -217,7 +230,7 @@ describe('live windows in the workline', () => {
       yield { control: 'start', scopeId: attempt.scopeId, cursors: { approval: 0, run: 0, worker: 0 } };
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     } }, async () => ({ binding: 'test-session', kinds: ['approval', 'run', 'worker'] }));
-    const tr = mountWorkline({ pollMs: 20, ledger: snapshot, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live } } });
+    const tr = mountWorkline({ pollMs: 20, ledger: snapshot, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live, unavailable: TR.unavailable } } });
     mounted.push(tr.instance);
     await settle(20); tr.stdin.write('/tasks\r');
     await until(() => tr.stdout.frame.includes('2 işçi · 1 iş'), 'both project sources through the Turkish snapshot');
@@ -231,6 +244,15 @@ describe('live windows in the workline', () => {
     await until(() => tr.stdout.text.includes('Bu işçi başka bir projeye ait. İşçi kaydı burada açılamaz.'), 'Turkish transcript notice');
     expect(tr.stdout.frame).toContain(TR.live!.tasksHints!);
     expect(tr.stdout.frame).not.toMatch(/^│\s*İşçi kaydı(?:\s|│)/mu);
+    expect(inspectTranscript).not.toHaveBeenCalled();
+
+    tr.stdin.write('\u001b[B');
+    await until(() => />[^\n]*run-a/u.test(tr.stdout.frame), 'active Run highlighted in Turkish');
+    sources = [{ ...active, workers: [] }, other];
+    tr.stdin.write('\r');
+    await until(() => /^│\s*İşçi kaydı(?:\s|│)/mu.test(tr.stdout.frame), 'Turkish Run transcript window after the local worker disappears');
+    expect.soft(tr.stdout.frame).toContain('Bu iş için bu projede işçi kaydı yok. İş başka bir projede çalışıyorsa o projeyi açın.');
+    expect.soft(tr.stdout.frame).not.toContain(TR.unavailable);
     expect(inspectTranscript).not.toHaveBeenCalled();
   });
 
