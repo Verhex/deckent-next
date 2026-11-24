@@ -53,6 +53,8 @@
   "cli.run.control.cancelDetail": "İptal işe kaydedilir ve çalışan işçilerine iletilir. Geri alınamaz.",
   "cli.run.control.reason": "Bekletme gerekçesi: {reason}",
   "cli.run.control.answer": "{task} görevi için yanıt: {answer}",
+  "cli.run.control.questionUnavailable": "{run} işinde bu yanıta karşılık gelen açık bir soru yok.",
+  "cli.run.control.questionChanged": "{task} görevinin yeni bir sorusu var. Soruyu okuyup yeni bir yanıt girin. Yeni soru için yanıt gönderilmedi.",
   "cli.run.control.reread": "İş bu arada değişti; bu, yeni revizyonu.",
   "cli.run.control.stale": "İş yanıtınızdan önce değişti; yeniden okunuyor.",
   "cli.run.control.none": "{scope} kapsamında şu an 'deckent run {action}' alabilecek iş yok.",

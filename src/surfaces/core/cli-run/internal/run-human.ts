@@ -89,11 +89,16 @@ export const scopeLine = (scope: ScopeResolution, locale: Locale): string[] => s
  * The scope's Runs as the terminal's `/runs` window reads them: the same id query (`listRunIds`), each Run read through the same inspect application,
  * then waiting Runs first and newest first (the id query is newest first). One query for both surfaces; a Run that is gone is skipped.
  */
-export async function readScopeRuns(context: RunCommandContext, scopeId: string, observed?: (data: Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>) => void): Promise<readonly RunView[]> {
+export async function readScopeRuns(context: RunCommandContext, scopeId: string, observed?: (data: Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>) => void,
+  answerTaskId?: string): Promise<readonly RunView[]> {
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, inspect = context.inspectRun;
   const ids = await listRunIds(context, root, scopeId, options);
-  const views = await mapBounded(ids, HOST_LIMITS_REGISTRY.observationConcurrency, async id => { const data = await inspect(root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId: id }), options); observed?.(data); return data.run; });
+  const views = await mapBounded(ids, HOST_LIMITS_REGISTRY.observationConcurrency, async id => {
+    const data = await inspect(root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId: id }), options, answerTaskId);
+    observed?.(data);
+    return data.run;
+  });
   const order = new Map(ids.map((id, index) => [id, index]));
   return orderPendingFirst(views.filter((view): view is RunView => view !== null), { pending: runWaits, time: view => -(order.get(view.runId) ?? 0) });
 }

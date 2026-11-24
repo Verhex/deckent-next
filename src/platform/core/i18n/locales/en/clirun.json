@@ -53,6 +53,8 @@
   "cli.run.control.cancelDetail": "Cancellation is recorded on the Run and delivered to its running workers. It cannot be undone.",
   "cli.run.control.reason": "Hold reason: {reason}",
   "cli.run.control.answer": "Answer for task {task}: {answer}",
+  "cli.run.control.questionUnavailable": "Run {run} has no open question for that answer.",
+  "cli.run.control.questionChanged": "Task {task} has a new question. Read it and enter a new answer. No answer was sent for the new question.",
   "cli.run.control.reread": "The Run changed meanwhile; this is its new revision.",
   "cli.run.control.stale": "The Run changed before your answer arrived; reading it again.",
   "cli.run.control.none": "No Run in scope {scope} can take 'deckent run {action}' now.",

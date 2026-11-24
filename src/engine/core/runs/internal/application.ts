@@ -25,13 +25,16 @@ export class RunInspectionApplication {
     protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }, private readonly costs?: WorkCostEvidence) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
-  async inspectWithModels(input: unknown, credential?: unknown) {
+  async inspectWithModels(input: unknown, credential?: unknown, answerTaskId?: string) {
     const { run, snapshot, principal, evaluations } = await this.load(input, credential);
     const models = run && this.models ? await describeRunWorkerModels(parseRun(snapshot), principal, this.models.store, this.models.artifacts,
       this.models.authorization) : Object.freeze([]);
     const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(parseRun(snapshot), evaluations ?? [], principal, this.costs,
       (identity, actor) => this.models!.authorization.authorizeIdentity('read-output', identity, actor)) : undefined;
-    return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models });
+    // The local answer flow needs the binding from the same snapshot as the question and revision.
+    const answerSource = answerTaskId === undefined || !run ? undefined
+      : parseRun(snapshot).bindings.find(binding => binding.identity.taskId === answerTaskId)?.identity;
+    return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models, ...(answerSource ? { answerSource } : {}) });
   }
   private async load(input: unknown, credential?: unknown) {
     const query = runQuerySchema.parse(input);
