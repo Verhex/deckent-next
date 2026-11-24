@@ -72,10 +72,10 @@ it('stored package decisions show complete reviews and reserve unavailable Yes o
     tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
   };
   const reasons = {
-    en: { cut: 'This approval cannot be granted because its stored package review is incomplete, and if the package is too large you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
-      hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review.' },
-    tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz ve paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
-      hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz.' },
+    en: { cut: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+      hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review. Keep this card open and, while the request is pending, use /approvals or deckent approval decide in another terminal to decide. Leaving this decision card with Esc sends a denial.' },
+    tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+      hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz. Karar vermek için bu kartı açık tutun ve istek hâlâ beklerken başka bir terminalde /approvals ya da deckent approval decide komutunu kullanın. Bu karar kartından Esc ile çıkmak ret gönderir.' },
   };
   const secret = 'f4-package-fixture-value';
   const knownSecrets = snapshotKnownSecrets([{ name: 'F4_FIXTURE', value: secret }]);
@@ -125,6 +125,8 @@ it('stored package decisions show complete reviews and reserve unavailable Yes o
         expect.soft(view.stdout.frame).not.toContain(yes);
         expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
         expect.soft(view.stdout.frame).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
+        expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
+        expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale][cut ? 'hidden' : 'cut']));
         for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
           await settle(40); view.stdin.write(key); await settle(80);
           expect.soft(decisions).toEqual([]);
@@ -136,6 +138,8 @@ it('stored package decisions show complete reviews and reserve unavailable Yes o
         }
       } else {
         expect.soft(view.stdout.frame).toContain(`1. ${yes} (y)`);
+        expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale].hidden));
+        expect.soft(compact(view.stdout.frame)).not.toContain(compact(reasons[locale].cut));
         if (kind === 'plain' || kind === 'endings') for (const row of expectedRows) expect.soft(view.stdout.frame.split(row)).toHaveLength(2);
         if (kind === 'visible') {
           expect.soft(view.stdout.frame).toContain('pkg/check-3<U+FE0F>.js');
@@ -146,6 +150,11 @@ it('stored package decisions show complete reviews and reserve unavailable Yes o
       if (kind === 'masked') {
         expect.soft(view.stdout.text).not.toContain(secret);
         expect.soft(view.stdout.frame).toContain('‹secret:F4_FIXTURE›');
+      }
+      if (hidden) {
+        view.stdin.write('\u001b');
+        await until(() => decisions.length > 0, 'Esc decision on the hidden-review card');
+        expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
       }
       view.instance.unmount();
     }

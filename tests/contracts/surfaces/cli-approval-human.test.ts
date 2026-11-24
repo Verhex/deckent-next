@@ -162,8 +162,8 @@ it('deckent approval offers Yes on complete marked or masked reviews and never s
   if (pending.request.schemaVersion !== 3) throw new Error('Expected a v3 approval');
   const subject = { kind: 'run-create', runId: 'run-1', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: 'd' } as const;
   const reasons = {
-    en: 'This approval cannot be granted because its stored package review is incomplete, and if the package is too large you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
-    tr: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz ve paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+    en: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+    tr: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
   };
   for (const locale of ['en', 'tr'] as const) for (const kind of ['visible', 'masked', 'endings', 'cut'] as const) {
     const text = kind === 'endings' ? 'Review worker inputs\rpkg/first.js\r\npkg/last.js'
@@ -186,6 +186,7 @@ it('deckent approval offers Yes on complete marked or masked reviews and never s
         expect.soft(rendered).not.toContain(locale === 'en' ? 'Yes, once' : 'Evet, bu sefer');
         expect.soft(rendered).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
         expect.soft(rendered).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
+        expect.soft(rendered).toContain(reasons[locale]);
         for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
           stdin.write(key); await settle(100);
           expect.soft(decisions).toEqual([]);
@@ -195,6 +196,7 @@ it('deckent approval offers Yes on complete marked or masked reviews and never s
         expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
       } else {
         expect.soft(rendered).toContain(locale === 'en' ? '1. Yes, once (y)' : '1. Evet, bu sefer (y)');
+        expect.soft(rendered).not.toContain(reasons[locale]);
         if (kind === 'visible') {
           expect.soft(rendered).toContain('pkg/last<U+FE0F>.js');
           expect.soft(rendered).toContain(locale === 'en' ? '1 hidden characters' : '1 gizli karakter');
