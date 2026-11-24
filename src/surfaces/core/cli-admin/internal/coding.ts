@@ -164,7 +164,12 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
     if (!providers.length) {
-      const subscription = await context.hasInstalledSubscriptionWorkerCli?.(env, context.signal);
+      let subscription: boolean | undefined;
+      try {
+        subscription = flags.has('--docker') ? false : await context.hasInstalledSubscriptionWorkerCli?.(env, context.signal);
+      } catch {
+        // The optional probe informs the guidance; the missing-toolchain refusal owns the result.
+      }
       const message = subscription === undefined ? t('clisetup.coding.toolchainMissing.unknown', {}, locale)
         : subscription ? t('clisetup.coding.toolchainMissing.subscription', {}, locale)
         : t('clisetup.coding.toolchainMissing.docker', {}, locale);
