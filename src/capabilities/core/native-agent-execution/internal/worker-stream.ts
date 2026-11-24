@@ -1,5 +1,5 @@
 import type { ToolSessionPort } from './session.js';
-import { DeckentError } from '#platform/index.js';
+import { DeckentError, headlessDiagnosticIdentifier } from '#platform/index.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 import { ClaudeAgentError } from './claude-stream.js';
 import { NativeCliWorkerError } from './worker-profile.js';
@@ -39,12 +39,24 @@ export function nativeWorkerProcessResult(evidence: { reason: string; limit: str
   refused: boolean, finished?: { kind: 'completed'; text: string } | { kind: 'refused'; reason: NativeAgentReadinessReason } | { kind: 'failed' | 'cancelled' },
   result?: { response?: { native?: unknown } } | null, terminalFailure?: 'approval-expired' | null) {
   const base = { termination: 'confirmed' as const, text: '' };
-  if (evidence.cleanupError) return { termination: 'unverified' as const, text: '', status: 'failed' as const, cleanupError: evidence.cleanupError };
-  if (terminalFailure === 'approval-expired') return { ...base, status: 'failed' as const, text: 'APPROVAL_EXPIRED' };
-  if (finished?.kind === 'refused' || refused) return { ...base, status: 'failed' as const,
-    refusal: finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const };
-  if (aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') return { ...base, status: 'cancelled' as const };
-  if (evidence.limit || evidence.stdoutTruncated || evidence.stderrTruncated) return { ...base, status: 'failed' as const };
+  const unresolved = evidence.cleanupError && { termination: 'unverified' as const, text: '', status: 'failed' as const, cleanupError: evidence.cleanupError };
+  if (terminalFailure === 'approval-expired')
+    return { ...(unresolved ?? { ...base, status: 'failed' as const, text: 'APPROVAL_EXPIRED' }), failureCode: 'APPROVAL_EXPIRED' };
+  if (finished?.kind === 'refused' || refused) {
+    const refusal = finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const;
+    return unresolved ? { ...unresolved, refusal } : { ...base, status: 'failed' as const, refusal };
+  }
+  if (aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout')
+    return { ...(unresolved ?? { ...base, status: 'cancelled' as const }),
+      failureCode: evidence.reason === 'timeout' ? 'NATIVE_WORKER_DEADLINE_REACHED' : 'NATIVE_WORKER_STOP_UNCONFIRMED' };
+  if (evidence.limit || evidence.stdoutTruncated || evidence.stderrTruncated) {
+    const failureCode = evidence.limit ? headlessDiagnosticIdentifier('HEADLESS_LIMIT_REACHED', { limit: evidence.limit }) : 'NATIVE_WORKER_OUTPUT_LIMIT';
+    return { ...(unresolved ?? { ...base, status: 'failed' as const }), ...(failureCode && { failureCode }) };
+  }
+  if (unresolved) {
+    const outputBound = evidence.reason === 'output-limit' || evidence.reason === 'line-limit';
+    return outputBound ? { ...unresolved, failureCode: 'NATIVE_WORKER_OUTPUT_LIMIT' } : unresolved;
+  }
   if (finished?.kind === 'completed') return { ...base, status: 'completed' as const, text: finished.text };
   const native = result?.response?.native as { choices?: { message?: { content?: unknown } }[] } | undefined, content = native?.choices?.[0]?.message?.content;
   return typeof content === 'string' ? { ...base, status: 'completed' as const, text: content } : { ...base, status: 'failed' as const };

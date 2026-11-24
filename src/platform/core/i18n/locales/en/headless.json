@@ -1,6 +1,9 @@
 {
   "error.headless.lockLegacyUnverified": "The previous check could not acquire the sign-in lock. The specific cause could not be verified.",
   "error.headless.limitLegacyUnverified": "The previous check recorded a resource limit. Which limit was reached could not be verified.",
+  "error.headless.limitsLegacyUnverified": "The previous check concerned isolation limits. The specific cause could not be determined.",
+  "error.headless.versionLegacyUnverified": "The previous check concerned the CLI version. The specific cause could not be determined.",
+  "error.headless.flagsLegacyUnverified": "The previous check concerned CLI options. The specific cause could not be determined.",
   "error.headless.loginBusy.legacy-family": "The previous check recorded a busy sign-in lock. The holder could not be verified.",
   "error.headless.agentRunDispose": "Temporary files from the agent turn could not be cleared.",
   "error.headless.agentRunRemove": "The agent turn’s temporary directory could not be removed.",
@@ -226,6 +229,7 @@
   "headless.agent.worker.NATIVE_WORKER_TERMINATION_UNKNOWN": "The native worker’s termination is unverified. Keep its resource reserved and inspect process custody before any new attempt.",
   "headless.agent.worker.NATIVE_WORKER_OUTPUT_LIMIT": "The native worker exceeded its output limit. The result is unknown; inspect the retained Attempt evidence before deciding what to do next.",
   "headless.agent.worker.NATIVE_WORKER_STOP_UNCONFIRMED": "The stop request has not been confirmed. Cancellation does not prove termination; inspect process custody before releasing capacity or starting another attempt.",
+  "headless.agent.worker.NATIVE_WORKER_DEADLINE_REACHED": "The native worker reached its time limit. Its termination is unverified.",
   "headless.agent.worker.NATIVE_WORKER_EFFECTS_UNKNOWN": "The native worker’s tool effects are unresolved. Inspect this Attempt and reconcile pending effects; do not repeat the work blindly.",
   "headless.agent.worker.NATIVE_WORKER_NOT_STARTED": "The native worker did not start. Inspect this Attempt’s admission and stop records before choosing the next action.",
   "headless.agent.worker.NATIVE_WORKER_CUSTODY_UNKNOWN": "The native worker’s process custody is unknown. Missing files or a process id do not prove it ended; keep capacity reserved until custody is reconciled.",

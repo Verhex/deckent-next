@@ -1,6 +1,9 @@
 {
   "error.headless.lockLegacyUnverified": "Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.",
   "error.headless.limitLegacyUnverified": "Önceki denetimde bir kaynak sınırı kaydedildi. Hangi sınıra ulaşıldığı doğrulanamadı.",
+  "error.headless.limitsLegacyUnverified": "Önceki denetim yalıtım sınırlarıyla ilgiliydi. Kesin neden belirlenemedi.",
+  "error.headless.versionLegacyUnverified": "Önceki denetim CLI sürümüyle ilgiliydi. Kesin neden belirlenemedi.",
+  "error.headless.flagsLegacyUnverified": "Önceki denetim CLI seçenekleriyle ilgiliydi. Kesin neden belirlenemedi.",
   "error.headless.loginBusy.legacy-family": "Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.",
   "error.headless.agentRunDispose": "Ajan turunun geçici dosyaları temizlenemedi.",
   "error.headless.agentRunRemove": "Ajan turunun geçici dizini kaldırılamadı.",
@@ -226,6 +229,7 @@
   "headless.agent.worker.NATIVE_WORKER_TERMINATION_UNKNOWN": "Native işçinin sonlandığı doğrulanmadı. Kaynağı ayrılmış tutun; yeni denemeden önce süreç sahipliği kanıtını inceleyin.",
   "headless.agent.worker.NATIVE_WORKER_OUTPUT_LIMIT": "Native işçi çıktı sınırını aştı. Sonuç bilinmiyor; sonraki adıma karar vermeden önce kalıcı deneme kanıtını inceleyin.",
   "headless.agent.worker.NATIVE_WORKER_STOP_UNCONFIRMED": "Durdurma isteği doğrulanmadı. İptal isteği sonlanma kanıtı değildir; kapasiteyi bırakmadan veya yeni deneme başlatmadan önce süreç sahipliğini inceleyin.",
+  "headless.agent.worker.NATIVE_WORKER_DEADLINE_REACHED": "Native işçi süre sınırına ulaştı. Sonlandığı doğrulanmadı.",
   "headless.agent.worker.NATIVE_WORKER_EFFECTS_UNKNOWN": "Native işçinin araç etkileri uzlaştırılmadı. Bu deneme kaydını inceleyip bekleyen etkileri uzlaştırın; işi körlemesine yinelemeyin.",
   "headless.agent.worker.NATIVE_WORKER_NOT_STARTED": "Native işçi başlamadı. Sonraki adımı seçmeden önce bu deneme kaydının iş kabulü ve durdurma kayıtlarını inceleyin.",
   "headless.agent.worker.NATIVE_WORKER_CUSTODY_UNKNOWN": "Native işçinin süreç sahipliği bilinmiyor. Eksik dosya veya süreç kimliği sonlanma kanıtı değildir; sahiplik uzlaştırılana kadar kapasiteyi ayrılmış tutun.",

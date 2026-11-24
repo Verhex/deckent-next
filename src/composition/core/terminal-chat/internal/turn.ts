@@ -1,6 +1,6 @@
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { resolveTerminalModel } from '#adapters/index.js';
-import { inspectNativeChat, nativeChatVerifiedAtMs, invocationResourceLimit, readRetainedHeadlessFailure } from './native.js';
+import { inspectNativeChat, nativeChatVerifiedAtMs, hasRetainedSubscriptionFailure, readRetainedSubscriptionFailure } from './native.js';
 import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -135,20 +135,11 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
   const settled = outcome.receipt.outcome;
   if (settled?.state === 'not-sent') throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED', { params: { beforeSend: 'true' } });
   if (settled?.state === 'rejected' || settled?.state === 'unknown' || settled === null) {
-    const evidence = settled?.evidence;
-    if (evidence?.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && outcome.receipt.profile.adapter.id === evidence.adapter.id
-      && outcome.receipt.profile.adapter.version === evidence.adapter.version) {
+    if (hasRetainedSubscriptionFailure(outcome)) {
       const inspected = await ports.inspect?.(input.projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
         invocationId: outcome.receipt.claim.invocationId, reference: command.reference, includeResponseContent: true }, input.options).catch(() => null);
-      const failure = readRetainedHeadlessFailure(outcome, inspected?.responseContent);
-      const limit = invocationResourceLimit(failure?.body ?? null);
-      if (limit) throw limit;
-      if (failure?.body?.refusal === 'process-exit' && failure.body.exitCode !== null && failure.body.signal === null)
-        throw ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { code: failure.body.exitCode } });
-      if (failure?.code) throw ErrorRegistry.createError('TERMINAL_CHAT_RECORDED_FAILURE', { params: { code: failure.code } });
-      const refusal = failure?.body?.refusal;
-      if (refusal === 'guard' || refusal === 'response-limit')
-        throw ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal } });
+      const failure = readRetainedSubscriptionFailure(outcome, inspected?.responseContent);
+      if (failure) throw failure;
     }
     throw ErrorRegistry.createError(settled?.state === 'rejected' ? 'TERMINAL_CHAT_REJECTED' : 'MODEL_INVOCATION_OUTCOME_UNKNOWN');
   }

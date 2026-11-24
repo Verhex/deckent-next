@@ -16,7 +16,7 @@ import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin, resolveHeadlessExecutable, runHeadlessIsolated } from '#adapters/core/native-cli-headless/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
-import { nativeWorkerProcessResult } from '#capabilities/core/native-agent-execution/index.js';
+import { createClaudeAgentDriver, nativeWorkerProcessResult } from '#capabilities/core/native-agent-execution/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
@@ -42,16 +42,50 @@ async function workerCleanupFixture() {
     schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
     stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
   }));
-  const run = async (mcp?: Awaited<ReturnType<typeof createNativeToolBridge>>) => {
+  const run = async (mcp?: Awaited<ReturnType<typeof createNativeToolBridge>>, line?: Parameters<typeof runHeadlessIsolated>[5]) => {
+    let refused = false;
     const evidence = await runHeadlessIsolated(cleanupEntry, isolation, { program, executable: c.executable, args: [], env: {},
       stateDir, runDir, configDir: c.configDir, mcp, now: Date.now }, { timeoutMs: 1000, outputBytes: 4096, stderrBytes: 4096,
-      maxLineBytes: 4096, interruptGraceMs: 100 });
+      maxLineBytes: 4096, interruptGraceMs: 100 }, undefined, line && (async (raw, signal) => {
+      const decision = await line(raw, signal);
+      refused ||= decision === 'stop';
+      return decision;
+    }));
     expect(runner).toHaveBeenCalledOnce();
     expect(evidence).toMatchObject({ started: true, exitCode: 0 });
-    return nativeWorkerProcessResult(evidence, false, false, { kind: 'completed', text: 'otherwise usable work' });
+    return nativeWorkerProcessResult(evidence, false, refused, refused ? undefined : { kind: 'completed', text: 'otherwise usable work' });
   };
-  return { ...c, run, runner };
+  return { ...c, run, runDir, runner };
 }
+
+it.skipIf(process.platform !== 'linux')('keeps a worker guard refusal when removing its login marker fails', async () => {
+  const f = await workerCleanupFixture(), remove = files.rm, removalFailed = vi.fn();
+  const guard = createClaudeAgentDriver({ entry: cleanupEntry, model: 'fixture-model', cliVersion: '9.1.0', runDir: f.runDir,
+    outputMaxBytes: 4096, quotaPolicy: egressGateway.nativeQuotaPolicy(),
+    port: { session: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, tools: [], approvalTtlMs: 1000 },
+      propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() } });
+  const finish = f.runner.getMockImplementation()!;
+  f.runner.mockImplementationOnce(async (request, signal, onLine) => {
+    expect(await onLine?.('{"type":"assistant"}', signal ?? new AbortController().signal)).toBe('stop');
+    return finish(request, signal, onLine);
+  });
+  const marker = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+    if (typeof args[0] === 'string' && args[0].endsWith('.lock')) {
+      expect(f.runner).toHaveBeenCalledOnce();
+      expect(guard.signal.aborted).toBe(true);
+      removalFailed();
+      throw new Error('fixture marker removal failure');
+    }
+    return remove(...args);
+  });
+  try {
+    const result = await f.run(undefined, guard.line);
+    expect(removalFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '',
+      cleanupError: { params: { check: 'lock-marker-remove' } } });
+    expect(result).toHaveProperty('refusal', 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+  } finally { marker.mockRestore(); f.runner.mockRestore(); }
+});
 
 it.skipIf(process.platform !== 'linux')('blocks worker completion when closing the enumerated configuration directory fails', async () => {
   const f = await workerCleanupFixture(), openDirectory = files.opendir, closeFailed = vi.fn();
@@ -238,12 +272,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
 
 describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () => {
   const unavailable = async () => bubblewrapObservation('unavailable', 'no bubblewrap launcher');
-  const doctor = (logins: DoctorCheckFacts['headlessLogins'], locale: 'en' | 'tr') => doctorChecks({
+  const doctor = (logins: DoctorCheckFacts['headlessLogins'], locale: 'en' | 'tr', checkId = 'work.brainLogin') => doctorChecks({
     platform: 'linux', host: { cpuCores: 1, totalMemMB: 1024, recommendedMaxWorkers: 1 }, company: { companyId: 'default' },
     principal: { id: 'fixture' }, secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null,
   }, { scopeId: 'scope', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null,
     retiringModels: [], poolStatus: 'unconfigured', toolchainUpdateEnabled: false, imageId: null, headlessLogins: logins }, locale)
-    .find(row => row.id === 'work.brainLogin')?.text;
+    .find(row => row.id === checkId)?.text;
 
   it('Doctor preserves the bind-race diagnostic after persistence and treats ambiguous legacy checks as unverified', async () => {
     const c = await connection({}, {}, 'a'.repeat(64), async () => launcher);
@@ -268,12 +302,17 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_ISOLATION_UNAVAILABLE', check: 'limits' }));
     const legacy = await logins();
-    expect(doctor(legacy, 'en')).toContain('The check recorded an isolation refusal. The provider-program diagnostic could not be verified.');
+    expect.soft(doctor(legacy, 'en')).toContain('The check recorded an isolation refusal. The previous check concerned isolation limits. The specific cause could not be determined.');
+    expect.soft(doctor(legacy, 'tr')).toContain('Önceki denetim yalıtım sınırlarıyla ilgiliydi. Kesin neden belirlenemedi.');
     expect(legacy[0]?.isolation).toBe('unavailable');
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_LOGIN_REQUIRED', check: null }));
     expect.soft(doctor(await logins(), 'en')).toContain('The previous check recorded a sign-in requirement. The specific reason could not be verified.');
     expect.soft(doctor(await logins(), 'tr')).toContain('Önceki denetimde oturum açma gerekliliği kaydedildi. Kesin neden doğrulanamadı.');
     for (const [refusal, check, en, tr] of [
+      ['HEADLESS_PREFLIGHT_FAILED', 'version', 'The previous check concerned the CLI version. The specific cause could not be determined.',
+        'Önceki denetim CLI sürümüyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'flags', 'The previous check concerned CLI options. The specific cause could not be determined.',
+        'Önceki denetim CLI seçenekleriyle ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_ISOLATION_UNAVAILABLE', 'login-lock', 'The previous check could not acquire the sign-in lock. The specific cause could not be verified.',
         'Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.'],
       ['HEADLESS_LIMIT_REACHED', null, 'The previous check recorded a resource limit. Which limit was reached could not be verified.',
@@ -326,7 +365,8 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       const body = replies.shift();
       return { schemaVersion: 1, requestId: input.requestId, started: true, reason: body === undefined ? 'output-limit' : 'exit',
         exitCode: body === undefined ? null : 0, signal: null, stdoutBase64: Buffer.from(body ?? '').toString('base64'),
-        stderrBase64: '', stdoutTruncated: body === undefined, stderrTruncated: false, durationMs: 1 };
+        stderrBase64: body === undefined ? Buffer.from('/fixture/private-stderr').toString('base64') : '',
+        stdoutTruncated: false, stderrTruncated: body === undefined, durationMs: 1 };
     });
     const remove = files.rm;
     const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
@@ -335,12 +375,20 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     });
     try {
       await mkdir(join(c.root, 'state'), { mode: 0o700 });
-      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '2.0.0' }), { mode: 0o600 });
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '2.0.0', executable: '' }), { mode: 0o600 });
       await c.port.preflight(c.profile);
-      expect.soft((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]).toMatchObject({ state: 'open', cliUpdated: null });
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect.soft(logins[0]).toMatchObject({ state: 'open', cliUpdated: null });
+      expect.soft(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
+      expect.soft(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
       const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
       expect(result).toMatchObject({ kind: 'rejected' });
-      if ('kind' in result) expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'response-limit' });
+      if ('kind' in result) {
+        const body = readHeadlessRejection(result.evidence);
+        expect(body).toMatchObject({ refusal: 'response-limit' });
+        expect(body).not.toHaveProperty('field');
+        expect(JSON.stringify(body)).not.toContain('/fixture/private-stderr');
+      }
     } finally { cleanup.mockRestore(); runner.mockRestore(); }
   });
 

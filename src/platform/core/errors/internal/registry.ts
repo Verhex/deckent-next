@@ -1,4 +1,4 @@
-import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { t, resolveLocale, clockText, currencyAmountText, messageText, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { isHeadlessDiagnosticCode, readHeadlessDiagnosticCase } from './headless-diagnostics.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { localHeadlessPathDetail, retainHeadlessFailedCheck, retainHeadlessPaths } from './headless-paths.js';
@@ -11,6 +11,27 @@ const workerKindIssues = (p: Params, l: Locale) => (['image-missing', 'image-unv
   const kinds = p[reason === 'image-missing' ? 'missingKinds' : 'unverifiedKinds'] || Object.entries(p).filter(([key]) => key.startsWith(`${reason}.`)).map(([, value]) => value).join(', ');
   return kinds ? [reason === 'image-missing' ? t('worker.kinds.image-missing', { kinds }, l) : t('worker.kinds.image-unverified', { kinds }, l)] : [];
 }).join(' ');
+function terminalChatRejection(p: Params, l: Locale): string {
+  switch (p['refusal']) {
+    case 'guard': return t('error.TERMINAL_CHAT_REJECTED.guard', p, l);
+    case 'response-limit': return t('error.TERMINAL_CHAT_REJECTED.responseLimit', p, l);
+    case 'login-required': return t('error.TERMINAL_CHAT_REJECTED.loginRequired', p, l);
+    case 'invalid-output': return t('error.TERMINAL_CHAT_REJECTED.invalidOutput', p, l);
+    case 'model-mismatch': return t('error.TERMINAL_CHAT_REJECTED.modelMismatch', p, l);
+    case 'provider-error': return t('error.TERMINAL_CHAT_REJECTED.providerError', p, l);
+    case 'siwc-quota': return t('siwc.usage.limit', p, l);
+    case 'quota': {
+      const window = p['window'], reset = p['resetsAtMs'];
+      if (typeof window !== 'string') return t('headless.chat.quotaFallback', {}, l);
+      const unknown = t('headless.chat.quotaUnknown', {}, l);
+      return t('headless.chat.quota', {
+        window: messageText(`headless.chat.quotaWindow.${window}`, l) ?? (window === '?' ? unknown : window),
+        reset: typeof reset === 'number' && Number.isFinite(new Date(reset).getTime()) ? clockText(reset) : unknown,
+      }, l);
+    }
+    default: return t('error.TERMINAL_CHAT_REJECTED', p, l);
+  }
+}
 function invocationInputSubject(p: Params, l: Locale): string {
   switch (p['subject']) {
     case 'cli.input.subject.queue': return t('cli.input.subject.queue', {}, l);
@@ -242,10 +263,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
 }), {
   TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: p['beforeSend'] === 'true'
     ? t('error.TERMINAL_CHAT_CANCELLED.beforeSend', p, l) : t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
-  TERMINAL_CHAT_REJECTED: { category: 'error', render: (p, l) => ({ message: p['refusal'] === 'guard'
-    ? t('error.TERMINAL_CHAT_REJECTED.guard', p, l) : p['refusal'] === 'response-limit'
-      ? t('error.TERMINAL_CHAT_REJECTED.responseLimit', p, l) : t('error.TERMINAL_CHAT_REJECTED', p, l) }) },
-  TERMINAL_CHAT_PROCESS_EXIT: { category: 'error', render: (p, l) => ({ message: t('agent.turn.failure.processExit', p, l) }) },
+  TERMINAL_CHAT_REJECTED: { category: 'error', render: (p, l) => ({ message: terminalChatRejection(p, l) }) },
+  TERMINAL_CHAT_PROCESS_EXIT: { category: 'error', render: (p, l) => ({ message: p['observedSignal'] === 'true'
+    ? t('agent.turn.failure.processSignal', {}, l) : t('agent.turn.failure.processExit', p, l) }) },
   TERMINAL_CHAT_RECORDED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('agent.turn.failure.recordedCode', p, l) }) },
   INFERENCE_NOT_CONFIGURED: { category: 'error', render: (_p, l) => ({ message: t('inference.notConfigured', {}, l) }) },
 }, plainErrors('error.', {

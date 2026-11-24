@@ -1,5 +1,5 @@
 import type { HeadlessRejectionBody } from '#domain/index.js';
-import { clockText, messageText, getConfigFieldDefault, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, clockText, messageText, getConfigFieldDefault, t, type Locale } from '#platform/index.js';
 
 import { classifyClaudeRateLimit as classify, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './quota-rule.js';
 export type { ClaudeQuotaPolicy, ClaudeRateLimit } from './quota-rule.js';
@@ -22,11 +22,8 @@ export function nativeQuotaText(body: HeadlessRejectionBody, locale: Locale): st
     return t('headless.chat.quotaUnknownStatus', { status: body.subtype ?? '?' }, locale);
   if (body.refusal !== 'quota') return null;
   // Historical result-only refusals and the untouched Codex signals carry no Claude status/window facts.
-  if (body.subtype === undefined) return t('headless.chat.quotaFallback', {}, locale);
-  const window = body.field ?? '?';
-  return t('headless.chat.quota', { window: messageText(`headless.chat.quotaWindow.${window}`, locale)
-    ?? (window === '?' ? t('headless.chat.quotaUnknown', {}, locale) : window),
-    reset: typeof body.resetsAtMs === 'number' ? clockText(body.resetsAtMs) : t('headless.chat.quotaUnknown', {}, locale) }, locale);
+  return ErrorRegistry.get('TERMINAL_CHAT_REJECTED', locale, { refusal: 'quota',
+    ...(body.subtype !== undefined && { window: body.field ?? '?', ...(body.resetsAtMs != null && { resetsAtMs: body.resetsAtMs }) }) })!.message;
 }
 
 /** Bounded facts in open native metadata, rendered through the same window/reset message family. */

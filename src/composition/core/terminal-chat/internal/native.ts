@@ -1,7 +1,7 @@
-import { DeckentError, ErrorRegistry, headlessDiagnostic } from '#platform/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody, type ModelInvocationProfile, type ModelInvocationResponseContent } from '#domain/index.js';
+import { DeckentError, ErrorRegistry, headlessDiagnostic, messageText } from '#platform/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type ModelInvocationResponseContent } from '#domain/index.js';
 import { readSubscriptionRejection, type ModelInvocationResult } from '#engine/index.js';
-import { nativeCliAgent, resolveHeadlessExecutable } from '#adapters/index.js';
+import { nativeCliAgent, resolveHeadlessExecutable, SIWC_INFERENCE } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution, type NativeAgentReadiness } from '#capabilities/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 
@@ -63,19 +63,55 @@ export async function nativeChatVerificationExecution(profile: ModelInvocationPr
   return execution;
 }
 
-export function readRetainedHeadlessFailure(result: ModelInvocationResult, content: ModelInvocationResponseContent | null | undefined) {
+function subscriptionFailureEvidence(result: ModelInvocationResult) {
   const { profile, outcome } = result.receipt;
   const evidence = outcome?.state === 'unknown' || outcome?.state === 'rejected' ? outcome.evidence : null;
-  if (profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || evidence?.adapter.id !== profile.adapter.id
-    || evidence.adapter.version !== profile.adapter.version || content?.kind !== 'response-body') return null;
-  return { body: readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([profile.adapter.id])),
-    code: outcome?.state === 'unknown' && evidence.reason === 'interrupted' ? retainedFailureCode(content.data) : null };
+  return (profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID || profile.adapter.id === SIWC_INFERENCE.adapter.id)
+    && evidence?.adapter.id === profile.adapter.id && evidence.adapter.version === profile.adapter.version ? evidence : null;
 }
 
-export function invocationResourceLimit(body: HeadlessRejectionBody | null) {
-  if (body?.refusal !== 'resource-limit') return null;
-  const { field } = body;
-  return field === 'cpu-time' || field === 'processes' || field === 'memory' ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: field }) : null;
+export const hasRetainedSubscriptionFailure = (result: ModelInvocationResult) => subscriptionFailureEvidence(result) !== null;
+
+/** Only project facts permitted by the authorized, adapter-matched receipt. */
+export function readRetainedSubscriptionFailure(result: ModelInvocationResult, content: ModelInvocationResponseContent | null | undefined): DeckentError | null {
+  const evidence = subscriptionFailureEvidence(result);
+  if (!evidence || content?.kind !== 'response-body') return null;
+  const native = evidence.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID;
+  const body = readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id]));
+  if (!body) {
+    const code = native && result.receipt.outcome?.state === 'unknown' && evidence.reason === 'interrupted' ? retainedFailureCode(content.data) : null;
+    return code ? ErrorRegistry.createError('TERMINAL_CHAT_RECORDED_FAILURE', { params: { code } }) : null;
+  }
+  switch (body.refusal) {
+    case 'usage-unavailable': return ErrorRegistry.createError('SIWC_USAGE_UNAVAILABLE');
+    case 'service-unavailable': return ErrorRegistry.createError('SIWC_SERVICE_UNAVAILABLE');
+    case 'plan-unavailable': return ErrorRegistry.createError('HEADLESS_PLAN_UNAVAILABLE');
+    case 'credits-required': return native ? ErrorRegistry.createError('HEADLESS_CREDITS_REQUIRED') : null;
+    case 'quota': {
+      if (!native) return ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal: 'siwc-quota' } });
+      // Preserve known quota windows and reset times without displaying retained free-form fields.
+      const window = body.field && /^[a-z_]+$/u.test(body.field) && messageText(`headless.chat.quotaWindow.${body.field}`, 'en') ? body.field : '?';
+      return ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal: 'quota',
+        ...(body.subtype !== undefined && { window, ...(body.resetsAtMs != null && { resetsAtMs: body.resetsAtMs }) }) } });
+    }
+    case 'resource-limit': {
+      const { field } = body;
+      return native && (field === 'cpu-time' || field === 'processes' || field === 'memory')
+        ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: field }) : null;
+    }
+    case 'process-exit':
+      if (!native) return null;
+      if (body.exitCode !== null && body.signal === null)
+        return ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { code: body.exitCode } });
+      return body.exitCode === null && body.signal !== null
+        ? ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { observedSignal: 'true' } }) : null;
+    case 'guard':
+    case 'response-limit':
+    case 'login-required':
+    case 'invalid-output':
+    case 'model-mismatch':
+    case 'provider-error': return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal: body.refusal } }) : null;
+  }
 }
 
 /** The code-only body names a registered family without identifying an operation or proving cancellation. */
