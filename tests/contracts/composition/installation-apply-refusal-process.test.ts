@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
+import { dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
-import { getConfigFieldDefault } from '#platform/index.js';
+import { getConfigFieldDefault, resolveGlobalConfigPaths } from '#platform/index.js';
 import { applyInstallation, inspectInstallation } from '../../../src/index.js';
 import { lastJson, runInTerminal } from '../support/terminal-cli.js';
 import { fixture, rehash, unsupported } from './installation-apply-process.fixture.js';
@@ -86,4 +87,55 @@ it.skipIf(unsupported)('refuses marked supplied apply on a real terminal before 
   const installed = await applyInstallation(within.project, within.profile,
     { allowShutdown: false, dockerExecutable, proposalDigest: evidence.proposalDigest, acceptCustom: true });
   expect(installed).toMatchObject({ status: 'installed', proposalDigest: evidence.proposalDigest });
+}, 90_000);
+
+it.skipIf(unsupported)('refuses witnessed widening when the separate general settings cannot supply trusted markers', async () => {
+  const f = await fixture(), dockerExecutable = '/usr/bin/docker';
+  const cli = resolve('dist/composition/core/cli/internal/entry.js'), sdk = resolve('dist/index.js');
+  f.profile.policy.grants.push({ ...f.profile.policy.grants[0]!, id: 'edit', actions: ['invoke'],
+    resource: { kind: 'agent-tool', ids: ['edit_file'] } });
+  await writeFile(f.profilePath, JSON.stringify(rehash(f.profile)));
+  const { proposalDigest } = await inspectInstallation(f.project, f.profile, { allowShutdown: false, dockerExecutable });
+  const env = { HOME: join(f.root, 'home'), PATH: '/usr/bin:/bin', DECKENT_LANGUAGE: 'en' };
+  const globalConfig = resolveGlobalConfigPaths(env).platformPath;
+  await mkdir(dirname(globalConfig), { recursive: true, mode: 0o700 });
+  const before = await readdir(env.HOME, { recursive: true });
+  const cliRun = (language: string) => runInTerminal([process.execPath, cli, 'init', 'apply', '--profile', f.profilePath,
+    '--docker-executable', dockerExecutable, '--proposal', proposalDigest, '--accept-custom', '--lang', language], f.project, env);
+  const sdkRun = (language: string) => runInTerminal([process.execPath, '--input-type=module', '-e', `
+    import { readFile } from 'node:fs/promises';
+    import { applyInstallation } from ${JSON.stringify(sdk)};
+    const [profile, dockerExecutable, proposalDigest, language] = process.argv.slice(1);
+    try {
+      await applyInstallation(process.cwd(), JSON.parse(await readFile(profile)), { allowShutdown: false, dockerExecutable, proposalDigest, acceptCustom: true });
+    } catch (error) {
+      console.log(JSON.stringify({ code: error.code, params: error.params, message: error.localize?.(language).message }));
+      process.exitCode = 1;
+    }
+  `, f.profilePath, dockerExecutable, proposalDigest, language], f.project, env);
+  const authorityParams: Record<string, string> = { reason: 'installation-authority-global-config', path: globalConfig };
+  const cases = [
+    { contents: '{', mode: 0o600, language: 'en', heading: 'Error', params: authorityParams,
+      message: `The general settings file "${globalConfig}" could not be used for the authority check. Restore it as a valid JSON settings object while preserving your organization's automation markers, then run the same command again.` },
+    { contents: '[]', mode: 0o600, language: 'tr', heading: 'Hata', params: authorityParams,
+      message: `Genel ayar dosyası "${globalConfig}" yetki kontrolünde kullanılamadı. Kuruluşunuzun otomasyon işaretlerini koruyarak dosyayı geçerli bir JSON ayar nesnesi olarak geri yükleyin, ardından aynı komutu yeniden çalıştırın.` },
+  ];
+  if (userInfo().uid !== 0) cases.push({ contents: '{}', mode: 0o000, language: 'en', heading: 'Error', params: {},
+    message: 'Configuration could not be read; the file was preserved.' });
+  for (const { contents, mode, language, heading, params, message } of cases) {
+    await writeFile(globalConfig, contents, { mode: 0o600 });
+    await chmod(globalConfig, mode);
+    try {
+      const cliResult = await cliRun(language);
+      expect(cliResult.code, cliResult.output).toBe(78);
+      expect(cliResult.output).toContain(`${heading}: ${message} [CONFIG_READ_IO_HOLD]`);
+      const sdkResult = await sdkRun(language);
+      expect(sdkResult.code, sdkResult.output).toBe(1); // The child harness maps a rejected SDK promise to 1.
+      expect(lastJson(sdkResult.output)).toEqual({ code: 'CONFIG_READ_IO_HOLD', params, message });
+      expect(await readdir(f.project, { recursive: true })).toEqual([]);
+      await expect(readdir(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect((await readdir(env.HOME, { recursive: true })).sort()).toEqual([...before, relative(env.HOME, globalConfig)].sort());
+    } finally { await chmod(globalConfig, 0o600); }
+    expect(await readFile(globalConfig, 'utf8')).toBe(contents);
+  }
 }, 90_000);

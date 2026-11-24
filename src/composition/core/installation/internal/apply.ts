@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { automationMarker, persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, resolveGlobalConfigReadPath, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
+import { automationMarker, ErrorRegistry, persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, resolveGlobalConfigReadPath, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat, realpath } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
@@ -66,7 +66,15 @@ async function assertSuppliedAuthority(projectRoot: string, prepared: PreparedIn
   const globalIsTarget = pending && await realpath(dirname(await resolveGlobalConfigReadPath())).catch(() => undefined)
     === await realpath(dirname(prepared.material.layout.bootstrapConfigPath));
   const markers = globalIsTarget ? getConfigFieldDefault('cli').agentEnvironment
-    : (await loadComposedConfig(projectRoot, { globalOnly: pending, pendingBootstrap: 'config-settled', heal: false, secretResolver: async () => undefined })).cli.agentEnvironment;
+    : (await loadComposedConfig(projectRoot, {
+      // Both authority checks need the current trusted marker basis.
+      force: true, globalOnly: pending, pendingBootstrap: 'config-settled', heal: false, secretResolver: async () => undefined,
+      onWarning: warning => {
+        if (warning.code === 'CONFIG_GLOBAL_CORRUPT') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', {
+          params: { reason: 'installation-authority-global-config', path: warning.path },
+        });
+      },
+    })).cli.agentEnvironment;
   await assertAuthorityWitness('installationProfilePolicy', localPrincipalChannel(), { attest: async () =>
     !automationMarker(process.env, markers) && await attestLocalInteractiveTerminal() });
   return JSON.stringify([pending, [...new Set(markers)].sort()]);
