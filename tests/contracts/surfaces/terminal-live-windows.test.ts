@@ -13,6 +13,7 @@ import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindowStatus, LIVE_WINDOW_MAX_ROWS, type LiveWindowRenderLabels } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
 import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
+import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
 import { Window, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { plainText, resolveRenderGlyphs, RenderGlyphsContext, span } from '#surfaces/core/terminal-render-ink/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
@@ -121,6 +122,116 @@ describe('live windows in the workline', () => {
     await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks after denial');
     view.stdin.write('x'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'cancel approval again'); view.stdin.write('y');
     await until(() => cancelled.length === 1, 'approved cancellation'); expect(cancelled).toEqual([['run-a', 9]]);
+  });
+
+  it('/tasks keeps a selected worker bound to its project even when the active project has the same Attempt', async () => {
+    const attempt = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-0', attemptId: 'attempt-a', generation: 1, layoutRevision: 'layout-a' };
+    const inspectTranscript = vi.fn(async () => 'ACTIVE-PROJECT-TRANSCRIPT'), cancelRun = vi.fn(async () => 'CANCELLED');
+    const source = (id: string, path: string, provider: string) => ({
+      id, path, kind: 'next-project' as const, status: 'available' as const, truncated: false, nextAfter: null,
+      workers: [{ taskId: attempt.taskId, identity: attempt, process: 'running' as const, provider, authority: 'next-ledger' as const,
+        workspace: null, handle: null, terminal: null, outputRecorded: false, patchRecorded: false, files: null, diagnostics: [] }],
+    });
+    const active = source('current', '/project-a', 'local-worker'), other = source('project-b', '/project-b', 'observed-worker');
+    let sources = [{ ...active, workers: [] }, other];
+    const ledger: WorklineLedgerPorts = { scopeId: attempt.scopeId,
+      listWorkers: async () => ({ schemaVersion: 1, observedAt: 1, scopeId: attempt.scopeId, sources, control: 'observe-only' }),
+      listRunIds: async () => [attempt.runId], inspectRun: async () => ({ runId: attempt.runId, scopeId: attempt.scopeId,
+        revision: 3, cancellationRequested: false, tasks: [{ id: attempt.taskId, phase: 'active' }], state: { kind: 'running' } }) as never,
+      inspectTranscript, cancelRun,
+    };
+    const view = mountWorkline({ pollMs: 20, ledger });
+    mounted.push(view.instance);
+    await settle(20); view.stdin.write('/tasks\r');
+    await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'observed worker and the active Run');
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run highlighted');
+    view.stdin.write('\u001b[A');
+    await until(() => />[^\n]*Task 1 · observed-worker/u.test(view.stdout.frame), 'other project worker explicitly selected');
+
+    view.stdin.write('x'); await settle(100);
+    expect.soft(view.stdout.text).toContain("Cancellation can't start from this worker row. Select the Run's row.");
+    expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+    expect(cancelRun).not.toHaveBeenCalled();
+    if (view.stdout.frame.includes('C-PROMPT')) {
+      view.stdin.write('n');
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected cancellation confirmation');
+    }
+
+    view.stdin.write('\r'); await settle(100);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    expect.soft(view.stdout.text).toContain("This worker belongs to another project. Its transcript can't be opened here.");
+    expect.soft(view.stdout.frame).not.toContain(EN.jobs!.transcriptTitle);
+    if (view.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected transcript');
+    }
+    inspectTranscript.mockClear();
+
+    sources = [active, other];
+    await until(() => view.stdout.frame.includes('2 workers · 1 runs'), 'the same Attempt from both projects');
+    expect.soft(view.stdout.frame).toMatch(/>[^\n]*Task 2 · observed-worker/u);
+    sources = [active];
+    await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'the observed project disappears');
+    expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
+    view.stdin.write('\r'); await settle(100);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    if (view.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected inherited transcript');
+    }
+    view.stdin.write('x'); await settle(100);
+    expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+    expect(cancelRun).not.toHaveBeenCalled();
+    if (view.stdout.frame.includes('C-PROMPT')) {
+      view.stdin.write('n');
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back from unexpected inherited confirmation');
+    }
+
+    inspectTranscript.mockClear();
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*local-worker/u.test(view.stdout.frame), 'active worker explicitly selected');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('ACTIVE-PROJECT-TRANSCRIPT'), 'active worker transcript');
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempt);
+    view.stdin.write(ESC);
+    await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back to tasks after the active transcript');
+    view.stdin.write('x');
+    await until(() => view.stdout.frame.includes('C-PROMPT'), 'active Run cancellation confirmation');
+    expect(cancelRun).not.toHaveBeenCalled();
+    view.stdin.write('y');
+    await until(() => cancelRun.mock.calls.length === 1, 'active Run cancelled after confirmation');
+    expect(cancelRun).toHaveBeenCalledExactlyOnceWith(attempt.runId, 3);
+
+    sources = [active, other];
+    await until(() => view.stdout.frame.includes('2 workers · 1 runs') && view.stdout.frame.includes(EN.live!.tasksHints!), 'both projects after the local confirmation');
+    inspectTranscript.mockClear();
+    view.stdin.write('\u001b[A');
+    await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run row explicitly selected');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('ACTIVE-PROJECT-TRANSCRIPT'), 'Run transcript uses its own worker with both sources present');
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempt);
+    inspectTranscript.mockClear();
+
+    const snapshot = withSurfaceSnapshot({ ...ledger, async *followEvents(signal) {
+      yield { control: 'start', scopeId: attempt.scopeId, cursors: { approval: 0, run: 0, worker: 0 } };
+      await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
+    } }, async () => ({ binding: 'test-session', kinds: ['approval', 'run', 'worker'] }));
+    const tr = mountWorkline({ pollMs: 20, ledger: snapshot, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live } } });
+    mounted.push(tr.instance);
+    await settle(20); tr.stdin.write('/tasks\r');
+    await until(() => tr.stdout.frame.includes('2 işçi · 1 iş'), 'both project sources through the Turkish snapshot');
+    tr.stdin.write('\u001b[B');
+    await until(() => />[^\n]*observed-worker/u.test(tr.stdout.frame), 'other project worker selected in Turkish');
+    tr.stdin.write('x');
+    await until(() => tr.stdout.text.includes('Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.'), 'Turkish cancellation notice');
+    expect(tr.stdout.frame).not.toContain('C-PROMPT');
+    expect(cancelRun).toHaveBeenCalledExactlyOnceWith(attempt.runId, 3);
+    tr.stdin.write('\r');
+    await until(() => tr.stdout.text.includes('Bu işçi başka bir projeye ait. İşçi kaydı burada açılamaz.'), 'Turkish transcript notice');
+    expect(tr.stdout.frame).toContain(TR.live!.tasksHints!);
+    expect(tr.stdout.frame).not.toMatch(/^│\s*İşçi kaydı(?:\s|│)/mu);
+    expect(inspectTranscript).not.toHaveBeenCalled();
   });
 
   it('refuses /tasks without a ledger and opens no window', async () => {

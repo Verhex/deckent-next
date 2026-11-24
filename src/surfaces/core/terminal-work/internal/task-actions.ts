@@ -6,6 +6,9 @@ import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 import { workerApprovalWaitLines, queueRowSummaries, runDetailLines, runTitle } from './job-windows.js';
 
+/** The configured observer reserves `current` for the same root as the action ports. */
+const localWorker = (worker: WorkLedgerWorkerEntry) => worker.sourceId === undefined || worker.sourceId === 'current';
+
 /** Selected identities travel out of band through the local controller; no typed slash argument can select or cancel a task. */
 export async function openTaskAction(action: TaskWindowAction, panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts,
   work: WorkSurfaceLabels, cancel: (runId: string) => Promise<void>): Promise<string | void> {
@@ -13,7 +16,10 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
   if (action.target.scopeId !== ledger.scopeId) return;
   const target = action.target;
   const runId = target.kind === 'run' ? target.runId : target.attempt?.runId;
-  if (action.action === 'cancel' && runId === undefined) return t('terminal.live.workerCancelUnavailable', {}, resolveLocale(work.jobs?.locale ?? work.workerLine.numberLocale));
+  const otherProject = target.kind === 'worker' && target.attempt && !localWorker(target);
+  const locale = resolveLocale(work.jobs?.locale ?? work.workerLine.numberLocale);
+  if (action.action === 'cancel' && (runId === undefined || otherProject)) return t('terminal.live.workerCancelUnavailable', {}, locale);
+  if (action.action === 'transcript' && otherProject) return t('terminal.live.workerTranscriptUnavailable', {}, locale);
   const runs = await loadRunViewsForWatch(ledger);
   const run = runs.find(run => run.scopeId === target.scopeId && run.runId === runId);
   if (action.action === 'run') {
@@ -30,7 +36,7 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
   let worker: WorkLedgerWorkerEntry | undefined;
   if (action.target.kind === 'worker') worker = action.target;
   else if (run) {
-    const workers = (await ledgerEntriesForWorkers(ledger, 'tasks')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker' && Boolean(entry.attempt)
+    const workers = (await ledgerEntriesForWorkers(ledger, 'tasks')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker' && Boolean(entry.attempt) && localWorker(entry)
       && entry.attempt?.runId === run.runId && run.tasks.some(task => task.id === entry.taskId));
     if (workers.length === 1) worker = workers[0];
     else if (workers.length > 1) {
