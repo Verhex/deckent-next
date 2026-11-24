@@ -61,7 +61,7 @@ export type WorkLedgerWorkerEntry = Readonly<{
   readonly process: string;
   readonly provider: string;
   readonly authority: string;
-  /** Source identity for selecting an observation without an Attempt. */
+  /** Local selection provenance from the worker observation report. */
   readonly sourceId?: string;
   readonly observedAtMs?: number;
   /** 1-based position in the observation report; `/transcript <n>` resolves against the same numbering. */
@@ -130,7 +130,7 @@ function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId
     process: worker.process,
     provider: worker.provider,
     authority: worker.authority,
-    ...(!worker.identity && context.sourceId !== undefined ? { sourceId: context.sourceId } : {}),
+    ...(context.sourceId === undefined ? {} : { sourceId: context.sourceId }),
     ...(context.observedAtMs === undefined ? {} : { observedAtMs: context.observedAtMs }),
     ordinal: context.ordinal,
     ...(worker.identity === undefined ? {} : { attempt: worker.identity }),
