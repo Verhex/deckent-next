@@ -1,4 +1,4 @@
-import { clientCommandIdSchema, identitySchema, counterSchema, safeParseRun, parseRun, type RunSnapshot, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import { clientCommandIdSchema, identitySchema, counterSchema, safeParseRun, type RunSnapshot, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { readWorkerTreeExclusions, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
@@ -27,14 +27,19 @@ export class RunInspectionApplication {
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
   async inspectWithModels(input: unknown, credential?: unknown, answerTaskId?: string | null) {
     const { run, snapshot, principal, evaluations } = await this.load(input, credential);
-    const models = run && this.models ? await describeRunWorkerModels(parseRun(snapshot), principal, this.models.store, this.models.artifacts,
+    const models = snapshot && this.models ? await describeRunWorkerModels(snapshot, principal, this.models.store, this.models.artifacts,
       this.models.authorization) : Object.freeze([]);
-    const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(parseRun(snapshot), evaluations ?? [], principal, this.costs,
+    const costReport = snapshot && this.costs && this.models ? await inspectRunWorkCosts(snapshot, evaluations ?? [], principal, this.costs,
       (identity, actor) => this.models!.authorization.authorizeIdentity('read-output', identity, actor)) : undefined;
-    // The local answer flow needs the binding from the same snapshot as the question and revision.
-    const question = answerTaskId === undefined || !run ? null : openTaskQuestion(run, answerTaskId ?? undefined);
-    const answerSource = question ? parseRun(snapshot).bindings.find(binding => binding.identity.taskId === question.taskId)?.identity : undefined;
-    return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models, ...(answerSource ? { answerSource } : {}) });
+    // The Runs card selects after inspection finishes, using the same authorized snapshot for the question and its binding.
+    const selectAnswerQuestion = run && snapshot && answerTaskId !== undefined ? () => {
+      const question = openTaskQuestion(run, answerTaskId ?? undefined);
+      const source = question && snapshot.bindings.find(binding => binding.identity.taskId === question.taskId)?.identity;
+      return question && source ? { ...question, source } : null;
+    } : undefined;
+    const answerSource = answerTaskId === null ? undefined : selectAnswerQuestion?.()?.source;
+    return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models,
+      ...(answerSource ? { answerSource } : {}), ...(answerTaskId === null && selectAnswerQuestion ? { selectAnswerQuestion } : {}) });
   }
   private async load(input: unknown, credential?: unknown) {
     const query = runQuerySchema.parse(input);
@@ -59,7 +64,7 @@ export class RunInspectionApplication {
     const channelWaits = evidence?.quotaHolds?.filter(wait => wait.deadline > Date.now());
     const view = { ...projectRunView(parsed, receipts, evaluations, exclusions), ...(channelWaits?.length ? { channelWaits } : {}), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-    return { run: view, snapshot, principal, evaluations };
+    return { run: view, snapshot: parsed, principal, evaluations };
   }
 }
 export class RunApplication extends RunInspectionApplication {

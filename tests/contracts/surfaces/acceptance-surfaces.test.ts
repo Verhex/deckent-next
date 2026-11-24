@@ -77,13 +77,14 @@ it.skipIf(process.platform === 'win32')('keeps the open question source inside t
       ]) {
         expect(result.run).toMatchObject({ runId: query.runId, revision: parked.revision, tasks: [{ decision: { question } }] });
         expect.soft(result).not.toHaveProperty('answerSource');
+        expect.soft(result).not.toHaveProperty('selectAnswerQuestion');
       }
       const answer = await host.inspectRun!(project, query, options, identity.taskId);
       expect(answer.run).toMatchObject({ revision: parked.revision, tasks: [{ decision: { question } }] });
       expect(answer.answerSource).toEqual(identity);
       const terminalAnswer = await host.inspectRun!(project, query, options, null);
       expect(terminalAnswer.run).toMatchObject({ revision: parked.revision, tasks: [{ decision: { question } }] });
-      expect(terminalAnswer.answerSource).toEqual(identity);
+      expect(terminalAnswer.selectAnswerQuestion?.()?.source).toEqual(identity);
       db.prepare('UPDATE runs SET revision=?, snapshot=? WHERE scope_id=? AND run_id=?')
         .run(bound.revision, JSON.stringify(bound), query.scopeId, query.runId);
       const noQuestion = await host.inspectRun!(project, query, options, identity.taskId);

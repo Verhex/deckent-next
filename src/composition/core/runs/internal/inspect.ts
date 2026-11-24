@@ -17,10 +17,10 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
   return (await readConfiguredRun(projectRoot, input, options)).result;
 }
 
-/** The local answer cards read the question and its source at the same Run revision. Null selects the first open question. */
+/** The local answer cards read the question and its source at the same Run revision. Null defers first-open selection to the Runs card. */
 export async function inspectConfiguredRunAnswer(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, taskId: string | null) {
-  const { result, answerSource } = await readConfiguredRun(projectRoot, input, options, taskId);
-  return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}) });
+  const { result, answerSource, selectAnswerQuestion } = await readConfiguredRun(projectRoot, input, options, taskId);
+  return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}), ...(selectAnswerQuestion ? { selectAnswerQuestion } : {}) });
 }
 
 async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) {
@@ -32,8 +32,8 @@ async function readConfiguredRun(projectRoot: string, input: RunQuery, options: 
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
-    const { answerSource, ...inspected } = await app.inspectWithModels(query, undefined, answerTaskId);
-    if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected }), answerSource };
+    const { answerSource, selectAnswerQuestion, ...inspected } = await app.inspectWithModels(query, undefined, answerTaskId);
+    if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected }) };
     // BeUser M-33: the tasks of this Run a person set aside (the same records /deliver and the monitor read).
     const dismissed = (limit: number) => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options)
       .then(rows => new Set(rows.filter(row => row.runId === query.runId).map(row => row.taskId)));
@@ -41,6 +41,6 @@ async function readConfiguredRun(projectRoot: string, input: RunQuery, options: 
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
     const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options, principal);
-    return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) }), answerSource };
+    return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) }), answerSource, selectAnswerQuestion };
   } catch (error) { throw queryFailure(error); }
 }

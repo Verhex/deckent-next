@@ -1,5 +1,5 @@
 import type { ObservedRun } from '#surfaces/core/recovery-text/index.js';
-import type { SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
+import type { RunInspectionApplication, SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
 import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
 import type { StandingScope, SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
@@ -15,7 +15,8 @@ export interface WorklineLedgerPorts {
   readonly listWorkers: () => Promise<WorkerObservationReport>;
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
   readonly inspectRunObservation?: (runId: string) => Promise<ObservedRun | null>;
-  readonly inspectRunAnswer?: (runId: string) => Promise<Readonly<{ run: RunView | null; answerSource?: WorkerAttemptIdentity }>>;
+  readonly inspectRunAnswer?: (runId: string) => Promise<Readonly<{ run: RunView | null }>
+    & Pick<Awaited<ReturnType<RunInspectionApplication['inspectWithModels']>>, 'selectAnswerQuestion'>>;
   /** alpha.54 g: the summary lines of each queue row of a Run window (same reader and renderer as the delivery card, under the person's own grants; an unreadable one renders as not available). */
   readonly queueSummaryLines?: (views: NonNullable<RunView['targetQueue']>['records']) => Promise<readonly (readonly string[])[]>;
   readonly listRunIds?: () => Promise<readonly string[]>;

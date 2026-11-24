@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runLifecycleCommandSchema, type RunView } from '#engine/index.js';
+import { createRun, type RunSnapshot } from '#domain/index.js';
+import { RunInspectionApplication, runLifecycleCommandSchema, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli-terminal/index.js';
-import { runControlActions } from '#surfaces/core/terminal-work/index.js';
+import { runControlActions, runRunsControl, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
+import { execution, graph } from '../domain/acceptance-fixture.js';
 import { exitTypedText, mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 // Y1 (owner 2026-10-14): the Runs window's hold / resume / close keys. Each key opens a y/N card; only a single typed y sends the command to
@@ -185,9 +187,11 @@ describe('needs-input answer from the Runs window (BR2)', () => {
   }
   it('a opens the card with the question; y with no answer sends nothing; a written answer goes with one y at the shown revision', async () => {
     const answer = vi.fn(async () => 'ANSWER-RESULT');
-    const inspectRunAnswer = vi.fn(async () => ({ run: asking(), answerSource: {
-      scopeId: 'scope-a', runId: ASKING, taskId: 'task-ask', attemptId: 'attempt-ask', layoutRevision: 'layout', generation: 1,
-    } }));
+    const inspectRunAnswer = vi.fn(async () => ({ run: asking(), selectAnswerQuestion: () => ({
+      taskId: 'task-ask', question: 'Which branch should I use?', source: {
+        scopeId: 'scope-a', runId: ASKING, taskId: 'task-ask', attemptId: 'attempt-ask', layoutRevision: 'layout', generation: 1,
+      },
+    }) }));
     const h = await openAsking({ ...answerPorts(answer), inspectRunAnswer });
     expect(h.stdout.frame).toContain(EN.runControl!.keyAnswer!);
     for (const keys of [`${ESC}a`, 'aa']) { await press(h, keys); expect(h.stdout.frame).not.toContain('Answer run'); } // Alt+a, coalesced
@@ -206,6 +210,47 @@ describe('needs-input answer from the Runs window (BR2)', () => {
     expect(answer).toHaveBeenCalledWith(ASKING, 'task-ask', 'use release/2 (y is text here)', 5);
     await until(() => h.stdout.frame.includes('ANSWER-RESULT'), 'result as window status');
     await press(h, ESC, 120); await until(() => h.stdout.text.includes('ANSWER-RESULT'), 'result summary');
+
+    const query = { schemaVersion: 1 as const, scopeId: 'scope-a', runId: ASKING };
+    const identity = { scopeId: query.scopeId, runId: query.runId, layoutRevision: 'layout' };
+    const sources = ['first', 'next'].map(taskId => ({ ...identity, taskId, attemptId: `attempt-${taskId}`, generation: 1 }));
+    const questions = ['Which branch should I use?', 'Which region should I use?'];
+    const deadlines = [200, 300];
+    const twoTasks = { ...graph, tasks: sources.map(source => ({ ...graph.tasks[0]!, id: source.taskId })) };
+    const base = createRun(identity, twoTasks, 0, execution(twoTasks));
+    const snapshot: RunSnapshot = { ...base, revision: 7, state: { kind: 'parked', reason: 'operator-hold', note: 'Waiting for input', since: 100, deadline: 400 },
+      bindings: sources.map(source => ({ identity: source, observedKind: 'exited', observedRevision: 1 })),
+      progress: base.progress.map((task, index) => ({ ...task, phase: 'awaiting-decision',
+        decision: { reason: 'needs-input', since: 100, deadline: deadlines[index]!, question: questions[index]! } })) };
+    const app = new RunInspectionApplication({ async loadRun() { return snapshot; } },
+      { async verify() { return { id: 'operator', issuer: 'fixture', subject: 'operator', assurance: 'os-user', scopeIds: [query.scopeId] }; } },
+      { async authorize() {} });
+    const send = vi.fn(async () => 'NEXT-ANSWER');
+    const choices = ['answer:0', 'answer:0', 'close'];
+    const pick = vi.fn<WorklinePanel['pick']>(async (_execution, card) => card.kind === 'run-answer' ? 'allow' : choices.shift() ?? null);
+    const selections: unknown[] = [];
+    let now = 100, read = 0;
+    const terminal = createWorklineLedgerPorts({ root: '/project', scopeId: query.scopeId, options: {}, renderRunCancellation: () => '',
+      inspectWorkers: async () => ({}) as never, async inspectRun(_root, input, _options, taskId) {
+        const inspected = await app.inspectWithModels(input, undefined, taskId);
+        if (taskId !== null) return { schemaVersion: 1, layout: {} as never, ...inspected };
+        now = deadlines[read++]!;
+        return { schemaVersion: 1, layout: {} as never, ...inspected, selectAnswerQuestion() {
+          const selection = inspected.selectAnswerQuestion!();
+          selections.push(selection);
+          return selection;
+        } };
+      } })!;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const summary = await runRunsControl({ pick } as WorklinePanel, { signal: new AbortController().signal } as LocalExecution, {
+        ...answerPorts(send), inspectRun: terminal.inspectRun, inspectRunAnswer: terminal.inspectRunAnswer!,
+      }, EN, String, () => 'use west');
+      expect(pick.mock.calls[1]?.[1]).toMatchObject({ kind: 'run-answer', question: questions[1], run: { revision: 7 } });
+      expect(selections).toEqual([{ taskId: sources[1]!.taskId, question: questions[1], source: sources[1] }, null]);
+      expect(send).toHaveBeenCalledExactlyOnceWith(ASKING, sources[1]!.taskId, 'use west', 7);
+      expect(summary).toBe(`NEXT-ANSWER · ${EN.runAnswer!.none.replace('{run}', '9c8b7a6d')}`);
+    } finally { clock.mockRestore(); }
   });
   it.each([['n'], ['\r'], [ESC], ['\u0003']])('%j on the answer card keeps the run and sends nothing, even with an answer written', async key => {
     const answer = vi.fn(async () => 'SENT'), h = await openAsking(answerPorts(answer));
