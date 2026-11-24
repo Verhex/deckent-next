@@ -3,6 +3,9 @@ import type { ModelBindingDefinition, ModelReference } from '#domain/index.js';
 import type { ModelActivationActor, ModelActivationAuthorization, ModelActivationCommand,
   ModelActivationReceipt, ModelActivationRecord } from '#domain/index.js';
 
+/** The configured admission reader can load receipts. Observation opens the ordinary read view. */
+export const activationReceiptRead = Symbol('activationReceiptRead');
+
 /** Trusted admission after current authentication/policy. Adapters validate it before persistence. */
 export interface ModelActivationAdmission {
   readonly command: ModelActivationCommand;

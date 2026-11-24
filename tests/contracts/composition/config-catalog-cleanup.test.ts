@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,7 +54,9 @@ it.skipIf(process.platform === 'win32')('cleans provider history through real co
   async function models<T>(args: string[]): Promise<T> {
     const output: string[] = [];
     await modelsCommand(['models', ...args, '--json'], { root, env, stdout: { write: (value: string) => { output.push(value); } },
-      inspectModelBinding, admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation,
+      inspectModelBinding, admitModelActivation: (project, command, loadOptions) => args[0] === 'activate'
+        ? witnessedModelActivation('admitModelActivation', project, loadOptions, command as Readonly<Record<string, unknown>>)
+        : admitConfiguredModelActivation(project, command, loadOptions), inspectModelActivation: inspectConfiguredModelActivation,
       inspectModelInvocation: inspectConfiguredModelInvocation });
     return JSON.parse(output.join('')) as T;
   }

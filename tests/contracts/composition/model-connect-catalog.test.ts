@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import * as witnessAdapters from '#adapters/index.js';
+import { runInTerminal, lastJson } from '../support/terminal-cli.js';
+import { personMarkersUnset } from '../support/person-env.js';
+import { describe, expect, it, vi } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, readProviderConnectSeed } from '#adapters/index.js';
-import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel as configuredConnect } from '#composition/core/model-connect/index.js';
 import { applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createAnthropicMessagesPricedNative, openSqliteModelCatalogReader } from '#adapters/index.js';
@@ -74,9 +77,11 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
       { cwd: f.project, env: f.options.env as NodeJS.ProcessEnv });
     await deckent('models', 'catalog', 'register', '--scope', 'scope', '--file', 'synthetic.json', '--command-id', 'register-fable', '--json');
     clearConfigCache();
-    const out = [(await deckent('models', 'connect', '--scope', 'scope', '--connection', 'anthropic-api', '--model', FABLE, '--command-id', 'connect-fable', '--json')).stdout];
+    const terminal = await runInTerminal([process.execPath, resolve('dist/composition/core/cli/internal/entry.js'), 'models', 'connect',
+      '--scope', 'scope', '--connection', 'anthropic-api', '--model', FABLE, '--command-id', 'connect-fable', '--json'], f.project, f.options.env);
+    expect(terminal.code).toBe(0);
     clearConfigCache();
-    const result = JSON.parse(out.join('')) as Record<string, unknown>;
+    const result = lastJson(terminal.output);
     const reference = { providerId: 'anthropic-api', providerVersion: 1, modelId: FABLE, modelVersion: 1 };
     expect(result).toMatchObject({ status: 'connected', reference, tariff: 'published', credentialRef: 'DECKENT_ANTHROPIC_KEY',
       steps: { catalog: 'skipped', declaration: 'written', profile: 'written', activation: 'written' } });
@@ -126,3 +131,17 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
     expect((f.state.requests as { model: string }[]).map(request => request.model)).toEqual([SOL]);
   }, 60_000);
 });
+
+const connectConfiguredModel: typeof configuredConnect = (...args) => asPerson(() => configuredConnect(...args));
+
+async function asPerson<T>(operation: () => Promise<T>): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

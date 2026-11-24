@@ -1,37 +1,19 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { ModelActivationError, transitionModelActivation, type ModelActivationReceipt,
+import { ModelActivationError, transitionModelActivation,
   type ModelActivationRecord, type ModelReference } from '#domain/index.js';
 import { ModelActivationStoreError, parseModelActivationAdmission, sameModelActivationRequest,
   verifyModelActivationReceipt, type ModelActivationAdmission,
   type ModelActivationResult, type ModelActivationStore } from '#engine/index.js';
 import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { activationIdentity, activationRecordRow, decodeActivationRecord, loadActivationRecord } from './read.js';
+import { activationRecordRow, decodeActivationRecord, loadActivationRecord, loadActivationReceipt } from './read.js';
 
-type Row = Readonly<Record<string, unknown>>;
 const unavailable = (): never => { throw new ModelActivationStoreError('MODEL_ACTIVATION_UNAVAILABLE'); };
 function encoded(value: unknown): string { return JSON.stringify(value); }
 
 export class SqliteModelActivationStore implements ModelActivationStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  private receiptRow(scopeId: string, commandId: string): Row | undefined {
-    return this.db.prepare('SELECT scope_id,command_id,record FROM model_activation_receipts WHERE scope_id=? AND command_id=?')
-      .get(scopeId, commandId) as Row | undefined;
-  }
-  private decodeReceipt(row: Row, scopeId: string, commandId: string): ModelActivationReceipt {
-    try {
-      if (row['scope_id'] !== scopeId || row['command_id'] !== commandId || typeof row['record'] !== 'string') throw new Error();
-      const receipt = verifyModelActivationReceipt(JSON.parse(row['record']));
-      if (receipt.command.scopeId !== scopeId || receipt.command.commandId !== commandId) throw new Error();
-      return receipt;
-    } catch { throw new ModelActivationStoreError('MODEL_ACTIVATION_CORRUPT'); }
-  }
-  async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelActivationReceipt | null> {
-    try {
-      const scopeId = activationIdentity(scopeInput), commandId = activationIdentity(commandInput);
-      const row = this.receiptRow(scopeId, commandId); return row ? this.decodeReceipt(row, scopeId, commandId) : null;
-    } catch (error) { return this.failure(error); }
-  }
+  async loadReceipt(scopeId: string, commandId: string) { return loadActivationReceipt(this.db, scopeId, commandId); }
   async loadRecord(scopeInput: string, referenceInput: ModelReference): Promise<ModelActivationRecord | null> {
     try {
       return loadActivationRecord(this.db, scopeInput, referenceInput);
@@ -41,11 +23,10 @@ export class SqliteModelActivationStore implements ModelActivationStore {
     try {
       const admission = parseModelActivationAdmission(input), { command, actor } = admission;
       return ledgerTransaction(this.db, () => {
-        const priorReceipt = this.receiptRow(command.scopeId, command.commandId);
-        if (priorReceipt) {
-          const receipt = this.decodeReceipt(priorReceipt, command.scopeId, command.commandId);
-          if (!sameModelActivationRequest(receipt, command, actor)) throw new ModelActivationStoreError('MODEL_ACTIVATION_COMMAND_CONFLICT');
-          return Object.freeze({ replayed: true, receipt });
+        const prior = loadActivationReceipt(this.db, command.scopeId, command.commandId);
+        if (prior) {
+          if (!sameModelActivationRequest(prior, command, actor)) throw new ModelActivationStoreError('MODEL_ACTIVATION_COMMAND_CONFLICT');
+          return Object.freeze({ replayed: true, receipt: prior });
         }
         const row = activationRecordRow(this.db, command.scopeId, command.reference);
         const current = row ? decodeActivationRecord(row, command.scopeId, command.reference) : null;

@@ -1,15 +1,18 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
-import { afterEach, describe, expect, it } from 'vitest';
-import { applyModelCatalog, inspectModelCatalog } from '../../../src/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { admitModelActivation, applyModelCatalog, inspectModelActivation, inspectModelBinding, inspectModelCatalog } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main } from '../../../src/surfaces/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { modelActivationTargetId, modelCatalogTargetId } from '#engine/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 
 /** WORKER-CURRENCY-2: the ledger model catalog through CLI `models catalog`, MCP and SDK — one application contract, one authority. */
@@ -31,8 +34,9 @@ async function fixture(catalogScopes: 'all' | readonly string[] = 'all', inspect
   const tables = () => { const db = new DatabaseSync(path, { readOnly: true }); try { return TABLES.map(table => db.prepare(`SELECT * FROM ${table} ORDER BY 1,2`).all()); } finally { db.close(); } };
   const cli = async (...argv: string[]) => {
     const out: string[] = [], err: string[] = [];
-    const code = await main(['models', 'catalog', ...argv], { root: project, env, initialize() {}, stdout: { write(value: string) { out.push(value); } },
+    const run = () => main(['models', 'catalog', ...argv], { root: project, env, initialize() {}, stdout: { write(value: string) { out.push(value); } },
       stderr: { write(value: string) { err.push(value); } }, applyModelCatalog: applyModelCatalog as never, inspectModelCatalog: inspectModelCatalog as never });
+    const code = argv[0] === 'activate' ? await asPerson(run) : await run();
     return { code, stdout: out.join(''), stderr: err.join('') };
   };
   return { project, options, path, tables, cli, policy };
@@ -108,6 +112,17 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await expect(applyModelCatalog(admin.project, { schemaVersion: 1, commandId: 'sdk-register', scopeId: 's', action: 'register', catalog: edited }, admin.options))
       .rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(admin.tables()).toEqual(before);
+    const policyPath = join(admin.project, 'd', 'policy.json'), scopedPolicy = JSON.parse(await readFile(policyPath, 'utf8'));
+    for (const modelId of [null, 'claude-sonnet-5-5']) {
+      const blockedChild = modelId === null ? 'claude-sonnet-5-5' : null;
+      await writeFile(policyPath, JSON.stringify({ ...scopedPolicy, revision: `deny-child-${modelId}`, grants: [...scopedPolicy.grants,
+        { ...scopedPolicy.grants[1], id: 'deny-child', effect: 'deny', actions: ['activate'],
+          resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: blockedChild })] } }] }));
+      const command = { schemaVersion: 1, commandId: `child-denied-${modelId}`, scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 };
+      await expect(asPerson(() => applyModelCatalog(admin.project, command, admin.options))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(admin.tables()).toEqual(before);
+    }
+    await admin.policy(['s']);
     // … while it manages its own scope's activation rows, never another scope's.
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--command-id', 'on', '--expected-revision', '0')).code).toBe(0);
     expect((await admin.cli('activate', '--scope', 'b', '--channel', SEED_CHANNEL, '--command-id', 'on-b', '--expected-revision', '0')).stderr).toContain('POLICY_DENIED');
@@ -143,9 +158,146 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);
     await register('retired', '2026-10-15');
     expect((await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r3', '--expected-revision', '1')).code).toBe(0);
+    // Reopening a channel would also make its already-active worker reachable again.
+    const channelArgs = ['--scope', 's', '--channel', SEED_CHANNEL];
+    expect((await admin.cli('activate', ...channelArgs, '--model', 'claude-sonnet-5-5',
+      '--command-id', 'reactivate-worker', '--expected-revision', '2')).code).toBe(0);
+    expect((await admin.cli('deactivate', ...channelArgs, '--command-id', 'close-channel', '--expected-revision', '1')).code).toBe(0);
+    const closed = admin.tables();
+    await writeFile(policyPath, JSON.stringify({ ...scopedPolicy, revision: 'deny-existing-child', grants: [...scopedPolicy.grants,
+      { ...scopedPolicy.grants[1], id: 'deny-existing-child', effect: 'deny', actions: ['activate'],
+        resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5' })] } }] }));
+    const reopened = await admin.cli('activate', ...channelArgs, '--command-id', 'reopen-channel', '--expected-revision', '2');
+    expect(reopened.code).toBe(1); expect(reopened.stderr).toContain('POLICY_DENIED');
+    expect(admin.tables()).toEqual(closed);
+    await admin.policy('all');
     // Usage errors never reach the application.
     for (const argv of [['activate', '--scope', 's', '--channel', SEED_CHANNEL, '--command-id', 'x'], ['register', '--scope', 's', '--command-id', 'x'],
       ['register', '--scope', 's', '--command-id', 'x', '--seed', 'a', '--file', 'b'], ['list']]) expect((await admin.cli(...argv)).code).toBe(2);
+  });
+  it('deactivates without an audit seal and preserves the parent-first partial result', async () => {
+    const f = await declaredFixture();
+    const command = { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: f.model.nativeId, expectedRevision: 0 };
+    const before = f.tables();
+    const unavailable = () => vi.spyOn(witnessAdapters, 'openSqliteAuditStore').mockRejectedValue(ErrorRegistry.createError('AUDIT_UNAVAILABLE'));
+    let audit = unavailable();
+    try {
+      await expect(asPerson(() => applyModelCatalog(f.project, command, f.options))).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+      expect(f.tables()).toEqual(before);
+    } finally { audit.mockRestore(); }
+    await asPerson(() => applyModelCatalog(f.project, command, f.options));
+    const off = { ...command, action: 'deactivate', commandId: 'off', expectedRevision: 1 };
+    audit = unavailable();
+    try {
+      const result = await applyModelCatalog(f.project, off, f.options).catch(error => error);
+      expect.soft(result).toMatchObject({ replayed: false, receipt: { changes: [{ kind: 'activation', revision: 2 }] } });
+      if (result.replayed === false) await expect(applyModelCatalog(f.project, off, f.options)).resolves.toEqual({ ...result, replayed: true });
+    } finally { audit.mockRestore(); }
+
+    const partial = await declaredFixture();
+    await asPerson(() => applyModelCatalog(partial.project, command, partial.options));
+    const policyPath = join(partial.project, 'd', 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    await writeFile(policyPath, JSON.stringify({ ...policy, grants: [...policy.grants,
+      { ...policy.grants[1], id: 'deny-child-off', effect: 'deny', actions: ['deactivate'],
+        resource: { kind: 'model-activation', ids: [modelActivationTargetId(partial.reference)] } }] }));
+    await expect(applyModelCatalog(partial.project, off, partial.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    const [,, activations, receipts] = partial.tables();
+    expect.soft(activations).toEqual(expect.arrayContaining([expect.objectContaining({ model_id: f.model.nativeId, state: 'inactive', revision: 2 })]));
+    expect.soft(receipts).toEqual(expect.arrayContaining([expect.objectContaining({ command_id: 'off' })]));
+    const listed = await inspectModelCatalog(partial.project, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, partial.options);
+    expect(listed.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: f.model.nativeId, chatState: 'active' })]) });
+    const preserved = partial.tables();
+    await expect.soft(applyModelCatalog(partial.project, off, partial.options)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
+    expect(partial.tables()).toEqual(preserved);
+
+    const direct = await declaredFixture();
+    await asPerson(() => applyModelCatalog(direct.project, command, direct.options));
+    const directPolicy = join(direct.project, 'd', 'policy.json');
+    await writeFile(directPolicy, JSON.stringify({ ...policy, grants: [...policy.grants,
+      { ...policy.grants[1], id: 'deny-worker-off', effect: 'deny', actions: ['deactivate'],
+        resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: f.model.nativeId })] } }] }));
+    const binding = await inspectModelBinding(direct.project, direct.reference, direct.options);
+    if (binding.status !== 'declared') throw new Error('fixture binding absent');
+    const query = { schemaVersion: 1 as const, scopeId: 's', reference: direct.reference };
+    const beforeWorker = direct.tables();
+    await expect(admitModelActivation(direct.project, { ...query, action: 'deactivate', commandId: 'direct-off',
+      expectedBinding: binding.binding, expectedRevision: 1 }, direct.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await inspectModelActivation(direct.project, query, direct.options)).toMatchObject({ activation: { state: 'inactive', revision: 2 } });
+    expect(direct.tables()).toEqual(beforeWorker);
+  });
+
+  it('allows an unselected model revision to change before a named activation', async () => {
+    const f = await declaredFixture();
+    const edit = await seedCatalog();
+    edit.revision = 'concurrent-catalog';
+    edit.providers[0].models[0].lifecycle.state = 'deprecated';
+    edit.providers[0].models[0].lifecycle.deprecatedOn = '2026-09-30';
+    const command = { schemaVersion: 1, commandId: 'named', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: f.model.nativeId, expectedRevision: 0 };
+    const apply = () => applyModelCatalog(f.project, command, f.options);
+    const result = await asPerson(apply, async () => {
+      await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'edit-sibling', scopeId: 's', action: 'register', catalog: edit }, f.options);
+      return true;
+    }).catch(error => error);
+    expect.soft(result).toMatchObject({ replayed: false, receipt: { changes: [{ modelId: f.model.nativeId, revision: 1 }] } });
+
+    const direct = await declaredFixture();
+    await asPerson(() => applyModelCatalog(direct.project, command, direct.options));
+    const policyPath = join(direct.project, 'd', 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    await writeFile(policyPath, JSON.stringify({ ...policy, grants: [...policy.grants,
+      { ...policy.grants[1], id: 'deny-unchanged-worker', effect: 'deny', actions: ['activate'],
+        resource: { kind: 'model-activation', ids: [null, f.model.nativeId].map(modelId => modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId })) } }] }));
+    const binding = await inspectModelBinding(direct.project, direct.reference, direct.options);
+    if (binding.status !== 'declared') throw new Error('fixture binding absent');
+    const admit = () => admitModelActivation(direct.project, { schemaVersion: 1, scopeId: 's', commandId: 'direct-again',
+      action: 'activate', reference: direct.reference, expectedRevision: 1, expectedBinding: binding.binding, catalogRevision: binding.catalogRevision }, direct.options);
+    await expect(asPerson(admit)).resolves.toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 2 } } });
+  });
+
+  it('settles missing catalog children after interruption, then replays their receipts without another write', async () => {
+    const f = await declaredFixture();
+    const { declare } = f;
+    const command = { schemaVersion: 1, commandId: 'interrupted', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 };
+    const apply = () => applyModelCatalog(f.project, command, f.options);
+    const openStore = witnessAdapters.openSqliteModelCatalogStore;
+    let writes = 0;
+    const interrupted = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openStore(...args);
+      if (++writes === 3) vi.spyOn(store, 'apply').mockRejectedValueOnce(new Error('fixture interruption'));
+      return store;
+    });
+    try { await expect(asPerson(apply)).rejects.toThrow(); } finally { interrupted.mockRestore(); }
+    const partial = f.tables();
+    expect(partial[2]).toHaveLength(2);
+    const withoutTerminal = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(false);
+    try { await expect(apply()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); } finally { withoutTerminal.mockRestore(); }
+    expect(f.tables()).toEqual(partial);
+    await declare('changed-after-interruption');
+    await expect(asPerson(apply)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
+    expect(f.tables()).toEqual(partial);
+    await declare('original');
+    const completed = await asPerson(apply);
+    expect(completed.replayed).toBe(true);
+    const settled = f.tables();
+    expect(settled[2]).toEqual(expect.arrayContaining([expect.objectContaining({ model_id: 'claude-sonnet-5-5', state: 'active', revision: 1 })]));
+    const inspected = await inspectModelCatalog(f.project, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, f.options);
+    expect(inspected.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'claude-sonnet-5-5', chatState: 'active' })]) });
+    expect(await apply()).toEqual(completed);
+    expect(f.tables()).toEqual(settled);
+    const policyPath = join(f.project, 'd', 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    await writeFile(policyPath, JSON.stringify({ ...policy, grants: policy.grants.map((grant: { actions: string[] }) =>
+      ({ ...grant, actions: grant.actions.filter(action => action === 'inspect') })) }));
+    await expect(apply()).resolves.toEqual(completed);
+    expect(f.tables()).toEqual(settled);
+    const readable = await readFile(policyPath, 'utf8'), readers = JSON.parse(readable);
+    await writeFile(policyPath, JSON.stringify({ ...readers, grants: [...readers.grants,
+      { ...readers.grants[1], id: 'deny-child-inspect', effect: 'deny',
+        resource: { kind: 'model-activation', ids: [modelActivationTargetId(f.reference)] } }] }));
+    await expect(apply()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.tables()).toEqual(settled);
+    await writeFile(policyPath, readable);
+    const db = new DatabaseSync(f.path);
+    try { db.prepare("UPDATE model_activation_receipts SET record = '{}'").run(); } finally { db.close(); }
+    await expect(apply()).rejects.toMatchObject({ code: 'MODEL_ACTIVATION_CORRUPT' });
   });
   it('shows a channel without inspect authority as denied, and serves the same contract over MCP', async () => {
     const f = await fixture('all', false);
@@ -175,3 +327,28 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     } finally { await session.close(); }
   });
 });
+
+async function declaredFixture() {
+  const f = await fixture();
+  const seed = await seedCatalog(), provider = seed.providers[0]!;
+  const model = provider.models.find((item: { nativeId: string }) => item.nativeId === 'claude-sonnet-5-5')!;
+  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog: seed }, f.options);
+  const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+  const declaration = { schemaVersion: 1, revision: 'original', providers: [{ id: provider.id, version: provider.version,
+    models: [{ id: model.id, version: model.version, nativeId: model.nativeId, protocols: model.protocols }] }] };
+  const declare = (revision: string) => writeFile(configPath, JSON.stringify({ ...config, provider_catalog: { ...declaration, revision } }), { mode: 0o600 });
+  await declare('original');
+  return { ...f, declare, model, reference: { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version } };
+}
+
+async function asPerson<T>(operation: () => Promise<T>, attest = async () => true): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockImplementationOnce(attest).mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

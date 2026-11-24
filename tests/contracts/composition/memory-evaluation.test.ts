@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -38,8 +39,8 @@ async function setup(options: { evaluatorGrants: boolean; invoke: boolean; roles
     pricing: { ...(seed.providers[0]!.models[0]!['pricing'] as object), inputPerMTok: '3', outputPerMTok: '15' } };
   const catalog = { ...seed, revision: 'fixture-evaluator-catalog', recommendedActivations: [], providers: [{ ...seed.providers[0]!, id: reference.providerId, models: [model] }] };
   await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'register-evaluator', scopeId: 's', action: 'register', catalog }, f.options);
-  for (const id of [null, modelId]) await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `activate-evaluator-${id ?? 'channel'}`, scopeId: 's', action: 'activate',
-    channelId: CHANNEL, modelId: id, expectedRevision: 0 }, f.options);
+  await witnessedModelActivation('applyModelCatalog', f.project, f.options, [null, modelId].map(id => ({ schemaVersion: 1, commandId: `activate-evaluator-${id ?? 'channel'}`,
+    scopeId: 's', action: 'activate', channelId: CHANNEL, modelId: id, expectedRevision: 0 })));
   return { f, reference, evaluator: memoryEvaluatorPrincipal(person, ['s']) };
 }
 
@@ -69,7 +70,7 @@ it('the read-only view names the evaluator row, its catalog maker and its price 
   expect(turkish).toContain('0,9216 USD');
   await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'deactivate-evaluator-channel', scopeId: 's', action: 'deactivate', channelId: CHANNEL, modelId: null, expectedRevision: 1 }, f.options);
   expect(await inspectConfiguredMemoryEvaluators(f.project, 's', f.options)).toMatchObject({ available: false, rows: [] });
-  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'reactivate-evaluator-channel', scopeId: 's', action: 'activate', channelId: CHANNEL, modelId: null, expectedRevision: 2 }, f.options);
+  await witnessedModelActivation('applyModelCatalog', f.project, f.options, { schemaVersion: 1, commandId: 'reactivate-evaluator-channel', scopeId: 's', action: 'activate', channelId: CHANNEL, modelId: null, expectedRevision: 2 });
   await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'deactivate-evaluator-model', scopeId: 's', action: 'deactivate', channelId: CHANNEL, modelId, expectedRevision: 1 }, f.options);
   expect(await inspectConfiguredMemoryEvaluators(f.project, 's', f.options)).toMatchObject({ available: false, rows: [] });
   expect(f.posts).toBe(0);

@@ -2,8 +2,10 @@ import { createServer, type Server } from 'node:https';
 import { createServer as createProbe } from 'node:net';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ModelReference } from '#domain/index.js';
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapters/index.js';
 import { connectConfiguredModel, inspectConfiguredModelReadiness, planConfiguredProfileCache, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -72,8 +74,8 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     Object.assign(f.env, { DECKENT_ANTHROPIC_KEY: options.env.DECKENT_ANTHROPIC_KEY });
     await grantFixtureSecrets(f.project, 'scope', ['DECKENT_ANTHROPIC_KEY'], options); // PRE-8 v2: the admin lent the main-vault key to this project.
     await f.start();
-    const connected = await connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'connect-claude', scopeId: 'scope', connection: 'claude-fixture', endpoint: null,
-      model: { nativeId: 'claude-sonnet-5-5' } }, options, { registry });
+    const connected = await asPerson(() => connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'connect-claude', scopeId: 'scope', connection: 'claude-fixture', endpoint: null,
+      model: { nativeId: 'claude-sonnet-5-5' } }, options, { registry }));
     expect(connected.status).toBe('connected');
     const reference = connected.reference;
     // Fixture TLS is authored before any provider transport. All subsequent mutations go through the real governed config writer.
@@ -85,7 +87,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const ready = await inspectConfiguredModelReadiness(f.project, 'scope', reference, options) as { command: { nativeRequest: { max_completion_tokens: number } } };
     expect(ready.command.nativeRequest.max_completion_tokens).toBe(64);
     const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
-      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: (...args: Parameters<typeof prepareConfiguredModelSwitch>) => asPerson(() => prepareConfiguredModelSwitch(...args)),
       listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: ['DECKENT_ANTHROPIC_KEY'] }) };
     const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
     // The composed stream binds its real command to the workline context (as session-approval-terminal); the fixture names that scope.
@@ -172,7 +174,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const options = { env: f.env, heal: false as const };
     await f.start();
     const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
-      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: (...args: Parameters<typeof prepareConfiguredModelSwitch>) => asPerson(() => prepareConfiguredModelSwitch(...args)),
       listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: [] as string[] }) };
     const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
     const view = mountWorkline({ model: 'chat', context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' }, panels: { ports: { model: source }, labels: terminalPanelLabels('tr') },
@@ -193,3 +195,16 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     expect(f.state.requests).toHaveLength(1);
   }, 60_000);
 });
+
+
+async function asPerson<T>(operation: () => Promise<T>): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

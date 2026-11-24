@@ -30,14 +30,14 @@ export async function headlessIsolationRefusal(options: ConfigLoadOptions = {}):
 }
 /** The person at this terminal: a controlling TTY and no AI-agent or CI marker of the installation's list (PV: an agent with a PTY tool is not the person). */
 export const headlessPersonWitness = (env: Env, agents: readonly string[]): AuthorityWitness =>
-  ({ attest: async () => automationMarker(env, agents) === null && await attestLocalInteractiveTerminal() });
+  ({ attest: async () => automationMarker(process.env, agents) === null && automationMarker(env, agents) === null && await attestLocalInteractiveTerminal() });
 /**
  * S3-3: the CLI kind's connect ports. The adapter part is prepared once per command after the engine's person check (S3-5: the isolation realm
  * first, then executable, login dir — s3c: the Brain's own unless the person names one —, uid, preflight inside the realm; no model call), and the
  * consent is the person's own choice on each written layer. State lives under the person's global state dir, one fixed dir per connection.
  */
 export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>,
-  ledger: () => Promise<Readonly<{ installationId: string | null; config: ResolvedConfig; path: () => Promise<string>; }>>) {
+  ledger: (access: 'read' | 'write') => Promise<Readonly<{ installationId: string | null; config: ResolvedConfig; path: () => Promise<string>; }>>) {
   const env = options.env ?? process.env;
   const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string;
     custody: Awaited<ReturnType<typeof inspectNativeStateCustody>> }>>>();
@@ -55,9 +55,18 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       return Object.freeze({ protocol, owned, base, custody });
     })(); prepared.set(nativeId, next); return next;
   };
+  const bindings = new Map<string, { binding: ReturnType<typeof headlessCapacityBinding>; slots: number }>();
   return {
+    async commit() {
+      const context = await ledger('write');
+      const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
+      try {
+        for (const entry of bindings.values()) bindCapacityResource(db, entry.binding, { executionSlots: entry.slots, inFlightSlots: entry.slots });
+      } finally { db.close(); }
+    },
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
-      const context = await ledger();
+      const observed = await ledger('read');
+      const context = observed.installationId ? observed : await ledger('write');
       if (!context.installationId) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
       const principal = await person(), sourceBinding = { schemaVersion: 1 as const, installationId: context.installationId,
         companyId: context.config.company.id, scopeId: command.scopeId, principal: { issuer: principal.issuer, subject: principal.subject } };
@@ -79,8 +88,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       const { base, protocol, owned, custody } = await prepare(kind, value.nativeId), consent = prepareSubscriptionConsent(value.existing as never,
         command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), principal, Date.now()); // a first connect takes the owner default
       const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
-      const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
-      try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }
+      bindings.set(value.nativeId, { binding: headlessCapacityBinding(definition), slots: adapter.maxInFlight });
       return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [],
         ...(custody === 'outside-installation' ? { governedUse: custody } : {}) } };
     },

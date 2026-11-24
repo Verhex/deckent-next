@@ -3,10 +3,11 @@ import { optionalField } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import type { ModelBindingDefinition, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { parseModelActivationCommand, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationProfileSchema,
-  type ModelActivationAuthorization } from '#domain/index.js';
+  type ModelActivationAuthorization, transitionModelActivation } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { parseModelActivationAdmission, sameModelActivationRequest, verifyModelActivationReceipt } from './evidence.js';
+import type { ModelActivationReader } from './inspection.js';
 import { ModelActivationStoreError, type ModelActivationDeliveryFinding, type ModelActivationResult, type ModelActivationStore } from './port.js';
 
 export interface ModelActivationAuthorizer {
@@ -40,44 +41,62 @@ export class ModelActivationApplication {
     private readonly bindings: Pick<ModelBindingApplication, 'inspect'>,
     private readonly openStore: () => Promise<ModelActivationStore>, private readonly now: () => number,
     private readonly invocationDelivery?: ModelActivationInvocationDelivery) {}
-  async admit(input: unknown, credential?: unknown): Promise<ModelActivationResult> {
+  private async authorize(input: unknown, credential?: unknown) {
     const command = parseModelActivationCommand(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const actor = modelActivationActorSchema.parse({ id: principal.id, issuer: principal.issuer,
       subject: principal.subject, assurance: principal.assurance });
     const authorization = modelActivationAuthorizationSchema.parse(await this.authorization.authorize(command.action,
       { scopeId: command.scopeId, reference: command.reference }, principal));
-    // No store or catalog read precedes the fresh gate. Historical replay does not require a surviving declaration.
-    const store = await this.openStore();
-    try {
-      const prior = await store.loadReceipt(command.scopeId, command.commandId);
-      if (prior) {
-        if (!sameModelActivationRequest(prior, command, actor)) throw new ModelActivationStoreError('MODEL_ACTIVATION_COMMAND_CONFLICT');
-        return Object.freeze({ replayed: true, receipt: verifyModelActivationReceipt(prior) });
-      }
-      let definition: ModelBindingDefinition | undefined;
-      if (command.action === 'activate') {
-        const observed = await this.bindings.inspect(command.reference);
-        if (observed.status !== 'declared' || observed.catalogRevision !== command.catalogRevision
-          || observed.binding.digest !== command.expectedBinding.digest) throw new ModelActivationStoreError('MODEL_ACTIVATION_CATALOG_CONFLICT');
-        definition = observed.definition;
-        // SESSION-RESULT-LIMIT-2026-09-28: a profile already declared for this reference would fail every
-        // line-mode/MCP invocation forever once this activation makes it reachable; refuse now, before any
-        // store write. No profile yet (the common case: profiles are set up separately) is not a finding —
-        // there is nothing to protect yet, and doctor stays the ongoing authority (drift after activation).
-        if (this.invocationDelivery) {
-          const configured = this.invocationDelivery.profiles as { profiles?: unknown[] } | undefined;
-          const targets = (configured?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value))
-            .filter(profile => profile.scopeId === command.scopeId && exactReference(profile.reference, command.reference))
-            .map(profile => ({ profile, definition: observed.definition, catalogRevision: observed.catalogRevision }));
-          const finding = this.invocationDelivery.assess(targets, this.invocationDelivery.surfaces)[0];
-          if (finding) {
-            throw new ModelActivationStoreError('MODEL_ACTIVATION_DELIVERY_UNFIT', finding);
-          }
+    return { command, actor, authorization };
+  }
+  private replay(prior: Awaited<ReturnType<ModelActivationStore['loadReceipt']>>, { command, actor }: Awaited<ReturnType<ModelActivationApplication['authorize']>>): ModelActivationResult | null {
+    if (!prior) return null;
+    if (!sameModelActivationRequest(prior, command, actor)) throw new ModelActivationStoreError('MODEL_ACTIVATION_COMMAND_CONFLICT');
+    return Object.freeze({ replayed: true, receipt: verifyModelActivationReceipt(prior) });
+  }
+  private async plan({ command, actor, authorization }: Awaited<ReturnType<ModelActivationApplication['authorize']>>) {
+    let definition: ModelBindingDefinition | undefined;
+    if (command.action === 'activate') {
+      const observed = await this.bindings.inspect(command.reference);
+      if (observed.status !== 'declared' || observed.catalogRevision !== command.catalogRevision
+        || observed.binding.digest !== command.expectedBinding.digest) throw new ModelActivationStoreError('MODEL_ACTIVATION_CATALOG_CONFLICT');
+      definition = observed.definition;
+      // SESSION-RESULT-LIMIT-2026-09-28: a profile already declared for this reference would fail every
+      // line-mode/MCP invocation forever once this activation makes it reachable; refuse now, before any
+      // store write. No profile yet (the common case: profiles are set up separately) is not a finding —
+      // there is nothing to protect yet, and doctor stays the ongoing authority (drift after activation).
+      if (this.invocationDelivery) {
+        const configured = this.invocationDelivery.profiles as { profiles?: unknown[] } | undefined;
+        const targets = (configured?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value))
+          .filter(profile => profile.scopeId === command.scopeId && exactReference(profile.reference, command.reference))
+          .map(profile => ({ profile, definition: observed.definition, catalogRevision: observed.catalogRevision }));
+        const finding = this.invocationDelivery.assess(targets, this.invocationDelivery.surfaces)[0];
+        if (finding) {
+          throw new ModelActivationStoreError('MODEL_ACTIVATION_DELIVERY_UNFIT', finding);
         }
       }
-      const admission = parseModelActivationAdmission({ command, actor, authorization, admittedAtMs: this.now(),
-        ...optionalField('definition', definition) });
+    }
+    return parseModelActivationAdmission({ command, actor, authorization, admittedAtMs: this.now(),
+      ...optionalField('definition', definition) });
+  }
+  async preflight(input: unknown, openReader: () => Promise<ModelActivationReader>) {
+    const authorized = await this.authorize(input), { command } = authorized, reader = await openReader();
+    try {
+      if (!reader.loadReceipt) throw new ModelActivationStoreError('MODEL_ACTIVATION_UNAVAILABLE');
+      const replay = this.replay(await reader.loadReceipt(command.scopeId, command.commandId), authorized);
+      const current = await reader.loadRecord(command.scopeId, command.reference);
+      if (!replay) transitionModelActivation(current, command, (await this.plan(authorized)).definition);
+      return { replay, current };
+    } finally { reader.close(); }
+  }
+  async admit(input: unknown, credential?: unknown): Promise<ModelActivationResult> {
+    const authorized = await this.authorize(input, credential), { command, actor, authorization } = authorized;
+    const store = await this.openStore();
+    try {
+      const replay = this.replay(await store.loadReceipt(command.scopeId, command.commandId), authorized);
+      if (replay) return replay;
+      const admission = await this.plan(authorized);
       const result = await store.admit(admission), receipt = verifyModelActivationReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelActivationRequest(receipt, command, actor)
         || (!result.replayed && (JSON.stringify(receipt.authorization) !== JSON.stringify(authorization)

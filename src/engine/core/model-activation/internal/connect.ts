@@ -1,11 +1,12 @@
 import { timedSync } from '#platform/index.js';
 import { CodedError } from '#platform/index.js';
-import { configuredInvocationProfiles } from '#engine/core/provider-catalog/index.js';
+import { configuredInvocationProfiles, ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { admittedToolchains, compareToolchainVersions, extractToolchainVersion, type ToolchainAdmissionSource } from '#engine/core/toolchain-currency/index.js';
+import { ModelActivationStoreError } from './port.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, parseProviderCatalog as parseProviderCatalogRaw, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
+import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, delegatedUseConsentSchema, delegationOwner, endpointMayCarryKey, isAiPrincipal, modelConnectCommandSchema, modelCatalogTargets, parseProviderCatalog as parseProviderCatalogRaw, parseProviderCatalogDocument, parseModelInvocationProfile, type AuditEvent, type JsonObject,
   type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
   type CatalogModel, type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
@@ -36,6 +37,20 @@ export interface ModelConnectPorts {
   priced?(kind: string, nativeId: string, endpoint: string): boolean;
   workerActivate?(reference: ModelReference, commandId: string): Promise<boolean | void>;
   preflight?(scopeId: string, principal: VerifiedPrincipal, target?: Readonly<{ reference: ModelReference; nativeId: string }>): Promise<void>;
+  beforeDiscovery?(command: ModelConnectCommand, kind: ModelConnectKind, base: string | null, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
+  beforeProbes?(kind: ModelConnectKind, base: string, nativeIds: readonly string[]): Promise<void>;
+  authorizePlan?(plan: {
+    profiled: boolean;
+    delegationOnly: boolean;
+    registrationTargets: ReturnType<typeof modelCatalogTargets>;
+    writes: readonly { layer: ModelConnectLayer; keyPath: string }[];
+    selections: readonly { reference: ModelReference; activate: boolean; worker: boolean }[];
+  }): Promise<void>;
+  beforeAdapter?(plan: Pick<Parameters<NonNullable<ModelConnectPorts['authorizePlan']>>[0], 'registrationTargets' | 'profiled' | 'selections'>): Promise<void>;
+  authorizeCarry?(reference: ModelReference, binding: Extract<ModelConnectBinding, { status: 'declared' }>): Promise<void>;
+  workerNeeded?(reference: ModelReference, registering: ProviderCatalogDocument | null): Promise<boolean>;
+  beforeWrite?(): Promise<void>;
+  commitAdapter?(): Promise<void>;
   /** Seedless kinds: a fresh bounded endpoint list must contain the selected exact id before any write. */
   discover?(kind: string, endpoint: string, nativeId: string): Promise<ProviderCatalogDocument>;
   /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
@@ -78,6 +93,12 @@ const sameReference = (left: ModelReference, right: ModelReference) => left.prov
   && left.modelId === right.modelId && left.modelVersion === right.modelVersion;
 const canonical = (value: unknown): string => value === null || typeof value !== 'object' ? JSON.stringify(value) : Array.isArray(value)
   ? `[${value.map(canonical).join(',')}]` : `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
+function withoutDelegation(profiles: readonly Record<string, unknown>[]) {
+  return profiles.map(row => {
+    const profile = parseModelInvocationProfile(row), { adapter } = profile;
+    return canonical({ ...profile, version: null, adapter: { ...adapter, definition: { ...adapter.definition, delegatedUse: null } } });
+  }).sort();
+}
 const step = (commandId: string, ...parts: readonly string[]) => [commandId, ...parts].join('.');
 type Declared = ProviderCatalog['providers'][number]['models'][number];
 type Target = Readonly<{ reference: ModelReference; nativeId: string; maxOutputTokens: number; contextWindow: number | null; seed: ProviderCatalogDocument | null;
@@ -167,7 +188,7 @@ export class ModelConnectApplication {
     // S3-3: a person's own CLI login is connected by that person only. S3-5: where its isolation realm is usable — the adapter step refuses
     // typed before any spawn or write otherwise, on every installation (no preview switch, no unisolated fallback).
     const principal = await ports.principal();
-    if (kind.connect.personOnly && isAiPrincipal(principal)) {
+    if (!ports.beforeDiscovery && kind.connect.personOnly && isAiPrincipal(principal)) {
       await this.delegation(command, [null], principal);
       throw new ModelConnectError('HEADLESS_PERSON_REQUIRED');
     }
@@ -183,11 +204,12 @@ export class ModelConnectApplication {
     if (kind.keyRequired && secure && keyName === null) throw new ModelConnectError('MODEL_CONNECT_KEY_NAME_UNAVAILABLE');
     // A key is only ever named over https (`endpointMayCarryKey`, G2-7); a plain-http local server is reached without one (the adapters refuse a cleartext credential).
     const credentialRef = secure ? keyName : null, { scopeId } = command;
-    if (isAiPrincipal(principal)) {
+    if (!ports.beforeDiscovery && isAiPrincipal(principal)) {
       if (!ports.preflight) throw new ModelConnectError('MODEL_CONNECT_NOT_CONNECTABLE');
       await ports.preflight(scopeId, principal);
     }
     let layers = await ports.layers();
+    await ports.beforeDiscovery?.(command, kind, base, layers);
     await this.delegationDiscovery(kind, command, layers, principal);
     const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
     const models: NonNullable<ModelConnectResult['models']>[number][] = [];
@@ -210,10 +232,12 @@ export class ModelConnectApplication {
     } else { // Mert M-35: a single-model catalog-only connect passes the same worker-image gate as the pull form (the port refuses without one)
       const listed = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
       if (kind.connect.headless) workerIds = listed; else if (listed && !listed.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
+    if (!kind.connect.seed && ports.beforeProbes)
+      await ports.beforeProbes(kind, base ?? '', commands.flatMap(item => 'nativeId' in item.model ? [item.model.nativeId] : []));
     const targets = await Promise.all(commands.map(item => this.target(kind, item, effective(), base ?? '')));
     const target = targets[0];
     if (!target) throw new ModelConnectError('MODEL_CONNECT_NO_AVAILABLE', models);
-    if (isAiPrincipal(principal)) for (const target of targets) await ports.preflight!(scopeId, principal, target);
+    if (!ports.beforeDiscovery && isAiPrincipal(principal)) for (const target of targets) await ports.preflight!(scopeId, principal, target);
     const steps: { catalog: ModelConnectStepState; declaration: ModelConnectStepState; profile: ModelConnectStepState; activation: ModelConnectStepState; carried: number } =
       { catalog: 'skipped', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 };
     let reboundProfile: ModelReference | null = null;
@@ -223,17 +247,15 @@ export class ModelConnectApplication {
       service: ModelConnectResult['service'] = null): ModelConnectResult => Object.freeze({ schemaVersion: 1, operation: MODEL_CONNECT_OPERATION_ID, commandId: command.commandId,
       scopeId, connection: command.connection, status, reference: target.reference, ...('pull' in command.model ? { models: [...models] } : {}), credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), carriedModels: Object.freeze([...carriedModels]), tariff, ...(cli ? { cli } : {}), ...(worker ? { worker } : {}), approval, service });
     const write = async (keyPath: string, value: unknown, layer: ModelConnectLayer, id: string) => {
+      await ports.beforeWrite?.();
       const pending = await ports.write({ keyPath, value, layer, commandId: id });
       layers = await ports.layers();
       if (pending && 'reboundProfile' in pending) { reboundProfile = pending.reboundProfile; steps.profile = 'written'; return null; }
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath: pending.keyPath ?? keyPath, layer }) : null;
     };
     const { profileLayers, profileId, mine } = await this.delegationLayers(command, targets, layers, profiled, principal);
-    // Validate every tariff before the first write. One catalog and declaration change for the entire connection.
-    const adapters = !profiled ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
-      maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}), existing: null })));
-    tariff = adapters.some(adapter => adapter.tariff === 'published') ? 'published' : 'unmetered'; cli = adapters[0]?.cli;
     const seeds = [...new Map(targets.filter(target => target.seed !== null).map(target => [target.seed!.revision, target.seed!])).values()];
+    let registration: ProviderCatalogDocument | null = null;
     if (seeds.length) {
       const providers = new Map<string, ProviderCatalogDocument['providers'][number]>();
       for (const seed of seeds) for (const provider of seed.providers) {
@@ -242,34 +264,79 @@ export class ModelConnectApplication {
       }
       const merged = seeds.length === 1 ? seeds[0]! : parseProviderCatalogDocument({ ...seeds[0], revision: `connect-${createHash('sha256').update(canonical([...providers.values()])).digest('hex').slice(0, 16)}`, providers: [...providers.values()] });
       if (await Promise.all(merged.providers.flatMap(provider => provider.models.map(model => ports.catalogHas(provider.id, model.nativeId)))).then(rows => rows.every(Boolean))) steps.catalog = 'present';
-      else { await ports.register(merged, step(command.commandId, 'catalog')); steps.catalog = 'written'; }
+      else registration = merged;
     }
     const where = { global: layers.global['provider_catalog'] !== undefined, project: layers.project['provider_catalog'] !== undefined };
     const layer: ModelConnectLayer = where.project || !where.global ? 'project' : 'global';
     let next = layers[layer]['provider_catalog'] === undefined ? null : parseProviderCatalog(layers[layer]['provider_catalog']);
     let changed = false;
     for (const target of targets) if (profiled && target.declare) { const declared = declareConnectedModel(next, target.declare); if (declared) { next = declared; changed = true; } }
-    if (changed) {
-      const carry = await this.carryable(effective(), targets.map(target => target.reference));
-      const stopped = await write('provider_catalog', next, layer, step(command.commandId, 'declaration'));
-      if (stopped) return stopped;
-      steps.declaration = 'written';
-      for (const [index, item] of carry.entries()) {
-        try {
-          const binding = await ports.binding(item.reference);
-          if (binding.status !== 'declared' || binding.binding.digest !== item.digest) { notCarried.push({ reference: item.reference, code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }); continue; }
-          await (ports.carryActivate ?? ports.activate)({ commandId: step(command.commandId, 'carry', String(index)), reference: item.reference, expectedRevision: item.revision,
-            catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
-          steps.carried++; carriedModels.push(item.reference);
-        } catch (error) { notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') }); }
+    const carry = changed ? await this.carryable(effective(), targets.map(target => target.reference)) : [];
+    const forward = new ModelBindingApplication({ async read() { return changed ? next ?? undefined : effective() ?? undefined; } });
+    const exact = async (reference: ModelReference) => {
+      const binding = await forward.inspect(reference);
+      if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+      return binding;
+    };
+    const selection = ports.authorizePlan ? await Promise.all(targets.map(async target => {
+      const binding = profiled ? await exact(target.reference) : null;
+      const activation = binding ? await ports.activation(target.reference) : null;
+      const activate = binding !== null && !(activation?.state === 'active' && activation.catalogRevision === binding.catalogRevision && activation.binding.digest === binding.binding.digest);
+      const worker = (!kind.connect!.headless || workerIds?.includes(target.nativeId) === true)
+        && Boolean(await ports.workerNeeded?.(target.reference, registration));
+      return { reference: target.reference, binding, activation, activate, worker };
+    })) : [];
+    const carryPlan: (typeof carry[number] & { binding: Awaited<ReturnType<typeof exact>> | null })[] = [];
+    for (const item of carry) {
+      try {
+        const binding = ports.authorizePlan ? await exact(item.reference) : null;
+        if (binding && item.digest !== binding.binding.digest) throw new ModelActivationStoreError('MODEL_ACTIVATION_CATALOG_CONFLICT');
+        if (binding) await ports.authorizeCarry?.(item.reference, binding);
+        carryPlan.push({ ...item, binding });
+      } catch (error) { notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') }); }
+    }
+    const publish = async () => {
+      if (registration) {
+        await ports.beforeWrite?.();
+        await ports.register(registration, step(command.commandId, 'catalog')); steps.catalog = 'written';
       }
-    } else if (profiled && targets.some(target => target.declare)) steps.declaration = 'present';
+      if (changed) {
+        const stopped = await write('provider_catalog', next, layer, step(command.commandId, 'declaration'));
+        if (stopped) return stopped;
+        steps.declaration = 'written';
+        for (const [index, item] of carryPlan.entries()) {
+          try {
+            const binding = await ports.binding(item.reference);
+            if (item.binding && !isDeepStrictEqual(item.binding, binding)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+            if (binding.status !== 'declared' || binding.binding.digest !== item.digest) { notCarried.push({ reference: item.reference, code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }); continue; }
+            await ports.beforeWrite?.();
+            await (ports.carryActivate ?? ports.activate)({ commandId: step(command.commandId, 'carry', String(index)), reference: item.reference, expectedRevision: item.revision,
+              catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
+            steps.carried++; carriedModels.push(item.reference);
+          } catch (error) {
+            if (ports.authorizePlan) throw error;
+            notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') });
+          }
+        }
+      } else if (profiled && targets.some(target => target.declare)) steps.declaration = 'present';
+      return null;
+    };
+    const registrationTargets = registration ? modelCatalogTargets({ schemaVersion: 1, commandId: command.commandId, scopeId, action: 'register', catalog: registration }) : [];
+    await ports.beforeAdapter?.({ registrationTargets, profiled, selections: selection });
+    // Validate every tariff before the first write. One catalog and declaration change for the entire connection.
+    const adapters = !profiled ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
+      maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}), existing: null })));
+    tariff = adapters.some(adapter => adapter.tariff === 'published') ? 'published' : 'unmetered'; cli = adapters[0]?.cli;
+    if (!ports.authorizePlan) {
+      const stopped = await publish();
+      if (stopped) return stopped;
+    }
     const planned = new Map<ModelConnectLayer, Record<string, unknown>[]>(profileLayers.map(layer => [layer, [...configuredInvocationProfiles(layers[layer])]]));
     for (const [index, target] of (!profiled ? [] : targets).entries()) {
     if (reboundProfile && sameReference(target.reference, reboundProfile)) continue; // The atomic capability write preserved this profile's authored limits.
     const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) };
     const adapter = adapters[index]!;
-    const binding = await ports.binding(target.reference);
+    const binding = selection[index]?.binding ?? await ports.binding(target.reference);
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
     const id = profileId(target);
@@ -301,9 +368,35 @@ export class ModelConnectApplication {
       planned.set(layer, [...profiles.filter(item => !mine(target, item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow, known)]);
     }
     }
+    if (ports.authorizePlan) {
+      const writes = profileLayers.filter(layer => !isDeepStrictEqual(planned.get(layer), configuredInvocationProfiles(layers[layer])))
+        .map(layer => ({ layer, keyPath: 'provider_invocation_profiles' }));
+      if (changed) writes.unshift({ layer, keyPath: 'provider_catalog' });
+      const delegationOnly = command.delegate !== undefined && !changed && profileLayers.every(layer =>
+        isDeepStrictEqual(withoutDelegation(planned.get(layer)!), withoutDelegation(configuredInvocationProfiles(layers[layer]))));
+      await ports.authorizePlan({ registrationTargets, profiled, delegationOnly, writes, selections: selection });
+      if (registration || writes.length || selection.some(item => item.activate || item.worker) || ports.commitAdapter) {
+        await ports.beforeWrite?.();
+        await ports.commitAdapter?.();
+        const stopped = await publish();
+        if (stopped) return stopped;
+      } else {
+        if (profiled && targets.some(target => target.declare)) steps.declaration = 'present';
+        if (!profiled) steps.profile = 'skipped';
+        if (kind.connect.headless) worker = targets.some(target => !workerIds?.includes(target.nativeId)) ? 'image-required' : 'present';
+        for (const target of targets) models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
+        return result('connected', null, credentialRef ? await ports.keyStored(credentialRef) : null, await ports.service());
+      }
+    }
     for (const layer of profileLayers) {
-      const profiles = planned.get(layer)!;
-      if (isDeepStrictEqual(profiles, configuredInvocationProfiles(layers[layer]))) continue;
+      const current = configuredInvocationProfiles(layers[layer]);
+      const profiles = reboundProfile ? planned.get(layer)!.map(profile => {
+        const target = targets.find(item => sameReference(item.reference, reboundProfile!));
+        return target && mine(target, profile) ? current.find(row => mine(target, row)) ?? profile : profile;
+      }) : planned.get(layer)!;
+      if (isDeepStrictEqual(profiles, current)) continue;
+      for (const item of selection) if (item.binding && !isDeepStrictEqual(item.binding, await ports.binding(item.reference)))
+        throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
       const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles }, layer, step(command.commandId, 'profile', layer));
       if (stopped) return stopped;
       steps.profile = 'written';
@@ -314,19 +407,24 @@ export class ModelConnectApplication {
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 4. The chat activation at the current revision (after the profile: activation checks the profile's delivery).
     const activation = await ports.activation(target.reference);
+    const expected = selection[index];
+    if (expected && (!isDeepStrictEqual(expected.binding, binding) || !isDeepStrictEqual(expected.activation, activation)))
+      throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
     if (!(activation?.state === 'active' && activation.catalogRevision === binding.catalogRevision && activation.binding.digest === binding.binding.digest)) {
       // Without an admitted worker image a headless worker kind takes the chat activation only (the combined one would also switch the worker model on).
+      await ports.beforeWrite?.();
       await (kind.connect.headless && !workerIds?.includes(target.nativeId) ? ports.carryActivate ?? ports.activate : ports.activate)({ commandId: step(command.commandId, 'activate', String(index)), reference: target.reference, expectedRevision: activation?.revision ?? 0,
         catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
       steps.activation = 'written';
     }
     }
     if (kind.connect.headless && !workerIds?.includes(target.nativeId)) worker = 'image-required'; // the image gates only the worker activation, and the result says so
-    else if (await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
+    else if ((!ports.authorizePlan || selection[index]?.worker) && await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
     }
     if (!profiled) steps.profile = 'skipped';
     // 5. One record of the connection (names only), then the key's presence and the running service's state for the person.
+    await ports.beforeWrite?.();
     await ports.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId, principal: { issuer: principal.issuer, subject: principal.subject },
       policyRevision: await ports.policyRevision(), atMs: this.now(), subject: { kind: 'model-connect', commandId: command.commandId, connection: command.connection,
         reference: target.reference, credentialRef, steps: { ...steps }, notCarried: notCarried.map(item => item.reference) } });
@@ -382,7 +480,8 @@ export class ModelConnectApplication {
     for (const provider of before?.providers ?? []) for (const model of provider.models) {
       const reference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
       if (skip.some(item => sameReference(reference, item))) continue;
-      const activation = await this.ports.activation(reference).catch(() => null);
+      const pending = this.ports.activation(reference);
+      const activation = await (this.ports.authorizePlan ? pending : pending.catch(() => null));
       if (activation?.state === 'active' && activation.catalogRevision === before!.revision) carry.push({ reference, revision: activation.revision, digest: activation.binding.digest });
     }
     return carry;

@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
@@ -60,7 +61,8 @@ async function registerFixtureChannel(f: Awaited<ReturnType<typeof fixture>>, cl
     channel: { ...provider.channel, cli, client: cli, protocolFamily: 'fixture', aliases: [], aliasesRefused: [] }, models: [{ ...provider.models[0], id: modelId, nativeId: modelId,
       channelModelId: modelId, canonicalModelId: modelId, aliases: [], minCliVersion: null, minClientVersion: null, protocols: [{ family: 'fixture', version: 'v1', capabilities: [] }],
       lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null } }] }] } }, f.options);
-  for (const id of [null, modelId]) await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `activate-${cli}-${id}`, scopeId: 's', action: 'activate', channelId, modelId: id, expectedRevision: 0 }, f.options);
+  await witnessedModelActivation('applyModelCatalog', f.project, f.options, [null, modelId].map(id => ({ schemaVersion: 1, commandId: `activate-${cli}-${id}`,
+    scopeId: 's', action: 'activate', channelId, modelId: id, expectedRevision: 0 })));
 }
 /** A Run 'relay' with one task on a compiled native Codex profile (catalog channel registered and activated); `bind` may turn it into the relay route. */
 async function nativeCodexRun(f: Awaited<ReturnType<typeof fixture>>, bind: (compiled: ReturnType<typeof compileNativeCodingDockerProfile>, modelId: string) => ReturnType<typeof compileNativeCodingDockerProfile>,

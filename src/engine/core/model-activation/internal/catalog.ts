@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
-  parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
-  type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
+  parseModelCatalogCommand, parseModelCatalogReceipt, principalGrants, transitionModelCatalogActivation, type Policy, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
+  type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type ModelActivationReceipt, type VerifiedPrincipal } from '#domain/index.js';
 import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { sameModelActivationRequest } from './evidence.js';
 import { catalogDay } from './worker-admission.js';
 
 /** Trusted admission after authentication and policy; the store re-validates it inside its transaction. */
@@ -26,6 +28,7 @@ export interface ModelCatalogReader {
   channel(channelId: string): Promise<ModelCatalogChannelRecord | null>;
   models(channelId: string): Promise<readonly ModelCatalogModelRecord[]>;
   activation(scopeId: string, channelId: string, modelId: string | null): Promise<ModelCatalogActivationRecord | null>;
+  loadReceipt?(scopeId: string, commandId: string): Promise<ModelCatalogReceipt | null>;
   close(): void;
 }
 export interface ModelCatalogAuthorizer {
@@ -52,10 +55,12 @@ export class ModelCatalogApplication {
     if (!this.openReader) throw new ModelCatalogError('MODEL_CATALOG_UNAVAILABLE');
     return new ModelCatalogInspectionApplication(this.verifier, this.authorizer, this.openReader).inspect(input, credential);
   }
-  async apply(input: unknown, credential?: unknown): Promise<ModelCatalogResult> {
-    const command = parseModelCatalogCommand(input);
-    const principal = await authenticate(this.verifier, credential, command.scopeId);
+  private async identify(input: unknown, credential?: unknown) {
+    const command = parseModelCatalogCommand(input), principal = await authenticate(this.verifier, credential, command.scopeId);
     const actor = modelActivationActorSchema.parse({ id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance });
+    return { command, principal, actor };
+  }
+  private async authorize({ command, principal, actor }: Awaited<ReturnType<ModelCatalogApplication['identify']>>) {
     // Enabling (register, activate) needs `activate`; only narrowing (deactivate) is allowed with `deactivate`.
     const action = command.action === 'deactivate' ? 'deactivate' as const : 'activate' as const;
     // Registered facts are installation-wide (every scope's admission reads them); activation rows belong to the command's scope.
@@ -65,9 +70,54 @@ export class ModelCatalogApplication {
       authorizations.push(Object.freeze({ target, action, level,
         authorization: modelActivationAuthorizationSchema.parse(await this.authorizer.authorize(action, command.scopeId, target, principal, level)) }));
     }
+    return { command, actor, authorizations: Object.freeze(authorizations), admittedAtMs: this.now() };
+  }
+  async preflight(input: unknown, readReplay = false): Promise<ModelCatalogResult | null> {
+    const identity = await this.identify(input), { command, actor, principal } = identity;
+    const inspectReplay = readReplay && command.action !== 'register';
+    const inspect = () => this.authorizer.authorize('inspect', command.scopeId, modelCatalogTargets(command)[0]!, principal, 'scope');
+    const write = await this.authorize(identity).then(admission => ({ admission }), async (refusal: unknown) => {
+      if (!inspectReplay) throw refusal;
+      await inspect().catch(() => { throw refusal; });
+      return { refusal };
+    });
+    const reader = await this.openReader?.();
+    if (!reader?.loadReceipt) { reader?.close(); throw new ModelCatalogError('MODEL_CATALOG_UNAVAILABLE'); }
+    try {
+      const receipt = await reader.loadReceipt(command.scopeId, command.commandId);
+      if (receipt) {
+        if (inspectReplay && 'admission' in write) await inspect();
+        if (!sameModelCatalogRequest(receipt, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_COMMAND_CONFLICT');
+        return Object.freeze({ replayed: true, receipt });
+      }
+      if (!('admission' in write)) throw write.refusal;
+      const { admittedAtMs } = write.admission;
+      if (command.action !== 'register') {
+        if (!await reader.channel(command.channelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+        if (command.modelId !== null) {
+          const models = await reader.models(command.channelId);
+          if (!models.some(entry => entry.modelId === command.modelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+          if (command.action === 'activate') refuseRetiredModelActivation(models, command.modelId, admittedAtMs);
+        }
+        const current = await reader.activation(command.scopeId, command.channelId, command.modelId);
+        transitionModelCatalogActivation(current, command);
+        if (command.action === 'activate' && command.modelId === null && current?.state !== 'active') {
+          for (const entry of await reader.models(command.channelId)) {
+            if (isRetiredCatalogModel(entry, admittedAtMs)) continue;
+            const active = await reader.activation(command.scopeId, command.channelId, entry.modelId);
+            if (active?.state === 'active') await this.authorizer.authorize('activate', command.scopeId,
+              { channelId: command.channelId, modelId: entry.modelId }, principal, 'scope');
+          }
+        }
+      }
+      return null;
+    } finally { reader.close(); }
+  }
+  async apply(input: unknown, credential?: unknown): Promise<ModelCatalogResult> {
+    const admission = await this.authorize(await this.identify(input, credential)), { command, actor } = admission;
     const store = await this.openStore();
     try {
-      const result = await store.apply({ command, actor, authorizations: Object.freeze(authorizations), admittedAtMs: this.now() });
+      const result = await store.apply(admission);
       const receipt = parseModelCatalogReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelCatalogRequest(receipt, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
       return Object.freeze({ replayed: result.replayed, receipt });
@@ -113,10 +163,72 @@ export class ModelCatalogInspectionApplication {
   }
 }
 
+export function isRetiredCatalogModel(entry: Pick<ModelCatalogModelRecord, 'model'>, nowMs: number): boolean {
+  return catalogModelRetired(entry.model.lifecycle, catalogDay(nowMs));
+}
+
 /** A person's explicit activation of a retired model is refused with its retirement day and a recorded successor; deactivation stays allowed. */
 export function refuseRetiredModelActivation(models: Parameters<typeof retiredModelActivationRefusal>[0], modelId: string, nowMs: number): void {
   const refusal = retiredModelActivationRefusal(models, modelId, catalogDay(nowMs));
   if (refusal) throw refusal;
+}
+
+/** The deciding grant's terms are independent of revisions to unrelated policy cells. */
+export const modelActivationPolicyRule = (policy: Policy, principal: VerifiedPrincipal, id: string) =>
+  principalGrants(policy, principal).find(grant => grant.id === id);
+
+/** Only the channel's own facts and participating model rows make up an activation plan. */
+export async function checkCatalogActivationFacts(reader: ModelCatalogReader, scopeId: string,
+  planned: Extract<ModelCatalogChannelView, { access: 'allowed' }>, selected: readonly string[], opening: boolean): Promise<void> {
+  const { channelId } = planned;
+  const models = await reader.models(channelId), at = Date.now();
+  const versions = (rows: readonly Pick<ModelCatalogModelRecord, 'modelId' | 'revision'>[]) =>
+    rows.filter(row => selected.includes(row.modelId)).map(({ modelId, revision }) => ({ modelId, revision }));
+  const sibling = (row: Pick<ModelCatalogModelRecord, 'modelId' | 'model'>) => !selected.includes(row.modelId) && !isRetiredCatalogModel(row, at);
+  const active = opening ? (await Promise.all(models.filter(sibling).map(async row => ({
+    modelId: row.modelId, revision: row.revision, activation: await reader.activation(scopeId, channelId, row.modelId),
+  })))).filter(row => row.activation?.state === 'active').map(row => ({ ...row, activation: row.activation!.revision })) : [];
+  const expected = planned.models.filter(row => opening && sibling(row) && row.activation?.state === 'active')
+    .map(row => ({ modelId: row.modelId, revision: row.revision, activation: row.activation!.revision }));
+  if ((await reader.channel(channelId))?.revision !== planned.revision
+    || !isDeepStrictEqual(versions(models), versions(planned.models)) || !isDeepStrictEqual(active, expected)) {
+    throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+  }
+}
+
+export function verifyCatalogActivationChange(receipt: ModelCatalogReceipt, command: Exclude<ModelCatalogCommand, { action: 'register' }>): void {
+  const { channelId, modelId, expectedRevision } = command;
+  if (!isDeepStrictEqual(receipt.changes, [{ kind: 'activation', channelId, modelId, revision: expectedRevision + 1 }]))
+    throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
+}
+
+export const catalogChildCommandId = (commandId: string, id: string, stage: 'activate' | 'worker' | 'chat') =>
+  `catalog-state-${createHash('sha256').update(JSON.stringify([commandId, id, stage])).digest('hex')}`;
+
+/** Verify historical children against the parent actor and the deterministic identities of its original writes. */
+export async function readCatalogCascadeReceipts(command: Exclude<ModelCatalogCommand, { action: 'register' }>,
+  actor: ModelCatalogReceipt['actor'], modelIds: readonly string[], catalog: (id: string) => Promise<ModelCatalogReceipt | null>,
+  chat: (id: string) => Promise<ModelActivationReceipt | null>) {
+  const { action, scopeId, channelId, modelId, commandId } = command;
+  const targets = modelId === null ? modelIds : [modelId], children = [];
+  if (action === 'activate') for (const id of modelId === null ? targets : [null]) {
+    const childId = id === null ? catalogChildCommandId(commandId, 'channel', 'activate') : catalogChildCommandId(commandId, id, 'worker');
+    const receipt = await catalog(childId);
+    if (!receipt) continue;
+    const expected = { schemaVersion: 1 as const, commandId: childId, scopeId, action, channelId, modelId: id,
+      expectedRevision: receipt.command.action === 'activate' ? receipt.command.expectedRevision : 0 };
+    if (!sameModelCatalogRequest(receipt, expected, actor)) throw new ModelCatalogError('MODEL_CATALOG_COMMAND_CONFLICT');
+    verifyCatalogActivationChange(receipt, expected);
+    children.push(expected);
+  }
+  for (const id of targets) {
+    const receipt = await chat(catalogChildCommandId(commandId, id, 'chat'));
+    if (!receipt) continue;
+    if (receipt.command.action !== action || !sameModelActivationRequest(receipt, receipt.command, actor))
+      throw new ModelCatalogError('MODEL_CATALOG_COMMAND_CONFLICT');
+    children.push(receipt.command);
+  }
+  return children;
 }
 
 /** Write-time channel cascade. Explicit inactive rows always win; a retired model is never turned on by it (law 6 amendment: only current,

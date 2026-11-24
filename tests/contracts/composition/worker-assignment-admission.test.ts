@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -45,10 +46,14 @@ async function seeded() {
   await writeFile(configPath, JSON.stringify({ ...config, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order',
     registry: registry(workers.template('coding', { ...docker })) } })); clearConfigCache();
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  const catalog = (fields: Record<string, unknown>) => fields['action'] === 'activate'
+    ? witnessedModelActivation('applyModelCatalog', project, options, command(fields))
+    : applyModelCatalog(project, command(fields), options);
   const activate = (modelId: string | null, action = 'activate', expectedRevision = 0) => catalog({ action, channelId: SEED_CHANNEL, modelId, expectedRevision });
   await catalog({ action: 'register', catalog: await seedCatalog() });
-  await activate(null); await activate('claude-sonnet-5-5');
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, 'claude-sonnet-5-5'].map(modelId =>
+    command({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 })));
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
   const runs = () => read<{ n: number }>('SELECT count(*) AS n FROM runs')[0]!.n;
   const execution = (runId: string) => (JSON.parse(read<{ snapshot: string }>('SELECT snapshot FROM runs WHERE run_id = ?', runId)[0]!.snapshot) as

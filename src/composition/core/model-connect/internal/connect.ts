@@ -1,19 +1,19 @@
-import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
 import { SIWC_INFERENCE } from '#adapters/index.js';
-import type { ModelConnectResult } from '#domain/index.js';
+import { modelInvocationProfileSchema, type ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { configuredInvocationProfiles, assertAuthorityWitness, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
-import { localPrincipalChannel, localPrincipalPeer, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
-import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
+import { DeckentError, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-import { activateConfiguredWorkerModel, carryConfiguredModelActivation, admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { listConfiguredConnectionWorkspaces, listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
-import { headlessConnectPorts, headlessPersonWitness } from './headless.js';
+import { activateConfiguredWorkerModel, carryConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
+import { headlessConnectPorts } from './headless.js';
+import { connectAuthority } from './connect-authority.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { providerSpendingConfiguredBudget } from '#adapters/index.js';
@@ -22,6 +22,8 @@ import { modelConnectCommandSchema } from '#domain/index.js';
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
+  let siwc: ReturnType<typeof configuredSiwcConnect> | null = null;
+  let enablingWriteStarted = false;
   let connectPhase: 'before-profile-write' | 'profile-write-started' | 'profile-written' = 'before-profile-write';
   try {
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, scopeId = (input as { scopeId?: unknown } | null)?.scopeId;
@@ -32,59 +34,85 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
       }
     });
-    const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
-    const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
+    const parsed = modelConnectCommandSchema.safeParse(input), kind = parsed.success ? kindOf(parsed.data.connection) : null;
+    const authority = parsed.success && kind ? connectAuthority(projectRoot, parsed.data, options, kind) : null;
+    const scope = (access: 'read' | 'write' = 'read') => loadConfiguredScopeContext(projectRoot, String(scopeId), options, access);
+    const principal = async () => (await (authority?.current() ?? scope())).principal;
     let effective: Record<string, unknown> = {};
-    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal, scope) : null;
-    if (parsed.success && parsed.data.workspaceId) {
-      const rows = await listConfiguredConnectionWorkspaces(projectRoot, String(scopeId), parsed.data.connection, parsed.data.endpoint, options, host);
-      if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
-      host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
-    }
-    // A person-only CLI connection needs authorized catalog/activation facts before a legacy profile can be repaired, never invocation permission.
-    const facts = parsed.success && kindOf(parsed.data.connection)?.connect?.personOnly && kindOf(parsed.data.connection)?.connect?.chatPath === null ? { modelUse: false } as const : {};
+    let withdrawing = false;
+    const cli = parsed.success && kind?.connect?.chatPath === null && kind.connect.adapter !== SIWC_INFERENCE.adapter.id
+      && (!kind.connect.catalogOnly || kind.connect.headless) ? headlessConnectPorts(parsed.data, options, principal, scope) : null;
+    const facts = { modelUse: false } as const;
     const inspectCatalog = (channelId: string) => inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options, facts);
-    const siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
+    siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
+    const siwcModels = async () => (await siwc!.models()).map(row => row.slug);
     const pulled = new Map<string, readonly string[]>();
+    const checkLayers = async () => {
+      const fresh = await snapshotConfiguredConfig(projectRoot, options);
+      if (!observed || !isDeepStrictEqual(observed.global, fresh.global) || !isDeepStrictEqual(observed.project, fresh.project))
+        throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+    };
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
       defaults: registry.profileDefaults,
       async available(id, base) {
         const kind = kindOf(id)!;
         if (kind.connect?.catalogOnly) { const seed = await readProviderConnectSeed(kind.connect.seed!), ids = workerConnectionModelIds(seed, effective as never); if (ids.length || kind.connect.headless) return ids; throw ErrorRegistry.createError('MODEL_CONNECT_WORKER_IMAGE_REQUIRED', { params: { cli: seed.providers[0]?.channel.cli ?? kind.id } }); } // BeUser M-24: the image comes first (owner 2026-10-31: for a headless kind it gates only the worker activation)
-        if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = (await siwc.models()).map(row => row.slug); pulled.set(id, ids); return ids; }
+        if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = await siwcModels(); pulled.set(id, ids); return ids; }
         if (!kind.probe?.listsModels) return null;
         const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);
         pulled.set(id, ids); return ids;
       },
       priced: (id, nativeId, base) => providerConnectModelPriced(kindOf(id)!, nativeId, base),
-      async preflight(scopeId, principal, target) {
-        const kind = parsed.success ? kindOf(parsed.data.connection) : null;
-        const channelId = target?.reference.providerId ?? kind?.connect?.seed ?? (kind ? providerDiscoveryChannel(kind, parsed.success ? parsed.data.endpoint : null) : 'unknown');
-        const source = contextPolicySource(await scope(), async () => (await scope()).document);
-        await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: null }, principal, 'scope');
-        if (target) {
-          await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: target.nativeId }, principal, 'scope');
-          await new ModelActivationPolicyAuthorization(source).authorize('activate', { scopeId, reference: target.reference }, principal);
+      async beforeDiscovery(command, _kind, base, layers) {
+        await authority!.beforeDiscovery(base, layers, host);
+        if (command.workspaceId) host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: command.workspaceId } };
+      },
+      async beforeProbes(_kind, base, ids) { await authority!.beforeProbes(base, ids); },
+      async beforeAdapter(plan) {
+        if (authority!.mightWithdraw) {
+          const layers = { global: observed!.global, project: observed!.project, effective };
+          withdrawing = await authority!.withdrawal(plan, layers);
+          if (withdrawing) return;
+          await authority!.discoveryAuthority(null, layers, host, false);
         }
+        await authority!.targets(plan);
+      },
+      async authorizePlan(plan) {
+        withdrawing &&= plan.delegationOnly;
+        if (!withdrawing) {
+          await authority!.targets(plan);
+          await authority!.config(plan.writes);
+        }
+        await checkLayers();
+      },
+      async authorizeCarry(reference, binding) {
+        await authority!.authorizeCarry(reference);
+        const context = await authority!.current();
+        const targets = configuredInvocationProfiles(context.config).map(profile => modelInvocationProfileSchema.parse(profile))
+          .filter(profile => profile.scopeId === scopeId && isDeepStrictEqual(profile.reference, reference))
+          .map(profile => ({ profile, definition: binding.definition, catalogRevision: binding.catalogRevision }));
+        const finding = assessModelInvocationProfileDeliveries(targets, configuredModelInvocationDeliverySurfaces(context.config))[0];
+        if (finding) throw new ModelActivationStoreError('MODEL_ACTIVATION_DELIVERY_UNFIT', finding);
+      },
+      workerNeeded: (reference, registration) => authority!.workerNeeded(reference, registration),
+      ...(cli ? { commitAdapter: () => cli.commit() } : {}),
+      async beforeWrite() {
+        await checkLayers();
+        if (!withdrawing) await authority!.witness(!enablingWriteStarted);
+        enablingWriteStarted = true;
       },
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
       discover: async (id, base, nativeId) => {
-        if (kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc && !pulled.has(id)) pulled.set(id, (await siwc.models()).map(row => row.slug));
+        if (kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc && !pulled.has(id)) pulled.set(id, await siwcModels());
         return pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId, await probeLocalToolCalls(kindOf(id)!, base, nativeId, host.discoveryOptions)) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host);
       },
-      adapter: (id, value) => kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc ? siwc.adapter(value.existing) : kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
-      async workerActivate(reference, commandId) {
-        return kindOf(parsed.success ? parsed.data.connection : '')?.connect?.catalogOnly
-          ? activateConfiguredWorkerModel(projectRoot, String(scopeId), reference, commandId, options) : false;
-      },
-      async authorizeDelegation() {
-        const config = await loadComposedConfig(projectRoot, options);
-        await assertAuthorityWitness('models.connect.delegate', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
-          headlessPersonWitness(options.env ?? process.env, config.cli.agentEnvironment));
-      },
+      adapter: async (id, value) => kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc ? siwc.adapter(value.existing) : kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
+      workerActivate: (reference, commandId) => authority!.applyWorker(reference,
+        () => activateConfiguredWorkerModel(projectRoot, String(scopeId), reference, commandId, options)),
+      authorizeDelegation: () => authority!.witness(),
       principal,
       async layers() {
         const [snapshot, global] = await Promise.all([snapshotConfiguredConfig(projectRoot, options), snapshotConfiguredConfig(projectRoot, options, 'global')]);
@@ -131,15 +159,12 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       binding: reference => inspectModelBinding(projectRoot, reference, options),
       async activation(reference) { return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options, facts)).activation; },
       async activate(value) {
-        await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
-          expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },
-      async carryActivate(value) {
         await carryConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options);
       },
       delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
         configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
-      async audit(event) { await withScopeAudit(await scope(), audit => { audit.record(event); }); },
+      async audit(event) { await withScopeAudit(await scope('write'), audit => { audit.record(event); }); },
       async policyRevision() { return (await scope()).document.revision; },
       async keyStored(name) { if (!host.listSecretNames) return null; try { return (await host.listSecretNames(projectRoot, options)).names.includes(name); } catch { return null; } },
       service: () => configServiceState(projectRoot, options, host.describeService),
@@ -152,8 +177,18 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (error instanceof ModelConnectError) normalized = ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
     if (error instanceof ProviderConnectError) normalized = ErrorRegistry.createError(error.code);
     const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
-    throw new DeckentError(failure.code, failure.message, failure.suggestion, failure.docLink, failure.whatHappened, failure.why, failure.howToFix,
-      failure.category, { cause: failure }, failure.localize, Object.freeze({ ...failure.params, connectPhase }));
+    const oauthConnected = siwc?.connected() === true;
+    const localizeRefusal = oauthConnected ? (locale: Locale) => {
+      if (failure.code === 'AUTHORITY_WITNESS_REQUIRED' && !enablingWriteStarted)
+        return { ...failure.localize?.(locale), message: t('siwc.connectedActivationRefused', {}, locale) };
+      const cause = failure.localize?.(locale);
+      const params = { reason: cause?.message ?? failure.message };
+      return { ...cause, message: enablingWriteStarted ? t('siwc.connectedActivationUnconfirmed', params, locale)
+        : t('siwc.connectedActivationFailed', params, locale) };
+    } : undefined;
+    throw new DeckentError(failure.code, localizeRefusal?.('en').message ?? failure.message, failure.suggestion, failure.docLink, failure.whatHappened, failure.why, failure.howToFix,
+      failure.category, { cause: failure }, localizeRefusal ?? failure.localize, Object.freeze({ ...failure.params, connectPhase,
+        ...(oauthConnected ? { connectionState: 'connected', activationState: 'unfinished' } : {}) }));
   }
 }
 /** İ-12 budget step: the priced-turn gate's own rule (`model-invocation/internal/native.ts` budgetFor — the scope's account, else a configured budget). */

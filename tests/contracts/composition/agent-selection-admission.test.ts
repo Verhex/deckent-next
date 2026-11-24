@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -46,9 +47,10 @@ async function seeded() {
     { id: 'agents', effect: 'allow', actions: ['inspect', 'define'], scopes: ['s'], principals, resource: { kind: 'agent-catalog', ids: 'all' } },
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }); await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6-luna', expectedRevision: 0 });
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  await applyModelCatalog(project, command({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') }), options);
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, 'gpt-6-luna'].map(modelId =>
+    command({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 })));
   const task = (runId: string) => { const db = new DatabaseSync(path, { readOnly: true });
     try { return (JSON.parse(String(db.prepare('SELECT snapshot FROM runs WHERE run_id = ?').get(runId)!['snapshot'])) as { execution: { tasks: Record<string, unknown>[] } }).execution.tasks[0]!; } finally { db.close(); } };
   return { project, options, task };

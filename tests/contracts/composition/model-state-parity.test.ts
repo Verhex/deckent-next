@@ -1,7 +1,9 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { clearConfigCache, t } from '#platform/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { configuredConfigChoiceSources } from '#composition/core/config/index.js';
@@ -118,7 +120,14 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
     // The fixture verifies the live ledger shape without any metadata/model endpoint or paid call.
     const port = providerPanelPort(f.project, 'scope', { providerConnect: { ...providerConnect, kinds: registry.kinds.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available,
         endpointDefault: kind.endpoint.default, endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: null, endpointChoices: [] })) },
-      connectModel: (root, command, options) => connectConfiguredModel(root, command, options, { registry }) }, { env }, 'en', error => String(error));
+      connectModel: async (root, command, options) => {
+        const terminal = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+        const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+        const values = markers.map(key => process.env[key]!);
+        for (const key of markers) delete process.env[key];
+        try { return await connectConfiguredModel(root, command, options, { registry }); }
+        finally { terminal.mockRestore(); for (const [index, key] of markers.entries()) process.env[key] = values[index]!; }
+      } }, { env }, 'en', error => String(error));
     for (const [connection, seed, count] of seeds) {
       const catalog = await readProviderConnectSeed(seed);
       for (const model of catalog.providers.flatMap(provider => provider.models).slice(0, count)) {

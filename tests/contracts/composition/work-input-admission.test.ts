@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { execFile } from 'node:child_process';
@@ -76,15 +77,20 @@ async function seeded(localRegistry: object = registry, suppliedCatalog?: object
     { id: 'catalog', effect: 'allow', actions: ['activate', 'deactivate'], scopes: 'all', principals, resource: { kind: 'model-activation', ids: 'all' } },
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  const catalog = (fields: Record<string, unknown>) => fields['action'] === 'activate'
+    ? witnessedModelActivation('applyModelCatalog', project, options, command(fields))
+    : applyModelCatalog(project, command(fields), options);
   const activation = (modelId: string | null, action = 'activate', expectedRevision = 0, channelId = SEED_CHANNEL) => catalog({ action, channelId, modelId, expectedRevision });
   // The fixture's HAIKU plays the "no reasoning-effort knob" model (the retired haiku-4-5 had none): the seed copy lists no efforts for it.
   const effortless = async () => { const seed = await seedCatalog(); for (const model of seed.providers[0].models) if (model.nativeId === HAIKU) { model.efforts = []; model.reasoning.supportedEfforts = []; } return seed; };
   await catalog({ action: 'register', catalog: suppliedCatalog ?? await effortless() });
   // Opus stays inactive on purpose: a work input naming it is refused as not active.
-  await activation(null); await activation('claude-sonnet-5-5'); await activation(HAIKU);
-  await catalog({ action: 'register', catalog: CODEX_SEED }); await activation(null, 'activate', 0, CODEX_CHANNEL);
-  for (const modelId of [CODEX, CODEX_HELPER]) await activation(modelId!, 'activate', 0, CODEX_CHANNEL);
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, 'claude-sonnet-5-5', HAIKU].map(modelId =>
+    command({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 })));
+  await catalog({ action: 'register', catalog: CODEX_SEED });
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, CODEX!, CODEX_HELPER!].map(modelId =>
+    command({ action: 'activate', channelId: CODEX_CHANNEL, modelId, expectedRevision: 0 })));
   // Owner 2026-11-08: the Claude kinds move to the person's login (`coding template --connection`): the template keeps its turn limit and parts,
   // the hand-prepared card becomes the same prepared worker on that login.
   const workers = await nativeClaudeWorkers(project, 's', options), configPath = join(project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));

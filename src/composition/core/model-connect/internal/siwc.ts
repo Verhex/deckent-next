@@ -1,13 +1,14 @@
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { randomUUID } from 'node:crypto';
 import { type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
-import { configuredInvocationProfiles, subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, installationSecretRoot, unsafeStoreDirectory, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
+import { configuredInvocationProfiles, subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, policySecretChangeAuthorization, policyVerdictRefusal, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, installationSecretRoot, unsafeStoreDirectory, SIWC_PROTOCOL } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { connectConfiguredModel } from './connect.js';
+import { assertConfiguredActivationWitness } from '#composition/core/model-activation/index.js';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
 /** One gate and one error boundary for the CLI and the terminal window: sign-in follows the kind's registry availability (logout and usage
@@ -18,6 +19,7 @@ export async function executeConfiguredSiwc(root: string, request: SubscriptionC
   if (!kind || !kind.available && request.operation !== 'logout' && request.operation !== 'usage') throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
   try { return await siwcOperation(root, request, options, presentation, kind.id); }
   catch (error) {
+    if (error instanceof DeckentError && error.params?.['connectionState'] === 'connected') throw error;
     // `connect` arrives already registered (connectConfiguredModel); login/logout/inspect arrive as the OAuth owner's typed refusal.
     const typed = error instanceof OAuthConnectionError || error instanceof PersonalCustodyError ? { code: error.code, reason: error.reason }
       : error instanceof DeckentError && error.code === 'SIWC_STORE_NOT_PERSONAL' ? { code: error.code, reason: error.params?.['reason'] } : null;
@@ -30,8 +32,12 @@ export async function executeConfiguredSiwc(root: string, request: SubscriptionC
 }
 async function siwcOperation(root: string, request: SubscriptionConnectionRequest, options: ConfigLoadOptions,
   presentation: Readonly<{ signal?: AbortSignal; fallback?: (url: string) => void }>, connection: string): Promise<SubscriptionConnectionResult> {
-  await assertAuthorityWitness('models.login', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), { attest: () => attestLocalInteractiveTerminal() });
-  const context = await loadConfiguredScopeContext(root, request.scopeId, options, request.operation === 'prepare' || request.operation === 'usage' ? 'read' : 'write');
+  const observes = request.operation === 'prepare' || request.operation === 'usage';
+  const baseAuthority = observes || request.operation === 'logout';
+  if (baseAuthority) await assertAuthorityWitness('models.login', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
+    { attest: () => attestLocalInteractiveTerminal() });
+  const context = await loadConfiguredScopeContext(root, request.scopeId, options, request.operation === 'logout' ? 'write' : 'read');
+  if (!baseAuthority) await assertConfiguredActivationWitness('models.login', context, options);
   if (subscriptionActor(context.principal).principalClass !== 'person') throw ErrorRegistry.createError('HEADLESS_PERSON_REQUIRED');
   if (request.operation === 'prepare' || request.operation === 'usage') {
     const profiles = configuredInvocationProfiles(context.config), apiTargets = [], references = [];
@@ -53,6 +59,7 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
     }
     return { apiTargets, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
   }
+  if (request.operation === 'login' && !request.newAccount) await authorizeSiwcConnect(context, request.scopeId, request.connectionId);
   if (request.operation === 'logout' || request.operation === 'login' && !request.newAccount) return withConfiguredSiwc(root, request.scopeId, options,
     request.operation === 'logout' ? 'logout' : 'connect', async app => {
       const records = request.connectionId ? [] : request.operation === 'logout' ? await app.listForRevocation() : await app.list();
@@ -75,3 +82,15 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
   const view = await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.inspect(definition.connectionId));
   return { models, ...view, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
 };
+
+
+/** The known OAuth policy targets are decided before the OAuth owner opens its write scope. */
+export async function authorizeSiwcConnect(context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, scopeId: string, connectionId?: string) {
+  const authorize = policySecretChangeAuthorization(context.document, context.principal);
+  const names = connectionId ? [`${SIWC_PROTOCOL.connectionSecretPrefix}${connectionId.replaceAll('-', '').toUpperCase()}`] : [SIWC_PROTOCOL.hostSecretName];
+  for (const name of names) {
+    const { effect } = await authorize({ principal: context.principal, scopeId, name, action: 'set' });
+    const refusal = policyVerdictRefusal(effect, { deny: 'OAUTH_CONNECTION_DENIED' });
+    if (refusal) throw new OAuthConnectionError(refusal);
+  }
+}

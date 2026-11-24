@@ -1,10 +1,12 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
-import { connectConfiguredModel, listConfiguredConnectionModels } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel as connect, listConfiguredConnectionModels } from '#composition/core/model-connect/index.js';
 import { probeProviderConnection } from '#adapters/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -268,3 +270,17 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect(called).toBe(false); expect(await readFile(f.path, 'utf8')).toBe(before);
   });
 });
+
+const connectConfiguredModel: typeof connect = (...args) => asPerson(() => connect(...args));
+
+async function asPerson<T>(operation: () => Promise<T>): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

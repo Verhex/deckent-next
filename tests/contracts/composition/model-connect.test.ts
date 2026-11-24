@@ -1,14 +1,16 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
 import { terminalApproval } from '../support/terminal-runtime-client.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, parseProviderConnectRegistry } from '#adapters/index.js';
-import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, readProviderConnectSeed, parseProviderConnectRegistry } from '#adapters/index.js';
+import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation as admit, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel as connect } from '#composition/core/model-connect/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { modelActivationTargetId } from '#engine/index.js';
+import { modelActivationTargetId, modelCatalogTargetId } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 // T4-B models.connect (owner 2026-10-08 D2) through the real configured paths: the governed config writer (policy, approval, audit), the ledger
@@ -81,9 +83,18 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(await f.client().chatTurn(ask('turn-configured'), () => undefined)).toMatchObject({ finish: 'stop', answer: 'Still local.' });
     expect((f.state.requests as { model: string }[]).map(request => request.model)).toEqual(['gpt-6-luna', 'native-chat']);
     // The same command again: everything is in place, nothing is written.
-    const again = await connectConfiguredModel(f.project, command, f.options, { registry: localRegistry });
+    const beforeReplay = f.rows("SELECT * FROM audit_events");
+    const again = await connect(f.project, command, f.options, { registry: localRegistry });
     expect(again.steps).toEqual({ catalog: 'present', declaration: 'present', profile: 'present', activation: 'present', carried: 0 });
-    // Canary: no result, configuration file, ledger row or model request carries the key.
+    expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
+      const db = new DatabaseSync(f.ledger);
+    try { db.prepare('DELETE FROM model_catalog_activations WHERE channel_id=? AND model_id=?').run('openai-api', 'gpt-6-luna'); }
+    finally { db.close(); }
+    const missing = f.rows('SELECT * FROM model_catalog_activations');
+    await expect(connect(f.project, command, f.options, { registry: localRegistry })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(f.rows('SELECT * FROM model_catalog_activations')).toEqual(missing);
+    expect(f.rows('SELECT * FROM audit_events')).toEqual(beforeReplay);
+  // Canary: no result, configuration file, ledger row or model request carries the key.
     expect(JSON.stringify([result, again])).not.toContain(CANARY);
     expect(await allText(f.project)).not.toContain(CANARY);
     expect(await allText(f.data)).not.toContain(CANARY);
@@ -267,4 +278,99 @@ it.skipIf(process.platform !== 'linux')('explicit model state writes both owners
   try { unset.prepare("DELETE FROM model_catalog_activations WHERE model_id='gpt-6-luna'").run(); } finally { unset.close(); }
   const missing = await inspectConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: connected.reference.providerId }, f.options);
   expect(missing.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'gpt-6-luna', chatState: 'active', activation: null, activationConflict: false })]) });
+
+  const sibling = 'gpt-6.1-sol', channelId = connected.reference.providerId;
+  await connectConfiguredModel(f.project, { ...command, commandId: 'sibling-on', model: { nativeId: sibling } }, f.options, { registry: localRegistry });
+  const seed = await readProviderConnectSeed(channelId), authored = structuredClone(seed);
+  const retired = authored.providers[0]!.models.find(row => row.nativeId === sibling)!;
+  Object.assign(retired.lifecycle, { state: 'retired', retiredOn: '2026-01-01', retireNotBefore: '2026-01-01' });
+  await applyConfiguredModelCatalog(f.project, { schemaVersion: 1, commandId: 'retire-sibling', scopeId: 'scope', action: 'register', catalog: authored }, f.options);
+  await applyConfiguredModelCatalog(f.project, { schemaVersion: 1, commandId: 'close-channel', scopeId: 'scope', action: 'deactivate',
+    channelId, modelId: null, expectedRevision: 1 }, f.options);
+  const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+  await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'retired-sibling-denied', grants: [...policy.grants,
+    { id: 'deny-retired-sibling', effect: 'deny', scopes: ['scope'], principals: me, actions: ['activate'],
+      resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId, modelId: sibling })] } }] }));
+  await expect(connectConfiguredModel(f.project, { ...command, commandId: 'reopen-channel' }, f.options, { registry: localRegistry }))
+    .resolves.toMatchObject({ status: 'connected' });
 }, 40_000);
+
+it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect before the capability POST or any durable change', async () => {
+  const f = await harness([], true);
+  const methodLog: string[] = [];
+  const nativeId = 'witness-loopback-fixture';
+  const snapshot = async () => ({ config: await f.config(), ledger: await readFile(f.ledger),
+    dataFiles: (await readdir(f.data)).filter(file => file !== 'policy.json').sort(), channels: f.rows('SELECT * FROM model_catalog_channels'),
+    catalog: f.rows('SELECT * FROM model_catalog_activations'), chat: f.rows('SELECT * FROM model_activations'),
+    audit: f.rows('SELECT * FROM audit_events'), receipts: f.rows('SELECT * FROM model_activation_receipts') });
+  const before = await snapshot();
+  const command = { schemaVersion: 1, commandId: 'witness-loopback', scopeId: 'scope',
+    connection: 'local-openai', endpoint: f.base, model: { nativeId } };
+  const host = { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+    methodLog.push(String(init.method));
+    return Response.json(init.method === 'GET' ? { data: [{ id: nativeId }] } : { choices: [] });
+  } } };
+  const raw = () => connect(f.project, command, f.options, host);
+  const result = await raw().then(value => value.status, (error: { code?: string }) => error.code);
+  const after = await snapshot();
+  expect({ result, posts: methodLog.filter(method => method === 'POST').length,
+    configUnchanged: JSON.stringify(after.config) === JSON.stringify(before.config),
+    catalogUnchanged: JSON.stringify([after.channels, after.catalog]) === JSON.stringify([before.channels, before.catalog]),
+    chatUnchanged: JSON.stringify(after.chat) === JSON.stringify(before.chat),
+    auditUnchanged: JSON.stringify(after.audit) === JSON.stringify(before.audit) })
+    .toEqual({ result: 'AUTHORITY_WITNESS_REQUIRED', posts: 0, configUnchanged: true, catalogUnchanged: true, chatUnchanged: true, auditUnchanged: true });
+  await expect(asPerson(async () => {
+    process.env['CI'] = 'true';
+    try { return await raw(); } finally { delete process.env['CI']; }
+  })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(after).toEqual(before);
+  expect(methodLog).toEqual([]);
+
+  const policyPath = join(f.data, 'policy.json'), policy = await readFile(policyPath, 'utf8');
+  const denied = JSON.parse(policy);
+  denied.grants = denied.grants.filter((rule: { id: string }) => rule.id !== 'config');
+  await writeFile(policyPath, JSON.stringify({ ...denied, revision: 'connect-known-deny' }));
+  await expect(asPerson(raw)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(methodLog).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+  await writeFile(policyPath, policy);
+
+  const drift = () => connect(f.project, command, f.options, { discoveryOptions: { async fetch(url, init) {
+    const response = await host.discoveryOptions.fetch(String(url), init);
+    if (init.method === 'POST') await writeFile(policyPath, JSON.stringify({ ...JSON.parse(policy), revision: 'connect-drift' }));
+    return response;
+  } } });
+  await expect(asPerson(drift)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  expect(methodLog).toEqual(['GET', 'POST']);
+  expect(await snapshot()).toEqual(before);
+  await writeFile(policyPath, policy);
+
+  const losesTerminal = () => connect(f.project, command, f.options, { discoveryOptions: { async fetch(url, init) {
+    const response = await host.discoveryOptions.fetch(String(url), init);
+    if (init.method === 'POST') vi.mocked(witnessAdapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
+    return response;
+  } } });
+  await expect(asPerson(losesTerminal)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(methodLog).toEqual(['GET', 'POST', 'GET', 'POST']);
+  expect(await snapshot()).toEqual(before);
+
+  expect(await asPerson(raw)).toMatchObject({ status: 'connected', steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
+  expect(methodLog).toEqual(['GET', 'POST', 'GET', 'POST', 'GET', 'POST']);
+
+});
+
+const admitConfiguredModelActivation: typeof admit = (...args) => asPerson(() => admit(...args));
+
+const connectConfiguredModel: typeof connect = (...args) => asPerson(() => connect(...args));
+
+async function asPerson<T>(operation: () => Promise<T>): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

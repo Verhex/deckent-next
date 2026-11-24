@@ -1,31 +1,47 @@
-import { createHash } from 'node:crypto';
-import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced } from '#adapters/index.js';
-import { admitConfiguredChatActivation } from './admit.js';
-import { inspectModelBinding, inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
-import { ModelCatalogError, modelCatalogCommandSchema, type ModelCatalogQuery } from '#domain/index.js';
-import { verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization } from '#engine/index.js';
-import { openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
+import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced, openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
+import { admitConfiguredChatActivation, configuredBinding, configuredChatActivation, configuredDeclarations } from './admit.js';
+import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
+import { ModelCatalogError, modelActivationCommandSchema, modelCatalogCommandSchema, type ModelCatalogQuery, type ModelCatalogCommand, type ModelActivationCommand } from '#domain/index.js';
+import { checkCatalogActivationFacts, verifyCatalogActivationChange, verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization, type ModelCatalogAuthorizer, type ModelCatalogChannelView } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { activationAuthority, type ActivationAuthority } from './activation-authority.js';
+import { catalogEvidence, activationReceiptOptions } from './catalog-evidence.js';
 
-/** Governed ledger model catalog write (WORKER-CURRENCY-1): register facts, activate/deactivate a channel or model in a scope. */
-export async function applyConfiguredModelCatalogOnly(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}) {
-  try {
-    const parsed = modelCatalogCommandSchema.safeParse(input);
-    if (!parsed.success) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
-    return await (await catalog(projectRoot, parsed.data.scopeId, options, 'write')).application.apply(parsed.data);
-  } catch (error) { throw queryFailure(error); }
+type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
+type Channel = Extract<ModelCatalogChannelView, { access: 'allowed' }>;
+function catalogApplication(context: Context, authority?: ActivationAuthority, register = false) {
+  const decide = new ModelCatalogPolicyAuthorization({ async load() { return context.document; } });
+  const authorize: ModelCatalogAuthorizer['authorize'] = authority ? (...args) => authority.authorize(({ document }) =>
+    new ModelCatalogPolicyAuthorization({ async load() { return document; } }).authorize(...args)) : decide.authorize.bind(decide);
+  return new ModelCatalogApplication(verifiedPrincipal(context.principal), { authorize }, async () => {
+    if (!authority && !register) throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY');
+    const writable = await (authority?.write() ?? context);
+    return openSqliteModelCatalogStore(await writable.path(), writable.config.storage.sqlite, 'forbid');
+  }, Date.now, async () => openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context)));
+}
+export async function planCatalogWrite(context: Context, authority: ActivationAuthority, command: Exclude<ModelCatalogCommand, { action: 'register' }>, readReplay = false) {
+  const app = catalogApplication(context, authority), replay = await app.preflight(command, readReplay);
+  const check = async (planned?: Channel, selected = command.modelId === null ? [] : [command.modelId]) => {
+    if (planned && command.action === 'activate') await checkConfiguredCatalogFacts(context, command.scopeId, planned, selected, command.modelId === null);
+  };
+  return { replay, check, write: async (planned?: Channel, selected?: string[]) => { await check(planned, selected); return replay ?? app.apply(command); },
+    authorizeResume: () => app.preflight(command) };
+}
+export async function checkConfiguredCatalogFacts(context: Context, scopeId: string, planned: Channel, selected: readonly string[], opensChannel: boolean) {
+  const reader = await openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context));
+  try { await checkCatalogActivationFacts(reader, scopeId, planned, selected, opensChannel && planned.activation?.state !== 'active'); }
+  finally { reader.close(); }
 }
 /** Read-only listing (WORKER-CURRENCY-2). `modelUse: false` (connect, KG6 F7): the authorized catalog facts only, without the chat state that reads model use. */
 export async function inspectConfiguredModelCatalog(projectRoot: string, query: ModelCatalogQuery, options: ConfigLoadOptions = {}, use: Readonly<{ modelUse?: false }> = {}, snapshot?: ModelInspectionSnapshot) {
   try {
-    const { application, config } = await catalog(projectRoot, query.scopeId, options, 'read', snapshot);
-    const result = await application.inspect(query);
-    if (use.modelUse === false) return result;
-    if (!config.provider_catalog) return result;
+    const context = await (snapshot?.context() ?? loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read')), { config } = context;
+    const result = await catalogApplication(context).inspect(query);
+    if (use.modelUse === false || !config.provider_catalog) return result;
     const declared = (snapshot?.declared ?? await inspectDeclaredModels(projectRoot, options)).catalog;
     if (!declared) return result;
     return { ...result, channels: await Promise.all(result.channels.map(async channel => {
@@ -43,39 +59,80 @@ export async function inspectConfiguredModelCatalog(projectRoot: string, query: 
     })) };
   } catch (error) { throw queryFailure(error); }
 }
-async function catalog(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write', snapshot?: ModelInspectionSnapshot) {
-  const { config, document, principal, path } = await (snapshot?.context() ?? loadConfiguredScopeContext(projectRoot, scopeId, options, access));
-  return { config, application: new ModelCatalogApplication(verifiedPrincipal(principal), new ModelCatalogPolicyAuthorization({ async load() { return document; } }),
-    access === 'write' ? async () => openSqliteModelCatalogStore(await path(), config.storage.sqlite, 'forbid') : async () => { throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY'); }, Date.now, async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs })) };
-}
 
-/** Person-facing catalog activation also aligns declared chat rows; raw catalog and chat owners retain separate receipts. */
+/** Authorize required enabling writes before publication, and verify the original cascade on replay. */
 export async function applyConfiguredModelCatalog(root: string, input: unknown, options: ConfigLoadOptions = {}) {
-  const parsed = modelCatalogCommandSchema.safeParse(input);
-  if (!parsed.success) throw queryFailure(new ModelCatalogError('MODEL_CATALOG_INVALID'));
-  const command = parsed.data;
-  if (command.action === 'register') return applyConfiguredModelCatalogOnly(root, command, options);
-  const before = await inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId: command.scopeId, channelId: command.channelId }, options);
-  const channel = before.channels.find(row => row.access === 'allowed');
-  const result = await applyConfiguredModelCatalogOnly(root, command, options);
-  if (channel?.access !== 'allowed') return result;
-  if (result.replayed) return result;
-  const declared = (await inspectDeclaredModels(root, options)).catalog?.providers.find(provider => provider.id === channel.channelId && provider.version === channel.providerVersion);
-  const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(kind => kind.connect?.seed === channel.channelId);
-  const child = (id: string, stage: string) => `catalog-state-${createHash('sha256').update(JSON.stringify([command.commandId, id, stage])).digest('hex')}`;
-  if (command.action === 'activate' && command.modelId !== null && channel.activation?.state !== 'active') await applyConfiguredModelCatalogOnly(root, { schemaVersion: 1, commandId: child('channel', 'activate'), scopeId: command.scopeId, action: 'activate', channelId: channel.channelId, modelId: null, expectedRevision: channel.activation?.revision ?? 0 }, options);
-  const priced = kind ? channel.models.filter(row => providerConnectModelPriced(kind, row.model.nativeId)).map(row => row.modelId) : [];
-  for (const { entry, enabled, activateWorker, reference } of planCatalogStateCascade(command, channel, declared, priced, Date.now())) {
-    if (activateWorker) await applyConfiguredModelCatalogOnly(root, { schemaVersion: 1, commandId: child(entry.modelId, 'worker'), scopeId: command.scopeId,
-      action: 'activate', channelId: channel.channelId, modelId: entry.modelId, expectedRevision: 0 }, options);
-    if (!reference) continue;
-    const current = await inspectConfiguredModelActivation(root, { schemaVersion: 1, scopeId: command.scopeId, reference }, options);
-    if (current.activation?.state === (enabled ? 'active' : 'inactive') || !current.activation && !enabled) continue;
-    const binding = await inspectModelBinding(root, reference, options);
-    if (binding.status !== 'declared') continue;
-    await admitConfiguredChatActivation(root, { schemaVersion: 1, commandId: child(entry.modelId, 'chat'), scopeId: command.scopeId, reference,
-      expectedRevision: current.activation?.revision ?? 0, expectedBinding: binding.binding,
-      ...(enabled ? { action: 'activate', catalogRevision: binding.catalogRevision } : { action: 'deactivate' }) }, options);
-  }
-  return result;
+  try {
+    const parsed = modelCatalogCommandSchema.safeParse(input);
+    if (!parsed.success) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
+    const command = parsed.data, { scopeId } = command;
+    const context = await loadConfiguredScopeContext(root, scopeId, options, command.action === 'register' ? 'write' : 'read');
+    if (command.action === 'register') return await catalogApplication(context, undefined, true).apply(command);
+    const authority = activationAuthority(root, scopeId, options, context), enabling = command.action === 'activate';
+    const parent = await planCatalogWrite(context, authority, command, true);
+    const off = !parent.replay && !enabling ? await parent.write() : null;
+    const replay = parent.replay ?? (off?.replayed ? off : null);
+    const channel = (await catalogApplication(context, authority).inspect({ schemaVersion: 1, scopeId, channelId: command.channelId }))
+      .channels.find(row => row.access === 'allowed');
+    if (!replay && enabling) await authority.witness('models.catalog.activate');
+    const proof = catalogEvidence(context, authority, command);
+    const basis = replay ? await proof.read() : null;
+    const children: (typeof command | ModelActivationCommand)[] = replay && channel ? await proof.settled(replay, channel) : [];
+    if (replay && basis !== null && proof.matches(basis, children)) return replay;
+    const settled = new Set(children.map(child => child.commandId)), prepare = [];
+    let selected: string[] = [];
+    if (channel) {
+      const declaration = async (current: Context) => (await configuredDeclarations(current))?.providers
+        .find(provider => provider.id === channel.channelId && provider.version === channel.providerVersion);
+      const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(kind => kind.connect?.seed === channel.channelId);
+      const plan = (id: string, modelId: string | null, expectedRevision: number) => {
+        if (settled.has(id)) return;
+        const childCommand = { schemaVersion: 1 as const, commandId: id, scopeId, action: 'activate' as const, channelId: channel.channelId, modelId, expectedRevision };
+        children.push(childCommand);
+        prepare.push(async () => {
+          const planned = await planCatalogWrite(context, authority, childCommand);
+          return async () => verifyCatalogActivationChange((await planned.write(channel, selected)).receipt, childCommand);
+        });
+      };
+      const priced = kind ? channel.models.filter(row => providerConnectModelPriced(kind, row.model.nativeId)).map(row => row.modelId) : [];
+      const at = replay?.receipt.admittedAtMs ?? Date.now();
+      const declared = await declaration(context), cascade = planCatalogStateCascade(command, channel, declared, priced, at);
+      selected = cascade.map(row => row.entry.modelId);
+      const selectedDeclarations = (provider: typeof declared) => provider?.models.filter(model => selected.includes(model.nativeId)) ?? [];
+      if (enabling) authority.pin(selectedDeclarations(declared), async current => selectedDeclarations(await declaration(current)));
+      if (enabling && command.modelId !== null && channel.activation?.state !== 'active')
+        plan(proof.child('channel', 'activate'), null, channel.activation?.revision ?? 0);
+      for (const { entry, reference, activateWorker } of cascade) {
+        if (activateWorker) plan(proof.child(entry.modelId, 'worker'), entry.modelId, 0);
+        const id = proof.child(entry.modelId, 'chat');
+        if (!reference || settled.has(id)) continue;
+        const current = (await inspectConfiguredModelActivation(root, { schemaVersion: 1, scopeId, reference }, options, { modelUse: false })).activation;
+        if (enabling ? current?.state === 'active' : current?.state !== 'active') continue;
+        const binding = await configuredBinding(context).inspect(reference);
+        if (binding.status !== 'declared') continue;
+        const childCommand = modelActivationCommandSchema.parse({ schemaVersion: 1, commandId: id, scopeId, reference, expectedBinding: binding.binding,
+          expectedRevision: current?.revision ?? 0, ...(enabling ? { action: 'activate', catalogRevision: binding.catalogRevision } : { action: 'deactivate' }) });
+        if (off && !replay) { await admitConfiguredChatActivation(root, childCommand, options); continue; }
+        const chat = configuredChatActivation(childCommand, context, authority);
+        children.push(childCommand);
+        prepare.push(async () => { await chat.preflight(); return chat.write; });
+      }
+    }
+    if (off && !replay) return off;
+    if (replay) {
+      if (basis === null && !prepare.length) return replay;
+      if (basis === null || !proof.matches(basis, children)) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+      const current = channel && (command.modelId === null ? channel.activation : channel.models.find(row => row.modelId === command.modelId)?.activation);
+      if (current?.revision !== replay.receipt.changes[0]?.revision || current?.state !== (enabling ? 'active' : 'inactive'))
+        throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+      await parent.authorizeResume();
+      if (enabling) await authority.witness('models.catalog.activate');
+    }
+    const writes = [];
+    for (const preflight of prepare) writes.push(await preflight());
+    if (!replay && enabling) { await parent.check(channel, selected); await proof.record(children); }
+    const result = replay ?? await parent.write(channel, selected);
+    for (const write of writes) await write();
+    return result;
+  } catch (error) { throw queryFailure(error); }
 }

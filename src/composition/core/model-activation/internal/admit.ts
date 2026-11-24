@@ -1,88 +1,113 @@
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import { inspectConfiguredModelActivation } from './inspect.js';
-import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
-import { modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
-import { configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
+import { DeclaredModelsApplication, configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
   assessModelInvocationProfileDeliveries } from '#engine/index.js';
-import { openSqliteModelActivationStore } from '#adapters/index.js';
+import { ModelCatalogError, ModelActivationError, modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
+import { openSqliteModelActivationReader, openSqliteModelActivationStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { inspectConfiguredModelCatalog, applyConfiguredModelCatalogOnly } from './catalog.js';
+import { checkConfiguredCatalogFacts, inspectConfiguredModelCatalog, planCatalogWrite } from './catalog.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-/** Explicit local activation admission, not provider invocation. Store path is resolved only after the gate. */
-export async function admitConfiguredChatActivation(projectRoot: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) {
-  try {
-    const command = modelActivationCommandSchema.parse(input);
-    const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
-    // Adapter selection/wiring only (SESSION-RESULT-LIMIT-2026-09-28 review): the audit decision itself — which
-    // declared profiles match this reference, whether any is unfit, refuse or not — lives in
-    // ModelActivationApplication.admit (engine); this composition root only resolves the two surfaces' capacity
-    // and wires the real size-math implementation in as `assess` (engine/core/model-activation cannot import
-    // engine/core/model-invocation directly — that package already depends back on model-activation, so a
-    // direct import would cycle; composition, which depends on both, is where the two meet).
-    const app = new ModelActivationApplication(verifiedPrincipal(principal),
-      new ModelActivationPolicyAuthorization({ async load() { return document; } }),
-      new ModelBindingApplication({ async read() { return config['provider_catalog']; } }),
-      async () => openSqliteModelActivationStore(await path(), config.storage.sqlite, 'forbid'), Date.now,
-      { profiles: { profiles: configuredInvocationProfiles(config) }, surfaces: configuredModelInvocationDeliverySurfaces(config),
-        assess: assessModelInvocationProfileDeliveries });
-    return await app.admit(command);
-  } catch (error) { throw queryFailure(error); }
+import { activationAuthority, type ActivationAuthority } from './activation-authority.js';
+import { activationReceiptOptions } from './catalog-evidence.js';
+
+type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
+const configuredCatalogSource = ({ config }: Context) => ({ async read() { return config['provider_catalog']; } });
+export const configuredBinding = (context: Context) => new ModelBindingApplication(configuredCatalogSource(context));
+export const configuredDeclarations = async (context: Context) => (await new DeclaredModelsApplication(configuredCatalogSource(context)).inspect()).catalog;
+export function configuredChatActivation(command: ModelActivationCommand, context: Context, authority: ActivationAuthority) {
+  const { principal, path } = context, { scopeId, reference } = command;
+  const delivery = ({ config }: Context) => {
+    const profiles = configuredInvocationProfiles(config).filter(profile => profile.scopeId === scopeId && isDeepStrictEqual(profile.reference, reference));
+    return { profiles: { profiles }, surfaces: profiles.length ? configuredModelInvocationDeliverySurfaces(config) : [] };
+  };
+  const limits = delivery(context);
+  const app = new ModelActivationApplication(verifiedPrincipal(principal), { authorize: (action, target, actor) =>
+    authority.authorize(({ document }) => new ModelActivationPolicyAuthorization({ async load() { return document; } }).authorize(action, target, actor)) },
+    configuredBinding(context), async () => {
+      const writable = await authority.write();
+      return openSqliteModelActivationStore(await writable.path(), writable.config.storage.sqlite, 'forbid');
+    }, Date.now, { ...limits, assess: assessModelInvocationProfileDeliveries });
+  if (command.action === 'activate') {
+    authority.pin(limits, delivery);
+    authority.pin({ status: 'declared', catalogRevision: command.catalogRevision, binding: command.expectedBinding }, async current => {
+      const { status, catalogRevision, binding } = await configuredBinding(current).inspect(reference);
+      return { status, catalogRevision, binding };
+    });
+  }
+  return { preflight: () => app.preflight(command, async () => openSqliteModelActivationReader(await path(),
+    activationReceiptOptions(context))), write: () => app.admit(command) };
 }
 
-/** One explicit model command coordinates the chat and worker owners; reads never cascade. */
-export async function admitConfiguredModelActivation(projectRoot: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) {
+/** Carry writes just the chat binding. It still needs the same witness as direct activation. */
+export const admitConfiguredChatActivation = (root: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) =>
+  admit(root, input, options, false);
+
+/** One explicit model command coordinates the chat and worker owners. */
+export const admitConfiguredModelActivation = (root: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) =>
+  admit(root, input, options, true);
+
+async function admit(root: string, input: ModelActivationCommand, options: ConfigLoadOptions, cascade: boolean) {
   try {
-    const command = modelActivationCommandSchema.parse(input);
-    // A retired worker-catalog model is refused before the chat owner writes anything (no half-activated pair).
-    if (command.action === 'activate') {
-      const before = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: command.scopeId, channelId: command.reference.providerId }, options);
-      const channel = before.channels.find(row => row.access === 'allowed' && row.providerVersion === command.reference.providerVersion);
-      const nativeId = (await inspectDeclaredModels(projectRoot, options)).catalog?.providers.find(provider => provider.id === command.reference.providerId
-        && provider.version === command.reference.providerVersion)?.models.find(model => model.id === command.reference.modelId && model.version === command.reference.modelVersion)?.nativeId;
-      const model = channel?.access === 'allowed' ? channel.models.find(row => row.model.nativeId === nativeId) : undefined;
-      if (channel?.access === 'allowed' && model) refuseRetiredModelActivation(channel.models, model.modelId, Date.now());
-    }
-    const result = await admitConfiguredChatActivation(projectRoot, command, options);
-    if (result.replayed) {
-      const latest = await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: command.scopeId, reference: command.reference }, options);
-      if (latest.activation?.revision !== result.receipt.record.revision) return result;
-    }
-    const listed = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: command.scopeId, channelId: command.reference.providerId }, options);
-    const channel = listed.channels.find(row => row.access === 'allowed' && row.providerVersion === command.reference.providerVersion);
-    if (channel?.access === 'allowed') {
-      const declared = (await inspectDeclaredModels(projectRoot, options)).catalog?.providers.find(provider => provider.id === command.reference.providerId && provider.version === command.reference.providerVersion)?.models.find(model => model.id === command.reference.modelId && model.version === command.reference.modelVersion);
-      const model = channel.models.find(row => row.model.nativeId === declared?.nativeId);
-      if (model) {
-        const targets = command.action === 'activate' ? [null, model.modelId] : [model.modelId];
-        for (const [index, modelId] of targets.entries()) {
-          const current = modelId === null ? channel.activation : model.activation;
-          const wanted = command.action === 'activate' ? 'active' : 'inactive';
-          if (current?.state === wanted) continue;
-          await applyConfiguredModelCatalogOnly(projectRoot, { schemaVersion: 1, commandId: `model-state-${createHash('sha256').update(command.commandId).digest('hex')}-${index}`, scopeId: command.scopeId,
-            action: command.action, channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 }, options);
-        }
-      }
-    }
+    const parsed = modelActivationCommandSchema.safeParse(input);
+    if (!parsed.success) throw new ModelActivationError('MODEL_ACTIVATION_INVALID');
+    const command = parsed.data, scopeId = command.scopeId;
+    const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
+    const app = configuredChatActivation(command, context, authority);
+    const { replay, current } = await app.preflight();
+    if (replay && (!cascade || current?.revision !== replay.receipt.record.revision)) return replay;
+    const off = command.action === 'deactivate' ? replay ?? await app.write() : null;
+    const writes = cascade ? await planWorkerWrites(root, scopeId, command.reference, command.commandId, command.action, options, context, authority, false) : [];
+    if (command.action === 'activate' && (!replay || writes.length)) await authority.witness('models.activate');
+    const result = off ?? replay ?? await app.write();
+    for (const write of writes) await write();
     return result;
   } catch (error) { throw queryFailure(error); }
 }
 
-/** A named worker-only model: no chat declaration/profile and no whole-channel cascade. */
-export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {}): Promise<boolean> {
-  const listed = await inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId, channelId: reference.providerId }, options);
+async function planWorkerWrites(root: string, scopeId: string, reference: ModelReference, commandId: string, action: 'activate' | 'deactivate',
+  options: ConfigLoadOptions, context: Context, authority: ActivationAuthority, workerOnly: boolean) {
+  const listed = await inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId, channelId: reference.providerId }, options, { modelUse: false });
   const channel = listed.channels.find(row => row.access === 'allowed' && row.providerVersion === reference.providerVersion);
-  if (channel?.access !== 'allowed') throw queryFailure(Object.assign(Error('MODEL_CATALOG_NOT_FOUND'), { code: 'MODEL_CATALOG_NOT_FOUND' }));
-  const model = channel.models.find(row => row.model.id === reference.modelId && row.model.version === reference.modelVersion);
-  if (!model) throw queryFailure(Object.assign(Error('MODEL_CATALOG_NOT_FOUND'), { code: 'MODEL_CATALOG_NOT_FOUND' }));
-  try { refuseRetiredModelActivation(channel.models, model.modelId, Date.now()); } catch (error) { throw queryFailure(error); }
-  let written = false;
-  for (const [index, modelId] of [null, model.modelId].entries()) {
-    const current = modelId === null ? channel.activation : model.activation;
-    if (current?.state === 'active') continue;
-    await applyConfiguredModelCatalogOnly(root, { schemaVersion: 1, commandId: `${commandId}.${index}`, scopeId, action: 'activate', channelId: reference.providerId,
-      modelId, expectedRevision: current?.revision ?? 0 }, options); written = true;
+  const declared = workerOnly ? null : await configuredDeclarations(context);
+  const nativeId = declared?.providers.find(provider => provider.id === reference.providerId && provider.version === reference.providerVersion)
+    ?.models.find(model => model.id === reference.modelId && model.version === reference.modelVersion)?.nativeId;
+  const model = channel?.access === 'allowed' ? channel.models.find(row => workerOnly
+    ? row.model.id === reference.modelId && row.model.version === reference.modelVersion : row.model.nativeId === nativeId) : undefined;
+  if (channel?.access !== 'allowed' || !model) {
+    if (workerOnly) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+    return [];
   }
-  return written;
+  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes = [];
+  const prefix = workerOnly ? commandId : `model-state-${createHash('sha256').update(commandId).digest('hex')}`;
+  if (action === 'activate') {
+    refuseRetiredModelActivation(channel.models, model.modelId, Date.now());
+    authority.pin(undefined, current => checkConfiguredCatalogFacts(current, scopeId, channel, [model.modelId], true));
+  }
+  for (const [index, modelId] of targets.entries()) {
+    const current = modelId === null ? channel.activation : model.activation;
+    if (current?.state === (action === 'activate' ? 'active' : 'inactive')) continue;
+    const child = { schemaVersion: 1 as const, commandId: workerOnly ? `${prefix}.${index}` : `${prefix}-${index}`, scopeId, action,
+      channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
+    // A chat receipt replay with a newly missing child still requires a witness.
+    const planned = await planCatalogWrite(context, authority, child);
+    writes.push(async () => {
+      if (action === 'activate' && planned.replay) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+      return planned.write(channel, [model.modelId]);
+    });
+  }
+  return writes;
+}
+
+/** A named worker-only model has no chat declaration or whole-channel cascade. */
+export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {}): Promise<boolean> {
+  try {
+    const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
+    const writes = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
+    if (!writes.length) return false;
+    await authority.witness('models.activate');
+    for (const write of writes) await write();
+    return true;
+  } catch (error) { throw queryFailure(error); }
 }

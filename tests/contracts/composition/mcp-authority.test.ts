@@ -8,12 +8,51 @@ import { FIRST_RUN_V19_RULE_IDS } from '../support/first-run-v16.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
-import { admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { admitConfiguredModelActivation, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+import { modelActivationTargetId, modelCatalogTargetId } from '#engine/index.js';
+import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 describe.skipIf(process.platform !== 'linux')('MCP authority through the actual configured applications and service', () => {
+  it('denies both policy-allowed activation tools for the bound MCP actor without writing any rows', async () => {
+    const actor = mcpPrincipalRef(me[0]!);
+    const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
+    const modelId = 'claude-sonnet-5-5';
+    const targets = [modelActivationTargetId(reference), modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId }),
+      modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: null })];
+    const f = await runtime({ noServer: true, extraGrants: [
+      { id: 'register-fixture', effect: 'allow', actions: ['activate', 'inspect'], scopes: 'all', principals: me, resource: { kind: 'model-activation', ids: 'all' } },
+      { id: 'mcp-exact', effect: 'allow', actions: ['activate', 'inspect'], scopes: ['scope'], principals: [actor], resource: { kind: 'model-activation', ids: targets } },
+    ] });
+    const configPath = join(f.project, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+    config.service.responseMaxBytes = 1_048_576;
+    await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+    const options = { env: f.env };
+    await applyConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', commandId: 'fixture-seed', action: 'register', catalog: await seedCatalog() }, options);
+    const before = await readFile(f.ledger);
+    const server = createMcpServer(mcpApplications({ ...f.client(true),
+      admitModelActivation: input => admitConfiguredModelActivation(f.project, input, options),
+      applyModelCatalog: input => applyConfiguredModelCatalog(f.project, input, options),
+    }), { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'en');
+    const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st);
+    const client = new Client({ name: 'external-ai', version: '1' }); await client.connect(ct);
+    const base = { schemaVersion: 1, scopeId: 'scope', action: 'activate' } as const;
+    try {
+      for (const [name, args] of [
+        ['admit_model_activation', { ...base, commandId: 'mcp-direct', reference, expectedRevision: 1, catalogRevision: 'catalog-1', expectedBinding: f.binding }],
+        ['apply_model_catalog', { ...base, commandId: 'mcp-channel', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }],
+        ['apply_model_catalog', { ...base, commandId: 'mcp-model', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }],
+      ] as const) {
+        const result = await client.callTool({ name, arguments: args });
+        expect(result.isError).toBe(true);
+        expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      }
+      expect(await readFile(f.ledger)).toEqual(before);
+    } finally { await client.close(); await server.close(); }
+  }, 30_000);
+
   it('refuses budget changes/unfreeze, activation and paid sends on v7/v8/v9; owner still revises; explicit scoped MCP grant works and is audited', async () => {
     const f = await runtime();
     const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));

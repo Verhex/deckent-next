@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { createHash } from 'node:crypto';
@@ -87,7 +88,10 @@ async function fixture(catalogScopes: 'all' | readonly string[] | null = 'all', 
     ...(catalogScopes ? [{ id: 'catalog', effect: 'allow', actions: ['activate', 'deactivate'], scopes: catalogScopes, principals, resource: { kind: 'model-activation', ids: 'all' } }] : []),
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  const catalog = (fields: Record<string, unknown>) => fields['action'] === 'activate'
+    ? witnessedModelActivation('applyModelCatalog', project, options, command(fields))
+    : applyModelCatalog(project, command(fields), options);
   const activation = (modelId: string | null, action = 'activate', expectedRevision = 0, scopeId = 's', channelId = SEED_CHANNEL) => catalog({ action, channelId, modelId, expectedRevision, scopeId });
   const count = (table: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n; } finally { db.close(); } };
   const runs = () => count('runs');

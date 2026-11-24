@@ -1,8 +1,10 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapters/index.js';
-import { connectConfiguredModel, planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel as connect, planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -52,8 +54,8 @@ describe.skipIf(process.platform === 'win32')('connect-seeded delivery headroom 
       const before = (await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation!;
       const binding = await inspectModelBinding(f.project, reference, options);
       if (binding.status !== 'declared') throw new Error('FIXTURE_BINDING');
-      return { before, result: admitConfiguredModelActivation(f.project, { schemaVersion: 1, action: 'activate', commandId, scopeId: 'scope', reference,
-        expectedRevision: before.revision, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding }, options) };
+      return { before, result: asPerson(() => admitConfiguredModelActivation(f.project, { schemaVersion: 1, action: 'activate', commandId, scopeId: 'scope', reference,
+        expectedRevision: before.revision, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding }, options)) };
     };
     const audit = () => assessConfiguredModelInvocationDelivery(f.project, options);
     return { f, path, options, connect, profile, cache, changeCatalog, reactivate, audit };
@@ -93,3 +95,17 @@ describe.skipIf(process.platform === 'win32')('connect-seeded delivery headroom 
     expect(await c.audit()).toEqual([]);
   });
 });
+
+const connectConfiguredModel: typeof connect = (...args) => asPerson(() => connect(...args));
+
+async function asPerson<T>(operation: () => Promise<T>): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}
