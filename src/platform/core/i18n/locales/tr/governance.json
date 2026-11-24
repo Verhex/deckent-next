@@ -355,6 +355,7 @@
   "error.RUN_ADMISSION_NOT_CONFIGURED": "Bu kapsam için arka plan işçileri kurulmadı. Arka plan işçileri bir Git projesinde kodlama işi yapar: o projede `deckent` açıp /setup kullanın (İlk iş türü, İşçi imajı, İşçi havuzu). `deckent init --phase onboarding --json` kalan kurulum adımlarını tam komutlarıyla listeler.",
   "error.RUN_STORE_CORRUPT": "İş kayıtları tutarsız; başarılı güncelleme iddia edilmiyor.",
   "error.RUN_STORE_CONFLICT": "İş değişti veya mevcut değil. Kayıtlı durumunu yeniden okuyun.",
+  "error.RUN_CONTROL_BINDING_CHANGED": "Projenin bağlı olduğu kurulum değişti. İstediğiniz projeyi yeniden açın, işi yeniden okuyup onaylayın.",
   "error.RUN_NOT_FOUND": "Kayıtlı iş bulunamadı: {run}.",
   "error.RUN_COMMAND_CONFLICT": "Bu komut kimliği farklı iş girdisine bağlı.",
   "error.RUN_POOL_REQUIRED": "Bu kapsam için henüz işçi havuzu kurulmadı; bu yüzden içinde arka plan işi çalışmıyor (bekletilecek, sürdürülecek ya da boyutlandırılacak bir şey yok). Arka plan işçileri bir Git projesinde kodlama işi yapar: o projede `deckent` açıp /setup kullanın (İlk iş türü, İşçi imajı, İşçi havuzu). `deckent init --phase onboarding --json` kalan kurulum adımlarını tam komutlarıyla listeler.",

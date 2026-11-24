@@ -1,4 +1,4 @@
-import { rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
@@ -58,5 +58,22 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(after.revision).toBe(before.revision); expect(after.state.kind).toBe('running');
     const code = /\(kod: ([A-Z_]+)\)/u.exec(plain(result.output))?.[1];
     expect(code).toBe('POLICY_DENIED');
+  });
+
+  it('keeps /runs open when the confirmed hold belongs to the previous installation', async () => {
+    const selected = await workspacePatchFixture(track), attached = await workspacePatchFixture(track);
+    for (const fixture of [selected, attached]) { await fixture.run(); await grant(fixture, ['create', 'reserve', 'inspect', 'cancel']); }
+    const runs = () => Promise.all([selected, attached].map(fixture => fixture.runtime.store.loadRun('s', 'r')));
+    const before = await runs();
+    expect(before[0]!.revision).toBe(before[1]!.revision);
+    const nextConfig = join(selected.root, 'next-config.json');
+    const config = JSON.parse(await readFile(selected.configPath, 'utf8'));
+    await writeFile(nextConfig, JSON.stringify({ ...config, layout: { root: attached.runtime.layout.root } }), { mode: 0o600 });
+    const result = await inPty(program, selected.project, { ...selected.options.env, DECKENT_TEST_RUN_CONTROL_NEXT_CONFIG: nextConfig }, 'en', [
+      ['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', ''], ['Enter/Esc keep (default)', 'y', 'next'],
+      ['(code: RUN_CONTROL_BINDING_CHANGED)', '', 'fresh'], ['h hold', '', 'next'],
+    ]);
+    expect(squeeze(result.output)).toContain(squeeze("The project's installation changed. Reopen the intended project, read the Run again, and confirm."));
+    expect(await runs()).toEqual(before);
   });
 });

@@ -355,6 +355,7 @@
   "error.RUN_ADMISSION_NOT_CONFIGURED": "Background workers are not set up for this scope. Background workers do coding work in a Git project: open `deckent` in that project and use /setup (First work kind, Worker image, Worker pool). `deckent init --phase onboarding --json` lists the remaining setup steps with their exact commands.",
   "error.RUN_STORE_CORRUPT": "Run records are inconsistent; no successful update is claimed.",
   "error.RUN_STORE_CONFLICT": "The Run changed or is unavailable. Reload its recorded state.",
+  "error.RUN_CONTROL_BINDING_CHANGED": "The project's installation changed. Reopen the intended project, read the Run again, and confirm.",
   "error.RUN_NOT_FOUND": "No recorded Run found: {run}.",
   "error.RUN_COMMAND_CONFLICT": "This command identity is already bound to different Run input.",
   "error.RUN_POOL_REQUIRED": "No worker pool is set up for this scope yet, so no background work runs in it (nothing to hold, resume or size). Background workers do coding work in a Git project: open `deckent` in that project and use /setup (First work kind, Worker image, Worker pool). `deckent init --phase onboarding --json` lists the remaining setup steps with their exact commands.",

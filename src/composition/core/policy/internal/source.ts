@@ -4,12 +4,15 @@ import { productResourcePath, withConfigWriteLock, type ProductLayout } from '#p
 import type { Policy } from '#domain/index.js';
 import { FilePolicySource, PolicyFileError } from '#adapters/index.js';
 import { type PolicySource, DispatchPolicyAuthorization } from '#engine/index.js';
+/** Managed policy and bindings updates share this lock with effects pinned to an authority revision. */
+export const withLayoutPolicyLock = <T>(layout: ProductLayout, work: () => Promise<T>) =>
+  withConfigWriteLock(productResourcePath(layout, 'policy'), work, 5_000);
 /** Trusted layout/owner/budget, never wire paths. Local POSIX custody, not remote policy distribution.
  * v2 role bindings share the guard/budget. Authority writes are archived and serialized (5 s lock). */
 export function createLayoutPolicySource(layout: ProductLayout, ownerUid: number, maxBytes: number) {
   return new FilePolicySource({ path: productResourcePath(layout, 'policy'), bindingsPath: productResourcePath(layout, 'bindings'),
     archivePath: join(productResourcePath(layout, 'audit'), 'authority-revisions'), ownerUid, maxBytes },
-  work => withConfigWriteLock(productResourcePath(layout, 'policy'), work, 5_000));
+  work => withLayoutPolicyLock(layout, work));
 }
 /** The file a policy read refused (unsafe, damaged, missing bindings) and why, for the caller's own typed refusal; null for any other failure. */
 export const policyFileRefusal = (layout: ProductLayout, error: unknown) => error instanceof PolicyFileError && error.resource !== 'archive' ? { path: productResourcePath(layout, error.resource), reason: error.code } : null;

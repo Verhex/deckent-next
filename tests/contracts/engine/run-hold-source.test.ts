@@ -77,6 +77,18 @@ async function fixture(snapshot: RunSnapshot) {
     noInspect() { inspect = false; }, denyControl() { controls = false; } };
 }
 
+it('checks exact-target inspect before disclosing a stale MCP revision and never calls commit', async () => {
+  for (const inspect of [false, true]) {
+    const f = await fixture(holdRun(baseRun(), 0, 'wait', 10, 1000, 'operator'));
+    f.as(ai, false); f.delegate();
+    if (!inspect) f.noInspect();
+    const before = f.durable();
+    await expect(f.lifecycle.execute(command('resume', 0), undefined, 'mcp')).rejects.toMatchObject({ code: inspect ? 'RUN_STORE_CONFLICT' : 'POLICY_DENIED' });
+    expect(f.sequence.filter(step => step !== 'policy')).toEqual(['authenticate', 'reserve', 'run', 'receipt', 'decision', 'inspect']);
+    expect(f.durable()).toEqual(before);
+  }
+});
+
 it.each(['nervous', 'auditor'] as const)('a %s hold is resumed only by a person at a terminal; AI, MCP and scripts are refused even with the resume cell', async holdSource => {
   const f = await fixture(baseRun()); f.delegate(); f.as(ai);
   const held = await f.lifecycle.holdFrom(holdSource, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'safety-hold', expectedRevision: 0, holdReason: 'Out-of-scope write seen' });
