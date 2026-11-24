@@ -3,7 +3,7 @@ import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority, type BackupStoragePort } from '#engine/index.js';
-import { PolicyFileError, FileBackupStorage, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore, BACKUP_AUDIT_LOCATIONS } from '#adapters/index.js';
+import { PolicyFileError, FileBackupStorage, FileProjectAttachmentStore, attachmentGuardedBackupStorage, attachmentLifecycle, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup, verifySharedProjectRestore, BACKUP_AUDIT_LOCATIONS } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
 import { isCodedError, PRODUCT_LAYOUT_REGISTRY, ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -103,10 +103,15 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       return identity.status === 'available' ? identity.value : undefined;
     });
     // Lead 2026-10-27: a set an uninstall archived files beside also brings those files back (never over a file that exists again).
-    const result = await app.execute(command, passphrase);
-    if (command.action === 'restore') await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath), options.env), passphrase, limits);
-    if (sharedRestore && command.action === 'restore') await relocateConfiguredProjectAttachment(command.target, command.scopeId, options, true);
-    await release?.(); return result;
+    if (command.action !== 'restore') return await app.execute(command, passphrase);
+    return await new FileProjectAttachmentStore(layout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs).hold(async () => {
+      if (sharedRestore) await verifySharedProjectRestore(config, recovered!, command.target, command.scopeId, options);
+      const result = await app.execute(command, passphrase);
+      await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath), options.env), passphrase, limits);
+      if (sharedRestore) await relocateConfiguredProjectAttachment(command.target, command.scopeId, options, true);
+      await release?.();
+      return result;
+    });
   } finally { recovered?.close(); }
 }
 

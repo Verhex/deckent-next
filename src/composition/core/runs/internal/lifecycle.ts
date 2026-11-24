@@ -1,9 +1,9 @@
-import { DeckentError, ErrorRegistry, resolveLocale, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { ErrorRegistry, resolveLocale, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteInventoryReader, type SqliteInventoryReader } from '#adapters/index.js';
 import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { withLayoutPolicyLock } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { runControlContext, runControlFailure, withRunControlBindingLocks } from './authority.js';
 export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}, binding?: string) => applyLifecycle(root, command, options, false, binding);
 export const parkConfiguredRunProgression = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, 'park');
 export const advanceConfiguredRunLifecycle = (root: string, query: RunQuery, options: ConfigLoadOptions = {}) => applyLifecycle(root, query, options, true);
@@ -17,15 +17,8 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
   try {
     const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain === 'nervous' ? runSafetyHoldOnceSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
     const control = !maintain && 'action' in command && (command.action === 'hold' || command.action === 'resume'), channel = control ? localPrincipalChannel() : undefined;
-    const verifyBinding = (expected: string | undefined, actual: string) => {
-      if (expected !== actual) throw ErrorRegistry.createError(channel ? 'POLICY_DENIED' : 'RUN_CONTROL_BINDING_CHANGED');
-    };
-    const loadContext = async (expected?: string) => {
-      const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, control ? 'read' : 'write', undefined,
-        expected === undefined || channel ? undefined : location => verifyBinding(expected.split(':')[0], location));
-      if (expected !== undefined) verifyBinding(expected, context.runControlBinding());
-      return context;
-    };
+    const loadContext = control ? runControlContext(projectRoot, command.scopeId, options)
+      : () => loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const initial = await loadContext(control && !channel ? selected : undefined), { config, layout, document, principal, path } = initial;
     const binding = control ? initial.runControlBinding() : undefined, boundContext = () => loadContext(binding);
     const source = { async load() { return (await boundContext()).document; } }, verifier = verifiedPrincipal(principal), authorization = new RunPolicyAuthorization(source);
@@ -43,21 +36,18 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       const app = new RunLifecycleApplication({ loadRun: async (scope, run) => (await reader()).loadRun(scope, run), hasTaskEvaluation: async (identity, revision) => (await reader()).hasTaskEvaluation(identity, revision),
         loadRunReceipt: async (scope, commandId) => (await reader()).loadRunReceipt(scope, commandId),
         async commitRunLifecycle(write, audit, recheck) {
-          const commit = async () => {
-            const admitted = control ? await boundContext() : initial;
-            if (recheck) write = await recheck(admitted.document);
-            if (control) {
-              await admitted.admitWrite();
-              integrity = await openLocalIntegrityAuthority(admitted.layout, admitted.config.approvals.keyFile, true);
-            }
+          const commit = async (admitted: typeof initial) => {
             const writer = await openConfiguredLedger(admitted, { migration: 'forbid' });
             try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
           };
-          if (!channel) return commit();
-          let entered = false;
-          return withLayoutPolicyLock(layout, () => { entered = true; return commit(); }).catch((error: unknown) => {
-            throw entered || error instanceof DeckentError ? error : ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error });
-          });
+          if (!control) return commit(initial);
+          return withRunControlBindingLocks(initial, options, async admitWrite => {
+            const admitted = await boundContext();
+            if (recheck) write = await recheck(admitted.document);
+            await admitWrite(admitted);
+            integrity = await openLocalIntegrityAuthority(admitted.layout, admitted.config.approvals.keyFile, true);
+            return commit(admitted);
+          }, Boolean(channel));
         } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
         Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions,
@@ -67,5 +57,5 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       return Object.freeze({ schemaVersion: 1 as const, layout, lifecycle: { schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) } });
       } finally { approvals?.close(); }
     } finally { store?.close(); }
-  } catch (error) { throw queryFailure(error); }
+  } catch (error) { throw queryFailure(runControlFailure(error)); }
 }

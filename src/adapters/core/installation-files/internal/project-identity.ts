@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { projectIdentitySchema, type ProjectIdentity } from '#domain/index.js';
 import { ProjectIdentityError, type ProjectIdentityStore, type IdentityRead } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
-import { IdentityFile } from './identity-file.js';
+import { IdentityFile, type IdentityWriteCustody } from './identity-file.js';
 
 /** The fixed anchor travels with the project, independently of its execution data root. */
 export class FileProjectIdentityStore implements ProjectIdentityStore {
-  constructor(private readonly projectRoot: string, private readonly lockTimeoutMs?: number, private readonly initialProjectId?: string) {}
+  constructor(private readonly projectRoot: string, private readonly lockTimeoutMs?: number, private readonly initialProjectId?: string,
+    private readonly custody?: IdentityWriteCustody) {}
   async read(): Promise<IdentityRead<ProjectIdentity>> {
     // The storage custody contract is POSIX-only; an optional metadata read must not block commands.
     if (process.platform === 'win32') return { status: 'unavailable', reason: 'unsupported' };
@@ -21,7 +22,7 @@ export class FileProjectIdentityStore implements ProjectIdentityStore {
         create: () => projectIdentitySchema.parse({ schemaVersion: 1, projectId: this.initialProjectId ?? randomUUID() }),
         error: reason => new ProjectIdentityError(({ INVALID: 'PROJECT_IDENTITY_INVALID', INCOMPLETE: 'PROJECT_IDENTITY_INCOMPLETE', UNAVAILABLE: 'PROJECT_IDENTITY_UNAVAILABLE',
           LOCKED: 'PROJECT_IDENTITY_LOCKED', UNSUPPORTED: 'PROJECT_IDENTITY_UNAVAILABLE', MASKED: 'PROJECT_IDENTITY_MASKED' } as const)[reason]),
-      }, this.lockTimeoutMs);
+      }, this.lockTimeoutMs, this.custody);
       return await (create ? file.loadOrCreate() : file.load());
     } catch (error) {
       if (error instanceof ProjectIdentityError) throw error;

@@ -8,7 +8,7 @@ import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, inst
 import { assessInstallationBinding, classifyInstallationRebinding, InstallationIdentityError, type InstallationIdentityResolutionInput, type RebindAdmission, type InstallationBindingCapability, type InstallationIdentityStore,
   type InstallationBindingSource, type InstallationIdentityRead } from '#engine/index.js';
 import { productResourcePath, HOST_LIMITS_REGISTRY, type ProductLayout } from '#platform/index.js';
-import { IdentityFile } from './identity-file.js';
+import { IdentityFile, withIdentityWriteCustody, type IdentityWriteCustody } from './identity-file.js';
 import { localInstallationBindingSource, type InstallationBindingSettings } from './installation-binding.js';
 
 type IdentityRecord = ReturnType<typeof installationIdentityRecordSchema.parse>;
@@ -30,9 +30,11 @@ const refuseNewerBindingWrite = (record: IdentityRecord | null) => {
 
 /** One local metadata transition owner. Binding evidence detects relocation; it grants no authority. */
 export class FileInstallationIdentityStore implements InstallationIdentityStore {
+  static readonly holdWrites = withIdentityWriteCustody;
+
   constructor(private readonly layout: ProductLayout, private readonly lockTimeoutMs?: number,
     private readonly bindingSource?: InstallationBindingSource, private readonly settings: InstallationBindingSettings = {},
-    private readonly genesis: () => Promise<BeuserRealmSeal | undefined> = readBeuserGenesis) {}
+    private readonly genesis: () => Promise<BeuserRealmSeal | undefined> = readBeuserGenesis, private readonly custody?: IdentityWriteCustody) {}
   /** Trusted bootstrap provider only; never a CLI flag, environment switch or deserialized command. */
   private async checkSeal(record: IdentityRecord) {
     const genesis = await this.genesis();
@@ -73,7 +75,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       isError: (error: unknown) => error instanceof InstallationIdentityError,
       error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', INCOMPLETE: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
         LOCKED: 'INSTALLATION_IDENTITY_LOCKED', UNSUPPORTED: 'INSTALLATION_IDENTITY_UNSUPPORTED', MASKED: 'INSTALLATION_IDENTITY_MASKED' } as const)[reason]),
-    }, this.lockTimeoutMs);
+    }, this.lockTimeoutMs, this.custody);
   }
   /** ID-1D: observes only. No identity, directory, lock or binding upgrade is created here; `pendingWrite` routes the next write. */
   async read(): Promise<InstallationIdentityRead> {

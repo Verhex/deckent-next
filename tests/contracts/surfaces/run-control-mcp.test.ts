@@ -11,7 +11,7 @@ import { applyConfiguredRunLifecycle } from '#composition/core/runs/index.js';
 import { createRun, holdRun, mcpPrincipalRef } from '#domain/index.js';
 import { AttemptStoreError, AuthenticationError, RunDecisionApprovalBroker } from '#engine/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
-import { isCodedError, productResourcePath, t, withConfigWriteLock, type Locale } from '#platform/index.js';
+import { isCodedError, productResourcePath, t, withConfigWriteLock, writeConfig, type Locale } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const machine = vi.hoisted(() => ({ absent: false }));
@@ -99,7 +99,7 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
   vi.spyOn(adapters, 'openSqliteInventoryReader').mockImplementation(async (...args) => {
     const reader = await openReader(...args), load = reader.loadRun.bind(reader), receipt = reader.loadRunReceipt.bind(reader);
     vi.spyOn(reader, 'loadRun').mockImplementation(async (...key) => {
-      lookup(...key);
+      await lookup(...key);
       if (readFailure) throw new AttemptStoreError('ATTEMPT_STORE_READ_UNAVAILABLE');
       return load(...key);
     });
@@ -183,7 +183,10 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
               expect.soft(locked.isError).toBe(true);
               expect.soft(locked.structuredContent).toBeUndefined();
               expect.soft({ ...body, message: body.message?.replace(/(?<=age )\d+(?=s)|(?<=yaş )\d+(?= sn)/g, 'AGE') }).toEqual({
-                schemaVersion: 1, code: 'CONFIG_WRITE_LOCKED', message: t('error.CONFIG_WRITE_LOCKED', { path: `${policyPath}.write-lock`, pid: process.pid, ageSeconds: 'AGE' }, locale) });
+                schemaVersion: 1, code: 'CONFIG_WRITE_LOCKED', message: locale === 'en'
+                  ? 'Configuration is locked (age AGEs). Retry after the writer finishes.'
+                  : 'Config kilitli (yaş AGE sn). Yazıcı tamamlandıktan sonra yeniden deneyin.' });
+              expect.soft(JSON.stringify(body)).not.toContain(policyPath);
             } else expect.soft(locked).toEqual(absent);
           });
         }
@@ -234,11 +237,20 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
         await writePolicy(productResourcePath(other.layout, 'policy'), 'fixture', runGrant('cancel'));
         await configure(data);
         await setPolicy(runGrant('cancel'));
+        const ledgerBytes = () => Promise.all([path, other.path].map(ledger => Promise.all([
+          readFile(ledger), readFile(`${ledger}-wal`).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return Buffer.alloc(0); }),
+        ])));
+        const sameLedgerBytes = (left: Buffer[][], right: Buffer[][]) =>
+          left.map((files, ledger) => files.every((bytes, file) => bytes.equals(right[ledger]![file]!)));
+        const beforeBytes = await ledgerBytes();
+        const switchInstallation = () => writeConfig(join(root, '.deckent/config.json'), {
+          layout: { root: moved }, installation, configFile: { writeLockTimeoutMs: 1 },
+        });
         const before = [effects(), state(other.path)];
         const authorize = RunDecisionApprovalBroker.prototype.authorize;
         const broker = vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
           const decision = await authorize.apply(this, args);
-          await configure(moved);
+          await switchInstallation();
           return decision;
         });
         try {
@@ -246,7 +258,42 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           expect(broker).toHaveBeenCalledOnce();
           expect.soft(drifted).toEqual(absent);
           expect.soft([effects(), state(other.path)]).toEqual(before);
+          expect.soft(sameLedgerBytes(await ledgerBytes(), beforeBytes)).toEqual([true, true]);
         } finally { broker.mockRestore(); await configure(data); }
+
+        const readProject = adapters.FileProjectIdentityStore.prototype.read;
+        const initialRead = vi.spyOn(adapters.FileProjectIdentityStore.prototype, 'read').mockImplementationOnce(async function (this: adapters.FileProjectIdentityStore) {
+          const project = await readProject.call(this);
+          await switchInstallation();
+          return project;
+        });
+        try { expect.soft(await call({ ...hold, runId: 'drift', commandId: 'first-read-drift' })).toEqual(absent); }
+        finally { initialRead.mockRestore(); await configure(data); }
+
+        await setPolicy(runGrant('reserve'), inspectAbsent);
+        lookup.mockImplementationOnce(switchInstallation);
+        try { expect.soft(await call()).toEqual(absent); }
+        finally { await configure(data); }
+        lookup.mockImplementationOnce(() => writeFile(policyPath, '{'));
+        try { published(await call(), 'POLICY_UNAVAILABLE', locale); }
+        finally { await setPolicy(runGrant('cancel')); }
+
+        let writerRefusal: unknown;
+        const bindingRace = vi.spyOn(adapters, 'openSqliteAttemptStore').mockImplementationOnce(async (...args) => {
+          writerRefusal = await switchInstallation().catch((error: unknown) => error);
+          expect.soft(sameLedgerBytes(await ledgerBytes(), beforeBytes)).toEqual([true, true]);
+          return openWriter(...args);
+        });
+        try {
+          const raced = await call({ ...hold, runId: 'busy-visible', commandId: 'binding-race' }, false);
+          expect(bindingRace).toHaveBeenCalledOnce();
+          expect.soft(writerRefusal).toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
+          expect.soft(raced.structuredContent).toMatchObject({ lifecycle: { run: { revision: 1 } } });
+          const committedBytes = await ledgerBytes();
+          expect.soft(sameLedgerBytes(committedBytes, beforeBytes)).toEqual([false, true]);
+          await switchInstallation();
+          expect.soft(sameLedgerBytes(await ledgerBytes(), committedBytes)).toEqual([true, true]);
+        } finally { bindingRace.mockRestore(); await configure(data); }
 
         const afterDecision = (edit: () => Promise<void>) => vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
           const decision = await authorize.apply(this, args);

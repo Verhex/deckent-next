@@ -21,8 +21,8 @@ afterEach(async () => {
 });
 
 const runId = 'run-fixture', scopeId = 's', code = 'RUN_CONTROL_BINDING_CHANGED';
-const english = "The project's installation changed. Reopen the intended project, read the Run again, and confirm.";
-const turkish = 'Projenin bağlı olduğu kurulum değişti. İstediğiniz projeyi yeniden açın, işi yeniden okuyup onaylayın.';
+const english = 'The target or authority facts read for this operation changed. Read the work again in the project you mean and confirm.';
+const turkish = 'Bu işlem için okunan hedef veya yetki bilgileri değişti. İstediğiniz projede işi yeniden okuyup onaylayın.';
 const command = { schemaVersion: 1, scopeId, runId, commandId: 'hold-selected', expectedRevision: 1, action: 'hold', holdReason: 'wait' };
 const argv = ['run', 'hold', '--scope', scopeId, '--id', runId];
 

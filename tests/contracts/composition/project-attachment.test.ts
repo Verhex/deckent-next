@@ -27,9 +27,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
+import { applyConfiguredRunLifecycle } from '#composition/core/runs/index.js';
+import { openConfiguredAttemptStore } from '../support/configured-open.js';
+import { admitRunAttempts } from '../support/admission.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
-import { ProjectAttachmentApplication } from '#engine/index.js';
+import { ProjectAttachmentApplication, RunDecisionApprovalBroker } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, DeckentError } from '#platform/index.js';
 import { assessAttachmentLocation, readableInstallationRegistrationSchema, installationRegistrationSchema,
   normalizeAttachmentRegistration, attachmentRegistrationAllowance,
@@ -159,6 +162,23 @@ async function exerciseAttachedLifecycle(input: { f: AttachmentFixture; target: 
   await executeConfiguredProjectAttachment(f.b, { action: 'restore', projectId: attached.attachment.projectId, expect: recoveredPlan.planDigest }, f.options);
   expect(await loadConfiguredInstallationIdentity(f.b, f.options)).toEqual(original);
   expect(await snapshotBytes(f.a)).toEqual(sourceState);
+  const { store, path: targetLedger } = await openConfiguredAttemptStore(f.b, f.options);
+  try { await admitRunAttempts(store, [{ scopeId: 'target', runId: 'revoke-race', taskId: 't', attemptId: 'a', layoutRevision: 'fixture', generation: 1 }]); }
+  finally { store.close(); }
+  const beforeRevoke = await readFile(targetLedger), active = (await target.store.registration())!.entries[0]!;
+  const authorize = RunDecisionApprovalBroker.prototype.authorize;
+  const decision = vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
+    const result = await authorize.apply(this, args);
+    await f.selected.app.revoke(attached.attachment.projectId);
+    return result;
+  });
+  try {
+    await expect.soft(applyConfiguredRunLifecycle(f.b, { schemaVersion: 1, scopeId: 'target', runId: 'revoke-race',
+      commandId: 'hold-revoke-race', expectedRevision: 1, action: 'hold', holdReason: 'fixture' }, f.options)).rejects.toMatchObject({ code: 'RUN_CONTROL_BINDING_CHANGED' });
+    expect(decision).toHaveBeenCalledOnce();
+    expect(await readFile(targetLedger)).toEqual(beforeRevoke);
+    expect((await target.store.registration())!.entries[0]).toMatchObject({ state: 'revoked', attachment: active.attachment });
+  } finally { decision.mockRestore(); }
   await target.app.detach(attached.attachment.projectId);
   await f.selected.app.revoke(attached.attachment.projectId);
   await expect(loadConfiguredInstallationIdentity(f.b, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_REVOKED' });

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
 import { withExclusiveFileLock } from '#adapters/core/file-lock/index.js';
-import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, pathWithin, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, ConfigValidationError, pathWithin, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, withConfigWriteLock, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
 import { createBackupSet, locateBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
@@ -155,10 +155,12 @@ export class FileBackupStorage implements BackupStoragePort {
       // The copy matches the fingerprint the manifest verified, so a set ledger swapped after verify is never restored.
       if (ledgerFingerprint(ledger) !== verified.fingerprint) return refuse('BACKUP_FINGERPRINT_INVALID');
       // Astra 2471 R1: a durable hold precedes the first publication; config admission refuses it until the last one completed.
-      if (!await lstat(hold).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
-        const pending = `${hold}.${token}`; await writePrivate(pending, JSON.stringify({ schemaVersion: 1, kind: 'backup-restore', operation: token, target, startedAt: new Date().toISOString() }) + '\n');
-        holdCreated = true; await rename(pending, hold); await syncDirectory(dirname(hold));
-      }
+      await withConfigWriteLock(targetConfig, async () => {
+        if (!await lstat(hold).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
+          const pending = `${hold}.${token}`; await writePrivate(pending, JSON.stringify({ schemaVersion: 1, kind: 'backup-restore', operation: token, target, startedAt: new Date().toISOString() }) + '\n');
+          holdCreated = true; await rename(pending, hold); await syncDirectory(dirname(hold));
+        }
+      });
       const publish = async (from: string, to: string) => {
         await ensurePrivateDirectory(dirname(to));
         if (await lstat(to).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {

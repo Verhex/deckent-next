@@ -122,10 +122,13 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
  * Without a caller timeout the wait is the registered `configFile.writeLockTimeoutMs` default (single source). */
 /** Holds the write lock of both configuration layers (project, then global: one fixed order) for `fn`, the same lock every configuration write takes:
  * nothing changes either layer until `fn` settles (POLICY-V12, Astra 2598: the installer names the service identity it read and publishes inside). */
-export function withConfigLayersLocked<T>(projectRoot: string, options: { readonly env?: Environment; readonly platform?: string }, fn: () => Promise<T>): Promise<T> {
+export function withConfigLayersLocked<T>(projectRoot: string, options: { readonly env?: Environment; readonly platform?: string }, fn: () => Promise<T>, sourceRoot?: string): Promise<T> {
   const env = options.env ?? process.env, platform = options.platform ?? process.platform;
-  const project = productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config');
-  return withConfigWriteLock(project, () => withConfigWriteLock(resolveGlobalConfigPaths(env, platform).platformPath, fn));
+  const projectPaths = (sourceRoot ? [projectRoot, sourceRoot] : [projectRoot]).map(root =>
+    productResourcePath(resolveProductLayout({ projectRoot: root, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config'));
+  const global = resolveGlobalConfigPaths(env, platform).platformPath;
+  const paths = [...new Set(projectPaths.filter(path => path !== global))].sort().concat(global);
+  return paths.reduceRight<() => Promise<T>>((work, path) => () => withConfigWriteLock(path, work), fn)();
 }
 export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = getConfigFieldDefault('configFile').writeLockTimeoutMs, options: ConfigLockOptions = {}): Promise<T> {
   options.signal?.throwIfAborted();

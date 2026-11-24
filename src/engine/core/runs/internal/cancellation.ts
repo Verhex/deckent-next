@@ -3,6 +3,7 @@ import { type CancellationDeliveryStore, type CancellationDeliveryLimits, type C
 import { counterSchema, type AttemptIdentity } from '#domain/index.js';
 import type { DispatchRecord, DispatchApplication } from '#engine/core/dispatch/index.js';
 import type { RunApplication } from './application.js';
+import type { RunReceipt } from './store.js';
 import type { RunCancellationSettlement, RunCancellationSettlementStore } from './settlement.js';
 export interface RunCancellationDispatchStore { loadCancellationDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
 export type RunCancellationOutcome = Readonly<{ attemptId: string; taskId: string; delivery?: Readonly<Pick<CancellationDelivery, 'state' | 'attempts' | 'nextEligibleAt'>>; settlement?: RunCancellationSettlement; status: 'not-dispatched' | 'prevented' | 'terminal' | 'unresolved' | 'denied' | 'unavailable' }>;
@@ -17,7 +18,9 @@ export class RunCancellationCoordinator {
     this.worker = new CancellationDeliveryWorker(store, dispatch, { maxAttempts: options.maxAttempts, retryDelayMs: options.retryDelayMs, claimTtlMs: options.claimTtlMs }, runtime);
   }
   async cancel(input: unknown, credential?: unknown) {
-    const receipt = await this.runs.execute(input, credential);
+    return this.deliver(await this.runs.execute(input, credential), credential);
+  }
+  async deliver(receipt: RunReceipt, credential?: unknown) {
     const bindings = receipt.snapshot.bindings; const outcomes: RunCancellationOutcome[] = new Array(bindings.length); let cursor = 0;
     const work = async () => {
       while (cursor < bindings.length) {

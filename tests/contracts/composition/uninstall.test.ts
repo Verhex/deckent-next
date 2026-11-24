@@ -66,6 +66,8 @@ vi.mock('#adapters/core/local-principal/internal/interactive.js', () => ({ attes
 const tail = vi.hoisted(() => ({ left: null as number | null, at: null as string | null }));
 vi.mock('node:fs/promises', async original => { const actual = await original<typeof import('node:fs/promises')>();
   return { ...actual, unlink: async (path: Parameters<typeof actual.unlink>[0]) => {
+    // The durable hold admission releases its transient lock before the final-tail deletion sequence.
+    if (String(path).endsWith(join(`${uninstallHoldPath('')}.write-lock`, 'owner.json'))) return actual.unlink(path);
     // `at`: the process dies at the first unlink whose path names this text (one member of the final tail), once.
     if (tail.left !== null && tail.left-- <= 0 || tail.at && String(path).includes(tail.at) && !(tail.at = null)) throw Object.assign(new Error('crash'), { code: 'EIO' });
     return actual.unlink(path); } }; });
