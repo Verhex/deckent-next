@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, t, loadConfig, terminalSafeText, redactSensitive, type ConfigLoadOptions, type ExitCode } from '#platform/index.js';
+import { ErrorRegistry, emit, t, loadConfig, terminalSafeText, redactSensitive, isAuthorizationRefusal, type ConfigLoadOptions, type ExitCode } from '#platform/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { BeuserReport } from '#engine/index.js';
@@ -86,8 +86,15 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
   if (args.action === 'walk') return walkExit(report);
 }
 
+const preWalkRefusals = new Set([
+  'BEUSER_CANDIDATE_MISMATCH', 'BEUSER_TARGET_NOT_SANDBOX', 'BEUSER_START_STATE_UNMET', 'BEUSER_START_STATE_UNREACHABLE',
+  'EXECUTION_NOT_CONFIGURED', 'RUN_POOL_FULL',
+]);
+
 function walkExit(report: BeuserReport): ExitCode | undefined {
   if (report.unwalked.some(row => row.reason === 'cancelled') || report.unknown.some(row => row.reason === 'cancelled')) return 1;
+  if (report.counts.walked === 0 && report.unknown.some(({ reason }) =>
+    preWalkRefusals.has(reason) || isAuthorizationRefusal(reason, { include: ['policy-denied', 'approval-unsupported'] }))) return 1;
 }
 
 /** Journey beuser-one-command B1/B2/B4: controller → the person's model choice → setup card → walk → report, from any folder. A refused card applies nothing. */

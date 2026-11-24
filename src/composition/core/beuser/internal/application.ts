@@ -232,8 +232,12 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       throw error;
     }), directory = (name: string) => beuserPrivateRecord(join(crashes, 'beuser-reports'), name, c.config.artifacts.maxBytes);
     const authorization = new RunPolicyAuthorization(contextPolicySource(c));
-    const readReport = async (id: string) => {
-      await authorization.authorize('inspect', { scopeId, runId: id }, c.principal);
+    const readReport = async (id: string, skipDenied = false) => {
+      try { await authorization.authorize('inspect', { scopeId, runId: id }, c.principal); }
+      catch (error) {
+        if (skipDenied && isCodedError(error, 'POLICY_DENIED')) return null;
+        throw error;
+      }
       const read = await directory(sha256(JSON.stringify([scopeId, id]))).read();
       if (read.kind === 'absent') return null;
       if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
@@ -249,7 +253,7 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       const monitor = await beuserPrivateRecord(crashes, beuserMonitorName(scopeId, c.principal), c.config.artifacts.maxBytes).read();
       const candidate = monitor.kind === 'ready' ? beuserMonitorRecord.safeParse(monitor.value).data?.runId : undefined;
       if (candidate && candidate !== runId) {
-        const recovered = await readReport(candidate);
+        const recovered = await readReport(candidate, runId !== undefined);
         if (recovered) return recovered;
       }
     }

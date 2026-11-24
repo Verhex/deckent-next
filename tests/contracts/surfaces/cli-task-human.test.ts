@@ -237,11 +237,12 @@ it('accept: the revision is read before the card; declining writes nothing; a st
   } finally { ask.mockRestore(); }
 });
 
-function fakePort(log: string[], options: { queue?: { state?: string; outcome?: string; item?: 'settled' | 'refused' | 'unknown' }; targets?: string[]; summary?: boolean; workingTree?: boolean } = {}) {
+function fakePort(log: string[], options: { queue?: { state?: string; outcome?: string; item?: 'settled' | 'refused' | 'unknown' }; targets?: string[];
+  verification?: { required: boolean; kind: string }; summary?: boolean; workingTree?: boolean } = {}) {
   const deliverView = { operation: 'deliver-integration', scopeId: 's', runId: LONG, taskId: 't', commandId: 'd', title: 'Add the file', resource: 'refs/deckent/delivery/x',
     from: 'base', to: 'cand', files: ['src/a.ts'], added: 1, removed: 0 };
   const preview = { target: { key: 'k', scopeId: 's', runId: LONG, taskId: 't', title: 'Add the file' }, identity: {}, files: [{ path: 'src/a.ts', added: 1, removed: 0 }], added: 1, removed: 0,
-    source: 'src', base: 'base', proposal: 'p', outOfScope: [], adoptionTargets: options.targets ?? [], verification: null, ...(options.queue ? { queueTarget: 'refs/heads/main' } : {}),
+    source: 'src', base: 'base', proposal: 'p', outOfScope: [], adoptionTargets: options.targets ?? [], verification: options.verification ?? null, ...(options.queue ? { queueTarget: 'refs/heads/main' } : {}),
     ...(options.summary ? { summary: deliverySummaryFixture() } : {}), ...(options.workingTree ? { workingTree: true as const } : {}) };
   const refuse = () => Object.assign(new Error('declined'), { code: 'DELIVERY_CONFIRMATION_DECLINED' });
   return {
@@ -254,7 +255,7 @@ function fakePort(log: string[], options: { queue?: { state?: string; outcome?: 
       if (!await answer({ ...deliverView, operation: 'adopt-integration', resource: targetRef })) throw refuse();
       log.push(`adopted:${targetRef}`); return { targetRef, fromCommit: 'a'.repeat(40), toCommit: 'b'.repeat(40), commandId, verifiedBy: null };
     },
-    async verificationRuns() { return []; },
+    async verificationRuns() { log.push('verification-runs'); return []; },
     ...(options.queue ? { queue: {
       async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: options.queue?.state ?? 'awaiting-confirmation', target: { kind: 'git-ref', id: 'refs/heads/main' },
         display: { labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.next.prepare-current' }, basis: null,
@@ -283,6 +284,18 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   expect.soft(await run(['deliver', 'no', 'exit'])).toMatchObject({ status: 1, log: ['preview'] });
   expect(await run(['deliver', 'deliver', 'yes', 'no', 'exit'], { targets: ['refs/heads/main'] }))
     .toMatchObject({ status: 0, log: ['preview', 'delivered'] });
+  const required = { targets: ['refs/heads/main'], verification: { required: true, kind: 'review' } };
+  const missing = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', 'exit'], required);
+  expect.soft(missing.status).toBe(1);
+  expect(missing.log).toEqual(['preview', 'delivered', 'verification-runs']);
+  expect(missing.cards).toHaveLength(5);
+  expect(missing.printed).toEqual([
+    'Delivered commit c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff at refs/deckent/delivery/x. Source HEAD, index and working files are unchanged.',
+    'Adoption needs an accepted review Run on this commit; none exists yet. Delivered, not adopted (--delivery-command-id cli-delivery).',
+  ]);
+  const laterSuccess = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', 'deliver', 'deliver', 'yes', 'no', 'exit'], required);
+  expect.soft(laterSuccess.status).toBe(1);
+  expect(laterSuccess.log).toEqual(['preview', 'delivered', 'verification-runs', 'preview', 'delivered']);
   // Delivery confirmation card (the port's exact card) declined: the port refuses, nothing delivered.
   const declined = await run(['deliver', 'deliver', 'no']);
   expect(declined.log).toEqual(['preview', 'error:DELIVERY_CONFIRMATION_DECLINED']);
