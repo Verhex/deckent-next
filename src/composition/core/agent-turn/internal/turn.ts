@@ -1,4 +1,4 @@
-import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
+import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, freshModelInvocationDiagnostic, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
@@ -9,7 +9,7 @@ import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, age
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { DeckentError, isHeadlessDiagnosticCode, isRecord, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -109,14 +109,20 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       if (readiness.state === 'unknown' && host.nativeAgent?.preflight) {
         try {
           await host.nativeAgent.preflight(profile, AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]));
-          execution = await nativeChatVerificationExecution(profile, host.nativeAgent, error => { diagnostic = error; });
+          let verificationDiagnostic: DeckentError | undefined;
+          execution = await nativeChatVerificationExecution(profile, host.nativeAgent, error => { verificationDiagnostic = error; });
           readiness = await inspectNativeChat(profile, host.nativeAgent);
-          diagnostic = execution ? readiness.diagnostic : diagnostic ?? readiness.diagnostic;
+          diagnostic = readiness.state === 'unavailable' || execution ? readiness.diagnostic : verificationDiagnostic ?? readiness.diagnostic;
           if (readiness.state === 'unavailable') execution = null;
         } catch (error) {
-          if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)
+          diagnostic = error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error : undefined;
+          if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted) {
+            if (diagnostic?.localize && diagnostic.params?.['check'] !== 'cancelled' && !channel.signal.aborted) {
+              const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
+              channel.emit({ kind: 'text', text: diagnostic.localize(language).message + '\n' });
+            }
             return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
-          if (error instanceof DeckentError && isHeadlessDiagnosticCode(error.code)) diagnostic = error;
+          }
           execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
         }
       }
@@ -307,30 +313,47 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
-          // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
-          return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? queryFailure(error).code };
+          const failure = queryFailure(error);
+          const diagnosis = isHeadlessDiagnosticCode(failure.code)
+            ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : undefined;
+          return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? failure.code, ...(diagnosis && { diagnosis }) };
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
+        const fresh = freshModelInvocationDiagnostic(result);
+        if (fresh?.localize) return { status: 'failed', state: 'unknown', diagnosis: fresh.localize(language).message };
         const refusalReason = nativeRefusal();
         if (refusalReason) return { status: 'failed', state: refusalReason };
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          const cliSubscription = evidence && profile && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
-            && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
-          if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliSubscription)) {
+          const receiptAdapter = result.receipt.profile.adapter;
+          const cliSubscription = receiptAdapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID;
+          const cliEvidence = cliSubscription && evidence?.adapter.id === receiptAdapter.id && evidence.adapter.version === receiptAdapter.version;
+          if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliEvidence)) {
             const inspected = await withLocalPrincipalChannel(undefined, () => inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
               invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null);
             const content = inspected?.responseContent;
             const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
-            const limitText = cliSubscription && body ? nativeQuotaText(body, language) : null;
+            const limitText = cliEvidence && body ? nativeQuotaText(body, language) : null;
             if (limitText) return { status: 'failed', state: limitText };
             if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
             if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
             if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
             if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };
+            if (cliEvidence && outcome.state === 'unknown' && evidence.reason === 'interrupted') {
+              if (body?.refusal === 'process-exit') {
+                if (body.signal !== null && body.exitCode === null) return { status: 'failed', state: 'unknown: interrupted' };
+                if (body.exitCode !== null && body.signal === null)
+                  return { status: 'failed', state: 'unknown', diagnosis: t('agent.turn.failure.processExit', { code: body.exitCode }, language) };
+              }
+              const code = content?.kind === 'response-body' ? retainedFailureCode(content.data) : null;
+              const diagnosis = code ? t('agent.turn.failure.recordedCode', { code }, language) : t('agent.turn.failure.causeUndetermined', {}, language);
+              return { status: 'failed', state: 'unknown', diagnosis };
+            }
           }
+          if (outcome.state === 'unknown' && !evidence && cliSubscription)
+            return { status: 'failed', state: 'unknown', diagnosis: t('agent.turn.failure.causeUndetermined', {}, language) };
           if (evidence?.adapter.id === 'openai-chat-http' && (evidence.httpStatus === 400 || evidence.httpStatus === 429)) {
             const diagnosis = providerRequestDiagnosis(profile);
             if (evidence.httpStatus === 429) {
@@ -486,6 +509,14 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     scratch?.release();
     store?.close();
   }
+}
+
+/** The old code-only body names a registered family, with no evidence of the operation or an interruption. */
+function retainedFailureCode(data: string): string | null {
+  try {
+    const body: unknown = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+    return isRecord(body) && Object.keys(body).length === 1 && typeof body['code'] === 'string' && ErrorRegistry.has(body['code']) ? body['code'] : null;
+  } catch { return null; }
 }
 /** Cancels a running turn of the same principal at once; another principal's turn or an unknown id is `not-running`. */
 export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,

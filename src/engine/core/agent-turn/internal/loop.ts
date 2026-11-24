@@ -18,7 +18,7 @@ const providerStopWords = (language: Locale | undefined) => ({ 'content-filter':
 export type AgentRoundOutcome =
   | { readonly status: 'responded'; readonly content: string; readonly reasoning: string; readonly toolCalls: readonly AgentToolCall[];
     readonly finish: string; readonly continuation?: AgentMessageContinuation; readonly providerStop?: AgentProviderStop; readonly usage: { readonly promptTokens: number; readonly completionTokens: number } | null }
-  | { readonly status: 'failed'; readonly state: string };
+  | { readonly status: 'failed'; readonly state: string; readonly diagnosis?: string };
 
 /**
  * The loop's only ways to act. Rounds are governed invocations (policy, activation, allocation, spending, receipts) whose command
@@ -115,6 +115,11 @@ function outcomeState(state: string, language: Locale = LOCALES[0]): string {
     MODEL_NOT_ACTIVATED: t('agent.turn.outcome.notActivated', {}, language),
   };
   return name && labels[name] ? labels[name] + state.slice(name.length) : state;
+}
+function failedRoundNote(outcome: Extract<AgentRoundOutcome, { status: 'failed' }>, summary: string, language?: Locale): string {
+  if (outcome.diagnosis) return t('agent.turn.outcome.failedDiagnosis', { diagnosis: outcome.diagnosis, summary }, language);
+  return agentSpendFailureNote(outcome.state, language)
+    ?? t('agent.turn.outcome.failed', { state: outcomeState(outcome.state, language), summary }, language);
 }
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
@@ -505,11 +510,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.
         if (streamed) push({ role: 'assistant', content: `${streamed}\n${ports.serviceStopping?.() ? `[deckent] ${t('agent.turn.outcome.serviceStoppedMidAnswer', {}, input.language)}` : cancelledMidAnswer(input.language)}`, toolCalls: [] });
-        return finish('cancelled', cancelled());
+        return finish('cancelled', [cancelled(), outcome.diagnosis].filter(Boolean).join(' '));
       }
-      const spendNote = agentSpendFailureNote(outcome.state, input.language);
-      if (spendNote) return finish('error', spendNote);
-      return finish('error', t('agent.turn.outcome.failed', { state: outcomeState(outcome.state, input.language), summary: summary() }, input.language));
+      return finish('error', failedRoundNote(outcome, summary(), input.language));
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });
     if (outcome.content.trim() || outcome.toolCalls.length) push({ role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls,

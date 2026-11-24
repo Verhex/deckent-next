@@ -167,11 +167,21 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
     expect(await f.read()).toMatchObject([{ mode: 'version', program: f.payload }]);
   });
 
-  it('keeps a signal separate from a normal nonzero version exit', async () => {
+  it('distinguishes the shared signal diagnostic from a signal observed by the runner', async () => {
     const f = await fixture({ versionSignal: 'SIGTERM' });
-    await expect(headlessPreflight(entry, f.definition, Date.now, testIsolation)).rejects.toMatchObject({
-      code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'signal' },
-    });
+    const reported = await headlessPreflight(entry, f.definition, Date.now, testIsolation).catch((error: unknown) => error) as DeckentError;
+    expect(reported).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'relay-signal-diagnostic' } });
+    expect(reported.localize?.('en').message).toBe('The version check exited with a signal diagnostic. The channel stays closed.');
+    expect(reported.localize?.('tr').message).toBe('Sürüm denetimi bir sinyal tanısıyla sonlandı. Kanal kapalı kalır.');
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => ({
+      schemaVersion: 1, requestId: command.requestId, started: true, reason: 'signal', exitCode: null, signal: 'SIGTERM',
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      await expect(headlessPreflight(entry, f.definition, Date.now, testIsolation)).rejects.toMatchObject({
+        code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'signal' },
+      });
+    } finally { runner.mockRestore(); }
   });
 
   it('keeps interactive sign-in on the selected launcher and checks status with the isolated native file', async () => {
@@ -715,7 +725,6 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
   async function expectPreflightBind(f: Awaited<ReturnType<typeof fixture>>, executable: string, packageRoot?: string, replace?: () => Promise<void>) {
     const expected = await lstat(executable, { bigint: true });
     const isolation = await fixtureIsolation(async seal => { if (seal === 2) await replace?.(); });
-    const stopped = new Error('version probe captured before spawn');
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async (command, _signal, _onLine, fd) => {
       expect(fd).toBeDefined();
       expect(fstatSync(fd!, { bigint: true })).toMatchObject({ dev: expected.dev, ino: expected.ino, ctimeNs: expected.ctimeNs });
@@ -732,7 +741,8 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
         const hostBinds = args.flatMap((arg, i) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? args.slice(i + 1, i + 3) : []);
         expect(hostBinds.filter(path => path === packageRoot || path.startsWith(packageRoot + sep))).toEqual([]);
       }
-      throw stopped;
+      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 17, signal: null,
+        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     });
     try {
       const preflight = headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation);
@@ -743,7 +753,10 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
         expect(error.localize?.('tr').message).toContain('Sağlayıcı programının kimliği daha önce denetlenen program kimliğinden farklı.');
         expect(runner).not.toHaveBeenCalled();
       } else {
-        await expect(preflight).rejects.toBe(stopped);
+        // An assertion failure inside the runner takes the unverified-process route, never this observed exit case.
+        await expect(preflight).rejects.toMatchObject({
+          code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'version', reason: 'exit', exitCode: '17' },
+        });
         expect(runner).toHaveBeenCalledOnce();
       }
     } finally { runner.mockRestore(); }

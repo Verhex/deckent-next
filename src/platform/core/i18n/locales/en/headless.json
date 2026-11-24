@@ -1,4 +1,9 @@
 {
+  "error.headless.workerPreparationRelease": "The worker preparation lock could not be released.",
+  "error.headless.npmProof.manifest-target-not-regular": "A declared launcher path ends at an entry that is not a regular file.",
+  "error.headless.realmProcessUnverified": "The isolated process result could not be determined.",
+  "error.headless.realmBridgeClose": "The tool bridge for the isolated process could not be closed.",
+  "error.headless.relaySignalDiagnostic": "The version check exited with a signal diagnostic. The channel stays closed.",
   "error.headless.npmProof.manifest-target-missing": "A declared launcher path has a missing component.",
   "error.headless.pathSearchExecuteUnverified": "A regular file was found on PATH, but its execute access could not be verified. The search covers up to the first {bound} absolute directories.",
   "error.headless.npmProof.manifest-target-not-directory": "A declared launcher path requires a directory at one of its components.",

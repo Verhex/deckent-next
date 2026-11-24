@@ -1,4 +1,4 @@
-export { ModelInvocationApplication, ModelInvocationPurgeApplication } from './internal/application.js';
+export { ModelInvocationApplication, ModelInvocationPurgeApplication, freshModelInvocationDiagnostic } from './internal/application.js';
 export type { ModelInvocationAcquisitionInput } from './internal/acquisition.js';
 export type { ModelInvocationSpending, ModelInvocationSpendingAuthority, ModelInvocationSpendingInput } from './internal/spending.js';
 export type { ModelInvocationAuthorizer, ModelInvocationMeasurement, ModelInvocationNativePort, ModelInvocationNativeRegistry,

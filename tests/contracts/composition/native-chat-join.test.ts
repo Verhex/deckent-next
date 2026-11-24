@@ -24,7 +24,7 @@ import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-le
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
 import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
-import { clearConfigCache, redactForRecord, SystemTrustedClock } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
 
@@ -215,6 +215,43 @@ it('refuses a driver returning another tool session before any model send or eff
   expect(await h.run()).toMatchObject({ finish: 'error', recorded: true });
   expect(h.state.calls).toBe(0); expect(h.state.closes).toBe(1);
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
+});
+
+it.each(['admission', 'send'] as const)('renders a path-free typed refusal at the end of a turn after %s fails (EN/TR)', async phase => {
+  if (await unsupportedPeer()) return;
+  for (const [language, expected] of [
+    ['en', 'The model round ended without an answer. The sign-in lock directory could not be created. No tool call ran.'],
+    ['tr', 'Model turu yanıt alınamadan sona erdi. Giriş kilidi dizini oluşturulamadı. Hiçbir araç çağrısı çalıştırılmadı.'],
+  ] as const) {
+    const h = await fixture(), driver = h.runtime.driver;
+    Object.assign(h.f.options.env, { DECKENT_LANGUAGE: language });
+    const fail = async () => {
+      throw ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-directory-create' }),
+        '/fixture/turn-diagnostic-must-remain-local');
+    };
+    h.runtime.driver = async input => {
+      const opened = await driver(input);
+      return phase === 'admission' ? { ...opened, admit: fail } : { ...opened, native: (...args) => ({ ...opened.native(...args), send: fail }) };
+    };
+    const result = await h.run();
+    expect.soft(result.note).toBe(expected);
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
+  }
+});
+
+it('names the current chat readiness barrier after the guarded rereads disagree', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture();
+  const common = { cli: true, login: true, environment: true, plugins: true, toolSurface: true, execution: h.execution };
+  h.runtime.preflight = vi.fn(async () => undefined);
+  h.runtime.readiness.read = vi.fn<NativeChatRuntime['readiness']['read']>()
+    .mockResolvedValueOnce({ ...common })
+    .mockResolvedValueOnce({ ...common, bridge: true, execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
+    .mockResolvedValue({ ...common, bridge: false });
+  await h.run();
+  expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
+  expect(h.state.calls).toBe(0);
 });
 
 it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the turn\'s recorded note, not a pause', async () => {

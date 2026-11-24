@@ -12,7 +12,9 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
 
 export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unknown): DeckentError {
   const diagnostic = readHeadlessDiagnosticCase(refusal) ?? readLegacyHeadlessDiagnosticCase(refusal, legacyCheck);
-  return diagnostic ? ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params }) : ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED');
+  if (diagnostic) return ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params });
+  const family = refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? refusal : 'HEADLESS_PREFLIGHT_FAILED';
+  return ErrorRegistry.createError(family, { params: { check: 'diagnostic-unverified' } });
 }
 
 const signInReturned = new WeakSet<object>();

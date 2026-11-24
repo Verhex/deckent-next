@@ -112,6 +112,7 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const result = await runHeadlessIsolated(entry, isolation, { executable, program, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir, now },
       { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
     if (result.limit) refuse('HEADLESS_LIMIT_REACHED', { limit: result.limit });
+    if (result.signalFromTrailer) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'relay-signal-diagnostic' });
     if (result.reason === 'signal' || result.reason === 'cancelled') refuse('HEADLESS_PREFLIGHT_FAILED', { check: result.reason });
     if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'spawn', reason: result.reason });
     return { ...result, stdout: Buffer.from(result.stdoutBase64, 'base64').toString('utf8'), stderr: Buffer.from(result.stderrBase64, 'base64').toString('utf8') };
@@ -124,8 +125,8 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     if (version === null) return versionRefusal({ check: 'version', reason: 'unreadable' });
     if (compareToolchainVersions(version, definition.minCliVersion) < 0) versionRefusal(verifiedCliVersion(definition.minCliVersion) !== null ? { check: 'version', reason: 'too-old', version, minimum: definition.minCliVersion }
       : { check: 'version', reason: 'too-old-unrenderable' });
+    if (versionRun.cleanupError) throw versionRun.cleanupError;
     const helpRun = await run(headless.preflight.helpArgs);
-    if (helpRun.cleanupError) throw helpRun.cleanupError;
     const help = helpRun.stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
     // A hidden flag is proven by the parser refusing a bad value, in an empty temporary config dir: the probe never sees the person's login.
     const accepted = async (probe: NonNullable<ReturnType<typeof hidden.get>>) => {
@@ -147,9 +148,11 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     };
     for (const flag of agent?.requiredFlags ?? headlessRequiredFlags(entry)) {
       const probe = hidden.get(flag);
+      if (probe !== undefined && helpRun.cleanupError) throw helpRun.cleanupError;
       if (probe === undefined ? !help.includes(flag) : !(await accepted(probe))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags',
         reason: probe === undefined ? 'help-unverified' : 'parser-unverified' });
     }
+    if (helpRun.cleanupError) throw helpRun.cleanupError;
     const status = await run(headless.preflight.authStatusArgs);
     const auth = headlessAuth(headless.auth, status, definition.configDir);
     if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED', { reason: auth.reason });

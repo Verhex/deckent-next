@@ -132,6 +132,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
                 choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] } };
             } else if (ended && 'refusal' in ended) return rejectResult(ended.refusal);
             else return rejectResult(reject('interrupted', { refusal: 'invalid-output', subtype: 'incomplete' }), false);
+            if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
             response = projectResponse(response, known) as typeof response;
             if (Buffer.byteLength(JSON.stringify(response)) > profile.limits.responseMaxBytes) return rejectResult(reject('response-limit', { refusal: 'response-limit' }));
             // A completed, guarded turn is current surface evidence; a preflight alone never sets these facts.

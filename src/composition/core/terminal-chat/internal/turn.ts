@@ -72,8 +72,8 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const profile = nativeChatProfile(configuredInvocationProfiles(config), (config['terminal'] as { scopeId?: string } | undefined)?.scopeId, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
   const headlessModel = binding.status === 'declared' && binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null);
-  const toolsDiagnostic = native?.diagnostic ?? (headlessModel && (!native || native.state === 'unavailable')
-    ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) : undefined);
+  const toolsDiagnostic = native?.diagnostic ?? (native?.state === 'unavailable' ? ErrorRegistry.createError(native.reason)
+    : headlessModel && !native ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) : undefined);
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
   const verifiedAtMs = profile && native?.state === 'unknown' ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
 

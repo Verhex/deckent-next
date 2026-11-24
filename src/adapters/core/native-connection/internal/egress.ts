@@ -8,7 +8,7 @@ import catalog from './providers.json' with { type: 'json' };
 import { NativeConnectionError, nativeProviderSpec, type NativeSubscription } from './credential.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { HEADLESS_EGRESS_HOST, type HeadlessEgress, type HeadlessEgressReason } from '#domain/index.js';
-import { privateIpcRoot } from '#platform/index.js';
+import { DeckentError, headlessDiagnostic, isHeadlessDiagnosticCode, privateIpcRoot } from '#platform/index.js';
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
   ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
@@ -130,7 +130,11 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     if (closed) return; closed = true;
     let failed = false;
     try { await input.mcp?.close(); }
-    catch (error) { failed = true; throw error; }
+    catch (error) {
+      failed = true;
+      throw error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error
+        : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-bridge-close' });
+    }
     finally {
       await Promise.resolve().then(async () => {
         for (const socket of sockets) socket.destroy();

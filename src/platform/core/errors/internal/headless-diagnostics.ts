@@ -95,6 +95,7 @@ const manifestProof = {
   'manifest-exclusion-unverified': 'error.headless.npmProof.manifest-exclusion-unverified',
   'manifest-target-missing': 'error.headless.npmProof.manifest-target-missing',
   'manifest-target-not-directory': 'error.headless.npmProof.manifest-target-not-directory',
+  'manifest-target-not-regular': 'error.headless.npmProof.manifest-target-not-regular',
 } as const;
 const npmProof = <const Reason extends keyof typeof manifestProof>(reason: Reason) =>
   classified(preflight, 'native', { check: 'npm-layout-unknown', reason } as const, {
@@ -153,6 +154,7 @@ export const headlessDiagnosticCases = Object.freeze([
   }),
   ...classified(preflight, 'check', {}, {
     signal: 'error.HEADLESS_PREFLIGHT_FAILED.signal',
+    'relay-signal-diagnostic': 'error.headless.relaySignalDiagnostic',
     cancelled: 'error.HEADLESS_PREFLIGHT_FAILED.cancelled',
     'executable-changed': 'error.HEADLESS_PREFLIGHT_FAILED.executable-changed',
     'executable-bind-unverified': 'error.headless.executableBindUnverified',
@@ -188,8 +190,11 @@ export const headlessDiagnosticCases = Object.freeze([
     'realm-scratch-remove': 'error.headless.realmScratchRemove',
     'realm-program-close': 'error.headless.realmProgramClose',
     'realm-gateway-close': 'error.headless.realmGatewayClose',
+    'realm-bridge-close': 'error.headless.realmBridgeClose',
     'realm-process-request': 'error.headless.realmProcessRequest',
     'realm-process-response': 'error.headless.realmProcessResponse',
+    'realm-process-unverified': 'error.headless.realmProcessUnverified',
+    'worker-preparation-release': 'error.headless.workerPreparationRelease',
     'lock-directory-create': 'error.headless.lockDirectoryCreate',
     'lock-directory-read': 'error.headless.lockDirectoryRead',
     'lock-directory-type': 'error.headless.lockDirectoryType',
@@ -239,6 +244,7 @@ export const headlessDiagnosticCases = Object.freeze([
   ...npmProof('manifest-exclusion-unverified'),
   ...npmProof('manifest-target-missing'),
   ...npmProof('manifest-target-not-directory'),
+  ...npmProof('manifest-target-not-regular'),
   ...classified(preflight, 'reason', { check: 'login-status-incomplete' }, {
     timeout: 'error.headless.loginStatus.timeout',
     signal: 'error.headless.loginStatus.signal',
@@ -378,7 +384,14 @@ function caseFor(code: string, params: Params): Diagnostic | undefined {
   return (headlessDiagnosticCases as readonly Diagnostic[]).find(row => row.code === code
     && known.length === Object.keys(row.fields).length + Object.keys(row.extras ?? {}).length
     && Object.entries(row.fields).every(([key, value]) => params[key] === value)
-    && Object.entries(row.extras ?? {}).every(([key, field]) => field.accepts(params[key])));
+    && Object.entries(row.extras ?? {}).every(([key, field]) => field.accepts(params[key]))
+    && (row.fields['reason'] !== 'too-old' || belowMinimum(String(params['version']), String(params['minimum']))));
+}
+
+function belowMinimum(reported: string, minimum: string): boolean {
+  const actual = reported.split('.').map(Number), required = minimum.split('.').map(Number);
+  const firstDifference = actual.findIndex((part, index) => part !== required[index]);
+  return firstDifference !== -1 && actual[firstDifference]! < required[firstDifference]!;
 }
 
 /** Normalize an old or external error without trusting any extra data. */
@@ -423,12 +436,12 @@ export function headlessDiagnosticIdentifier(code: string, params: Params): Head
   // The existing failure identifier may include only values checked by the closed case.
   return row.extras ? `${base}__${Object.keys(row.extras).sort().map(key => params[key]).join('__')}` : base;
 }
-export function readHeadlessDiagnosticIdentifier(value: string, locale: Locale): string | undefined {
+function identifierCase(value: string) {
   if (!value.startsWith('HEADLESS_') || !value.includes('__')) return undefined;
   for (const row of headlessDiagnosticCases as readonly Diagnostic[]) {
     const base = identifier(row);
     if (!row.extras) {
-      if (base === value) return row.render(row.fields, locale);
+      if (base === value) return { row, params: row.fields };
       continue;
     }
     if (!value.startsWith(base + '__')) continue;
@@ -439,8 +452,18 @@ export function readHeadlessDiagnosticIdentifier(value: string, locale: Locale):
       return [key, typeof row.extras![key]!.example === 'number' && String(Number(raw)) === raw ? Number(raw) : raw];
     }));
     const params = readHeadlessDiagnosticCase({ code: row.code, params: { ...row.fields, ...extra } })?.params;
-    if (params) return row.render(params, locale);
+    if (params) return { row, params };
     break;
   }
-  return t('error.headless.diagnosticUnverified', {}, locale);
+  return undefined;
+}
+
+export function isHeadlessDiagnosticIdentifier(value: string): boolean {
+  return identifierCase(value) !== undefined;
+}
+
+export function readHeadlessDiagnosticIdentifier(value: string, locale: Locale): string | undefined {
+  if (!value.startsWith('HEADLESS_') || !value.includes('__')) return undefined;
+  const parsed = identifierCase(value);
+  return parsed ? parsed.row.render(parsed.params, locale) : t('error.headless.diagnosticUnverified', {}, locale);
 }

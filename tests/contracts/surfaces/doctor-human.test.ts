@@ -48,6 +48,34 @@ const report = {
 };
 
 describe('doctor rows (pure)', () => {
+  it('describes a parked run without inferring a failure count (EN/TR)', () => {
+    for (const [locale, expected] of [
+      ['en', 'Run run-fixture is parked (HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE). The sign-in lock directory could not be created.'],
+      ['tr', 'run-fixture işi beklemede (HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE). Giriş kilidi dizini oluşturulamadı.'],
+    ] as const) {
+      const checks = doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code: 'HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE' }] }), locale);
+      expect.soft(checks.find(row => row.id === 'work.stuckRun')?.text).toBe(expected);
+    }
+  });
+  it('the Doctor command accepts a validated dotted version identifier without exposing malformed details', async () => {
+    const root = await project();
+    const code = 'HEADLESS_PREFLIGHT_FAILED__CHECK_VERSION__REASON_TOO_OLD__2.0.0__1.0.0';
+    const snapshot = { installs: [{ runs: [
+      { runId: 'fixture-run', blocker: { code: 'parked', detail: code } },
+      { runId: 'private-run', blocker: { code: 'parked', detail: code.replace(/1\.0\.0$/u, '/private/fixture') } },
+    ] }] };
+    for (const [locale, expected] of [
+      ['en', 'Run fixture-run is parked'],
+      ['tr', 'fixture-run işi beklemede'],
+    ] as const) {
+      let output = '';
+      await runKernelCommand(['doctor', '--lang', locale], { root, env: { HOME: join(root, 'h') },
+        inspectMonitor: (async () => snapshot) as never, stdout: { write: chunk => { output += chunk; } } });
+      expect(output).toContain(expected);
+      expect(output).toContain(code);
+      expect(output).not.toMatch(/private-run|\/private\/fixture/u);
+    }
+  });
   // BeUser S-11: "Where your data can go" lists the configured outbound routes as facts, last, and says plainly that no telemetry is sent.
   it('lists where data can go: local and remote models, web fetch, MCP servers, the toolchain check, workers, Hub and no telemetry (EN/TR)', () => {
     const egress = { models: [{ name: 'openai-chat-http', host: '127.0.0.1', local: true }, { name: 'anthropic', host: 'api.anthropic.com', local: false }],

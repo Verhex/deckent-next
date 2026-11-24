@@ -207,14 +207,17 @@ async function binTargetInfo(root: FileHandle, packageRoot: string, target: unkn
       finally { current = next; }
     }
     const info = await current.stat({ bigint: true });
-    if (!info.isFile()) throw new Error();
+    if (!info.isFile()) {
+      failed = true;
+      return { path: join(packageRoot, ...parts), reason: 'manifest-target-not-regular' } as const;
+    }
     return info;
   } catch (error) { failed = true; throw error; }
   finally { if (current !== root) await current.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 
 type ManifestExclusionFailure = 'manifest-exclusion-unverified' | 'manifest-exclusion-changed' | 'manifest-declares-bin'
-  | Readonly<{ path: string; reason: 'manifest-target-missing' | 'manifest-target-not-directory' }>;
+  | Readonly<{ path: string; reason: 'manifest-target-missing' | 'manifest-target-not-directory' | 'manifest-target-not-regular' }>;
 
 async function remainingTargetsAfterExclusion(packageRoot: string, chosen: BigIntStats, maxBytes: number, remaining: number): Promise<number | ManifestExclusionFailure> {
   let failure: ManifestExclusionFailure = 'manifest-exclusion-unverified';

@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
+import { prepareNativeWorkerObservation } from '#capabilities/core/native-agent-execution/index.js';
 import { headlessDiagnostic, readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
@@ -14,6 +15,22 @@ import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/nat
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+
+it('keeps the current release refusal after a successful reread, and reports the last observation when no claim was obtained', async () => {
+  const read = vi.fn<Parameters<typeof prepareNativeWorkerObservation>[0]['read']>()
+    .mockImplementationOnce(async diagnose => { diagnose(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' })); return null; })
+    .mockResolvedValueOnce({});
+  const preflight = vi.fn();
+  const reason = await prepareNativeWorkerObservation({ read, preflight, claim: async () => ({ async release() {
+    throw new Error('fixture cleanup path');
+  } }) });
+  expect(readHeadlessDiagnosticIdentifier(reason!, 'en')).toBe('The worker preparation lock could not be released.');
+  expect(preflight).not.toHaveBeenCalled();
+  read.mockImplementationOnce(async diagnose => { diagnose(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' })); return null; });
+  const busy = await prepareNativeWorkerObservation({ read, preflight, claim: async () => null });
+  expect(readHeadlessDiagnosticIdentifier(busy!, 'en')).toContain('operating-system user');
+  expect(preflight).not.toHaveBeenCalled();
+});
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'k26-preparation-')); roots.push(root);
   const global = join(root, 'global'), configDir = join(global, 'headless', 'logins', 'fixture'), stateDir = join(global, 'headless', 'connections', 'fixture'), bin = join(root, 'bin');

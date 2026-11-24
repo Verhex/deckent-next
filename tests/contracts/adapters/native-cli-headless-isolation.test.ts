@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
+import * as egressGateway from '#adapters/core/native-connection/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry } from '#platform/index.js';
@@ -185,6 +186,10 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     }
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check: 'realm-scratch-create' }));
     expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_ISOLATION_UNAVAILABLE', check: 'limits' }));
+    const legacy = await logins();
+    expect(doctor(legacy, 'en')).toContain('The check recorded an isolation refusal. The provider-program diagnostic could not be verified.');
+    expect(legacy[0]?.isolation).toBe('unavailable');
   });
 
   it('Doctor and the shared error renderer treat malformed diagnostic cases as unverified for every code', async () => {
@@ -202,6 +207,13 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       }
       expect(JSON.stringify(error)).not.toContain(params.invalid);
     }
+    for (const version of ['2.0.0', '10.0.0']) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed',
+        refusal: { code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'version', reason: 'too-old', version, minimum: '2.0.0' } } }));
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect(doctor(logins, 'en')).toContain('The provider-program diagnostic could not be verified.');
+      expect(doctor(logins, 'tr')).toContain('Sağlayıcı programına ilişkin tanı doğrulanamadı.');
+    }
   });
   it('Doctor shows a completed negative parser probe even when its scratch cleanup fails', async () => {
     const info = lstatSync(process.execPath, { bigint: true });
@@ -214,6 +226,15 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       return remove(...args);
     });
     const replies = ['9.1.0 (Claude Code)', fullHelp(), 'parser output without the required refusal'];
+    const openGateway = egressGateway.openNativeEgressGateway;
+    const closeFailed = vi.fn();
+    const gateway = vi.spyOn(egressGateway, 'openNativeEgressGateway').mockImplementation(async input => {
+      const opened = await openGateway(input);
+      return { ...opened, async close() {
+        await opened.close();
+        if (!replies.length) { closeFailed(); throw new Error('fixture realm gateway cleanup failure'); }
+      } };
+    });
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
       schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
       stdoutBase64: Buffer.from(replies.shift() ?? '').toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
@@ -221,10 +242,11 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     try {
       await expect.soft(c.port.preflight(c.profile)).rejects.toMatchObject({ params: { check: 'flags', reason: 'parser-unverified' } });
       expect(cleanup.mock.calls.some(([path]) => typeof path === 'string' && /\/probe-[^/]+$/u.test(path))).toBe(true);
+      expect(closeFailed).toHaveBeenCalledOnce();
       const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
       expect(doctor(logins, 'en')).toContain('parser');
       expect(doctor(logins, 'tr')).toContain('ayrıştırıcı');
-    } finally { cleanup.mockRestore(); runner.mockRestore(); }
+    } finally { cleanup.mockRestore(); gateway.mockRestore(); runner.mockRestore(); }
   });
   it('refuses typed before any spawn when no bubblewrap launcher is usable (preflight and connect)', async () => {
     const c = await connection({ steps: happy({}) }, {}, 'a'.repeat(64), unavailable);

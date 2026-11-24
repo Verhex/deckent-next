@@ -1,4 +1,9 @@
 {
+  "error.headless.workerPreparationRelease": "İşçi hazırlık kilidi serbest bırakılamadı.",
+  "error.headless.npmProof.manifest-target-not-regular": "Bildirilen başlatıcı yolunun sonundaki öğe normal bir dosya değil.",
+  "error.headless.realmProcessUnverified": "Yalıtılmış sürecin sonucu belirlenemedi.",
+  "error.headless.realmBridgeClose": "Yalıtılmış sürecin araç köprüsü kapatılamadı.",
+  "error.headless.relaySignalDiagnostic": "Sürüm denetimi bir sinyal tanısıyla sonlandı. Kanal kapalı kalır.",
   "error.headless.npmProof.manifest-target-missing": "Bildirilen başlatıcı yolunun bir bileşeni bulunamadı.",
   "error.headless.pathSearchExecuteUnverified": "PATH üzerinde normal bir dosya bulundu ancak çalıştırma erişimi doğrulanamadı. Arama en fazla ilk {bound} mutlak dizini kapsar.",
   "error.headless.npmProof.manifest-target-not-directory": "Bildirilen başlatıcı yolunun bir bileşeninde dizin gerekiyor.",

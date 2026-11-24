@@ -1,4 +1,4 @@
-import { timedAsync } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, isHeadlessDiagnosticCode, timedAsync } from '#platform/index.js';
 import type { ModelInvocationControllerHandle } from './controllers.js';
 import { claimModelInvocation } from './claim.js';
 import { acquireModelInvocationEvidence, type ModelInvocationAcquisitionInput } from './acquisition.js';
@@ -71,6 +71,10 @@ export interface ModelInvocationRuntime {
 export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceipt;
   readonly response: ModelInvocationNativeResponse | null; readonly contentStatus: 'retained' | 'not-captured' | 'purged';
   readonly purge: ModelInvocationPurgeReceipt | null }
+
+// Fresh results can carry a validated diagnosis in process memory without changing their receipt or wire shape.
+const freshDiagnostics = new WeakMap<ModelInvocationResult, DeckentError>();
+export const freshModelInvocationDiagnostic = (result: ModelInvocationResult): DeckentError | undefined => freshDiagnostics.get(result);
 
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<typeof parseModelInvocationCommand>,
@@ -314,14 +318,17 @@ export class ModelInvocationApplication {
         } catch (error) {
           try {
             const observedAtMs = this.runtime.now(), code = (error as { code?: unknown } | null)?.code;
-            // 1b: a thrown typed code is kept as incomplete evidence (the code only, never a message or params); the unknown reason stays transport-error.
+            // The frozen envelope keeps the code under its incomplete-evidence tag. The tag alone proves no interruption.
             const evidence = typeof code === 'string' && ErrorRegistry.has(code)
               ? createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null, Buffer.from(JSON.stringify({ code }), 'utf8'), false) : null;
             const record = verifyModelInvocationRecord(await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, evidence));
             if (!isDeepStrictEqual(record, evidence ? createModelInvocationEvidenceRecord(claimReceipt, evidence, observedAtMs) : createModelInvocationUnknownRecord(claimReceipt, observedAtMs))) {
               throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
             }
-            return checkInvocationResultDelivery(publicResult(false, record), delivery);
+            const result = checkInvocationResultDelivery(publicResult(false, record), delivery);
+            if (error instanceof DeckentError && isHeadlessDiagnosticCode(error.code))
+              freshDiagnostics.set(result, ErrorRegistry.createError(error.code, { params: error.params ?? { check: 'diagnostic-unverified' } }));
+            return result;
           } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
         }
         try {
@@ -343,5 +350,4 @@ export class ModelInvocationApplication {
   }
 }
 import { isDeepStrictEqual } from 'node:util';
-import { ErrorRegistry } from '#platform/index.js';
 import { ProviderSpendError } from '#engine/core/provider-spend/index.js';

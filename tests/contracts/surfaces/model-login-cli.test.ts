@@ -81,6 +81,7 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
       ['record write', 1, ['The sign-in command ended with a failure.', 'Giriş komutu başarısız sonuçlandı.']],
       ['status working directory list', 0, null], ['status working directory cleanup', 0, null],
       ['realm scratch create', 0, null], ['realm scratch cleanup', 0, null], ['realm response invalid', 0, null],
+      ['realm response unverified', 0, null],
     ] as const) {
       const f = await project('g3-'), executable = join(f.root, 'fixture-provider');
       const scratch = boundary.startsWith('realm scratch'), command = scratch ? ['models', 'login', '--connection', 'codex-cli-subscription'] : LOGIN;
@@ -119,10 +120,11 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
         if (boundary === 'realm scratch create' && isScratch(args[0])) hit();
         return original.mkdtemp(...args);
       }) as typeof files.mkdtemp);
-      const runner = scratch || boundary === 'realm response invalid' ? vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      const runner = scratch || boundary.startsWith('realm response') ? vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
         schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
-        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+        stdoutBase64: '', stderrBase64: Buffer.from('Logged in using ChatGPT').toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
       })) : undefined;
+      if (boundary === 'realm response unverified') runner!.mockImplementation(async () => { hit(); throw failure; });
       if (boundary === 'realm response invalid') runner!.mockImplementation(async () => {
         hit.mockImplementationOnce(() => undefined);
         hit();
@@ -150,6 +152,10 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
         if (boundary === 'realm response invalid') {
           expect.soft(typed.localize?.('en').message).toBe('The isolated process result failed validation.');
           expect.soft(typed.localize?.('tr').message).toBe('Yalıtılmış süreç sonucu doğrulamayı geçemedi.');
+        }
+        if (boundary === 'realm response unverified') {
+          expect.soft(typed.localize?.('en').message).toBe('The isolated process result could not be determined.');
+          expect.soft(typed.localize?.('tr').message).toBe('Yalıtılmış sürecin sonucu belirlenemedi.');
         }
         const crashes = productResourcePath(resolveProductPaths(f.root, { env: f.env }), 'crashes');
         expect.soft(await files.readdir(crashes).catch(() => []), boundary).toEqual([]);
@@ -318,10 +324,15 @@ recorded-program-mismatch	earlier preflight record does not establish the curren
 login-status-positive-nonzero	status check returned a nonzero exit code	durum denetimi sıfır dışı bir çıkış kodu döndürdü
 manifest-target-missing	A declared launcher path has a missing component.	Bildirilen başlatıcı yolunun bir bileşeni bulunamadı.
 manifest-target-not-directory	A declared launcher path requires a directory at one of its components.	Bildirilen başlatıcı yolunun bir bileşeninde dizin gerekiyor.
+manifest-target-not-regular	A declared launcher path ends at an entry that is not a regular file.	Bildirilen başlatıcı yolunun sonundaki öğe normal bir dosya değil.
 recorded-owner-mismatch	The recorded connection owner differs from the current operating-system user.	Kayıtlı bağlantının sahibi mevcut işletim sistemi kullanıcısından farklı.
 agent-observation-identity-unverified	The recorded agent observation could not be verified against the current login metadata.	Kayıtlı ajan gözlemi mevcut oturum üstverisiyle doğrulanamadı.
 login-status-unreadable	The subscription CLI did not report its login state in a readable form.	Abonelik CLI'ı giriş durumunu okunabilir biçimde bildirmedi.
 realm-process-response	The isolated process result failed validation.	Yalıtılmış süreç sonucu doğrulamayı geçemedi.
+realm-process-unverified	The isolated process result could not be determined.	Yalıtılmış sürecin sonucu belirlenemedi.
+realm-bridge-close	The tool bridge for the isolated process could not be closed.	Yalıtılmış sürecin araç köprüsü kapatılamadı.
+relay-signal-diagnostic	The version check exited with a signal diagnostic.	Sürüm denetimi bir sinyal tanısıyla sonlandı.
+worker-preparation-release	The worker preparation lock could not be released.	İşçi hazırlık kilidi serbest bırakılamadı.
 lock-marker-read-changed	The sign-in lock marker did not match its initial file metadata during the read.	Giriş kilidi işareti okuma sırasında ilk dosya üstverisiyle eşleşmedi.
 login-status-incomplete/timeout	The subscription status check timed out.	Abonelik durum denetimi zaman aşımına uğradı.
 login-status-incomplete/signal	The subscription status check reported termination by a signal.	Abonelik durum denetimi bir sinyalle sonlanma bildirdi.
