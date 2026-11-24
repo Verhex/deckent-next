@@ -5,7 +5,7 @@ import type { ModelCommandContext } from './context.js';
 
 /** s3c: what the sign-in reported (the composition's result; login kind and plan only, never an account name or a token). */
 export type HeadlessLoginView = Readonly<{ configDir: string; owned: boolean; exit: 'completed' | 'cancelled' | 'failed'; signedIn: boolean; authMethod: string | null;
-  subscriptionType: string | null; statusIssue?: DeckentError; cleanupIssue?: DeckentError }>;
+  subscriptionType: string | null; statusIssue?: DeckentError; cleanupIssue?: DeckentError; followUpFailed?: true }>;
 export type HeadlessLoginHandler = (command: Readonly<{ connection: string; configDir?: string; executable?: string; sso?: boolean; loginMethod?: string }>, options: ConfigLoadOptions,
   confirm: (dir: Readonly<{ configDir: string; owned: boolean }>) => Promise<boolean>) => Promise<HeadlessLoginView | null>;
 const FLAGS = ['--connection', '--config-dir', '--executable', '--login-method', '--lang'] as const;
@@ -29,16 +29,18 @@ function parse(argv: readonly string[]) {
 const dirLine = (dir: Readonly<{ configDir: string; owned: boolean }>, locale: Locale) => dir.owned ? t('headless.login.dirOwned', { dir: terminalSafeText(dir.configDir) }, locale)
   : t('headless.login.dirOther', { dir: terminalSafeText(dir.configDir) }, locale);
 /** The sign-in's outcome in the person's words: signed in (kind and plan), not signed in, or stopped. */
-export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale, connection: string): string {
+export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale, connection: string, localDetails = false): string {
   const lines = [dirLine(view, locale)];
   if (view.exit !== 'completed') lines.push(view.exit === 'cancelled' ? t('headless.login.cancelled', {}, locale) : t('headless.login.failed', {}, locale));
-  else if (view.cleanupIssue) lines.push(t('error.headless.loginOutcome.completed', {}, locale));
+  else if (view.cleanupIssue || view.followUpFailed) lines.push(t('error.headless.loginOutcome.completed', {}, locale));
   const login = { method: terminalSafeText(view.authMethod ?? '-'), plan: view.subscriptionType ? ` (${terminalSafeText(view.subscriptionType)})` : '', connection: terminalSafeText(connection) };
   if (view.statusIssue) lines.push(view.statusIssue.localize?.(locale).message ?? view.statusIssue.message);
   else if (!view.signedIn) lines.push(t('headless.login.notSignedIn', { connection: login.connection }, locale));
   else lines.push(view.exit === 'completed' && !view.cleanupIssue
     ? t('headless.login.signedIn', login, locale) : t('headless.login.stillSignedIn', login, locale));
   if (view.cleanupIssue) lines.push(view.cleanupIssue.localize?.(locale).message ?? view.cleanupIssue.message);
+  const detail = localDetails && view.followUpFailed && view.statusIssue ? ErrorRegistry.localHeadlessPathDetail(view.statusIssue, locale) : undefined;
+  if (detail) lines.push(detail);
   return lines.join('\n');
 }
 
@@ -62,6 +64,6 @@ export async function modelLoginCommand(argv: readonly string[], context: ModelC
   if (!view) { emit(t('headless.login.declined', {}, locale), { level: 'warning', ...sinks }); return EXIT_CODES.error; }
   // PV 2e: the CLI's own sign-in wrote to this terminal; its last line may lack a line break, so the result starts on a line of its own.
   (context.stdout ?? process.stdout).write('\n');
-  emit(renderHeadlessLogin(view, locale, command.connection), { ...sinks, ...(view.signedIn && !view.cleanupIssue ? {} : { level: 'warning' as const }) });
+  emit(renderHeadlessLogin(view, locale, command.connection, process.stdin.isTTY && process.stderr.isTTY), { ...sinks, ...(view.signedIn && !view.cleanupIssue ? {} : { level: 'warning' as const }) });
   return view.signedIn && view.exit === 'completed' && !view.cleanupIssue ? undefined : EXIT_CODES.error;
 }

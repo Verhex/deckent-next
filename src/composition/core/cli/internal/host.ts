@@ -189,7 +189,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     planRun: planRuntimeRun,
     describeTerminalChatPlan: describeTerminalChat,
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
-      { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
+      { invoke: invokeRuntimeModel, inspect: inspectRuntimeModelInvocation, cancel: cancelRuntimeModelInvocation }),
     // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).
     secretGrantCard: { offer: terminalSecretGrantOffer, target: inspectSecretProjectTarget, grant: (root, scopeId, name, opts, target) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts, undefined, target).then(() => {}),
       check: (root, scopeId, name, opts) => typed(assertConfiguredProjectCredential(root, scopeId, name, opts)) },

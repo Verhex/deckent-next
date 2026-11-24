@@ -507,8 +507,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         }
         if (joinFailure && primary.status !== 'failed') throw joinFailure.error;
         outcome = primary;
-        const diagnosis = outcome.status === 'failed' ? outcome.diagnosis : undefined;
-        if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown', ...(diagnosis && { diagnosis }) };
+        const failure = outcome.status === 'failed' ? outcome : null;
+        const diagnosis = failure?.diagnosis ?? (failure && !['cancelled', 'unknown', 'rejected', 'pending', 'unavailable'].includes(failure.state)
+          ? outcomeState(failure.state, input.language) : undefined);
+        if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown',
+          ...(diagnosis && { diagnosis: `${t('agent.turn.failure.toolSettlementUnknown', {}, input.language)} ${diagnosis}` }) };
         else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled', ...(diagnosis && { diagnosis }) };
         // Native transport already submitted proposals. Returned calls must never become a second execution path.
         if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };

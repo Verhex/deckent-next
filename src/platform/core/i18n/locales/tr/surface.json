@@ -1,4 +1,5 @@
 {
+  "agent.turn.failure.toolSettlementUnknown": "Araç işlemlerinin sonucu belirsiz.",
   "agent.turn.failure.processExit": "Başlatılan yalıtım komutu {code} koduyla sonlandı.",
   "agent.shell.subscriptionHostRefused": "Bu abonelik ajanı için yalıtım alanı yok; ajan bilgisayarda komut çalıştıramaz. Hiçbir komut çalıştırılmadı.",
   "agent.shell.productStateProtected": "Hiçbir onay deckent durumunu açamaz. HOME, DECKENT_GLOBAL_HOME veya DECKENT_HOME üzerinden bu durumu adlandıran yollar da korunur. Hiçbir komut çalıştırılmadı.",

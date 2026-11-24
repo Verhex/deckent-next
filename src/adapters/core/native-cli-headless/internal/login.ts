@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, realpath, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { headlessDiagnostic, markHeadlessLoginReturned, type DeckentError } from '#platform/index.js';
+import { headlessDiagnostic, DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { refuse } from './contract.js';
 import { headlessExecutable } from './connect.js';
@@ -13,7 +13,7 @@ import { configReadRefusal, emptyRunDir, headlessAuth, privateDir } from './pref
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HeadlessLoginExit = 'completed' | 'cancelled' | 'failed';
 export type HeadlessLoginResult = Readonly<{ schemaVersion: 1; configDir: string; owned: boolean; exit: HeadlessLoginExit; signedIn: boolean; authMethod: string | null;
-  subscriptionType: string | null; statusIssue?: DeckentError; cleanupIssue?: DeckentError }>;
+  subscriptionType: string | null; statusIssue?: DeckentError; cleanupIssue?: DeckentError; followUpFailed?: true }>;
 type HeadlessLoginInput = Readonly<{ family: string; stateDir: string; configDir: string; owned: boolean; executable?: string | undefined; sso: boolean; loginMethod?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation; signal?: AbortSignal }>;
 function headlessLoginArgs(family: string, method: string | undefined, sso: boolean): readonly string[] {
   const entry = nativeCliHeadless(family), selected = method === undefined ? undefined : nativeCliAgent(family)?.agent.loginMethods.find(row => row.method === method);
@@ -43,7 +43,9 @@ export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<Headl
   if (!config.isDirectory()) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'not-directory' });
   if (config.uid !== uid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'untrusted-owner' });
   await privateDir(input.stateDir, uid); await privateDir(runDir, uid);
-  let commandReturned = false;
+  let observedExit: HeadlessLoginExit | undefined;
+  const unverified = (exit: HeadlessLoginExit) => ({ schemaVersion: 1 as const, configDir: input.configDir, owned: input.owned,
+    exit, signedIn: false, authMethod: null, subscriptionType: null });
   const env = headlessLoginEnv(headless, input.env, input.configDir), exit = await withLoginLock(entry, input.configDir, input.stateDir, input.now, async (): Promise<HeadlessLoginExit> => {
     input.signal?.throwIfAborted();
     const hold = () => undefined; process.on('SIGINT', hold);
@@ -52,15 +54,21 @@ export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<Headl
       try { run = spawnSync(executable, args, { stdio: 'inherit', shell: false, cwd: runDir, env, timeout: headless.login.timeoutMs, killSignal: 'SIGTERM' }); }
       catch { refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'login-launch-unverified' }); }
       if (run.error && (run.error as { code?: unknown }).code !== 'ETIMEDOUT') refuse('HEADLESS_CLI_UNAVAILABLE', { check: 'login-launch-unverified' });
-      commandReturned = true;
-      return run.status === 0 ? 'completed' : run.signal === 'SIGINT' || run.status === 130 ? 'cancelled' : 'failed';
+      observedExit = run.status === 0 ? 'completed' : run.signal === 'SIGINT' || run.status === 130 ? 'cancelled' : 'failed';
+      return observedExit;
     } finally { process.off('SIGINT', hold); }
-  }, input.signal).catch((error: unknown) => { if (commandReturned) markHeadlessLoginReturned(error); throw error; });
+  }, input.signal).catch((error: unknown) => {
+    if (observedExit !== undefined && error instanceof DeckentError) return Object.freeze({ ...unverified(observedExit), cleanupIssue: error });
+    throw error;
+  });
+  if (typeof exit !== 'string') return exit;
   const record = loginRecordPath(input.configDir, input.stateDir), temporary = `${record}.${randomUUID()}.tmp`;
   await writeFile(temporary, JSON.stringify({ schemaVersion: 1, atMs: input.now(), exit }), { mode: 0o600, flag: 'wx' })
     .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'login-record-write', exit }));
   await rename(temporary, record).catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'login-record-rename', exit }));
-  return finishSignIn(input, entry, executable, runDir, uid, exit).catch(markHeadlessLoginReturned);
+  return finishSignIn(input, entry, executable, runDir, uid, exit).catch((error: unknown) => Object.freeze({ ...unverified(exit),
+    statusIssue: error instanceof DeckentError ? error : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-operation-unverified' }),
+    followUpFailed: true as const }));
 }
 
 async function finishSignIn(input: HeadlessLoginInput, entry: NonNullable<ReturnType<typeof nativeCliHeadless>>, executable: string,

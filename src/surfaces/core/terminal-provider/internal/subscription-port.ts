@@ -73,9 +73,9 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
           : signedIn && !view.statusIssue ? t('tui.provider.login.doneTitle', { kind: label }, locale)
           : view.exit === 'completed' && view.statusIssue ? t('tui.provider.login.completedUnverifiedTitle', { kind: label }, locale)
             : t('tui.provider.login.failedTitle', { kind: label }, locale);
-        return { signedIn, refused: !!view.cleanupIssue, title,
+        return { signedIn, refused: !!view.cleanupIssue || view.followUpFailed === true, title,
           lines: [...(signedIn && view.statusIssue ? [{ label: '', text: title, tone: 'warning' as const }] : []),
-            ...renderHeadlessLogin(view, locale, kind).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) }))] };
+            ...renderHeadlessLogin(view, locale, kind, process.stdin.isTTY && process.stdout.isTTY).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) }))] };
       } catch (error) {
         const known = error instanceof DeckentError && ErrorRegistry.has(error.code);
         const title = didHeadlessLoginReturn(error) ? t('tui.provider.login.startedTitle', { kind: label }, locale)

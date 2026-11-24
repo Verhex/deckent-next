@@ -1,4 +1,10 @@
 {
+  "error.headless.lockLegacyUnverified": "The previous check could not acquire the sign-in lock. The specific cause could not be verified.",
+  "error.headless.limitLegacyUnverified": "The previous check recorded a resource limit. Which limit was reached could not be verified.",
+  "error.headless.loginBusy.legacy-family": "The previous check recorded a busy sign-in lock. The holder could not be verified.",
+  "error.headless.agentRunDispose": "Temporary files from the agent turn could not be cleared.",
+  "error.headless.agentRunRemove": "The agent turn’s temporary directory could not be removed.",
+  "error.headless.loginStatusOperationUnverified": "The follow-up sign-in status check could not be completed.",
   "error.headless.workerPreparationRelease": "The worker preparation lock could not be released.",
   "error.headless.npmProof.manifest-target-not-regular": "A declared launcher path ends at an entry that is not a regular file.",
   "error.headless.realmProcessUnverified": "The isolated process result could not be determined.",
@@ -286,6 +292,7 @@
   "error.headless.loginStatusRunRemove": "The sign-in command returned. An entry in the status check's working directory could not be removed.",
   "error.headless.realmScratchCreate": "The temporary directory for the isolated login view could not be created.",
   "error.headless.realmScratchRemove": "The temporary directory for the isolated login view could not be removed.",
+  "error.headless.realmConfigDirectoryClose": "The directory used to enumerate the isolated configuration could not be closed.",
   "error.headless.realmProgramClose": "The program descriptor for the isolated process could not be closed.",
   "error.headless.realmGatewayClose": "The isolated network gateway could not be closed.",
   "error.headless.realmProcessRequest": "The isolated process request failed validation.",

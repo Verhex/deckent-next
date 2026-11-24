@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolSessionPort } from '#capabilities/index.js';
-import { isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { headlessDiagnostic, isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge } from './http.js';
 
 export interface NativeToolBridgeLimits {
@@ -38,7 +38,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
   const turnToken = `~${randomBytes(32).toString('base64url')}`, tokenHeader = bridge.tokenValueTemplate.replace('{turnToken}', turnToken); // '~' head (RFC 6750 b64token): a field ending in a known-secret prefix is masked, and ordinary text practically never ends in '~'
   const tokenDigest = digest(tokenHeader), known = snapshotKnownSecrets([{ name: bridge.tokenEnvName, value: turnToken }]);
   const lifetime = new AbortController(), responses = new Set<ServerResponse>(), replay = new Map<string, Replay>(), inFlight = new Set<string>();
-  let closed = false, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
+  let closing: Promise<void> | undefined, initializing = false, sessionId: string | undefined, active = 0, replayBytes = 0;
   const url = `http://${bridge.sentinelHost}${bridge.path}`, progressIntervalMs = Math.floor(limits.idleMs / 2);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID,
     onsessioninitialized: id => { sessionId = id; }, keepAliveMs: progressIntervalMs, maxRequestBodySize: bridge.bodyMaxBytes });
@@ -64,7 +64,7 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     const key = correlation.data.kind === 'claude-tool-use' ? correlation.data.toolUseId : correlation.data.callId;
     const fingerprint = digest(JSON.stringify(request.params)).toString('hex'), previous = replay.get(key);
     if (previous) return previous.digest === fingerprint ? serve(previous.result, previous.deckentCallId, context.mcpReq.id, context.mcpReq.signal) : failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT');
-    if (closed) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED');
+    if (closing) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED');
     if (replay.size >= limits.replayMaxEntries || replayBytes + bridge.frameMaxBytes > limits.replayMaxBytes) return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_LIMIT');
     // Reserve before awaiting K1; duplicates share this promise even during approval. No eviction permits a second effect.
     replayBytes += bridge.frameMaxBytes;
@@ -93,19 +93,29 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     try { return await Promise.race([executed, aborted]); }
     finally { combined.removeEventListener('abort', onAbort); }
   }
-  const close = async () => {
-    if (closed) return; closed = true; lifetime.abort(); input.signal?.removeEventListener('abort', onAbort);
-    for (const response of responses) response.destroy();
-    await server.close(); replay.clear();
+  const close = () => {
+    if (closing) return closing;
+    let resolveClose!: () => void, rejectClose!: (error: unknown) => void;
+    const pending = new Promise<void>((resolve, reject) => { resolveClose = resolve; rejectClose = reject; });
+    closing = pending;
+    // Fence queued proposals synchronously, before awaiting the transport close.
+    void (async () => {
+      lifetime.abort(); input.signal?.removeEventListener('abort', onAbort);
+      for (const response of responses) response.destroy();
+      try { await server.close(); }
+      catch { throw headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-bridge-close' }); }
+      finally { replay.clear(); }
+    })().then(resolveClose, rejectClose);
+    return pending;
   };
-  const onAbort = () => { void close(); };
+  const onAbort = () => { void close().catch(() => undefined); };
   input.signal?.addEventListener('abort', onAbort, { once: true });
   await server.connect(transport);
   if (input.signal?.aborted) await close();
   async function handle(request: IncomingMessage, response: ServerResponse, count: (bytes: number) => boolean): Promise<void> {
     // Authenticate before reading/parsing the request body. Every method, including GET/DELETE, is turn-bound.
     const token = request.headers[bridge.tokenHeaderName.toLowerCase()];
-    if (closed || typeof token !== 'string' || !timingSafeEqual(tokenDigest, digest(token))) { refuseBridge(response, 403, 'NATIVE_BRIDGE_TOKEN_INVALID'); return; }
+    if (closing || typeof token !== 'string' || !timingSafeEqual(tokenDigest, digest(token))) { refuseBridge(response, 403, 'NATIVE_BRIDGE_TOKEN_INVALID'); return; }
     if (request.headers.origin !== undefined && request.headers.origin !== `http://${bridge.sentinelHost}`) { refuseBridge(response, 403, 'NATIVE_BRIDGE_ORIGIN_INVALID'); return; }
     if (active >= limits.maxConnections) { refuseBridge(response, 429, 'NATIVE_BRIDGE_CONNECTION_LIMIT'); return; }
     active++; responses.add(response); let rpcKey: string | undefined;

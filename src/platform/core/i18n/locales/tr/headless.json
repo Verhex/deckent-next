@@ -1,4 +1,10 @@
 {
+  "error.headless.lockLegacyUnverified": "Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.",
+  "error.headless.limitLegacyUnverified": "Önceki denetimde bir kaynak sınırı kaydedildi. Hangi sınıra ulaşıldığı doğrulanamadı.",
+  "error.headless.loginBusy.legacy-family": "Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.",
+  "error.headless.agentRunDispose": "Ajan turunun geçici dosyaları temizlenemedi.",
+  "error.headless.agentRunRemove": "Ajan turunun geçici dizini kaldırılamadı.",
+  "error.headless.loginStatusOperationUnverified": "Giriş sonrası durum denetimi tamamlanamadı.",
   "error.headless.workerPreparationRelease": "İşçi hazırlık kilidi serbest bırakılamadı.",
   "error.headless.npmProof.manifest-target-not-regular": "Bildirilen başlatıcı yolunun sonundaki öğe normal bir dosya değil.",
   "error.headless.realmProcessUnverified": "Yalıtılmış sürecin sonucu belirlenemedi.",
@@ -286,6 +292,7 @@
   "error.headless.loginStatusRunRemove": "Giriş komutu döndü. Durum denetiminin çalışma dizinindeki bir girdi kaldırılamadı.",
   "error.headless.realmScratchCreate": "Yalıtılmış giriş görünümü için geçici dizin oluşturulamadı.",
   "error.headless.realmScratchRemove": "Yalıtılmış giriş görünümü için geçici dizin kaldırılamadı.",
+  "error.headless.realmConfigDirectoryClose": "Yalıtılmış yapılandırma girdilerini listelemek için açılan dizin kapatılamadı.",
   "error.headless.realmProgramClose": "Yalıtılmış sürecin program tanıtıcısı kapatılamadı.",
   "error.headless.realmGatewayClose": "Yalıtılmış ağ geçidi kapatılamadı.",
   "error.headless.realmProcessRequest": "Yalıtılmış süreç isteği doğrulamayı geçemedi.",

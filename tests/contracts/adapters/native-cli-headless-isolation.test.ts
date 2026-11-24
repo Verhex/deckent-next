@@ -5,13 +5,18 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as files from 'node:fs/promises';
 import { existsSync, lstatSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
+import { Server as HttpServer } from 'node:http';
+import { Server as McpServer } from '@modelcontextprotocol/server';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
 import * as egressGateway from '#adapters/core/native-connection/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
-import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin } from '#adapters/core/native-cli-headless/index.js';
+import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin, resolveHeadlessExecutable, runHeadlessIsolated } from '#adapters/core/native-cli-headless/index.js';
+import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
+import { nativeWorkerProcessResult } from '#capabilities/core/native-agent-execution/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
@@ -24,6 +29,80 @@ const servers: Server[] = [];
 vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 afterEach(async () => { await cleanupConnections(); await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve)))); });
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
+const cleanupEntry = nativeCliAgent('claude-code-stream-json')!;
+async function workerCleanupFixture() {
+  const c = await connection(), stateDir = join(c.root, 'state'), runDir = join(stateDir, 'work');
+  await mkdir(runDir, { recursive: true, mode: 0o700 });
+  const info = lstatSync(process.execPath, { bigint: true });
+  const isolation = async () => ({ ...bubblewrapObservation('available'), status: 'available' as const,
+    launcher: { source: 'system' as const, path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+      identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } });
+  const program = await resolveHeadlessExecutable(cleanupEntry, c.executable, process.getuid!());
+  const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+    schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+    stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+  }));
+  const run = async (mcp?: Awaited<ReturnType<typeof createNativeToolBridge>>) => {
+    const evidence = await runHeadlessIsolated(cleanupEntry, isolation, { program, executable: c.executable, args: [], env: {},
+      stateDir, runDir, configDir: c.configDir, mcp, now: Date.now }, { timeoutMs: 1000, outputBytes: 4096, stderrBytes: 4096,
+      maxLineBytes: 4096, interruptGraceMs: 100 });
+    expect(runner).toHaveBeenCalledOnce();
+    expect(evidence).toMatchObject({ started: true, exitCode: 0 });
+    return nativeWorkerProcessResult(evidence, false, false, { kind: 'completed', text: 'otherwise usable work' });
+  };
+  return { ...c, run, runner };
+}
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when closing the enumerated configuration directory fails', async () => {
+  const f = await workerCleanupFixture(), openDirectory = files.opendir, closeFailed = vi.fn();
+  const directory = vi.spyOn(files, 'opendir').mockImplementation(async (...args) => {
+    const opened = await openDirectory(...args);
+    if (args[0] === f.configDir) {
+      const close = opened.close.bind(opened);
+      opened.close = async () => { await close(); closeFailed(); throw new Error('fixture configuration directory close error'); };
+    }
+    return opened;
+  });
+  try {
+    const result = await f.run();
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '', cleanupError: { params: { check: 'realm-config-directory-close' } } });
+  } finally { directory.mockRestore(); f.runner.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when the gateway server close callback reports an error', async () => {
+  const f = await workerCleanupFixture(), close = HttpServer.prototype.close, closeFailed = vi.fn();
+  const gateway = vi.spyOn(HttpServer.prototype, 'close').mockImplementation(function (this: HttpServer, callback) {
+    return close.call(this, () => { closeFailed(); callback?.(new Error('fixture gateway close callback error')); });
+  });
+  try {
+    const result = await f.run();
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '', cleanupError: { params: { check: 'realm-gateway-close' } } });
+  } finally { gateway.mockRestore(); f.runner.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when the bridge already failed to close', async () => {
+  const f = await workerCleanupFixture();
+  const bridge = await createNativeToolBridge({ bridge: cleanupEntry.bridge, correlationKind: 'claude-tool-use',
+    limits: { idleMs: 300, maxConnections: 2, replayMaxEntries: 4, replayMaxBytes: cleanupEntry.bridge.frameMaxBytes * 4 },
+    port: { session: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, tools: [], approvalTtlMs: 1000 },
+      propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() } });
+  const close = McpServer.prototype.close;
+  const sdk = vi.spyOn(McpServer.prototype, 'close').mockImplementationOnce(async function (this: McpServer) {
+    await close.call(this); throw new Error('fixture first bridge close error');
+  });
+  try {
+    const first = bridge.close();
+    await expect(first).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'realm-bridge-close' } });
+    expect(await f.run(bridge)).toMatchObject({ status: 'failed', termination: 'unverified', text: '',
+      cleanupError: { params: { check: 'realm-bridge-close' } } });
+    expect(bridge.close()).toBe(first);
+    await expect(bridge.close()).rejects.toMatchObject({ params: { check: 'realm-bridge-close' } });
+    expect(sdk).toHaveBeenCalledOnce();
+  } finally { sdk.mockRestore(); f.runner.mockRestore(); }
+});
+
 const happy = (probe: IsolationProbe): FakeStep[] => [{ line: uiLine() }, { line: initLine() }, { isolation: probe }, { line: assistantLine('{"ok":true}') },
   { line: rateLimitLine() }, { line: resultLine('{"ok":true}') }];
 type Results = { read: Record<string, string>; list: Record<string, string[] | string>; write: Record<string, string>; replace: Record<string, string>;
@@ -194,6 +273,19 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_LOGIN_REQUIRED', check: null }));
     expect.soft(doctor(await logins(), 'en')).toContain('The previous check recorded a sign-in requirement. The specific reason could not be verified.');
     expect.soft(doctor(await logins(), 'tr')).toContain('Önceki denetimde oturum açma gerekliliği kaydedildi. Kesin neden doğrulanamadı.');
+    for (const [refusal, check, en, tr] of [
+      ['HEADLESS_ISOLATION_UNAVAILABLE', 'login-lock', 'The previous check could not acquire the sign-in lock. The specific cause could not be verified.',
+        'Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.'],
+      ['HEADLESS_LIMIT_REACHED', null, 'The previous check recorded a resource limit. Which limit was reached could not be verified.',
+        'Önceki denetimde bir kaynak sınırı kaydedildi. Hangi sınıra ulaşıldığı doğrulanamadı.'],
+      ['HEADLESS_LOGIN_BUSY', null, 'The previous check recorded a busy sign-in lock. The holder could not be verified.',
+        'Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.'],
+    ] as const) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal, check }));
+      const history = await logins();
+      expect.soft(doctor(history, 'en')).toContain(en);
+      expect.soft(doctor(history, 'tr')).toContain(tr);
+    }
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '9.0.0' }));
     expect.soft((await logins())[0]?.state).toBe('unknown');
     expect.soft(doctor(await logins(), 'en')).toContain('The previous subscription CLI check record could not be interpreted.');
@@ -242,6 +334,10 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       return remove(...args);
     });
     try {
+      await mkdir(join(c.root, 'state'), { mode: 0o700 });
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '2.0.0' }), { mode: 0o600 });
+      await c.port.preflight(c.profile);
+      expect.soft((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]).toMatchObject({ state: 'open', cliUpdated: null });
       const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
       expect(result).toMatchObject({ kind: 'rejected' });
       if ('kind' in result) expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'response-limit' });

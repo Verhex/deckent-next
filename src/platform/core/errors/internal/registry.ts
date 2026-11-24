@@ -236,10 +236,17 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   MODEL_CONNECT_DECLARATION_CONFLICT: 'error', MODEL_CONNECT_KEY_NAME_UNAVAILABLE: 'usage', MODEL_CONNECT_SEED_UNAVAILABLE: 'error',
   MODEL_CONNECT_TARIFF_UNKNOWN: 'error', MODEL_CONNECT_TARIFF_UNVERIFIED: 'error', MODEL_CONNECT_KEY_INSECURE: 'usage', MODEL_CONNECT_DEFINITION_INVALID: 'error',
   TERMINAL_DEFAULT_MODEL_PROJECT_LAYER: 'config', TERMINAL_CHAT_MODEL_NOT_DECLARED: 'error', TERMINAL_CHAT_TRUNCATED: 'error', TERMINAL_CHAT_EMPTY: 'error',
-  TERMINAL_CHAT_CANCELLED: 'error', TERMINAL_CHAT_UNAVAILABLE: 'error', AGENT_TURN_IN_PROGRESS: 'error', AGENT_TURN_CONFLICT: 'error', AGENT_TURN_CORRUPT: 'error',
+  TERMINAL_CHAT_UNAVAILABLE: 'error', AGENT_TURN_IN_PROGRESS: 'error', AGENT_TURN_CONFLICT: 'error', AGENT_TURN_CORRUPT: 'error',
   AGENT_TURN_INVALID: 'usage', AGENT_TURN_REASONING_UNSUPPORTED: 'usage', AGENT_TURN_UNAVAILABLE: 'error', TERMINAL_TTY_REQUIRED: 'usage',
   INFERENCE_METRICS_UNREAD: 'error',
 }), {
+  TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: p['beforeSend'] === 'true'
+    ? t('error.TERMINAL_CHAT_CANCELLED.beforeSend', p, l) : t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
+  TERMINAL_CHAT_REJECTED: { category: 'error', render: (p, l) => ({ message: p['refusal'] === 'guard'
+    ? t('error.TERMINAL_CHAT_REJECTED.guard', p, l) : p['refusal'] === 'response-limit'
+      ? t('error.TERMINAL_CHAT_REJECTED.responseLimit', p, l) : t('error.TERMINAL_CHAT_REJECTED', p, l) }) },
+  TERMINAL_CHAT_PROCESS_EXIT: { category: 'error', render: (p, l) => ({ message: t('agent.turn.failure.processExit', p, l) }) },
+  TERMINAL_CHAT_RECORDED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('agent.turn.failure.recordedCode', p, l) }) },
   INFERENCE_NOT_CONFIGURED: { category: 'error', render: (_p, l) => ({ message: t('inference.notConfigured', {}, l) }) },
 }, plainErrors('error.', {
   INFERENCE_PROFILE_UNKNOWN: 'usage', DECISION_INVALID: 'error', DECISION_UNAVAILABLE: 'error', DECISION_COMMAND_CONFLICT: 'error', DECISION_CORRUPT: 'error',

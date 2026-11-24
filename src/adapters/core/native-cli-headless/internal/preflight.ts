@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DeckentError, readHeadlessDiagnosticCase, type HeadlessPreflightParams } from '#platform/index.js';
+import { DeckentError, isRecord, readHeadlessDiagnosticCase, type HeadlessPreflightParams } from '#platform/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
 import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
@@ -164,13 +164,19 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const sealed = Object.freeze({ executable, program, version, flagSetDigest, runDir, env, isolation: isolated });
     // S7: the version an earlier passing check of this connection proved, kept while it differs (the doctor's "CLI updated A → B" note).
     const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8')
-      .then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; updatedFrom?: unknown }, () => null)
+      .then(raw => JSON.parse(raw) as unknown, () => null)
       .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'preflight-record-unreadable' }));
-    const updatedFrom = prior?.state === 'open' && typeof prior.version === 'string' && prior.version !== version ? prior.version : prior?.version === version && typeof prior.updatedFrom === 'string' ? prior.updatedFrom : null;
+    const identified = isIdentifiedOpenPreflight(prior) ? prior : null;
+    const priorVersion = verifiedCliVersion(identified?.['version']);
+    const updatedFrom = priorVersion === null ? null : priorVersion !== version ? priorVersion : verifiedCliVersion(identified?.['updatedFrom']);
     await record({ state: 'open', executable: program.packageRoot ? entry.command.executable : executable, revision, version, updatedFrom, size: program.size, mtimeMs: program.mtimeMs, isolation: isolated,
       auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: auth.subscriptionType } });
     passed.set(key, sealed); return sealed;
   } catch (error) { return closed(error); }
+}
+
+export function isIdentifiedOpenPreflight(record: unknown): record is Record<string, unknown> {
+  return isRecord(record) && record['state'] === 'open' && (typeof record['revision'] === 'string' || typeof record['executable'] === 'string');
 }
 
 // The record's existing revision field binds registry semantics to this installation's identity.

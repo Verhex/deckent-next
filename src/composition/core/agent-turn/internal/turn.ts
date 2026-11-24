@@ -9,7 +9,7 @@ import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, age
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { DeckentError, headlessDiagnostic, isHeadlessDiagnosticCode, isRecord, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -25,7 +25,7 @@ import { createAgentProposals, type AgentProposalViews } from './proposals.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { terminalModelHere, inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
+import { terminalModelHere, inspectNativeChat, inspectNativeChatForVerification, invocationResourceLimit, readRetainedHeadlessFailure } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -110,10 +110,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         const preflightSignal = AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]);
         try {
           await host.nativeAgent.preflight(profile, preflightSignal);
-          execution = await nativeChatVerificationExecution(profile, host.nativeAgent);
-          readiness = await inspectNativeChat(profile, host.nativeAgent);
+          ({ execution, readiness } = await inspectNativeChatForVerification(profile, host.nativeAgent));
           diagnostic = readiness.diagnostic;
-          if (readiness.state === 'unavailable') execution = null;
         } catch (error) {
           diagnostic = error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error : undefined;
           if (preflightSignal.aborted) {
@@ -132,11 +130,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       }
       if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, loaded, peer, options,
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
-      const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
+      const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_CAPABILITY_UNSEALED' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-      channel.emit({ kind: 'text', text: (diagnostic?.localize?.(language).message ?? nativeChatReasonText(reason, language, readiness.state === 'unknown')) + '\n' });
+      const notice = diagnostic?.params?.['check'] === 'cancelled' ? undefined : diagnostic?.localize?.(language).message;
+      channel.emit({ kind: 'text', text: (notice ?? nativeChatReasonText(reason, language, readiness.state === 'unknown')) + '\n' });
       await channel.drained();
-      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
+      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, notice);
     };
     if (observed.state !== 'unknown' || !host.nativeAgent?.preflight) return start();
     const key = runningKey(command.scopeId, command.turnId);
@@ -336,7 +335,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const cliEvidence = cliSubscription && evidence?.adapter.id === receiptAdapter.id && evidence.adapter.version === receiptAdapter.version;
           if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliEvidence)) {
             const content = await invocationContent(result);
-            const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
+            const cliFailure = cliEvidence ? readRetainedHeadlessFailure(result, content) : null;
+            const body = cliFailure ? cliFailure.body : content?.kind === 'response-body'
+              ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
             const limitText = cliEvidence && body ? nativeQuotaText(body, language) : null;
             if (limitText) return { status: 'failed', state: limitText };
             const limit = cliEvidence ? invocationResourceLimit(body) : null;
@@ -351,7 +352,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
                 if (body.exitCode !== null && body.signal === null)
                   return { status: 'failed', state: 'unknown', diagnosis: t('agent.turn.failure.processExit', { code: body.exitCode }, language) };
               }
-              const code = content?.kind === 'response-body' ? retainedFailureCode(content.data) : null;
+              const code = cliFailure?.code;
               const diagnosis = code ? t('agent.turn.failure.recordedCode', { code }, language) : t('agent.turn.failure.causeUndetermined', {}, language);
               return { status: 'failed', state: 'unknown', diagnosis };
             }
@@ -475,7 +476,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const evidence = outcome?.state === 'rejected' || outcome?.state === 'unknown' ? outcome.evidence : null;
           if (evidence?.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || evidence.adapter.version !== result.receipt.profile.adapter.version) return null;
           const content = await invocationContent(result);
-          const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
+          const body = readRetainedHeadlessFailure(result, content)?.body ?? null;
           const limit = invocationResourceLimit(body);
           if (limit) return diagnosed(limit);
           if (body?.refusal === 'process-exit' && body.exitCode !== null && body.signal === null)
@@ -537,19 +538,6 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
   }
 }
 
-/** The old code-only body names a registered family, with no evidence of the operation or an interruption. */
-function invocationResourceLimit(body: ReturnType<typeof readSubscriptionRejection>) {
-  if (body?.refusal !== 'resource-limit') return null;
-  const { field } = body;
-  return field === 'cpu-time' || field === 'processes' || field === 'memory' ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: field }) : null;
-}
-
-function retainedFailureCode(data: string): string | null {
-  try {
-    const body: unknown = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
-    return isRecord(body) && Object.keys(body).length === 1 && typeof body['code'] === 'string' && ErrorRegistry.has(body['code']) ? body['code'] : null;
-  } catch { return null; }
-}
 /** Cancels a running turn of the same principal at once; another principal's turn or an unknown id is `not-running`. */
 export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   host: RuntimeChatTurnHost): Promise<ChatTurnCancellationResult> {

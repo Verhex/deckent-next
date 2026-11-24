@@ -45,8 +45,8 @@ async function identity(profile: ModelInvocationProfile, program: HeadlessExecut
     await Promise.all(entry.headless.isolation.configVisible.map(name => stamp(join(definition.configDir, name)))),
     await stamp(loginRecordPath(definition.configDir, definition.stateDir))]);
 }
-export async function recordNativeAgentObservation(profile: ModelInvocationProfile, preflight: HeadlessPreflight,
-  execution: z.infer<typeof nativeAgentExecutionSchema>, now: () => number, surface?: true | NativeAgentReadinessReason): Promise<void> {
+export async function prepareNativeAgentObservation(profile: ModelInvocationProfile, preflight: HeadlessPreflight,
+  execution: z.infer<typeof nativeAgentExecutionSchema>, now: () => number, surface?: true | NativeAgentReadinessReason) {
   const { definition, entry } = agentTarget(profile);
   const program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid, 'recheck');
   const observed = { cli: true, login: true, environment: true, execution,
@@ -55,11 +55,19 @@ export async function recordNativeAgentObservation(profile: ModelInvocationProfi
   if (preflight.program.identity !== program.identity) headlessExecutableRefusal({ check: 'agent-program-changed' }, program.chosen, program.executable);
   if (preflight.executable !== execution.executable || preflight.version !== execution.cliVersion) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-seal' });
   const path = targetPath(profile, definition.stateDir), temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, JSON.stringify(recordSchema.parse({ schemaVersion: 1, scopeId: profile.scopeId, reference: profile.reference,
-      checkedAtMs: now(), identity: await identity(profile, program), observed })), { mode: 0o600, flag: 'wx' });
-    await rename(temporary, path);
-  } finally { await rm(temporary, { force: true }); }
+  const record = recordSchema.parse({ schemaVersion: 1, scopeId: profile.scopeId, reference: profile.reference,
+    checkedAtMs: now(), identity: await identity(profile, program), observed });
+  return async () => {
+    try {
+      await writeFile(temporary, JSON.stringify(record), { mode: 0o600, flag: 'wx' });
+      await rename(temporary, path);
+    } finally { await rm(temporary, { force: true }); }
+  };
+}
+
+async function recordNativeAgentObservation(...args: Parameters<typeof prepareNativeAgentObservation>): Promise<void> {
+  const save = await prepareNativeAgentObservation(...args);
+  await save();
 }
 /** Bounded read-only K7 input: missing/malformed/foreign/stale records are unknown. Never spawn, refresh, sign in or read credentials.
  * `display` (R8e, /provider and /model only, never a gate): the last verification counts past its age and the CLI's own login-file writes, and

@@ -132,6 +132,43 @@ describe('terminal chat turn is one governed model invocation', () => {
     expect(failing.invoked).toHaveLength(1); expect(failing.cancelled).toEqual([]);
   });
 
+  it('shows the retained refusal after send permission, even if cancellation was requested', async () => {
+    const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 64 } } });
+    const adapter = { id: 'native-cli-headless', version: 1 };
+    const cases = [
+      { body: { code: 'HEADLESS_PREFLIGHT_FAILED' }, state: 'unknown', reason: 'interrupted',
+        en: 'The record contains the error code HEADLESS_PREFLIGHT_FAILED. The specific cause could not be determined.',
+        tr: 'Kayıtta HEADLESS_PREFLIGHT_FAILED hata kodu var. Hatanın kesin nedeni belirlenemedi.' },
+      { body: { schemaVersion: 1, refusal: 'response-limit' }, state: 'rejected', reason: 'response-limit',
+        en: 'The subscription CLI reply exceeded an output limit.', tr: "Abonelik CLI'ının yanıtı çıktı sınırını aştı." },
+      { body: { schemaVersion: 1, refusal: 'guard', field: '/private/fixture-guard' }, state: 'rejected', reason: 'invalid-response',
+        en: 'A safety check refused the subscription CLI result.', tr: "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti." },
+      { body: { schemaVersion: 1, refusal: 'resource-limit', field: 'cpu-time' }, state: 'rejected', reason: 'response-limit',
+        en: 'The isolated process returned a status reserved for the CPU-time limit.', tr: 'Yalıtılmış süreç, CPU süresi sınırına ayrılan çıkış kodunu döndürdü.' },
+      { body: { schemaVersion: 4, refusal: 'process-exit', exitCode: 23, signal: null, stderrSummary: '/private/fixture-stderr' }, state: 'unknown', reason: 'interrupted',
+        en: 'The launched isolation command exited with code 23.', tr: 'Başlatılan yalıtım komutu 23 koduyla sonlandı.' },
+    ] as const;
+    const controller = new AbortController();
+    controller.abort();
+    for (const { body, state, reason, en, tr } of cases) {
+      const result = { ...reply(''), response: null, receipt: { claim: { invocationId: 'invocation' }, profile: { adapter },
+        outcome: { state, evidence: { adapter, reason } } } } as unknown as ModelInvocationResult;
+      const p = ports(async () => result);
+      const inspect = async (_root: string, query: unknown) => {
+        expect(query).toEqual({ schemaVersion: 2, scopeId: 'team-a', invocationId: 'invocation', reference, includeResponseContent: true });
+        return { responseContent: { kind: 'response-body' as const, schemaVersion: 1 as const, descriptor: {} as never,
+          data: Buffer.from(JSON.stringify(body)).toString('base64') } };
+      };
+      const failure = completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 'team-a', messages: [{ role: 'user', content: 'hi' }],
+        options: f.options, signal: controller.signal }, { ...p.value, inspect });
+      await expect(failure).rejects.toBeInstanceOf(DeckentError);
+      const error = await failure.catch((error: DeckentError) => error);
+      expect.soft((error as DeckentError).localize?.('en').message).toBe(en);
+      expect.soft((error as DeckentError).localize?.('tr').message).toBe(tr);
+      expect(p.cancelled).toEqual([]);
+    }
+  });
+
   it('extracts trimmed assistant content and returns null for non-chat shapes', () => {
     expect(extractOpenAiChatTextFromInvocation(reply('  hello  '))).toBe('hello');
     expect(extractOpenAiChatTextFromInvocation({ response: { native: { output: [] } } } as unknown as ModelInvocationResult)).toBeNull();

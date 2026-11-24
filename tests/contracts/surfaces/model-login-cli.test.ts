@@ -75,7 +75,7 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
   const isScratch = (path: unknown) => typeof path === 'string' && /\/headless\/login-[a-f0-9]+\/login-copy-/u.test(path);
   try {
     for (const [boundary, localExit, expected] of [
-      ['lock directory create', 0, null], ['lock directory inspect', 0, null], ['marker write', 0, null], ['marker remove', 0, null],
+      ['lock directory create', 0, null], ['lock directory inspect', 0, null], ['marker write', 0, null], ['marker remove', 0, null], ['marker remove', 130, null],
       ['record write', 0, ['The sign-in command completed.', 'Giriş komutu tamamlandı.']],
       ['record rename', 130, ['The sign-in command was interrupted.', 'Giriş komutu kesildi.']],
       ['record write', 1, ['The sign-in command ended with a failure.', 'Giriş komutu başarısız sonuçlandı.']],
@@ -134,13 +134,22 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
       });
       try {
         let sharedError: unknown;
-        const cliError = capture();
-        expect(await main([...command, '--executable', executable], { ...f, stdin: tty(), stdout: capture().sink, stderr: cliError.sink,
+        const cliError = capture(), cliOutput = capture();
+        let observed: Awaited<ReturnType<typeof loginConfiguredHeadless>> | undefined;
+        expect(await main([...command, '--executable', executable], { ...f, stdin: tty(), stdout: cliOutput.sink, stderr: cliError.sink,
           loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, { attest: async () => true })
-            .then(view => { if (view?.cleanupIssue) sharedError = view.cleanupIssue; return view; })
+            .then(view => { observed = view; if (view?.cleanupIssue || view?.statusIssue) sharedError = view.cleanupIssue ?? view.statusIssue; return view; })
             .catch((error: unknown) => { sharedError = error; throw error; }),
         })).toBe(1);
         expect(hit, boundary).toHaveBeenCalledOnce();
+        if (boundary === 'marker remove' || boundary === 'status working directory list') {
+          const interrupted = localExit === 130;
+          const en = interrupted ? 'The sign-in command was interrupted.' : 'The sign-in command completed.';
+          const tr = interrupted ? 'Giriş komutu kesildi.' : 'Giriş komutu tamamlandı.';
+          expect.soft(cliOutput.text() + cliError.text(), boundary).toContain(en);
+          expect.soft(observed, boundary).toMatchObject({ exit: interrupted ? 'cancelled' : 'completed', signedIn: false });
+          if (observed) expect(renderHeadlessLogin(observed, 'tr', command[3]!)).toContain(tr);
+        }
         expect(card.asked[0]?.body?.join('\n')).toContain(f.env.DECKENT_GLOBAL_HOME);
         expect.soft(sharedError, boundary).toBeInstanceOf(DeckentError);
         const typed = sharedError as DeckentError;
@@ -336,11 +345,14 @@ manifest-target-not-directory	A declared launcher path requires a directory at o
 manifest-target-not-regular	A declared launcher path ends at an entry that is not a regular file.	Bildirilen başlatıcı yolunun sonundaki öğe normal bir dosya değil.
 recorded-owner-mismatch	The recorded connection owner differs from the current operating-system user.	Kayıtlı bağlantının sahibi mevcut işletim sistemi kullanıcısından farklı.
 agent-observation-identity-unverified	The recorded agent observation could not be verified against the current login metadata.	Kayıtlı ajan gözlemi mevcut oturum üstverisiyle doğrulanamadı.
+login-status-operation-unverified	The follow-up sign-in status check could not be completed.	Giriş sonrası durum denetimi tamamlanamadı.
 login-status-unreadable	The subscription CLI did not report its login state in a readable form.	Abonelik CLI'ı giriş durumunu okunabilir biçimde bildirmedi.
 realm-process-response	The isolated process result failed validation.	Yalıtılmış süreç sonucu doğrulamayı geçemedi.
 realm-process-unverified	The isolated process result could not be determined.	Yalıtılmış sürecin sonucu belirlenemedi.
 realm-bridge-close	The tool bridge for the isolated process could not be closed.	Yalıtılmış sürecin araç köprüsü kapatılamadı.
 relay-signal-diagnostic	The version check exited with a signal diagnostic.	Sürüm denetimi bir sinyal tanısıyla sonlandı.
+agent-run-dispose	Temporary files from the agent turn could not be cleared.	Ajan turunun geçici dosyaları temizlenemedi.
+agent-run-remove	The agent turn’s temporary directory could not be removed.	Ajan turunun geçici dizini kaldırılamadı.
 worker-preparation-release	The worker preparation lock could not be released.	İşçi hazırlık kilidi serbest bırakılamadı.
 lock-marker-read-changed	The sign-in lock marker did not match its initial file metadata during the read.	Giriş kilidi işareti okuma sırasında ilk dosya üstverisiyle eşleşmedi.
 login-status-incomplete/timeout	The subscription status check timed out.	Abonelik durum denetimi zaman aşımına uğradı.
@@ -380,6 +392,7 @@ login-status-run-list	working directory for the status check could not be listed
 login-status-run-remove	entry in the status check's working directory could not be removed	Durum denetiminin çalışma dizinindeki bir girdi kaldırılamadı
 realm-scratch-create	temporary directory for the isolated login view could not be created	Yalıtılmış giriş görünümü için geçici dizin oluşturulamadı
 realm-scratch-remove	temporary directory for the isolated login view could not be removed	Yalıtılmış giriş görünümü için geçici dizin kaldırılamadı
+realm-config-directory-close	directory used to enumerate the isolated configuration could not be closed	Yalıtılmış yapılandırma girdilerini listelemek için açılan dizin kapatılamadı
 realm-program-close	program descriptor for the isolated process could not be closed	Yalıtılmış sürecin program tanıtıcısı kapatılamadı
 realm-gateway-close	isolated network gateway could not be closed	Yalıtılmış ağ geçidi kapatılamadı
 realm-process-request	isolated process request failed validation	Yalıtılmış süreç isteği doğrulamayı geçemedi
@@ -392,6 +405,7 @@ lock-marker-write	sign-in lock marker could not be created	giriş kilidi işaret
 lock-marker-parse	sign-in lock marker could not be interpreted during release	giriş kilidi işareti serbest bırakma sırasında yorumlanamadı
 lock-marker-remove	sign-in lock marker could not be removed	giriş kilidi işareti kaldırılamadı
 lock-guard-release	sign-in lock guard could not be released	Giriş kilidi koruması serbest bırakılamadı
+login-lock/legacy-unverified	The previous check could not acquire the sign-in lock. The specific cause could not be verified.	Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.
 login-lock/guard-path	sign-in lock guard path failed validation	Giriş kilidi korumasının yolu doğrulamayı geçemedi
 login-lock/native-unavailable	Native support for the sign-in lock could not be loaded	Giriş kilidi için yerel destek yüklenemedi
 login-lock/guard-unsafe	sign-in lock guard failed its safety check	Giriş kilidi koruması güvenlik denetimini geçemedi
@@ -439,6 +453,7 @@ limits/limit-application	limit-related diagnostic	sınıra ilişkin
 limits/limit-verification	limit-verification diagnostic	sınır doğrulama
 holder/cli	refresh marker was still present	yenileme işareti hâlâ duruyordu
 holder/guard	lock guard remained held	kilidi koruması hâlâ tutuluyordu
+holder/legacy-family-unverified	The previous check recorded a busy sign-in lock. The holder could not be verified.	Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.
 holder/legacy-unverified	no verifiable holder	sahibi hâlâ doğrulanamamıştı
 holder/legacy-process	process ID in the sign-in lock marker still existed	kimliğe sahip bir süreç hâlâ vardı
 holder/legacy-process-unverified	process ID in the sign-in lock marker could not be checked	işaretindeki süreç kimliği denetlenemedi
@@ -490,6 +505,7 @@ login-outcome/cancelled	The sign-in command was interrupted.	Giriş komutu kesil
 login-outcome/failed	The sign-in command ended with a failure.	Giriş komutu başarısız sonuçlandı.
 login-outcome/unsaved	deckent could not save the outcome. The subscription state in this directory was not verified.	deckent sonucu kaydedemedi. Bu dizindeki abonelik durumu doğrulanmadı.
 os-owner-mismatch	belongs to another operating-system user	başka bir işletim sistemi kullanıcısına ait
+limit/legacy-unverified	The previous check recorded a resource limit. Which limit was reached could not be verified.	Önceki denetimde bir kaynak sınırı kaydedildi. Hangi sınıra ulaşıldığı doğrulanamadı.
 limit/cpu-time	status reserved for the CPU-time limit	CPU süresi sınırına ayrılan çıkış kodu
 limit/processes	status reserved for the process-count limit	süreç sayısı sınırına ayrılan çıkış kodu
 limit/memory	status reserved for the data-size limit	veri boyutu sınırına ayrılan çıkış kodu

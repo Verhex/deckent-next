@@ -4,14 +4,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { headlessEgressReasons, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { modelInvocationProfileDigest, createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeQuotaRejection, nativeAgentExecutionSchema, toolSessionSchema, type ClaudeRateLimit, type NativeAgentExecution, type NativeAgentReadinessReason, type ToolSessionPort } from '#capabilities/index.js';
-import { feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
+import { headlessDiagnostic, feedRecordStream, finishRecordStream, EMPTY_RECORD_STREAM, redactForRecord, combineKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { createClaudeAgentDriver } from './claude-agent.js';
 import { codexAgentTurn, type CodexAgentResultLookup } from './codex-agent.js';
 import { nativeAgentLaunch } from './launch.js';
 import { createNativeCliHeadlessPort } from './port.js';
 import { emptyRunDir } from './preflight.js';
 import { runHeadlessIsolated, type HeadlessIsolation, type HeadlessSpawn } from './realm.js';
-import { agentTarget, preflightNativeAgent, recordNativeAgentObservation } from './agent-observation.js';
+import { agentTarget, preflightNativeAgent, prepareNativeAgentObservation } from './agent-observation.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, refuse } from './contract.js';
 import { nativeAgentFlagSetDigest } from './env.js';
 import { emitDelta, reject, type Prepared, type Refusal } from './turn.js';
@@ -84,12 +84,13 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
           claude = entry.agent.transport.kind === 'claude-mcp' ? createClaudeAgentDriver({ entry, port: input.session, model: prepared.model,
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
-          let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined, failed = false;
+          let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined;
           const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => {
-            failed = true;
             return Object.freeze({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason,
               reason.status, Buffer.from(JSON.stringify(reason.body)), complete) });
           };
+          let response: Exclude<ModelInvocationNativeResult, { kind: 'rejected' }>;
+          let saveReadiness: () => Promise<void>, cleanup: ReturnType<typeof headlessDiagnostic> | undefined;
           try {
             await emptyRunDir(runDir);
             const launch = await nativeAgentLaunch(entry, { session: port.session, runDir, configDir: definition.configDir, model: prepared.model, system: prepared.system,
@@ -117,10 +118,10 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             }
             if (evidence.reason === 'cancelled') combined.throwIfAborted();
             if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
-            if (evidence.limit || evidence.reason === 'output-limit' || evidence.reason === 'line-limit' || evidence.stdoutTruncated || evidence.stderrTruncated)
+            if (evidence.limit) return rejectResult(reject('response-limit', { refusal: 'resource-limit', field: evidence.limit }));
+            if (evidence.reason === 'output-limit' || evidence.reason === 'line-limit' || evidence.stdoutTruncated || evidence.stderrTruncated)
               return rejectResult(reject('response-limit', { refusal: 'response-limit' }));
             const ended = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
-            let response: Exclude<ModelInvocationNativeResult, { kind: 'rejected' }>;
             if (finished?.kind === 'completed') {
               const usage = finished.usage, inputTokens = usage['input_tokens']! + usage['cache_read_input_tokens']! + usage['cache_creation_input_tokens']!;
               const atLength = finished.stopReason !== null && 'lengthStopReasons' in headless.guards && headless.guards.lengthStopReasons.includes(finished.stopReason);
@@ -138,15 +139,17 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
             response = projectResponse(response, known) as typeof response;
             if (Buffer.byteLength(JSON.stringify(response)) > profile.limits.responseMaxBytes) return rejectResult(reject('response-limit', { refusal: 'response-limit' }));
-            // A completed, guarded turn is current surface evidence; a preflight alone never sets these facts.
-            await recordNativeAgentObservation(profile, preflight, execution, input.now, true);
-            emitDelta(onDelta, finishRecordStream(stream, known)); return response;
-          } catch (error) { failed = true; throw error; }
-          finally {
-            await Promise.resolve().then(() => dispose?.()).catch((error: unknown) => {
-              if (!failed) { failed = true; throw error; }
-            }).finally(() => rm(runDir, { recursive: true, force: true }).catch((error: unknown) => { if (!failed) throw error; }));
+            saveReadiness = await prepareNativeAgentObservation(profile, preflight, execution, input.now, true);
+          } finally {
+            try { await dispose?.(); }
+            catch { cleanup = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-run-dispose' }); }
+            try { await rm(runDir, { recursive: true, force: true }); }
+            catch { cleanup ??= headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-run-remove' }); }
           }
+          if (cleanup) throw cleanup;
+          // Only a settled guarded turn provides current surface evidence.
+          await saveReadiness();
+          emitDelta(onDelta, finishRecordStream(stream, known)); return response;
         },
       });
     },

@@ -109,7 +109,7 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
   const directories: string[] = [], files: string[] = [];
   const copies: { source: string; target: string }[] = [];
   function maskRefusal(reason: 'entry-limit' | 'copy-entry-rejected' | 'copy-size-limit' | 'mask-unverified'): never { return refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason }); }
-  let dir: Dir | undefined, seen = 0;
+  let dir: Dir | undefined, cleanupError: DeckentError | undefined, seen = 0;
   try {
     dir = await opendir(configDir);
     for (let entry = await dir.read(); entry; entry = await dir.read()) {
@@ -136,8 +136,10 @@ async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['i
       (entry.isDirectory() ? directories : files).push(join(configDir, entry.name));
     }
   } catch (error) { if (isCodedError(error, 'HEADLESS_PREFLIGHT_FAILED')) throw error; maskRefusal('mask-unverified'); }
-  finally { await dir?.close().catch(() => undefined); }
-  return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
+  finally {
+    await dir?.close().catch(() => { cleanupError = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-config-directory-close' }); });
+  }
+  return Object.freeze({ directories: directories.sort(), files: files.sort(), copies, cleanupError });
 }
 
 export type HeadlessSpawn = Readonly<{ executable: string; program: HeadlessExecutable; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
@@ -208,12 +210,13 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
   let file: Awaited<ReturnType<typeof pinHeadlessExecutable>> | undefined;
   let scratch: string | undefined, gateway: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
   let failed = false;
-  let outcome: HeadlessProcessResult | undefined;
+  let outcome: HeadlessProcessResult | undefined, cleanup: DeckentError | undefined;
   try {
     // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
     scratch = realm.configEphemeral ? await mkdtemp(join(spawn.stateDir, 'login-copy-'))
       .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-scratch-create' })) : undefined;
-    const masks = await loginMasks(spawn.configDir, realm, scratch), node = process.execPath, caps = realm.limits;
+    const { cleanupError, ...masks } = await loginMasks(spawn.configDir, realm, scratch), node = process.execPath, caps = realm.limits;
+    cleanup = cleanupError;
     // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
     const limiter = await realpath(caps.limiter).catch(() => null);
     if (!limiter) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits', reason: 'limiter-unverified' });
@@ -260,8 +263,7 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     return outcome;
   } catch (error) { failed = true; throw error; }
   finally {
-    let cleanup: DeckentError | undefined;
-    try { await file?.close(); } catch { cleanup = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-program-close' }); }
+    try { await file?.close(); } catch { cleanup ??= headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-program-close' }); }
     try { await gateway?.close(); } catch (error) {
       cleanup ??= error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error
         : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-gateway-close' });

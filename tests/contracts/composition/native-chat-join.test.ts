@@ -289,26 +289,32 @@ it('keeps the summary refusal before and after claim in the final note in EN and
   }
 });
 
-it('names the current chat readiness barrier after the guarded rereads disagree', async () => {
+it('derives verification execution and readiness from the same guarded observation', async () => {
   if (await unsupportedPeer()) return;
   const h = await fixture();
   const common = { cli: true, login: true, environment: true, plugins: true, toolSurface: true, execution: h.execution };
+  const mismatch = 'The operating-system user in the agent execution record differs from the configured user.\n';
   h.runtime.preflight = vi.fn(async () => undefined);
-  h.runtime.readiness.read = vi.fn<NativeChatRuntime['readiness']['read']>()
-    .mockResolvedValueOnce({ ...common })
-    .mockResolvedValueOnce({ ...common, bridge: true, execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
-    .mockResolvedValue({ ...common, bridge: false });
-  await h.run();
+  const read = vi.fn<NativeChatRuntime['readiness']['read']>();
+  h.runtime.readiness.read = read;
+  for (const [turnId, later, bridge] of [['stale-bridge-refusal', { ...common, bridge: false }, true],
+    ['stale-unknown', { diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' }) }, undefined]] as const) {
+    h.events.length = 0;
+    read.mockReset().mockResolvedValueOnce(common)
+      .mockResolvedValueOnce({ ...common, ...(bridge === true && { bridge }), execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
+      .mockResolvedValue(later);
+    const result = await h.run(turnId);
+    expect.soft(result.note).toContain(mismatch.trim());
+    expect.soft(h.events.find(event => event.kind === 'text')).toMatchObject({ text: mismatch });
+    expect.soft(read).toHaveBeenCalledTimes(2);
+    expect.soft((await h.run(turnId)).note).toBe(result.note);
+    expect(h.state.calls).toBe(0);
+  }
+  h.events.length = 0;
+  read.mockReset().mockResolvedValueOnce(common).mockResolvedValue({ ...common, bridge: false });
+  await h.run('observed-bridge-refusal');
   expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
   expect(h.state.calls).toBe(0);
-  h.events.length = 0;
-  const latest = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' });
-  h.runtime.readiness.read = vi.fn<NativeChatRuntime['readiness']['read']>()
-    .mockResolvedValueOnce({ ...common })
-    .mockResolvedValueOnce({ ...common, execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
-    .mockResolvedValue({ diagnostic: latest });
-  await h.run('latest-unknown');
-  expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: latest.localize?.('en').message + '\n' });
 });
 
 it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the turn\'s recorded note, not a pause', async () => {
@@ -424,6 +430,10 @@ it('retains a preflight refusal in the replayed note when cancellation arrives f
   expect.soft(first.note).toContain('The sign-in lock guard failed its safety check.');
   delete h.runtime.preflight;
   expect(await h.run()).toMatchObject({ finish: 'cancelled', replayed: true, note: first.note });
+  h.runtime.preflight = async () => { throw headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'login-lock', reason: 'guard-unsafe' }); };
+  const fallback = await h.run('ordinary-fallback');
+  expect.soft(fallback.note).toContain('The sign-in lock guard failed its safety check.');
+  expect(await h.run('ordinary-fallback')).toMatchObject({ replayed: true, note: fallback.note });
   expect(h.state.calls).toBe(0);
 });
 

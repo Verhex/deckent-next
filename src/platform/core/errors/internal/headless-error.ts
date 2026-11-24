@@ -13,6 +13,10 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
 export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unknown): DeckentError {
   const diagnostic = readHeadlessDiagnosticCase(refusal) ?? readLegacyHeadlessDiagnosticCase(refusal, legacyCheck);
   if (diagnostic) return ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params });
+  if (refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' && legacyCheck === 'login-lock')
+    return headlessDiagnostic(refusal, { check: 'login-lock', reason: 'legacy-unverified' });
+  if (refusal === 'HEADLESS_LIMIT_REACHED' && legacyCheck === null) return headlessDiagnostic(refusal, { limit: 'legacy-unverified' });
+  if (refusal === 'HEADLESS_LOGIN_BUSY' && legacyCheck === null) return headlessDiagnostic(refusal, { holder: 'legacy-family-unverified' });
   if (refusal === 'HEADLESS_LOGIN_REQUIRED' && legacyCheck === null) return headlessDiagnostic(refusal, { reason: 'legacy-unverified' });
   const family = refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? refusal : 'HEADLESS_PREFLIGHT_FAILED';
   return ErrorRegistry.createError(family, { params: { check: 'diagnostic-unverified' } });

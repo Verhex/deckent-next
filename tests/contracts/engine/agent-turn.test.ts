@@ -848,6 +848,20 @@ it('native settlement failure is retained as unknown, fences new effects and can
   expect(result).toMatchObject({ finish: 'error' }); expect(result.note).toContain('unknown'); expect(checked).toBe(true); expect(executions).toBe(1);
 });
 
+it('retains a native guard reason when tool settlement also becomes unknown', async () => {
+  const p = ports([]);
+  p.value.execute = async () => ({ status: 'ok', text: 'effect happened' });
+  p.value.settled = async () => { throw new Error('store unavailable'); };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal);
+    return { status: 'failed', state: 'The native CLI reported a tool surface that differs from the one offered.' };
+  };
+  const result = await nativeRun(p.value);
+  expect(result).toMatchObject({ finish: 'error', toolCalls: 1 });
+  expect(result.note).toContain('unknown');
+  expect(result.note).toContain('The native CLI reported a tool surface that differs from the one offered.');
+});
+
 it('native dispatch never falls back to pull and refuses returned tool calls as a second execution path', async () => {
   const missing = ports([]); expect(await nativeRun(missing.value)).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(missing.invoked).toEqual([]);
   const extra = ports([]);

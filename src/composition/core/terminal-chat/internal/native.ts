@@ -1,5 +1,6 @@
-import { DeckentError, headlessDiagnostic } from '#platform/index.js';
-import type { ModelInvocationProfile } from '#domain/index.js';
+import { DeckentError, ErrorRegistry, headlessDiagnostic } from '#platform/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody, type ModelInvocationProfile, type ModelInvocationResponseContent } from '#domain/index.js';
+import { readSubscriptionRejection, type ModelInvocationResult } from '#engine/index.js';
 import { nativeCliAgent, resolveHeadlessExecutable } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution, type NativeAgentReadiness } from '#capabilities/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
@@ -22,7 +23,7 @@ export async function inspectNativeChat(profile: ModelInvocationProfile, runtime
   if (!runtime) return { state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
     diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) };
   const query = nativeReadinessQuery(profile, 'chat');
-  if (!query) return { state: 'unavailable', reason: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE',
+  if (!query) return { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
     diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-query-unavailable' }) };
   const readiness = await inspectSubscriptionReadiness(query, runtime.readiness);
   if (readiness.state !== 'ready') return readiness;
@@ -39,18 +40,49 @@ export async function nativeChatVerifiedAtMs(profile: ModelInvocationProfile, di
   return typeof observed?.checkedAtMs === 'number' ? observed.checkedAtMs : null;
 }
 
-/** Invocation-only eligibility: missing surface facts may be checked by the guarded first turn; false never is eligible. */
+/** Missing surface facts may be checked by a guarded first turn. An observed false still blocks it. */
+export async function inspectNativeChatForVerification(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader }) {
+  const query = nativeReadinessQuery(profile, 'chat');
+  if (!query) return { readiness: await inspectNativeChat(profile, runtime), execution: null };
+  const observed = await runtime.readiness.read(query);
+  const reader = { read: async () => observed };
+  const readiness = await inspectSubscriptionReadiness(query, reader);
+  const prerequisites = readiness.state === 'unknown'
+    ? await inspectSubscriptionReadiness(query, reader, { unknownSurfaceFacts: 'allow' }) : readiness;
+  if (prerequisites.state !== 'ready') return { readiness, execution: null };
+  const seal = await sealedForProfile(profile, prerequisites.execution);
+  return seal === true ? { readiness, execution: prerequisites.execution }
+    : { readiness: { state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED', diagnostic: seal } as const, execution: null };
+}
+
+/** Kept for callers that need only the invocation eligibility projection. */
 export async function nativeChatVerificationExecution(profile: ModelInvocationProfile, runtime: { readonly readiness: SubscriptionReadinessReader },
   diagnose?: (error: DeckentError) => void) {
-  const query = nativeReadinessQuery(profile, 'chat');
-  if (!query) return null;
-  const observed = await runtime.readiness.read(query);
-  const prerequisites = await inspectSubscriptionReadiness(query, { read: async () => observed }, { unknownSurfaceFacts: 'allow' });
-  if (prerequisites.state !== 'ready') {
-    if (prerequisites.diagnostic) diagnose?.(prerequisites.diagnostic);
-    return null;
-  }
-  const seal = await sealedForProfile(profile, prerequisites.execution);
-  if (seal instanceof DeckentError) diagnose?.(seal);
-  return seal === true ? prerequisites.execution : null;
+  const { readiness, execution } = await inspectNativeChatForVerification(profile, runtime);
+  if (readiness.diagnostic) diagnose?.(readiness.diagnostic);
+  return execution;
+}
+
+export function readRetainedHeadlessFailure(result: ModelInvocationResult, content: ModelInvocationResponseContent | null | undefined) {
+  const { profile, outcome } = result.receipt;
+  const evidence = outcome?.state === 'unknown' || outcome?.state === 'rejected' ? outcome.evidence : null;
+  if (profile.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID || evidence?.adapter.id !== profile.adapter.id
+    || evidence.adapter.version !== profile.adapter.version || content?.kind !== 'response-body') return null;
+  return { body: readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([profile.adapter.id])),
+    code: outcome?.state === 'unknown' && evidence.reason === 'interrupted' ? retainedFailureCode(content.data) : null };
+}
+
+export function invocationResourceLimit(body: HeadlessRejectionBody | null) {
+  if (body?.refusal !== 'resource-limit') return null;
+  const { field } = body;
+  return field === 'cpu-time' || field === 'processes' || field === 'memory' ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: field }) : null;
+}
+
+/** The code-only body names a registered family without identifying an operation or proving cancellation. */
+function retainedFailureCode(data: string): string | null {
+  try {
+    const body: unknown = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+    return body !== null && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 1
+      && 'code' in body && typeof body.code === 'string' && ErrorRegistry.has(body.code) ? body.code : null;
+  } catch { return null; }
 }

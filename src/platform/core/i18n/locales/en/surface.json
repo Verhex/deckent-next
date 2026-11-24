@@ -1,4 +1,5 @@
 {
+  "agent.turn.failure.toolSettlementUnknown": "Tool settlement is unknown.",
   "agent.turn.failure.processExit": "The launched isolation command exited with code {code}.",
   "agent.shell.subscriptionHostRefused": "No sandbox is available for this subscription agent; it cannot run commands on the host. Nothing was run.",
   "agent.shell.productStateProtected": "deckent's own state cannot be opened by any approval. Paths naming this state through HOME, DECKENT_GLOBAL_HOME or DECKENT_HOME are protected too. Nothing was run.",
