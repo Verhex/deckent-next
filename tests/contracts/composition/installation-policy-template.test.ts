@@ -13,7 +13,7 @@ import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/in
 import { FIRST_RUN_TOOL_NAMES, PermissionModeApplication, type SetupStage } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout, sha256 } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate, policyFileSchema } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -318,7 +318,7 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   expect(errors).toEqual([]);
 });
 
-it.skipIf(process.platform === 'win32')('explains a bindings-only permission change and retains the generic refusal for external bindings drift', async () => {
+it.skipIf(process.platform === 'win32')('explains a bindings-only permission change and retains the generic refusal for external drift', async () => {
   const root = await project(), scopeId = 'w05', options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global') } };
   const paths = ['installation/journal.json', 'policy.json', 'bindings.json', 'config.json'].map(path => join(root, '.deckent', path));
   const snapshot = () => Promise.all(paths.map(path => readFile(path, 'utf8')));
@@ -339,6 +339,13 @@ it.skipIf(process.platform === 'win32')('explains a bindings-only permission cha
   await writeFile(paths[2]!, drift);
   await expect(applyPolicyTemplateInstallation(root, scopeId, options)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED', reason: undefined });
   expect(await snapshot()).toEqual([before[0], before[1], drift, before[3]]);
+
+  await writeFile(paths[2]!, before[2]!);
+  const reformatted = `${JSON.stringify(policyFileSchema.parse(JSON.parse(before[1]!)), null, 2)}\n`;
+  expect(reformatted).not.toBe(before[1]);
+  await writeFile(paths[1]!, reformatted);
+  await expect(applyPolicyTemplateInstallation(root, scopeId, options)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED', reason: undefined });
+  expect(await snapshot()).toEqual([before[0], reformatted, before[2], before[3]]);
 });
 
 it.skipIf(process.platform === 'win32')('explains why plain init policy cannot replay after witnessed starting permissions and preserves the committed publication', async () => {

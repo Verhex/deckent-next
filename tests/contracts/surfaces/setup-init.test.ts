@@ -94,9 +94,10 @@ describe('I-S4 bare deckent init', () => {
 
 });
 
-it('projects the approved policy change in localized setup output and as a safe JSON reason', async () => {
-  const result = { stage: 'core:policy', operation: 'installation.policy-template', status: 'refused',
-    code: 'INSTALLATION_PUBLICATION_CHANGED', reason: 'governed-policy-advanced' } as const;
+it('projects the approved policy change in localized setup output and preserves setup JSON v2', async () => {
+  const externalResult = { stage: 'core:policy', operation: 'installation.policy-template', status: 'refused',
+    code: 'INSTALLATION_PUBLICATION_CHANGED' } as const;
+  const result = { ...externalResult, reason: 'governed-policy-advanced' } as const;
   const messages = [
     ['en', 'After setup, deckent recorded approved changes to the installed policy. The initial template was not reapplied. Run `deckent policy status --scope <id>` to inspect the current policy.'],
     ['tr', 'Kurulumdan sonra deckent politikada yapılan onaylı değişiklikleri kaydetti. İlk kurulum şablonu yeniden uygulanmadı. Geçerli politikayı görmek için `deckent policy status --scope <id>` komutunu kullanın.'],
@@ -105,9 +106,11 @@ it('projects the approved policy change in localized setup output and as a safe 
     const plain = harness(), args = ['init', '--yes', '--scope', 'my-erp', '--lang', locale];
     expect(await failure(setupInitCommand(args, { ...plain.context, applySetupStage: async () => result }))).toBe('SETUP_STAGE_REFUSED');
     expect(plain.out()).toContain(message);
-    const json = harness();
-    expect(await failure(setupInitCommand([...args, '--json'], { ...json.context, applySetupStage: async () => result }))).toBe('SETUP_STAGE_REFUSED');
-    expect(JSON.parse(json.out()).apply.results).toEqual([result]);
+    const jsonArgs = [...args, '--json'], previous = harness(), json = harness();
+    expect(await failure(setupInitCommand(jsonArgs, { ...previous.context, applySetupStage: async () => externalResult }))).toBe('SETUP_STAGE_REFUSED');
+    expect(await failure(setupInitCommand(jsonArgs, { ...json.context, applySetupStage: async () => result }))).toBe('SETUP_STAGE_REFUSED');
+    expect(JSON.parse(previous.out()).apply).toEqual({ requested: true, results: [externalResult] });
+    expect(json.out()).toBe(previous.out());
 
     const window = createSetupController({ context: { ...plain.context, applySetupStage: async () => result }, root: '/x', locale,
       observed: { observation: base, registry }, flags: { json: false, yes: false, scope: 'my-erp' } });
@@ -116,6 +119,8 @@ it('projects the approved policy change in localized setup output and as a safe 
     expect(await window.runPending()).toBe(true);
     expect(window.model().rows.at(-1)).toContain(message);
     expect(window.model().wrapNotice).toBe(true);
+    const outcome = window.outcome();
+    expect(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome)).toContain(message);
   }
 });
 

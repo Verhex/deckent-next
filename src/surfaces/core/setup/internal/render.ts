@@ -12,11 +12,15 @@ import type { ExecutionPermissionNotice } from './execution-permission.js';
 export const SETUP_DOCUMENT_SCHEMA_VERSION = 2 as const;
 export type SetupDocument = ReturnType<typeof setupDocument>;
 export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>, externalConnections?: readonly string[]) {
+  const results: readonly Omit<SetupApplyResult, 'reason'>[] = apply.results.map(({ reason, ...result }) => {
+    void reason;
+    return result;
+  });
   return { schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION, planSchemaVersion: plan.schemaVersion, planDigest: plan.planDigest, registryDigest: plan.registryDigest,
     stages: plan.stages.map(stage => ({ id: stage.id, namespace: stage.namespace, phase: stage.phase, state: stage.state, title: stage.title, reason: stage.reason,
       question: stage.question, default: stage.default, cli: stage.cli, operation: stage.operation, autoEligible: stage.autoEligible })),
     authority: setupAuthority(plan), ...(externalConnections?.length ? { externalConnections } : {}),
-    apply: { requested: apply.requested, results: apply.results } };
+    apply: { requested: apply.requested, results } };
 }
 
 /** Derived from the install carrier's observation, never from --yes or an apply exit code. */
