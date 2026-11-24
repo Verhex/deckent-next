@@ -96,6 +96,7 @@
   "cli.approval.card.reasonDefault": "Kayda geçecek gerekçe: \"Terminalde onaylandı\" (kendi gerekçeniz için --reason).",
   "cli.approval.card.nothing": "Yanıt verilmedi; hiçbir karar kaydedilmedi.",
   "cli.approval.card.expired": "Bu onayın süresi doldu. Karar kaydedilmedi.",
+  "cli.approval.card.unconfirmed": "Hizmet bu kararı doğrulamadı.",
   "cli.approval.reason.allow": "Terminalde onaylandı",
   "cli.approval.reason.deny": "Terminalde reddedildi",
   "cli.approval.missingInput": "Eksik argüman: --input <dosya|->. Kendi terminalinizde --input olmadan çalıştırırsanız seçip kartta yanıtlarsınız.\nAlanlar: deckent approval {action} --schema\nÖrnek: {example}",

@@ -1,5 +1,5 @@
 import { delegationWords } from '#surfaces/core/work-labels/index.js';
-import { ErrorRegistry, emit, loadConfig, t } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ExitCode } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -12,7 +12,7 @@ import { readScope } from './policy-summary.js';
  * switched (pick → preview card → apply). `delegate`/`undelegate --scope --step`: the explicit form, answered on the same card; off a
  * terminal the change itself refuses (`APPROVAL_INTERACTIVE_REQUIRED`). Every change is the existing governed delegation change.
  */
-export async function policyDelegationsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function policyDelegationsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   const action = argv[1], host = context.delegations;
   if (!host || !['delegations', 'delegate', 'undelegate'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   const values: Record<string, string> = {}; let json = false;
@@ -41,4 +41,5 @@ export async function policyDelegationsCommand(argv: readonly string[], context:
       options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.policy.toggle.no', {}, locale), role: 'no' }] }) === 'apply';
   }, options);
   emit(result, { ...sinks, render: data => [words.result[data.status], delegationTable(data.view, locale, cliTableStyle(context))].join('\n') });
+  if (result.status === 'cancelled') return EXIT_CODES.error;
 }

@@ -3,7 +3,7 @@ import { ErrorRegistry, EXIT_CODES, emit, formatValue, t, type ExitCode } from '
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, type CliCardOption } from '#surfaces/core/cli-human/index.js';
-import { mcpRevokeLines } from '#surfaces/core/mcp-presentation/index.js';
+import { mcpGrantLine, mcpGrantWithdrawalLine, mcpRemoveLines, mcpRevokeLines } from '#surfaces/core/mcp-presentation/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { askMcpCard, mcpCancelled, mcpConfirmOptions, mcpLaunchText, mcpSafe, mcpScopeWord, mcpStateWord, mcpTrustCard, renderMcpList, renderMcpServer,
   type McpListedServer } from './mcp-view.js';
@@ -106,13 +106,27 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   } else throw usage();
   // A trust decision (approve; add of a personal scope, owner 2026-09-28) is a person's card on a real terminal (owner A48-D5/D6): off a terminal,
   // `--yes` included, it is refused before anything is asked, started or written; AI and MCP never decide.
-  const decides = request.verb === 'approve' || (request.verb === 'add' && request.scope !== 'project' && request.approve !== false);
+  const decides = requestsMcpTrust(request);
   if (decides && !interactive) throw ErrorRegistry.createError('MCP_APPROVAL_NEEDS_TERMINAL');
   if (decides && yes) emit(t('climodels.mcp.yesShowsCard', {}, locale), { level: 'warning', ...sinks });
   const result = await context.runMcpCommand(root, request, options, trustAsker(context, locale), locale);
   emit(result, { ...sinks, json, render: value => request.verb === 'list' ? renderMcpList(value, check, locale, context)
     : request.verb === 'get' ? renderMcpServer(value, locale) : mcpResultText(value, request.verb, locale) });
   if (bare && person && request.verb === 'list') return mcpWindow(context, locale, ((result ?? {}) as { servers?: McpListedServer[] }).servers ?? []);
+  return mcpActionExit(request, result);
+}
+
+function requestsMcpTrust(request: McpCommandRequest): boolean {
+  return request.verb === 'approve' || (request.verb === 'add' && request.scope !== 'project' && request.approve !== false);
+}
+
+function mcpActionExit(request: McpCommandRequest, value: unknown): ExitCode | void {
+  const result = value as { approved?: boolean; trust?: string; grant?: { status: string } } | null | undefined;
+  const grantRefused = result?.grant?.status === 'refused';
+  if (request.verb === 'approve' && result?.approved === false) return EXIT_CODES.error;
+  if (request.verb === 'add' && requestsMcpTrust(request)
+    && (result?.trust === 'declined' || result?.trust === 'unanswered' || result?.trust === 'shadowed')) return EXIT_CODES.error;
+  if (grantRefused && (requestsMcpTrust(request) || request.verb === 'revoke' || request.verb === 'remove')) return EXIT_CODES.error;
 }
 
 /** The trust card asker: the card on the person's terminal; its answer, or null when cancelled (the adapter records nothing then). */
@@ -146,6 +160,7 @@ async function mcpAct(context: CommandContext, locale: Locale, server: McpListed
   const request: McpCommandRequest = verb === 'remove' ? { verb, name: server.name, scope: server.scope as Scope } : { verb, name: server.name };
   const result = await context.runMcpCommand!(root, request, options, trustAsker(context, locale), locale);
   emit(result, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: value => mcpResultText(value, verb, locale) });
+  return mcpActionExit(request, result);
 }
 
 /** Bare `deckent mcp` on a person's terminal: after the table, pick a server and what to do with it (Esc closes; nothing changes). */
@@ -205,7 +220,7 @@ function mcpResultText(value: unknown, verb: McpCommandRequest['verb'], locale: 
     const values = { name: mcpSafe(result.name), scope: mcpScopeWord(result.scope ?? '', locale), tools: result.pinnedTools ?? 0 };
     lines.push(result.approved ? t('climodels.mcp.result.approved', values, locale) : t('climodels.mcp.result.notApproved', values, locale));
   }
-  else if (result.removed) lines.push(t('terminal.mcp.removed', { name: mcpSafe(result.removed.name), scope: mcpScopeWord(result.removed.scope, locale) }, locale));
+  else if (result.removed) return mcpRemoveLines(value, locale).map(mcpSafe).join('\n');
   else if (result.imported) {
     lines.push(result.imported.length ? t('climodels.mcp.result.imported', { names: result.imported.map(item => `${mcpSafe(item.name)} (${mcpScopeWord(item.scope, locale)})`).join(', ') }, locale)
       : t('climodels.mcp.result.importedNone', {}, locale));
@@ -213,18 +228,6 @@ function mcpResultText(value: unknown, verb: McpCommandRequest['verb'], locale: 
   } else return formatValue(value);
   const grant = mcpGrantLine(result.grant, locale);
   return [...lines, ...(grant ? [grant] : [])].join('\n');
-}
-
-/** The K1 grant outcome of an add, approve, revoke, remove or reset, in the person's words (null: none to say). */
-export function mcpGrantLine(grant: unknown, locale: Locale): string | null {
-  const value = grant as { status?: unknown; reason?: unknown } | null | undefined;
-  if (!value || typeof value !== 'object') return null;
-  if (value.status === 'granted') return t('cli.mcp.grant.granted', {}, locale);
-  if (value.status === 'revoked') return t('cli.mcp.grant.revoked', {}, locale);
-  if (value.status !== 'refused') return null;
-  const reason = value.reason === 'delegation' ? t('mcp.grant.reason.delegation', {}, locale) : value.reason === 'administer' ? t('mcp.grant.reason.administer', {}, locale)
-    : value.reason === 'unsupported' ? t('mcp.grant.reason.unsupported', {}, locale) : value.reason === 'principal' ? t('mcp.grant.reason.principal', {}, locale) : String(value.reason ?? '-');
-  return t('cli.mcp.grant.refused', { reason }, locale);
 }
 
 function mcpStatusText(status: string, locale: Locale): string {
@@ -265,9 +268,14 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
       : t('terminal.mcp.problemServer', { name: problem.name, scope: mcpScopeText(problem.scope, locale), reason: problem.reason }, locale)}`),
     ...(listed.servers.some(server => server.status === 'pending-approval' || server.status === 'changed') ? [`  ${t('terminal.mcp.pendingHint', {}, locale)}`] : [])];
   }
-  if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }
+  if (verb === 'approve') {
+    const receipt = await run({ verb: 'reset', name: name! });
+    const reset = t('terminal.mcp.approve', { name: name! }, locale);
+    const withdrawal = mcpGrantWithdrawalLine(receipt, locale);
+    return withdrawal ? [reset, withdrawal] : [reset];
+  }
   if (verb === 'reconnect') { await run({ verb: 'reconnect', name: name! }); return [t('terminal.mcp.reconnect', { name: name! }, locale)]; }
   if (verb === 'revoke') return mcpRevokeLines(await run({ verb: 'revoke', name: name! }), locale);
-  if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: mcpScopeText(removed.removed.scope, locale) }, locale)]; }
+  if (verb === 'remove') return mcpRemoveLines(await run({ verb: 'remove', name: name! }), locale, name);
   return [t('terminal.mcp.usage', {}, locale)];
 }
