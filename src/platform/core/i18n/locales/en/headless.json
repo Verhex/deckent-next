@@ -293,6 +293,7 @@
   "error.headless.versionTooOldUnrenderable": "The checked provider program version was below the configured minimum.",
   "error.headless.isolation.launcher-identity-mismatch": "The isolation launcher no longer matches the measured identity and could not be reverified.",
   "error.headless.loginRequired.status-unconfirmed": "The status check did not confirm an eligible subscription.",
+  "error.headless.loginRequired.legacy-unverified": "The previous check recorded a sign-in requirement. The specific reason could not be verified.",
   "error.headless.loginRequired.reported-signed-out": "The status check reported that the subscription CLI was signed out.",
   "error.headless.loginRequired.subscription-unconfirmed": "The reported sign-in did not establish an eligible subscription.",
   "error.headless.npmUnverified": "The npm program check could not be completed. {reason} Choose a provider program from a trusted source that you can verify.",

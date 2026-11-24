@@ -331,6 +331,7 @@ export const headlessDiagnosticCases = Object.freeze([
   }),
   diagnostic(ownerMismatch, {}, 'error.HEADLESS_OWNER_MISMATCH'),
   ...classified(loginRequired, 'reason', {}, {
+    'legacy-unverified': 'error.headless.loginRequired.legacy-unverified',
     'status-unconfirmed': 'error.headless.loginRequired.status-unconfirmed',
     'reported-signed-out': 'error.headless.loginRequired.reported-signed-out',
     'subscription-unconfirmed': 'error.headless.loginRequired.subscription-unconfirmed',

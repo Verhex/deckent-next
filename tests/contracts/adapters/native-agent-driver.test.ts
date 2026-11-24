@@ -186,7 +186,10 @@ it('keeps cancelled calls unknown, closes the process and removes token-bearing 
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
     const f = await fixture(family!, { hang: true }), h = await f.start();
-    await expect(h.run(AbortSignal.timeout(750))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    const signal = AbortSignal.timeout(750);
+    const failure = await h.run(signal).catch((error: unknown) => error);
+    expect(signal.aborted).toBe(true);
+    expect(failure).toBe(signal.reason);
     expect(await readdir(join(f.c.root, 'state', 'run'))).toEqual([]);
     expect(await readNativeAgentObservation(f.profile)).not.toMatchObject({ toolSurface: true });
     expect(f.propose).not.toHaveBeenCalled();

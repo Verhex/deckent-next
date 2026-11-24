@@ -293,6 +293,7 @@
   "error.headless.versionTooOldUnrenderable": "Denetlenen sağlayıcı programının sürümü yapılandırılan alt sınırın altında kaldı.",
   "error.headless.isolation.launcher-identity-mismatch": "Yalıtım başlatıcısı ölçümdeki kimlikle artık eşleşmiyor ve yeniden doğrulanamadı.",
   "error.headless.loginRequired.status-unconfirmed": "Durum denetimi uygun bir aboneliği doğrulamadı.",
+  "error.headless.loginRequired.legacy-unverified": "Önceki denetimde oturum açma gerekliliği kaydedildi. Kesin neden doğrulanamadı.",
   "error.headless.loginRequired.reported-signed-out": "Durum denetimi abonelik CLI'ında oturum açılmadığını bildirdi.",
   "error.headless.loginRequired.subscription-unconfirmed": "Bildirilen oturum uygun bir aboneliği doğrulamadı.",
   "error.headless.npmUnverified": "npm programı denetimi tamamlanamadı. {reason} Güvenilir bir kaynaktan doğrulayabildiğiniz bir sağlayıcı programı seçin.",

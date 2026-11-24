@@ -137,6 +137,7 @@ it.skipIf(process.platform !== 'linux')('keeps private paths out of real interac
         const cliError = capture();
         expect(await main([...command, '--executable', executable], { ...f, stdin: tty(), stdout: capture().sink, stderr: cliError.sink,
           loginHeadless: (command, options, confirm) => loginConfiguredHeadless(command, options, confirm, { attest: async () => true })
+            .then(view => { if (view?.cleanupIssue) sharedError = view.cleanupIssue; return view; })
             .catch((error: unknown) => { sharedError = error; throw error; }),
         })).toBe(1);
         expect(hit, boundary).toHaveBeenCalledOnce();
@@ -221,8 +222,16 @@ it.skipIf(process.platform !== 'linux')('a positive status with nonzero exit can
     return remove(...args);
   });
   try {
-    await expect(loginConfiguredHeadless({ connection: 'claude-cli-subscription', executable }, { env: f.env }, async () => true,
-      { attest: async () => true })).rejects.toMatchObject({ params: { check: 'lock-marker-remove' } });
+    card.interactive = true; card.answers = ['apply'];
+    const out = capture(), errors = capture();
+    expect(await modelsCommand([...LOGIN, '--executable', executable], { root: f.root, env: f.env, stdin: tty(),
+      stdout: out.sink, stderr: errors.sink, loginHeadless: (command, options, confirm) =>
+        loginConfiguredHeadless(command, options, confirm, { attest: async () => true }) })).toBe(1);
+    const text = out.text() + errors.text();
+    expect(text).toContain('The sign-in command completed.');
+    expect(text).toContain('The status check returned a nonzero exit code.');
+    expect(text).toContain('The deckent sign-in lock marker could not be removed.');
+    expect(text).not.toContain('Connect the Brain');
     expect(runner).toHaveBeenCalledOnce();
   } finally { cleanup.mockRestore(); runner.mockRestore(); isolation.mockRestore(); }
 });
@@ -357,6 +366,7 @@ npm-package-runtime-overlap	package contains a program required to start process
 realm-command-unverified	launch command for the isolated process could not be prepared	yalıtılmış sürecin başlatma komutu
 preflight-record-write	check result could not be saved	denetiminin sonucu kaydedilemedi
 preflight-record-unreadable	previous subscription CLI check record could not be interpreted	önceki denetim kaydı yorumlanamadı
+legacy-unverified	previous check recorded a sign-in requirement	önceki denetimde oturum açma gerekliliği kaydedildi
 auth-status	did not report its login state in a readable form	giriş durumunu okunabilir biçimde bildirmedi
 agent-owner-mismatch	The operating-system user in the agent execution record differs from the configured user.	Ajan yürütme kaydındaki işletim sistemi kullanıcısı yapılandırılan kullanıcıdan farklı.
 agent-program-changed	CLI identity differs from the one recorded by the agent execution check	ajan yürütme denetiminin kaydettiği kimlikten farklı

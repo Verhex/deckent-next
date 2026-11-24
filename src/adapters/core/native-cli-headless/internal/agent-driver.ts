@@ -85,9 +85,11 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             cliVersion: preflight.version, runDir, outputMaxBytes: profile.limits.responseMaxBytes, quotaPolicy: nativeQuotaPolicy(), ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(prepared.paidExtraUsage ? { paidExtraUsage: prepared.paidExtraUsage } : {}), onDelta: delta }) : undefined;
           const turn = codex = claude ? undefined : codexAgentTurn(prepared, preflight, port.session, id => calls.get(id), delta, known);
           let stopped: Refusal | null = null, dispose: (() => Promise<void>) | undefined, failed = false;
-          const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => Object.freeze({ kind: 'rejected',
-            evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason, reason.status,
-              Buffer.from(JSON.stringify(reason.body)), complete) });
+          const rejectResult = (reason: Refusal, complete = true): ModelInvocationNativeResult => {
+            failed = true;
+            return Object.freeze({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, reason.reason,
+              reason.status, Buffer.from(JSON.stringify(reason.body)), complete) });
+          };
           try {
             await emptyRunDir(runDir);
             const launch = await nativeAgentLaunch(entry, { session: port.session, runDir, configDir: definition.configDir, model: prepared.model, system: prepared.system,
@@ -113,6 +115,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               }
               return rejectResult(stoppedTurn ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
             }
+            if (evidence.reason === 'cancelled') combined.throwIfAborted();
             if (combined.aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
             if (evidence.limit || evidence.reason === 'output-limit' || evidence.reason === 'line-limit' || evidence.stdoutTruncated || evidence.stderrTruncated)
               return rejectResult(reject('response-limit', { refusal: 'response-limit' }));

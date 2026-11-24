@@ -60,12 +60,12 @@ export interface AgentTurnPorts {
     signal: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }>;
   /**
    * The model's summary of older messages for compaction (T-L5b): a governed, tools-off invocation whose command id derives from the
-   * turn and `sequence`. Null when the call failed (no answer): the loop then keeps the history and closes the turn with a typed note.
+   * turn and `sequence`. A diagnosed failure or null keeps the history and closes the turn without another round.
    * `unreadable` when it answered with no usable summary (TERM-FEEDBACK-1): the loop compacts with Deckent's labelled mechanical
    * excerpt instead, and the turn's note says so.
    */
   summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal):
-    Promise<AgentCompactionSummary | 'unreadable' | null>;
+    Promise<AgentCompactionSummary | { readonly diagnosis: string } | { readonly cancelled: true } | 'unreadable' | null>;
   /**
    * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
    * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call. APPROVER-NOTE: a decision
@@ -456,13 +456,18 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       const canonical = carry.fold(plan.older, byteBound);
       if (!canonical) return finish('error', agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
       compactions++;
-      let summaryOf: AgentCompactionSummary | 'unreadable' | null;
+      let summaryOf: Awaited<ReturnType<NonNullable<AgentTurnPorts['summarize']>>>;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
-      if (signal.aborted) return finish('cancelled', cancelled());
-      if (!summaryOf) {
+      const diagnosis = summaryOf && summaryOf !== 'unreadable' && 'diagnosis' in summaryOf ? summaryOf.diagnosis : undefined;
+      if (signal.aborted) return finish('cancelled', [cancelled(), diagnosis].filter(Boolean).join(' '));
+      if (summaryOf && summaryOf !== 'unreadable' && 'cancelled' in summaryOf)
+        return finish('cancelled', t('agent.turn.outcome.compactionCancelled', { summary: summary() }, input.language));
+      if (!summaryOf || summaryOf !== 'unreadable' && 'diagnosis' in summaryOf) {
         const reached = tokenPressure && current ? t('agent.turn.outcome.contextLimit', { prompt: current.promptTokens, window: current.windowTokens ?? '?' }, input.language)
           : t('agent.turn.outcome.requestLimit', { bytes: byteBound ?? '?' }, input.language);
-        return finish('error', t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language));
+        return finish('error', diagnosis
+          ? t('agent.turn.outcome.compactionFailedDiagnosis', { reached, diagnosis, summary: summary() }, input.language)
+          : t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language));
       }
       if (summaryOf === 'unreadable') mechanical++;
       const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
@@ -492,11 +497,19 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const onDelta = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part); };
     try {
       if (native) {
-        try { outcome = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port }, onDelta, native.signal)
+        let primary: AgentRoundOutcome;
+        let joinFailure: { error: unknown } | undefined;
+        try { primary = ports.invokeAgent ? await ports.invokeAgent({ round: rounds, messages, tools, session: native.port }, onDelta, native.signal)
           : { status: 'failed', state: 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' }; }
-        finally { native.close(); await native.drain(); }
-        if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown' };
-        else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled' };
+        finally {
+          try { native.close(); await native.drain(); }
+          catch (error) { joinFailure = { error }; }
+        }
+        if (joinFailure && primary.status !== 'failed') throw joinFailure.error;
+        outcome = primary;
+        const diagnosis = outcome.status === 'failed' ? outcome.diagnosis : undefined;
+        if (native.failedSettlement) outcome = { status: 'failed', state: 'unknown', ...(diagnosis && { diagnosis }) };
+        else if (native.interrupted) outcome = { status: 'failed', state: 'cancelled', ...(diagnosis && { diagnosis }) };
         // Native transport already submitted proposals. Returned calls must never become a second execution path.
         if (outcome.status === 'responded' && outcome.toolCalls.length) outcome = { status: 'failed', state: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
       } else outcome = await ports.invokeRound({ round: rounds, messages, tools }, onDelta, signal);

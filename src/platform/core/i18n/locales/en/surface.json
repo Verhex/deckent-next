@@ -1,5 +1,5 @@
 {
-  "agent.turn.failure.processExit": "The provider process exited with code {code}.",
+  "agent.turn.failure.processExit": "The launched isolation command exited with code {code}.",
   "agent.shell.subscriptionHostRefused": "No sandbox is available for this subscription agent; it cannot run commands on the host. Nothing was run.",
   "agent.shell.productStateProtected": "deckent's own state cannot be opened by any approval. Paths naming this state through HOME, DECKENT_GLOBAL_HOME or DECKENT_HOME are protected too. Nothing was run.",
   "agent.edit.previewCounts": "(+{added} −{removed} lines)",
@@ -638,6 +638,9 @@
   "agent.turn.outcome.contextLimit": "{prompt} of {window} context tokens",
   "agent.turn.outcome.requestLimit": "the request size bound ({bytes} bytes)",
   "agent.turn.outcome.compactionFailed": "The conversation reached {reached} and could not be compacted (the summary call failed). Nothing more was sent and the history is unchanged. {summary}. Send the message again to retry, or start a new conversation (this one stays saved).",
+  "agent.turn.outcome.compactionFailedDiagnosis": "The conversation reached {reached} and could not be compacted because the summary call failed. {diagnosis} Nothing more was sent and the history is unchanged. {summary}.",
+  "agent.turn.outcome.compactionSignIn": "Sign in through the subscription CLI for this connection before continuing.",
+  "agent.turn.outcome.compactionCancelled": "The summary call was cancelled. The conversation was not compacted. Nothing more was sent and the history is unchanged. {summary}.",
   "agent.turn.outcome.failed": "The model round ended without an answer ({state}); it is recorded and not retried. {summary}.",
   "agent.turn.outcome.failedDiagnosis": "The model round ended without an answer. {diagnosis} {summary}.",
   "agent.turn.failure.causeUndetermined": "The cause could not be determined.",

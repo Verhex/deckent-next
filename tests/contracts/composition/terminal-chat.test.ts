@@ -122,6 +122,10 @@ describe('terminal chat turn is one governed model invocation', () => {
     const empty = ports(async () => reply('   '));
     await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, empty.value))
       .rejects.toMatchObject({ code: 'TERMINAL_CHAT_EMPTY' });
+    const cancelled = ports(async () => ({ ...reply(''), receipt: { outcome: { state: 'not-sent', reason: 'cancelled-before-permission' } }, response: null }) as ModelInvocationResult);
+    await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, cancelled.value))
+      .rejects.toMatchObject({ code: 'TERMINAL_CHAT_CANCELLED' });
+    expect(cancelled.cancelled).toEqual([]);
     const failing = ports(async () => { throw new DeckentError('MODEL_INVOCATION_UNAVAILABLE', 'down'); });
     await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, failing.value))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });

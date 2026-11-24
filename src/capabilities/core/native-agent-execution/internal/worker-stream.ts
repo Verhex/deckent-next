@@ -1,4 +1,5 @@
 import type { ToolSessionPort } from './session.js';
+import { DeckentError } from '#platform/index.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 import { ClaudeAgentError } from './claude-stream.js';
 import { NativeCliWorkerError } from './worker-profile.js';
@@ -9,7 +10,11 @@ type Result = Awaited<ReturnType<ToolSessionPort['propose']>>;
 export async function nativeWorkerPreflight<T>(run: () => Promise<T>, signal: AbortSignal): Promise<T | null> {
   if (signal.aborted) return null;
   try { const checked = await run(); return signal.aborted ? null : checked; }
-  catch (error) { if (signal.aborted) return null; throw error; }
+  catch (error) {
+    if (signal.aborted && (error === signal.reason || error instanceof Error && error.name === 'AbortError'
+      || error instanceof DeckentError && error.code === 'HEADLESS_PREFLIGHT_FAILED' && error.params?.['check'] === 'cancelled')) return null;
+    throw error;
+  }
 }
 export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal) {
   const calls = new Map<string, { call: Call; result: Result }>(), controller = new AbortController();
@@ -30,10 +35,11 @@ export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal)
     }, cancel: () => port.cancel(), revoke: () => port.revoke() } satisfies ToolSessionPort,
   };
 }
-export function nativeWorkerProcessResult(evidence: { reason: string; limit: string | null; stdoutTruncated: boolean; stderrTruncated: boolean }, aborted: boolean,
+export function nativeWorkerProcessResult(evidence: { reason: string; limit: string | null; stdoutTruncated: boolean; stderrTruncated: boolean; cleanupError?: DeckentError }, aborted: boolean,
   refused: boolean, finished?: { kind: 'completed'; text: string } | { kind: 'refused'; reason: NativeAgentReadinessReason } | { kind: 'failed' | 'cancelled' },
   result?: { response?: { native?: unknown } } | null, terminalFailure?: 'approval-expired' | null) {
   const base = { termination: 'confirmed' as const, text: '' };
+  if (evidence.cleanupError) return { termination: 'unverified' as const, text: '', status: 'failed' as const, cleanupError: evidence.cleanupError };
   if (terminalFailure === 'approval-expired') return { ...base, status: 'failed' as const, text: 'APPROVAL_EXPIRED' };
   if (finished?.kind === 'refused' || refused) return { ...base, status: 'failed' as const,
     refusal: finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const };

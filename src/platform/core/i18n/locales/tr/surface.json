@@ -1,5 +1,5 @@
 {
-  "agent.turn.failure.processExit": "Sağlayıcı süreci {code} koduyla sonlandı.",
+  "agent.turn.failure.processExit": "Başlatılan yalıtım komutu {code} koduyla sonlandı.",
   "agent.shell.subscriptionHostRefused": "Bu abonelik ajanı için yalıtım alanı yok; ajan bilgisayarda komut çalıştıramaz. Hiçbir komut çalıştırılmadı.",
   "agent.shell.productStateProtected": "Hiçbir onay deckent durumunu açamaz. HOME, DECKENT_GLOBAL_HOME veya DECKENT_HOME üzerinden bu durumu adlandıran yollar da korunur. Hiçbir komut çalıştırılmadı.",
   "agent.edit.previewCounts": "(+{added} −{removed} satır)",
@@ -638,6 +638,9 @@
   "agent.turn.outcome.contextLimit": "{window} tokenlık bağlamda {prompt} tokene",
   "agent.turn.outcome.requestLimit": "istek boyutu sınırına ({bytes} bayt)",
   "agent.turn.outcome.compactionFailed": "Konuşma {reached} ulaştı ve özet çağrısı başarısız olduğu için kısaltılamadı. Yeni bir istek gönderilmedi; geçmiş korundu. {summary}. Tekrar denemek için iletiyi yeniden gönderin veya yeni bir konuşma açın; bu konuşma kayıtlı kalır.",
+  "agent.turn.outcome.compactionFailedDiagnosis": "Konuşma {reached} ulaştı ve özet çağrısı başarısız olduğu için kısaltılamadı. {diagnosis} Yeni bir istek gönderilmedi ve geçmiş korundu. {summary}.",
+  "agent.turn.outcome.compactionSignIn": "Devam etmeden önce bu bağlantı için abonelik CLI'ı üzerinden oturum açın.",
+  "agent.turn.outcome.compactionCancelled": "Özet çağrısı iptal edildi. Konuşma kısaltılamadı. Yeni bir istek gönderilmedi ve geçmiş korundu. {summary}.",
   "agent.turn.outcome.failed": "Model turu yanıt alınamadan sona erdi ({state}). Sonuç kaydedildi; otomatik olarak tekrar denenmedi. {summary}.",
   "agent.turn.outcome.failedDiagnosis": "Model turu yanıt alınamadan sona erdi. {diagnosis} {summary}.",
   "agent.turn.failure.causeUndetermined": "Neden belirlenemedi.",

@@ -75,6 +75,8 @@ export interface ModelInvocationResult { readonly replayed: boolean; readonly re
 // Fresh results can carry a validated diagnosis in process memory without changing their receipt or wire shape.
 const freshDiagnostics = new WeakMap<ModelInvocationResult, DeckentError>();
 export const freshModelInvocationDiagnostic = (result: ModelInvocationResult): DeckentError | undefined => freshDiagnostics.get(result);
+const cancelledSends = new WeakSet<ModelInvocationResult>();
+export const freshModelInvocationCancelled = (result: ModelInvocationResult): boolean => cancelledSends.has(result);
 
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<typeof parseModelInvocationCommand>,
@@ -308,8 +310,8 @@ export class ModelInvocationApplication {
           return checkInvocationResultDelivery(publicResult(false, permittedRecord), delivery);
         }
         let response;
+        const sendSignal = live ? (signal ? AbortSignal.any([signal, live.signal]) : live.signal) : signal;
         try {
-          const sendSignal = live ? (signal ? AbortSignal.any([signal, live.signal]) : live.signal) : signal;
           response = parseModelInvocationNativeResult(await (onDelta ? native.send(prepared, sendSignal, onDelta) : native.send(prepared, sendSignal)));
           if ('kind' in response) verifyModelInvocationResponseEvidence(response.evidence, profile);
           if (!('kind' in response) && responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
@@ -326,6 +328,7 @@ export class ModelInvocationApplication {
               throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
             }
             const result = checkInvocationResultDelivery(publicResult(false, record), delivery);
+            if (sendSignal?.aborted && error === sendSignal.reason) cancelledSends.add(result);
             if (error instanceof DeckentError && isHeadlessDiagnosticCode(error.code))
               freshDiagnostics.set(result, ErrorRegistry.createError(error.code, { params: error.params ?? { check: 'diagnostic-unverified' } }));
             return result;

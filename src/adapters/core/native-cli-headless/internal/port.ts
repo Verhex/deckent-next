@@ -178,7 +178,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta, options.knownSecrets ?? EMPTY_KNOWN_SECRETS);
       let refusal: Refusal | null = null;
       const onLine = async (raw: string, lineSignal?: AbortSignal): Promise<'stop' | void> => { refusal ??= await turn.line(raw, lineSignal); return refusal ? 'stop' : undefined; };
-      let evidence, failed = false;
+      let evidence, promptFailure: { error: unknown } | undefined;
       try {
         await emptyRunDir(preflight.runDir);
         await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' });
@@ -189,8 +189,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
           stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
           stdinBase64: Buffer.from(prepared.user, 'utf8').toString('base64') }, signal, onLine);
-      } catch (error) { failed = true; throw error; }
-      finally { await rm(promptFile, { force: true }).catch((error: unknown) => { if (!failed) throw error; }); }
+      } finally { await rm(promptFile, { force: true }).catch((error: unknown) => { promptFailure = { error }; }); }
       // f5: every settled call names what the realm's gateway did (counts and refused host names only).
       const { egress } = evidence, settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER,
         value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });
@@ -202,13 +201,16 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const ended = turn.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, egress);
       if (ended && 'refusal' in ended) return settle(ended.refusal);
       if (!ended) {
+        if (evidence.reason === 'cancelled') signal?.throwIfAborted();
         if (evidence.reason !== 'exit' && evidence.reason !== 'signal') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
         const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.stderrAllow.rules, headless.limits.stderrSummaryBytes, options.knownSecrets ?? EMPTY_KNOWN_SECRETS), egress };
         return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, 'interrupted', null, Buffer.from(JSON.stringify(exited), 'utf8'), false) });
       }
       if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
       const response = ended.response;
-      return Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes ? settle(reject('response-limit', { refusal: 'response-limit' })) : response;
+      if (Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes) return settle(reject('response-limit', { refusal: 'response-limit' }));
+      if (promptFailure) throw promptFailure.error;
+      return response;
     },
   });
 }

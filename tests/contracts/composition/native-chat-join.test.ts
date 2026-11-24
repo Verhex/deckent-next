@@ -4,8 +4,8 @@ import { createClaudeAgentDriver, toolSessionSchema, type ToolSessionPort } from
 import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/index.js';
 import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { FAMILY, PINNED, rateLimitLine } from '../../fixtures/native-headless/stream.js';
-import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
-import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import { cancelPeerConfiguredModelInvocation, notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
+import { createModelInvocationResponseEvidence, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, firstRunPolicyTemplate, modelInvocationProfileSchema, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, firstRunPolicyTemplate, modelInvocationProfileSchema, type ModelInvocationClaim, type AgentTurnMessage, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
 import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn, cancelPeerConfiguredChatTurn, type NativeChatRuntime } from '#composition/core/agent-turn/index.js';
 import { describeTerminalChat, inspectNativeChat } from '#composition/core/terminal-chat/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
@@ -26,6 +26,7 @@ import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } f
 import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
 import { clearConfigCache, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
+import * as adapters from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -102,7 +103,7 @@ async function fixture(askEdits = true) {
   const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => true,
     emit(event: AgentTurnStreamEvent) { events.push(event); if (event.kind === 'approval.requested') offer(event); } };
   const command = { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn', messages: [{ role: 'user', content: 'write the business result' }] };
-  const run = (turnId = command.turnId) => runPeerConfiguredChatTurn(f.project, { ...command, turnId }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
+  const run = (turnId = command.turnId, messages: readonly AgentTurnMessage[] | typeof command.messages = command.messages) => runPeerConfiguredChatTurn(f.project, { ...command, turnId, messages }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
   const decide = (event: Awaited<typeof offered>, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', commandId: 'decide-k11', approvalId: event.approvalId,
     expectedRevision: event.revision, decision, reason: 'synthetic person decision', channel: 'local-terminal-card', decisionCapability: event.decisionCapability }, f.options, peer, undefined, {}, host.decisions, host.answers);
   return { f, profile, runtime, execution, state, host, peer, events, run, offered, decide };
@@ -240,6 +241,54 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
   }
 });
 
+it('keeps the summary refusal before and after claim in the final note in EN and TR', async () => {
+  if (await unsupportedPeer()) return;
+  const refusal = ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_LOGIN_REQUIRED', { reason: 'reported-signed-out' }),
+    '/fixture/summary-diagnostic-must-remain-local');
+  const history: AgentTurnMessage[] = [...Array.from({ length: 16 }, (_, index): AgentTurnMessage => index % 2
+    ? { role: 'assistant', content: 'Earlier answer', toolCalls: [] } : { role: 'user', content: 'Earlier question' }),
+  { role: 'user', content: 'Continue' }];
+  for (const [language, expected] of [
+    ['en', 'The status check reported that the subscription CLI was signed out.'],
+    ['tr', "Durum denetimi abonelik CLI'ında oturum açılmadığını bildirdi."],
+  ] as const) {
+    const h = await fixture();
+    Object.assign(h.f.options.env, { DECKENT_LANGUAGE: language });
+    const config = { ...h.f.config, terminal: { ...h.f.config.terminal,
+      chat: { ...h.f.config.terminal.chat, compactionThresholdTokens: 1 } } };
+    await writeFile(join(h.f.project, '.deckent/config.json'), JSON.stringify(config));
+    clearConfigCache();
+    const preflight = vi.fn(async () => undefined);
+    const send = vi.fn<ReturnType<typeof adapters.createNativeCliHeadlessPort>['send']>(async () => { throw refusal; });
+    const port = vi.spyOn(adapters, 'createNativeCliHeadlessPort').mockReturnValue({
+      billingAxis: 'subscription', preflight, prepare: async () => ({}), send,
+    });
+    try {
+      preflight.mockRejectedValueOnce(refusal);
+      const admission = await h.run('summary-admission', history);
+      expect(preflight).toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      const returned = await h.run('summary-returned', history);
+      expect(send).toHaveBeenCalledOnce();
+      for (const result of [admission, returned]) {
+        expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0 });
+        expect.soft(result.note).toContain(expected);
+        expect.soft(result.note).toContain(language === 'en' ? 'Sign in through the subscription CLI' : 'abonelik CLI\'ı üzerinden oturum açın');
+        expect.soft(result.note).toMatch(language === 'en' ? /could not be compacted.*Nothing more was sent/u : /kısaltılamadı.*Yeni bir istek gönderilmedi/u);
+        expect.soft(result.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin|\/fixture\//u);
+      }
+      send.mockResolvedValueOnce({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(h.profile.adapter,
+        'response-limit', null, Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'resource-limit', field: 'cpu-time' })), true) });
+      const bounded = await h.run('summary-resource-bound', history);
+      expect.soft(bounded.note).toContain(language === 'en' ? 'The isolated process returned a status reserved for the CPU-time limit.'
+        : 'Yalıtılmış süreç, CPU süresi sınırına ayrılan çıkış kodunu döndürdü.');
+      expect.soft(bounded.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin/u);
+      expect(h.events.some(event => event.kind === 'compacted')).toBe(false);
+      expect(h.state.calls).toBe(0);
+    } finally { port.mockRestore(); }
+  }
+});
+
 it('names the current chat readiness barrier after the guarded rereads disagree', async () => {
   if (await unsupportedPeer()) return;
   const h = await fixture();
@@ -252,6 +301,14 @@ it('names the current chat readiness barrier after the guarded rereads disagree'
   await h.run();
   expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
   expect(h.state.calls).toBe(0);
+  h.events.length = 0;
+  const latest = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' });
+  h.runtime.readiness.read = vi.fn<NativeChatRuntime['readiness']['read']>()
+    .mockResolvedValueOnce({ ...common })
+    .mockResolvedValueOnce({ ...common, execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
+    .mockResolvedValue({ diagnostic: latest });
+  await h.run('latest-unknown');
+  expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: latest.localize?.('en').message + '\n' });
 });
 
 it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the turn\'s recorded note, not a pause', async () => {
@@ -348,6 +405,62 @@ it('cancels the first no-model preflight from the starting person before any mod
     expect(h.events.filter(event => event.kind === 'text')).toEqual([]);
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
   } finally { release.resolve(); await pending.catch(() => undefined); }
+});
+
+it('retains a preflight refusal in the replayed note when cancellation arrives first', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(), started = Promise.withResolvers<void>();
+  h.runtime.readiness.read = async () => ({ cli: true, login: true, environment: true, execution: h.execution });
+  h.runtime.preflight = async (_profile, signal) => {
+    started.resolve();
+    await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    throw headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'login-lock', reason: 'guard-unsafe' });
+  };
+  const pending = h.run();
+  await started.promise;
+  expect(await cancelPeerConfiguredChatTurn(h.f.project, { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn' }, h.peer, h.f.options, h.host)).toMatchObject({ state: 'cancelling' });
+  const first = await pending;
+  expect(first).toMatchObject({ finish: 'cancelled', recorded: true });
+  expect.soft(first.note).toContain('The sign-in lock guard failed its safety check.');
+  delete h.runtime.preflight;
+  expect(await h.run()).toMatchObject({ finish: 'cancelled', replayed: true, note: first.note });
+  expect(h.state.calls).toBe(0);
+});
+
+it('ends compaction when only its governed invocation was cancelled', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(), sent = Promise.withResolvers<void>();
+  const config = { ...h.f.config, terminal: { ...h.f.config.terminal,
+    chat: { ...h.f.config.terminal.chat, compactionThresholdTokens: 1 } } };
+  await writeFile(join(h.f.project, '.deckent/config.json'), JSON.stringify(config));
+  clearConfigCache();
+  const history: AgentTurnMessage[] = [...Array.from({ length: 16 }, (_, index): AgentTurnMessage => index % 2
+    ? { role: 'assistant', content: 'Earlier answer', toolCalls: [] } : { role: 'user', content: 'Earlier question' }),
+  { role: 'user', content: 'Continue' }];
+  const port = vi.spyOn(adapters, 'createNativeCliHeadlessPort').mockReturnValue({
+    billingAxis: 'subscription', preflight: async () => undefined, prepare: async () => ({}),
+    async send(_prepared, signal) {
+      sent.resolve();
+      await new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }));
+      signal!.throwIfAborted();
+      throw new Error('fixture invocation did not abort');
+    },
+  });
+  const register = h.host.model.controllers.register.bind(h.host.model.controllers);
+  let claim!: ModelInvocationClaim;
+  const controller = vi.spyOn(h.host.model.controllers, 'register').mockImplementation((row, owner) => {
+    claim = row;
+    return register(row, owner);
+  });
+  try {
+    const pending = h.run('summary-invocation-cancelled', history);
+    await sent.promise;
+    await cancelPeerConfiguredModelInvocation(h.f.project, { schemaVersion: 1, commandId: 'cancel-summary-only', scopeId: 's',
+      targetCommandId: claim.commandId, expectedRequestDigest: claim.requestDigest, reference: h.profile.reference },
+      h.peer, h.f.options, undefined, h.host.model.controllers);
+    expect(await pending).toMatchObject({ finish: 'cancelled', answer: null, note: expect.stringContaining('The summary call was cancelled.') });
+    expect(h.state.calls).toBe(0);
+  } finally { controller.mockRestore(); port.mockRestore(); }
 });
 
 it('builtin notices use session memory once per terminal/version/name with EN/TR text and no persistent counters', async () => {

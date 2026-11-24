@@ -132,8 +132,8 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
   return definition?.success ? [{ definition: definition.data, family: profile.protocol?.family }] : []; }).map(async ({ definition, family }) => {
     const observed = await readPreflight(definition), prior = observed.record;
     const identified = prior?.state === 'open' && (typeof prior.revision === 'string' || typeof prior.executable === 'string');
-    const mismatch = !identified ? null : family ? await currentPreflightRefusal(prior, family, definition)
-      : headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
+    const mismatch = prior?.state !== 'open' ? null : !identified ? preflightRecordDiagnostic()
+      : family ? await currentPreflightRefusal(prior, family, definition) : headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
     const record = mismatch ? null : prior;
     const closed = record?.state === 'closed' ? readHeadlessDiagnosticRecord(record.refusal, record.check) : null;
     const diagnostic = observed.diagnostic ?? mismatch ?? closed;

@@ -380,6 +380,20 @@ it('K17: Codex worker uses the real K3 stream guard, token env and no invented t
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
 
+it('fails a worker whose isolated process returns valid output with a cleanup error', async () => {
+  const f = await transportFixture('codex-jsonl'), signal = new AbortController().signal;
+  const isolated = f.isolated.getMockImplementation()!;
+  f.isolated.mockImplementation(async (...args) => ({ ...await isolated(...args),
+    cleanupError: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'realm-program-close' } }) }));
+  try {
+    const driver = createNativeCliWorkerDriver(f.input, f.transport, signal);
+    expect(await driver.run(f.bridge, signal)).toMatchObject({ status: 'failed', text: '',
+      cleanupError: { code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'realm-program-close' } } });
+    await driver.close();
+    expect(await readdir(f.stateDir)).toEqual([]);
+  } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+});
+
 it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {
   const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
   const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
@@ -446,12 +460,22 @@ it('K24 cancellation during preflight settles without spawning; a genuine prefli
   try {
     const error = Object.assign(new Error('preflight stopped before model spawn'), { code: 'HEADLESS_PREFLIGHT_FAILED' });
     const preflight = vi.spyOn(f.transport, 'preflight').mockImplementation(async signal => {
-      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); throw error;
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); signal.throwIfAborted();
+      throw error;
     });
     const driver = createNativeCliWorkerDriver(f.input, f.transport, cancel.signal), pending = driver.run(f.bridge, cancel.signal);
     cancel.abort();
     expect(await pending).toMatchObject({ status: 'cancelled', termination: 'confirmed' });
     await driver.close(); expect(f.isolated).not.toHaveBeenCalled(); expect(await readdir(f.stateDir)).toEqual([]);
+    const race = new AbortController();
+    preflight.mockImplementationOnce(async signal => {
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      throw error;
+    });
+    const racing = createNativeCliWorkerDriver(f.input, f.transport, race.signal), racingResult = racing.run(f.bridge, race.signal);
+    race.abort();
+    await expect.soft(racingResult).rejects.toBe(error);
+    await racing.close();
     preflight.mockRejectedValue(error);
     const live = createNativeCliWorkerDriver(f.input, f.transport, new AbortController().signal);
     await expect(live.run(f.bridge, new AbortController().signal)).rejects.toBe(error); await live.close();

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
-import { modelInvocationProfileDigest, configuredInvocationProfiles, type ModelInvocationNativePort } from '#engine/index.js';
+import { modelInvocationProfileDigest, configuredInvocationProfiles, type AgentRoundOutcome, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import type { ClaudeRateLimit, NativeAgentExecution, NativeAgentReadinessReason, ToolSessionPort } from '#capabilities/index.js';
@@ -29,28 +29,35 @@ export interface NativeChatRuntime {
   }>;
 }
 /** Bridge lifetime is inside the governed invocation; K1 alone authorizes, executes and settles proposals. */
-export async function withNativeChatInvocation<T>(input: { readonly runtime: NativeChatRuntime; readonly profile: ModelInvocationProfile;
+export async function withNativeChatInvocation(input: { readonly runtime: NativeChatRuntime; readonly profile: ModelInvocationProfile;
   readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly signal: AbortSignal;
   readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit'; recheck(): Promise<void> },
   invoke: (binding: { readonly profileDigest: string; readonly port: ModelInvocationNativePort; admit(signal?: AbortSignal): Promise<void>;
-    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<T>): Promise<T> {
+    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<AgentRoundOutcome>): Promise<AgentRoundOutcome> {
   const entry = nativeCliAgent(input.profile.protocol.family);
   if (!entry) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
-  const recheck = async () => { try { await input.recheck(); } catch (error) { await input.session.revoke(); throw error; } };
+  const recheck = async () => { try { await input.recheck(); } catch (error) { await input.session.revoke().catch(() => undefined); throw error; } };
   await recheck();
   const session: ToolSessionPort = { ...input.session, propose: (call, correlation, signal) => withMcpPrincipal(async () => {
     await recheck(); return input.session.propose(call, correlation, signal);
   }) };
   const driver = await input.runtime.driver({ profile: input.profile, execution: input.execution, session, ...(input.onPaidUsage ? { onPaidUsage: input.onPaidUsage } : {}), ...(input.paidExtraUsage ? { paidExtraUsage: input.paidExtraUsage } : {}) });
   let bridge: Bridge | undefined;
+  let outcome: AgentRoundOutcome;
+  let cleanupFailure: { error: unknown } | undefined;
   try {
     if (!isDeepStrictEqual(driver.port.session, input.session.session)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     bridge = await createNativeToolBridge({ port: driver.port, bridge: entry.bridge, limits: input.runtime.limits,
       correlationKind: nativeAgentCorrelationKind(entry), signal: input.signal, knownSecrets: input.knownSecrets });
     const port = driver.native(bridge, { configured: input.knownSecrets, turn: bridge.known });
-    return await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
+    outcome = await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
       recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
-  } finally { try { await bridge?.close(); } finally { await driver.close(); } }
+  } finally {
+    try { await bridge?.close(); } catch (error) { cleanupFailure = { error }; }
+    try { await driver.close(); } catch (error) { cleanupFailure ??= { error }; }
+  }
+  if (cleanupFailure && outcome.status !== 'failed') throw cleanupFailure.error;
+  return outcome;
 }
 
 /** The readiness and current driver's refusal use the same catalog renderer; a stream refusal stops only its own turn (owner 2026-11-05). */

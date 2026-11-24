@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { HeadlessEgress } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
+import type { DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
 import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
@@ -25,7 +26,7 @@ export interface NativeCliWorkerTransport {
   claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
   runIsolated(entry: Entry, spawn: { executable: string; program: Preflight['program']; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
-    line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;
+    line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null; cleanupError?: DeckentError }>;
 }
 
 /** F2-7: the worker-event class of each bridged Deckent tool (its own spec's class), so a read, edit or command reads as one and an edited path counts as changed. */

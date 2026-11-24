@@ -12,7 +12,8 @@ import { loginRecordPath, withLoginLock } from './login-lock.js';
 import { configReadRefusal, emptyRunDir, headlessAuth, privateDir } from './preflight.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type HeadlessLoginExit = 'completed' | 'cancelled' | 'failed';
-export type HeadlessLoginResult = Readonly<{ schemaVersion: 1; configDir: string; owned: boolean; exit: HeadlessLoginExit; signedIn: boolean; authMethod: string | null; subscriptionType: string | null; statusIssue?: DeckentError }>;
+export type HeadlessLoginResult = Readonly<{ schemaVersion: 1; configDir: string; owned: boolean; exit: HeadlessLoginExit; signedIn: boolean; authMethod: string | null;
+  subscriptionType: string | null; statusIssue?: DeckentError; cleanupIssue?: DeckentError }>;
 type HeadlessLoginInput = Readonly<{ family: string; stateDir: string; configDir: string; owned: boolean; executable?: string | undefined; sso: boolean; loginMethod?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation; signal?: AbortSignal }>;
 function headlessLoginArgs(family: string, method: string | undefined, sso: boolean): readonly string[] {
   const entry = nativeCliHeadless(family), selected = method === undefined ? undefined : nativeCliAgent(family)?.agent.loginMethods.find(row => row.method === method);
@@ -72,7 +73,6 @@ async function finishSignIn(input: HeadlessLoginInput, entry: NonNullable<Return
   const decoded = (base64: string) => Buffer.from(base64, 'base64').toString('utf8');
   const auth = status.reason === 'exit' && !status.limit ? headlessAuth(headless.auth, { exitCode: status.exitCode, stdout: decoded(status.stdoutBase64), stderr: decoded(status.stderrBase64) }, input.configDir) : null;
   const signedIn = auth?.state === 'signed-in';
-  if (signedIn && status.cleanupError) throw status.cleanupError;
   const statusIssue = status.limit ? headlessDiagnostic('HEADLESS_LIMIT_REACHED', { limit: status.limit })
     : auth?.state === 'signed-out' ? headlessDiagnostic('HEADLESS_LOGIN_REQUIRED', { reason: auth.reason })
       : auth?.state === 'config-dir' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: auth.reason })
@@ -80,5 +80,5 @@ async function finishSignIn(input: HeadlessLoginInput, entry: NonNullable<Return
           : !auth || auth.state === 'unreadable' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-unreadable' })
             : status.exitCode !== 0 ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-positive-nonzero' }) : undefined;
   return Object.freeze({ schemaVersion: 1, configDir: input.configDir, owned: input.owned, exit, signedIn, authMethod: signedIn ? text(auth.authMethod) : null, subscriptionType: signedIn ? text(auth.subscriptionType) : null,
-    ...(statusIssue && { statusIssue }) });
+    ...(statusIssue && { statusIssue }), ...(signedIn && status.cleanupError && { cleanupIssue: status.cleanupError }) });
 }

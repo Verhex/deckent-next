@@ -7,7 +7,8 @@ import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 describe('terminal turn-outcome catalog guard', () => {
   it('every producer outcome key has EN/TR text and identical placeholders; closures cannot return literal prose', () => {
-    const producers = ['loop.ts', 'durable.ts', 'store.ts'].map(file => readFileSync(`src/engine/core/agent-turn/internal/${file}`, 'utf8')).join('\n');
+    const producers = [...['loop.ts', 'durable.ts', 'store.ts'].map(file => `src/engine/core/agent-turn/internal/${file}`),
+      'src/composition/core/agent-turn/internal/turn.ts'].map(file => readFileSync(file, 'utf8')).join('\n');
     const used = [...producers.matchAll(/t\('(agent\.turn\.outcome\.[\w]+)'/g)].map(match => match[1]!);
     const en = MESSAGE_REGISTRY.catalogs.en, tr = MESSAGE_REGISTRY.catalogs.tr;
     const keys = Object.keys(en).filter(key => key.startsWith('agent.turn.outcome.'));

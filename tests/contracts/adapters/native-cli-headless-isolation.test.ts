@@ -11,12 +11,13 @@ import { bubblewrapObservation } from '#adapters/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
 import * as egressGateway from '#adapters/core/native-connection/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
-import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
+import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
+import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import { doctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assistantLine, fullHelp, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
-import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
+import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 const servers: Server[] = [];
@@ -190,6 +191,12 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     const legacy = await logins();
     expect(doctor(legacy, 'en')).toContain('The check recorded an isolation refusal. The provider-program diagnostic could not be verified.');
     expect(legacy[0]?.isolation).toBe('unavailable');
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_LOGIN_REQUIRED', check: null }));
+    expect.soft(doctor(await logins(), 'en')).toContain('The previous check recorded a sign-in requirement. The specific reason could not be verified.');
+    expect.soft(doctor(await logins(), 'tr')).toContain('Önceki denetimde oturum açma gerekliliği kaydedildi. Kesin neden doğrulanamadı.');
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '9.0.0' }));
+    expect.soft((await logins())[0]?.state).toBe('unknown');
+    expect.soft(doctor(await logins(), 'en')).toContain('The previous subscription CLI check record could not be interpreted.');
   });
 
   it('Doctor and the shared error renderer treat malformed diagnostic cases as unverified for every code', async () => {
@@ -215,6 +222,58 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       expect(doctor(logins, 'tr')).toContain('Sağlayıcı programına ilişkin tanı doğrulanamadı.');
     }
   });
+  it('keeps the text response limit when deleting the prompt fails', async () => {
+    const info = lstatSync(process.execPath, { bigint: true });
+    const c = await connection({}, {}, 'a'.repeat(64), async () => ({ ...bubblewrapObservation('available'), status: 'available',
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } }));
+    const parserRefusals = "option '--max-turns <turns>' argument 'invalid' is invalid. must be a number\noption '--system-prompt-file <file>' argument missing";
+    const replies = ['9.1.0 (Claude Code)', fullHelp(), parserRefusals, parserRefusals,
+      JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })];
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => {
+      const body = replies.shift();
+      return { schemaVersion: 1, requestId: input.requestId, started: true, reason: body === undefined ? 'output-limit' : 'exit',
+        exitCode: body === undefined ? null : 0, signal: null, stdoutBase64: Buffer.from(body ?? '').toString('base64'),
+        stderrBase64: '', stdoutTruncated: body === undefined, stderrTruncated: false, durationMs: 1 };
+    });
+    const remove = files.rm;
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      if (args[0] === join(c.root, 'state', 'run', headless.systemPromptFile)) throw new Error('fixture prompt cleanup failure');
+      return remove(...args);
+    });
+    try {
+      const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
+      expect(result).toMatchObject({ kind: 'rejected' });
+      if ('kind' in result) expect(readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'response-limit' });
+    } finally { cleanup.mockRestore(); runner.mockRestore(); }
+  });
+
+  it('preserves the sign-in command exit and the positive nonzero status when realm cleanup fails', async () => {
+    const c = await connection({ loginExit: 130 });
+    const info = lstatSync(process.execPath, { bigint: true });
+    const isolation = async () => ({ ...bubblewrapObservation('available'), status: 'available' as const,
+      launcher: { source: 'system' as const, path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } });
+    const openGateway = egressGateway.openNativeEgressGateway;
+    const gateway = vi.spyOn(egressGateway, 'openNativeEgressGateway').mockImplementation(async input => {
+      const opened = await openGateway(input);
+      return { ...opened, async close() { await opened.close(); throw new Error('fixture gateway cleanup failure'); } };
+    });
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 9, signal: null,
+      stdoutBase64: Buffer.from(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })).toString('base64'),
+      stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      const result = await runHeadlessLogin({ family: c.profile.protocol.family, stateDir: join(c.root, 'state'), configDir: c.configDir,
+        owned: true, executable: c.executable, sso: false, env: {}, now: Date.now, isolation });
+      expect(result).toMatchObject({ exit: 'cancelled', signedIn: true, statusIssue: { params: { check: 'login-status-positive-nonzero' } },
+        cleanupIssue: { params: { check: 'realm-gateway-close' } } });
+      expect(renderHeadlessLogin(result, 'en', 'fixture')).toContain('The sign-in command was interrupted.');
+      expect(renderHeadlessLogin(result, 'tr', 'fixture')).toContain('Giriş komutu kesildi.');
+    } finally { gateway.mockRestore(); runner.mockRestore(); }
+  });
+
   it('Doctor shows a completed negative parser probe even when its scratch cleanup fails', async () => {
     const info = lstatSync(process.execPath, { bigint: true });
     const c = await connection({}, {}, 'a'.repeat(64), async () => ({ ...bubblewrapObservation('available'), status: 'available',
@@ -255,7 +314,9 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       executable: c.executable, configDir: c.configDir, env: {}, now: () => 1, isolation: unavailable })).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
     expect(await c.log()).toEqual([]);
     // Doctor reads the retained update and names its executable without spawning or requiring an available realm.
-    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', updatedFrom: '1.0.0', version: '2.0.0' }));
+    const program = lstatSync(c.executable);
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', updatedFrom: '1.0.0', version: '2.0.0',
+      executable: c.executable, revision: headless.revision, size: program.size, mtimeMs: Math.trunc(program.mtimeMs) }));
     expect((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated).toEqual({ cli: 'fake-cli', from: '1.0.0', to: '2.0.0' });
     expect(await c.log()).toEqual([]);
   });

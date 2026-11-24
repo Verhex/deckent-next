@@ -131,6 +131,7 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
     await ports.cancel(input.projectRoot, terminalChatCancellation(command), input.options).catch(() => undefined);
     throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
   }
+  if (outcome.receipt.outcome?.state === 'not-sent') throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
   const text = extractOpenAiChatTextFromInvocation(outcome);
   if (!text) {
     throw openAiChatStoppedAtLength(outcome)
