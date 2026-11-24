@@ -6,12 +6,14 @@ import type { ApprovalDecisionProjection } from './types.js';
 // Existing picker-summary bound relocated with its exact admission identity; no new product limit.
 const SUMMARY_MAX = 160;
 
-export function projectApprovalDecisionText(raw: string, known?: KnownSecretSnapshot): ApprovalDecisionProjection {
+export function projectApprovalDecisionText(raw: string, known?: KnownSecretSnapshot): ApprovalDecisionProjection & Readonly<{ contentHidden: boolean }> {
   const received = redactForDecision(raw, known);
   // Scrubbing can reconstruct a known value; preserve the canonical decision mode on both sides of that boundary.
-  const display = redactForDecision(terminalSafeText(received.text), known);
+  const safe = terminalSafeText(received.text);
+  const display = redactForDecision(safe, known);
   const exact = projectHiddenText(display.text, 'exact');
-  return Object.freeze({ ...exact, patternMatches: received.patternMatches });
+  const contentHidden = received.knownMatches > 0 || display.knownMatches > 0 || safe !== received.text.replace(/\r\n?/gu, '\n');
+  return Object.freeze({ ...exact, patternMatches: received.patternMatches, contentHidden });
 }
 
 /** Projection is already complete before whitespace collapse and the summary's existing local UTF-16 bound. */

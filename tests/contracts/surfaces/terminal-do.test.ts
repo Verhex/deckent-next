@@ -2,7 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
 import { approvalRecordSchema } from '#domain/index.js';
-import { DeckentError, formatHumanError, t } from '#platform/index.js';
+import { DeckentError, formatHumanError, snapshotKnownSecrets, t } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -66,11 +66,19 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   else { await until(() => !view.stdout.frame.includes('Rejected'), 'closed'); view.stdin.write('/do Revised request\r');
     await until(() => plans.length === 3, 'new request'); expect(plans[2]!.id).not.toBe(plans[0]!.id); }
 });
-it('/do makes every sealed package row readable before Yes and withholds Yes for a cut preview in EN and TR', async () => {
+it('stored package decisions show complete reviews and reserve unavailable Yes on /do and /approvals in EN and TR', async () => {
   const risk = {
     en: 'A path and rule name do not show whether the content is safe. If you approve an unregistered real secret, the worker can read it and send it to the model provider. You may decline.',
     tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
   };
+  const reasons = {
+    en: { cut: 'This approval cannot be granted because its stored package review is incomplete, and if the package is too large you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+      hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review.' },
+    tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz ve paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+      hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz.' },
+  };
+  const secret = 'f4-package-fixture-value';
+  const knownSecrets = snapshotKnownSecrets([{ name: 'F4_FIXTURE', value: secret }]);
   for (const locale of ['en', 'tr'] as const) {
     const pending = pendingBrainFixture(), work = workSurfaceLabels(locale), digest = 'd'.repeat(64);
     const rows = Array.from({ length: 4 }, (_, index) => ({ path: `pkg/check-${index}.js`, rule: 'pattern:url-userinfo', digest }));
@@ -79,9 +87,13 @@ it('/do makes every sealed package row readable before Yes and withholds Yes for
     const expectedRows = rows.map(row => `${row.path} · pattern:url-userinfo · ${locale === 'en' ? 'SHA-256' : 'SHA-256 özeti'} ${digest}`);
     const plan = brainProposalCardLines(pending, locale)[0]!;
     const yes = locale === 'en' ? 'Yes, once' : 'Evet, bu sefer';
-    for (const cut of [null, { shown: 4, total: 6, bytes: 400, totalBytes: 600, digest, kept: '/fixture/package-review.txt' }]) {
+    const truncated = { shown: 4, total: 6, bytes: 400, totalBytes: 600, digest, kept: '/fixture/package-review.txt' };
+    for (const surface of ['/do', '/approvals']) for (const kind of ['plain', 'visible', 'masked', 'control', 'endings', 'cut'] as const) {
+      const cut = kind === 'cut' ? truncated : null;
       const decisions: unknown[] = [], approval = pending.proposal.approval!;
-      const text = (cut ? preview.slice(0, cut.shown) : preview).join('\n');
+      const review = cut ? preview.slice(0, cut.shown) : preview;
+      const text = (kind === 'endings' ? review[0] + '\r' + review.slice(1).join('\r\n') : review.join('\n')).replace('pkg/check-3.js',
+        kind === 'visible' ? 'pkg/check-3\uFE0F.js' : kind === 'masked' ? `pkg/${secret}.js` : kind === 'control' ? 'pkg/check-3\u001b[0m.js' : 'pkg/check-3.js');
       const request = { schemaVersion: 3, approvalId: approval.approvalId, scopeId: 's', createdAt: Date.now(), expiresAt: approval.expiresAt,
         policyRevision: 'p', actionDigest: digest, requester: { id: 'owner', issuer: 'fixture', subject: 'owner' }, summary: 'Create proposed Run',
         subject: { kind: 'run-create', runId: 'r', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: approval.decisionRecordId },
@@ -91,27 +103,54 @@ it('/do makes every sealed package row readable before Yes and withholds Yes for
       const ledger = createWorklineLedgerPorts({ root: '/fixture', scopeId: 's', options: {}, locale, inspectWorkers: (async () => ({})) as never,
         inspectRun: (async () => ({ run: null })) as never, listApprovals: async () => [record],
         decideApproval: async input => { decisions.push(input); throw new Error('decision captured'); } })!;
-      const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work }, ledger, pollMs: 60_000,
-        doPlan: { ...words, plan: async () => pending, lines: result => brainProposalLines(result, locale), cardLines: result => brainProposalCardLines(result, locale) } }, 220);
-      mounted.push(view); await settle(40); view.stdin.write('/do Prepare purchase\r');
-      await until(() => view.stdout.frame.includes(plan), 'non-empty plan in the /do approval').catch(error => { throw new Error(view.stdout.frame, { cause: error }); });
-      if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## /do package ${locale} ${cut ? 'cut' : 'full'}\n${view.stdout.frame}\n`);
-      expect.soft(view.stdout.frame.split(plan)).toHaveLength(2);
+      const labels = { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work,
+        render: { ...WORKLINE_TEST_LABELS.render, hiddenCount: t('terminal.safety.hiddenCount', {}, locale) } };
+      const view = mountWorkline({ labels, ledger, knownSecrets, pollMs: 60_000,
+        doPlan: { ...words, plan: async () => pending, lines: result => brainProposalLines(result, locale), cardLines: result => brainProposalCardLines(result, locale) } }, 280);
+      mounted.push(view); await settle(40);
+      if (surface === '/do') view.stdin.write('/do Prepare purchase\r');
+      else {
+        view.stdin.write('/approvals\r');
+        await until(() => view.stdout.frame.includes('Create proposed Run'), 'approval picker');
+        await settle(40); view.stdin.write('\r');
+      }
+      const compact = (text: string) => text.replace(/[│┃\s]+/gu, '');
+      await until(() => view.stdout.frame.includes(risk[locale]), `${surface} approval`);
+      if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## ${surface} package ${locale} ${kind}\n${view.stdout.frame}\n`);
+      if (surface === '/do') expect.soft(view.stdout.frame.split(plan)).toHaveLength(2);
       expect.soft(view.stdout.frame.split(risk[locale])).toHaveLength(2);
-      if (cut) {
-        expect.soft(view.stdout.frame).toContain(cut.kept);
+      const hidden = surface === '/do' && (kind === 'masked' || kind === 'control');
+      if (cut || hidden) {
+        if (cut) expect.soft(view.stdout.frame).toContain(cut.kept);
         expect.soft(view.stdout.frame).not.toContain(yes);
-        await settle(40); view.stdin.write('y'); await settle(80);
-        expect.soft(decisions).toEqual([]);
+        expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
+        expect.soft(view.stdout.frame).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
+        for (const key of locale === 'en' ? ['1', 'y'] : ['y', '1']) {
+          await settle(40); view.stdin.write(key); await settle(80);
+          expect.soft(decisions).toEqual([]);
+          expect.soft(compact(view.stdout.frame)).toContain(compact(reasons[locale][cut ? 'cut' : 'hidden']));
+        }
+        if (cut) {
+          view.stdin.write(locale === 'en' ? '2' : 'n'); await settle(100);
+          expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
+        }
       } else {
-        for (const row of expectedRows) expect.soft(view.stdout.frame.split(row)).toHaveLength(2);
-        expect.soft(view.stdout.frame).toContain(yes);
+        expect.soft(view.stdout.frame).toContain(`1. ${yes} (y)`);
+        if (kind === 'plain' || kind === 'endings') for (const row of expectedRows) expect.soft(view.stdout.frame.split(row)).toHaveLength(2);
+        if (kind === 'visible') {
+          expect.soft(view.stdout.frame).toContain('pkg/check-3<U+FE0F>.js');
+          expect.soft(view.stdout.frame).toContain(locale === 'en' ? '1 hidden characters' : '1 gizli karakter');
+        }
         expect.soft(decisions).toEqual([]);
+      }
+      if (kind === 'masked') {
+        expect.soft(view.stdout.text).not.toContain(secret);
+        expect.soft(view.stdout.frame).toContain('‹secret:F4_FIXTURE›');
       }
       view.instance.unmount();
     }
   }
-});
+}, 30_000);
 
 it('shows the already combined chat plan and sealed package rows once in the decision window', async () => {
   const plan = 'Review this purchase plan', risk = t('coding.dependencies.patternRisk', {}, 'en');

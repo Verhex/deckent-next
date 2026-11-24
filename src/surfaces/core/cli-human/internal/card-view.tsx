@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
 import { useApp } from 'ink';
-import { colorCapability, loadConfigTerminalLaunch, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
+import { colorCapability, loadConfigTerminalLaunch, t, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
-import { humanRecordText, prefersAsciiGlyphs, span } from '#surfaces/core/terminal-render/index.js';
+import { humanRecordText, prefersAsciiGlyphs, projectHumanText, span } from '#surfaces/core/terminal-render/index.js';
 import { CardCopyContext, DecisionArmLabelsContext, QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
 import { openTerminalHost, streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { decisionArmLabels, cardCopyLabels, type CliCardRequest } from './card.js';
 
 /** The card body: the terminal's bounded window and question rows, answered once; Esc, Ctrl+C or the window's close give no answer. */
-function CliCard({ request, hints, known, finish }: { readonly request: CliCardRequest; readonly hints: string; readonly known?: KnownSecretSnapshot | undefined;
+function CliCard({ request, hints, locale, known, finish }: { readonly request: CliCardRequest; readonly hints: string; readonly locale: Locale; readonly known?: KnownSecretSnapshot | undefined;
   readonly finish: (id: string | null) => void }) {
   const { exit } = useApp(), done = useRef(false);
   const [state, setState] = useState<QuestionState>({ at: request.options.findIndex(option => option.id === request.initial), ticked: [] });
@@ -17,7 +17,12 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
   // J2e (lead, C-APPROVE note): option labels are drawn through the terminal-safe text rule like the title and body, so a label built from a stored
   // record (a server, Run or approval name) can never carry a control sequence onto the person's terminal, whatever the caller did.
   const options = request.options.map(option => ({ ...option, label: terminalSafeText(option.label) }));
-  return <Window title={[span(humanRecordText(request.title, known))]} body={(request.body ?? []).map(line => ({ spans: [span(humanRecordText(line, known))], exact: request.exactBody === true }))}
+  const body = (request.body ?? []).flatMap(line => {
+    if (!request.markHiddenBody) return [{ spans: [span(humanRecordText(line, known))], exact: request.exactBody === true }];
+    const { spans, hiddenCount } = projectHumanText(line, 'exact', known);
+    return [{ spans, exact: true }, ...(hiddenCount ? [{ spans: [span(t('terminal.safety.hiddenCount', { count: hiddenCount }, locale), { role: 'warning' })], exact: false }] : [])];
+  });
+  return <Window title={[span(humanRecordText(request.title, known))]} body={body} notice={request.notice}
     hints={request.hints === undefined ? hints : humanRecordText(hints, known)} position="{from}-{to}/{total}" decision priority={WINDOW_PRIORITY.approval} footerRows={request.options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={state} focused={owns} />} onClose={() => answer(null)}
     onInput={(input, key, meta) => {
@@ -27,7 +32,7 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
       const step = questionStep('single', request.options, current.current, input, key);
       if (step.kind === 'move') { current.current = step.state; setState(step.state); return true; }
       if (step.kind === 'submit' || step.kind === 'cancel') { answer(step.kind === 'submit' ? step.ids[0] ?? null : null); return true; }
-      return key.tab;
+      return step.kind === 'unavailable' || key.tab;
     }} />;
 }
 
@@ -43,7 +48,7 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
   const host = await openTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout: io.stdout, stdin: io.stdin,
     ...(io.signal ? { signal: io.signal } : {}), ascii: prefersAsciiGlyphs(io.env), clearScreen: false, fullscreen: false,
     view: () => <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
-      <DecisionArmLabelsContext.Provider value={decisionArmLabels(io.locale)}><WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider></DecisionArmLabelsContext.Provider>
+      <DecisionArmLabelsContext.Provider value={decisionArmLabels(io.locale)}><WindowStackProvider><CliCard request={request} hints={io.hints} locale={io.locale} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider></DecisionArmLabelsContext.Provider>
     </CardCopyContext.Provider> });
   const eof = () => { ended = true; chosen = null; void host.close(); };
   io.stdin.once('end', eof); io.stdin.once('close', eof);

@@ -58,7 +58,7 @@ interface DecisionCardProps {
   /** Standing scopes this card offers (`s` session, `a` always); none = the plain y/N card. */
   readonly scopes?: readonly StandingScope[];
   /** A card without its complete review may still be declined. */
-  readonly canAllow?: boolean;
+  readonly unavailable?: Readonly<{ label: string; reason: string }>;
   /** The answers as a list (shared question contract); absent = keys only. The highlight starts on No, so Enter alone never approves. */
   readonly choices?: DecisionChoiceLabels;
   /** Called once; later keys are ignored while the decision is recorded. `reason` is the typed text, trimmed (absent: none typed). */
@@ -74,10 +74,11 @@ const REASON_CAP = 2048;
  * `y` typed there never decides. Shift+Tab is swallowed: under a decision it changes nothing else.
  */
 export function DecisionCard({ title, projectedLines, decisionLabels = {}, prompt, pendingText, position = '{from}-{to}/{total}', status, priority = WINDOW_PRIORITY.window,
-  reason: reasonLabels, pending: controlledPending, scopes = [], choices, canAllow = true, onDecide }: DecisionCardProps) {
+  reason: reasonLabels, pending: controlledPending, scopes = [], choices, unavailable, onDecide }: DecisionCardProps) {
   const decided = useRef(false);
-  const options: readonly QuestionOption[] = choices ? [...(canAllow ? [{ id: 'once', label: choices.once, role: 'yes' as const }, ...(scopes.includes('session') ? [{ id: 'session', label: choices.session, key: 's' }] : []),
-    ...(scopes.includes('always') ? [{ id: 'always', label: choices.always, key: 'a' }] : [])] : []), { id: 'no', label: choices.no, role: 'no' }] : [];
+  const options: readonly QuestionOption[] = choices ? [{ id: 'once', label: unavailable?.label ?? choices.once, role: 'yes', disabled: Boolean(unavailable) },
+    ...(!unavailable && scopes.includes('session') ? [{ id: 'session', label: choices.session, key: 's' }] : []),
+    ...(!unavailable && scopes.includes('always') ? [{ id: 'always', label: choices.always, key: 'a' }] : []), { id: 'no', label: choices.no, role: 'no' }] : [];
   // The highlight is kept as an option id (default No), so a changed option set can never move it onto an approving answer.
   const [chosen, setChosen] = useState('no'), found = options.findIndex(option => option.id === chosen), at = found < 0 ? Math.max(0, options.length - 1) : found;
   const atRef = useRef(at); atRef.current = at;
@@ -92,7 +93,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
     reasonRef.current = kept; setReason(kept);
   };
   const decide = (yes: boolean, standing?: StandingScope) => {
-    if (yes && !canAllow) return;
+    if (yes && unavailable) return;
     if (controlledPending === undefined) { decided.current = true; setPending(true); }
     const text = reasonRef.current.trim();
     onDecide(yes, standing, text || undefined);
@@ -125,7 +126,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
         decide(id !== 'no', id === 'session' || id === 'always' ? id : undefined);
         return true;
       }
-      return key.tab;
+      return step.kind === 'unavailable' || key.tab;
     }
     const answer = scopedDecisionKey(input, key, scopes);
     if (answer === null) return key.tab;
@@ -135,7 +136,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
   const reasonRow = reasonLabels && (editing || reason) ? 1 : 0, rows = reasonRow + options.length;
   return <Window title={title.spans} {...(status ? { status } : {})} body={[...decisionWarningLines(title.fields, decisionLabels), ...decisionWindowLines(projectedLines, decisionLabels)]}
     hints={(controlledPending ?? pending) ? pendingText : editing && reasonLabels ? reasonLabels.hint : prompt}
-    position={position} priority={priority} onInput={onInput} footerRows={rows} decision burstText={editing}
+    notice={unavailable?.reason} position={position} priority={priority} onInput={onInput} footerRows={rows} decision burstText={editing}
     // Pasted text only ever fills an open reason field; otherwise the window drops it and re-arms.
     {...(editing ? { onPaste: (text: string) => write(reasonRef.current + text.replace(/[\r\n\t]+/gu, ' ')) } : {})}
     {...(rows ? { footer: (focused: boolean) => <>

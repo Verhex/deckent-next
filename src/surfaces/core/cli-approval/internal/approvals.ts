@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, emit, loadConfig, redactForRecord, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import { approvalCommandSchema, approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { approvalRecordSchema, requiresPersonRunInputDecision, type ApprovalRecord } from '#domain/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -131,12 +131,14 @@ export async function answerOnCard(record: ApprovalRecord, reason: string | unde
   const request = record.request;
   const preview = request.schemaVersion === 3 && request.subject.kind === 'run-create' ? request.preview : undefined;
   const packageReview = Boolean(preview) || requiresPersonRunInputDecision(request);
-  const canAllow = !packageReview || Boolean(preview?.text && !preview.cut && preview.text.split('\n').every(line => redactForRecord(terminalSafeText(line)) === line));
+  const canAllow = !packageReview || Boolean(preview?.text && !preview.cut);
   const guidance = canAllow ? [] : [preview?.cut?.kept ? t('terminal.approval.window.detail.kept', { path: preview.cut.kept }, locale) : t('cli.approval.tableDetails', {}, locale)];
+  const options = standingCardOptions(locale, { hardFloor: onHardFloor(record) });
   const answer = await ask({ title: t('cli.approval.card.title', { what: approvalWhat(record, locale) }, locale),
     body: [...approvalLines(record, now, locale), ...guidance, own ? t('cli.approval.card.reasonGiven', { reason: own }, locale) : t('cli.approval.card.reasonDefault', {}, locale)],
-    exactBody: packageReview, options: canAllow ? standingCardOptions(locale, { hardFloor: onHardFloor(record) })
-      : [{ id: 'no', key: 'n', label: t('terminal.approval.window.choice.no', {}, locale) }] }, expiresAt);
+    exactBody: packageReview, markHiddenBody: packageReview,
+    ...(!canAllow ? { notice: t('terminal.approval.window.reviewIncomplete', {}, locale) } : {}),
+    options: canAllow ? options : options.map(option => option.role === 'yes' ? { ...option, disabled: true, label: t('terminal.approval.window.choice.unavailable', {}, locale) } : option) }, expiresAt);
   if (Date.now() >= expiresAt) return t('cli.approval.card.expired', {}, locale);
   if (answer !== 'no' && (answer !== 'once' || !canAllow)) return t('cli.approval.card.nothing', {}, locale);
   if (!context.decideApproval) throw ErrorRegistry.createError('CLI_USAGE');

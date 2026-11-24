@@ -985,6 +985,7 @@ it.skipIf(process.platform !== 'linux').each(['write intent', 'grant publication
         for (const item of ['pkg/check.js', 'pkg/package.json', 'pattern:url-userinfo', 'unregistered real secret'])
           expect(preview).toContain(item);
         expect(preview).not.toContain(payload);
+        await pty.waitFor('Enter confirm', 0, 15_000);
         await pty.type('y');
         await pty.waitFor('reached ' + boundary, 0, 15_000);
         expect(await pty.closed).toBe(247); // The PTY relay encodes the child's -SIGKILL exit as an unsigned byte.

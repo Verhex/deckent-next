@@ -19,13 +19,18 @@ import { WINDOW_PRIORITY } from './window-stack.js';
  */
 type QuestionKind = 'single' | 'multi';
 /** `role`: the yes or the no answer of a yes/no question, whose letter the contract derives; `key`: any other answer's own letter. Never both. */
-export type QuestionOption = Readonly<{ id: string; label: string } & ({ key?: string; role?: never } | { role: 'yes' | 'no'; key?: never })>;
+export type QuestionOption = Readonly<{ id: string; label: string; disabled?: boolean } & ({ key?: string; role?: never } | { role: 'yes' | 'no'; key?: never })>;
 const YES_NO_KEYS = { yes: 'y', no: 'n' } as const;
 
 /** The one letter an option shows and answers to: `y`/`n` from its yes/no role, else its own key. */
 export const optionKey = (option: QuestionOption): string | undefined => option.role ? YES_NO_KEYS[option.role] : option.key;
 export type QuestionState = Readonly<{ at: number; ticked: readonly string[] }>;
-type QuestionStep = Readonly<{ kind: 'move'; state: QuestionState }> | Readonly<{ kind: 'submit'; ids: readonly string[] }> | Readonly<{ kind: 'cancel' }> | Readonly<{ kind: 'ignored' }>;
+type QuestionStep = Readonly<{ kind: 'move'; state: QuestionState }> | Readonly<{ kind: 'submit'; ids: readonly string[] }> | Readonly<{ kind: 'cancel' }> | Readonly<{ kind: 'unavailable' }> | Readonly<{ kind: 'ignored' }>;
+
+function submitOption(option: QuestionOption | undefined): QuestionStep {
+  if (!option) return { kind: 'ignored' };
+  return option.disabled ? { kind: 'unavailable' } : { kind: 'submit', ids: [option.id] };
+}
 
 export function questionStep(kind: QuestionKind, options: readonly QuestionOption[], state: QuestionState, input: string, key: Key): QuestionStep {
   const last = Math.max(0, options.length - 1), move = (at: number): QuestionStep => ({ kind: 'move', state: { ...state, at: Math.min(last, Math.max(0, at)) } });
@@ -35,18 +40,19 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
   if (key.upArrow) return move(state.at - 1);
   if (key.downArrow) return move(state.at + 1);
   if (key.return) {
-    if (kind === 'multi') return { kind: 'submit', ids: options.filter(option => state.ticked.includes(option.id)).map(option => option.id) };
-    const option = options[state.at];
-    return option ? { kind: 'submit', ids: [option.id] } : { kind: 'ignored' };
+    if (kind === 'multi') return { kind: 'submit', ids: options.filter(option => !option.disabled && state.ticked.includes(option.id)).map(option => option.id) };
+    return submitOption(options[state.at]);
   }
   if (input.length !== 1) return { kind: 'ignored' };
   const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => optionKey(option)?.toLowerCase() === lower) : undefined;
-  if (shortcut) return { kind: 'submit', ids: [shortcut.id] };
+  if (shortcut) return submitOption(shortcut);
   // Owner 2026-10-29 (replaces BeUser E-14's "an unlabelled digit only moves"): the number a row shows answers a single-choice question.
-  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return kind === 'single' ? { kind: 'submit', ids: [options[Number(input) - 1]!.id] } : move(Number(input) - 1);
+  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return kind === 'single' ? submitOption(options[Number(input) - 1]) : move(Number(input) - 1);
   if (kind === 'multi' && input === ' ') {
-    const id = options[state.at]?.id;
-    if (id === undefined) return { kind: 'ignored' };
+    const option = options[state.at];
+    if (!option) return { kind: 'ignored' };
+    if (option.disabled) return { kind: 'unavailable' };
+    const { id } = option;
     return { kind: 'move', state: { ...state, ticked: state.ticked.includes(id) ? state.ticked.filter(item => item !== id) : [...state.ticked, id] } };
   }
   return { kind: 'ignored' };
@@ -58,7 +64,7 @@ export function QuestionRows({ kind, options, state, focused }: { readonly kind:
   useCardCopyOptions(options.map((option, index) => `${index + 1}. ${option.label}${optionKey(option) ? ` (${optionKey(option)})` : ''}`));
   return <>{options.map((option, index) => {
     const here = index === state.at, box = kind === 'multi' ? `${state.ticked.includes(option.id) ? '[x]' : '[ ]'} ` : '', letter = optionKey(option);
-    return <Text key={option.id} wrap="truncate-end" {...(here && focused ? palette.selection : {})}>
+    return <Text key={option.id} wrap="truncate-end" {...(option.disabled ? palette.muted : here && focused ? palette.selection : {})}>
       {`${here ? pointer : ' '} ${index + 1}. ${box}${option.label}${letter ? ` (${letter})` : ''}`}</Text>;
   })}</>;
 }
@@ -77,6 +83,6 @@ export function QuestionWindow({ title, kind, options, initial = -1, hints, posi
       const step = questionStep(kind, options, current.current, input, key);
       if (step.kind === 'move') { current.current = step.state; setState(step.state); return true; }
       if (step.kind === 'submit' || step.kind === 'cancel') { done.current = true; onAnswer(step.kind === 'submit' ? step.ids : null); return true; }
-      return key.tab;
+      return step.kind === 'unavailable' || key.tab;
     }} />;
 }
