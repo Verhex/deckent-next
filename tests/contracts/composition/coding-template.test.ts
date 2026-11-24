@@ -8,7 +8,7 @@ import { applyPolicyTemplateInstallation } from '#composition/core/installation/
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyModelCatalog, createRun, inspectModelCatalog } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingTemplateBase } from '#adapters/index.js';
-import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, t } from '#platform/index.js';
 import { encodeExecutionProfileDefinition } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { seedCatalog } from '../support/model-catalog.js';
@@ -64,7 +64,7 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     const invocation = preview.profile.parameters['invocation'] as Record<string, unknown>;
     for (const field of ['model', 'prompt', 'effort']) expect(invocation).not.toHaveProperty(field);
     for (const field of ['argv', 'nativeSubscription', 'executable']) expect(preview.profile.parameters['docker']).not.toHaveProperty(field);
-    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person);
+    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true, digest: preview.digest }, f.options, person);
     const saved = JSON.parse(await readFile(f.path, 'utf8')).admission.registry;
     expect(saved).toEqual(preview.registry); expect(applied.registry).toEqual(preview.registry);
     expect(encodeExecutionProfileDefinition(saved.profiles.at(-1))).toBe(encodeExecutionProfileDefinition(preview.profile));
@@ -214,8 +214,9 @@ it.skipIf(process.platform === 'win32')('returns failure without applying when t
   const f = await setup(), before = await readFile(f.path, 'utf8');
   const configureCodingTemplate = vi.fn((root: string, input: Parameters<typeof configureNativeCodingTemplate>[1], options: object) =>
     configureNativeCodingTemplate(root, input, options, person));
+  let stderr = '';
   const context = { root: f.root, env: f.options.env, configureCodingTemplate, stdin: { isTTY: true, setRawMode() {} },
-    stdout: { isTTY: true, write() {} }, stderr: { write() {} } };
+    stdout: { isTTY: true, write() {} }, stderr: { write(chunk: string) { stderr += chunk; } } };
   const cliHuman = await import('#surfaces/core/cli-human/index.js');
   const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValueOnce('no').mockResolvedValue(null);
   const base = ['coding', 'template'], provider = ['--provider', 'codex'], kind = ['--kind', 'feature'];
@@ -227,6 +228,22 @@ it.skipIf(process.platform === 'win32')('returns failure without applying when t
     expect(configureCodingTemplate).toHaveBeenCalledExactlyOnceWith(f.root, expect.objectContaining({ apply: false }), expect.anything());
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(declined).toBe(1);
+
+    let updated: Buffer | undefined;
+    ask.mockImplementationOnce(async card => {
+      expect(card.body?.join('\n')).toContain('codex-cli 0.159.2');
+      await f.mutate(config => { config.admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion = 'codex-cli 0.160.0'; });
+      updated = await readFile(f.path);
+      return 'apply';
+    });
+    const stale = await main([...base, ...provider, ...kind, '--lang', 'en'], context);
+    expect.soft(stale).toBe(78);
+    expect.soft(stderr).toContain('[CONFIG_CONCURRENT_REVISION_HOLD]');
+    expect.soft(stderr).toContain('Configuration changed concurrently; retry after the writer finishes.');
+    expect.soft(stderr).toContain('The proposal shown on the card has changed, so reopen the guide with deckent coding template to see the current proposal.');
+    expect(t('error.CONFIG_CONCURRENT_REVISION_HOLD', {}, 'tr')).toBe('Config eşzamanlı değişti; yazıcı tamamlandıktan sonra yeniden deneyin.');
+    expect(t('clisetup.coding.card.changed', {}, 'tr')).toBe('Kartta gösterilen öneri değiştiği için güncel öneriyi görmek üzere deckent coding template ile kılavuzu yeniden açın.');
+    expect(updated?.equals(await readFile(f.path))).toBe(true);
 
     const otherImage = `sha256:${'b'.repeat(64)}`;
     await f.mutate(config => {

@@ -26,7 +26,9 @@ const discoveryModeSchema = z.enum(['disabled', 'repository']);
  * (`disabled`, owner 2026-10-23 Q2); a connected worker requires disabled. Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
 const requestSchema = z.strictObject({ provider: nativeCliIdSchema, kind: identitySchema,
   image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), connection: identitySchema.optional(), detach: z.boolean().optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CodingTemplateRequest = z.infer<typeof requestSchema>;
+const proposalDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const templateRequestSchema = requestSchema.extend({ digest: proposalDigestSchema.optional() });
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type CodingTemplateRequest = z.infer<typeof templateRequestSchema>;
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
   expect: string | null; connection?: string | null; write: ConfigWriteResult | null }>;
@@ -79,9 +81,12 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: bound ? registry.data.kinds.map(row => row.kind === request.kind ? kind : row) : [...registry.data.kinds, kind] };
   return { status: 'ready' as const, profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
 }
+function proposalDigest(read: ConfigSnapshot, plan: Pick<CodingTemplateResult, 'profile' | 'registry'>): string {
+  return sha256(JSON.stringify({ project: read.digest, global: read.global, profile: plan.profile, registry: plan.registry }));
+}
 export async function addNativeProfile(input: unknown, ports: NativeTemplatePorts) {
   const parsed = requestSchema.omit({ connection: true, detach: true }).extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
-    expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict().safeParse(input);
+    expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: proposalDigestSchema.optional() }).strict().safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
   if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
@@ -100,7 +105,7 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
     ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) }); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } })();
   const plan = proposal(read, request, ports.template, candidate);
   if (plan.status === 'no-toolchain') refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
-  const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, profile: plan.profile, registry: plan.registry }));
+  const digest = proposalDigest(read, plan);
   const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, digest };
   if (!request.apply) return { ...result, status: plan.changed ? 'preview' as const : 'unchanged' as const, write: null };
   if (request.digest !== digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
@@ -118,8 +123,8 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   return { ...result, status: 'applied' as const, write };
 }
 
-export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult & Readonly<{ status: 'preview' | 'applied' | 'unchanged' }>> {
-  const parsed = requestSchema.safeParse(input);
+export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult & Readonly<{ status: 'preview' | 'applied' | 'unchanged'; digest: string }>> {
+  const parsed = templateRequestSchema.safeParse(input);
   if (!parsed.success || parsed.data.connection && parsed.data.detach) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
   if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
@@ -141,7 +146,9 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     if (plan.status === 'no-toolchain') refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
     return plan;
   };
-  const plan = planFor(read), result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null };
+  const plan = planFor(read), digest = proposalDigest(read, plan);
+  if (request.apply && request.digest !== undefined && request.digest !== digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+  const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null, digest };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
   const config = read.effective;
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
