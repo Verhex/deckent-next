@@ -1,6 +1,7 @@
 import { InMemoryTransport, CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY, type JSONRPCMessage } from '@modelcontextprotocol/server';
 import { appendFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
+import { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import type { ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
@@ -54,9 +55,9 @@ it.each(['2025-11-25', '2026-07-28'])('bounds escaped duplicate model output and
         { maxConcurrentCalls: 1, responseMaxBytes: maximum }, locale);
         const [client, transport] = InMemoryTransport.createLinkedPair();
         const responses: JSONRPCMessage[] = []; client.onmessage = message => { responses.push(message); };
-        await server.connect(transport); await client.start();
-        const call = async (name: string, args: Record<string, unknown>) => {
-          await client.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args,
+        await server.connect(createBoundedMcpTransport(transport, { responseMaxBytes: maximum })); await client.start();
+        const call = async (name: string, args: Record<string, unknown>, id: number | string = 1) => {
+          await client.send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args,
             _meta: { [PROTOCOL_VERSION_META_KEY]: '2026-07-28', [CLIENT_CAPABILITIES_META_KEY]: {} } } });
           await expect.poll(() => responses.length).toBe(1);
           const response = responses.shift()!;
@@ -72,6 +73,8 @@ it.each(['2025-11-25', '2026-07-28'])('bounds escaped duplicate model output and
           const coded = (code: string, text?: string) => ({ isError: true,
             content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code, ...(text ? { message: text } : {}) }) }] });
           expect.soft(create).toMatchObject(maximum === 512 ? coded(specific) : coded(general, message));
+          if (locale === 'en' && maximum === 512)
+            expect(await call('create_run', { ...query, graph }, 'a'.repeat(234))).toMatchObject(coded(general));
           for (const [name, args] of [['plan_run', { schemaVersion: 1, scopeId, commandId, intent: 'Review packages' }],
             ['propose_run', proposal], ['inspect_run_proposal', query]] as const) {
             const result = await call(name, args);

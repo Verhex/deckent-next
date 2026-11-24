@@ -346,7 +346,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; message?: string; narrowCode?: string } = {}): CallToolResult => {
     const message = extra.message ?? (extra.error ? extra.error.localize?.(locale).message ?? extra.error.message : ErrorRegistry.get(code, locale)?.message);
     const full = coded({ code, ...(extra.note ? { note: extra.note } : {}), ...(message ? { message: redactSensitive(message) } : {}) });
-    return toolResultFits(id, full, limits.responseMaxBytes) ? full : coded({ code: extra.narrowCode ?? code });
+    if (toolResultFits(id, full, limits.responseMaxBytes)) return full;
+    if (extra.narrowCode) {
+      const narrow = coded({ code: extra.narrowCode });
+      if (toolResultFits(id, narrow, limits.responseMaxBytes)) return narrow;
+    }
+    return coded({ code });
   };
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
