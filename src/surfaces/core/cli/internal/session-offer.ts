@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { projectAttachmentOfferSchema } from '#domain/index.js';
-import { ErrorRegistry, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { askCliCard } from '#surfaces/core/cli-human/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
@@ -25,7 +25,10 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
   stdin.pause();
   if (answer !== 'yes') return 'cancelled';
   const result = await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);
-  if ((result as { status?: unknown } | null)?.status !== 'attached') throw ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE');
+  if ((result as { status?: unknown } | null)?.status !== 'attached') {
+    await reportFatal(ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE'), { ...context, locale });
+    return 1;
+  }
   stdin.resume();
   return launch({ ...context, root: offer.path, rootResolution: { root: offer.path, folder: '', found: true, gitTop: context.rootResolution?.gitTop ?? null } }).catch((error: unknown) => {
     stdin.pause();

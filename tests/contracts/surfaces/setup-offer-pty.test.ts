@@ -171,11 +171,11 @@ async function fixture(repository = false) {
   await symlink(process.execPath, join(bin, 'node'));
   // A person's terminal: no AI-agent or CI marker (the runner may itself run inside one), a real terminal type, no Deckent variables.
   const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/local/bin:/usr/bin:/bin`, HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
-    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
+    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', GIT_OPTIONAL_LOCKS: process.env['GIT_OPTIONAL_LOCKS'] };
   // U7 recommends the nearest Git top: keep positive setup cases inside their own repository, never an ambient parent (such as /tmp).
   if (repository) await execute('git', ['init', '--quiet', root], { env, timeout: 10_000 });
-  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = [], cwd = root): Promise<Run> => {
-    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, cli, ...argv]), cwd], { env: { ...env, ...extra },
+  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = [], cwd = root, entry = [cli]): Promise<Run> => {
+    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, ...entry, ...argv]), cwd], { env: { ...env, ...extra },
       timeout: 180_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as Run;
     const dir = process.env['DECKENT_I_S5_TRANSCRIPTS'];
@@ -213,6 +213,32 @@ async function expectExplicitAttachmentDeclines(f: Awaited<ReturnType<typeof fix
   }
 }
 
+async function expectUnfinishedAttachmentStops(f: Awaited<ReturnType<typeof fixture>>, target: string, titles: readonly [string, string]) {
+  // Run the compiled CLI over the same PTY with only the attachment apply result supplied by the fixture.
+  const pendingEntry = ['--input-type=module', '--eval', `
+    import { main } from ${JSON.stringify(resolve('dist/surfaces/core/cli/index.js'))};
+    import { createCliHost } from ${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))};
+    const base = { root: process.cwd(), locale: process.env.LANG.slice(0, 2), signal: new AbortController().signal };
+    const host = createCliHost(base);
+    process.exitCode = await main([], { ...base, ...host,
+      projectAttachment: (root, input, ...options) => input.action === 'apply'
+        ? Promise.resolve({ status: 'pending' }) : host.projectAttachment(root, input, ...options),
+    });
+  `];
+  for (const [lang, title, explanation] of [
+    ['en_US.UTF-8', titles[0], 'The attachment is unfinished. Resume the same attach command with its original command ID and preview digest.'],
+    ['tr_TR.UTF-8', titles[1], 'Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün.'],
+  ] as const) {
+    const pending = await f.pty(`attachment-pending-${lang.slice(0, 2)}`, [[title, 'y']], { LANG: lang, NODE_ENV: 'production' }, [], target, pendingEntry);
+    expect(pending.timeout, pending.output).toBeUndefined();
+    expect(pending.output).toContain(title);
+    expect(pending.output).toContain(`${explanation} [PROJECT_ATTACHMENT_INCOMPLETE]`);
+    expect.soft(pending.status, `unfinished attachment (${lang})`).toBe(1);
+    expect(pending.output).not.toMatch(/deckent workline|Step 1\/|Adım 1\/|Runtime service started|deckent servisi arka planda başlatıldı/u);
+    expect(await readdir(target)).toEqual([]);
+  }
+}
+
 describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder with no installation (real PTY, compiled CLI)', () => {
   it('declining the attached-session offer explains the exit in EN/TR; accepting it opens the attached root once', async () => {
     await access(cli);
@@ -238,6 +264,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
       }
     }
     await expectExplicitAttachmentDeclines(f, target, missingTr);
+    await expectUnfinishedAttachmentStops(f, target, [card, cardTr]);
     const attached = await f.pty('attachment-yes', [[card, 'y'], ['Step 1/', '\u0003'], ['Connect a model with /provider', '/exit\r']], {}, [], target);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(attached.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
