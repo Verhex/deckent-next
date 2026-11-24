@@ -7,8 +7,11 @@ export function withPlanningSpending(root: string, result: import('#engine/index
 export function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions): Promise<RunPlanningResult>;
 export async function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions, inspect?: InspectPlanningSpending): Promise<RunPlanningResult> {
   if (isRunIntentResult(result)) return result;
-  const proposal = result.proposal.proposal;
-  if (proposal.source.kind !== 'model') return result;
+  const planningSpending = await observePlanningSpending(root, result.proposal.proposal, options, inspect);
+  return planningSpending ? Object.freeze({ ...result, planningSpending }) : result;
+}
+export async function observePlanningSpending(root: string, proposal: import('#domain/index.js').RunProposal, options: ConfigLoadOptions, inspect?: InspectPlanningSpending) {
+  if (proposal.source.kind !== 'model') return undefined;
   let planningSpending: NonNullable<import('#engine/index.js').RunProposalResult['planningSpending']> = { class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' };
   try {
     const source = proposal.source.receipt;
@@ -31,5 +34,5 @@ export async function withPlanningSpending(root: string, result: RunPlanningResu
           ? 'measured-tariff-upper-bound' : spending?.measurement?.basis ?? 'settled-local' : state?.state === 'held' ? 'held' : 'unknown' };
     }
   } catch { /* Unavailable/denied supplemental observation cannot undo an already durable proposal. */ }
-  return Object.freeze({ ...result, planningSpending: Object.freeze(planningSpending) });
+  return Object.freeze(planningSpending);
 }

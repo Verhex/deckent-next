@@ -1,30 +1,31 @@
 import { brainInputDigest } from '#capabilities/index.js';
-import { withPlanningSpending, type InspectPlanningSpending } from './planning-spending.js';
+import { observePlanningSpending, withPlanningSpending, type InspectPlanningSpending } from './planning-spending.js';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation, withLocalPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
 import { verifiedPrincipal, agentSelectionSummary, assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
-  runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
+  runProposalQuerySchema, type RunProposalQuery, type RunPackageCardCheck } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { withConfiguredRunAdmission } from './create.js';
-export async function proposeConfiguredRun(projectRoot: string, input: RunProposal, options: ConfigLoadOptions = {}) {
-  return propose(projectRoot, input, options);
+export async function proposeConfiguredRun(projectRoot: string, input: RunProposal, options: ConfigLoadOptions = {}, checkPackageCard?: RunPackageCardCheck) {
+  return propose(projectRoot, input, options, undefined, checkPackageCard);
 }
 type AssertTurnSource = (value: RunProposal, known: ReturnType<typeof getConfigKnownSecrets>) => void;
 /** Both sends verify the same proposal against the masking snapshot loaded for that send. */
 export function bindConfiguredTurnProposal(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
-  inspect: InspectPlanningSpending, assertSource: AssertTurnSource) {
+  inspect: InspectPlanningSpending, assertSource: AssertTurnSource, checkPackageCard?: RunPackageCardCheck) {
   const proposal = parseRunProposal(input);
-  return () => propose(projectRoot, proposal, options, { inspect, verify: assertSource });
+  return () => propose(projectRoot, proposal, options, { inspect, verify: assertSource }, checkPackageCard);
 }
 async function propose(projectRoot: string, input: RunProposal, options: ConfigLoadOptions,
-  turnSource?: { inspect: InspectPlanningSpending; verify: AssertTurnSource }) {
+  turnSource?: { inspect: InspectPlanningSpending; verify: AssertTurnSource }, checkPackageCard?: RunPackageCardCheck) {
   try {
     const proposal = parseRunProposal(input), context = await loadConfiguredScopeContext(projectRoot, proposal.scopeId, options, 'write');
+    const spending = checkPackageCard ? await observePlanningSpending(projectRoot, proposal, options, turnSource?.inspect) : undefined;
     const result = await withConfiguredRunAdmission(projectRoot, context, options, async (runs, authority, _warnings, agents) => {
       const store = await openSqliteRunProposalStore(await context.path(), context.config.storage.sqlite);
       try {
@@ -56,9 +57,11 @@ async function propose(projectRoot: string, input: RunProposal, options: ConfigL
               receipt: inspected.invocation, response: content.response, contentStatus: 'retained', purge: null }) : null;
             assertRunProposalSource(value, inspected.invocation, text, getConfigKnownSecrets(context.config));
           },
-        }).propose(proposal);
+        }).propose(proposal, undefined, checkPackageCard && ((draft, card) =>
+          checkPackageCard(spending ? { ...draft, planningSpending: spending } : draft, card)));
       } finally { store.close(); }
     });
+    if (checkPackageCard) return spending ? Object.freeze({ ...result, planningSpending: spending }) : result;
     return await withPlanningSpending(projectRoot, result, options, turnSource?.inspect);
   } catch (error) { throw queryFailure(error); }
 }

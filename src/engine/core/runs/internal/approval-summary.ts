@@ -1,7 +1,8 @@
 import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, isWorkloadPrincipalRef, resolveTaskWorkClass,
-  NATIVE_CLI_WORKER_ADAPTER_ID, type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
-import { currencyAmountText, redactForRecord, shortId, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
-import type { BoundRunAdmission } from './admission.js';
+  nativeCliWorkerWrapperSchema, NATIVE_CLI_WORKER_ADAPTER_ID, NATIVE_NODE_DEPENDENCY_LAYOUT, approvalPreviewSchema,
+  type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
+import { ErrorRegistry, currencyAmountText, redactForRecord, shortId, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
+import type { BoundRunAdmission, PackageApprovalRow } from './admission.js';
 import type { RunCreate } from './store.js';
 import limits from './approval-summary-limits.json' with { type: 'json' };
 
@@ -63,9 +64,17 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [], mode = create.execution.workerMode ? [t('approval.plan.workerMode', { mode: create.execution.workerMode.mode === 'full-auto' ? aiProposal && create.execution.workerMode.askEdits ? t('approval.plan.workerMode.full-auto-ask-edits', {}, locale) : t('approval.plan.workerMode.full-auto', {}, locale) : create.execution.workerMode.askEdits ? t('approval.plan.workerMode.ask-edits', {}, locale) : t('approval.plan.workerMode.standart', {}, locale) }, locale)] : []; // R9/C3 worker ceiling
   const rule = verdict.ruleId ? field(verdict.ruleId, limits.ruleChars, known) : t('approval.plan.registryGate', {}, locale), required = t('approval.plan.required', {}, locale); // the plain requirement needs no code beside its words
   const decision = verdict.reason === 'APPROVAL_REQUIRED' ? t('approval.plan.decisionRule', { decision: required, rule }, locale) : t('approval.plan.decision', { decision: required, rule, reason: field(verdict.reason, limits.reasonChars, known) }, locale);
+  const inputs = create.execution.tasks.flatMap(({ profile }) => {
+    const parsed = profile.adapter.id === NATIVE_CLI_WORKER_ADAPTER_ID ? nativeCliWorkerWrapperSchema.safeParse(profile.parameters).data : undefined;
+    return parsed?.schemaVersion === 2 && parsed.dependencies.state === 'sealed' ? [parsed.dependencies] : [];
+  })[0];
+  const packages = inputs ? [t('coding.dependencies.reference', { project: field(inputs.project, limits.assignmentChars, known),
+    target: field(inputs.workTarget, limits.assignmentChars, known), platform: inputs.platform, layout: inputs.layout, lockfile: NATIVE_NODE_DEPENDENCY_LAYOUT.lockfile,
+    listDigest: inputs.listDigest, lockfileDigest: inputs.lockfileDigest, mount: NATIVE_NODE_DEPENDENCY_LAYOUT.mount }, locale),
+    inputs.allowance ? t('coding.dependencies.allowance.runCard', {}, locale) : t('coding.dependencies.approval', {}, locale)] : [];
   const render = () => [t('approval.plan.tasks', { count: tasks.length }, locale), ...taskRows,
     ...(tasks.length > taskRows.length ? [t('approval.plan.moreTasks', { count: tasks.length - taskRows.length }, locale)] : []),
-    ...mode, ...(aiProposal ? [t('approval.plan.aiAuthorityNotice', {}, locale)] : []),
+    ...mode, ...(aiProposal ? [t('approval.plan.aiAuthorityNotice', {}, locale)] : []), ...packages,
     ...(command.proposal ? asked : []), ...(command.proposal?.delivery ? [t('approval.plan.delivery', { target: field(command.proposal.delivery.target.id, limits.runChars, known) }, locale)] : []),
     ...(metered ? [t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale)] : []),
     ...(edges.length ? [t('approval.plan.conflictEdges', { count: edges.length }, locale), ...edgeRows] : []),
@@ -81,4 +90,17 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     if (taskRows.length) { taskRows.pop(); taskDetailRows.pop(); } else if (edgeRows.length) edgeRows.pop(); else permissionRows.pop();
   }
   return render();
+}
+
+/** The existing bounded approval expansion stores every row, or no card opens. */
+export function renderPackageApprovalPreview(rows: readonly PackageApprovalRow[] | undefined, basisDigest: string, locale: Locale = 'en', known?: KnownSecretSnapshot) {
+  const safe = rows?.every(({ path, rule, digest }) => /^[a-f0-9]{64}$/u.test(digest) && /^pattern:[a-z0-9-]+$/u.test(rule) &&
+    path !== '' && !/[\p{Cc}\p{Cf}]/u.test(path) && redactForRecord(path, known) === path && terminalSafeText(path) === path);
+  if (!safe) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+  const text = [t('coding.dependencies.patternRisk', {}, locale), t('coding.dependencies.patternCount', { count: rows!.length }, locale),
+    ...rows!.map(row => t('coding.dependencies.pattern', row, locale))].join('\n');
+  if (redactForRecord(text, known) !== text) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+  const preview = approvalPreviewSchema.safeParse({ schemaVersion: 1, argsDigest: basisDigest, text, cut: null });
+  if (!preview.success) throw ErrorRegistry.createError('NATIVE_WORKER_DEPENDENCIES_REFUSED', { params: { preview: 'over-limit' } });
+  return preview.data;
 }

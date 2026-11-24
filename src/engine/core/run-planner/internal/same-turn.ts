@@ -49,7 +49,7 @@ export interface SameTurnPlanningPorts {
   readResult(completedReceipt: ModelInvocationReceipt, isCurrent: () => boolean): Promise<ModelInvocationResult>;
   /** The proposal owner can run its existing source check. The verified body remains in the finalizer's closure. */
   propose?(proposal: RunProposal, receipt: ModelInvocationReceipt,
-    assertSource: (value: RunProposal, known: KnownSecretSnapshot) => void): Promise<RunProposalResult>;
+    assertSource: (value: RunProposal, known: KnownSecretSnapshot) => void, brainBelowRecommended?: boolean): Promise<RunProposalResult>;
   text(result: ModelInvocationResult): string | null;
   /** Re-read Brain model role, activation/binding/profile, model-use/delegation, policy and settings on this actual chat model.
    * Return the current preparation snapshot; any drift is refused. This port cannot invoke a model or admit a Run. */

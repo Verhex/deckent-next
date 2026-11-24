@@ -45,6 +45,25 @@ it('atomically persists Run progress and attempts, with exact replay across inde
   expect((await reopened.loadRun('s', 'r'))!.progress.filter(p => p.phase === 'active')).toHaveLength(2);
   await expect(reopened.reserveRunTasks({ ...reservation(['c'], 'full'), expectedRevision: 1 })).rejects.toThrow('RUN_CAPACITY_OR_ORDER');
 });
+it('reopens a native v2 package reference beside the original Run using the existing ledger version', async () => {
+  const { path, store } = await fixture(); await store.createRun(create);
+  const legacy = await store.loadRun('s', 'r');
+  const expected = { state: 'sealed', layout: 'node-npm', platform: 'linux-x64', project: '/fixture/repo', workTarget: '/fixture/repo',
+    lockfileDigest: 'b'.repeat(64), listDigest: 'c'.repeat(64), approval: { scopeId: 's', commandId: 'sealed-create' } };
+  const execution = { ...create.execution, tasks: create.execution.tasks.map(task => ({ ...task, profile: { ...task.profile,
+    adapter: { id: 'native-cli-worker', version: 2 }, parameters: { schemaVersion: 2, base: task.profile, binding: {}, dependencies: expected } } })) };
+  await store.createRun({ ...create, commandId: 'sealed-create', identity: { ...identity, runId: 'sealed-run' }, execution });
+  store.close(); stores.splice(stores.indexOf(store), 1);
+  const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: options.busyTimeoutMs });
+  try {
+    expect(await reader.loadRun('s', 'r')).toEqual(legacy);
+    expect((await reader.loadRun('s', 'sealed-run'))?.execution).toEqual(execution);
+    expect((await reader.loadRunReceipt('s', 'sealed-create'))?.snapshot.execution.tasks[0]?.profile.parameters['dependencies']).toEqual(expected);
+  } finally { reader.close(); }
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); }
+  finally { db.close(); }
+});
 it('rolls back every inserted attempt and Run change if any attempt identity conflicts', async () => {
   const { store } = await fixture(); await store.createRun(create);
   await store.commit({ commandId: 'existing', command: 'existing', expectedRevision: null, snapshot: createAttempt(attempt('b')) });

@@ -377,6 +377,16 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
         delivery = bounded;
       }
       const result = jsonToolResult(await tool.invoke(args, delivery, context.mcpReq.signal));
+      if (tool.name === 'plan_run' || tool.name === 'propose_run' || tool.name === 'inspect_run_proposal') {
+        const { structuredContent } = result;
+        const proposal = typeof structuredContent === 'object' && structuredContent && 'proposal' in structuredContent
+          ? structuredContent.proposal as { reason?: unknown } | null : null;
+        if (proposal?.reason === 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT') {
+          const message = ErrorRegistry.createError(proposal.reason, { locale }).message;
+          const withMessage = { ...result, content: [...result.content, { type: 'text' as const, text: message }] };
+          return toolResultFits(id, withMessage, limits.responseMaxBytes) ? withMessage : failure(id, proposal.reason, { message });
+        }
+      }
       if (!toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes)) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
         ? invocationLimit('MCP_RESPONSE_LIMIT') : failure(id, 'MCP_RESPONSE_LIMIT');
       return result;

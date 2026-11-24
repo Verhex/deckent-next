@@ -100,11 +100,11 @@ export async function nativeWorkerInputViews(resources: NativeWorkerResources, s
 
 /** A provider keeps its own admission facts; Core owns only the added input view's closed lifecycle. */
 export function nativeWorkerInputSandboxes<C, R extends { ok: true; realm: ShellRealm; writeSets?: boolean }>(
-  inputs: { views: readonly View[]; validate(): Promise<void> },
+  inputs: { views: readonly View[]; protectedView?: boolean; validate(): Promise<void> },
   providers: readonly { kind: Exclude<ShellRealm['kind'], 'host'>; usable(capabilities: C): R | { ok: false; reason: string; restricted?: boolean } }[],
   ports: { launcher(capabilities: C): string | null; args(request: ShellRealmRequest): Promise<readonly string[] | null>;
     maxArgumentBytes: number; run(file: string, args: readonly string[], request: ShellRealmRequest): Promise<ShellRealmResult> }) {
-  if (!inputs.views.length) return providers;
+  if (!inputs.views.length && !inputs.protectedView) return providers;
   return providers.filter(provider => provider.kind === 'bubblewrap').map(provider => ({ ...provider, usable(capabilities: C) {
     const ready = provider.usable(capabilities), launcher = ports.launcher(capabilities);
     if (!ready.ok || !launcher) return ready;

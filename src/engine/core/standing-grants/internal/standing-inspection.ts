@@ -3,7 +3,7 @@ import { redactForRecord } from '#platform/index.js';
 import { z } from 'zod';
 import { PolicyAuthorizationError, policyVerdictRefusal, type PolicySource } from '#engine/core/policy/index.js';
 import { effectInputDigest } from '#engine/core/effect/index.js';
-import bounds from './standing-list.json' with { type: 'json' };
+import { standingGrantListBounds as bounds } from '#engine/core/approval/index.js';
 
 /** CA-1 (owner 2026-10-19): everyone's standing approvals in one scope, one bounded page; the bounds are registry data (`standing-list.json`). */
 export const STANDING_GRANTS_LIST = Object.freeze({ ...bounds });

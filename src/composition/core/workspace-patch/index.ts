@@ -5,3 +5,5 @@ export { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegra
 export { interactiveDeliveryHandlers, verifiedDeliveryConfirmation } from './internal/terminal.js';
 export { describeConfiguredDeliverySummaries } from './internal/summary.js';
 export { configuredGitDeliveryPermission } from './internal/permission.js';
+export { changeConfiguredPackageAllowance, configuredPackageList, configuredWorkerPackagePorts, withPackageUse } from './internal/worker-packages.js';
+export type { PackageConsentRequest, PackageConsentCard } from '#engine/index.js';

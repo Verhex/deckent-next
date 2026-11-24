@@ -70,7 +70,7 @@ export interface BrainPlanPorts {
   invoke(command: ModelInvocationCommand, signal?: AbortSignal): Promise<ModelInvocationResult>;
   text(result: ModelInvocationResult): string | null;
   stoppedAtLength(result: ModelInvocationResult): boolean;
-  propose(proposal: RunProposal): Promise<RunProposalResult>;
+  propose(proposal: RunProposal, brainBelowRecommended?: boolean): Promise<RunProposalResult>;
   /** S3-4: a rejected call's retained adapter body (base64) read under the caller's content right; null when not retained or not readable. */
   readonly subscriptionAdapterIds?: ReadonlySet<string>;
   continueBilling?(command: ModelInvocationCommand, result: ModelInvocationResult, notice: (reference: ModelReference) => void, signal?: AbortSignal): Promise<ModelInvocationCommand | null>;
@@ -319,7 +319,8 @@ export class BrainPlanApplication {
       if (sourceText !== null && redactForRecord(sourceText, known) !== sourceText) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
       assertRunProposalSource(value, receipt, sourceText, known);
     };
-    const recorded = await (propose ? propose(proposal, receipt, assertSource) : this.ports.propose(proposal));
+    const recorded = await (propose ? propose(proposal, receipt, assertSource, prepared.brainBelowRecommended)
+      : this.ports.propose(proposal, prepared.brainBelowRecommended));
     return prepared.planningMemory || prepared.brainBelowRecommended ? { ...recorded, ...(prepared.planningMemory ? { planningMemory: prepared.planningMemory } : {}),
       ...(prepared.brainBelowRecommended ? { brainBelowRecommended: true as const } : {}) } : recorded;
   }
