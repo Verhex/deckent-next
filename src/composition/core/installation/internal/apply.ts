@@ -1,9 +1,9 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
-import { lstat } from 'node:fs/promises';
+import { automationMarker, persistedString, bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, resolveGlobalConfigReadPath, isCodedError, type BootstrapObservation, type ConfigLoadOptions } from '#platform/index.js';
+import { lstat, realpath } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
-import { isAbsolute } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { attestLocalInteractiveTerminal, ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, localPrincipalChannel, withInstallationJournal } from '#adapters/index.js';
 import { counterSchema, immutableJsonObjectSchema } from '#domain/index.js';
@@ -44,26 +44,37 @@ export async function configuredInstallationBinding(projectRoot: string, options
 }
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); // Snapshot and validate before the lock or bootstrap directory.
-  const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator); await assertSuppliedAuthority(initial); await preflightEvidence(initial, operator);
+  const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator);
+  const authority = await assertSuppliedAuthority(projectRoot, initial); await approvedEvidence(initial, operator);
   await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite(); // before the journal or any bootstrap directory
-  return executeInstallation(projectRoot, operator, lockTimeout(initial), initial.material.authoredProfile);
+  return executeInstallation(projectRoot, operator, lockTimeout(initial), authority, initial.material.authoredProfile);
 }
 export async function resumeInstallation(projectRoot: string, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); const recovery = retained(await observeBootstrapState(projectRoot));
   if (!recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   const initial = await prepareSuppliedInstallation(projectRoot, recovery.material.authoredProfile, { allowShutdown: operator.allowShutdown }, recovery.material.configuration);
-  validateInstallationRecovery(recovery, initial); await assertSuppliedAuthority(initial); await preflightEvidence(initial, operator);
+  validateInstallationRecovery(recovery, initial);
+  const authority = await assertSuppliedAuthority(projectRoot, initial); await approvedEvidence(initial, operator);
   await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite();
-  return executeInstallation(projectRoot, operator, lockTimeout(initial));
+  return executeInstallation(projectRoot, operator, lockTimeout(initial), authority);
 }
-/** H (owner 2026-10-29): a supplied policy beyond the unwitnessed first-run template (U4E) is an authority write like `init policy --modes|--upgrade
- * --apply`: the SEC-1 witness (Core: this process's controlling terminal), never the MCP actor, before evidence or any write. The proposal digest binds
- * this exact profile, so the journal-locked re-preparation publishes nothing else. */
-async function assertSuppliedAuthority(prepared: PreparedInstallation) {
-  if (!suppliedPolicyWithinTemplate(prepared.preview)) await assertAuthorityWitness('installationProfilePolicy', localPrincipalChannel(), { attest: () => attestLocalInteractiveTerminal() });
+/** The approved proposal binds the prepared profile. The settled marker setting is independent of that proposal. */
+async function assertSuppliedAuthority(projectRoot: string, prepared: PreparedInstallation, observed?: BootstrapObservation) {
+  if (suppliedPolicyWithinTemplate(prepared.preview)) return null;
+  const pending = bootstrapPublishesConfig(observed ?? await observeBootstrapState(projectRoot), projectRoot);
+  // A global root can point at the pending project bootstrap directory too.
+  const globalIsTarget = pending && await realpath(dirname(await resolveGlobalConfigReadPath())).catch(() => undefined)
+    === await realpath(dirname(prepared.material.layout.bootstrapConfigPath));
+  const markers = globalIsTarget ? getConfigFieldDefault('cli').agentEnvironment
+    : (await loadComposedConfig(projectRoot, { globalOnly: pending, pendingBootstrap: 'config-settled', heal: false, secretResolver: async () => undefined })).cli.agentEnvironment;
+  await assertAuthorityWitness('installationProfilePolicy', localPrincipalChannel(), { attest: async () =>
+    !automationMarker(process.env, markers) && await attestLocalInteractiveTerminal() });
+  return JSON.stringify([pending, [...new Set(markers)].sort()]);
 }
-async function preflightEvidence(prepared: PreparedInstallation, operator: InstallationApplyChoices) {
-  if ((await inspectPreparedInstallation(prepared, operator.dockerExecutable)).proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+async function approvedEvidence(prepared: PreparedInstallation, operator: InstallationApplyChoices) {
+  const evidence = await inspectPreparedInstallation(prepared, operator.dockerExecutable);
+  if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+  return evidence;
 }
 /** The identity stores of the prepared configuration: its layout root and resources and its installation binding settings. */
 function identityStores(projectRoot: string, prepared: PreparedInstallation, timeoutMs: number) {
@@ -74,15 +85,15 @@ function identityStores(projectRoot: string, prepared: PreparedInstallation, tim
 function lockTimeout(prepared: PreparedInstallation) {
   return Math.min(getConfigFieldDefault('installation').writeLockTimeoutMs, validateConfig(versionedConfig(prepared.material.configuration)).config.installation.writeLockTimeoutMs);
 }
-async function executeInstallation(projectRoot: string, operator: InstallationApplyChoices, timeoutMs: number, supplied?: unknown) {
+async function executeInstallation(projectRoot: string, operator: InstallationApplyChoices, timeoutMs: number, authority: string | null, supplied?: unknown) {
   return withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
     const observed = await journal.observe(), recovery = retained(observed), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER)
     if (!supplied && !recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
     const prepared = await prepareSuppliedInstallation(projectRoot, supplied ?? recovery!.material.authoredProfile,
       { allowShutdown: operator.allowShutdown }, recovery?.material.configuration);
     if (recovery) validateInstallationRecovery(recovery, prepared);
-    const evidence = await inspectPreparedInstallation(prepared, operator.dockerExecutable);
-    if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+    const evidence = await approvedEvidence(prepared, operator);
+    if (await assertSuppliedAuthority(projectRoot, prepared, observed) !== authority) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     const { layout, installation: installationIdentity, project: projectIdentity } = identityStores(projectRoot, prepared, timeoutMs);
     await installationIdentity.admitWrite(); await projectIdentity.read(); // re-admitted under the journal lock, before any target is published
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',

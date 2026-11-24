@@ -116,19 +116,28 @@ it('revalidates evidence after final verification before committing or replaying
 
   const committed = memoryPorts(source, observed), replay = new InstallationPublicationApplication(committed.ports);
   await replay.apply(source, observed, agreed); committed.resetCalls(); committed.mutateDuringFinalVerify(3);
+  const beforeReplay = committed.state, writesBeforeReplay = committed.writes.length;
   await expect(replay.apply(source, observed, agreed)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
   expect(committed.state.record).toMatchObject({ phase: 'committed' });
+  expect(committed.state).toBe(beforeReplay);
+  expect(committed.writes).toHaveLength(writesBeforeReplay);
+  expect(committed.publishes).toBe(0);
 });
 
 it('rejects changed proposal, consent, and stored resource target recovery conflicts', async () => {
   const source = await prepared(), observed = evidence(source), agreed = consent(source, observed), memory = memoryPorts(source, observed);
   const application = new InstallationPublicationApplication(memory.ports); await application.apply(source, observed, agreed);
+  const writesBeforeConflict = memory.writes.length, publishedBeforeConflict = memory.publishes;
   const changed = evidence(source, 'd'.repeat(64));
   await expect(application.apply(source, changed, consent(source, changed))).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
   await expect(application.apply(source, observed, consent(source, observed, 'another-choice'))).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
   const { checksum: ignored, ...payload } = memory.state.record!; void ignored;
   memory.replace({ ...payload, resources: payload.resources.map(resource => resource.resource === 'policy' ? { ...resource, path: '/other/policy.json' } : resource) });
+  const conflictingState = memory.state;
   await expect(application.apply(source, observed, agreed)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
+  expect(memory.state).toBe(conflictingState);
+  expect(memory.writes).toHaveLength(writesBeforeConflict);
+  expect(memory.publishes).toBe(publishedBeforeConflict);
 });
 
 // SECRET-WRITE-CLOCK (proof/SECRET-WRITE-FLAKE-2026-10-01): same writer-side ordering as the policy-template path; TIME_ORDER stays exact.
