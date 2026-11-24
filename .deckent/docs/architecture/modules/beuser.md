@@ -145,8 +145,10 @@ recipe revision and the controller's configured image (null when absent; the wal
 `EXECUTION_NOT_CONFIGURED`). Contributor receipts are recorded as unavailable. The setup card shows
 journey, candidate version and revision, each walker, the judge, per-walker shared walk/judge budget and completion reservation, aggregate call/token/cost ceilings, execution/in-flight slots before→after and the content digest. A judge also selected as a walker is labelled `reduced`; a different model alone remains `unknown` independence, with unavailable contributor receipts. The judge consumes each walker's existing envelope; the limits registry is unchanged; Esc or Cancel applies nothing. Setup in this mode may replace an existing registry
 only when all its profiles are BeUser profiles. `beuser-controller-2` records the lead's measured capacity ceiling of four execution/in-flight slots; the selected walk uses exactly its walker count. Only these two pool fields may change, after the person sees before→after and approves; other pool fields remain equal. The existing policy-checked pool capacity command owns a stored capacity change (including occupied-shrink refusal). This requires installation-wide `set-capacity` authority; a scope-only owner grant is refused as `POLICY_DENIED`, even after the person approves the setup card. Setup never creates that grant, and the normal installer provisions a fresh pool. Config and pool are separate durable writes; a failure after config publication remains explicit and requires reconciliation, never a fabricated completed walk. Any other difference is still `BEUSER_SETUP_CONFLICT`. The walk then runs under the
-same admission; human output separates walker diagnostics from each judge verdict, preserving unknown results. The output ends with the walked revision and `cd <controller> && deckent beuser
-report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
+same admission. Human output separates walker diagnostics from each judge verdict and preserves unknown
+results. It names the walked revision when at least one walk occurred and ends with `cd <controller> &&
+deckent beuser report`. Both walk forms exit 1 when the first reservation fails before any execution attempt.
+An authorized read of that report exits 0. The `--scope` form also defaults `--candidate` to this package's build.
 
 ### BS part 2b author slice (alpha.60 candidate)
 

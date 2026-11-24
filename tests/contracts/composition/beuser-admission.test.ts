@@ -366,7 +366,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       [answer('\r'), answer('\r'), answer('\u001b[6~'), answer('y')]);
     expect(freshWalk.code, freshWalk.output).toBe(1); expect(freshWalk.output).toContain('Judge: fixture-extra-1'); expect(freshWalk.output).toContain('independence: reduced');
     expect(freshWalk.output).toContain('new pool → 2/2'); expect(freshWalk.output).toContain('Walker ayse-onboarding-walker-1');
-    expect(freshWalk.output).toContain('Judge for ayse-onboarding-walker-2'); expect(freshWalk.output).toContain(`Walked revision ${source.sourceCommit}`);
+    expect(freshWalk.output).toContain('Judge for ayse-onboarding-walker-2'); expect(freshWalk.output).not.toContain('Walked revision');
     expect(freshWalk.output).toContain(`cd ${freshRoot} && deckent beuser report`);
     expect(JSON.parse(await readFile(freshConfigPath, 'utf8')).admission).toMatchObject({ poolId: 'beuser-controller', executionSlots: 2, inFlightSlots: 2 });
     const monitor = await inspectConfiguredBeuserMonitor(freshOptions);

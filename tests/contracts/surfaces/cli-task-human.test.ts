@@ -238,7 +238,7 @@ it('accept: the revision is read before the card; declining writes nothing; a st
 });
 
 function fakePort(log: string[], options: { queue?: { state?: string; outcome?: string; item?: 'settled' | 'refused' | 'unknown' }; targets?: string[];
-  verification?: { required: boolean; kind: string }; summary?: boolean; workingTree?: boolean } = {}) {
+  verification?: { required: boolean; kind: string }; verificationRuns?: { runId: string; taskId: string }[]; summary?: boolean; workingTree?: boolean } = {}) {
   const deliverView = { operation: 'deliver-integration', scopeId: 's', runId: LONG, taskId: 't', commandId: 'd', title: 'Add the file', resource: 'refs/deckent/delivery/x',
     from: 'base', to: 'cand', files: ['src/a.ts'], added: 1, removed: 0 };
   const preview = { target: { key: 'k', scopeId: 's', runId: LONG, taskId: 't', title: 'Add the file' }, identity: {}, files: [{ path: 'src/a.ts', added: 1, removed: 0 }], added: 1, removed: 0,
@@ -255,7 +255,7 @@ function fakePort(log: string[], options: { queue?: { state?: string; outcome?: 
       if (!await answer({ ...deliverView, operation: 'adopt-integration', resource: targetRef })) throw refuse();
       log.push(`adopted:${targetRef}`); return { targetRef, fromCommit: 'a'.repeat(40), toCommit: 'b'.repeat(40), commandId, verifiedBy: null };
     },
-    async verificationRuns() { log.push('verification-runs'); return []; },
+    async verificationRuns() { log.push('verification-runs'); return options.verificationRuns ?? []; },
     ...(options.queue ? { queue: {
       async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: options.queue?.state ?? 'awaiting-confirmation', target: { kind: 'git-ref', id: 'refs/heads/main' },
         display: { labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.next.prepare-current' }, basis: null,
@@ -293,6 +293,14 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
     'Delivered commit c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff at refs/deckent/delivery/x. Source HEAD, index and working files are unchanged.',
     'Adoption needs an accepted review Run on this commit; none exists yet. Delivered, not adopted (--delivery-command-id cli-delivery).',
   ]);
+  const unselected = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', null, null],
+    { ...required, verificationRuns: [{ runId: 'review-run', taskId: 'review-task' }] });
+  expect(unselected.cards[4]).toMatchObject({ title: 'Which accepted review Run verifies this commit?',
+    options: [{ id: 'run:review-run', label: 'Run review-run · task review-task' }] });
+  expect(unselected.log).toEqual(['preview', 'delivered', 'verification-runs']);
+  expect(unselected.printed).toEqual([missing.printed[0],
+    'Delivered, not adopted. Adopt later in /deliver (it lists delivered results), or: deckent task integration-adopt --scope <scope> --run <run> --target refs/heads/<branch>']);
+  expect.soft(unselected.status).toBe(1);
   const laterSuccess = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', 'deliver', 'deliver', 'yes', 'no', 'exit'], required);
   expect.soft(laterSuccess.status).toBe(1);
   expect(laterSuccess.log).toEqual(['preview', 'delivered', 'verification-runs', 'preview', 'delivered']);

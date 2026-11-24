@@ -93,7 +93,7 @@ export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTa
       return 1;
     }
     const picked = await ask({ title: t('cli.task.menu.adopt.verifyTitle', { kind: preview.verification.kind }, locale), body: [], options });
-    if (!picked) { print(t('cli.task.menu.adopt.left', { command: delivered.commandId }, locale)); return; }
+    if (!picked) { print(t('cli.task.menu.adopt.left', { command: delivered.commandId }, locale)); return 1; }
     if (picked.startsWith('run:')) verificationRunId = picked.slice(4);
   }
   const adopted = await port.adopt(preview, delivered, targetRef.slice(4), `cli-adopt-${randomUUID()}`, answer, verificationRunId);
