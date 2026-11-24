@@ -13,7 +13,7 @@ function run(state: RunView['state'], title: string, id: string, phase = 'active
 describe('active work note', () => {
   it('is empty without active work, and lists the /do, deliveries and Runs in the strip order with their state', () => {
     expect(activeWorkModelNote({ active: null, runs: [], nowMs: 0 })).toBe('');
-    const note = activeWorkModelNote({ nowMs: 200_000, active: { title: 'sipariş akışını düzelt', phase: 'planning', sinceMs: 140_000 },
+    const note = activeWorkModelNote({ nowMs: 200_000, active: { commandId: 'order-request', title: 'sipariş akışını düzelt', phase: 'planning', sinceMs: 140_000 },
       deliveries: [{ key: 'd', title: 'patch ready', sinceMs: 100_000 }],
       runs: [{ run: run({ kind: 'running' } as RunView['state'], 'ERP export', 'run-1'), sinceMs: 0 },
         { run: run({ kind: 'parked', reason: 'needs-input', since: 0, deadline: 1 } as RunView['state'], 'ask me', 'run-2'), sinceMs: 0 },
@@ -33,7 +33,7 @@ describe('active work note', () => {
   });
 
   it('never shows in a resumed conversation; what the person typed (and attachments) is kept apart from it', () => {
-    const note = activeWorkModelNote({ active: { title: 'plan', phase: 'waiting', sinceMs: 0 }, runs: [], nowMs: 1000 });
+    const note = activeWorkModelNote({ active: { commandId: 'plan-request', title: 'plan', phase: 'waiting', sinceMs: 0 }, runs: [], nowMs: 1000 });
     expect(withoutActiveWorkNote(`hangi moddayız${note}`)).toBe('hangi moddayız');
     const rows = resumedHistoryEntries([{ role: 'system', content: 's' }, { role: 'user', content: `hangi moddayız${note}` }]);
     expect(JSON.stringify(rows)).not.toContain('deckent session note');

@@ -37,6 +37,9 @@ function run(state: RunView['state'], phase: string, outlook?: string, id = 'r',
 }
 const RUNNING = { kind: 'running' } as const, COMPLETED = { kind: 'terminal', outcome: 'completed', reason: 'completed' } as const;
 const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 'awaiting-delivery', id, title);
+const collidingDeliveries = () => [awaiting('r:part', 'FIRST-COLLISION'), awaiting('r', 'SECOND-COLLISION')].map((view, index) => ({
+  ...view, tasks: [{ ...view.tasks[0]!, id: index === 0 ? 'task' : 'part:task' }],
+}));
 
 type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
@@ -127,9 +130,12 @@ const windowTitle = 'Delivery · ORDER-TASK';
 
 describe('delivery window — pure rules', () => {
   it('lists only accepted, work-input tasks of finished Runs whose patch awaits delivery', () => {
+    const colliding = awaitingDeliveryTargets(collidingDeliveries(), 'FALLBACK');
+    expect.soft(colliding.map(({ runId, taskId }) => [runId, taskId])).toEqual([['r:part', 'task'], ['r', 'part:task']]);
+    expect(new Set(colliding.map(target => target.key)).size).toBe(2);
     expect(awaitingDeliveryTargets([awaiting('a'), run(RUNNING, 'accepted', 'awaiting-delivery', 'b'), run(COMPLETED, 'accepted', 'none', 'c'), run(COMPLETED, 'failed', 'awaiting-delivery', 'd'),
       { ...awaiting('e'), tasks: [{ ...awaiting('e').tasks[0]!, taskBrief: { ...awaiting('e').tasks[0]!.taskBrief!, task: null } }] } as RunView], 'FALLBACK').map(target => target.runId)).toEqual(['a']);
-    expect(awaitingDeliveryTargets([awaiting('a', 'First line\nsecond')], 'FALLBACK')[0]).toMatchObject({ key: 's:a:task', title: 'First line' });
+    expect(awaitingDeliveryTargets([awaiting('a', 'First line\nsecond')], 'FALLBACK')[0]).toMatchObject({ key: 'delivery:["s","a","task"]', title: 'First line' });
     // F2-5: the Brain's title wins over the instruction (the summary after delivery names the title, never the whole request).
     const titled = awaiting('a', 'Append the sixth line to notlar.txt with this exact wording');
     expect(awaitingDeliveryTargets([{ ...titled, tasks: [{ ...titled.tasks[0]!, taskBrief: { ...titled.tasks[0]!.taskBrief!, title: 'Add a line' } }] } as RunView], 'FALLBACK')[0]!.title).toBe('Add a line');
@@ -326,6 +332,25 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain('WINDOW-FOCUS'); // a person-opened window takes focus
     await press(h, ESC, 100);
     expect(frame(h)).not.toContain(windowTitle); expect(h.calls.filter(call => call !== 'preview:r')).toEqual([]);
+  });
+
+  it('keeps both colon-containing deliveries in the pending strip and opens the selected one', async () => {
+    const [first, second] = collidingDeliveries(), scopeRuns = [first!];
+    const h = harness({ scopeRuns }); await settle(80);
+    await press(h, '/deliver\r');
+    await until(() => frame(h).includes('Delivery · FIRST-COLLISION') && frame(h).includes(WORDS.hints), 'first delivery opens');
+    await press(h, ESC);
+    scopeRuns[0] = second!;
+    await press(h, '/deliver\r');
+    expect.soft(frame(h)).toContain('Delivery · SECOND-COLLISION');
+    await press(h, ESC);
+    expect.soft(frame(h)).toContain(`FIRST-COLLISION · ${EN.activeWork!.deliveryWaiting}`);
+    expect.soft(frame(h)).toContain(`SECOND-COLLISION · ${EN.activeWork!.deliveryWaiting}`);
+    await press(h, CTRL_T); await press(h, DOWN);
+    expect.soft(frame(h)).toMatch(/[>›] SECOND-COLLISION/u);
+    await press(h, '\r');
+    await until(() => frame(h).includes('Delivery · SECOND-COLLISION') && frame(h).includes(WORDS.hints), 'Enter reopens the chosen second delivery');
+    expect(h.calls).toEqual(['preview:r:part', 'preview:r', 'preview:r']);
   });
 
   it('BeUser M-33: x sets the result aside (patch kept, restore named); /deliver lists it as set aside and Enter brings it back to its window', async () => {

@@ -13,6 +13,12 @@ import PORT from './deliver-port.json' with { type: 'json' };
 /** `request`: the task's request as the Run recorded it (L1c: `r` on a working-tree conflict prepares `/do <request>`). */
 /** `candidateCommandId`: the existing integration receipt reopens its retained candidate; no new persisted field. */
 export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; candidateCommandId?: string; setAside?: string; request?: string }>;
+
+/** The pending-delivery map, picker and strip share this key. Each identity component can contain colons. */
+export function deliveryTargetKey({ scopeId, runId, taskId }: Pick<DeliveryTarget, 'scopeId' | 'runId' | 'taskId'>): string {
+  return `delivery:${JSON.stringify([scopeId, runId, taskId])}`;
+}
+
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -100,7 +106,8 @@ export function deliveredTargets(runs: readonly RunView[], fallbackTitle: string
   for (const run of runs) if (run.state.kind === 'terminal') for (const task of run.tasks) {
     const delivery = task.resultBrief?.runDelivery;
     if (task.phase !== 'accepted' || delivery?.state !== 'delivered' || !delivery.commit || !delivery.commandId) continue;
-    out.push(Object.freeze({ key: `${run.scopeId}:${run.runId}:${task.id}`, scopeId: run.scopeId, runId: run.runId, taskId: task.id,
+    const identity = { scopeId: run.scopeId, runId: run.runId, taskId: task.id };
+    out.push(Object.freeze({ key: deliveryTargetKey(identity), ...identity,
       title: taskTitle(task, fallbackTitle),
       delivered: Object.freeze({ ref: delivery.targetRef ?? delivery.commit, commit: delivery.commit, commandId: delivery.commandId }) }));
   }
@@ -118,9 +125,10 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
       const instruction = task.taskBrief?.task;
       const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
       if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
-      const key = `${run.scopeId}:${run.runId}:${task.id}`, title = taskTitle(task, fallbackTitle);
+      const identity = { scopeId: run.scopeId, runId: run.runId, taskId: task.id };
+      const key = deliveryTargetKey(identity), title = taskTitle(task, fallbackTitle);
       const delivery = task.resultBrief?.runDelivery, candidate = delivery?.state === 'integrated' ? delivery.commandId : delivery?.receipts?.filter(value => value.state === 'integrated').at(-1)?.commandId;
-      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, request: instruction, ...(candidate ? { candidateCommandId: candidate } : {}), ...(aside ? { setAside: title } : {}) }));
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, ...identity, title, request: instruction, ...(candidate ? { candidateCommandId: candidate } : {}), ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);

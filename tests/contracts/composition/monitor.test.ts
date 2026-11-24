@@ -90,9 +90,11 @@ describe('inspectMonitor composition', () => {
   it('lists never-dispatched Runs of every admitted scope across installs, read-only, without a running service', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s', 's2', 'hidden'], ['s', 's2']), other = await project(root, 'other', ['s'], ['s']);
-    const gone = join(root, 'gone');
+    const gone = join(root, 'gone'), legacy = join(root, 'legacy');
+    await mkdir(legacy, { mode: 0o700 });
+    await writeFile(join(legacy, 'task-t.hb'), '{}');
     current.config.inspection.workers.sources = [{ id: 'dogfood', kind: 'next-project', path: other.dir, scopeId: 's' },
-      { id: 'legacy', kind: 'legacy-tasks', path: join(root, 'legacy'), scopeId: 's' }, { id: 'gone', kind: 'next-project', path: gone, scopeId: 's' }];
+      { id: 'legacy', kind: 'legacy-tasks', path: legacy, scopeId: 's' }, { id: 'gone', kind: 'next-project', path: gone, scopeId: 's' }];
     await writeFile(current.configPath, JSON.stringify(current.config)); clearConfigCache();
     const before = [await files(current.ledger), await files(other.ledger)];
     const snapshot = await inspectMonitor(current.dir, current.options);
@@ -100,6 +102,14 @@ describe('inspectMonitor composition', () => {
     await expect(stat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
     const [mine, dogfood, missing] = snapshot.installs;
+    if (process.platform === 'linux') {
+      const report = await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's', source: 'legacy' }, current.options);
+      expect(report.sources[0]?.workers).toMatchObject([{ taskId: 't', identity: null, authority: 'legacy-activity' }]);
+    }
+    for (const [install, runId] of [[mine, 'current-s'], [dogfood, 'other-s']] as const)
+      expect(install!.workers).toMatchObject([{ taskId: 't', authority: 'next-ledger', identity: {
+        scopeId: 's', runId, taskId: 't', attemptId: runId + '-t', generation: 1, layoutRevision: 'layout',
+      } }]);
     expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: process.platform === 'linux' ? 'stopped' : 'unknown', build: null } });
     expect(mine!.diagnostics).toContain('scopes-denied:1'); expect(JSON.stringify(mine)).not.toMatch(/hidden(?!Pools)/);
     if (process.platform !== 'linux') expect(mine!.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_UNSUPPORTED');

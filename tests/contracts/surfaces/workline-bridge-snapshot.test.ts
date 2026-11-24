@@ -27,17 +27,20 @@ describe('workline bridge snapshot', () => {
       { schemaVersion: 1 as const, kind: 'chat' as const, id: `c-${index}`, role: 'user' as const, text: `secret prompt ${index}` },
       { schemaVersion: 1 as const, kind: 'notice' as const, id: `n-${index}`, level: 'info' as const, text: `notice ${index}` },
     ]).flat();
+    const worker = { schemaVersion: 1 as const, kind: 'worker' as const, id: 'worker', scopeId: 'pilot', taskId: 't1', process: 'unknown',
+      provider: 'unknown', authority: 'legacy-activity', sourceId: 'terminal-only-source' };
     const snapshot = buildWorklineBridgeSnapshot({
       profile,
       plan,
       tty: { columns: 120, rows: 40 },
-      ledgerTail: entries,
+      ledgerTail: [...entries, worker],
       maxTail: 3,
       observedAtMs: 1000,
     });
     expect(snapshot.profileId).toBe('host-qwen');
-    expect(snapshot.ledgerTail.map(entry => entry.id)).toEqual(['n-2', 'n-3', 'n-4']);
+    expect(snapshot.ledgerTail.map(entry => entry.id)).toEqual(['n-3', 'n-4', 'worker']);
     expect(JSON.stringify(snapshot)).not.toContain('secret prompt');
+    expect(snapshot.ledgerTail.at(-1)).not.toHaveProperty('sourceId');
     expect(snapshot.observedAtMs).toBe(1000);
   });
 

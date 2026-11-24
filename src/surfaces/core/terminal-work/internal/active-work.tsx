@@ -24,8 +24,9 @@ export interface ActiveWorkLabels {
   readonly deliveryWaiting?: string; readonly quotaWait?: string;
 }
 /** The one `/do` this session is running (one line at a time). `expiresAtMs`: its run-create approval's expiry; `untilText`: a quota wait's end. */
-export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting' | 'quota-wait'; sinceMs: number; expiresAtMs?: number | undefined; untilText?: string | undefined }>;
-type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
+export type ActiveDo = Readonly<{ commandId: string; title: string; phase: 'planning' | 'waiting' | 'quota-wait'; sinceMs: number;
+  approvalId?: string; expiresAtMs?: number | undefined; untilText?: string | undefined }>;
+type ActiveWorkTarget = Readonly<{ kind: 'do'; windowId: string }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
 /** A delivery waiting for the person in this session (TESLIM-PENCERESI); `sinceMs`: when this session first saw it. */
 export type ActiveDelivery = Readonly<{ key: string; title: string; sinceMs: number }>;
 /** `detail`: a Run's short id and its model (or task kind), between the title and the state (owner 2026-10-17). */
@@ -57,15 +58,16 @@ export function activeWorkItems(input: { readonly active: ActiveDo | null; reado
   const selectionGone = t('terminal.activeWork.selectionGone', {}, jobs.locale);
   const items: ActiveWorkItem[] = [];
   if (active) {
+    const key = `do:${active.commandId}`;
     const left = active.expiresAtMs === undefined ? null : active.expiresAtMs - nowMs;
     const state = active.phase === 'planning' ? labels.planning : active.phase === 'quota-wait' ? fillTemplate(labels.quotaWait ?? labels.planning, { time: active.untilText ?? jobs.unknown })
       : left !== null && left <= 0 ? labels.expired : fillTemplate(labels.waiting, { remaining: left === null ? jobs.unknown : formatDuration(left, input.duration) });
-    items.push({ key: 'do', title: fillTemplate(labels.doTitle, { title: active.title }), state, role: active.phase === 'planning' ? 'accent' : 'warning',
-      elapsed: elapsed(active.sinceMs), target: { kind: 'do' }, selectionGone });
+    items.push({ key, title: fillTemplate(labels.doTitle, { title: active.title }), state, role: active.phase === 'planning' ? 'accent' : 'warning',
+      elapsed: elapsed(active.sinceMs), target: { kind: 'do', windowId: key }, selectionGone });
   }
   // A waiting delivery needs the person: it is listed right after the running /do, before the Runs.
   for (const delivery of labels.deliveryWaiting ? input.deliveries ?? [] : [])
-    items.push({ key: `delivery:${delivery.key}`, title: delivery.title, state: labels.deliveryWaiting!, role: 'warning', elapsed: elapsed(delivery.sinceMs), target: { kind: 'delivery', key: delivery.key }, selectionGone });
+    items.push({ key: delivery.key, title: delivery.title, state: labels.deliveryWaiting!, role: 'warning', elapsed: elapsed(delivery.sinceMs), target: { kind: 'delivery', key: delivery.key }, selectionGone });
   const sorted = [...input.runs].sort((a, b) => runRank(a.run) - runRank(b.run) || b.sinceMs - a.sinceMs);
   const runs = [...sorted.filter(row => row.run.state.kind !== 'terminal'), ...sorted.filter(row => row.run.state.kind === 'terminal').slice(0, FINISHED_SHOWN)];
   for (const { run, sinceMs } of runs) {
@@ -123,8 +125,12 @@ export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen,
     else if (key.return) {
       const item = items[index];
       if (!item) return;
+      if (item.target.kind === 'do') {
+        if (owner.top === item.target.windowId && owner.focusTop()) onFocus(false);
+        return;
+      }
       onFocus(false);
-      if (item.target.kind === 'do') owner.focusTop(); else onOpen(item);
+      onOpen(item);
     }
   }, { isActive: focused && composing && items.length > 0 });
   useInput((input, key) => { if (key.ctrl && !key.meta && input === 't') { if (selection === null) select(items[0]!); onFocus(true); } }, { isActive: !focused && composing && items.length > 0 });

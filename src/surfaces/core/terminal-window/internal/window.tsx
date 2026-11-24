@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize, type DOMElement, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, wrapCells, wrapSpans, type Span, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
@@ -9,6 +9,9 @@ import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 import { CardCopyContext, CardCopyOptionsContext, cardCopyText, cardRowRange, cardSelectionText, hyperlinkEnds, isCardCopyKey, type CardSelection } from './card-copy.js';
 import { PointerContext } from './fullscreen-workline.js';
 import { highlightCells } from './selection.js';
+
+/** A host may identify a specific Window so a person can focus it from its matching work row. */
+export const WindowLayerIdContext = createContext<string | undefined>(undefined);
 
 /** One logical body row: an optional field label kept in its own column (values wrap under the value column, never under the label; an
  * empty label continues the previous field in its value column).
@@ -147,7 +150,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   onFocusChange, onPaste, inputRevision, burstText = false, copyOptions = [] }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
-  const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
+  const instanceId = useId(), id = useContext(WindowLayerIdContext) ?? instanceId;
+  const focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
   // Card copy (card-copy.ts): Ctrl+Y sends the drawn, redacted title, body and option labels; it never reaches the owner, decides or touches the arming.
   const optionLabels = useRef(new Map<string, readonly string[]>());

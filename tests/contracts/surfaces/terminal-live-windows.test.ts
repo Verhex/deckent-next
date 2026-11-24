@@ -11,7 +11,7 @@ import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, l
 import { main } from '../../../src/surfaces/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindowStatus, LIVE_WINDOW_MAX_ROWS, type LiveWindowRenderLabels } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal/index.js';
+import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
 import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
 import { Window, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { plainText, resolveRenderGlyphs, RenderGlyphsContext, span } from '#surfaces/core/terminal-render-ink/index.js';
@@ -131,15 +131,17 @@ describe('live windows in the workline', () => {
 
   it('/tasks leaves Enter and x without a target when the selected worker disappears', async () => {
     const attempts = ['a', 'b', 'c'].map(id => ({ scopeId: 'scope-a', runId: `run-${id}`, taskId: `task-${id}`, attemptId: `attempt-${id}` }));
-    let visible = attempts, legacy = false;
+    let visible = attempts, legacy = false, legacySources = ['legacy-a'];
     const inspectTranscript = vi.fn(async () => 'NEIGHBOUR-TRANSCRIPT'), cancelRun = vi.fn(async () => 'CANCELLED');
-    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a',
-      listWorkers: async () => ({ scopeId: 'scope-a', sources: [{ workers: visible.map(identity =>
-        ({ taskId: identity.taskId, process: 'running', provider: 'docker', authority: legacy ? 'legacy-activity' : 'next-ledger', identity: legacy ? null : identity })) }] }) as never,
+    const ledger: WorklineLedgerPorts = { scopeId: 'scope-a',
+      listWorkers: async () => ({ scopeId: 'scope-a', sources: (legacy ? legacySources : ['current']).map(id => ({ id, workers: visible.map(identity =>
+        ({ taskId: identity.taskId, process: id === 'legacy-b' ? 'present-unverified' : 'running',
+          provider: legacy ? 'unknown' : 'docker', authority: legacy ? 'legacy-activity' : 'next-ledger', identity: legacy ? null : identity })) })) }) as never,
       listRunIds: async () => attempts.map(item => item.runId), inspectRun: async runId =>
         ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ id: 'task-c', phase: 'active' }], state: { kind: 'running' } }) as never,
       inspectTranscript, cancelRun,
-    } }); mounted.push(view.instance);
+    };
+    const view = mountWorkline({ pollMs: 20, ledger }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r');
     await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial live list');
     view.stdin.write('\r');
@@ -179,14 +181,65 @@ describe('live windows in the workline', () => {
     view.stdin.write(ESC);
     await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'return to the live list again');
     legacy = true; visible = [attempts[2]!];
-    await until(() => view.stdout.frame.includes('1 workers · 3 runs'), 'legacy worker without a Run identity');
-    view.stdin.write('\u001b[B');
-    await until(() => />[^\n]*Task 1/u.test(view.stdout.frame), 'legacy worker explicitly selected');
-    view.stdin.write('x');
-    await settle(100);
-    expect(view.stdout.frame).toContain(EN.live!.tasksHints!);
-    expect(view.stdout.frame).not.toContain('C-PROMPT');
-    expect(cancelRun).not.toHaveBeenCalled();
+    legacySources = ['legacy-a', 'legacy-b'];
+    const legacyView = mountWorkline({ pollMs: 20, ledger }); mounted.push(legacyView.instance);
+    await settle(20); legacyView.stdin.write('/tasks\r');
+    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs') && />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'first of two legacy observations selected');
+    legacyView.stdin.write('\u001b[B'); await settle(80);
+    expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 2 · unknown · present-unverified/u);
+    legacySources = ['legacy-b', 'legacy-a'];
+    await until(() => /Task 1 · unknown · present-unverified/u.test(legacyView.stdout.frame), 'legacy sources reordered');
+    expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 1 · unknown · present-unverified/u);
+    legacySources = ['legacy-a'];
+    await until(() => legacyView.stdout.frame.includes('1 workers · 3 runs'), 'selected legacy source disappears');
+    expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
+    inspectTranscript.mockClear();
+    legacyView.stdin.write('x'); await settle(80);
+    expect.soft(legacyView.stdout.text).not.toContain("Cancellation can't start from this worker row.");
+    expect.soft(legacyView.stdout.frame).not.toContain('C-PROMPT');
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    expect.soft(cancelRun).not.toHaveBeenCalled();
+    legacyView.stdin.write('\r'); await settle(80);
+    expect.soft(legacyView.stdout.frame).not.toContain(EN.jobs!.transcriptTitle);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    if (legacyView.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
+      legacyView.stdin.write(ESC);
+      await until(() => legacyView.stdout.frame.includes(EN.live!.tasksHints!), 'return from unexpected unavailable window');
+    }
+    legacySources = ['legacy-a', 'legacy-b'];
+    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs'), 'both observation sources are back');
+    expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
+    legacyView.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'legacy worker explicitly selected');
+    const tr = mountWorkline({ pollMs: 20, ledger, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live } } });
+    mounted.push(tr.instance);
+    await settle(20); tr.stdin.write('/tasks\r');
+    await until(() => />[^\n]*Task 1/u.test(tr.stdout.frame), 'Turkish session shows the worker');
+    for (const [screen, work, feedback] of [
+      [legacyView, EN, "Cancellation can't start from this worker row. Select the Run's row."],
+      [tr, TR, 'Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.'],
+    ] as const) {
+      screen.stdin.write('\r');
+      await until(() => screen.stdout.frame.includes(WORKLINE_TEST_LABELS.work!.unavailable) && screen.stdout.frame.includes(work.jobs!.transcriptTitle), 'transcript unavailable for a worker without an Attempt');
+      expect(inspectTranscript).not.toHaveBeenCalled();
+      screen.stdin.write(ESC);
+      await until(() => screen.stdout.frame.includes(work.live!.tasksHints!), 'return from unavailable transcript');
+      screen.stdin.write('x');
+      await settle(100);
+      expect.soft(screen.stdout.text).toContain(feedback);
+      expect(screen.stdout.frame).toContain(work.live!.tasksHints!);
+      expect(screen.stdout.frame).not.toContain('C-PROMPT');
+      expect(cancelRun).not.toHaveBeenCalled();
+      screen.stdin.write('\u001b[B');
+      await until(() => />[^\n]*Task 2 · unknown/u.test(screen.stdout.frame), 'second legacy source selected explicitly');
+      screen.stdin.write('\u001b[B');
+      await until(() => />[^\n]*run-a/u.test(screen.stdout.frame), 'Run row selected explicitly');
+      screen.stdin.write('x');
+      await until(() => screen.stdout.frame.includes('C-PROMPT'), 'Run cancellation approval still opens');
+      expect(cancelRun).not.toHaveBeenCalled();
+      screen.stdin.write('n');
+      await until(() => screen.stdout.text.includes('C-KEPT run-a'), 'Run kept after denial');
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import { resolveLocale, t } from '#platform/index.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import type { TaskWindowAction } from './live-windows.js';
@@ -7,12 +8,12 @@ import { workerApprovalWaitLines, queueRowSummaries, runDetailLines, runTitle } 
 
 /** Selected identities travel out of band through the local controller; no typed slash argument can select or cancel a task. */
 export async function openTaskAction(action: TaskWindowAction, panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts,
-  work: WorkSurfaceLabels, cancel: (runId: string) => Promise<void>): Promise<void> {
+  work: WorkSurfaceLabels, cancel: (runId: string) => Promise<void>): Promise<string | void> {
   if (execution.signal.aborted) return;
   if (action.target.scopeId !== ledger.scopeId) return;
   const target = action.target;
   const runId = target.kind === 'run' ? target.runId : target.attempt?.runId;
-  if (action.action === 'cancel' && runId === undefined) return;
+  if (action.action === 'cancel' && runId === undefined) return t('terminal.live.workerCancelUnavailable', {}, resolveLocale(work.jobs?.locale ?? work.workerLine.numberLocale));
   const runs = await loadRunViewsForWatch(ledger);
   const run = runs.find(run => run.scopeId === target.scopeId && run.runId === runId);
   if (action.action === 'run') {
