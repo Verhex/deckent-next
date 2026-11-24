@@ -22,4 +22,5 @@ export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnviron
 export { nativeWorkerEnvironmentProbes, nativeWorkerTemplateEnvironment, nativeWorkerToolBounds, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, type NativeWorkerProbeRunner } from './internal/worker-environment.js';
 export { workerToolPreviewComplete, mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type WorkerToolCard } from './internal/worker-card.js';
 export { nativeBuiltinPlugins } from './internal/plugins.js';
-export { classifyClaudeRateLimit, nativeQuotaRejection, nativeQuotaText, nativePaidUsageText, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './internal/quota.js';
+export { classifyClaudeRateLimit, nativeQuotaRejection, nativeQuotaText, nativePaidUsageText, nativeModelRefusal, nativeClaudeResultRefusal,
+  type ClaudeQuotaPolicy, type ClaudeRateLimit } from './internal/quota.js';

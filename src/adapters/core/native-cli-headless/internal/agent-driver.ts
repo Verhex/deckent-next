@@ -103,6 +103,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             if (finished?.kind === 'refused') {
               const limit = finished.limit;
               if (limit) return rejectResult(reject(limit.kind === 'unknown' ? 'invalid-response' : 'http-status', nativeQuotaRejection(limit)));
+              if (finished.rejection) return rejectResult(reject(finished.rejection.refusal === 'model-mismatch' ? 'model-mismatch' : 'invalid-response', finished.rejection));
               // Owner 2026-11-05: a refused turn stops only itself; no negative observation pauses later turns.
               refusal = finished.reason;
               const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;

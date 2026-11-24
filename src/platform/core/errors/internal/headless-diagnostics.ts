@@ -36,6 +36,7 @@ const loginBusy = 'HEADLESS_LOGIN_BUSY';
 const loginRequired = 'HEADLESS_LOGIN_REQUIRED';
 const limit = 'HEADLESS_LIMIT_REACHED';
 const ownerMismatch = 'HEADLESS_OWNER_MISMATCH';
+const workerResult = 'HEADLESS_WORKER_RESULT';
 
 const npmReasons = {
   missing: 'error.headless.npmReason.missing',
@@ -137,6 +138,16 @@ const minimum = { ...version, example: '2.0.0' } as const;
 const bound = { example: 16, accepts: (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 } as const;
 
 export const headlessDiagnosticCases = Object.freeze([
+  diagnostic(workerResult, { reason: 'exit' }, (p, l) => t('agent.turn.failure.processExit', { code: p['exitCode']! }, l), { exitCode: bound }),
+  ...classified(workerResult, 'reason', {}, {
+    signal: 'agent.turn.failure.processSignal',
+    quota: 'error.headless.workerQuota',
+    'quota-status-unrecognized': 'headless.chat.quotaStatusUnrecognized',
+    'invalid-output': 'error.TERMINAL_CHAT_REJECTED.invalidOutput',
+    'model-mismatch': 'error.TERMINAL_CHAT_REJECTED.modelMismatch',
+    'provider-error': 'error.TERMINAL_CHAT_REJECTED.providerError',
+    guard: 'error.TERMINAL_CHAT_REJECTED.guard',
+  }),
   diagnostic(unavailable, { check: 'path-search-empty' }, (p, l) => t('error.headless.pathSearchEmpty', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-unverified' }, (p, l) => t('error.headless.pathSearchUnverified', p, l), { bound }),
   diagnostic(unavailable, { check: 'path-search-execute-unverified' }, (p, l) => t('error.headless.pathSearchExecuteUnverified', p, l), { bound }),
@@ -259,6 +270,7 @@ export const headlessDiagnosticCases = Object.freeze([
     stopped: 'error.headless.loginStatus.stopped',
   }),
   ...classified(preflight, 'reason', { check: 'config-dir' }, {
+    'legacy-unverified': 'error.headless.configLegacyUnverified',
     'relative-path': 'error.headless.config.relative-path',
     unresolved: 'error.headless.config.unresolved',
     missing: 'error.headless.config.missing',
@@ -285,6 +297,7 @@ export const headlessDiagnosticCases = Object.freeze([
     'legacy-unverified': 'error.headless.flagsLegacyUnverified',
   }),
   ...classified(preflight, 'reason', { check: 'spawn' }, {
+    'legacy-unverified': 'error.headless.spawnLegacyUnverified',
     timeout: 'error.headless.probe.timeout',
     'start-failed': 'error.headless.probe.start-failed',
     'output-limit': 'error.headless.probe.output-limit',

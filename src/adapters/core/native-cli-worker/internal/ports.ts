@@ -12,7 +12,7 @@ import type { NativeCliWorkerBinding } from './profile.js';
   | 'NATIVE_AGENT_LOGIN_REQUIRED' | 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' | 'NATIVE_AGENT_PLUGIN_UNEXPECTED' | 'NATIVE_AGENT_BRIDGE_UNAVAILABLE';
 export type NativeCliWorkerReadiness = Readonly<{ state: 'ready'; execution: NativeAgentExecution; verification?: true } | { state: 'waiting'; reason: NativeCliWorkerWaitReason }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliWorkerProcessResult = Readonly<{ termination: 'confirmed' | 'unverified'; status: 'completed' | 'failed' | 'cancelled'; text: string;
-  refusal?: import('#capabilities/index.js').NativeAgentReadinessReason; failureCode?: string; cleanupError?: DeckentError }>;
+  refusal?: import('#capabilities/index.js').NativeAgentReadinessReason; stopped?: true; failureCode?: string; cleanupError?: DeckentError }>;
 /** Admitted tool-realm resources; never passed to the login-bearing CLI realm. */
 export type NativeCliWorkerToolContext = Readonly<Pick<DockerSupervisorOptions, 'readOnlyMounts' | 'inputs' | 'handoffInputs'>>;
 export interface NativeCliWorkerDriver {

@@ -325,9 +325,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         const refusalReason = nativeRefusal();
         if (freshModelInvocationCancelled(result) || result.receipt.outcome?.state === 'not-sent')
           return { status: 'failed', state: 'cancelled', ...(refusalReason && { diagnosis: refusalReason }) };
+        if (refusalReason) return { status: 'failed', state: refusalReason };
         const fresh = freshModelInvocationDiagnostic(result);
         if (fresh?.localize) return { status: 'failed', state: 'unknown', diagnosis: fresh.localize(language).message };
-        if (refusalReason) return { status: 'failed', state: refusalReason };
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {

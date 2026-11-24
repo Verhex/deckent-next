@@ -166,9 +166,10 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8')
       .then(raw => JSON.parse(raw) as unknown, () => null)
       .catch(() => refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'preflight-record-unreadable' }));
-    const identified = isIdentifiedOpenPreflight(prior) ? prior : null;
+    const identified = isIdentifiedOpenPreflight(prior) && isSealedPreflightRecord(prior) ? prior : null;
     const priorVersion = verifiedCliVersion(identified?.['version']);
-    const updatedFrom = priorVersion === null ? null : priorVersion !== version ? priorVersion : verifiedCliVersion(identified?.['updatedFrom']);
+    const updatedFrom = priorVersion !== null && compareToolchainVersions(priorVersion, version) !== 0
+      ? priorVersion : null;
     await record({ state: 'open', executable: program.packageRoot ? entry.command.executable : executable, revision, version, updatedFrom, size: program.size, mtimeMs: program.mtimeMs, isolation: isolated,
       auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: auth.subscriptionType } });
     passed.set(key, sealed); return sealed;
@@ -181,6 +182,18 @@ export function isIdentifiedOpenPreflight(record: unknown): record is Record<str
     && typeof record['executable'] === 'string' && record['executable'].trim().length > 0
     && typeof record['size'] === 'number' && Number.isSafeInteger(record['size']) && record['size'] >= 0
     && typeof record['mtimeMs'] === 'number' && Number.isFinite(record['mtimeMs']);
+}
+
+function isSealedPreflightRecord(record: Record<string, unknown>): boolean {
+  return (record['schemaVersion'] === 1 || record['schemaVersion'] === 2)
+    && typeof record['revision'] === 'string' && /^.+:[a-f0-9]{64}$/u.test(record['revision']);
+}
+
+// Version 1 could inherit updatedFrom without evidence for that version.
+export function readPreflightVersionUpdate(record: unknown): { from: string; to: string } | null {
+  if (!isIdentifiedOpenPreflight(record) || record['schemaVersion'] !== 2 || !isSealedPreflightRecord(record)) return null;
+  const from = verifiedCliVersion(record['updatedFrom']), to = verifiedCliVersion(record['version']);
+  return from !== null && to !== null && compareToolchainVersions(from, to) !== 0 ? { from, to } : null;
 }
 
 // The record's existing revision field binds registry semantics to this installation's identity.

@@ -5,7 +5,7 @@ import { inspectTask, phaseWord } from './task-inspect.js';
 import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, readHeadlessDiagnosticIdentifier, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -47,7 +47,8 @@ const safeDiff = (body: string, marker: string) => body.split('\n').flatMap(line
 }).join('\n');
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
-  execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
+  execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean;
+    waiting?: Readonly<{ reason: string }> }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 async function latestAttempt(context: TaskCommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
@@ -344,11 +345,14 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if (action === 'execute') {
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.executeTask(context.root ?? process.cwd(), identity, options);
+    const reason = result.execution.status === 'unresolved' && result.execution.waiting
+      ? readHeadlessDiagnosticIdentifier(result.execution.waiting.reason, locale) : undefined;
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.task.execute.heading', data.execution.identity, locale),
       data.execution.status === 'terminal'
         ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? t('cli.value.none', {}, locale), signal: data.execution.terminal?.signal ?? t('cli.value.none', {}, locale) }, locale)
         : ({ prevented: t('cli.task.execute.prevented', {}, locale), unresolved: t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
+      ...(reason ? [reason] : []),
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }

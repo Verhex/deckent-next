@@ -6,7 +6,7 @@ import { headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { searchExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
-import { headlessExecutableRevision, isIdentifiedOpenPreflight, headlessPreflight, verifiedCliVersion } from './preflight.js';
+import { headlessExecutableRevision, isIdentifiedOpenPreflight, headlessPreflight, readPreflightVersionUpdate, verifiedCliVersion } from './preflight.js';
 import { headlessExecutableRefusal, headlessSelectionRefusal, executableLookupReason, resolveHeadlessExecutable } from './executable.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
@@ -86,7 +86,7 @@ async function readEgress(stateDir: string) {
   return parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
     ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
 }
-type PreflightRecord = { state?: unknown; refusal?: unknown; check?: unknown; version?: unknown; updatedFrom?: unknown; executable?: unknown; revision?: unknown; size?: unknown; mtimeMs?: unknown;
+type PreflightRecord = { state?: unknown; refusal?: unknown; check?: unknown; version?: unknown; executable?: unknown; revision?: unknown; size?: unknown; mtimeMs?: unknown;
   auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } };
 async function readPreflight(definition: NativeCliHeadlessDefinition) {
   const raw = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(text => ({ text }), (error: NodeJS.ErrnoException) => ({ missing: error.code === 'ENOENT' }));
@@ -135,6 +135,7 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
     const mismatch = prior?.state !== 'open' ? null : !identified ? preflightRecordDiagnostic()
       : family ? await currentPreflightRefusal(prior, family, definition) : headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
     const record = mismatch ? null : prior;
+    const update = readPreflightVersionUpdate(record);
     const closed = record?.state === 'closed' ? readHeadlessDiagnosticRecord(record.refusal, record.check) : null;
     const diagnostic = observed.diagnostic ?? mismatch ?? closed;
     const egress = await readEgress(definition.stateDir).then(value => value === undefined ? { egress: null, egressUnreadable: true } : { egress: value },
@@ -147,7 +148,7 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
       ...(ownedRoot !== null && { owned: dirname(definition.configDir) === ownedRoot }),
       consent: definition.delegatedUse?.classes ?? [], isolation,
       // S7: the CLI behind the connected path changed version since an earlier passing check (`doctor.headless.updated`).
-      cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { cli: basename(definition.executable), from: text(record.updatedFrom)!, to: text(record.version)! } : null,
+      cliUpdated: update ? { cli: basename(definition.executable), ...update } : null,
       ...egress, ...(diagnostic && { diagnostic }) });
   }));
 }

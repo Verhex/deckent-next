@@ -106,10 +106,16 @@ export function readRetainedSubscriptionFailure(result: ModelInvocationResult, c
       return body.exitCode === null && body.signal !== null
         ? ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { observedSignal: 'true' } }) : null;
     case 'guard':
+      return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: {
+        refusal: body.field === 'agent-surface:rate-limit-status' ? 'quota-status-unrecognized' : 'guard',
+      } }) : null;
+    case 'model-mismatch':
+      return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: {
+        refusal: body.subtype === 'model-reported' ? 'model-mismatch' : 'invalid-output',
+      } }) : null;
     case 'response-limit':
     case 'login-required':
     case 'invalid-output':
-    case 'model-mismatch':
     case 'provider-error': return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal: body.refusal } }) : null;
   }
 }
