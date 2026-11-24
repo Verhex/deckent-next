@@ -88,9 +88,12 @@ export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTa
     const runs = await port.verificationRuns(preview);
     const options = [...runs.map(run => ({ id: `run:${run.runId}`, label: t('cli.task.menu.adopt.verifyRow', { run: run.runId, task: run.taskId }, locale) })),
       ...(preview.verification.required ? [] : [{ id: 'none', label: t('cli.task.menu.adopt.withoutVerification', {}, locale) }])];
-    const picked = options.length ? await ask({ title: t('cli.task.menu.adopt.verifyTitle', { kind: preview.verification.kind }, locale), body: [], options }) : null;
-    if (!picked) { print(options.length ? t('cli.task.menu.adopt.left', { command: delivered.commandId }, locale)
-      : t('cli.task.menu.adopt.noVerification', { command: delivered.commandId, kind: preview.verification.kind }, locale)); return; }
+    if (!options.length) {
+      print(t('cli.task.menu.adopt.noVerification', { command: delivered.commandId, kind: preview.verification.kind }, locale));
+      return 1;
+    }
+    const picked = await ask({ title: t('cli.task.menu.adopt.verifyTitle', { kind: preview.verification.kind }, locale), body: [], options });
+    if (!picked) { print(t('cli.task.menu.adopt.left', { command: delivered.commandId }, locale)); return; }
     if (picked.startsWith('run:')) verificationRunId = picked.slice(4);
   }
   const adopted = await port.adopt(preview, delivered, targetRef.slice(4), `cli-adopt-${randomUUID()}`, answer, verificationRunId);

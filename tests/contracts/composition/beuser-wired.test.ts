@@ -15,7 +15,7 @@ import * as platform from '#platform/index.js';
 import { walkConfiguredBeuser, readConfiguredBeuserReport, admitConfiguredBeuserWalk, setupConfiguredBeuser } from '#composition/core/beuser/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { recordedExecutionSupervisor, validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
-import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
+import { beuserCommand, formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
 import { sha256, clearConfigCache, ErrorRegistry, inspectProductFile } from '#platform/index.js';
 import { BeuserContractError, BeuserTransferError } from '#engine/index.js';
 import { BeuserSurfaceError } from '#adapters/index.js';
@@ -128,7 +128,11 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
       return createRealm(input);
     });
     const surface = vi.spyOn(await adapters.loadBeuserTerminal(), 'createBeuserSurface'), runtime = vi.spyOn(adapters.DockerBeuserRealmRuntime.prototype, 'create');
-    const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+    const output: string[] = [];
+    const cli = { root: f.root, env: f.options.env, stdout: { write(value: string) { output.push(value); } },
+      walkBeuser: walkConfiguredBeuser, readBeuserReport: readConfiguredBeuserReport };
+    const exit = await beuserCommand(['beuser', 'walk', '--scope', 'scope', '--journey', 'journey', '--candidate', f.candidate, '--json'], cli);
+    const report = JSON.parse(output.join(''));
     expect(report).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'BEUSER_CANDIDATE_MISMATCH' },
       { branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }] });
     const { terminal, custody } = await f.records();
@@ -136,6 +140,7 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
     expect(terminal.binding).toEqual(custody.binding);
     expect(custody.lease).toMatchObject({ handle: null, observation: { state: 'quarantined', evidenceRefs: [] } });
     expect(surface).not.toHaveBeenCalled();
+    expect.soft(exit ?? 0).toBe(1);
     const config = await loadComposedConfig(f.root, { ...f.options, heal: false });
     const stored = { layout: config.productLayout, store: await adapters.openSqliteAttemptStore(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite,
       { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile }) };
@@ -166,6 +171,37 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
     await latest.write({ schemaVersion: 1, scopeId, runId: olderRun });
     await monitor.write({ ...(held.value as object), runId: 'started-without-a-report' });
     expect(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(olderReport);
+    const laterRun = 'started-without-a-report', laterName = sha256(JSON.stringify([scopeId, laterRun]));
+    const policyPath = join(config.productLayout.root, 'policy.json'), policy = await readFile(policyPath, 'utf8');
+    const deny = async (ids: string[]) => {
+      const document = JSON.parse(policy);
+      document.grants.push({ id: 'deny-report', effect: 'deny', principals: 'all', scopes: [scopeId], actions: ['inspect'],
+        resource: { kind: 'run', ids } });
+      await writeFile(policyPath, JSON.stringify(document));
+    };
+    output.length = 0;
+    await deny([laterRun]);
+    const privateRecord = vi.spyOn(adapters, 'beuserPrivateRecord');
+    try {
+      await expect.soft(beuserCommand(['beuser', 'report', '--scope', scopeId, '--json'], cli)).resolves.toBeUndefined();
+      expect.soft(output.join('').trim()).toBe(JSON.stringify(olderReport));
+      await expect(readConfiguredBeuserReport(f.root, scopeId, laterRun, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(privateRecord).not.toHaveBeenCalledWith(reports, laterName, expect.anything());
+      await deny([laterRun, olderRun]);
+      await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(privateRecord).not.toHaveBeenCalledWith(reports, laterName, expect.anything());
+    } finally {
+      privateRecord.mockRestore();
+      await writeFile(policyPath, policy);
+    }
+    const authorize = vi.spyOn(engine.RunPolicyAuthorization.prototype, 'authorize')
+      .mockRejectedValueOnce(new engine.PolicyAuthorizationError('POLICY_UNAVAILABLE'));
+    try {
+      await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+      expect(authorize).toHaveBeenCalledExactlyOnceWith('inspect', { scopeId, runId: laterRun }, expect.anything());
+    } finally { authorize.mockRestore(); }
+    await adapters.beuserPrivateRecord(reports, laterName, config.artifacts.maxBytes).write({ schemaVersion: 1, scopeId, runId: laterRun, report: null });
+    await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'INVENTORY_QUERY_INVALID' });
     await monitor.write(held.value);
     expect(await readConfiguredBeuserReport(f.root, scopeId, runId, f.options)).toEqual(report);
     expect.soft(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(report);
