@@ -18,10 +18,11 @@ async function installationMissing(context: CommandContext, root: string, env: N
  * The card writes nothing. Yes runs `deckent init` itself (the setup window owns the terminal only after the card unmounted and stdin paused), then
  * the terminal starts again on the configuration as it is now; No, Esc or a still missing scope give the human answer naming `deckent init`.
  */
-export async function offerSetup(refusal: unknown, context: CommandContext, locale: Locale, launch: (context: CommandContext) => Promise<void>): Promise<void> {
+export async function offerSetup(refusal: unknown, context: CommandContext, locale: Locale,
+  launch: (context: CommandContext) => Promise<import('#platform/index.js').ExitCode | void>) {
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, stdin = context.stdin ?? process.stdin;
   if (cliMode(context).reason !== 'tty' || !(await installationMissing(context, root, env))) throw refusal;
-  if (await offerAttachedSession(context, locale, launch)) return;
+  if (await offerAttachedSession(context, locale, async selected => { await launch(selected); })) return;
   const target = offerTarget(context.rootResolution?.found ?? false, context.rootResolution?.gitTop ?? null, root);
   const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale), t('setup.session.registerHint', {}, locale)],
     options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },
@@ -30,14 +31,15 @@ export async function offerSetup(refusal: unknown, context: CommandContext, loca
   { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
-  if (answer !== 'yes' && answer !== 'here') throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');
+  if (answer !== 'yes' && answer !== 'here') return 'cancelled' as const;
   const chosen = answer === 'here' ? root : target;
   const selected = { ...context, root: chosen, rootResolution: { root: chosen, folder: relative(chosen, root).split(sep).join('/'), found: false, gitTop: null } };
-  await initCommand(['init'], selected);
+  const status = await initCommand(['init'], selected);
+  if (status !== undefined && status !== 0) return status;
   // The terminal reads the configuration again; the card is never offered twice in one call. Its input reads stdin as a fresh process has it:
   // flowing (an explicitly paused stream never starts again for a new 'data' reader), paused again when the terminal does not open.
   stdin.resume();
-  await launch(selected).catch(async (error: unknown) => {
+  return launch(selected).catch(async (error: unknown) => {
     stdin.pause();
     if (code(error) === 'TERMINAL_SCOPE_REQUIRED' && await installationMissing(selected, chosen, env)) throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');
     throw error;
