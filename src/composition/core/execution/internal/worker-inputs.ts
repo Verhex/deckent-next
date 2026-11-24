@@ -4,8 +4,8 @@ import { dirname, join, relative } from 'node:path';
 import { productResourcePath, readPrivateFile, privateDirectory, PrivateFileError, type ProductLayout } from '#platform/index.js';
 import { nativeWorkerInputViews, nativeWorkerInputSandboxes } from '#capabilities/index.js';
 import { taskInputBindingSchema } from '#engine/index.js';
-import { MAX_WALK_DEPTH, createWorkspaceReadTools, resolveDockerReadOnlyMounts, BASH_LAUNCH, runShellProcess, bubblewrapArguments,
-  resolveBubblewrapView, recheckRuntimeSocketMasks, BUBBLEWRAP_ARGUMENT_MAX_BYTES,
+import { MAX_WALK_DEPTH, createWorkspaceReadTools, resolveDockerReadOnlyMounts, BASH_LAUNCH, runShellProcess, bubblewrapArgumentPlan,
+  resolveBubblewrapView, recheckRuntimeSocketMasks, argumentCountRefusal, withinBubblewrapArgumentByteBound, BUBBLEWRAP_ARGUMENT_MAX_COUNT, SANDBOX_VIEW_TOO_LARGE,
   type ShellCapabilities, type NativeCliWorkerToolContext, type ShellSandboxLayout, type ShellSandbox, type WorkerTreeGateOptions } from '#adapters/index.js';
 
 export const prepareNativeWorkerInputs = (resources: NativeCliWorkerToolContext, scopeId: string, project: string, workspace: string,
@@ -42,9 +42,25 @@ export const prepareNativeWorkerInputs = (resources: NativeCliWorkerToolContext,
       readTools: createWorkspaceReadTools });
 };
 export const nativeWorkerViewSandboxes = (layout: ShellSandboxLayout, inputs: Awaited<ReturnType<typeof prepareNativeWorkerInputs>>, providers: readonly ShellSandbox[]) =>
-  nativeWorkerInputSandboxes<ShellCapabilities, Extract<ReturnType<ShellSandbox['usable']>, { ok: true }>>(inputs, providers, { launcher: capabilities => capabilities.bubblewrap.launcher?.path ?? null, maxArgumentBytes: BUBBLEWRAP_ARGUMENT_MAX_BYTES,
+  nativeWorkerInputSandboxes<ShellCapabilities, Extract<ReturnType<ShellSandbox['usable']>, { ok: true }>, ReturnType<typeof bubblewrapArgumentPlan>>(inputs, providers, {
+    launcher: capabilities => capabilities.bubblewrap.launcher?.path ?? null,
     async args(request) {
       const view = await resolveBubblewrapView(layout, request.environment ?? process.env, {}, { floorReadOnly: request.writeFloorReadOnly === true,
         projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}) });
-      return view.ok ? bubblewrapArguments(await recheckRuntimeSocketMasks(view.view)) : null;
-    }, run: (file, args, request) => runShellProcess({ file, args: command => [...args, '--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)] }, request) });
+      return view.ok ? bubblewrapArgumentPlan(await recheckRuntimeSocketMasks(view.view)) : null;
+    },
+    async run(file, base, inputBinds, request) {
+      const fail = (output: string) => ({ status: 'spawn-failed' as const, exitCode: null, signal: null,
+        output, totalBytes: 0, omittedBytes: 0, durationMs: 0, cleanup: 'clean' as const });
+      const remount = ['--remount-ro', '/'];
+      const prefix = [...base.prefix, ...inputBinds, ...remount];
+      const tail = ['--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(request.command)];
+      const args = [...prefix, ...tail];
+      if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) {
+        const counts = { ...base.counts, protective: base.counts.protective + inputBinds.length, remounts: base.counts.remounts + remount.length, tail: tail.length };
+        const reason = argumentCountRefusal(args.length, counts, request.environment ?? process.env);
+        return fail(`[deckent] sandbox: ${SANDBOX_VIEW_TOO_LARGE}: ${reason}; nothing was run.`);
+      }
+      if (!withinBubblewrapArgumentByteBound(prefix)) return fail('NATIVE_WORKER_INPUT_REFUSED');
+      return runShellProcess({ file, args: () => args }, request);
+    } });

@@ -3114,6 +3114,7 @@
     },
     "src/adapters/core/shell-sandbox-bwrap": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/platform/core/host",
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
@@ -5342,6 +5343,7 @@
     },
     "src/adapters/core/mcp-start-diagnosis": {
       "dependencies": [
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/platform/core/config",
         "src/adapters/core/mcp-trust",
         "src/domain/core/agent-tool",
@@ -6204,6 +6206,14 @@
           "HTTP/1.1 200 Connection Established"
         ],
         "reason": "HTTP CONNECT success response (RFC 9110 section 9.3.6: any 2xx turns the connection into a tunnel); a protocol constant of the worker and headless egress gateway, moved from gateway.ts with the shared tunnel (S3-5). Not an operator policy."
+      },
+      {
+        "file": "src/adapters/core/shell-sandbox-bwrap/internal/arguments.ts",
+        "symbol": "BUBBLEWRAP_ARGUMENT_MAX_COUNT",
+        "values": [
+          9000
+        ],
+        "reason": "Argument-count compatibility bound verified against the bubblewrap v0.13.0 parser pinned in packaging/bwrap/bwrap.lock.json."
       },
       {
         "file": "src/adapters/core/shell-sandbox-bwrap/internal/arguments.ts",

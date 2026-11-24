@@ -209,7 +209,7 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
       cpu, processes: `${caps.processes}:${caps.processes}`, data: `${caps.dataBytes}:${caps.dataBytes}`, ticks: USER_HZ,
       sampleMs: caps.sampleMs, permille: caps.attributionPermille, exits: caps.exits, statusExit: RELAY_STATUS, versionProbe });
     file = await pinHeadlessExecutable(entry, program);
-    const command = isolatedProcessCommand({ shell: realm.shell, launcher: seal.path, fileSizeBlocks: realm.limits.fileSizeBlocks, openFiles: realm.limits.openFiles,
+    const command = isolatedProcessCommand({ shell: realm.shell, launcher: seal.path, fileSizeBlocks: realm.limits.fileSizeBlocks, openFiles: realm.limits.openFiles, environment: spawn.env,
       view: { workDir: spawn.runDir, workFiles: [spawn.promptFile, spawn.mcpConfigFile].filter((file): file is string => file !== undefined), executables: [...new Set([node, limiter])],
         pinnedExecutable: { fd: PROGRAM_FD, target: spawn.executable, ...(packageRoot ? { hideDirectory: packageRoot } : {}) }, stateDir: spawn.configDir,
         stateMasks: masks, stateCopies: masks.copies, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },

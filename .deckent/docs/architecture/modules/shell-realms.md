@@ -59,6 +59,13 @@ the installation’s normal launcher directory. The development entry keeps its 
 created, written or re-moded, and a copy the service has not placed yet is reported as "not placed … yet". The shipped provider list is
 one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the service's default port, MCP `inspect` starts and doctor.
 
+Shell, native worker input shell and MCP stdio launches count the final bubblewrap arguments after `argv[0]`, including `--`, the program and its arguments.
+The native worker count includes all prepared input binds and the last read-only remount.
+The compatibility limit comes from the bubblewrap v0.13.0 parser pinned in [the packaging lock](../../../../packaging/bwrap/bwrap.lock.json).
+Over that limit, `SANDBOX_VIEW_TOO_LARGE` reports the count, the limit and the contributions of the view and command without
+disclosing paths. The shell or MCP server stays stopped. The separate 1 MiB view-prefix byte check still applies.
+Doctor's self-test uses a closed view without conversation scratch and measures launcher readiness.
+
 **Doctor realm report (REALM-NOTICE).** `doctor` (`--json` field `shellRealm`, schemaVersion 1, additive to doctor schemaVersion 2,
 `null` when unwired; human lines in the product's own sandbox words, no catalog text — the result marker with `[terminal.shell.realm
 <mode>]`, then the notice or the reasons) reports the realm a shell call in this project gets under the configured mode, every provider
@@ -167,3 +174,4 @@ with the general matcher is an oracle test. Measured on this repository (ext4/WS
 
 The headless subscription Brain's bubblewrap realm (`src/adapters/core/native-cli-headless/internal/realm.ts`) is a separate contract
 from the shell and MCP realms described here; see [core layers](core-layers.md#headless-subscription-brain-and-quota-s3-1s3-5-s9-f3-f4).
+It applies the same argument-count compatibility bound to the argv its outer POSIX shell forwards to bubblewrap.

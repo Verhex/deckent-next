@@ -1,6 +1,8 @@
 import { realpathSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
-import { BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS } from './arguments.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_ARGUMENT_MAX_COUNT, BUBBLEWRAP_SYSTEM_PATHS } from './arguments.js';
+import { argumentCountRefusal, SANDBOX_VIEW_TOO_LARGE } from './argument-refusal.js';
 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17).
  * S3-5: the closed view one non-shell process runs in (the headless subscription CLI). Every path is absolute and real; nothing outside it exists
@@ -49,6 +51,14 @@ function packageMountPaths(root: string): readonly string[] {
  * and the CLI must stay in the runner's process group so SIGINT reaches it first. Null when the arguments exceed the launcher's argv bound.
  */
 export function isolatedProcessArguments(view: IsolatedProcessView): string[] | null {
+  const args = isolatedViewPrefix(view);
+  return withinByteBound(args) ? args : null;
+}
+
+export const withinByteBound = (args: readonly string[]) =>
+  args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0) <= BUBBLEWRAP_ARGUMENT_MAX_BYTES;
+
+function isolatedViewPrefix(view: IsolatedProcessView): string[] {
   const size = String(view.tmpfsBytes);
   const args = ['--unshare-all', '--unshare-user', '--disable-userns', '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--size', size, '--tmpfs', '/tmp'];
   for (const path of BUBBLEWRAP_SYSTEM_PATHS) args.push('--ro-bind-try', path, path);
@@ -70,7 +80,7 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
   // The realm's own root (bubblewrap's tmpfs holding the mount points) read-only last: a write outside the private memories and the bound login
   // dir fails instead of landing in memory (`--remount-ro` changes only that mount point).
   args.push('--remount-ro', '/', '--chdir', view.workDir);
-  return args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0) > BUBBLEWRAP_ARGUMENT_MAX_BYTES ? null : args;
+  return args;
 }
 
 /**
@@ -79,11 +89,18 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
  * sets the process limits — no core dump (a crashed CLI's memory holds its login), bounded file size and descriptors — and execs `command`.
  */
 export function isolatedProcessCommand(input: Readonly<{ shell: string; launcher: string; view: IsolatedProcessView; fileSizeBlocks: number; openFiles: number;
-  command: readonly string[] }>): Readonly<{ executable: string; args: readonly string[] }> | null {
-  const view = isolatedProcessArguments(input.view);
+  command: readonly string[]; environment?: Readonly<Record<string, string | undefined>> }>): Readonly<{ executable: string; args: readonly string[] }> | null {
+  const view = isolatedViewPrefix(input.view);
   // `fileSizeBlocks` is in the shell's own unit: POSIX `ulimit -f` counts 512-byte blocks (dash; bash in POSIX mode).
-  if (!view || !Number.isSafeInteger(input.fileSizeBlocks) || input.fileSizeBlocks <= 0 || !Number.isSafeInteger(input.openFiles) || input.openFiles <= 0) return null;
+  if (!Number.isSafeInteger(input.fileSizeBlocks) || input.fileSizeBlocks <= 0 || !Number.isSafeInteger(input.openFiles) || input.openFiles <= 0) return null;
   // `unset PWD`: the shell's own variable never joins the command's built environment.
   const limits = `ulimit -c 0 && ulimit -f ${input.fileSizeBlocks} && ulimit -n ${input.openFiles} && unset PWD && exec "$0" "$@"`;
-  return Object.freeze({ executable: input.shell, args: Object.freeze(['-c', 'trap "" INT; exec "$0" "$@"', input.launcher, ...view, '--', input.shell, '-c', limits, ...input.command]) });
+  const tail = ['--', input.shell, '-c', limits, ...input.command], args = [...view, ...tail];
+  if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) {
+    const protective = input.view.stateDir ? 6 * input.view.stateMasks.directories.length + 3 * input.view.stateMasks.files.length : 0;
+    const message = argumentCountRefusal(args.length, { home: 0, protective, pins: 0, remounts: 2, tail: tail.length }, input.environment ?? process.env, true);
+    throw ErrorRegistry.createError(SANDBOX_VIEW_TOO_LARGE, { message, params: { check: message } });
+  }
+  if (!withinByteBound(view)) return null;
+  return Object.freeze({ executable: input.shell, args: Object.freeze(['-c', 'trap "" INT; exec "$0" "$@"', input.launcher, ...args]) });
 }

@@ -212,12 +212,12 @@ export interface ShellSandbox {
     | { readonly ok: false; readonly reason: string; readonly restricted?: boolean };
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
- * the view resolved now (always `longLivedWritePosture`); the caller appends `--`, the command and its arguments. `view` is the write view
+ * the view resolved now (always `longLivedWritePosture`); the caller supplies the exact tail it will append. `view` is the write view
  * that launch enforces and `posture` the mechanism's words for it (the cards read these, never a fixed text). Absent: the mechanism only
  * runs one command at a time. */
-export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile) =>
+export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile, tail?: readonly string[]) =>
   Promise<{ readonly ok: true; readonly file: string; readonly args: readonly string[]; readonly view: ShellSandboxWriteView; readonly posture: string }
-    | { readonly ok: false; readonly reason: string }>;
+    | { readonly ok: false; readonly reason: string; readonly code?: 'SANDBOX_VIEW_TOO_LARGE' }>;
 /** K4 (`sandbox-net`, the MCP default): the launch keeps the host network and binds `home` — a private, persistent directory of its own — as
  * HOME instead of an empty one; everything else of the view is unchanged (the project read-only, the user's HOME and Deckent's state hidden). */
 export interface ShellSandboxLaunchProfile { readonly network: boolean; readonly home: string }

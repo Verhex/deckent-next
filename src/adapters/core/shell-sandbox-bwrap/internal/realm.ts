@@ -8,8 +8,9 @@ import { DECKENT_DIR, pathWithin, privateIpcRoot, relativeInside, resolveLocale,
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
 export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
-import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, bubblewrapArgumentsOverBound, ancestorPins, type BubblewrapView } from './arguments.js';
+import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_ARGUMENT_MAX_COUNT, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArgumentPlan, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
+import { argumentCountRefusal, SANDBOX_VIEW_TOO_LARGE } from './argument-refusal.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
 export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.open
@@ -133,7 +134,10 @@ export async function recheckRuntimeSocketMasks(view: BubblewrapView): Promise<B
   const runtimeSocket = runtimeSocketPath();
   const gone = await Promise.all(view.maskedDirectories.map(path => runtimeSocket.exec(`${path}/`)?.[1] === path
     ? lstat(path).then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT') : false));
-  return gone.some(Boolean) ? Object.freeze({ ...view, maskedDirectories: view.maskedDirectories.filter((_, index) => !gone[index]) }) : view;
+  if (!gone.some(Boolean)) return view;
+  const homeMaskStart = view.homeMaskStart;
+  return Object.freeze({ ...view, maskedDirectories: view.maskedDirectories.filter((_, index) => !gone[index]),
+    ...(homeMaskStart ? { homeMaskStart: { ...homeMaskStart, directories: gone.slice(0, homeMaskStart.directories).filter(removed => !removed).length } } : {}) });
 }
 /** Runtime IPC is never a full-access grant: hide daemon/user-runtime directories and configured sockets. */
 async function maskHostSockets(environment: Readonly<Record<string, string | undefined>>, project: string,
@@ -378,8 +382,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     const socketMasks = await maskHostSockets(environment, root, maskedDirectories, maskedFiles);
     if (socketMasks) return { ok: false, reason: socketMasks };
   }
-  const home = environment['HOME'];
-  const scratchDir = layout.scratchDir;
+  const home = environment['HOME'], scratchDir = layout.scratchDir;
   const homeDir = home && isAbsolute(home) ? home : null;
   if (seal?.ok) {
     // Owner Y (2026-09-30): an existing subdirectory of a sealed root that is not Deckent's state (a tracked `.deckent/docs`) is the project's —
@@ -400,13 +403,14 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     const realHome = openView && homeDir ? await realpath(homeDir).catch(() => null) : null;
     if (openView && !realHome) return { ok: false, code: HOME_CREDENTIAL_REFUSAL,
       reason: t('shell.homeCredentialsRefused', { detail: 'HOME is missing or cannot be resolved', entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment)) };
+    const homeMaskStart = { directories: maskedDirectories.length, files: maskedFiles.length };
     const refusedHome = realHome && layout.hardFloor ? await maskHomeCredentials(realHome, layout.hardFloor.homeDenied,
-      [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles, BUBBLEWRAP_MASK_MAX, environment) : null;
+      [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles, homeMaskStart, BUBBLEWRAP_MASK_MAX, environment) : null;
     if (refusedHome) return { ok: false, code: HOME_CREDENTIAL_REFUSAL, reason: refusedHome };
     const over = overMasks(); if (over) return { ok: false, reason: over };
     if (openView) {
       const view: BubblewrapView = Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
-        readOnlyPaths: outermost(readOnly), ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
+        readOnlyPaths: outermost(readOnly), ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, homeMaskStart, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
       const refusedPins = await canPinAncestors(view);
       return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
     }
@@ -422,6 +426,17 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
 }
 
+function prepareLaunch(view: BubblewrapView, tail: readonly string[], maxBytes: number, environment: Readonly<Record<string, string | undefined>>) {
+  const { prefix, counts } = bubblewrapArgumentPlan(view);
+  const args = [...prefix, ...tail];
+  if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) return { ok: false, code: SANDBOX_VIEW_TOO_LARGE,
+    reason: `${SANDBOX_VIEW_TOO_LARGE}: ${argumentCountRefusal(args.length, { ...counts, tail: tail.length }, environment)}` } as const;
+  const bytes = prefix.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0);
+  if (bytes > maxBytes) return { ok: false as const, reason: `${SANDBOX_VIEW_TOO_LARGE}: ${t('shell.sandboxArgumentBytesExceeded',
+    { bytes, bound: maxBytes }, resolveLocale(undefined, environment))}` };
+  return { ok: true as const, args, prefix };
+}
+
 /**
  * The bubblewrap realm (S9): the same process runner as the host shell (process group, cancellation, timeout, bounded output,
  * cleanup) launching `bwrap … -- bash --noprofile --norc -c <command>`. Usable only when the host measurement selected a launcher whose
@@ -430,18 +445,20 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
 export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: BubblewrapOptions = {}): ShellSandbox {
   const run = (bwrap: string, writeSets: boolean): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
     const started = performance.now();
+    const environment = request.environment ?? process.env;
     const view = request.writeSet && !writeSets ? { ok: false as const, reason: `bwrap at ${bwrap} has no overlay (bubblewrap ${BUBBLEWRAP_OVERLAY_VERSION} or later is needed)` }
-      : await resolveBubblewrapView(layout, request.environment ?? process.env, options,
+      : await resolveBubblewrapView(layout, environment, options,
         { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}),
           ...(request.open ? { open: true } : {}) });
     if (!view.ok) {
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${'code' in view && view.code ? `${view.code}: ` : ''}${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     }
-    const prefix = bubblewrapArguments(await recheckRuntimeSocketMasks(view.view)), tooLarge = bubblewrapArgumentsOverBound(prefix, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
-    if (tooLarge) return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${tooLarge}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
+    const tail = ['--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(request.command)];
+    const launch = prepareLaunch(await recheckRuntimeSocketMasks(view.view), tail, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES, environment);
+    if (!launch.ok) return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${launch.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
       durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
-    return runShellProcess({ file: bwrap, args: command => [...prefix, '--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)] }, request);
+    return runShellProcess({ file: bwrap, args: () => launch.args }, request);
   } });
   return Object.freeze({ kind: 'bubblewrap',
     usable(capabilities: ShellCapabilities): ReturnType<ShellSandbox['usable']> {
@@ -458,7 +475,7 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
       // third-party code no card approves call by call: its view is the unattended posture with the whole project read-only (C5, owner
       // 2026-09-29, until SHELL-OVERLAY; `longLivedWritePosture`), the write floor's matcher still required (fail closed).
-      const launch = async (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile) => {
+      const launch = async (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile, tail: readonly string[] = []) => {
         const write = sandboxWriteView(layout, longLivedWritePosture());
         const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: write.writeFloorReadOnly, projectReadOnly: write.projectReadOnly });
         if (!view.ok) return { ok: false as const, reason: view.reason };
@@ -466,9 +483,9 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         if (profile && !view.view.home) return { ok: false as const, reason: 'no HOME to give the server its own' };
         const current = await recheckRuntimeSocketMasks(view.view); // right before the caller spawns the server
         const shaped = profile ? { ...current, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : current;
-        const args = bubblewrapArguments(shaped), tooLarge = bubblewrapArgumentsOverBound(args, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
-        if (tooLarge) return { ok: false as const, reason: tooLarge };
-        return { ok: true as const, file: binary.path, args, view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
+        const prepared = prepareLaunch(shaped, tail, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES, environment);
+        if (!prepared.ok) return prepared;
+        return { ok: true as const, file: binary.path, args: prepared.prefix, view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
       };
       // SHELL-OVERLAY × BWRAP-SELECT: write sets are offered exactly when the selected launcher's measured version has the overlay options
       // (`launcher.overlay`, ≥ 0.11.0: the bundled 0.13 always, a system ≥ 0.12 too); otherwise a write-set request is refused (nothing runs).

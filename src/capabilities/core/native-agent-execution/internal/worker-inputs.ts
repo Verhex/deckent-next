@@ -18,7 +18,7 @@ interface NativeWorkerInputIO {
   readCopy(path: string, maxBytes: number): Promise<Buffer>; directorySeal(path: string): Promise<string>; checkCopyCustody(): Promise<void>;
   readTools(root: string, options: { limits: { maxFileBytes?: number; maxResultBytes: number } }): Promise<{ execute(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> }>;
 }
-const ENTRY_COUNT_INCREMENT = 1, SINGLE_FILE_LINK = 1, READ_SENTINEL_BYTES = 1, C_STRING_TERMINATOR_BYTES = 1;
+const ENTRY_COUNT_INCREMENT = 1, SINGLE_FILE_LINK = 1, READ_SENTINEL_BYTES = 1;
 type View = Readonly<{ source: string; target: string; file: boolean; digest?: string; byteLength?: number }>;
 const inside = (root: string, path: string) => { const rel = relative(root, path); return rel === '' || rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel); };
 const overlap = (a: string, b: string) => inside(a, b) || inside(b, a);
@@ -99,11 +99,11 @@ export async function nativeWorkerInputViews(resources: NativeWorkerResources, s
 }
 
 /** A provider keeps its own admission facts; Core owns only the added input view's closed lifecycle. */
-export function nativeWorkerInputSandboxes<C, R extends { ok: true; realm: ShellRealm; writeSets?: boolean }>(
+export function nativeWorkerInputSandboxes<C, R extends { ok: true; realm: ShellRealm; writeSets?: boolean }, Base>(
   inputs: { views: readonly View[]; validate(): Promise<void> },
   providers: readonly { kind: Exclude<ShellRealm['kind'], 'host'>; usable(capabilities: C): R | { ok: false; reason: string; restricted?: boolean } }[],
-  ports: { launcher(capabilities: C): string | null; args(request: ShellRealmRequest): Promise<readonly string[] | null>;
-    maxArgumentBytes: number; run(file: string, args: readonly string[], request: ShellRealmRequest): Promise<ShellRealmResult> }) {
+  ports: { launcher(capabilities: C): string | null; args(request: ShellRealmRequest): Promise<Base | null>;
+    run(file: string, base: Base, inputBinds: readonly string[], request: ShellRealmRequest): Promise<ShellRealmResult> }) {
   if (!inputs.views.length) return providers;
   return providers.filter(provider => provider.kind === 'bubblewrap').map(provider => ({ ...provider, usable(capabilities: C) {
     const ready = provider.usable(capabilities), launcher = ports.launcher(capabilities);
@@ -113,9 +113,7 @@ export function nativeWorkerInputSandboxes<C, R extends { ok: true; realm: Shell
       const base = await ports.args(request), fail = (): ShellRealmResult => ({ status: 'spawn-failed', exitCode: null, signal: null,
         output: 'NATIVE_WORKER_INPUT_REFUSED', totalBytes: 0, omittedBytes: 0, durationMs: 0, cleanup: 'clean' });
       if (!base || request.open || request.writeSet && !ready.writeSets) return fail();
-      const args = [...base, ...inputs.views.flatMap(view => ['--ro-bind', view.source, view.target]), '--remount-ro', '/'];
-      if (args.reduce((sum, arg) => sum + Buffer.byteLength(arg) + C_STRING_TERMINATOR_BYTES, 0) > ports.maxArgumentBytes) return fail();
-      return ports.run(launcher, args, request);
+      return ports.run(launcher, base, inputs.views.flatMap(view => ['--ro-bind', view.source, view.target]), request);
     } };
     return { ...ready, opens: false, realm };
   } }));

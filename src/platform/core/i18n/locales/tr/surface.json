@@ -3,7 +3,7 @@
   "agent.shell.productStateProtected": "Hiçbir onay deckent durumunu açamaz. HOME, DECKENT_GLOBAL_HOME veya DECKENT_HOME üzerinden bu durumu adlandıran yollar da korunur. Hiçbir komut çalıştırılmadı.",
   "agent.edit.previewCounts": "(+{added} −{removed} satır)",
   "agent.shell.fullAccessUnavailable": "Tam erişim için açık yalıtım alanı gerekir; hiçbir komut çalıştırılmadı.",
-  "agent.shell.sandboxNotStarted": "Yalıtım alanı bu komutu başlatamadı: {reason}. Hiçbir şey çalışmadı, host kabuğuna geçilmedi; `deckent doctor` aynı yalıtım öz-testini çalıştırır.",
+  "agent.shell.sandboxNotStarted": "Yalıtım alanı bu komutu başlatamadı: {reason}. Hiçbir şey çalışmadı, host kabuğuna geçilmedi.",
   "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "Konuşmanın zorunlu bir olayı tek çerçeve kapasitesini aşıyor. Aktarım durdu; geçmişin bir bölümü eksik olabilir. Yeniden denemeden önce araç etkilerini kontrol edin. /clear ile yeni konuşma açıp daha küçük parçalar kullanın.",
   "agent.context.AGENT_CONTEXT_CARRY_TOO_LARGE": "Korunan bağlam ve özet, istek bayt sınırını aşıyor. Başka veri gönderilmedi; konuşma geçmişi değiştirilmedi. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
   "agent.context.AGENT_CONTEXT_REQUEST_TOO_LARGE": "Konuşma, istek bayt sınırını aşıyor. Modele yeni istek gönderilmedi; geçmiş kısaltılmadı. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",

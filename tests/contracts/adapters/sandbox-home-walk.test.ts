@@ -109,6 +109,20 @@ describe.skipIf(process.platform !== 'linux')('bounded HOME credential protectio
     expect(await f.resolve()).toMatchObject({ ok: false, code: 'SHELL_HOME_CREDENTIALS_UNDETERMINED', reason: expect.stringContaining('mask bound') });
   });
 
+  it.skipIf(measured.bubblewrap.status !== 'available')('names the HOME masks that exhaust the argument count without exposing their paths', async () => {
+    const f = await fixture();
+    for (let i = 0; i < 3_050; i++) writeFileSync(join(f.home, `fixture-${i}.pem`), SECRET);
+    const provider = bubblewrapShellSandbox(f.layout).usable(measured);
+    if (!provider.ok) throw new Error(provider.reason);
+    const request = { command: 'printf unexpected', cwd: f.project, open: true };
+    const en = await provider.realm.run({ ...request, environment: f.environment });
+    expect(en).toMatchObject({ status: 'spawn-failed', exitCode: null, output: expect.stringMatching(/SANDBOX_VIEW_TOO_LARGE: .*at most 9000.*HOME masks 9150.*command tail 6/u) });
+    expect(en.output).not.toContain(f.home);
+    expect(en.output).not.toContain('fixture-');
+    const tr = await provider.realm.run({ ...request, environment: { ...f.environment, LANG: 'tr_TR.UTF-8' } });
+    expect(tr).toMatchObject({ status: 'spawn-failed', exitCode: null, output: expect.stringMatching(/SANDBOX_VIEW_TOO_LARGE: Başlatıcı için .*HOME maskeleri 9150.*komut eki 6.*yeniden deneyin/u) });
+  });
+
   it.skipIf(measured.bubblewrap.status !== 'available')('executes the open sandbox with large HOME while credential bytes and writes remain blocked', async () => {
     const f = await fixture(); largeWorktrees(f.home); const key = await f.secret('.npmrc');
     const provider = bubblewrapShellSandbox(f.layout).usable(measured); if (!provider.ok || !provider.realm) throw new Error('BWRAP_UNAVAILABLE');
