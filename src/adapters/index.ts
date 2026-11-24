@@ -114,7 +114,7 @@ export * from '#adapters/core/siwc-worker/index.js';
 export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 
 export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, workerImageEstimate, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-export { detectCodingFacts, workingTreeChanges, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
+export { detectCodingFacts, hasInstalledSubscriptionWorkerCli, workingTreeChanges, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
 export * from '#adapters/core/hub-client-store/index.js';
 export * from '#adapters/core/hub-package-file/index.js';

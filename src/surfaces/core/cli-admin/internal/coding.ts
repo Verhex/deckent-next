@@ -163,7 +163,13 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   let provider = values.get('--provider') ?? (connected && cliOf(context)(connected) || undefined);
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
-    if (!providers.length) throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale });
+    if (!providers.length) {
+      const subscription = await context.hasInstalledSubscriptionWorkerCli?.(env, context.signal);
+      const message = subscription === undefined ? t('clisetup.coding.toolchainMissing.unknown', {}, locale)
+        : subscription ? t('clisetup.coding.toolchainMissing.subscription', {}, locale)
+        : t('clisetup.coding.toolchainMissing.docker', {}, locale);
+      throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale, message });
+    }
     provider = await ask(t('clisetup.coding.ask.provider', {}, locale), providers.map(id => ({ id, label: id })));
     if (!provider) return cancelled();
   }

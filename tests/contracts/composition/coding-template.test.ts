@@ -253,6 +253,39 @@ it.skipIf(process.platform === 'win32')('returns failure without applying when t
   } finally { ask.mockRestore(); }
 });
 
+it.skipIf(process.platform === 'win32')('refuses a selected image with conflicting approved CLI versions before offering Apply', async () => {
+  const f = await setup(), otherImage = `sha256:${'b'.repeat(64)}`;
+  await f.mutate(config => {
+    const nativeSubscription = pin.parameters['nativeSubscription'] as { preflight: object };
+    config.admission.registry.profiles.push(
+      { ...pin, id: 'different-cli-version', parameters: { ...pin.parameters,
+        nativeSubscription: { ...nativeSubscription, preflight: { ...nativeSubscription.preflight, cliVersion: 'codex-cli 0.160.0' } } } },
+      { ...pin, id: 'other-image', parameters: { ...pin.parameters, imageId: otherImage } },
+    );
+    for (const id of ['different-cli-version', 'other-image']) config.admission.registry.kinds.push({ kind: id, profile: { id, version: 1 } });
+  });
+  const before = await readFile(f.path, 'utf8'), audits = f.auditCount();
+  const configureCodingTemplate = vi.fn(configureNativeCodingTemplate);
+  const cliHuman = await import('#surfaces/core/cli-human/index.js');
+  const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue(imageId);
+  let stderr = '';
+  try {
+    const code = await main(['coding', 'template', '--kind', 'feature', '--lang', 'en'], {
+      root: f.root, env: { ...f.options.env, NO_COLOR: '1' }, configureCodingTemplate, stdin: { isTTY: true, setRawMode() {} },
+      stdout: { isTTY: true, write() {} }, stderr: { write(value) { stderr += value; } },
+    });
+    expect(ask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: expect.stringContaining('image'),
+      options: [expect.objectContaining({ id: imageId }), expect.objectContaining({ id: otherImage })] }), expect.anything());
+    expect(configureCodingTemplate).toHaveBeenCalledExactlyOnceWith(f.root,
+      { provider: 'codex', kind: 'feature', image: imageId, apply: false }, expect.anything());
+    expect(code).toBe(78);
+    expect(stderr).toContain('[CODING_TEMPLATE_TOOLCHAIN_REQUIRED]');
+    expect(stderr).toContain('No single approved CLI version and instruction setting matches this provider and image.');
+    expect(await readFile(f.path, 'utf8')).toBe(before);
+    expect(f.auditCount()).toBe(audits);
+  } finally { ask.mockRestore(); }
+});
+
 // C1 (owner 2026-10-23 Q2): own describe so the main block stays within the function size limit.
 describe.skipIf(process.platform === 'win32')('coding template discovery selection', () => {
   it('keeps the admitted discovery mode by default and takes an explicit --discovery as a new template content id (C1)', async () => {

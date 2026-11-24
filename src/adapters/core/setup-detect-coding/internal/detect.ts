@@ -2,7 +2,7 @@ import { lstat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { nativeCliIds } from '#domain/index.js';
-import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
+import { nativeCliAgent, nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { isSelfSourceProject } from '#adapters/core/agent-workspace-floor/index.js';
 import { findExecutable, runDetectCommand, type DetectEnvironment, type DetectRunner } from '#adapters/core/setup-detect-execution/index.js';
 import type { CodingFacts } from './family.js';
@@ -19,6 +19,17 @@ const HOST_CODING_PORTS: CodingDetectPorts = Object.freeze({ run: runDetectComma
   selfSource: (root: string) => isSelfSourceProject(root).catch(() => false),
   owned: (path: string) => lstat(path).then(info => info.isDirectory() && !info.isSymbolicLink() && info.uid === process.getuid?.() && (info.mode & 0o022) === 0, () => false),
   executable: (id: string) => { try { return nativeCliCommand(id as (typeof nativeCliIds)[number]).executable; } catch { return null; } } });
+/** Coding-template guidance uses executable presence only, without running the CLI or checking sign-in. */
+export async function hasInstalledSubscriptionWorkerCli(env: DetectEnvironment, signal?: AbortSignal): Promise<boolean> {
+  for (const id of nativeCliIds) {
+    const command = nativeCliCommand(id), headless = command.headless;
+    if (!headless || !nativeCliAgent(headless.protocolFamily ?? command.capabilities.eventStream)) continue;
+    const timeout = AbortSignal.timeout(headless.connect.pathSearchTimeoutMs);
+    if (await findExecutable(command.executable, env, headless.connect.pathSearchDirectories,
+      signal ? AbortSignal.any([signal, timeout]) : timeout)) return true;
+  }
+  return false;
+}
 /** BeUser M-32 / Astra R1-K5: uncommitted paths (tracked + untracked) with a stat signature each; read-only, owned folder only; repository filters, fsmonitor, external diff and submodules never run. */
 export async function workingTreeChanges(root: string, env: DetectEnvironment, overrides: Partial<CodingDetectPorts> = {}, known?: string | null, signal = AbortSignal.timeout(registry.limits.totalTimeoutMs)): Promise<Readonly<{ state: 'present' | 'none' | 'unknown'; files: ReadonlyMap<string, string> }>> {
   const ports = { ...HOST_CODING_PORTS, ...overrides }, { git, limits } = registry, unknown = { state: 'unknown' as const, files: new Map<string, string>() }, gitPath = known ?? await ports.find(git.executable, env, limits.pathDirectories, signal);

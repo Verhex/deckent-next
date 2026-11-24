@@ -11,7 +11,7 @@ import { configCommand, terminalConfigWrite, type ConfigPanelOpener } from '#sur
 import { setupInitCommand } from '#surfaces/core/setup/index.js';
 import { personMarkersUnset } from '../support/person-env.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { compileNativeCodingDockerProfile } from '#adapters/index.js';
+import { compileNativeCodingDockerProfile, hasInstalledSubscriptionWorkerCli } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
 
 // C-SETUP (review §coding, §operation, §inference): bare commands read; missing choices are named; errors name the right field and exit code.
@@ -121,6 +121,47 @@ describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
       expect(result.stderr).not.toMatch(/: -\./u);
     }
     expect(template).not.toHaveBeenCalled();
+  });
+  it('explains the missing prerequisite before the first picker, using the installed worker CLI route when available', async () => {
+    const f = await project({}), before = await readFile(f.path, 'utf8');
+    const bin = join(f.projectRoot, 'bin');
+    await mkdir(bin);
+    const configureCodingTemplate = vi.fn();
+    const cliHuman = await import('#surfaces/core/cli-human/index.js');
+    const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue(null);
+    try {
+      for (const [subscription, messages] of [
+        [false, {
+          en: 'No coding toolchain is approved yet, so configure an approved toolchain profile for your Docker worker image.',
+          tr: 'Henüz onaylı bir kodlama araç zinciri olmadığı için Docker işçi imajınız için onaylı bir araç zinciri profili yapılandırın.',
+        }],
+        [true, {
+          en: 'No coding toolchain is approved yet, so open /setup in the terminal and set up the subscription CLI in the worker step.',
+          tr: 'Henüz onaylı bir kodlama araç zinciri olmadığı için terminalde /setup açın ve işçi adımında abonelik CLI’sini yapılandırın.',
+        }],
+        [undefined, {
+          en: 'No coding toolchain is approved yet. Open /setup in the terminal and review the worker setup options.',
+          tr: 'Henüz onaylı bir kodlama araç zinciri yok. Terminalde /setup açın ve işçi kurulum seçeneklerini gözden geçirin.',
+        }],
+      ] as const) {
+        if (subscription) await writeFile(join(bin, 'codex'), '', { mode: 0o700 });
+        for (const lang of ['en', 'tr'] as const) {
+          const stdout = { isTTY: true, write: vi.fn() };
+          const result = await run(f, ['coding', 'template', '--lang', lang], {
+            env: { ...f.env, PATH: bin, NO_COLOR: '1' }, configureCodingTemplate,
+            ...(subscription === undefined ? {} : { hasInstalledSubscriptionWorkerCli }),
+            stdin: { isTTY: true, setRawMode() {} }, stdout,
+          });
+          expect.soft(result.code).toBe(78);
+          expect.soft(result.stderr).toContain(messages[lang]);
+          expect.soft(result.stderr).toContain('[CODING_TEMPLATE_TOOLCHAIN_REQUIRED]');
+          expect(stdout.write).not.toHaveBeenCalled();
+        }
+      }
+      expect(ask).not.toHaveBeenCalled();
+      expect(configureCodingTemplate).not.toHaveBeenCalled();
+      expect(await readFile(f.path, 'utf8')).toBe(before);
+    } finally { ask.mockRestore(); }
   });
   it('root cause: TOOLCHAIN_REQUIRED on a configured image with no admitted CLI names the admitted images and the command that works', async () => {
     const f = await project(codingConfig());

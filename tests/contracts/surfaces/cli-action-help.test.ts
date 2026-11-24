@@ -41,17 +41,21 @@ it('uses the environment locale for scoped Turkish help', async () => {
 it.each([
   ['en', 'This command has no option to work directly in the current folder.',
     'It refuses a new request when there is neither a configured worker nor a worker setup record.',
-    'While worker setup is in progress, it can save the request as a waiting intent.'],
+    'While worker setup is in progress, it can save the request as a waiting intent.',
+    'Start `deckent` and use `/do` to work in the current folder when chat and policy allow it.'],
   ['tr', 'Bu komutta geçerli klasörde doğrudan çalışma seçeneği yoktur.',
     'Yapılandırılmış işçi ve işçi kurulum kaydı yoksa yeni isteği reddeder.',
-    'İşçi kurulumu sürüyorsa isteği bekleyen niyet olarak kaydedebilir.'],
-] as const)('explains when do refuses or saves a request during worker setup (%s)', async (language, directWork, refusal, waiting) => {
+    'İşçi kurulumu sürüyorsa isteği bekleyen niyet olarak kaydedebilir.',
+    'Sohbet ve politika izin verdiğinde geçerli klasörde çalışmak için `deckent` komutunu başlatıp `/do` kullanın.'],
+] as const)('explains worker requirements and the terminal route for do (%s)', async (language, directWork, refusal, waiting, terminalRoute) => {
   const f = context();
   expect(await main(['do', '--help', '--lang', language], f.context)).toBe(0);
-  const output = outputs.join('').replace(/\s+/g, ' ');
+  const rendered = outputs.join(''), output = rendered.replace(/\s+/g, ' ');
   expect.soft(output).toContain(directWork);
   expect.soft(output).toContain(refusal);
   expect.soft(output).toContain(waiting);
+  expect.soft(output).toContain(terminalRoute);
+  expect(rendered.split('\n').every(line => [...line].length <= 80)).toBe(true);
   expect(f.initialized()).toBe(0);
 });
 
