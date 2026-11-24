@@ -168,8 +168,9 @@ describe('terminal lifecycle port over the CLI handler', () => {
 // lifecycle command as `deckent run resume --task --answer`; the answer is typed in the card (Tab) and sent only with a single typed y.
 const ASKING = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
 function asking(revision = 5): RunView {
-  return { ...view(ASKING, { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2 } as never, 'Pick a branch', revision),
-    tasks: [{ id: 'task-ask', phase: 'awaiting-decision', decision: { reason: 'needs-input', question: 'Which branch should I use?', since: 1, deadline: 2 },
+  const deadline = Date.now() + 60_000;
+  return { ...view(ASKING, { kind: 'parked', reason: 'needs-input', since: 1, deadline } as never, 'Pick a branch', revision),
+    tasks: [{ id: 'task-ask', phase: 'awaiting-decision', decision: { reason: 'needs-input', question: 'Which branch should I use?', since: 1, deadline },
       taskBrief: { schemaVersion: 1, task: 'Pick a branch', model: null, scopePaths: [], acceptance: null, criteria: [], profile: null, effort: null, contextRefs: [] } }] } as unknown as RunView;
 }
 describe('needs-input answer from the Runs window (BR2)', () => {
@@ -250,6 +251,26 @@ describe('needs-input answer from the Runs window (BR2)', () => {
   });
   it('a run not waiting on a question never offers a (running, held)', async () => {
     const h = await open(ports(vi.fn()), 'en'); await press(h, 'a', 120); expect(h.stdout.frame).not.toContain('Answer run');
+  });
+  it('hides the answer action when a fresh read finds cancellation or an elapsed decision', async () => {
+    const openQuestion = asking();
+    const task = openQuestion.tasks[0]!;
+    for (const [locale, words, ineligible] of [
+      ['en', EN, { ...openQuestion, cancellationRequested: true }],
+      ['tr', TR, { ...openQuestion, tasks: [{ ...task, decision: { ...task.decision!, deadline: 2 } }] }],
+    ] as const) {
+      let current = openQuestion;
+      const answer = vi.fn(async () => 'SENT');
+      const h = await openAsking(answerPorts(answer, () => current), locale);
+      expect(h.stdout.frame).toContain(words.runControl!.keyAnswer!);
+      current = { ...ineligible, revision: openQuestion.revision + 1 };
+      await press(h, 'a', 120);
+      expect.soft(h.stdout.frame, locale).toContain(words.runAnswer!.none.replace('{run}', '9c8b7a6d'));
+      expect.soft(h.stdout.frame, locale).not.toContain(words.runControl!.keyAnswer!);
+      expect.soft(h.stdout.frame, locale).not.toContain('Which branch should I use?');
+      expect(answer).not.toHaveBeenCalled();
+      h.instance.unmount();
+    }
   });
 });
 

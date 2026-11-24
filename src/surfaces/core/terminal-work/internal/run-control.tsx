@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RunView } from '#engine/index.js';
 import { shortId, t } from '#platform/index.js';
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels, DecisionCard } from '#surfaces/core/approval-presentation-ink/index.js';
-import { fillTemplate, loadRunViewsForWatch, runControlActions, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+import { fillTemplate, loadRunViewsForWatch, openTaskQuestion, runControlActions, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { projectHumanPickerText, span, type Span, useHumanTextSecrets } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { runProgressionLines } from '#surfaces/core/recovery-text/index.js';
@@ -44,11 +44,6 @@ export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunVie
 export type RunAnswerPresentation = Readonly<{ kind: 'run-answer'; run: RunView; question: string; reread?: string }>;
 
 const KEYS: Readonly<Record<string, RunRowAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close', a: 'answer' });
-/** The question a needs-input task asks, or null (`a` answers it). */
-function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
-  for (const task of run.tasks ?? []) if (task.decision?.reason === 'needs-input' && task.decision.question) return { taskId: task.id, question: task.decision.question };
-  return null;
-}
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
 function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunRowAction | null {
   return key.ctrl || key.meta || input.length !== 1 ? null : KEYS[input] ?? null;
@@ -115,7 +110,7 @@ async function runAnswerFlow(panel: WorklinePanel, execution: LocalExecution, le
   for (let round = 0; ; round++) {
     const fresh = await ledger.inspectRun(runId);
     if (execution.signal.aborted) return null;
-    const waiting = fresh ? needsInputTask(fresh) : null;
+    const waiting = fresh ? openTaskQuestion(fresh) : null;
     if (!fresh || !waiting) return fillTemplate(words.none, { run: shortId(runId) });
     const decision = await panel.pick(execution, { kind: 'run-answer', run: fresh, question: waiting.question, ...(round ? { reread: words.reread } : {}) }, ['allow', 'deny']);
     if (execution.signal.aborted) return null;
@@ -146,7 +141,7 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     const selected = Math.max(0, runs.findIndex(run => run.runId === selection.current));
     selection.current = runs[selected]?.runId ?? null; // A vanished row resets to the first remaining row.
     const answerable = Boolean(ledger.answerTask && work.runAnswer && words.keyAnswer);
-    const rows = runs.map(run => ({ runId: run.runId, actions: [...runControlActions(run), ...(answerable && needsInputTask(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
+    const rows = runs.map(run => ({ runId: run.runId, actions: [...runControlActions(run), ...(answerable && openTaskQuestion(run) ? ['answer' as const] : [])], spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
       ...runProgressionLines(run, run.progression, jobs.locale).slice(0, 1).map(text => span(` · ${text}`)), span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
     const choices = ['close', 'refresh', ...rows.map((_, index) => `inspect:${index}`), ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
     const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected, detailHint: t('run.progression.openDetail', {}, jobs.locale) }, choices);

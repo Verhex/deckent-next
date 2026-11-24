@@ -13,7 +13,7 @@ async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['
   const db = openSqliteLedgerReadOnly(await path(), config.storage.sqlite), queue = new SqliteTargetQueue(db), limit = config.targetQueue.perTarget;
   try { return await observeRunQueue(queue.forRun(query.scopeId, query.runId, queueObservationReadLimit(limit)), queue, limit, principal, authorization, GIT_QUEUE_DISPLAY); } finally { db.close(); }
 }
-export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
+export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}, answerTaskId?: string) {
   try {
     const query = runQuerySchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
@@ -22,7 +22,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
-    const inspected = await app.inspectWithModels(query);
+    const inspected = await app.inspectWithModels(query, undefined, answerTaskId);
     if (!inspected.run) return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected });
     // BeUser M-33: the tasks of this Run a person set aside (the same records /deliver and the monitor read).
     const dismissed = (limit: number) => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options)

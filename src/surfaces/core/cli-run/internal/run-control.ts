@@ -1,5 +1,6 @@
-import { runControlActions } from '#surfaces/core/terminal-ledger/index.js';
+import { openTaskQuestion, runControlActions } from '#surfaces/core/terminal-ledger/index.js';
 import { randomUUID } from 'node:crypto';
+import { sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
 import { ErrorRegistry, EXIT_CODES, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
@@ -31,36 +32,65 @@ function controlCard(action: RunControl, run: RunView, scopeId: string, locale: 
 /** What the person typed that the flow keeps: scope, Run (a short id resolves), hold reason, resume answer for one task. */
 export type RunControlInput = Readonly<{ scopeId?: string | undefined; runId?: string | undefined; reason?: string | undefined; taskId?: string | undefined; answer?: string | undefined; quota?: 'wait' | 'next-candidate' | undefined }>;
 
+type TaskQuestion = Readonly<{ text: string; source: AttemptIdentity }>;
+
+function readTaskQuestion(run: RunView, taskId: string | undefined, source: AttemptIdentity | undefined): TaskQuestion | undefined {
+  if (taskId === undefined || !source) return undefined;
+  const open = openTaskQuestion(run, taskId);
+  return open ? { text: open.question, source } : undefined;
+}
+
 /**
  * A Run control for a person on a terminal (CLI review §run, owner 10-08 "değerler yalnız seçimle"): the scope (a change never takes a silent
  * default: picked, the configured one preselected), the Run (picked among the Runs whose state offers the control), the revision read just before
  * the card, a card naming scope, Run and consequence, and a command id from the system. `n`, Esc or silence write nothing. A Run that changed
- * meanwhile is read again and asked again if the action remains available (bounded). The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
+ * meanwhile is read again and asked again if the action remains available and a task answer still matches its original question (bounded).
+ * The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
  */
 export async function runControlFlow(action: RunControl, context: RunCommandContext, io: RunHumanIo, input: RunControlInput): Promise<ExitCode> {
   const { locale, print } = io;
   const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: input.scopeId, mutating: true, interactive: true, ask: io.ask });
   if (!scope) { print(t('cli.run.control.nothing', {}, locale)); return EXIT_CODES.error; }
   const scopeId = scope.scopeId;
+  const answerTaskId = input.answer === undefined ? undefined : input.taskId;
   const answering = input.answer !== undefined || input.quota !== undefined;
+  const eligible = (run: RunView, question?: TaskQuestion) => input.quota !== undefined
+    ? !run.cancellationRequested && run.state.kind === 'parked' && run.state.reason === 'quota-ask' && (run.quotaWaits?.length ?? 0) > 0
+    : answering ? question !== undefined : runControls(run).includes(action);
+  let originalQuestion: TaskQuestion | undefined;
   let runId = input.runId ? await resolveRunId(context, scopeId, input.runId) : undefined;
   if (!runId) {
-    // An answer goes to a Run that waits (the service checks which task asked); every other control to the Runs whose state offers it.
-    const runs = (await readScopeRuns(context, scopeId)).filter(run => answering ? run.state.kind === 'parked' : runControls(run).includes(action));
-    if (!runs.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return EXIT_CODES.error; }
-    const picked = await pickRun(io, scopeId, runs, t('cli.run.control.pick', { scope: scopeId, action }, locale));
+    const sources = new Map<string, AttemptIdentity>();
+    const runs = await readScopeRuns(context, scopeId, ({ run, answerSource }) => {
+      if (run && answerSource) sources.set(run.runId, answerSource);
+    }, answerTaskId);
+    const choices = runs.flatMap(run => {
+      const question = readTaskQuestion(run, answerTaskId, sources.get(run.runId));
+      return eligible(run, question) ? [{ run, question }] : [];
+    });
+    if (!choices.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return EXIT_CODES.error; }
+    const picked = await pickRun(io, scopeId, choices.map(choice => choice.run), t('cli.run.control.pick', { scope: scopeId, action }, locale));
     if (!picked) { print(t('cli.run.control.nothing', {}, locale)); return EXIT_CODES.error; }
     runId = picked.runId;
+    originalQuestion = choices.find(choice => choice.run === picked)?.question;
   }
   if (!context.inspectRun || (action === 'cancel' ? !context.deliverRunCancellation : !context.applyRunLifecycle)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const reason = input.reason?.trim() || t('terminal.runControl.reasonDefault', {}, locale);
   for (let round = 0; ; round++) {
-    const run = (await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options)).run;
+    const { run, answerSource } = await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
-    if (!answering && !runControls(run).includes(action)) {
-      print(terminalSafeText(t('run.control.noActionInState', { run: shownId(run.runId), state: runStateWord(run, locale) }, locale)));
+    const question = readTaskQuestion(run, answerTaskId, answerSource);
+    if (!eligible(run, question)) {
+      const id = shownId(run.runId);
+      print(terminalSafeText(answering ? t('cli.run.control.questionUnavailable', { run: id }, locale)
+        : t('run.control.noActionInState', { run: id, state: runStateWord(run, locale) }, locale)));
       return EXIT_CODES.error;
     }
+    if (question && originalQuestion && (question.text !== originalQuestion.text || !sameAttemptIdentity(question.source, originalQuestion.source))) {
+      print(terminalSafeText(t('cli.run.control.questionChanged', { task: question.source.taskId }, locale)));
+      return EXIT_CODES.error;
+    }
+    originalQuestion ??= question;
     // S6R-6: a held Run's card says why it is held, in words (a system hold's catalog text, never its raw code).
     const held = action === 'hold' ? null : runHoldReasonText(run.state, locale);
     const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []), ...(held ? [t('recovery.hold.cardReason', { reason: held }, locale)] : []),
