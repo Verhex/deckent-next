@@ -49,9 +49,7 @@ export class McpToolGrants {
   /** Removes this person's grant of the server (trust revoked, reset, declined or the entry removed); nothing to remove is `none`. */
   async revoke(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly server: McpToolGrantTarget;
     readonly reason: string }): Promise<McpToolGrantOutcome> {
-    let policy;
-    try { policy = await this.snapshot(); }
-    catch { return { status: 'refused', reason: 'POLICY_UNAVAILABLE' }; }
+    const policy = await this.snapshot().catch(() => null);
     if (!policy) return { status: 'none' };
     const digest = this.digest(input.scopeId, input.principal, input.server), held = mcpGrantRuleIds(digest).filter(id => policy.grants.some(grant => grant.id === id));
     if (!held.length) return { status: 'none' };

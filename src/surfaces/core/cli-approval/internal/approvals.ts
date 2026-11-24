@@ -104,26 +104,29 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
   const configured = ((await loadConfig(root, options)).terminal as { scopeId?: unknown } | undefined)?.scopeId, io = cardIo(context, locale, approvals.sessionTtlMs);
   const scope = await resolveCommandScope({ command: `${registry.command} ${args.action}`, locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: args.action === 'decide', interactive, listScopes: scopeLister(context, root, options), pick: io.ask });
-  let exit: ExitCode | undefined = args.action === 'decide' ? EXIT_CODES.error : undefined;
-  if (!scope) return exit;
+  const noSelection = args.action === 'decide' ? EXIT_CODES.error : undefined;
+  if (!scope) return noSelection;
   let view = await scan(list, scope.scopeId, approvals.pageSize);
   if (args.json) { emit(view.raw, { ...sinks, json: true }); return; }
   const print = (text: string) => emit(text, sinks);
   if (args.action === 'list') print(listText(view, scope, locale, cliTableStyle(context)));
   if (!interactive) return;
   // The person's terminal: pick a waiting approval and answer it on the card; repeat until "leave" or nothing waits (bounded rounds).
+  let exit: ExitCode | undefined;
   for (let round = 0; round < APPROVAL_LIST.menuRounds; round++) {
     const now = Date.now(), waiting = view.records.filter(record => isPending(record, now));
-    if (!waiting.length) { if (args.action === 'decide' || round > 0) print(t('cli.approval.noneWaiting', { scope: scope.scopeId }, locale)); return exit; }
+    if (!waiting.length) {
+      if (args.action === 'decide' || round > 0) print(t('cli.approval.noneWaiting', { scope: scope.scopeId }, locale));
+      return round === 0 ? noSelection : exit;
+    }
     const picked = await io.ask({ title: t('cli.approval.pick.title', { count: waiting.length }, locale),
       options: [...waiting.slice(0, APPROVAL_LIST.rowsShown).map(record => ({ id: record.request.approvalId, label: approvalPickLabel(record, locale) })),
         { id: LEAVE, label: t('cli.approval.pick.leave', {}, locale), key: 'q' }] });
     const record = waiting.find(item => item.request.approvalId === picked);
-    if (!record) return exit;
-    if (args.action === 'list') exit = EXIT_CODES.error;
+    if (!record) return round === 0 && picked !== LEAVE ? noSelection : exit;
     const answer = await approvalCardOutcome(record, args.reason, scope.scopeId, context, io.ask, locale);
     print(answer.text);
-    if (answer.recorded) exit = undefined;
+    if (!answer.recorded) exit = EXIT_CODES.error;
     view = await scan(list, scope.scopeId, approvals.pageSize);
   }
   return exit;

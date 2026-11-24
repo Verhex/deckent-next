@@ -95,8 +95,8 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
         const aiMarked = automationMarker(process.env, markers) === 'agent' || automationMarker(options.env ?? process.env, markers) === 'agent';
         const localPerson = channel === undefined && !aiMarked;
         const witnessed = localPerson && await attestLocalInteractiveTerminal(peer?.pid, peer?.uid);
-        if (channel === undefined) {
-          // Local processes already read their grant via mcp get and installation absence via policy mcp list.
+        if (localPerson) {
+          // Only an unmarked local caller can use a validated or guarded absence observation.
           const absent = await withPolicyAdministration(root, scopeId, options, 'read', async (deps, person, document) => {
             if (!isApprover(person)) return false;
             const grants = new McpToolGrants({ ...deps, policy: { load: async () => document } });

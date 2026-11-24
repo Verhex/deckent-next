@@ -217,12 +217,22 @@ it('approval decide and decisions started from list require a matching recorded 
     listApprovals.mockResolvedValueOnce([record]).mockResolvedValueOnce([]);
     expect((await invoke('list', '--scope', 'live')).code).toBe(0);
     const later = approval('pending-2');
-    listApprovals.mockResolvedValueOnce([record, later]).mockResolvedValueOnce([later]).mockResolvedValueOnce([later]);
-    card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no')
-      .mockResolvedValueOnce(later.request.approvalId).mockResolvedValueOnce('no').mockResolvedValueOnce('-leave');
-    const tr = await run(['approval', 'list', '--scope', 'live', '--lang', 'tr'], handlers, root, { TERM: 'xterm' }, tty);
-    expect(tr.code).toBe(1);
-    expect(out.join('')).toContain('Hizmet bu kararı doğrulamadı.');
+    for (const command of ['list', 'decide']) {
+      card.mockResolvedValueOnce('-leave');
+      expect.soft((await invoke(command, '--scope', 'live')).code, `${command}: leave without selecting`).toBe(0);
+      for (const answer of ['no', null]) {
+        out.length = 0;
+        decideApproval.mockClear();
+        listApprovals.mockResolvedValueOnce([record, later]).mockResolvedValueOnce([later]).mockResolvedValueOnce([later]);
+        card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no')
+          .mockResolvedValueOnce(later.request.approvalId).mockResolvedValueOnce(answer).mockResolvedValueOnce('-leave');
+        const tr = await run(['approval', command, '--scope', 'live', '--lang', 'tr'], handlers, root, { TERM: 'xterm' }, tty);
+        expect.soft(tr.code, `${command}: ${answer === null ? 'unanswered' : 'mismatched receipt'} after recorded Deny`).toBe(1);
+        expect(decideApproval).toHaveBeenNthCalledWith(1, expect.objectContaining({ approvalId: record.request.approvalId, decision: 'deny' }));
+        expect(out.join('')).toContain('Karar: reddedildi');
+        expect(out.join('')).toContain(answer === null ? 'Yanıt verilmedi; hiçbir karar kaydedilmedi.' : 'Hizmet bu kararı doğrulamadı.');
+      }
+    }
   } finally { card.mockRestore(); clock.mockRestore(); }
 });
 

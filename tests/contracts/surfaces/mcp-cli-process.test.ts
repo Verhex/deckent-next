@@ -99,8 +99,8 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   expect.soft(revokedWithoutPolicy.code, revokedWithoutPolicy.output).toBe(0);
   expect.soft(lastJson(revokedWithoutPolicy.output)).toEqual({ schemaVersion: 1, revoked: { name: 'lx', scope: 'local' } });
   const agentWithoutPolicy = runAsAgent(project, 'revoke', 'lx', '--lang', 'tr');
-  expect.soft(agentWithoutPolicy.code, agentWithoutPolicy.err).toBe(0);
-  expect.soft(agentWithoutPolicy.out.trimEnd()).toBe('lx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.');
+  expect.soft(agentWithoutPolicy.code, agentWithoutPolicy.err).toBe(1);
+  expect.soft(agentWithoutPolicy.out.trimEnd()).toBe('lx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.\nBu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.');
 
   const governed = join(base, 'governed');
   mkdirSync(governed, { mode: 0o700 });
@@ -111,8 +111,8 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   const agentNoGrant = runAsAgent(governed, 'get', 'fx', '--json');
   expect(json(agentNoGrant)).toMatchObject({ server: { grant: { status: 'none' } } });
   const agentRevoked = runAsAgent(governed, 'revoke', 'fx', '--lang', 'en');
-  expect.soft(agentRevoked.code, agentRevoked.err).toBe(0);
-  expect.soft(agentRevoked.out.trimEnd()).toBe('Trust for fx was revoked. Approve it again before starting the server.');
+  expect.soft(agentRevoked.code, agentRevoked.err).toBe(1);
+  expect.soft(agentRevoked.out.trimEnd()).toBe("Trust for fx was revoked. Approve it again before starting the server.\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.");
   const witnessedRevoked = await runInTerminal([process.execPath, CLI, 'mcp', 'revoke', 'fx', '--json'], governed, env);
   expect(witnessedRevoked.code, witnessedRevoked.output).toBe(0);
   expect(lastJson(witnessedRevoked.output)).toEqual({ schemaVersion: 1, revoked: { name: 'fx', scope: 'project' } });
