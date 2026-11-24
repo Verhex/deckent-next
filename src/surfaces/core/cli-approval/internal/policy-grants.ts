@@ -75,6 +75,7 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
   const result = await context.revokeStandingGrant(root, { scopeId, id: id!, reason: t('cli.policy.revoke.reason', {}, locale), confirm }, options);
   emit(result, { ...sinks, json, render: data => !data.grant ? t('cli.policy.revoke.notFound', { id: id! }, locale)
     : data.revoked ? t('cli.policy.revoke.done', { id: id! }, locale) : t('cli.policy.revoke.kept', { id: id! }, locale) });
+  return result.revoked ? EXIT_CODES.success : EXIT_CODES.error;
 }
 
 /**
