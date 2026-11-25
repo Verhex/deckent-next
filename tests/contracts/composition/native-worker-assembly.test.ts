@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as adapters from '#adapters/index.js';
@@ -12,6 +12,7 @@ import { firstRunPolicyTemplate } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { connection, cleanupConnections } from '../../fixtures/native-headless/connection.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
+import { initLine, rateLimitLine } from '../../fixtures/native-headless/stream.js';
 import type { NativeCliWorkerBinding, NativeCliWorkerPorts, NativeCliWorkerTransport, NativeCliWorkerDriver } from '#adapters/index.js';
 
 const temporary: string[] = [];
@@ -77,6 +78,23 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   // B2-11: an evidence target without a registry entry is the typed F08 refusal the readiness reader names, not an untyped error.
   await expect(runtime.verification!.acquire({ identity: { scopeId: profile.scopeId, attemptId: 'a' } }, { ...binding, protocolFamily: 'unregistered' }, {} as never))
     .rejects.toMatchObject({ code: 'NATIVE_WORKER_F08_INVALID' });
+  // C1: the production transport classifies Claude rate-limit lines with the registry policy: an allowed one goes on, a rejected one stops with its quota reason.
+  create.mockRestore(); await mkdir(profile.adapter.definition['stateDir'] as string, { recursive: true });
+  const seen: unknown[] = [];
+  isolated.mockImplementation(async (_entry, _isolation, spawn, _bounds, runSignal, line) => {
+    const init = { ...initLine(), model: input.model, claude_code_version: '9.1.0', cwd: spawn.runDir, mcp_servers: [{ name: entry.bridge.serverName, status: 'connected' }] };
+    for (const raw of [init, rateLimitLine(), rateLimitLine('rejected')]) seen.push(await Promise.resolve().then(() => line!(JSON.stringify(raw))).catch(() => 'threw'));
+    return { schemaVersion: 1, requestId: 'r', started: true, reason: runSignal?.aborted ? 'cancelled' : 'stopped', exitCode: null, signal: null, stdoutBase64: '', stderrBase64: '',
+      stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
+  });
+  preflight.mockResolvedValue({ execution: {}, preflight: { version: '9.1.0', executable: '/fixture/cli', program: { executable: '/fixture/cli' } } } as never);
+  const session = { schemaVersion: 1 as const, turnId: 'quota-worker', generation: 1, approvalTtlMs: 1000, tools: [] };
+  const worker = await runtime.driver({ ...input, maxTurns: undefined, tools: { session, propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() } } as never, signal);
+  try {
+    const result = await worker.run({ turnToken: 'turn-token', url: 'http://127.0.0.1:9/mcp' } as never, signal);
+    expect(seen).toEqual([undefined, undefined, 'stop']);
+    expect(result).toEqual({ termination: 'confirmed', text: '', status: 'failed', stopped: true, failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' });
+  } finally { await worker.close(); }
 });
 
 it('K21: K1 tools use the exact Attempt tree with an MCP workload session and durable effects, never the project tree', async () => {
