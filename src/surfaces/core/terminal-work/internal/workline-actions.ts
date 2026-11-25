@@ -129,21 +129,31 @@ export function showWorkerNumbering(ledger: WorklineLedgerPorts, entries: readon
   shownWorkerAttempts.set(ledger, workerNumbering(entries, true));
 }
 
-export function presentWorkerRef(ledger: WorklineLedgerPorts, attempt: WorkerAttemptIdentity, ordinal: number | undefined,
-  firstObservation: readonly WorkLedgerEntry[] = []): string {
+function displayWorkerOrdinal(shown: ReturnType<typeof workerNumbering> | undefined, key: string, ordinal: number | undefined): number | undefined {
+  if (ordinal === undefined) return shown?.ordinals.get(key);
+  const occupant = shown?.attempts.get(ordinal);
+  if (occupant === key) return ordinal;
+  const bound = shown?.ordinals.get(key);
+  if (bound !== undefined) return bound;
+  return occupant === null || (occupant === undefined && !shown?.listed) ? ordinal : undefined;
+}
+
+function pinWorkerOrdinal(ledger: WorklineLedgerPorts, key: string, ordinal: number | undefined): void {
+  if (ordinal === undefined) return;
   let shown = shownWorkerAttempts.get(ledger);
   if (!shown) {
-    shown = workerNumbering(firstObservation, false);
+    shown = workerNumbering([], false);
     shownWorkerAttempts.set(ledger, shown);
   }
-  const key = attemptKey(attempt);
-  if (ordinal !== undefined && shown.attempts.get(ordinal) === key) return String(ordinal);
-  const bound = shown.ordinals.get(key);
-  if (bound !== undefined) return String(bound);
-  if (ordinal === undefined || shown.listed || shown.attempts.has(ordinal)) return attempt.attemptId;
+  if (shown.attempts.get(ordinal) === key) return;
   shown.attempts.set(ordinal, key);
   shown.ordinals.set(key, ordinal);
-  return String(ordinal);
+}
+
+export function presentWorkerRef(ledger: WorklineLedgerPorts, attempt: WorkerAttemptIdentity, ordinal: number | undefined): string {
+  const key = attemptKey(attempt), displayed = displayWorkerOrdinal(shownWorkerAttempts.get(ledger), key, ordinal);
+  pinWorkerOrdinal(ledger, key, displayed);
+  return displayed === undefined ? attempt.attemptId : String(displayed);
 }
 
 /** Read-only: checks the selected Attempt against a fresh observation and shows its sealed transcript. */
@@ -155,17 +165,18 @@ async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: Wor
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
   const numbering = shown ?? shownWorkerAttempts.get(ledger);
   const key = ordinal === undefined ? undefined : numbering?.attempts.get(ordinal);
-  if (key === null) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
-  const target = key !== undefined ? workers.find(worker => worker.attempt && attemptKey(worker.attempt) === key)
-    : ordinal !== undefined && numbering?.listed ? null : resolveWorkerRef(name, workers);
+  const target = key != null ? workers.find(worker => worker.attempt && attemptKey(worker.attempt) === key)
+    : ordinal !== undefined && numbering?.listed && key === undefined ? null : resolveWorkerRef(name, workers);
   if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref: name }))];
   if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
   const text = await ledger.inspectTranscript!(target.attempt);
   // The list or another transcript can finish while the transcript port is reading.
-  const pageRef = ordinal === undefined ? name : presentWorkerRef(ledger, target.attempt, ordinal, workers);
-  const result = work.transcriptPage ? transcriptPage(text, page, pageRef, work.transcriptPage) : { ok: true as const, text };
+  const targetKey = attemptKey(target.attempt);
+  const displayed = displayWorkerOrdinal(shownWorkerAttempts.get(ledger), targetKey, ordinal ?? target.ordinal);
+  const headerRef = displayed === undefined ? target.attempt.attemptId : String(displayed);
+  const result = work.transcriptPage ? transcriptPage(text, page, ordinal === undefined ? name : headerRef, work.transcriptPage) : { ok: true as const, text };
   if (!result.ok) return [notice('error', result.text)];
-  const headerRef = ordinal === undefined ? presentWorkerRef(ledger, target.attempt, target.ordinal) : pageRef;
+  pinWorkerOrdinal(ledger, targetKey, displayed);
   const header = [fillTemplate(work.transcriptHeader, { n: headerRef, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
     ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
   return [notice('info', `${header}\n${result.text}`)];

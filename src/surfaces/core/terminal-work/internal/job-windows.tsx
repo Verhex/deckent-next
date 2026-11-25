@@ -148,11 +148,11 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
     await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']);
     return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   }
-  const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle, rows: workers.map(worker => [span(fillTemplate(work.workerLine.ordinal, { n: presentWorkerRef(ledger, worker.attempt!, worker.ordinal, observed) }), { bold: true }),
+  const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle, rows: workers.map(worker => [span(fillTemplate(work.workerLine.ordinal, { n: presentWorkerRef(ledger, worker.attempt!, worker.ordinal) }), { bold: true }),
     span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })]) }, workers.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   const worker = workers[Number(choice)]!, text = await ledger.inspectTranscript!(worker.attempt!);
-  const ref = presentWorkerRef(ledger, worker.attempt!, worker.ordinal, observed);
+  const ref = presentWorkerRef(ledger, worker.attempt!, worker.ordinal);
   await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: ref, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
     ...text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true }))] }, ['close']);
   return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: ref })}`;
