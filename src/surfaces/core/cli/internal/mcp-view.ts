@@ -6,7 +6,7 @@ import type { CommandContext } from './kernel-commands.js';
 /** One server as `mcp list` returns it (adapter summary + health); only the fields a person reads. */
 export type McpListedServer = Readonly<{ name: string; scope: string; status: string; reason?: string; realm?: string | null; transport?: string; command?: string;
   args?: readonly string[]; envNames?: readonly string[]; headerNames?: readonly string[]; pinnedTools?: number; health?: string; failure?: string;
-  lastStart?: Readonly<{ text?: string }>; definitionDigest?: string }>;
+  lastStart?: Readonly<{ text?: string }>; definitionDigest: string }>;
 type Problem = Readonly<{ name: string | null; scope: string; reason: string }>;
 
 /** Display text of a registry value: escapes inert, line breaks shown as `\n` (SEC-2 F3: a repository writes these values). */

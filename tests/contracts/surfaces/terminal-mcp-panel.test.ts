@@ -28,7 +28,7 @@ describe('/mcp window port', () => {
     const port = mcpPanelPort('/p', run, {}, 'tr');
     const list = await port.list();
     expect(list.servers).toEqual([{ name: 'files', scope: 'yerel', state: 'changed', status: 'bağlı değil — onaydan sonra değişti, yeniden onay gerekir', attention: true, tools: '2 araç',
-      realm: 'host', launch: 'npx -y files', trusted: false }]);
+      realm: 'host', launch: 'npx -y files', trusted: false, selected: { scope: 'local', definitionDigest: SERVER.definitionDigest } }]);
     expect(list.problems).toEqual(['proje MCP dosyasında sorun: invalid json']);
     // YTK-40: the window words a waiting server exactly as `deckent mcp list` does (one renderer): a pre-alpha.48 trust says why it asks again.
     const moved = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'pending-approval', reason: 'trust-moved' }] } }).run, {}, 'tr').list();
@@ -106,14 +106,15 @@ describe('/mcp window port', () => {
     const { run, requests } = host({ add: { added: { name: 'remote', scope: 'local', file: '/p/.deckent/mcp.local.json' }, trust: 'trusted', pinnedTools: 2 },
       revoke: { revoked: { name: 'fx', scope: 'local' }, grant }, remove: { removed: { name: 'files', scope: 'project' }, grant } });
     const port = mcpPanelPort('/p', run, {}, 'en');
+    const local = { scope: 'local', definitionDigest: SERVER.definitionDigest }, project = { ...local, scope: 'project' };
     expect(await port.add({ transport: 'http', name: 'remote', target: 'https://mcp.example.com/mcp', args: [], env: {}, headers: { Authorization: 'Bearer $DECK:GH' }, realm: '',
       scope: 'local' }, async () => true)).toEqual(['Added remote (local): /p/.deckent/mcp.local.json', 'remote is trusted; 2 tools pinned.']);
     expect(port.transports.find(choice => choice.id === 'http')!.blocked).toBeUndefined();
-    expect(await port.revoke('fx')).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    expect(await port.revoke('fx', local)).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
     await port.reconnect('files');
-    expect.soft(await port.remove('files')).toEqual(['Removed files (project)', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    expect.soft(await port.remove('files', project)).toEqual(['Removed files (project)', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
     expect(requests).toEqual([{ verb: 'add', scope: 'local', name: 'remote', approve: true, entry: { type: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GH' } } },
-      { verb: 'revoke', name: 'fx' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
+      { verb: 'revoke', name: 'fx', selected: local }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files', selected: project }]);
   });
   it('G3: approve sends no alwaysAsk list, so a re-approval keeps the locks the CLI set', async () => {
     const { run, requests } = host({ approve: { approved: true, pinnedTools: 2 } });

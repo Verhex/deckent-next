@@ -1,15 +1,73 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { expect, it, vi } from 'vitest';
+import { mcpDefinitionDigest, mcpRegistryPaths, mcpTrustDirectory, MCP_TRUST_FILE, runMcpCommand, updateMcpTrust,
+  type McpCommandContext, type McpCommandRequest } from '#adapters/core/mcp-client/index.js';
+import { DeckentError, resolveProductLayout } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 // C-MODELS: the trust card is an arrow-key card on a person's terminal; it is simulated here and its lines are printed as the card shows them.
 const shownCards = vi.hoisted(() => [] as string[]);
+const cardAnswers = vi.hoisted(() => [] as (() => string | Promise<string>)[]);
 vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
   const real = await importOriginal<typeof import('#surfaces/core/cli-human/index.js')>();
   return { ...real, cliMode: () => ({ mode: 'interactive' as const, reason: 'tty' as const }),
-    askCliCard: async (request: CliCardRequest) => { shownCards.push([request.title, ...(request.body ?? [])].join('\n')); return 'yes'; } };
+    askCliCard: async (request: CliCardRequest) => { shownCards.push([request.title, ...(request.body ?? [])].join('\n')); return cardAnswers.shift()?.() ?? 'yes'; } };
 });
+
+const changedEN = 'The selected MCP server changed. Open the list and confirm the current server again.';
+const changedTR = 'Seçtiğiniz MCP sunucusu değişti. Listeyi açıp güncel sunucuyu yeniden onaylayın.';
+async function pickedWithdrawal(verb: 'revoke' | 'remove', changed: boolean) {
+  const base = await mkdtemp(join(tmpdir(), 'deckent-mcp-confirm-')), root = join(base, 'project'), home = join(base, 'home');
+  const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, '.deckent'), NO_COLOR: '1' };
+  const registries = mcpRegistryPaths(root, env.DECKENT_GLOBAL_HOME);
+  const projectScope = verb === 'remove', pickedScope = projectScope ? 'project' : 'user';
+  const entries = { user: { command: 'user-fixture' }, project: { command: 'project-fixture' } };
+  const replacement = { mcpServers: { fx: { command: 'replacement-fixture' } } };
+  const auditors: string[] = [], grants: string[] = [], stderr: string[] = [];
+  const context: McpCommandContext = { projectRoot: root, layout: resolveProductLayout({ projectRoot: root }), environment: env, secret: async () => undefined,
+    principal: { issuer: 'fixture', subject: 'owner' }, sandboxes: [], ask: async () => null, describeNotice: () => '',
+    audit: async target => { auditors.push(target.scope); },
+    grants: { grant: async () => ({ status: 'none' }), revoke: async target => { grants.push(target.scope); return { status: 'none' }; } } };
+  try {
+    await mkdir(dirname(registries.project), { recursive: true });
+    await mkdir(dirname(registries.personal), { recursive: true });
+    await writeFile(registries.personal, JSON.stringify({ mcpServers: { fx: entries.user } }), { mode: 0o600 });
+    if (projectScope) await writeFile(registries.project, JSON.stringify({ mcpServers: { fx: entries.project } }));
+    const trustFiles = await Promise.all((['user', 'project'] as const).map(async scope => {
+      const directory = await mcpTrustDirectory(scope, context, true);
+      await updateMcpTrust(directory, () => [{ name: 'fx', scope, definitionDigest: mcpDefinitionDigest('fx', entries[scope]), decision: 'trusted', tools: [],
+        reconnect: 0, approvedAtMs: 1, principal: context.principal }]);
+      return join(directory, MCP_TRUST_FILE);
+    }));
+    const readTrust = () => Promise.all(trustFiles.map(file => readFile(file, 'utf8')));
+    const before = await readTrust();
+    cardAnswers.push(() => `${pickedScope}:fx`);
+    if (projectScope) cardAnswers.push(() => 'remove');
+    cardAnswers.push(async () => {
+      if (changed) await writeFile(registries.project, JSON.stringify(projectScope ? replacement : { mcpServers: { fx: entries.project } }));
+      return 'apply';
+    });
+    let localized: string | undefined;
+    const code = await main(projectScope ? ['mcp', '--lang', 'en'] : ['mcp', 'revoke', '--lang', 'en'], {
+      root, env, stdout: { write: () => true }, stderr: { write: (line: string) => stderr.push(line) },
+      async runMcpCommand(_root: string, request: McpCommandRequest) {
+        try { return await runMcpCommand(request, context); }
+        catch (error) { if (error instanceof DeckentError) localized = error.localize?.('tr').message; throw error; }
+      },
+    } as never);
+    const after = await readTrust();
+    const observed = projectScope ? JSON.parse(await readFile(registries.project, 'utf8')) as unknown : undefined;
+    return { code, localized, stderr: stderr.join('').trim(), auditors, grants, before, after, observed, replacement };
+  } finally {
+    cardAnswers.length = 0;
+    shownCards.length = 0;
+    await rm(base, { recursive: true, force: true });
+  }
+}
 
 // T3 integration (L1 i18n debt): `deckent mcp add` prints its trust card with the terminal window's localized fields (realm in words, URL and
 // header names, never a value) and the K1 grant outcome as one sentence — not the adapter's raw card object or a `grant: {…}` dump.
@@ -70,6 +128,16 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'revoked' } })).toBe(`${enTrust}\nPolicy grant removed: calls to this server follow your company policy again.`);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'delegation' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
   expect(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'not-settled' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
+  const changed = await pickedWithdrawal('revoke', true);
+  expect.soft(changed.code).toBe(1);
+  expect.soft(changed.stderr).toBe(`Error: ${changedEN} [MCP_SERVER_CHANGED]`);
+  expect.soft(changed.localized).toBe(changedTR);
+  expect.soft(changed.after).toEqual(changed.before);
+  expect.soft([changed.auditors, changed.grants]).toEqual([[], []]);
+  const unchanged = await pickedWithdrawal('revoke', false);
+  expect(unchanged).toMatchObject({ code: 0, auditors: ['user'], grants: ['user'] });
+  expect(JSON.parse(unchanged.after[0]!).servers).toEqual([]);
+  expect(unchanged.after[1]).toBe(unchanged.before[1]);
 });
 
 it('reports an unfinished requested trust step while retaining the registration receipt', async () => {
@@ -106,6 +174,16 @@ it('reports an unfinished requested trust step while retaining the registration 
   } as never);
   expect.soft(code).toBe(1);
   expect(out.join('').trimEnd()).toBe("Removed web (local)\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.");
+  const changed = await pickedWithdrawal('remove', true);
+  expect.soft(changed.code).toBe(1);
+  expect.soft(changed.stderr).toBe(`Error: ${changedEN} [MCP_SERVER_CHANGED]`);
+  expect.soft(changed.observed).toEqual(changed.replacement);
+  expect.soft(changed.after).toEqual(changed.before);
+  expect.soft([changed.auditors, changed.grants]).toEqual([[], []]);
+  const unchanged = await pickedWithdrawal('remove', false);
+  expect(unchanged).toMatchObject({ code: 0, observed: { mcpServers: {} }, auditors: ['project'], grants: ['project'] });
+  expect(unchanged.after[0]).toBe(unchanged.before[0]);
+  expect(JSON.parse(unchanged.after[1]!).servers).toEqual([]);
   for (const [argv, locale, receipt, expected] of [
     [['approve', 'web'], 'en', { ...approve, approved: false, grant: { status: 'revoked' } },
       'web (local) was not approved; nothing is trusted.\nPolicy grant removed: calls to this server follow your company policy again.'],

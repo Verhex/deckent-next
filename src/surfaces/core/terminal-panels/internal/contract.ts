@@ -101,7 +101,7 @@ type McpScopeId = 'local' | 'project' | 'user';
 export type McpPanelState = 'connected' | 'checking' | 'not-started' | 'pending-approval' | 'changed' | 'declined' | 'invalid-launch'
   | 'trust-store-unavailable' | 'secret-unresolved' | 'secret-refused' | 'secret-project-missing' | 'secret-undeclared' | 'secret-no-identity' | 'failed' | 'tools-changed' | 'timed-out' | 'unknown';
 type McpPanelServer = Readonly<{ state: McpPanelState; name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
-  trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
+  selected: Readonly<{ scope: string; definitionDigest: string }>; trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
 export type McpPanelList = Readonly<{ servers: readonly McpPanelServer[]; problems: readonly string[] }>;
 /** One trust question of the wizard or a re-approval (the launch card, then the tools card): the window shows it, y says yes, n/Esc say no. */
 export type McpTrustQuestion = Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
@@ -114,11 +114,11 @@ export interface McpPanelPort {
   list(options?: { readonly health?: boolean; readonly checking?: boolean; readonly signal?: AbortSignal }): Promise<McpPanelList>;
   detail(name: string): Promise<readonly PanelLine[]>;
   /** Revoke this server's trust (it asks again before it starts); re-approve with the trust windows; restart on next use; remove its entry. */
-  revoke(name: string): Promise<readonly string[]>;
+  revoke(name: string, selected: McpPanelServer['selected']): Promise<readonly string[]>;
   approve(name: string, ask: McpTrustAsk): Promise<readonly string[]>;
   grantKey?(name: string, key: string, ask: McpTrustAsk): Promise<readonly string[]>;
   reconnect(name: string): Promise<readonly string[]>;
-  remove(name: string): Promise<readonly string[]>;
+  remove(name: string, selected: McpPanelServer['selected']): Promise<readonly string[]>;
   /** The wizard's engine: the same registry command as `deckent mcp add` (its trust decision through `ask`). It checks the name before any card:
    * a refused or taken name comes back as the error the wizard shows on its name step. */
   add(draft: McpServerDraft, ask: McpTrustAsk): Promise<readonly string[]>;
