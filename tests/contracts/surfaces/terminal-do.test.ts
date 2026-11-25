@@ -34,6 +34,16 @@ it.skipIf(process.platform === 'win32').each(['en', 'tr'] as const)('/do display
   expect(view.stdout.text).toContain('deckent models activate'); expect(f.posts).toBe(0);
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO inactive ${locale}\n${view.stdout.frame}\n`);
 });
+const risk = {
+  en: 'A path and rule name do not show whether the content is safe. If you approve an unregistered real secret, the worker can read it and send it to the model provider. You may decline.',
+  tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
+};
+const reasons = {
+  en: { cut: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+    hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review. Keep this card open and, while the request is pending, use /approvals or deckent approval decide in another terminal to decide. Leaving this decision card with Esc sends a denial.' },
+  tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+    hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz. Karar vermek için bu kartı açık tutun ve istek hâlâ beklerken başka bir terminalde /approvals ya da deckent approval decide komutunu kullanın. Bu karar kartından Esc ile çıkmak ret gönderir.' },
+};
 it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval card %s precedes replay and Run navigation; stored reviews govern /do and /approvals decisions', async key => {
   const pending = pendingBrainFixture(), plans: { intent: string; id: string }[] = [], decisions: string[] = [];
   const history: string[] = [];
@@ -71,16 +81,6 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   // Run the stored-review cases once across the two keyboard cases.
   if (key === 'y') {
     view.instance.unmount();
-    const risk = {
-      en: 'A path and rule name do not show whether the content is safe. If you approve an unregistered real secret, the worker can read it and send it to the model provider. You may decline.',
-      tr: 'Yol ve kural adı içeriğin güvenli olup olmadığını göstermez. Sisteme kayıtlı olmayan gerçek bir sırrı onaylarsanız işçi onu okuyup model sağlayıcısına gönderebilir. Onayı reddedebilirsiniz.',
-    };
-    const reasons = {
-      en: { cut: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
-        hidden: 'Part of the package review is hidden in this window, so use deckent approval inspect --input <file|-> --json to read the stored review. Keep this card open and, while the request is pending, use /approvals or deckent approval decide in another terminal to decide. Leaving this decision card with Esc sends a denial.' },
-      tr: { cut: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
-        hidden: 'Paket incelemesinin bir bölümü bu pencerede gizlendiği için saklanan incelemeyi deckent approval inspect --input <dosya|-> --json ile okuyabilirsiniz. Karar vermek için bu kartı açık tutun ve istek hâlâ beklerken başka bir terminalde /approvals ya da deckent approval decide komutunu kullanın. Bu karar kartından Esc ile çıkmak ret gönderir.' },
-    };
     const secret = 'f4-package-fixture-value';
     const knownSecrets = snapshotKnownSecrets([{ name: 'F4_FIXTURE', value: secret }]);
     for (const locale of ['en', 'tr'] as const) {

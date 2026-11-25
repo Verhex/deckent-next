@@ -54,13 +54,15 @@ it.each(['2025-11-25', '2026-07-28'])('bounds escaped duplicate model output and
           async proposeRun() { return rejected; }, async planRun() { return rejected; }, async inspectRunProposal() { return rejected; } },
         { maxConcurrentCalls: 1, responseMaxBytes: maximum }, locale);
         const [client, transport] = InMemoryTransport.createLinkedPair();
-        const responses: JSONRPCMessage[] = []; client.onmessage = message => { responses.push(message); };
         await server.connect(createBoundedMcpTransport(transport, { responseMaxBytes: maximum })); await client.start();
         const call = async (name: string, args: Record<string, unknown>, id: number | string = 1) => {
+          const { promise, resolve } = Promise.withResolvers<JSONRPCMessage>();
+          client.onmessage = message => {
+            if ('id' in message && message.id === id && !('method' in message)) resolve(message);
+          };
           await client.send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args,
             _meta: { [PROTOCOL_VERSION_META_KEY]: '2026-07-28', [CLIENT_CAPABILITIES_META_KEY]: {} } } });
-          await expect.poll(() => responses.length).toBe(1);
-          const response = responses.shift()!;
+          const response = await promise;
           if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF,
             `${locale} ${maximum} ${name}${overLimit ? '' : ' generic'} ${size(response) + 1} bytes ${JSON.stringify(response)}\n`);
           expect(size(response) + 1).toBeLessThanOrEqual(maximum);
