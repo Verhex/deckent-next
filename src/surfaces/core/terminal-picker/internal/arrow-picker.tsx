@@ -3,11 +3,11 @@
  * Up/Down move the highlight (wrapping), Enter commits the highlighted row, Esc or Ctrl+C closes it. The row Enter
  * commits is `pickerChoice(selected)` — passing the first row instead fails the Down-then-Enter tests.
  */
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
-import { useCardCopyOptions, useWindowInputGuard } from '#surfaces/core/terminal-window/index.js';
+import { DrawnText, useCardCopyOptions, useWindowInputGuard } from '#surfaces/core/terminal-window/index.js';
 import { truncateEnd, sliceSpans, span, type Span, useRenderGlyphs, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
@@ -87,22 +87,21 @@ export function ArrowPicker(props: {
     const selected = first + offset === index, marker = selected ? '> ' : '  ';
     const marked = marker + text, fitted = truncateEnd(marked, width, glyphs.ellipsis);
     const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
-    return { original, text, selected, marker, fitted, visible, spans: projected?.spans ?? props.styledRows?.[original],
-      onDrawn: projected && (() => projected.onDrawn(marked.slice(marker.length, visible))) };
+    return { original, text, selected, marker, fitted, visible, spans: projected?.spans ?? props.styledRows?.[original], onDrawn: projected?.onDrawn };
   });
-  useLayoutEffect(() => { for (const row of drawn) row.onDrawn?.(); }, [drawn]);
   useCardCopyOptions(drawn.map(row => row.text));
   void generation;
   return (
     <Box flexDirection="column">
       {props.filter ? <Text {...palette.muted} wrap="truncate">{truncateEnd(props.filter.prompt(filterText), width, glyphs.ellipsis)}</Text> : null}
       {props.filter && shown.length === 0 ? <Text {...palette.warning} wrap="truncate">{props.filter.none}</Text> : null}
-      {drawn.map(({ original, selected, marker, fitted, visible, spans: projected }) => (
-        <Text key={original} wrap="truncate" {...(selected ? palette.selection : {})}>
+      {drawn.map(({ original, selected, marker, fitted, visible, spans: projected, onDrawn }) => {
+        const row = <Text key={original} wrap="truncate" {...(selected ? palette.selection : {})}>
           {projected ? <SpanText selected={selected} spans={[...sliceSpans([span(marker), ...projected], 0, visible),
             ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
-        </Text>
-      ))}
+        </Text>;
+        return onDrawn ? <DrawnText key={original} text={fitted} onDrawn={line => onDrawn(line.slice(marker.length, visible))}>{row}</DrawnText> : row;
+      })}
       {shown.length > 0 && props.details?.[shown[index]!] ? <Text {...palette.warning} wrap="wrap">{props.details[shown[index]!]}</Text> : null}
       {shown.length > first + ARROW_PICKER_ROWS
         ? <Text {...palette.muted} wrap="truncate">{`  +${shown.length - first - ARROW_PICKER_ROWS}`}</Text> : null}

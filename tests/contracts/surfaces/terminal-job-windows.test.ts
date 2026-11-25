@@ -60,19 +60,32 @@ async function chooseScrolledTranscript() {
   }));
   const intervening = { ...first, identity: { ...first.identity!, attemptId: `80${attemptId.slice(2)}` } };
   let workers = [visible[1]!, visible[0]!, ...visible.slice(2), first, eighth!];
-  const inspect = vi.fn(base.inspectTranscript!);
+  const reading = Promise.withResolvers<void>(), transcript = Promise.withResolvers<string>();
+  const inspect = vi.fn(base.inspectTranscript!).mockImplementationOnce(() => { reading.resolve(); return transcript.promise; });
   const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
   const labels = { ...WORKLINE_TEST_LABELS, work: EN };
   // The terminal has room for the number, but the window's border and padding take it away.
-  const drawn = Promise.withResolvers<string>(), closed = Promise.withResolvers<void>();
+  const drawn = Promise.withResolvers<string>();
   const view = await open('/transcript', ledger, 'en', 24, true, { columns: 10, onFrame: frame => {
     const row = frame.split('\n').find(line => line.includes('> T'));
     if (row) drawn.resolve(row);
-    else if (captured.entries.length > 0) closed.resolve();
   } });
   expect(await drawn.promise).not.toContain('Task 1');
+  view.stdin.write('\r');
+  await reading.promise;
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(visible[1]!.identity);
+  await view.instance.waitUntilRenderFlush();
+  if (view.stdout.frame.includes('WINDOW FO')) {
+    view.stdin.write('\u000f');
+    await view.instance.waitUntilRenderFlush();
+  }
+  expect(view.stdout.frame).toContain('INPUT FOC');
   view.stdin.write('\u0003');
-  await closed.promise;
+  transcript.resolve('CANCELLED READ');
+  await view.instance.waitUntilRenderFlush();
+  expect(captured.entries).toEqual([]);
+  expect(view.stdout.frame).not.toContain('Trans…');
+  inspect.mockClear();
 
   workers = [...visible, first, eighth!];
   await runLedgerCommand('transcript', '1', ledger, labels);
@@ -107,6 +120,37 @@ async function chooseScrolledTranscript() {
   await until(() => view.stdout.frame.includes(`> Task ${attemptId}`), 'select the full Attempt reference');
   await choose(view);
   return { view, inspect, first, observe: (...next: typeof workers) => { workers = next; } };
+}
+
+async function checkClippedTranscriptPickerHeightAndRefusal() {
+  const base = ports(), initial = await base.listWorkers(), source = initial.sources[0]!, first = source.workers[0]!;
+  let workers = [first, ...Array.from({ length: 5 }, (_, index) => ({
+    ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
+  }))];
+  const inspect = vi.fn(base.inspectTranscript!);
+  const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
+  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
+  const view = mountWorkline({ labels, ledger, fullscreen: true, pollMs: 60_000 }, 100, { rows: 8 });
+  mounted.push(view);
+  await view.instance.waitUntilRenderFlush();
+  view.stdin.write('/transcript\r');
+  await view.instance.waitUntilRenderFlush();
+  expect(view.stdout.frame).toContain('Task 5');
+  expect(view.stdout.frame).not.toContain('Task 4');
+  view.stdin.write('\u0003');
+  await view.instance.waitUntilRenderFlush();
+  expect(view.stdout.frame).not.toContain('Task 5');
+
+  workers = [...workers].reverse();
+  await runLedgerCommand('transcript', '4', ledger, labels);
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(workers[3]!.identity);
+  view.instance.unmount();
+  captured.entries = [];
+  captured.seen = new WeakSet();
+
+  const refused = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
+  await until(() => refused.stdout.frame.includes('> Task 1'), 'picker'); await choose(refused);
+  await until(() => refused.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(refused); onlySummary();
 }
 
 async function checkListedTranscriptPicker({ view, inspect, first, observe }: Awaited<ReturnType<typeof chooseScrolledTranscript>>) {
@@ -304,11 +348,7 @@ describe('SW-2 job windows', () => {
     view.stdin.write(ESC); await until(() => captured.entries.length === 2, 'close summary');
     expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
-  it('keeps policy refusal inside a transcript window and leaves only one summary after close', async () => {
-    const view = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
-    await until(() => view.stdout.frame.includes('> Task 1'), 'picker'); await choose(view);
-    await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(view); onlySummary();
-  });
+  it('keeps policy refusal inside a transcript window and leaves only one summary after close', checkClippedTranscriptPickerHeightAndRefusal);
 });
 
 it('/runs shows the fresh cancelled state without a close card or control write', async () => {
