@@ -1,13 +1,19 @@
-import { ErrorRegistry, reportFatal, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, redactSensitive, reportFatal, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { askCliCard, cliMode, scopeLister } from '#surfaces/core/cli-human/index.js';
 import { initCommand } from '#surfaces/core/cli-installation/index.js';
-import { offerTarget } from '#surfaces/core/cli-kit/index.js';
+import { offerTarget, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { relative, sep } from 'node:path';
 import { offerAttachedSession } from './session-offer.js';
 
 export async function reportSetupCancellation(context: CommandContext, locale: Locale): Promise<1> {
   await reportFatal(ErrorRegistry.createError('CLI_INSTALLATION_MISSING'), { ...context, locale });
+  return 1;
+}
+
+export function reportAttachmentCancellation(context: CommandContext, locale: Locale, scopeId: string): 1 {
+  const scope = shellIdentity(redactSensitive(terminalSafeText(scopeId)));
+  emit(t('setup.attachment.cancelled', { scope }, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
   return 1;
 }
 

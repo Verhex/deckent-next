@@ -141,6 +141,9 @@ it('ATTACHDOC: human previews give a complete apply command; JSON stays exact an
 });
 it('attachment confirmations name the selected action in EN/TR and never offer a write card to a pipe or agent', async () => {
   const projectId = '11111111-1111-4111-8111-111111111111', digest = 'a'.repeat(64);
+  const cancelled = (language: 'en' | 'tr', scope: string) => language === 'en'
+    ? `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.\n`
+    : `Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için bu klasörde \`deckent terminal attach --scope ${scope} --preview\` çalıştırın. \`deckent init\` burada yeni ve ayrı bir kurulum başlatır.\n`;
   const cases: readonly [string[], string, string][] = [
     [['--register', '--scope', 'source', '--expect', digest], 'Register this source installation?', 'Bu kaynak kurulum kaydedilsin mi?'],
     [['--scope', 'target', '--expect', digest, '--command-id', projectId], 'Connect this folder to the selected installation?', 'Bu klasör seçilen kuruluma bağlansın mı?'],
@@ -161,7 +164,7 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
           stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
         const attach = args.includes('--command-id');
         expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(attach ? 1 : 0);
-        if (attach) expect(errors).toContain('[CLI_INSTALLATION_MISSING]');
+        if (attach) expect.soft(errors).toBe(cancelled(language, 'target'));
         expect(confirm).toHaveBeenCalledOnce();
         const card = confirm.mock.calls[0]![0];
         expect(card.title).toBe(language === 'en' ? en : tr); expect(card.initial).toBe('no');
@@ -178,7 +181,6 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
     }
     expect(projectAttachment).not.toHaveBeenCalled();
 
-    confirm.mockResolvedValue('yes');
     const incomplete = ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE');
     projectAttachment.mockImplementation(async (_root: string, input: ProjectAttachmentCommand) => {
       if (input.action === 'offer') return { kind: 'ready', scopeId: projectId, path: root, writeRoot: root,
@@ -188,6 +190,18 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
     let errors = '', output = '';
     const context = { root, env, projectAttachment, stdin: { isTTY: true, pause: vi.fn() } as unknown as NodeJS.ReadStream,
       stdout: { isTTY: true, write: (text: string) => { output += text; } }, stderr: { write: (text: string) => { errors += text; } } };
+    const bareContext = { ...context, completeTerminalChat: vi.fn(), configChoiceSources: () => ({
+      list: async () => { throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); },
+    }) };
+    for (const language of ['en', 'tr'] as const) {
+      await config(language);
+      errors = ''; projectAttachment.mockClear();
+      expect.soft([await main([], bareContext), errors]).toEqual([1, cancelled(language, projectId)]);
+      expect(projectAttachment.mock.calls.map(([, input]) => input.action)).toEqual(['offer']);
+    }
+
+    errors = '';
+    confirm.mockResolvedValue('yes');
     const generic = 'Hata: Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün. [PROJECT_ATTACHMENT_INCOMPLETE]\n';
     const explicit = await main(['terminal', 'attach', ...cases[1]![0], '--apply'], context);
     expect.soft([explicit, errors]).toEqual([1, generic]);
@@ -211,9 +225,7 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
     expect([preview, errors]).toEqual([78, generic]);
 
     errors = '';
-    const bare = await main([], { ...context, completeTerminalChat: vi.fn(), configChoiceSources: () => ({
-      list: async () => { throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); },
-    }) });
+    const bare = await main([], bareContext);
     expect.soft([bare, errors]).toEqual([1, `Hata: Proje bağlantısı tamamlanmadı. Güncel planı \`deckent terminal attach --scope ${projectId} --preview\` ile önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin. [PROJECT_ATTACHMENT_INCOMPLETE]\n`]);
   } finally { confirm.mockRestore(); }
 });

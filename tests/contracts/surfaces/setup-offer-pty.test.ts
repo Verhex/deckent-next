@@ -295,13 +295,15 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const declined = await f.pty('attachment-esc', [[offer, '\u001b']], {}, [], target);
     expect(declined.timeout, declined.output).toBeUndefined();
     expect.soft(declined.status, 'declined session offer').toBe(1);
-    expect.soft(declined.output, 'declined session offer').toContain(MISSING);
+    const declinedScope = /Scope: ([a-f0-9-]{36})/u.exec(declined.output)?.[1];
+    const cancelled = (scope: string | undefined) => `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.`;
+    expect.soft(declined.output.replaceAll('\r', ''), 'declined session offer').toContain(cancelled(declinedScope));
     expect(declined.output).not.toMatch(/deckent workline|Start setup\?/u);
     const explicit = await f.pty('explicit-attachment-ctrl-d', [['Connect this folder to the selected installation?', '\u0004']], {},
       ['terminal', 'attach', '--scope', 'target', '--apply', '--expect', 'a'.repeat(64), '--command-id', '11111111-1111-4111-8111-111111111111'], target);
     expect(explicit.timeout, explicit.output).toBeUndefined();
     expect.soft(explicit.status, 'declined explicit attach').toBe(1);
-    expect.soft(explicit.output, 'declined explicit attach').toContain(`Error: ${MISSING}`);
+    expect.soft(explicit.output.replaceAll('\r', ''), 'declined explicit attach').toContain(cancelled('target'));
     expect(await readdir(target), 'declines write nothing').toEqual([]);
     const pending = await f.pty('attachment-pending', [[offer, 'y']], { NODE_ENV: 'production' }, [], target, PENDING_ENTRY);
     expect(pending.timeout, pending.output).toBeUndefined();

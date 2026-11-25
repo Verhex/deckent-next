@@ -362,6 +362,7 @@
   "setup.session.body": "Folder: {path}\nScope: {scope}\nConnection: {connections}\nCost type: {costs}\nWrites to: {writeRoot}\nCreates separate project policy, ledger and session state with revocable connection use. Tokens are not copied.",
   "setup.session.noConnection": "Not configured yet",
   "setup.session.attachmentIncomplete": "The attachment did not complete. Preview the current plan with `deckent terminal attach --scope {scope} --preview`. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help.",
+  "setup.attachment.cancelled": "Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run `deckent terminal attach --scope {scope} --preview` in this folder. `deckent init` starts a new, separate installation here.",
   "setup.attachment.incomplete.restore": "The attachment restore is unfinished. Rerun the same `deckent terminal attach --restore` command with the original project ID and preview digest. If it is still blocked, ask an installation administrator for help.",
   "setup.attachment.incomplete.relocate": "The location update is unfinished. Rerun the same `deckent terminal attach --relocate` command from the same folder with the original scope. If it is still blocked, ask an installation administrator for help.",
   "setup.attachment.register": "Register this source installation",
