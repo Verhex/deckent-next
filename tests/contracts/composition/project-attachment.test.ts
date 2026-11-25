@@ -985,6 +985,25 @@ async function exerciseA2RefusalsAndRaces() {
     await refuse('PROJECT_ATTACHMENT_CHANGED');
   }
   await state(() => {}, r.ref);
+  expect(await r.bytes()).toEqual(start);
+
+  r.devices.target = 30n;
+  await state(record => { record.entries[0].attachment.location.device = '30'; }, r.ref);
+  const localOnlyBefore = await r.bytes();
+  expect(JSON.parse(localOnlyBefore.registry).lineage).toMatchObject({ headDevice: '20', filesystemIdentity: r.fsid, pastDevices: [] });
+  expect(JSON.parse(localOnlyBefore.identity).binding.device).toBe('20');
+  await expect(r.write().catch((error: unknown) => {
+    const failure = queryFailure(error);
+    throw new Error(`${failure.code} / ${platform.exitCodeFor(failure)}`, { cause: error });
+  })).resolves.toMatchObject({ projectId: r.ref.projectId });
+  const localOnlyAfter = await r.bytes();
+  expect(localOnlyAfter.local).not.toBe(localOnlyBefore.local);
+  expect(localOnlyAfter).toEqual({ ...localOnlyBefore, local: platform.serializeJsonDocument(r.localAt('30')) });
+  expect(JSON.parse(localOnlyAfter.registry).lineage.pastDevices).not.toContain('30');
+
+  r.devices.target = 40n;
+  await state(() => {}, r.ref);
+  expect(await r.bytes()).toEqual(start);
   await writeFile(r.refPath, '{invalid');
   await refuse('PROJECT_ATTACHMENT_INVALID');
   await state(() => {}, r.ref);
