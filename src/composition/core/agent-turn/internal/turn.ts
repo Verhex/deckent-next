@@ -303,7 +303,8 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, true, check)}${check ? ` (${check})` : ''}` : null; };
+        const reasonText = (reason?: Parameters<typeof nativeChatReasonText>[0] | null, check?: string | null) => reason ? `${nativeChatReasonText(reason, language, false, true, check)}${check ? ` (${check})` : ''}` : null;
+        const nativeRefusal = () => reasonText(agent?.refusal(), agent?.refusalCheck());
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
@@ -315,8 +316,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
-          const failure = queryFailure(error);
-          const refusal = nativeRefusal();
+          const failure = queryFailure(error), returned = agent?.returnedRefusal();
+          // Y25/Y26: a returned rejection whose receipt could not be recorded still names the check that refused it.
+          const refusal = nativeRefusal() ?? reasonText(returned?.reason, returned?.check);
           const diagnosis = refusal ?? (isHeadlessDiagnosticCode(failure.code)
             ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : null);
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : refusal ?? failure.code, ...(diagnosis && { diagnosis }) };

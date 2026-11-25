@@ -242,6 +242,7 @@ export const headlessDiagnosticCases = Object.freeze([
     ...selectionKind,
   }),
   ...classified(preflight, 'reason', { check: 'executable-recheck' }, {
+    'legacy-unverified': 'error.headless.recheckLegacyUnverified',
     missing: recheck(npmReasons.missing),
     'not-directory': recheck(npmReasons['not-directory']),
     directory: recheck(selectionKind.directory),
@@ -320,6 +321,7 @@ export const headlessDiagnosticCases = Object.freeze([
     gateway: 'error.HEADLESS_ISOLATION_UNAVAILABLE.gateway',
   }),
   ...classified(isolation, 'reason', { check: 'launcher' }, {
+    'legacy-unverified': 'error.headless.launcherLegacyUnverified',
     platform: 'error.headless.isolation.launcher-platform',
     unverified: 'error.headless.isolation.launcher-unverified',
     'identity-mismatch': 'error.headless.isolation.launcher-identity-mismatch',

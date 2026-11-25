@@ -334,6 +334,8 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
 // Semantic expectations are independent of the catalog keys and of the case renderer.
 const diagnosticMeaning = new Map(`path-search-not-file	A candidate on PATH was not a regular file	PATH üzerindeki bir aday normal bir dosya değildi
 spawn/legacy-unverified	The previous check concerned running a CLI probe. The specific cause could not be determined.	Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.
+launcher/legacy-unverified	The previous check concerned the isolation launcher. The specific cause could not be determined.	Önceki denetim yalıtım başlatıcısıyla ilgiliydi. Kesin neden belirlenemedi.
+executable-recheck/legacy-unverified	The previous check concerned checking the program again. The specific cause could not be determined.	Önceki denetim programın yeniden denetlenmesiyle ilgiliydi. Kesin neden belirlenemedi.
 config-dir/legacy-unverified	The previous check concerned the CLI login configuration directory. The specific cause could not be determined.	Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.
 worker-result/exit	The launched isolation command exited with code 16.	Başlatılan yalıtım komutu 16 koduyla sonlandı.
 worker-result/signal	A signal was observed for the launched isolation command. The invocation outcome is unknown.	Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.
@@ -554,7 +556,7 @@ function headlessExpectationIds(fields: Readonly<Record<string, string | number>
     const uncertainty = ['manifest-too-large', 'manifest-unreadable', 'changed-during-check', 'verification-unavailable'].includes(String(reason));
     return [uncertainty ? 'npm-unverified' : recheck ? 'npm-recheck' : 'npm-check', 'npm/' + reason];
   }
-  if (check === 'executable-recheck') return ['entry-recheck', reason === 'directory' ? 'selection/directory' : 'npm/' + reason];
+  if (check === 'executable-recheck' && reason !== 'legacy-unverified') return ['entry-recheck', reason === 'directory' ? 'selection/directory' : 'npm/' + reason];
   if (exit) return ['login-outcome/' + exit, 'login-outcome/unsaved'];
   if (holder) return ['holder/' + holder];
   if (limit) return ['limit/' + limit];

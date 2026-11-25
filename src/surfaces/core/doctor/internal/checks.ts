@@ -1,4 +1,4 @@
-import { ErrorRegistry, readHeadlessDiagnosticIdentifier, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, readFailureReasonText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
@@ -195,7 +195,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   // BeUser D-05: a Run the crash-loop breaker or the bounded failure path parked waits for the person; DISPATCH_PREPARATION_ABORTED means the
   // runtime service stopped repeatedly while starting its work. Each names the inspect step; resume follows once the cause is fixed.
   for (const { runId, code } of f.stuckRuns ?? []) {
-    const run = runId.slice(0, 12), diagnosis = readHeadlessDiagnosticIdentifier(code, l);
+    const run = runId.slice(0, 12), diagnosis = readFailureReasonText(code, l);
     const text = code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l)
       : t('doctor.check.run.parked', { run, code }, l) + (diagnosis ? ' ' + diagnosis : '');
     rows.push(row('work', 'work.stuckRun', 'warning', text, scoped(`deckent run inspect --id ${run}`, f)));

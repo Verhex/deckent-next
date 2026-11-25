@@ -76,8 +76,9 @@ export function nativeWorkerProcessResult(evidence: { reason: string; limit: str
   if (finished?.kind === 'refused' || refused) {
     const refusal = finished?.kind === 'refused' ? finished.reason : 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const;
     if (refusal === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' && finished?.kind === 'refused' && finished.field && !claudeEventChecks.has(finished.field))
+      // C6: the parser's own byte bound (`size`) is the established output bound, not an unexpected tool or a general guard.
       return { ...(unresolved ?? { ...base, status: 'failed' as const }), stopped: true as const,
-        failureCode: workerResultCode('guard') ?? 'NATIVE_WORKER_TERMINATION_UNKNOWN' };
+        failureCode: finished.field === 'size' ? 'NATIVE_WORKER_OUTPUT_LIMIT' : workerResultCode('guard') ?? 'NATIVE_WORKER_TERMINATION_UNKNOWN' };
     return unresolved ? { ...unresolved, refusal } : { ...base, status: 'failed' as const, refusal };
   }
   const processFailure = evidence.reason === 'exit' && typeof evidence.exitCode === 'number' && evidence.exitCode > 0
@@ -87,7 +88,9 @@ export function nativeWorkerProcessResult(evidence: { reason: string; limit: str
   const failureCode = (body && structuredFailureCode(body)) ?? processFailure;
   if (aborted || evidence.reason === 'cancelled' || evidence.reason === 'timeout')
     return { ...(unresolved ?? { ...base, status: 'cancelled' as const }),
-      failureCode: evidence.reason === 'timeout' ? 'NATIVE_WORKER_DEADLINE_REACHED' : failureCode ?? 'NATIVE_WORKER_STOP_UNCONFIRMED' };
+      // C2: the deadline decides the outcome class; a provider status the Claude result already reported keeps the reason.
+      failureCode: evidence.reason === 'timeout' ? (claudeRejection && structuredFailureCode(claudeRejection)) ?? 'NATIVE_WORKER_DEADLINE_REACHED'
+        : failureCode ?? 'NATIVE_WORKER_STOP_UNCONFIRMED' };
   if (evidence.limit || evidence.stdoutTruncated || evidence.stderrTruncated) {
     const failureCode = evidence.limit ? headlessDiagnosticIdentifier('HEADLESS_LIMIT_REACHED', { limit: evidence.limit }) : 'NATIVE_WORKER_OUTPUT_LIMIT';
     return { ...(unresolved ?? { ...base, status: 'failed' as const }), ...(failureCode && { failureCode }) };

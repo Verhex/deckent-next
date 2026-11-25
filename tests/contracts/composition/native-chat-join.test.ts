@@ -239,6 +239,22 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
     expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
   }
+  if (phase !== 'send') return;
+  // Y25/Y26: a model refusal returned as the turn's rejection whose receipt cannot be recorded still names its check in the final note.
+  const h = await fixture(), driver = h.runtime.driver, open = adapters.openSqliteModelInvocationStore;
+  Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  const store = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordRejected: async () => { throw new Error('fixture-record-failed'); } }));
+  h.runtime.driver = async input => {
+    const opened = await driver(input), body = Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'model-mismatch', field: 'assistant', subtype: 'model-reported' }));
+    return { ...opened, returnedRefusal: () => ({ reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const, check: 'agent-surface:assistant' }),
+      native: (...args) => ({ ...opened.native(...args), send: async () => ({ kind: 'rejected' as const,
+        evidence: createModelInvocationResponseEvidence(input.profile.adapter, 'model-mismatch', null, body, true) }) }) };
+  };
+  try {
+    expect((await h.run()).note).toBe('The model round ended without an answer. A CLI safety check refused this turn. No tool ran without permission; '
+      + 'the check is named below. (agent-surface:assistant) No tool call ran.');
+  } finally { store.mockRestore(); }
 });
 
 it('keeps the summary refusal before and after claim in the final note in EN and TR', async () => {

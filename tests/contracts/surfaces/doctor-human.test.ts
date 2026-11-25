@@ -56,6 +56,9 @@ describe('doctor rows (pure)', () => {
       const checks = doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code: 'HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE' }] }), locale);
       expect.soft(checks.find(row => row.id === 'work.stuckRun')?.text).toBe(expected);
     }
+    // C3: a registered short code outside the reason allowlist is named as the recorded code, its cause not determined.
+    expect(doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code: 'HEADLESS_CREDITS_REQUIRED' }] }), 'en').find(row => row.id === 'work.stuckRun')?.text)
+      .toBe('Run run-fixture is parked (HEADLESS_CREDITS_REQUIRED). The record contains the error code HEADLESS_CREDITS_REQUIRED. The specific cause could not be determined.');
   });
   it('the Doctor command accepts a validated dotted version identifier without exposing malformed details', async () => {
     const root = await project();
@@ -220,19 +223,19 @@ describe('doctor subscription rows (pure)', () => {
     }
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
-      ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
+      ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal son kaydedilen denetimde açık (şimdi doğrulanmadı), onay ai, system', undefined],
       ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', undefined],
       ['untested', 'Brain girişi: güncel doğrulama kullanılamıyor (dizin /home/p/.other).', undefined]]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'en').find(row => row.id === 'work.brainLogin')?.text)
-      .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
+      .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open at the last recorded check (not verified now), consent ai, system');
     for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ headlessLogins: value }), 'en').some(row => row.id === 'work.brainLogin')).toBe(false);
   });
   it('s3c "Brain girişi" names the Brain\'s own login dir; a connection sealed to another dir keeps working and the next step is the move', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.deckent/headless/logins/claude', owned: true, consent: [] },
       { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', owned: false, consent: [] }];
     expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text, row.next])).toEqual([
-      ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/headless/logins/claude, channel open, consent none (you only); the Brain\'s own login directory', undefined],
-      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/headless/logins/claude, channel open at the last recorded check (not verified now), consent none (you only); the Brain\'s own login directory', undefined],
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open at the last recorded check (not verified now), consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
         + 'Brain\'s own in, then connect again', 'deckent models login --connection claude-cli-subscription']]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain("Brain'in kendi giriş dizini değil");
   });
@@ -240,7 +243,7 @@ describe('doctor subscription rows (pure)', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: [], isolation: { launcher: 'bundled', version: '0.13.0' } },
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: 'unavailable' as const }];
     expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text])).toEqual([
-      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); isolated by bubblewrap 0.13.0 (bundled)'],
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open at the last recorded check (not verified now), consent none (you only); isolated by bubblewrap 0.13.0 (bundled)'],
       ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only). The check recorded an isolation refusal.']]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain('bubblewrap 0.13.0 (bundled) ile yalıtılmış');
   });
@@ -248,7 +251,7 @@ describe('doctor subscription rows (pure)', () => {
     const egress = { refused: 9, hosts: ['h1.example', 'h2.example', 'h3.example', 'h4.example', 'h5.example', 'h6.example', 'h7.example'], other: 1 };
     const login = { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: null, egress };
     expect(doctorChecks(report, facts({ headlessLogins: [login] }), 'en').find(row => row.id === 'work.brainLogin')?.text).toBe('Brain login: claude.ai, directory '
-      + '/home/p/.claude, channel open, consent none (you only); network: 9 connection(s) outside the provider allowlist refused (hosts: h1.example, h2.example, h3.example, '
+      + '/home/p/.claude, channel open at the last recorded check (not verified now), consent none (you only); network: 9 connection(s) outside the provider allowlist refused (hosts: h1.example, h2.example, h3.example, '
       + 'h4.example, h5.example and 2 more)');
     expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: { refused: 1, hosts: [], other: 1 } }] }), 'tr').find(row => row.id === 'work.brainLogin')?.text)
       .toContain('; ağ: sağlayıcı izin listesi dışında 1 bağlantı reddedildi (adresler: -)');

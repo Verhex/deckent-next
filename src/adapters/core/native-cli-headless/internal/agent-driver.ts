@@ -33,6 +33,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
+  // A refusal sent as the turn's own rejection: its receipt names it, so it is read only when that receipt could not be recorded.
+  let returned: { reason: NativeAgentReadinessReason; check: string } | null = null;
   const port: ToolSessionPort = { session: input.session.session,
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
@@ -58,7 +60,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
     }
     return sealed.preflight;
   };
-  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck, notices: () => claude?.notices() ?? [],
+  return Object.freeze({ port, admit: async (signal?: AbortSignal) => { await checked(signal); }, refusal: () => refusal, refusalCheck: () => refusalCheck, returnedRefusal: () => returned, notices: () => claude?.notices() ?? [],
     async close() { lifetime.abort(); calls.clear(); },
     native(bridge: Bridge, secrets: { configured: KnownSecretSnapshot; turn: KnownSecretSnapshot }): ModelInvocationNativePort {
       const known = combineKnownSecrets(secrets.configured, secrets.turn), textPort = createNativeCliHeadlessPort({ now: input.now, isolation: input.isolation, ...(input.paidExtraUsage ? { paidExtraUsage: input.paidExtraUsage } : {}) });
@@ -103,10 +105,13 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
             if (finished?.kind === 'refused') {
               const limit = finished.limit;
               if (limit) return rejectResult(reject(limit.kind === 'unknown' ? 'invalid-response' : 'http-status', nativeQuotaRejection(limit)));
-              if (finished.rejection) return rejectResult(reject(finished.rejection.refusal === 'model-mismatch' ? 'model-mismatch' : 'invalid-response', finished.rejection));
+              const field = `agent-surface:${finished.field}`.slice(0, 64), check = finished.detail ? `${field} ${finished.detail}` : field;
+              if (finished.rejection) {
+                returned = { reason: finished.reason, check };
+                return rejectResult(reject(finished.rejection.refusal === 'model-mismatch' ? 'model-mismatch' : 'invalid-response', finished.rejection));
+              }
               // Owner 2026-11-05: a refused turn stops only itself; no negative observation pauses later turns.
-              refusal = finished.reason;
-              const field = `agent-surface:${finished.field}`.slice(0, 64); refusalCheck = finished.detail ? `${field} ${finished.detail}` : field;
+              refusal = finished.reason; refusalCheck = check;
               return rejectResult(reject('invalid-response', { refusal: 'guard', field, ...(finished.detail ? { subtype: finished.detail } : {}) }));
             }
             const stoppedTurn = stopped as Refusal | null; // The line callback owns this typed refusal.
@@ -136,7 +141,9 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               response = { ...ended.response, native: { ...ended.response.native,
                 choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] } };
             } else if (ended && 'refusal' in ended) return rejectResult(ended.refusal);
-            else return rejectResult(reject('interrupted', { refusal: 'invalid-output', subtype: 'incomplete' }), false);
+            // A failed Claude result keeps its registered provider classification; the evidence stays incomplete as before.
+            else return rejectResult(reject('interrupted', finished?.kind === 'failed' && finished.rejection ? finished.rejection
+              : { refusal: 'invalid-output', subtype: 'incomplete' }), false);
             if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
             response = projectResponse(response, known) as typeof response;
             if (Buffer.byteLength(JSON.stringify(response)) > profile.limits.responseMaxBytes) return rejectResult(reject('response-limit', { refusal: 'response-limit' }));

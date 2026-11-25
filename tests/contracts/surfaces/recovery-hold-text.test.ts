@@ -61,6 +61,9 @@ it('run inspect, the terminal /runs detail and the monitor blocker show the hold
   const blocker = deriveRunBlocker({ run: { snapshot, attempts: [], approvals: [] }, observedAt: 6 } as never)!;
   expect(blocker).toMatchObject({ code: 'parked', detail: `recovery:continuation-not-approved:${REF}` }); // typed detail, rendered by the view
   expect(blockerDetailText(blocker.detail!, 'en')).toContain('not approved here'); expect(blockerDetailText(blocker.detail!, 'tr')).toContain('kalıcı onay yok');
+  // C3: an allowlisted worker reason is its sentence with the identifier beside it; any other registered code is the recorded code.
+  expect(blockerDetailText('NATIVE_WORKER_DEADLINE_REACHED', 'en')).toBe('The native worker reached its time limit. Its termination is unverified. (NATIVE_WORKER_DEADLINE_REACHED)');
+  expect(blockerDetailText('NATIVE_AGENT_LOGIN_REQUIRED', 'tr')).toBe('Kayıtta NATIVE_AGENT_LOGIN_REQUIRED hata kodu var. Hatanın kesin nedeni belirlenemedi.');
   // An operator's hold keeps its typed reason as the monitor detail and its own words in inspect (no system next step).
   const own = heldRun('auditor asked', 'operator');
   expect(deriveRunBlocker({ run: { snapshot: own, attempts: [], approvals: [] }, observedAt: 6 } as never)).toMatchObject({ detail: 'operator-hold' });

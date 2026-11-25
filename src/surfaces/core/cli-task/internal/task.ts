@@ -5,7 +5,7 @@ import { inspectTask, phaseWord } from './task-inspect.js';
 import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, readHeadlessDiagnosticIdentifier, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, readFailureReasonText, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -346,12 +346,14 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.executeTask(context.root ?? process.cwd(), identity, options);
     const reason = result.execution.status === 'unresolved' && result.execution.waiting
-      ? readHeadlessDiagnosticIdentifier(result.execution.waiting.reason, locale) : undefined;
+      ? readFailureReasonText(result.execution.waiting.reason, locale) : undefined;
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.task.execute.heading', data.execution.identity, locale),
       data.execution.status === 'terminal'
         ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? t('cli.value.none', {}, locale), signal: data.execution.terminal?.signal ?? t('cli.value.none', {}, locale) }, locale)
-        : ({ prevented: t('cli.task.execute.prevented', {}, locale), unresolved: t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
+        // C3: with a recorded reason the first line says only what is known (no final dispatch record), never that no exit was seen.
+        : ({ prevented: t('cli.task.execute.prevented', {}, locale),
+          unresolved: reason ? t('cli.task.execute.unresolvedReason', {}, locale) : t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
       ...(reason ? [reason] : []),
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
