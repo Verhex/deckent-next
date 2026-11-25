@@ -59,9 +59,7 @@ vi.mock('#surfaces/index.js', async importOriginal => {
 });
 const roots: string[] = [];
 afterEach(async () => {
-  personEffectWitness.allowed = false;
-  vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache();
-  vi.mocked(fs.lstat).mockReset(); vi.mocked(fs.rename).mockReset(); vi.mocked(fs.stat).mockReset();
+  resetCaseMocks();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function snapshotBytes(root: string, prefix = ''): Promise<Record<string, string>> {
@@ -614,7 +612,7 @@ it.skipIf(process.platform !== 'linux')('holds registration before identity on a
   expect(await loadConfiguredScopeContext(third, 'third', f.options, 'read')).toMatchObject({ installationId: existing.source.installationId });
 });
 
-it.skipIf(process.platform !== 'linux')('a governed source write finishes a device-only half write using fresh lineage evidence', async () => {
+it.skipIf(process.platform !== 'linux')('a governed source write finishes a device-only half write using fresh lineage evidence; A2 reconciles the source first, a scoped terminal write reopens the exact L2 pair and a policy withdrawn after source publication stops before local publication', async () => {
   vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available',
     identity: registrationV3Fixture.source.location.filesystemIdentity });
   const f = await fixture(), config = await loadComposedConfig(f.a, f.options);
@@ -664,9 +662,11 @@ it.skipIf(process.platform !== 'linux')('a governed source write finishes a devi
   const repaired = JSON.parse(await readFile(identity, 'utf8'));
   expect(repaired.binding).toMatchObject({ schemaVersion: 3, device: registration.source.location.device });
   expect(await readFile(join(productResourcePath(config.productLayout, 'installationIdentity'), 'identity.pre-v3.json'))).toEqual(legacy);
+  await exerciseA2TerminalReopen();
+  await exerciseA2PolicyWithdrawnAfterSource();
 });
 
-it.skipIf(process.platform !== 'linux')('preserves source bytes when revoke or detach wins before source repair takes the registration lock', async () => {
+it.skipIf(process.platform !== 'linux')('preserves source bytes when revoke or detach wins before source repair takes the registration lock; A2 refuses unproved provenance and authority and serializes competing writes, rejecting 104 or byte drift before local publication', async () => {
   vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available',
     identity: registrationV3Fixture.source.location.filesystemIdentity });
   const hold = FileProjectAttachmentStore.prototype.hold;
@@ -702,9 +702,10 @@ it.skipIf(process.platform !== 'linux')('preserves source bytes when revoke or d
       await expect.soft(readFile(join(directory, 'identity.pre-v3.json')), action).rejects.toMatchObject({ code: 'ENOENT' });
     } finally { beforeRepairLock.mockRestore(); }
   }
+  await exerciseA2RefusalsAndRaces();
 });
 
-it.skipIf(process.platform !== 'linux')('recovers the persisted H-back output after another renumber only with the same filesystem evidence', async () => {
+it.skipIf(process.platform !== 'linux')('recovers the persisted H-back output after another renumber only with the same filesystem evidence; A2 reuses the durable L1 output at 30, rederives a literal interrupted 20/30 pair at 40 and uses the head alone without filesystem identity', async () => {
   const filesystemIdentity = registrationV3Fixture.source.location.filesystemIdentity;
   const observe = vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available', identity: filesystemIdentity });
   const f = await fixture(), { productLayout } = await loadComposedConfig(f.a, f.options);
@@ -755,6 +756,8 @@ it.skipIf(process.platform !== 'linux')('recovers the persisted H-back output af
     source: { location: { device: String(observedDevice), filesystemIdentity } },
   });
   expect(await readFile(firstCopy)).toEqual(legacy);
+  await exerciseA2DurableL1();
+  await exerciseA2HeadWithoutFilesystemIdentity();
 });
 
 async function renumberingTarget() {
@@ -813,7 +816,16 @@ async function renumberingTarget() {
     write, read, source, bytes, failRename, restoreRename, localAt, useL1Cap };
 }
 
-it.skipIf(process.platform !== 'linux')('A2 reconciles the source first and a scoped terminal write reopens the exact L2 pair', async () => {
+/** The afterEach reset, also run where an A2 group below joins an existing declaration (each group builds only the fixture it needs). */
+function resetCaseMocks() {
+  personEffectWitness.allowed = false;
+  vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache();
+  vi.mocked(fs.lstat).mockReset(); vi.mocked(fs.rename).mockReset(); vi.mocked(fs.stat).mockReset();
+}
+
+/** A2: a renumbered target reconciles the source first and a scoped terminal write reopens the exact L2 pair (an unrepaired source). */
+async function exerciseA2TerminalReopen() {
+  resetCaseMocks();
   const r = await renumberingTarget();
   r.devices.target = 30n;
   const before = await r.bytes();
@@ -858,28 +870,31 @@ it.skipIf(process.platform !== 'linux')('A2 reconciles the source first and a sc
   await expect(r.read()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
   await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
   expect(await r.bytes()).toEqual(done);
-});
+}
 
-it.skipIf(process.platform !== 'linux')('A2 reuses the durable L1 output at 30 and rederives a literal interrupted 20/30 pair at 40', async () => {
-  for (const interruption of [false, true]) {
-    const r = await renumberingTarget();
-    await r.source();
-    const withOtherReference = (await r.store.registration())!;
-    const entry = withOtherReference.entries[0]!;
-    await r.store.hold(async () => {
-      const current = (await r.store.registration())!;
-      await r.store.writeJoined(current, { ...current, entries: [...current.entries, {
-        ...entry, state: 'revoked', attachment: { ...r.localAt('30'), projectId: randomUUID(), commandId: randomUUID(),
-          location: { ...r.localAt('30').location, canonicalRoot: join(r.f.root, 'unreachable') } },
-      }] });
-    });
-    const cap = await r.useL1Cap(), start = await r.bytes();
-    const expected = (device: string, pastDevices: string[]) => {
-      const record = JSON.parse(start.registry);
-      record.entries[0].attachment = r.localAt(device);
-      record.lineage.pastDevices = pastDevices;
-      return { ...start, local: JSON.stringify(r.localAt(device), null, 2) + '\n', registry: JSON.stringify(record, null, 2) + '\n' };
-    };
+/** A2: one L1 fixture (a second reference, the L1 cap); the interrupted pass ends on the start records, so the other pass reuses it. */
+async function exerciseA2DurableL1() {
+  resetCaseMocks();
+  const r = await renumberingTarget();
+  await r.source();
+  const withOtherReference = (await r.store.registration())!;
+  const entry = withOtherReference.entries[0]!;
+  await r.store.hold(async () => {
+    const current = (await r.store.registration())!;
+    await r.store.writeJoined(current, { ...current, entries: [...current.entries, {
+      ...entry, state: 'revoked', attachment: { ...r.localAt('30'), projectId: randomUUID(), commandId: randomUUID(),
+        location: { ...r.localAt('30').location, canonicalRoot: join(r.f.root, 'unreachable') } },
+    }] });
+  });
+  const cap = await r.useL1Cap(), start = await r.bytes();
+  const expected = (device: string, pastDevices: string[]) => {
+    const record = JSON.parse(start.registry);
+    record.entries[0].attachment = r.localAt(device);
+    record.lineage.pastDevices = pastDevices;
+    return { ...start, local: JSON.stringify(r.localAt(device), null, 2) + '\n', registry: JSON.stringify(record, null, 2) + '\n' };
+  };
+  for (const interruption of [true, false]) {
+    expect(await r.bytes(), `L1 pass (interruption: ${interruption}) starts from the start records`).toEqual(start);
     r.devices.source = r.devices.target = 30n;
     r.failRename(r.refPath);
     await expect(r.write()).rejects.toBeDefined();
@@ -916,9 +931,14 @@ it.skipIf(process.platform !== 'linux')('A2 reuses the durable L1 output at 30 a
     await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
     expect(await r.bytes()).toEqual(expected('20', interruption ? [] : ['30']));
   }
-});
+}
 
-it.skipIf(process.platform !== 'linux')('A2 refuses unproved provenance and authority and uses the head alone without filesystem identity', async () => {
+/**
+ * A2 on ONE repaired source: every refusal must leave the three records byte-identical, so the same fixture then carries the 104 and
+ * byte-drift races at 30, each from the asserted start records; the competing write publishes, so it runs last.
+ */
+async function exerciseA2RefusalsAndRaces() {
+  resetCaseMocks();
   const r = await renumberingTarget();
   await r.source();
   const start = await r.bytes();
@@ -974,36 +994,13 @@ it.skipIf(process.platform !== 'linux')('A2 refuses unproved provenance and auth
   r.devices.target = 20n;
   await refuse('PROJECT_ATTACHMENT_DENIED');
 
-  const head = await renumberingTarget();
-  head.filesystemAt.mockResolvedValue({ status: 'unavailable', reason: 'mount-unavailable' });
-  await head.source();
-  const retained = await head.bytes(), record = JSON.parse(retained.registry);
-  expect(record.lineage).toMatchObject({ headDevice: '20', filesystemIdentity: null });
-  expect(record.source.location).toMatchObject({ device: '20' });
-  expect(record.source.location.filesystemIdentity).toBeUndefined();
-  const intermediate = JSON.stringify(head.localAt('30'), null, 2) + '\n';
-  await writeFile(head.refPath, intermediate);
-  head.devices.target = 40n;
-  await expect(head.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
-  expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
-  head.devices.target = 20n;
-  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
-  expect(await head.bytes()).toEqual(retained);
-  record.lineage.pastDevices = ['10'];
-  record.entries[0].attachment = head.localAt('10');
-  await writeFile(head.registryPath, JSON.stringify(record, null, 2) + '\n');
-  await writeFile(head.refPath, JSON.stringify(head.localAt('10'), null, 2) + '\n');
-  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
-  expect(await head.bytes()).toEqual(retained);
-});
-
-it.skipIf(process.platform !== 'linux')('A2 serializes competing writes and rejects 104 or byte drift before local publication', async () => {
+  r.filesystemAt.mockResolvedValue({ status: 'available', identity: r.fsid });
+  r.devices.target = 30n;
   const hold = FileProjectAttachmentStore.prototype.hold;
-  for (const race of ['competing', 'revoke', 'detach', 'unregister', 'local', 'inventory'] as const) {
-    const r = await renumberingTarget();
-    await r.source();
-    r.devices.target = 30n;
+  for (const race of ['revoke', 'detach', 'unregister', 'local', 'inventory', 'competing'] as const) {
+    await state(() => {}, r.ref);
     const before = await r.bytes();
+    expect(before, `${race} starts from the start records`).toEqual(start);
     if (race === 'competing') {
       let enter!: () => void;
       const bothReady = new Promise<void>(resolve => { enter = resolve; });
@@ -1059,7 +1056,37 @@ it.skipIf(process.platform !== 'linux')('A2 serializes competing writes and reje
       expect(await r.bytes()).toEqual(raced);
     } finally { gate.mockRestore(); }
   }
+}
 
+/** A2 with no filesystem identity: the head alone settles a renumbered target (a source repaired without filesystem evidence). */
+async function exerciseA2HeadWithoutFilesystemIdentity() {
+  resetCaseMocks();
+  const head = await renumberingTarget();
+  head.filesystemAt.mockResolvedValue({ status: 'unavailable', reason: 'mount-unavailable' });
+  await head.source();
+  const retained = await head.bytes(), record = JSON.parse(retained.registry);
+  expect(record.lineage).toMatchObject({ headDevice: '20', filesystemIdentity: null });
+  expect(record.source.location).toMatchObject({ device: '20' });
+  expect(record.source.location.filesystemIdentity).toBeUndefined();
+  const intermediate = JSON.stringify(head.localAt('30'), null, 2) + '\n';
+  await writeFile(head.refPath, intermediate);
+  head.devices.target = 40n;
+  await expect(head.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+  head.devices.target = 20n;
+  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  expect(await head.bytes()).toEqual(retained);
+  record.lineage.pastDevices = ['10'];
+  record.entries[0].attachment = head.localAt('10');
+  await writeFile(head.registryPath, JSON.stringify(record, null, 2) + '\n');
+  await writeFile(head.refPath, JSON.stringify(head.localAt('10'), null, 2) + '\n');
+  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  expect(await head.bytes()).toEqual(retained);
+}
+
+/** A2: a target policy withdrawn after the source publication fails before local publication (an unrepaired source). */
+async function exerciseA2PolicyWithdrawnAfterSource() {
+  resetCaseMocks();
   const r = await renumberingTarget();
   r.devices.target = 30n;
   const target = await loadComposedConfig(r.f.b, r.f.options);
@@ -1099,7 +1126,7 @@ it.skipIf(process.platform !== 'linux')('A2 serializes competing writes and reje
   await writeFile(policy, granted);
   await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
   await expect(r.read()).resolves.toMatchObject({ projectId: r.ref.projectId });
-});
+}
 
 it('uses the retained binding and the fresh observation for H-back, H-fwd and S2 without carrying dead or long device lineage', () => {
   const record = readerFixture(), { filesystemIdentity, ...location } = registrationV3Fixture.source.location;
