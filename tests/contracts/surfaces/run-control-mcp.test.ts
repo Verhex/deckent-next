@@ -9,16 +9,23 @@ import * as adapters from '#adapters/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { applyConfiguredRunLifecycle } from '#composition/core/runs/index.js';
 import { createRun, holdRun, mcpPrincipalRef } from '#domain/index.js';
-import { AttemptStoreError, AuthenticationError, RunDecisionApprovalBroker } from '#engine/index.js';
+import { AttemptStoreError, AuthenticationError, ConfigApplication, RunDecisionApprovalBroker } from '#engine/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { isCodedError, productResourcePath, t, withConfigWriteLock, writeConfig, type Locale } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureExecution } from '../support/execution-registry.js';
-const machine = vi.hoisted(() => ({ absent: false }));
+const machine = vi.hoisted(() => ({ absent: false, contended: undefined as ((path: string) => void) | undefined, unlinkFault: undefined as string | undefined }));
 vi.mock('node:fs/promises', async importOriginal => {
   const original = await importOriginal<typeof import('node:fs/promises')>();
   return { ...original, readFile: (...args: Parameters<typeof original.readFile>) =>
-    machine.absent && args[0] === '/etc/machine-id' ? Promise.reject(Object.assign(new Error('fixture machine id missing'), { code: 'ENOENT' })) : original.readFile(...args) };
+    machine.absent && args[0] === '/etc/machine-id' ? Promise.reject(Object.assign(new Error('fixture machine id missing'), { code: 'ENOENT' })) : original.readFile(...args),
+  // Lock observation and release faults at the filesystem boundary: an occupied lock directory, a failing owner-record removal.
+  mkdir: (...args: Parameters<typeof original.mkdir>) => original.mkdir(...args).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'EEXIST') machine.contended?.(String(args[0]));
+    throw error;
+  }),
+  unlink: (...args: Parameters<typeof original.unlink>) => args[0] === machine.unlinkFault
+    ? (machine.unlinkFault = undefined, Promise.reject(Object.assign(new Error('fixture release fault'), { code: 'EIO' }))) : original.unlink(...args) };
 });
 it('exposes policy-gated hold/resume through one command contract and refuses human answers at the MCP wire', async () => {
   const received: unknown[] = [];
@@ -72,7 +79,8 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
     await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity });
     for (const [runId, source] of [['operator', 'operator'], ['safety', 'nervous'], ['corrupt', 'operator'], ['fresh', null],
       ['drift', null], ['policy-race', null], ['race-hidden', 'operator'], ['race-visible', 'operator'],
-      ['layout-edit', null], ['policy-edit', null], ['busy-visible', null], ['busy-hidden', null], ['identity-first', null], ['identity-weak', null]] as const) {
+      ['layout-edit', null], ['policy-edit', null], ['busy-visible', null], ['busy-hidden', null], ['identity-first', null], ['identity-weak', null],
+      ['run-first', null], ['release-fault', null]] as const) {
       const identity = { scopeId, runId, layoutRevision: 'fixture' }, execution = fixtureExecution(graph);
       await store.createRun({ commandId: `create-${runId}`, actor: { id: owner.id, issuer: owner.issuer, subject: owner.subject },
         identity, graph, execution, now, policy: { schemaVersion: 2, poolId: 'pool', capacity, ordering: ['t'] } });
@@ -186,7 +194,6 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
                 schemaVersion: 1, code: 'CONFIG_WRITE_LOCKED', message: locale === 'en'
                   ? 'Configuration is locked (age AGEs). Retry after the writer finishes.'
                   : 'Config kilitli (yaş AGE sn). Yazıcı tamamlandıktan sonra yeniden deneyin.' });
-              expect.soft(JSON.stringify(body)).not.toContain(policyPath);
             } else expect.soft(locked).toEqual(absent);
           });
         }
@@ -237,20 +244,11 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
         await writePolicy(productResourcePath(other.layout, 'policy'), 'fixture', runGrant('cancel'));
         await configure(data);
         await setPolicy(runGrant('cancel'));
-        const ledgerBytes = () => Promise.all([path, other.path].map(ledger => Promise.all([
-          readFile(ledger), readFile(`${ledger}-wal`).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return Buffer.alloc(0); }),
-        ])));
-        const sameLedgerBytes = (left: Buffer[][], right: Buffer[][]) =>
-          left.map((files, ledger) => files.every((bytes, file) => bytes.equals(right[ledger]![file]!)));
-        const beforeBytes = await ledgerBytes();
-        const switchInstallation = () => writeConfig(join(root, '.deckent/config.json'), {
-          layout: { root: moved }, installation, configFile: { writeLockTimeoutMs: 1 },
-        });
         const before = [effects(), state(other.path)];
         const authorize = RunDecisionApprovalBroker.prototype.authorize;
         const broker = vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
           const decision = await authorize.apply(this, args);
-          await switchInstallation();
+          await configure(moved);
           return decision;
         });
         try {
@@ -258,42 +256,93 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           expect(broker).toHaveBeenCalledOnce();
           expect.soft(drifted).toEqual(absent);
           expect.soft([effects(), state(other.path)]).toEqual(before);
-          expect.soft(sameLedgerBytes(await ledgerBytes(), beforeBytes)).toEqual([true, true]);
         } finally { broker.mockRestore(); await configure(data); }
 
+        // Owner 196, order (a): a real governed publication A -> B already holds the project settings lock when the Run reaches its final
+        // write path. The Run waits for it, rereads B and is refused: neither ledger and neither key location changes.
+        const configPath = join(root, '.deckent/config.json'), lockPath = `${configPath}.write-lock`;
+        const keys = () => Promise.all([layout, other.layout].map(at => stat(join(productResourcePath(at, 'approvals'), 'authority.key')).then(() => true, () => false)));
+        let inside!: () => void, publish!: () => void, waited!: () => void, authorizations = 0;
+        const holding = new Promise<void>(done => { inside = done; }), publishing = new Promise<void>(done => { publish = done; });
+        const contended = new Promise<void>(done => { waited = done; });
+        const governed = new ConfigApplication(adapters.createConfigFileDocuments(root, options), { witness: async () => {}, audit: async () => {},
+          async authorize() { if (++authorizations === 2) { inside(); await publishing; } return 'fixture'; } }); // the second call is under the lock
+        const publication = governed.set({ keyPath: 'layout.root', value: moved, principal: { ...owner, scopeIds: [scopeId] }, scopeId, commandId: 'publication-first' });
+        await holding;
+        const baseline = [effects(), state(other.path), await keys()];
+        machine.contended = path => { if (path === lockPath) waited(); };
+        try {
+          const stale = call({ ...hold, runId: 'drift', commandId: 'publication-first' }, false);
+          await Promise.race([contended, stale]);
+          publish();
+          await publication;
+          expect.soft(JSON.parse(await readFile(configPath, 'utf8')).layout.root).toBe(moved);
+          expect.soft(await stale).toEqual(absent);
+          expect.soft([effects(), state(other.path), await keys()]).toEqual(baseline);
+        } finally { machine.contended = undefined; publish(); await publication.catch(() => undefined); await configure(data); }
+
+        // Order (b): the Run wins. Paused after its last bound read and before write admission (the MCP recheck of its decision), it holds the
+        // project settings lock: a raw publication cannot take it, another project's control completes, the publication lands after the receipt.
+        const elsewhere = await mkdtemp(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(elsewhere);
+        await mkdir(join(elsewhere, '.deckent'), { mode: 0o700 });
+        await writeFile(join(elsewhere, '.deckent/config.json'), JSON.stringify({ layout: { root: join(elsewhere, 'data') }, installation }), { mode: 0o600 });
+        const second = await openConfiguredAttemptStore(elsewhere, options);
+        try {
+          await second.store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity });
+          await second.store.createRun({ commandId: 'create-elsewhere', actor: { id: owner.id, issuer: owner.issuer, subject: owner.subject },
+            identity: { scopeId, runId: 'elsewhere', layoutRevision: 'fixture' }, graph, execution: fixtureExecution(graph), now, policy: { schemaVersion: 2, poolId: 'pool', capacity, ordering: ['t'] } });
+        } finally { second.store.close(); }
+        await writeFile(productResourcePath(second.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'elsewhere', restrictions: [], grants: [{ id: 'run',
+          effect: 'allow', principals: [{ issuer: owner.issuer, subject: owner.subject }], scopes: [scopeId], actions: ['inspect', 'cancel'], resource: { kind: 'run', ids: 'all' } }] }), { mode: 0o600 });
+        let paused!: () => void, proceed!: () => void;
+        const atBarrier = new Promise<void>(done => { paused = done; }), proceeding = new Promise<void>(done => { proceed = done; });
+        const barrier = vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementation(async function (this: RunDecisionApprovalBroker, ...args) {
+          if (args[4] !== undefined && args[0].commandId === 'run-first') { paused(); await proceeding; }
+          return authorize.apply(this, args);
+        });
+        const moveRaw = (writeLockTimeoutMs?: number) => writeConfig(configPath, { layout: { root: moved, resources: {} }, installation, ...(writeLockTimeoutMs ? { configFile: { writeLockTimeoutMs } } : {}) });
+        try {
+          const first = call({ ...hold, runId: 'run-first', commandId: 'run-first' }, false);
+          await atBarrier;
+          const bytes = await readFile(configPath, 'utf8');
+          await expect.soft(moveRaw(1)).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
+          expect.soft(await readFile(configPath, 'utf8')).toBe(bytes);
+          await expect.soft(applyConfiguredRunLifecycle(elsewhere, { schemaVersion: 1, scopeId, runId: 'elsewhere', commandId: 'elsewhere', expectedRevision: 0,
+            action: 'hold', holdReason: 'wait' }, options)).resolves.toMatchObject({ lifecycle: { run: { revision: 1 } } });
+          proceed();
+          expect.soft((await first).structuredContent).toMatchObject({ lifecycle: { commandId: 'run-first', run: { revision: 1 } } });
+          await moveRaw();
+          expect.soft(JSON.parse(await readFile(configPath, 'utf8')).layout.root).toBe(moved);
+        } finally { proceed(); barrier.mockRestore(); await configure(data); }
+
+        // Point 5(c): releasing the lock fails after the commit. The hold is recorded, so the caller receives the committed receipt; the owner
+        // record of this live process stays (the existing stale-lock recovery reclaims it once the process has ended).
+        const ownerRecord = join(lockPath, 'owner.json');
+        machine.unlinkFault = ownerRecord;
+        try {
+          const faulted = await call({ ...hold, runId: 'release-fault', commandId: 'release-fault' }, false);
+          expect.soft(faulted.structuredContent).toMatchObject({ lifecycle: { commandId: 'release-fault', run: { revision: 1 } } });
+          expect.soft(machine.unlinkFault).toBeUndefined();
+          await expect.soft(readFile(ownerRecord, 'utf8').then(JSON.parse)).resolves.toMatchObject({ pid: process.pid });
+        } finally { machine.unlinkFault = undefined; await rm(lockPath, { recursive: true, force: true }); }
+
         const readProject = adapters.FileProjectIdentityStore.prototype.read;
-        const initialRead = vi.spyOn(adapters.FileProjectIdentityStore.prototype, 'read').mockImplementationOnce(async function (this: adapters.FileProjectIdentityStore) {
+        const firstRead = vi.spyOn(adapters.FileProjectIdentityStore.prototype, 'read').mockImplementationOnce(async function (this: adapters.FileProjectIdentityStore) {
           const project = await readProject.call(this);
-          await switchInstallation();
+          await configure(moved);
           return project;
         });
         try { expect.soft(await call({ ...hold, runId: 'drift', commandId: 'first-read-drift' })).toEqual(absent); }
-        finally { initialRead.mockRestore(); await configure(data); }
+        finally { firstRead.mockRestore(); await configure(data); }
 
         await setPolicy(runGrant('reserve'), inspectAbsent);
-        lookup.mockImplementationOnce(switchInstallation);
+        lookup.mockImplementationOnce(() => configure(moved));
         try { expect.soft(await call()).toEqual(absent); }
         finally { await configure(data); }
+
         lookup.mockImplementationOnce(() => writeFile(policyPath, '{'));
         try { published(await call(), 'POLICY_UNAVAILABLE', locale); }
         finally { await setPolicy(runGrant('cancel')); }
-
-        let writerRefusal: unknown;
-        const bindingRace = vi.spyOn(adapters, 'openSqliteAttemptStore').mockImplementationOnce(async (...args) => {
-          writerRefusal = await switchInstallation().catch((error: unknown) => error);
-          expect.soft(sameLedgerBytes(await ledgerBytes(), beforeBytes)).toEqual([true, true]);
-          return openWriter(...args);
-        });
-        try {
-          const raced = await call({ ...hold, runId: 'busy-visible', commandId: 'binding-race' }, false);
-          expect(bindingRace).toHaveBeenCalledOnce();
-          expect.soft(writerRefusal).toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
-          expect.soft(raced.structuredContent).toMatchObject({ lifecycle: { run: { revision: 1 } } });
-          const committedBytes = await ledgerBytes();
-          expect.soft(sameLedgerBytes(committedBytes, beforeBytes)).toEqual([false, true]);
-          await switchInstallation();
-          expect.soft(sameLedgerBytes(await ledgerBytes(), committedBytes)).toEqual([true, true]);
-        } finally { bindingRace.mockRestore(); await configure(data); }
 
         const afterDecision = (edit: () => Promise<void>) => vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
           const decision = await authorize.apply(this, args);

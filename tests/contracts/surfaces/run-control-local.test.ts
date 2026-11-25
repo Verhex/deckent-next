@@ -1,13 +1,13 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
-import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, t, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -33,8 +33,8 @@ async function fixture() {
   const installation = { machineIdentity: { source: join(root, 'machine-id') } };
   await writeFile(installation.machineIdentity.source, 'local-control-fixture', { mode: 0o600 });
   await mkdir(join(root, '.deckent'), { mode: 0o700 });
-  const configure = (data: string) => writeFile(join(root, '.deckent/config.json'), JSON.stringify({
-    layout: { root: join(root, data) }, installation,
+  const configure = (data: string, writeLockTimeoutMs?: number) => writeFile(join(root, '.deckent/config.json'), JSON.stringify({
+    layout: { root: join(root, data) }, installation, ...(writeLockTimeoutMs ? { configFile: { writeLockTimeoutMs } } : {}),
   }), { mode: 0o600 });
   const { issuer, subject } = readLocalOsIdentity(), files: string[] = [];
   for (const data of ['selected', 'attached']) {
@@ -98,6 +98,26 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     expect(broker).toHaveBeenCalledOnce();
     broker.mockRestore();
     expect(f.errors.splice(0).join('')).toContain(turkish);
+    expect(f.state()).toEqual(before);
+  }
+  // Owner 196: the hold takes the project settings lock before its last bound read, on the configured budget (1 ms here: one try). Busy,
+  // it is refused before any effect with the existing lock sentence; a refused Run control exits 1 (owner 155), --json included.
+  const settings = join(f.root, '.deckent/config.json'), flags = ['--command-id', command.commandId, '--expected-revision', '1', '--reason', command.holdReason];
+  await f.configure('selected', 1);
+  await withConfigWriteLock(settings, async () => {
+    await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED', params: { path: `${settings}.write-lock`, pid: process.pid } });
+    for (const json of [false, true]) {
+      await expect(f.cli([...argv, ...flags, ...(json ? ['--json'] : [])], false, 'tr')).resolves.toBe(1);
+      expect(f.errors.splice(0).join('')).toContain(`Config kilidi ${settings}.write-lock, pid ${process.pid} tarafından tutuluyor`);
+    }
+  });
+  expect(t('error.CONFIG_WRITE_LOCKED', { path: 'P', pid: 7, ageSeconds: 0 }, 'en')).toBe('Configuration lock P is held by pid 7 (age 0s).');
+  expect(f.state()).toEqual(before);
+  // Point 5(a): the lock cannot be created (no write access where the settings live): refused before any Run effect.
+  if (process.getuid?.() !== 0) {
+    await chmod(dirname(settings), 0o500);
+    try { await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code: 'CONFIG_READ_IO_HOLD' }); }
+    finally { await chmod(dirname(settings), 0o700); }
     expect(f.state()).toEqual(before);
   }
 });

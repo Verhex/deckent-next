@@ -4,7 +4,7 @@ import { UninstallRecovery, FileEffectStore, withExclusiveFileLock, LocalOsSessi
 import { verifiedPrincipal, ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, resolveGlobalConfigReadPath, uninstallHoldPath, withConfigWriteLock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, resolveGlobalConfigReadPath, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { withVerifiedUninstallSet } from '#composition/core/backup/index.js';
@@ -33,10 +33,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);
     const decided = await policy.load();
     for (const action of plan.tier !== 'keep-data' ? ['uninstall', 'purge'] as const : ['uninstall'] as const) authorizeUninstall(decided, { ...principal, scopeIds: affected }, plan.installation.id, affected, action);
-    // After admission the durable hold itself fences Run controls, including continuation of an interrupted tail.
-    const recoveryLocation = await withConfigWriteLock(uninstallHoldPath(config.productLayout.root),
-      () => recovery.admit(plan, location => new FileEffectStore(location, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords }).assertUnclaimed()),
-      config.configFile.writeLockTimeoutMs);
+    const recoveryLocation = await recovery.admit(plan, location => new FileEffectStore(location, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords }).assertUnclaimed());
     const store = new FileEffectStore(recoveryLocation, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords });
     await store.initialize();
     const approvals = openSqliteApprovalStore(path, config.storage.sqlite);

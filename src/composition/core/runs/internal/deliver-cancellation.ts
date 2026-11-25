@@ -1,19 +1,32 @@
 import { randomUUID } from 'node:crypto';
 import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { verifiedPrincipal, RunCancellationCoordinator, type RunCommand } from '#engine/index.js';
-import { withRecordedRunCancellation } from './cancel.js';
+import { verifiedPrincipal, authenticate, RunApplication, runCommandSchema, RunPolicyAuthorization, RunCancellationCoordinator, type RunCommand } from '#engine/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
+import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createRecordedCancellationDelivery } from './cancellation-runtime.js';
 /** Explicit delivery, separate from request-only SDK entry. Current Run and per-Attempt policy gate
  * every delivery; stopped containers stay retained until independent output durability/release.
  */
-export function deliverConfiguredRunCancellation(projectRoot: string, input: RunCommand, options: ConfigLoadOptions = {}) {
-  return withRecordedRunCancellation(projectRoot, input, options, async ({ context: { config, layout, principal }, receipt, runs, store }) => {
-    // Each attempt delivers against the committed Run's immutable custody.
-    const clock = new SystemTrustedClock();
-    const delivery = createRecordedCancellationDelivery(store, config, layout, principal, verifiedPrincipal(principal));
-    const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation!, { now: () => clock.sample().wallMs, token: randomUUID });
-    return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.deliver(receipt) });
-  }, ({ config }) => {
-    if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellation' } });
-  });
+export async function deliverConfiguredRunCancellation(projectRoot: string, input: RunCommand, options: ConfigLoadOptions = {}) {
+  try {
+    const command = runCommandSchema.parse(input);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
+    const verifier = verifiedPrincipal(principal); const authorization = new RunPolicyAuthorization({ async load() { return document; } });
+    const actor = await authenticate(verifier, undefined, command.scopeId);
+    await authorization.authorize('cancel', command, actor);
+    if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
+      params: { missing: 'cancellation' },
+    });
+    const store = await openConfiguredLedger({ config, path: () => path() }, { migration: 'forbid' });
+
+    try {
+      const runs = new RunApplication(store, verifier, authorization);
+      // No runtime dependency is touched for an attempt that has never been dispatched.
+      // Each attempt has its own immutable profile; never share one mutable configuration across workers.
+      const clock = new SystemTrustedClock();
+      const delivery = createRecordedCancellationDelivery(store, config, layout, principal, verifier);
+      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation, { now: () => clock.sample().wallMs, token: randomUUID });
+      return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.cancel(command) });
+    } finally { store.close(); }
+  } catch (error) { throw queryFailure(error); }
 }

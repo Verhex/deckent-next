@@ -4,21 +4,6 @@ import { CodedError, ManagedFileError, getConfigFieldDefault, inspectProductDire
   withConfigWriteLock, writeJsonAtomic, type ProductLayout } from '#platform/index.js';
 
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
-type IdentityTarget = Readonly<{ layout: ProductLayout; resource: IdentityResource }>;
-export interface IdentityWriteCustody { owns(path: string): boolean }
-/** Use the identity writers' locks, with a short-lived capability for the admitted write itself. */
-export function withIdentityWriteCustody<T>(targets: readonly IdentityTarget[], timeoutMs: number, work: (custody: IdentityWriteCustody) => Promise<T>): Promise<T> {
-  const locks = new Map(targets.map(target => [productResourcePath(target.layout, target.resource), target]));
-  return [...locks.keys()].sort().reduceRight<() => Promise<T>>((next, path) => async () => {
-    const { layout, resource } = locks.get(path)!;
-    await prepareProductCompanionPath(layout, resource, '-lock');
-    return withConfigWriteLock(path, next, timeoutMs);
-  }, async () => {
-    let active = true;
-    try { return await work({ owns: path => active && locks.has(path) }); }
-    finally { active = false; }
-  })();
-}
 /** The poll step keeps a concurrent first publication cheap to observe; the bound is the writer-lock timeout. */
 const PUBLICATION_POLL_MS = 10;
 /** INCOMPLETE: the record directory exists without its record — an interrupted first publication or a lost record (KAPANIS-KIMLIK-YARISI). */
@@ -47,13 +32,7 @@ interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?()
  */
 export class IdentityFile<T, P = undefined> {
   constructor(private readonly layout: ProductLayout, private readonly resource: IdentityResource,
-    private readonly codec: IdentityCodec<T, P>, private readonly lockTimeoutMs?: number, private readonly custody?: IdentityWriteCustody) {}
-
-  private async exclusive<R>(directory: string, work: () => Promise<R>): Promise<R> {
-    if (this.custody?.owns(directory)) return work();
-    await prepareProductCompanionPath(this.layout, this.resource, '-lock');
-    return withConfigWriteLock(directory, work, this.lockTimeoutMs);
-  }
+    private readonly codec: IdentityCodec<T, P>, private readonly lockTimeoutMs?: number) {}
 
   private async read(directory: string): Promise<T | null> {
     const path = join(directory, 'identity.json');
@@ -108,14 +87,15 @@ export class IdentityFile<T, P = undefined> {
     try {
       const directory = productResourcePath(this.layout, this.resource);
       await inspectProductDirectory(this.layout, this.resource);
-      return await this.exclusive(directory, async () => {
+      await prepareProductCompanionPath(this.layout, this.resource, '-lock');
+      return await withConfigWriteLock(directory, async () => {
         await inspectProductDirectory(this.layout, this.resource);
         const current = await this.read(directory);
         if (!current) throw new IdentityFileError('INCOMPLETE');
         const next = await change(current);
         if (next !== current) await writeJsonAtomic(join(directory, 'identity.json'), next);
         return next;
-      });
+      }, this.lockTimeoutMs);
     } catch (error) { return this.fail(error); }
   }
 
@@ -137,7 +117,8 @@ export class IdentityFile<T, P = undefined> {
       } catch (error) {
         if (!(error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING')) throw error;
       }
-      return await this.exclusive(directory, async () => {
+      await prepareProductCompanionPath(layout, resource, '-lock');
+      return await withConfigWriteLock(directory, async () => {
         const prepared = await this.codec.prepare?.();
         let fresh = false;
         try { await mkdir(directory, { mode: 0o700 }); fresh = true; }
@@ -152,7 +133,7 @@ export class IdentityFile<T, P = undefined> {
         const record = await this.read(directory);
         if (!record) throw new IdentityFileError('INCOMPLETE');
         return record;
-      });
+      }, this.lockTimeoutMs);
     } catch (error) { return this.fail(error); }
   }
 }
