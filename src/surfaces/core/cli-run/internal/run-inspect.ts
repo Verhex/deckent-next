@@ -82,7 +82,7 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
  */
 /** PRE7FU (c): every cancelled task of this Run stopped before launch (no worker was started: never dispatched, no quota-exhausted attempt behind
  * it) and nothing is in flight or unresolved; otherwise worker termination stays "not confirmed". From the recorded view only. */
-/** C3: an encoded failure in its diagnosis alone; any other code in the progression line (code and resume step), then the shared reason reader's line. */
+/** C3: an encoded failure in its diagnosis alone; any other code in the progression line, then the shared reason reader's line. */
 function failureLines(code: string, locale: Locale): string[] {
   // The crash-loop and environment-timeout codes keep their own dedicated line below instead.
   const encoded = readHeadlessDiagnosticIdentifier(code, locale), dedicated = code === 'DISPATCH_PREPARATION_ABORTED' || code === 'EXECUTION_ENVIRONMENT_TIMED_OUT';

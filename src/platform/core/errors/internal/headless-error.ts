@@ -4,12 +4,10 @@ import { DeckentError } from './error.js';
 import { ErrorRegistry } from './registry.js';
 
 /** Short failure codes whose registered sentence holds for every producer that can store them as a worker's or parked Run's reason. Not here:
- * NATIVE_AGENT_LOGIN_REQUIRED (readiness stores it when sign-in was only unobserved), HEADLESS_CREDITS_REQUIRED ("nothing was accepted" is not
- * established after tool effects), NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED (chat wording; malformed init), NATIVE_WORKER_STOP_UNCONFIRMED (also
- * without a stop request), NATIVE_WORKER_OUTPUT_LIMIT (the parser bound also counts call arguments). */
+ * NATIVE_AGENT_LOGIN_REQUIRED (readiness stores it when sign-in was only unobserved), NATIVE_WORKER_STOP_UNCONFIRMED (also without a stop
+ * request), NATIVE_WORKER_OUTPUT_LIMIT (the parser bound also counts call arguments). */
 const FAILURE_REASON_SENTENCES: ReadonlySet<string> = new Set(['NATIVE_CLI_WORKER_UNAVAILABLE', 'NATIVE_WORKER_DEADLINE_REACHED',
-  'NATIVE_WORKER_TERMINATION_UNKNOWN', 'NATIVE_WORKER_EFFECTS_UNKNOWN', 'NATIVE_WORKER_CUSTODY_UNKNOWN', 'NATIVE_WORKER_NOT_STARTED', 'APPROVAL_EXPIRED',
-  'SIWC_USAGE_UNAVAILABLE', 'SIWC_SERVICE_UNAVAILABLE', 'HEADLESS_PLAN_UNAVAILABLE']);
+  'NATIVE_WORKER_EFFECTS_UNKNOWN', 'NATIVE_WORKER_NOT_STARTED', 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED']);
 /** A recorded failure identifier in words: an encoded diagnostic; an allowlisted code's sentence; any other registered code as the recorded code
  * whose cause was not determined; undefined for an unregistered value. */
 export function readFailureReasonText(value: string, locale: Locale): string | undefined {
@@ -33,7 +31,8 @@ export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unkn
   if (refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' && (legacyCheck === 'login-lock' || legacyCheck === 'limits' || legacyCheck === 'launcher'))
     return headlessDiagnostic(refusal, { check: legacyCheck, reason: 'legacy-unverified' });
   if (refusal === 'HEADLESS_PREFLIGHT_FAILED' && (legacyCheck === 'version' || legacyCheck === 'flags'
-    || legacyCheck === 'spawn' || legacyCheck === 'config-dir' || legacyCheck === 'executable-recheck'))
+    || legacyCheck === 'spawn' || legacyCheck === 'config-dir' || legacyCheck === 'executable-recheck' || legacyCheck === 'executable-changed'
+    || legacyCheck === 'npm-layout-unknown' || legacyCheck === 'npm-payload-missing' || legacyCheck === 'npm-payload-unverified'))
     return headlessDiagnostic(refusal, { check: legacyCheck, reason: 'legacy-unverified' });
   if (refusal === 'HEADLESS_LIMIT_REACHED' && legacyCheck === null) return headlessDiagnostic(refusal, { limit: 'legacy-unverified' });
   if (refusal === 'HEADLESS_LOGIN_BUSY' && legacyCheck === null) return headlessDiagnostic(refusal, { holder: 'legacy-family-unverified' });

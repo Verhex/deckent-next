@@ -276,6 +276,7 @@ it('records Claude subscription limits in the existing strict refusal and render
     expect(body).toMatchObject({ resetsAtMs: 'resetsAt' in info ? 1792773600000 : null });
     expect(f.propose).not.toHaveBeenCalled();
     expect(h.driver.refusal()).toBeNull(); // A limit never becomes the misleading unexpected-tool notice.
+    if ('errorCode' in info) expect.soft(h.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'credits-required' } });
     for (const language of ['en', 'tr'] as const) {
       const text = nativeQuotaText(body!, language)!;
       expect(text).not.toMatch(/\{\w+\}/u); expect(text).not.toContain('\n'); expect(text).not.toContain('\u001b');
@@ -297,6 +298,7 @@ it('records Claude subscription limits in the existing strict refusal and render
   const failed = await (await fixture(families[0]!, { result: { is_error: true, subtype: 'error_during_execution', api_error_status: 429 } })).start(), settled = await failed.run();
   expect(settled.kind === 'rejected' ? [settled.evidence.reason, settled.evidence.body.complete, readHeadlessRejection(settled.evidence)] : null)
     .toMatchObject(['interrupted', false, { refusal: 'quota', status: 429 }]);
+  expect(failed.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'quota', status: 429 } });
 });
 
 it('D2 preserves a typed Codex usage limit and names a guard check without claiming an unexpected tool', async () => {
@@ -312,7 +314,8 @@ it('D2 preserves a typed Codex usage limit and names a guard check without claim
   for (const locale of ['en', 'tr'] as const) {
     expect(nativeQuotaText(body!, locale)).toContain(locale === 'en' ? 'usage limit' : 'kullanım sınırı');
     const text = nativeAgentReasonText(guard.driver.refusal()!, locale, false, true, guard.driver.refusalCheck());
-    expect(text).toContain(locale === 'en' ? 'safety check refused' : 'güvenlik denetimi');
+    expect(text).toBe(locale === 'en' ? "The CLI's tool surface or tool protocol could not be verified as expected. (usage)"
+      : "CLI'ın araç yüzeyi veya araç protokolü beklendiği gibi doğrulanamadı. (usage)");
     expect(text).not.toContain(locale === 'en' ? 'unexpected tool' : 'beklenmedik bir araç');
   }
 });

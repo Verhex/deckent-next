@@ -13,7 +13,10 @@ const workerKindIssues = (p: Params, l: Locale) => (['image-missing', 'image-unv
 }).join(' ');
 function terminalChatRejection(p: Params, l: Locale): string {
   switch (p['refusal']) {
-    case 'guard': return t('error.TERMINAL_CHAT_REJECTED.guard', p, l);
+    case 'guard': {
+      const message = t('error.TERMINAL_CHAT_REJECTED.guard', p, l);
+      return typeof p['check'] === 'string' ? `${message} (${p['check']})` : message;
+    }
     case 'quota-status-unrecognized': return t('headless.chat.quotaStatusUnrecognized', {}, l);
     case 'response-limit': return t('error.TERMINAL_CHAT_REJECTED.responseLimit', p, l);
     case 'login-required': return t('error.TERMINAL_CHAT_REJECTED.loginRequired', p, l);

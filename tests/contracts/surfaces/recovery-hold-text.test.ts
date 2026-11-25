@@ -62,8 +62,14 @@ it('run inspect, the terminal /runs detail and the monitor blocker show the hold
   expect(blocker).toMatchObject({ code: 'parked', detail: `recovery:continuation-not-approved:${REF}` }); // typed detail, rendered by the view
   expect(blockerDetailText(blocker.detail!, 'en')).toContain('not approved here'); expect(blockerDetailText(blocker.detail!, 'tr')).toContain('kalıcı onay yok');
   // C3: an allowlisted worker reason is its sentence with the identifier beside it; any other registered code is the recorded code.
-  expect(blockerDetailText('NATIVE_WORKER_DEADLINE_REACHED', 'en')).toBe('The native worker reached its time limit. Its termination is unverified. (NATIVE_WORKER_DEADLINE_REACHED)');
+  expect(blockerDetailText('NATIVE_WORKER_DEADLINE_REACHED', 'en')).toBe('The native worker reached its time limit. (NATIVE_WORKER_DEADLINE_REACHED)');
   expect(blockerDetailText('NATIVE_AGENT_LOGIN_REQUIRED', 'tr')).toBe('Kayıtta NATIVE_AGENT_LOGIN_REQUIRED hata kodu var. Hatanın kesin nedeni belirlenemedi.');
+  for (const code of ['NATIVE_WORKER_TERMINATION_UNKNOWN', 'NATIVE_WORKER_CUSTODY_UNKNOWN', 'APPROVAL_EXPIRED',
+    'SIWC_USAGE_UNAVAILABLE', 'SIWC_SERVICE_UNAVAILABLE', 'HEADLESS_PLAN_UNAVAILABLE']) {
+    expect(blockerDetailText(code, 'en')).toBe(`The record contains the error code ${code}. The specific cause could not be determined.`);
+  }
+  expect(blockerDetailText('NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', 'en')).toBe(
+    "The CLI's tool surface or tool protocol could not be verified as expected. (NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED)");
   // An operator's hold keeps its typed reason as the monitor detail and its own words in inspect (no system next step).
   const own = heldRun('auditor asked', 'operator');
   expect(deriveRunBlocker({ run: { snapshot: own, attempts: [], approvals: [] }, observedAt: 6 } as never)).toMatchObject({ detail: 'operator-hold' });

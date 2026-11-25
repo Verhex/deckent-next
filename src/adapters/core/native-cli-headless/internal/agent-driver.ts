@@ -33,8 +33,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   let projectToolResult = (value: Awaited<ReturnType<ToolSessionPort['propose']>>) => value;
   let codex: ReturnType<typeof codexAgentTurn> | undefined;
   let claude: ReturnType<typeof createClaudeAgentDriver> | undefined, refusal: NativeAgentReadinessReason | null = null, refusalCheck: string | null = null, used = false;
-  // A refusal sent as the turn's own rejection: its receipt names it, so it is read only when that receipt could not be recorded.
-  let returned: { reason: NativeAgentReadinessReason; check: string } | null = null;
+  // A classified refusal can precede cancellation, receipt settlement or an unavailable receipt read.
+  let returned: { reason: NativeAgentReadinessReason; check: string } | { body: Refusal['body'] } | null = null;
   const port: ToolSessionPort = { session: input.session.session,
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
@@ -102,9 +102,16 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               mcp: bridge, now: input.now }, launch.bounds, claude ? AbortSignal.any([combined, claude.signal]) : combined,
             (raw, lineSignal) => { if (claude) return claude.line(raw, lineSignal); stopped ??= turn!.line(raw); return stopped ? 'stop' : undefined; });
             const finished = claude?.finish(evidence);
+            const providerRefusal = (finished?.kind === 'failed' || finished?.kind === 'cancelled') && finished.rejection
+              ? reject('interrupted', finished.rejection) : null;
+            if (providerRefusal) returned = { body: providerRefusal.body };
             if (finished?.kind === 'refused') {
               const limit = finished.limit;
-              if (limit) return rejectResult(reject(limit.kind === 'unknown' ? 'invalid-response' : 'http-status', nativeQuotaRejection(limit)));
+              if (limit) {
+                const classified = reject(limit.kind === 'unknown' ? 'invalid-response' : 'http-status', nativeQuotaRejection(limit));
+                returned = { body: classified.body };
+                return rejectResult(classified);
+              }
               const field = `agent-surface:${finished.field}`.slice(0, 64), check = finished.detail ? `${field} ${finished.detail}` : field;
               if (finished.rejection) {
                 returned = { reason: finished.reason, check };
@@ -142,8 +149,8 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
                 choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] } };
             } else if (ended && 'refusal' in ended) return rejectResult(ended.refusal);
             // A failed Claude result keeps its registered provider classification; the evidence stays incomplete as before.
-            else return rejectResult(reject('interrupted', finished?.kind === 'failed' && finished.rejection ? finished.rejection
-              : { refusal: 'invalid-output', subtype: 'incomplete' }), false);
+            else return rejectResult((finished?.kind === 'failed' ? providerRefusal : null)
+              ?? reject('interrupted', { refusal: 'invalid-output', subtype: 'incomplete' }), false);
             if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
             response = projectResponse(response, known) as typeof response;
             if (Buffer.byteLength(JSON.stringify(response)) > profile.limits.responseMaxBytes) return rejectResult(reject('response-limit', { refusal: 'response-limit' }));

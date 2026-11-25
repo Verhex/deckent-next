@@ -8,7 +8,7 @@ import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCom
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
-  type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
+  ModelInvocationPolicyAuthorization, type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
 import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
@@ -25,7 +25,7 @@ import { createAgentProposals, type AgentProposalViews } from './proposals.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { terminalModelHere, inspectNativeChat, inspectNativeChatForVerification, hasRetainedSubscriptionFailure, readRetainedSubscriptionFailure } from '#composition/core/terminal-chat/index.js';
+import { terminalModelHere, inspectNativeChat, inspectNativeChatForVerification, hasRetainedSubscriptionFailure, readRetainedSubscriptionFailure, subscriptionRejectionError } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -296,15 +296,30 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
     const invocationContent = async (result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>) =>
       (await withLocalPrincipalChannel(undefined, () => inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
-        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null))?.responseContent;
+        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()));
+    const mayReadReturnedRefusal = (target: { scopeId: string; reference: ModelInvocationCommand['reference'] }) =>
+      withLocalPrincipalChannel(undefined, async () => {
+        const reader = await loadPeerInvocationContext(projectRoot, target.scopeId, options, peer, 'read');
+        const authorization = new ModelInvocationPolicyAuthorization(reader.policy);
+        await authorization.authorize('inspect', target, reader.principal);
+        await authorization.authorize('inspect-content', target, reader.principal);
+        return true;
+      }, localPrincipalPeer()).catch(() => false);
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
       onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], roundSignal: AbortSignal,
       agent?: Parameters<Parameters<typeof withNativeChatInvocation>[1]>[0]): Promise<AgentRoundOutcome> => {
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const reasonText = (reason?: Parameters<typeof nativeChatReasonText>[0] | null, check?: string | null) => reason ? `${nativeChatReasonText(reason, language, false, true, check)}${check ? ` (${check})` : ''}` : null;
+        const reasonText = (reason?: Parameters<typeof nativeChatReasonText>[0] | null, check?: string | null) =>
+          reason ? nativeChatReasonText(reason, language, false, true, check) : null;
         const nativeRefusal = () => reasonText(agent?.refusal(), agent?.refusalCheck());
+        const returnedDiagnosis = () => {
+          const returned = agent?.returnedRefusal();
+          return !returned ? null : 'body' in returned
+            ? subscriptionRejectionError(returned.body, true)?.localize?.(language).message ?? null
+            : reasonText(returned.reason, returned.check);
+        };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
@@ -316,28 +331,41 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
-          const failure = queryFailure(error), returned = agent?.returnedRefusal();
-          // Y25/Y26: a returned rejection whose receipt could not be recorded still names the check that refused it.
-          const refusal = nativeRefusal() ?? reasonText(returned?.reason, returned?.check);
+          const failure = queryFailure(error), returned = returnedDiagnosis();
+          const refusal = nativeRefusal() ?? (returned && await mayReadReturnedRefusal(invocation) ? returned : null);
           const diagnosis = refusal ?? (isHeadlessDiagnosticCode(failure.code)
             ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : null);
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : refusal ?? failure.code, ...(diagnosis && { diagnosis }) };
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();
-        if (freshModelInvocationCancelled(result) || result.receipt.outcome?.state === 'not-sent')
-          return { status: 'failed', state: 'cancelled', ...(refusalReason && { diagnosis: refusalReason }) };
+        const outcome = result.receipt.outcome;
+        const subscriptionDiagnosis = async () => {
+          const returned = result.replayed ? null : returnedDiagnosis();
+          if (!hasRetainedSubscriptionFailure(result) && !returned) return null;
+          try {
+            const inspected = await invocationContent(result);
+            const retained = readRetainedSubscriptionFailure(result, inspected.responseContent);
+            return retained?.localize?.(language).message ?? (inspected.invocation && inspected.contentStatus !== 'purged' ? returned : null);
+          } catch (error) {
+            const { code } = queryFailure(error);
+            // A fresh adapter check may supplement a temporarily unavailable read only under inspection authority.
+            return returned && (code === 'MODEL_INVOCATION_UNAVAILABLE' || code === 'MODEL_INVOCATION_OUTCOME_UNKNOWN' || code === 'QUERY_UNEXPECTED_FAILURE')
+              && await mayReadReturnedRefusal(invocation) ? returned : null;
+          }
+        };
+        if (freshModelInvocationCancelled(result) || outcome?.state === 'not-sent') {
+          const diagnosis = refusalReason ?? (outcome?.state === 'unknown' && returnedDiagnosis() ? await subscriptionDiagnosis() : null);
+          return { status: 'failed', state: 'cancelled', ...(diagnosis && { diagnosis }) };
+        }
         if (refusalReason) return { status: 'failed', state: refusalReason };
         const fresh = freshModelInvocationDiagnostic(result);
         if (fresh?.localize) return { status: 'failed', state: 'unknown', diagnosis: fresh.localize(language).message };
-        const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          if (hasRetainedSubscriptionFailure(result)) {
-            const failure = readRetainedSubscriptionFailure(result, await invocationContent(result));
-            if (failure) return { status: 'failed', state: outcome.state, diagnosis: failure.localize!(language).message };
-          }
+          const retainedDiagnosis = await subscriptionDiagnosis();
+          if (retainedDiagnosis) return { status: 'failed', state: outcome.state, diagnosis: retainedDiagnosis };
           if (outcome.state === 'unknown' && result.receipt.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
             && (!evidence || evidence.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && evidence.adapter.version === result.receipt.profile.adapter.version
               && evidence.reason === 'interrupted'))
@@ -457,7 +485,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const fresh = freshModelInvocationDiagnostic(result);
           if (fresh) return diagnosed(fresh);
           if (!hasRetainedSubscriptionFailure(result)) return null;
-          const failure = readRetainedSubscriptionFailure(result, await invocationContent(result));
+          const failure = readRetainedSubscriptionFailure(result, (await invocationContent(result).catch(() => null))?.responseContent);
           return failure ? { diagnosis: failure.localize!(language).message } : null;
         } catch (error) { return diagnosed(queryFailure(error)); }
       },

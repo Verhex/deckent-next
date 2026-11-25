@@ -1,6 +1,6 @@
 import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
-import { t } from '#platform/index.js';
+import { LOCALES, t } from '#platform/index.js';
 import type { ChatTurnSteerOutcome } from '#domain/index.js';
 
 /**
@@ -17,7 +17,13 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   const claimed = await store.claim(claim);
   if (claimed.status === 'finished') {
     const { answer, finish, note: storedNote, rounds, toolCalls, steer = { joined: [], returned: [] } } = claimed.outcome;
-    const note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
+    let note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
+    // Match only the full retired catalog wording in an authored note. The stored outcome remains the original evidence.
+    if (note) for (const locale of LOCALES) {
+      note = note.replaceAll(t('headless.chat.legacyCreditsAdvice', {}, locale), t('error.HEADLESS_CREDITS_REQUIRED', {}, locale));
+      note = note.replaceAll(t('headless.agent.legacySurfaceStopped', {}, locale), t('headless.agent.surfaceStopped', {}, locale));
+      note = note.replaceAll(t('headless.agent.legacyGuardStopped', {}, locale), t('headless.agent.surfaceStopped', {}, locale));
+    }
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });
     return Object.freeze({ finish, note, rounds, toolCalls, answer, appendedCount: 0,

@@ -1,5 +1,5 @@
 import { DeckentError, ErrorRegistry, headlessDiagnostic, messageText } from '#platform/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type ModelInvocationResponseContent } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody, type ModelInvocationProfile, type ModelInvocationResponseContent } from '#domain/index.js';
 import { readSubscriptionRejection, type ModelInvocationResult } from '#engine/index.js';
 import { nativeCliAgent, resolveHeadlessExecutable, SIWC_INFERENCE } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema, sealMatchesDefinition, type NativeAgentExecution, type NativeAgentReadiness } from '#capabilities/index.js';
@@ -82,6 +82,23 @@ export function readRetainedSubscriptionFailure(result: ModelInvocationResult, c
     const code = native && result.receipt.outcome?.state === 'unknown' && evidence.reason === 'interrupted' ? retainedFailureCode(content.data) : null;
     return code ? ErrorRegistry.createError('TERMINAL_CHAT_RECORDED_FAILURE', { params: { code } }) : null;
   }
+  return subscriptionRejectionError(body, native);
+}
+
+const SUBSCRIPTION_GUARD_CHECKS: ReadonlySet<string> = new Set([
+  'cliVersion', 'apiKeySource', 'permissionMode', 'tools', 'mcpServers', 'skills', 'plugins', 'pluginErrors', 'cwd', 'num_turns',
+  'usage', 'permission_denials', 'init', 'api_retry', 'result', 'json', 'after-turn', 'thread', 'turn', 'item', 'item.command_execution',
+  'item.file_change', 'item.mcp_tool_call', 'item.web_search', 'item.todo_list', 'notice', 'item-order', 'item-text', 'item-replay',
+  'mcp-tool', 'mcp-start', 'mcp-order', 'mcp-update', 'mcp-result', 'mcp-correlation', 'pending-tools', 'pending-items', 'event', 'proposal-order',
+  'agent-surface:init', 'agent-surface:init-binding', 'agent-surface:event', 'agent-surface:before-init', 'agent-surface:after-result',
+  'agent-surface:subagent', 'agent-surface:assistant', 'agent-surface:block', 'agent-surface:text', 'agent-surface:json',
+  'agent-surface:correlation', 'agent-surface:correlation-incomplete', 'agent-surface:tool-use', 'agent-surface:tool-result', 'agent-surface:tool-progress',
+  'agent-surface:proposal', 'agent-surface:proposal-order', 'agent-surface:facade-result', 'agent-surface:size', 'agent-surface:result',
+  'agent-surface:permission-denials', 'agent-surface:rate-limit', 'agent-surface:usage',
+]);
+
+/** Localize classified adapter facts from an authorized receipt or this round's own driver. */
+export function subscriptionRejectionError(body: HeadlessRejectionBody, native: boolean): DeckentError | null {
   switch (body.refusal) {
     case 'usage-unavailable': return ErrorRegistry.createError('SIWC_USAGE_UNAVAILABLE');
     case 'service-unavailable': return ErrorRegistry.createError('SIWC_SERVICE_UNAVAILABLE');
@@ -105,10 +122,15 @@ export function readRetainedSubscriptionFailure(result: ModelInvocationResult, c
         return ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { code: body.exitCode } });
       return body.exitCode === null && body.signal !== null
         ? ErrorRegistry.createError('TERMINAL_CHAT_PROCESS_EXIT', { params: { observedSignal: 'true' } }) : null;
-    case 'guard':
-      return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: {
-        refusal: body.field === 'agent-surface:rate-limit-status' ? 'quota-status-unrecognized' : 'guard',
-      } }) : null;
+    case 'guard': {
+      if (!native) return null;
+      const check = body.field;
+      if (check === 'agent-surface:rate-limit-status') return ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: { refusal: 'quota-status-unrecognized' } });
+      // Receipt fields from older writers may be free-form. Show only known CLI check names.
+      return ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: {
+        refusal: 'guard', ...(check && SUBSCRIPTION_GUARD_CHECKS.has(check) && { check }),
+      } });
+    }
     case 'model-mismatch':
       return native ? ErrorRegistry.createError('TERMINAL_CHAT_REJECTED', { params: {
         refusal: body.subtype === 'model-reported' ? 'model-mismatch' : 'invalid-output',

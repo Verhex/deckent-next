@@ -255,19 +255,15 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     const shownHosts = login.egress?.hosts.slice(0, registry.headlessRefusedHostsShown).map(host => terminalSafeText(host)) ?? [];
     const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
-    // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
-    const suggestMove = login.state === 'open' && login.owned === false && !login.egressUnreadable;
-    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : suggestMove ? t('doctor.headless.notOwned', {}, l)
+    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.state === 'open' && login.owned === false ? t('doctor.headless.notOwned', {}, l)
       : login.owned === false ? t('doctor.headless.externalDirectory', {}, l) : '';
     const diagnosis = login.diagnostic?.localize?.(l).message;
     const pathDetail = f.showLocalHeadlessPaths ? ErrorRegistry.localHeadlessPathDetail(login.diagnostic, l) : undefined;
     const detail = (diagnosis ? ' ' + diagnosis : '') + (pathDetail ? '\n' + pathDetail : '');
     const gateway = login.egressUnreadable ? ' ' + t('doctor.headless.egressUnreadable', {}, l) : '';
-    const next = suggestMove ? 'deckent models login --connection claude-cli-subscription' : undefined;
     rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own + detail + gateway)
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
-        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused + detail + gateway,
-      next));
+        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused + detail + gateway));
   }
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
   const recovery = f.recoveryMode;

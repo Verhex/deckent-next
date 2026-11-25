@@ -294,9 +294,19 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     expect.soft(doctor(stored, 'en')).not.toContain('identity differs');
     expect.soft(doctor(stored, 'en')).not.toContain('outside');
     expect(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8')).not.toContain(c.executable);
-    for (const check of ['executable-changed', 'npm-layout-unknown']) {
+    for (const [check, en, tr] of [
+      ['executable-changed', 'The previous check concerned verification of the executable. The specific cause could not be determined.',
+        'Önceki denetim çalıştırılabilir dosyanın doğrulanmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['npm-layout-unknown', 'The previous check concerned the npm launcher layout. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının yerleşimiyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ...['npm-payload-missing', 'npm-payload-unverified'].map(check => [check,
+        'The previous check concerned the native program behind the npm launcher. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının arkasındaki yerel programla ilgiliydi. Kesin neden belirlenemedi.'] as const),
+    ] as const) {
       await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check }));
-      expect.soft(doctor(await logins(), 'en')).toContain('The provider-program diagnostic could not be verified.');
+      const history = await logins();
+      expect.soft(doctor(history, 'en')).toContain(en);
+      expect.soft(doctor(history, 'tr')).toContain(tr);
     }
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check: 'realm-scratch-create' }));
     expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');

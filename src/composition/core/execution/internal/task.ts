@@ -16,7 +16,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
 import { openConfiguredSiwcWorker } from '#composition/core/siwc/index.js';
 import { NATIVE_CLI_WORKER_ADAPTER, isNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNativeCliWorker, prepareNativeCliWorker, validateExecutionSupervisorProfile, nativeCliWorkerFence,
-  createNativeWorkerEvents, nativeWorkerCustodyFile, executionTaskHiddenPaths, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
+  createNativeWorkerEvents, nativeWorkerCustodyFile, readRecordedNativeWorkerResult, executionTaskHiddenPaths, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from './native-runtime.js';
 import { startConfiguredWorkerObservation } from './observation.js';
 /** Lead fan-in supplies trusted transport/capacity/lease owners and enables retirement at the alpha.63 switch. Never task-authored flags. */
@@ -54,9 +54,15 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     let custody = false;
     try {
       const existing = await store.loadBoundDispatch(identity);
-      if (existing) return await preparation.settle(true).then(() => Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity,
-        status: existing.launch === 'prevented-before-launch' ? 'prevented' : existing.terminal ? 'terminal' : 'unresolved',
-        terminal: existing.terminal, outputRecorded: !!existing.output }) }));
+      if (existing) {
+        await preparation.settle(true);
+        const status = existing.launch === 'prevented-before-launch' ? 'prevented' : existing.terminal ? 'terminal' : 'unresolved';
+        const saved = status === 'unresolved' && existing.profile.adapterId === NATIVE_CLI_WORKER_ADAPTER.id
+          ? await readRecordedNativeWorkerResult(existing.profile, existing.request).catch(() => null) : null;
+        return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status,
+          terminal: existing.terminal, outputRecorded: !!existing.output,
+          ...(saved?.result.kind === 'unknown' && { waiting: Object.freeze({ reason: saved.result.reasonCode, legacy: false }) }) }) });
+      }
       if (identity.layoutRevision !== layout.revision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const startContext = await new TaskStartApplication(store, verifier, authorization).open(identity);
       const { run, profile: selected } = startContext;

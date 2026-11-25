@@ -113,6 +113,7 @@ function outcomeState(state: string, language: Locale = LOCALES[0]): string {
     prevented: t('agent.turn.outcome.prevented', {}, language),
     // BeUser KER-15: a switched-off model says how to switch it on or pick another (never a silent substitute).
     MODEL_NOT_ACTIVATED: t('agent.turn.outcome.notActivated', {}, language),
+    NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: t('headless.agent.reason.NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', {}, language),
   };
   return name && labels[name] ? labels[name] + state.slice(name.length) : state;
 }

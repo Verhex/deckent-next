@@ -376,6 +376,10 @@ login-status-incomplete/line-limit	A line of the subscription status check outpu
 login-status-incomplete/stopped	The subscription status check was stopped.	Abonelik durum denetimi durduruldu.
 login-status-incomplete	subscription status check could not be completed	abonelik durum denetimi tamamlanamadı
 executable-changed/bind-race-diagnostic	process exited with a bind-race diagnostic	süreç, bağlama yarışı tanısıyla sonlandı
+executable-changed/legacy-unverified	verification of the executable	çalıştırılabilir dosyanın doğrulanması
+npm-layout-unknown/legacy-unverified	npm launcher layout	npm başlatıcısının yerleşimi
+npm-payload-missing/legacy-unverified	native program behind the npm launcher	npm başlatıcısının arkasındaki yerel program
+npm-payload-unverified/legacy-unverified	native program behind the npm launcher	npm başlatıcısının arkasındaki yerel program
 path-search-execute-denied	did not pass the execute-access check	çalıştırma erişimi denetimini geçemedi
 path-search-empty	was not found in the PATH directories checked	denetlenen PATH dizinlerinde bulunamadı
 path-search-unverified	A candidate on PATH could not be checked	PATH üzerindeki bir aday denetlenemedi
@@ -552,7 +556,7 @@ function headlessExpectationIds(fields: Readonly<Record<string, string | number>
   const { check, reason, native, exit, holder, limit, recheck } = fields;
   const entry = reason === 'missing' || reason === 'not-directory' ? 'npm/' + reason : 'selection/' + reason;
   if (native && reason) return ['npm-proof', String(reason), String(native)];
-  if (check === 'npm-payload-missing' || check === 'npm-payload-unverified') {
+  if ((check === 'npm-payload-missing' || check === 'npm-payload-unverified') && reason !== 'legacy-unverified') {
     const uncertainty = ['manifest-too-large', 'manifest-unreadable', 'changed-during-check', 'verification-unavailable'].includes(String(reason));
     return [uncertainty ? 'npm-unverified' : recheck ? 'npm-recheck' : 'npm-check', 'npm/' + reason];
   }

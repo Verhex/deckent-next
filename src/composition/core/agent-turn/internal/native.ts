@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
+import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationProfileDigest, configuredInvocationProfiles, type AgentRoundOutcome, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
@@ -10,7 +10,7 @@ export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | nul
   .flatMap(row => { const agent = nativeCliAgent(row.protocol.family); return agent ? [{ id: row.id, provider: agent.id }] : []; });
 
 type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;
-type ReturnedRefusal = Readonly<{ reason: NativeAgentReadinessReason; check: string }>;
+type ReturnedRefusal = Readonly<{ reason: NativeAgentReadinessReason; check: string } | { body: HeadlessRejectionBody }>;
 /** Code-only fan-in ports. Observations never spawn or confer consent. K5b owns the opaque admission pin. */
 export interface NativeChatRuntime {
   readonly readiness: SubscriptionReadinessReader;
@@ -26,7 +26,7 @@ export interface NativeChatRuntime {
     native(bridge: Bridge, secrets: { readonly configured: KnownSecretSnapshot; readonly turn: KnownSecretSnapshot }): ModelInvocationNativePort;
     // R5b: the refused stream check; owner 2026-11-05: unrecognised CLI events the turn went on through (identifier-only facts)
     refusal(): NativeAgentReadinessReason | null; refusalCheck?(): string | null; notices?(): readonly string[];
-    /** The refusal the turn returned as its own rejection, for a turn whose receipt could not be recorded. */
+    /** The refusal established by this turn's driver before invocation settlement. */
     returnedRefusal?(): ReturnedRefusal | null;
     close(): Promise<void>;
   }>;

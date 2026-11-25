@@ -222,6 +222,10 @@ export const headlessDiagnosticCases = Object.freeze([
     'lock-guard-release': 'error.headless.lockGuardRelease',
   }),
   diagnostic(preflight, { check: 'executable-changed', reason: 'bind-race-diagnostic' }, 'error.headless.executableBindRaceDiagnostic'),
+  diagnostic(preflight, { check: 'executable-changed', reason: 'legacy-unverified' }, 'error.headless.executableLegacyUnverified'),
+  diagnostic(preflight, { check: 'npm-layout-unknown', reason: 'legacy-unverified' }, 'error.headless.npmLayoutLegacyUnverified'),
+  diagnostic(preflight, { check: 'npm-payload-missing', reason: 'legacy-unverified' }, 'error.headless.npmPayloadLegacyUnverified'),
+  diagnostic(preflight, { check: 'npm-payload-unverified', reason: 'legacy-unverified' }, 'error.headless.npmPayloadLegacyUnverified'),
   ...classified(preflight, 'reason', { check: 'environment' }, {
     probe: 'error.headless.environment.probe',
     'sign-in': 'error.headless.environment.sign-in',
