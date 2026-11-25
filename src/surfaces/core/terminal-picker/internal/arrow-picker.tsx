@@ -100,7 +100,9 @@ export function ArrowPicker(props: {
           {projected ? <SpanText selected={selected} spans={[...sliceSpans([span(marker), ...projected], 0, visible),
             ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
         </Text>;
-        return onDrawn ? <DrawnText key={original} text={fitted} onDrawn={line => onDrawn(line.slice(marker.length, visible))}>{row}</DrawnText> : row;
+        return onDrawn ? <DrawnText key={original} text={fitted} onDrawn={rows => {
+          for (const { text } of rows) onDrawn(text.slice(marker.length, visible));
+        }}>{row}</DrawnText> : row;
       })}
       {shown.length > 0 && props.details?.[shown[index]!] ? <Text {...palette.warning} wrap="wrap">{props.details[shown[index]!]}</Text> : null}
       {shown.length > first + ARROW_PICKER_ROWS
