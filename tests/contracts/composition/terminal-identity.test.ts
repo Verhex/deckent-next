@@ -162,7 +162,7 @@ it.each(['en', 'tr'])('refuses unsupported/relocated interactive startup before 
   }
 });
 
-it('never calls the write port for status, help, non-TTY workline or piped /status', async () => {
+it('keeps status, help, and piped commands read-only and reports the first membership refusal on a failed open', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-terminal-read-')); roots.push(root);
   const ensure = vi.fn(), sink = { write() {} }, env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'global') };
   const context = { root, env, stdout: sink, stderr: sink, ensureTerminalIdentity: ensure,
@@ -171,6 +171,23 @@ it('never calls the write port for status, help, non-TTY workline or piped /stat
   expect(await main(['terminal', 'workline', '--scope', 's'], { ...context, stdin: Object.assign(Readable.from([]), { isTTY: false }) })).toBe(2);
   expect(await main(['terminal', 'session', '--scope', 's'], { ...context, stdin: Object.assign(Readable.from(['/status\n', '/exit\n']), { isTTY: false }) })).toBe(0);
   expect(ensure).not.toHaveBeenCalled(); expect(context.completeTerminalChat).not.toHaveBeenCalled(); expect(await readdir(root)).toEqual([]);
+
+  const output: string[] = [];
+  const refusal = ErrorRegistry.createError('POLICY_DENIED');
+  const refuseAdmission = vi.fn(async () => { throw refusal; });
+  const loadInstallationIdentity = vi.fn(async () => { throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); });
+  const ensureRuntimeService = vi.fn();
+  const exit = await main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], {
+    ...context, stdin: Object.assign(Readable.from([]), { isTTY: true }), stdout: { ...sink, isTTY: true },
+    stderr: { write(value: string) { output.push(value); } }, ensureRuntimeService, loadInstallationIdentity,
+    async preflightTerminalIdentity() {}, ensureTerminalIdentity: refuseAdmission,
+  });
+  expect(refuseAdmission).toHaveBeenCalledOnce(); expect(loadInstallationIdentity).toHaveBeenCalledOnce();
+  expect(exit, output.join('')).toBe(1);
+  expect(output.join('')).toContain('Error: Policy does not permit the requested operation on this resource; ask a person with policy rights to allow it through `deckent policy` or /policy, and an AI client must not act as that person. [POLICY_DENIED]');
+  expect(output.join('')).not.toContain('PROJECT_ATTACHMENT_CHANGED');
+  expect(refusal.localize?.('tr').message).toBe('Politika bu kaynak üzerinde istenen işleme izin vermiyor; politika yetkisi olan bir kişiden `deckent policy` veya /policy üzerinden izin isteyin, AI istemcisi o kişinin yerine geçmemelidir.');
+  expect(ensureRuntimeService).not.toHaveBeenCalled(); expect(await readdir(root)).toEqual([]);
 });
 
 

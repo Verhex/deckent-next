@@ -35,7 +35,7 @@ import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver
 import type { TerminalChatPlanView } from './terminal-chat.js';
 import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 const DEFAULT_HISTORY_MESSAGES = 40;
-/** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
+/** Identity write refusals after which a read-only identity observation can still let the view open. */
 const ADMISSION_DEFERRED = {
   POLICY_UNAVAILABLE: (locale: Locale) => t('terminal.admission.policyUnavailable', {}, locale),
   POLICY_DENIED: (locale: Locale) => t('terminal.admission.policyDenied', {}, locale),
@@ -246,13 +246,17 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
     catch (error) {
-      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. A write admission that the trusted policy or a
-      // not-yet-upgraded ledger refuses creates nothing; the view still opens and every governed command meets its own gate (B36 R6).
+      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. After a policy or ledger refusal, the view can
+      // still open on a successful read and every governed command meets its own gate (B36 R6).
       // Existing identities are only read; absent ones get a fixed panel custody label that is never persisted, shown or authority.
       const code = String((error as { code?: unknown }).code);
       if (!Object.hasOwn(ADMISSION_DEFERRED, code)) throw error;
+      const observed = await readIdentity().catch((readError: unknown) => {
+        // A stale attachment can still refuse the read after membership stopped its repair.
+        if (code === 'POLICY_DENIED' || code === 'SCOPE_UNKNOWN' || code === 'POLICY_UNAVAILABLE') throw error;
+        throw readError;
+      });
       accessNotices.push({ level: 'error', text: ADMISSION_DEFERRED[code as keyof typeof ADMISSION_DEFERRED](locale) });
-      const observed = await readIdentity();
       installationId = observed.installation.status === 'available' ? observed.installation.value.installationId : UNADMITTED_CUSTODY_LABEL;
       projectId = observed.project.status === 'available' ? observed.project.value.projectId : UNADMITTED_CUSTODY_LABEL;
     }
