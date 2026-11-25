@@ -171,11 +171,11 @@ async function fixture(repository = false) {
   await symlink(process.execPath, join(bin, 'node'));
   // A person's terminal: no AI-agent or CI marker (the runner may itself run inside one), a real terminal type, no Deckent variables.
   const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/local/bin:/usr/bin:/bin`, HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
-    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
+    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', GIT_OPTIONAL_LOCKS: process.env['GIT_OPTIONAL_LOCKS'] };
   // U7 recommends the nearest Git top: keep positive setup cases inside their own repository, never an ambient parent (such as /tmp).
   if (repository) await execute('git', ['init', '--quiet', root], { env, timeout: 10_000 });
-  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = []): Promise<Run> => {
-    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, cli, ...argv]), root], { env: { ...env, ...extra },
+  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = [], cwd = root, entry = [cli]): Promise<Run> => {
+    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, ...entry, ...argv]), cwd], { env: { ...env, ...extra },
       timeout: 180_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as Run;
     const dir = process.env['DECKENT_I_S5_TRANSCRIPTS'];
@@ -193,7 +193,91 @@ async function fixture(repository = false) {
   return { root, home, env, pty, deckent, empty };
 }
 
+async function expectExplicitAttachmentDeclines(f: Awaited<ReturnType<typeof fixture>>, target: string, missingTr: string) {
+  const preview = await f.pty('explicit-attachment-preview', [], {}, ['terminal', 'attach', '--scope', 'target', '--preview'], target);
+  expect(preview.status, preview.output).toBe(0);
+  const apply = /^deckent (terminal attach --scope target --apply --expect [a-f0-9]{64} --command-id [a-f0-9-]{36})\r?$/mu.exec(preview.output)?.[1];
+  expect(apply, preview.output).toBeDefined();
+  for (const [lang, title, explanation] of [
+    ['en_US.UTF-8', 'Connect this folder to the selected installation?', `Error: ${MISSING}`],
+    ['tr_TR.UTF-8', 'Bu klasör seçilen kuruluma bağlansın mı?', `Hata: ${missingTr}`],
+  ] as const) {
+    for (const [label, key] of [['no', 'n'], ['esc', '\u001b'], ['ctrl-d', '\u0004']] as const) {
+      const run = await f.pty(`explicit-attachment-${label}-${lang.slice(0, 2)}`, [[title, key]], { LANG: lang }, apply!.split(' '), target);
+      expect(run.timeout, run.output).toBeUndefined();
+      expect(run.output).toContain(title);
+      expect.soft(run.status, `explicit ${label} (${lang})`).toBe(1);
+      expect.soft(run.output, `explicit ${label} (${lang})`).toContain(explanation);
+      expect(await readdir(target)).toEqual([]);
+    }
+  }
+}
+
+async function expectUnfinishedAttachmentStops(f: Awaited<ReturnType<typeof fixture>>, target: string, titles: readonly [string, string]) {
+  // Run the compiled CLI over the same PTY with only the attachment apply result supplied by the fixture.
+  const pendingEntry = ['--input-type=module', '--eval', `
+    import { main } from ${JSON.stringify(resolve('dist/surfaces/core/cli/index.js'))};
+    import { createCliHost } from ${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))};
+    const base = { root: process.cwd(), locale: process.env.LANG.slice(0, 2), signal: new AbortController().signal };
+    const host = createCliHost(base);
+    process.exitCode = await main([], { ...base, ...host,
+      projectAttachment: (root, input, ...options) => input.action === 'apply'
+        ? Promise.resolve({ status: 'pending' }) : host.projectAttachment(root, input, ...options),
+    });
+  `];
+  for (const [lang, title] of [['en_US.UTF-8', titles[0]], ['tr_TR.UTF-8', titles[1]]] as const) {
+    const pending = await f.pty(`attachment-pending-${lang.slice(0, 2)}`, [[title, 'y']], { LANG: lang, NODE_ENV: 'production' }, [], target, pendingEntry);
+    expect(pending.timeout, pending.output).toBeUndefined();
+    expect(pending.output).toContain(title);
+    const scope = /Scope: ([a-f0-9-]{36})/u.exec(pending.output)?.[1];
+    expect(scope, pending.output).toBeDefined();
+    const command = `deckent terminal attach --scope ${scope} --preview`;
+    const explanation = lang.startsWith('tr')
+      ? `Proje bağlantısı tamamlanmadı. Güncel planı \`${command}\` ile önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin.`
+      : `The attachment did not complete. Preview the current plan with \`${command}\`. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help.`;
+    expect(pending.output).toContain(`${explanation} [PROJECT_ATTACHMENT_INCOMPLETE]`);
+    expect.soft(pending.status, `unfinished attachment (${lang})`).toBe(1);
+    expect(pending.output).not.toMatch(/deckent workline|Step 1\/|Adım 1\/|Runtime service started|deckent servisi arka planda başlatıldı/u);
+    expect(await readdir(target)).toEqual([]);
+  }
+}
+
 describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder with no installation (real PTY, compiled CLI)', () => {
+  it('declining the attached-session offer explains the exit in EN/TR; accepting it opens the attached root once', async () => {
+    await access(cli);
+    const f = await fixture();
+    await applyPolicyTemplateInstallation(f.root, 'source', { env: f.env });
+    const registered = await f.pty('register-source', [['Register this source installation?', 'y']], {},
+      ['terminal', 'attach', '--register', '--scope', 'source', '--apply']);
+    expect(registered.status, registered.output).toBe(0);
+    expect(registered.output).toContain('Project connection record saved.');
+    const target = resolve(f.root, '..', 'attached');
+    await mkdir(target, { mode: 0o700 });
+    const card = 'Open a session in this folder?', cardTr = 'Bu klasörde oturum aç?';
+    const missingTr = 'Bu klasörde deckent kurulumu yok. Kurmak için `deckent init` çalıştırın. [CLI_INSTALLATION_MISSING]';
+    for (const { label, key } of [{ label: 'no', key: 'n' }, { label: 'esc', key: '\u001b' }, { label: 'eof', key: '\u0004' }]) {
+      for (const [lang, title, explanation] of [['en_US.UTF-8', card, MISSING], ['tr_TR.UTF-8', cardTr, missingTr]] as const) {
+        const run = await f.pty(`attachment-${label}-${lang.slice(0, 2)}`, [[title, key]], { LANG: lang }, [], target);
+        expect(run.timeout, run.output).toBeUndefined();
+        expect(run.output).toContain(title);
+        expect.soft(run.status, `${label} (${lang})`).toBe(1);
+        expect.soft(run.output, `${label} (${lang})`).toContain(explanation);
+        expect(run.output).not.toMatch(/deckent workline|Start setup\?|Kuruluma başla\?/u);
+        expect(await readdir(target)).toEqual([]);
+      }
+    }
+    await expectExplicitAttachmentDeclines(f, target, missingTr);
+    await expectUnfinishedAttachmentStops(f, target, [card, cardTr]);
+    const attached = await f.pty('attachment-yes', [[card, 'y'], ['Step 1/', '\u0003'], ['Connect a model with /provider', '/exit\r']], {}, [], target);
+    const pid = /Runtime service started in the background \(pid (\d+)/u.exec(attached.output)?.[1];
+    if (pid) services.push({ pid: Number(pid), root: f.home });
+    expect(attached.timeout, attached.output.slice(-3000)).toBeUndefined();
+    expect(attached.status, attached.output.slice(-3000)).toBe(0);
+    expect(attached.output).toContain(`Project attached · ${target}`);
+    expect(attached.output.split('Step 1/')).toHaveLength(2);
+    expect(attached.output.split('\u001b[?1049h')).toHaveLength(3);
+  }, 180_000);
+
   it.each([
     { label: 'no', key: 'n', lang: 'en_US.UTF-8', card: CARD, missing: MISSING },
     { label: 'esc', key: '\u001b', lang: 'en_US.UTF-8', card: CARD, missing: MISSING },

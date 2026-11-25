@@ -1,10 +1,15 @@
-import { ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, reportFatal, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { askCliCard, cliMode, scopeLister } from '#surfaces/core/cli-human/index.js';
 import { initCommand } from '#surfaces/core/cli-installation/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { relative, sep } from 'node:path';
 import { offerAttachedSession } from './session-offer.js';
+
+export async function reportSetupCancellation(context: CommandContext, locale: Locale): Promise<1> {
+  await reportFatal(ErrorRegistry.createError('CLI_INSTALLATION_MISSING'), { ...context, locale });
+  return 1;
+}
 
 const code = (error: unknown) => (error as { code?: unknown } | null)?.code;
 /** The J2d answer: only a missing policy file means "no installation here"; an installation with no scope to read keeps its own error. */
@@ -22,7 +27,8 @@ export async function offerSetup(refusal: unknown, context: CommandContext, loca
   launch: (context: CommandContext) => Promise<import('#platform/index.js').ExitCode | void>) {
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, stdin = context.stdin ?? process.stdin;
   if (cliMode(context).reason !== 'tty' || !(await installationMissing(context, root, env))) throw refusal;
-  if (await offerAttachedSession(context, locale, async selected => { await launch(selected); })) return;
+  const attachment = await offerAttachedSession(context, locale, launch);
+  if (attachment !== null) return attachment;
   const target = offerTarget(context.rootResolution?.found ?? false, context.rootResolution?.gitTop ?? null, root);
   const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale), t('setup.session.registerHint', {}, locale)],
     options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },

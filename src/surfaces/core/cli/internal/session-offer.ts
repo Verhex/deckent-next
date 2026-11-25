@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { projectAttachmentOfferSchema } from '#domain/index.js';
-import { t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { askCliCard } from '#surfaces/core/cli-human/index.js';
+import { shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** The existing question card owns input until the typed attach settles; no credential or policy writer lives here. */
-export async function offerAttachedSession(context: CommandContext, locale: Locale, launch: (context: CommandContext) => Promise<void>): Promise<boolean> {
-  if (!context.projectAttachment) return false;
+export async function offerAttachedSession(context: CommandContext, locale: Locale,
+  launch: (context: CommandContext) => Promise<ExitCode | void>): Promise<ExitCode | void | 'cancelled' | null> {
+  if (!context.projectAttachment) return null;
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, stdin = context.stdin ?? process.stdin;
   const options = { env, heal: false }, scopeId = randomUUID();
   const offer = projectAttachmentOfferSchema.parse(await context.projectAttachment(root, { action: 'offer', scopeId }, options));
-  if (offer.kind === 'none') return false;
+  if (offer.kind === 'none') return null;
   const connections = offer.preparation.connections.map(row => `${row.reference.providerId} / ${row.reference.modelId}`).join(', ');
   const billing = { subscription: t('billing.subscription', {}, locale), metered: t('billing.metered', {}, locale), local: t('billing.local', {}, locale) };
   const costs = [...new Set(offer.preparation.connections.map(row => billing[row.billing]))].join(', ');
@@ -22,9 +24,21 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
   { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
-  if (answer !== 'yes') return true;
-  await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);
+  if (answer !== 'yes') return 'cancelled';
+  let result: unknown;
+  try {
+    result = await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);
+  } catch (error) {
+    if (!isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
+  }
+  if ((result as { status?: unknown } | null)?.status !== 'attached') {
+    const message = t('setup.session.attachmentIncomplete', { scope: shellIdentity(terminalSafeText(offer.scopeId)) }, locale);
+    await reportFatal(ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE', { message, locale }), { ...context, locale });
+    return 1;
+  }
   stdin.resume();
-  await launch({ ...context, root: offer.path, rootResolution: { root: offer.path, folder: '', found: true, gitTop: context.rootResolution?.gitTop ?? null } });
-  return true;
+  return launch({ ...context, root: offer.path, rootResolution: { root: offer.path, folder: '', found: true, gitTop: context.rootResolution?.gitTop ?? null } }).catch((error: unknown) => {
+    stdin.pause();
+    throw error;
+  });
 }
