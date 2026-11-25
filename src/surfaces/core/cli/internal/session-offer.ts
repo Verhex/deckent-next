@@ -7,7 +7,7 @@ import type { CommandContext } from './kernel-commands.js';
 
 /** The existing question card owns input until the typed attach settles; no credential or policy writer lives here. */
 export async function offerAttachedSession(context: CommandContext, locale: Locale,
-  launch: (context: CommandContext) => Promise<ExitCode | void>): Promise<ExitCode | void | 'cancelled' | null> {
+  launch: (context: CommandContext) => Promise<ExitCode | void>): Promise<ExitCode | void | { readonly cancelledAttachmentScope: string } | null> {
   if (!context.projectAttachment) return null;
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, stdin = context.stdin ?? process.stdin;
   const options = { env, heal: false }, scopeId = randomUUID();
@@ -24,7 +24,7 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
   { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
-  if (answer !== 'yes') return 'cancelled';
+  if (answer !== 'yes') return { cancelledAttachmentScope: offer.scopeId };
   let result: unknown;
   try {
     result = await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);

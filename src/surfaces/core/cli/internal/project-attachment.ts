@@ -57,7 +57,7 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
     { locale, ...(context.env ? { env: context.env } : {}), ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
       ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
     if (answer !== 'yes') {
-      if (action === 'apply') return (await import('./setup-offer.js')).reportSetupCancellation(context, locale);
+      if (action === 'apply') return (await import('./setup-offer.js')).reportAttachmentCancellation(context, locale, parsed.data.scopeId);
       return;
     }
   }
