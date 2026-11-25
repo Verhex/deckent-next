@@ -5,7 +5,7 @@ import { ErrorRegistry, inspectProductFile, isCodedError, type ConfigLoadOptions
 import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError,
-  sameProjectAttachmentAuthority, type ScopeAccess } from '#engine/index.js';
+  sameProjectAttachmentAuthority, type ScopeAccess, type SourceRepairKind } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { configuredInstallationProjectContext } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
@@ -20,7 +20,8 @@ export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeI
   const verified = verifyLocalPeerIdentity(peer);
   return timedScopeContext(projectRoot, scopeId, options, () => verified, access);
 };
-async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess, inspected?: ScopeReadInputs) {
+async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>,
+  access: ScopeAccess, inspected?: ScopeReadInputs, onSourceRepair?: (kind: SourceRepairKind) => void) {
   const reading = access === 'read' ? inspected : undefined;
   const config = reading?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
   const loadPolicy = async () => {
@@ -38,7 +39,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
     writeAdmitted = true;
   };
   const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId,
-    { issuer: identity.issuer, subject: identity.subject }, reading?.inspectSource, access === 'write' ? admitWrite : undefined));
+    { issuer: identity.issuer, subject: identity.subject }, reading?.inspectSource, access === 'write' ? admitWrite : undefined, onSourceRepair));
   const sourceRepaired = writeAdmitted;
   const installationStore = installationContext.kind === 'legacy'
     ? new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation) : null;
@@ -161,9 +162,9 @@ export async function preflightConfiguredTerminalIdentity(root: string, options:
   }
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
-export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {
+export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions, onSourceRepair?: (kind: SourceRepairKind) => void) {
   await preflightConfiguredTerminalIdentity(root, options, scopeId);
-  const { installationId, projectId } = await loadConfiguredScopeContext(root, scopeId, options, 'write');
+  const { installationId, projectId } = await timedScopeContext(root, scopeId, options, readLocalOsIdentity, 'write', undefined, onSourceRepair);
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   return Object.freeze({ installationId, projectId });

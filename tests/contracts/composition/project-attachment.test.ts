@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
-import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
+import { configuredAttachmentStore, ensureConfiguredTerminalIdentity, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
@@ -1065,17 +1065,36 @@ it.skipIf(process.platform !== 'linux')('A2 serializes competing writes and reje
   const target = await loadComposedConfig(r.f.b, r.f.options);
   const policy = productResourcePath(target.productLayout, 'policy'), granted = await readFile(policy, 'utf8');
   const before = await r.bytes(), publish = FileProjectAttachmentStore.prototype.writeJoined;
-  const sourcePublished = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined').mockImplementationOnce(async function (
+  const sourcePublished = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined');
+  const withdrawAfterSourcePublication = async function (
     this: FileProjectAttachmentStore, ...args: Parameters<typeof publish>
   ) {
     await publish.call(this, ...args);
     await writeFile(policy, JSON.stringify({ ...JSON.parse(granted), revision: 'target-withdrawn', grants: [] }));
-  });
-  try { await expect(r.write()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { sourcePublished.mockRestore(); }
+  };
+  const completed = vi.fn();
+  const open = () => ensureConfiguredTerminalIdentity(r.f.b, 'target', r.f.options, completed);
+  sourcePublished.mockImplementationOnce(withdrawAfterSourcePublication);
+  try { await expect(open()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { sourcePublished.mockRestore(); }
   const after = await r.bytes();
   expect(after.local).toBe(before.local);
   expect(JSON.parse(after.registry)).toMatchObject({ source: { location: { device: '20' } }, entries: JSON.parse(before.registry).entries });
   expect(JSON.parse(after.identity).binding.device).toBe('20');
+  expect.soft(completed.mock.calls).toEqual([['device-only']]);
+
+  // Model registration publication ahead of the binding. H-back settles only the recorded source location.
+  const ahead = JSON.parse(after.registry);
+  [ahead.lineage.fromBinding, ahead.lineage.toBinding] = [ahead.lineage.toBinding, ahead.lineage.fromBinding];
+  ahead.source.location.device = '10';
+  await writeFile(r.registryPath, platform.serializeJsonDocument(ahead));
+  await writeFile(policy, granted);
+  const registrationPublished = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined').mockImplementationOnce(withdrawAfterSourcePublication);
+  try { await expect(open()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { registrationPublished.mockRestore(); }
+  expect(completed.mock.calls).toEqual([['device-only'], ['registration-only']]);
+  const registrationOnly = await r.bytes();
+  expect(registrationOnly.identity).toBe(after.identity);
+  expect(registrationOnly.local).toBe(before.local);
+  expect(JSON.parse(registrationOnly.registry)).toMatchObject({ source: { location: { device: '20' } }, entries: JSON.parse(before.registry).entries });
 
   await writeFile(policy, granted);
   await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });

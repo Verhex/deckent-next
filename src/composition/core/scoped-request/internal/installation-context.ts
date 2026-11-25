@@ -3,7 +3,7 @@ import { optionalField } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { inspectInstallationSourceFiles, localInstallationProjectContextPorts, FileProjectAttachmentStore } from '#adapters/index.js';
-import { resolveInstallationProjectContext, type RegisteredInstallationBinding } from '#engine/index.js';
+import { resolveInstallationProjectContext, type RegisteredInstallationBinding, type SourceRepairKind } from '#engine/index.js';
 import type { ConfigLoadOptions, ResolvedConfig } from '#platform/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 export async function inspectConfiguredInstallationSource(root: string, scopeId: string, actor: { readonly issuer: string; readonly subject: string },
@@ -14,9 +14,16 @@ export async function inspectConfiguredInstallationSource(root: string, scopeId:
 }
 export const configuredAttachmentStore = (config: ResolvedConfig, options: ConfigLoadOptions) => new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
 export function configuredInstallationProjectContext(config: ResolvedConfig, options: ConfigLoadOptions, scopeId?: string, actor?: { readonly issuer: string; readonly subject: string },
-  inspectSource: typeof inspectConfiguredInstallationSource = inspectConfiguredInstallationSource, admitWrite?: (checkpoint?: 'target-publication') => Promise<void>) {
+  inspectSource: typeof inspectConfiguredInstallationSource = inspectConfiguredInstallationSource, admitWrite?: (checkpoint?: 'target-publication') => Promise<void>,
+  onSourceRepair?: (kind: SourceRepairKind) => void) {
   const write: Parameters<typeof localInstallationProjectContextPorts>[3] = admitWrite && actor ? {
-    actor, ...optionalField('scopeId', scopeId), admitTarget: () => admitWrite('target-publication'),
+    actor, ...optionalField('scopeId', scopeId), admitTarget: async repair => {
+      try { await admitWrite('target-publication'); }
+      catch (error) {
+        if (repair) onSourceRepair?.(repair);
+        throw error;
+      }
+    },
     loadSource: root => loadComposedConfig(root, { ...options, heal: false, force: true }),
     inspectSource: (root, scope, person, locked) => inspectSource(root, scope, person, options, locked),
     admitSource: async (source, sourceScope) => {

@@ -160,6 +160,8 @@
   "terminal.admission.policyDenied": "Identity admission deferred: policy denied access. Governed commands will be rejected by their own authorization checks.",
   "terminal.admission.scopeUnknown": "Identity admission deferred: the scope is unknown. Governed commands will be rejected by their own authorization checks.",
   "terminal.admission.ledgerUpgrade": "Identity admission deferred: a ledger upgrade is pending. Governed commands will be rejected by their own authorization checks.",
+  "terminal.admission.sourceBindingUpdated": "The installation binding was updated at the source.",
+  "terminal.admission.sourceLocationUpdated": "At the source, only the location recorded in the shared inventory was updated.",
   "terminal.workline.watchAccessDenied": "Watch access: denied ({kinds}). These event types are not read.",
   "terminal.workline.watchAccessStopped": "Watch access: denied ({kinds}). Follow stopped; no automatic retry.",
   "terminal.workline.watchStep": "Watch {status}. Timeout {timeoutMs} ms. Owner: {owner}. Action: {action}.",

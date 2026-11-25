@@ -2,7 +2,7 @@ import { REBIND_CLASS, delegationOwner, readableInstallationRegistrationSchema, 
   type ReadableInstallationRegistration, type ReadableProjectAttachment } from '#domain/index.js';
 import { lstat } from 'node:fs/promises';
 import { attachmentBindingKey, attachmentFailure, classifyInstallationRebinding, InstallationIdentityError, planSourceRepair, planTargetRepair, ProjectAttachmentRelocationApplication,
-  type InstallationContextPorts, type InstallationProjectContext, type InstallationIdentityRead, type RegisteredInstallationBinding } from '#engine/index.js';
+  type InstallationContextPorts, type InstallationProjectContext, type InstallationIdentityRead, type RegisteredInstallationBinding, type SourceRepairKind } from '#engine/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import type { ConfigLoadOptions, ResolvedConfig } from '#platform/index.js';
 import { FileProjectAttachmentStore, captureAttachmentLocation, observeAttachmentFilesystemIdentity } from './store.js';
@@ -14,13 +14,14 @@ type TargetBinding = Pick<RegisteredInstallationBinding, 'binding' | 'capture' |
 type SourceRepairTarget = {
   fits(next: ReadableInstallationRegistration): boolean;
   prepare(next: ReadableInstallationRegistration, matched: TargetBinding, source: InstallationSource): Promise<() => Promise<void>>;
+  committed(kind: SourceRepairKind): void;
 };
 export type AttachmentContextWrite = { readonly actor: AttachmentPerson;
   readonly scopeId?: string;
   loadSource(root: string): Promise<ResolvedConfig>;
   inspectSource(root: string, scope: string, actor: AttachmentPerson, locked?: RegisteredInstallationBinding):
     Promise<{ source: InstallationSource; identity: InstallationIdentityRead }>;
-  admitTarget(): Promise<void>;
+  admitTarget(sourceRepair?: SourceRepairKind): Promise<void>;
   admitSource(config: ResolvedConfig, scope: string): Promise<void>;
 };
 const exists = (path: string) => lstat(path).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; });
@@ -43,6 +44,7 @@ export async function repairAttachedProject(store: FileProjectAttachmentStore, t
     };
 
     // Keep the registration hold across A1 and A2. Check the prospective target before allowing an A1 effect.
+    let sourceRepair: SourceRepairKind | undefined;
     await repairRegisteredInstallationSource(config, store.options, actor, scopeId, write.inspectSource,
       () => write.admitSource(config, scopeId), requireActiveTarget, {
         fits: next => store.fitsJoined(next),
@@ -51,6 +53,7 @@ export async function repairAttachedProject(store: FileProjectAttachmentStore, t
           await store.checkTarget(before, reference);
           return () => store.checkTarget(before, reference);
         },
+        committed: kind => { sourceRepair = kind; },
       });
     const current = requireActiveTarget(await store.registration());
     await store.checkTarget(current, reference);
@@ -59,7 +62,7 @@ export async function repairAttachedProject(store: FileProjectAttachmentStore, t
       const observed = await write.inspectSource(projectRoot, scopeId, actor, locked).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
       const next = await plan(current, locked, observed.source);
       await store.checkTarget(current, reference);
-      await write.admitTarget();
+      await write.admitTarget(sourceRepair);
       await locked.commit('registration-only', () => store.writeTarget(current, reference, next.attachment, next.registration));
       return Object.freeze({ kind: 'attached', identity: observed.identity, source: current.source, attachment: next.attachment });
     });
@@ -138,6 +141,7 @@ async function reconcileSource(config: ResolvedConfig, store: FileProjectAttachm
       await admit?.();
       await checkTarget?.();
       await locked.commit(planned.kind, () => store.writeJoined(registration, planned.next));
+      targetRepair?.committed(planned.kind);
     } else if (mode !== 'automatic') {
       // At a moved source, the old root and the retained binding's root both have to be absent.
       if (before.projectRoot !== source.projectRoot && await exists(before.projectRoot)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');

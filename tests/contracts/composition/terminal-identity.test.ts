@@ -175,18 +175,43 @@ it('keeps status, help, and piped commands read-only and reports the first membe
   const output: string[] = [];
   const refusal = ErrorRegistry.createError('POLICY_DENIED');
   const refuseAdmission = vi.fn(async () => { throw refusal; });
-  const loadInstallationIdentity = vi.fn(async () => { throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED'); });
+  const loadInstallationIdentity = vi.fn(async () => { throw ErrorRegistry.createError('PROJECT_ATTACHMENT_CHANGED', {
+    message: 'fixture fallback failure', params: { path: '/private/fixture-path' },
+  }); });
   const ensureRuntimeService = vi.fn();
-  const exit = await main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], {
+  const opening = {
     ...context, stdin: Object.assign(Readable.from([]), { isTTY: true }), stdout: { ...sink, isTTY: true },
     stderr: { write(value: string) { output.push(value); } }, ensureRuntimeService, loadInstallationIdentity,
     async preflightTerminalIdentity() {}, ensureTerminalIdentity: refuseAdmission,
-  });
+  };
+  const args = ['terminal', 'workline', '--scope', 's', '--lang', 'en'];
+  const exit = await main(args, opening);
   expect(refuseAdmission).toHaveBeenCalledOnce(); expect(loadInstallationIdentity).toHaveBeenCalledOnce();
   expect(exit, output.join('')).toBe(1);
-  expect(output.join('')).toContain('Error: Policy does not permit the requested operation on this resource; ask a person with policy rights to allow it through `deckent policy` or /policy, and an AI client must not act as that person. [POLICY_DENIED]');
-  expect(output.join('')).not.toContain('PROJECT_ATTACHMENT_CHANGED');
+  const primary = 'Error: Policy does not permit the requested operation on this resource; ask a person with policy rights to allow it through `deckent policy` or /policy, and an AI client must not act as that person. [POLICY_DENIED]';
+  const lines = output.join('').trimEnd().split('\n');
+  expect(lines[0]).toBe(primary);
+  expect(lines[0]).not.toContain('PROJECT_ATTACHMENT_CHANGED');
+  expect.soft(lines).toEqual([primary, 'PROJECT_ATTACHMENT_CHANGED']);
   expect(refusal.localize?.('tr').message).toBe('Politika bu kaynak üzerinde istenen işleme izin vermiyor; politika yetkisi olan bir kişiden `deckent policy` veya /policy üzerinden izin isteyin, AI istemcisi o kişinin yerine geçmemelidir.');
+
+  output.length = 0;
+  const registrationOnly = 'At the source, only the location recorded in the shared inventory was updated.';
+  expect(await main(args, { ...opening, loadInstallationIdentity: context.loadInstallationIdentity,
+    async loadProjectIdentity() { throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE'); },
+    async ensureTerminalIdentity(_root: string, _scope: string, _options: unknown, completed?: (repair: 'registration-only') => void) {
+      completed?.('registration-only');
+      throw refusal;
+    },
+  })).toBe(1);
+  expect.soft(output.join('').trimEnd().split('\n')).toEqual([primary, registrationOnly, 'PROJECT_IDENTITY_UNAVAILABLE']);
+  expect([
+    t('terminal.admission.sourceBindingUpdated', {}, 'en'), t('terminal.admission.sourceBindingUpdated', {}, 'tr'),
+    t('terminal.admission.sourceLocationUpdated', {}, 'en'), t('terminal.admission.sourceLocationUpdated', {}, 'tr'),
+  ]).toEqual([
+    'The installation binding was updated at the source.', 'Kaynak kurulumun bağı güncellendi.',
+    registrationOnly, 'Kaynakta yalnızca ortak envanterde kayıtlı konum güncellendi.',
+  ]);
   expect(ensureRuntimeService).not.toHaveBeenCalled(); expect(await readdir(root)).toEqual([]);
 });
 
