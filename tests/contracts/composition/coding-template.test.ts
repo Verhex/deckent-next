@@ -8,7 +8,7 @@ import { applyPolicyTemplateInstallation } from '#composition/core/installation/
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyModelCatalog, createRun, inspectModelCatalog } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingTemplateBase } from '#adapters/index.js';
-import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, sha256, t } from '#platform/index.js';
 import { encodeExecutionProfileDefinition } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { seedCatalog } from '../support/model-catalog.js';
@@ -53,32 +53,54 @@ async function setup() {
   return { root, path, options, policyPath, backups, auditCount, mutate };
 }
 
-describe.skipIf(process.platform === 'win32')('coding template configured producer and real CLI surface', () => {
+describe.skipIf(process.platform === 'win32')('guided coding template proposal', () => {
   it('preview/apply preserve exact profile bytes, old rows, CAS backup/audit and an unchanged repeat', async () => {
     const f = await setup(), before = await readFile(f.path, 'utf8'), audits = f.auditCount(), backups = await f.backups();
     const preview = await configureNativeCodingTemplate(f.root, request, f.options, person);
     expect(preview.status).toBe('preview'); expect(preview.write).toBeNull();
+    expect(preview.expect).toBe(sha256(before));
     expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits); expect(await f.backups()).toEqual(backups);
     nativeCodingTemplateBase(preview.profile);
     expect(preview.profile.parameters).toMatchObject({ docker: taskDocker, invocation: { provider: 'codex', cliVersion: 'codex-cli 0.159.2' } });
     const invocation = preview.profile.parameters['invocation'] as Record<string, unknown>;
     for (const field of ['model', 'prompt', 'effort']) expect(invocation).not.toHaveProperty(field);
     for (const field of ['argv', 'nativeSubscription', 'executable']) expect(preview.profile.parameters['docker']).not.toHaveProperty(field);
-    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person);
+    const concurrent = `${before}\n`;
+    await writeFile(f.path, concurrent);
+    await mkdir(join(f.root, 'global'), { recursive: true });
+    await writeFile(join(f.root, 'global/config.json'), JSON.stringify({ language: 'tr' }));
+    clearConfigCache();
+    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true, digest: preview.digest }, f.options, person);
     const saved = JSON.parse(await readFile(f.path, 'utf8')).admission.registry;
     expect(saved).toEqual(preview.registry); expect(applied.registry).toEqual(preview.registry);
     expect(encodeExecutionProfileDefinition(saved.profiles.at(-1))).toBe(encodeExecutionProfileDefinition(preview.profile));
     expect(saved.profiles[0]).toEqual(pin); expect(saved.kinds[0]).toEqual(registry.kinds[0]);
     expect(saved.evaluators).toEqual(registry.evaluators); expect(saved.revision).not.toBe(registry.revision);
-    expect(applied.write?.beforeDigest).toBe(preview.expect); expect(await readFile(applied.write!.backupPath!, 'utf8')).toBe(before);
+    expect(applied.write?.beforeDigest).toBe(sha256(concurrent)); expect(await readFile(applied.write!.backupPath!, 'utf8')).toBe(concurrent);
     expect(f.auditCount()).toBe(audits + 1);
     const after = await readFile(f.path, 'utf8'), savedBackups = await f.backups();
     expect((await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person)).status).toBe('unchanged');
+    expect(await configureNativeCodingTemplate(f.root, { ...request, apply: true, digest: preview.digest }, f.options, person))
+      .toMatchObject({ status: 'unchanged', registry: preview.registry, write: null });
     expect(await readFile(f.path, 'utf8')).toBe(after); expect(await f.backups()).toEqual(savedBackups); expect(f.auditCount()).toBe(audits + 1);
     const shared = await configureNativeCodingTemplate(f.root, { ...request, kind: 'another', apply: true }, f.options, person);
     expect(shared.registry.profiles).toHaveLength(2); expect(shared.registry.kinds).toHaveLength(3);
-  });
+    const expanded = await readFile(f.path, 'utf8'), expandedBackups = await f.backups(), expandedAudits = f.auditCount();
+    expect(await configureNativeCodingTemplate(f.root, { ...request, apply: true, digest: preview.digest }, f.options, person))
+      .toMatchObject({ status: 'unchanged', registry: shared.registry, write: null });
+    expect(await readFile(f.path, 'utf8')).toBe(expanded); expect(await f.backups()).toEqual(expandedBackups); expect(f.auditCount()).toBe(expandedAudits);
 
+    const ordered = { ...request, kind: 'ordered' };
+    const orderedPreview = await configureNativeCodingTemplate(f.root, ordered, f.options, person);
+    await f.mutate(config => { config.admission.registry.kinds.reverse(); });
+    const reordered = await readFile(f.path, 'utf8');
+    await expect(configureNativeCodingTemplate(f.root, { ...ordered, apply: true, digest: orderedPreview.digest }, f.options, person))
+      .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    expect(await readFile(f.path, 'utf8')).toBe(reordered); expect(await f.backups()).toEqual(expandedBackups); expect(f.auditCount()).toBe(expandedAudits);
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('coding template configured producer and real CLI surface', () => {
   it.each([
     [{ ...request, provider: 'unknown' }, 'CODING_TEMPLATE_INPUT_INVALID'],
     [{ ...request, kind: ' bad ' }, 'CODING_TEMPLATE_INPUT_INVALID'],
@@ -133,8 +155,20 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
 
   it('refuses a CAS race and keeps the concurrent edit with no template backup or audit', async () => {
     const f = await setup(), backups = await f.backups(), audits = f.auditCount();
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, { ...person, beforeWrite: () => f.mutate(config => { config.language = 'tr'; }) }))
-      .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    const configureCodingTemplate = vi.fn((root: string, input: unknown, options: object) =>
+      configureNativeCodingTemplate(root, input, options, { ...person, beforeWrite: () => f.mutate(config => { config.language = 'tr'; }) }));
+    const cliHuman = await import('#surfaces/core/cli-human/index.js');
+    const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValueOnce('apply');
+    let stderr = '';
+    try {
+      const status = await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--lang', 'en'], {
+        root: f.root, env: { ...f.options.env, NO_COLOR: '1' }, configureCodingTemplate, stdin: { isTTY: true, setRawMode() {} },
+        stdout: { isTTY: true, write() {} }, stderr: { write(chunk: string) { stderr += chunk; } },
+      });
+      await expect(configureCodingTemplate.mock.results[1]!.value).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+      expect(status).toBe(78);
+      expect(stderr.trim()).toBe('Error: Configuration changed concurrently; retry after the writer finishes. [CONFIG_CONCURRENT_REVISION_HOLD]');
+    } finally { ask.mockRestore(); }
     expect(JSON.parse(await readFile(f.path, 'utf8'))).toMatchObject({ language: 'tr', admission: { registry } });
     expect(await f.backups()).toEqual(backups); expect(f.auditCount()).toBe(audits);
   });
@@ -170,6 +204,7 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     }
     output = ''; expect(await main([...base, '--preview', '--json'], context), error).toBe(0);
     expect(JSON.parse(output)).not.toHaveProperty('registry'); expect(output).not.toContain('nativeSubscription'); expect(output).not.toContain('admitted');
+    expect(JSON.parse(output)).toHaveProperty('expect'); expect(JSON.parse(output)).not.toHaveProperty('digest');
   });
 
   it.each(['deny', 'require-approval'])('preserves config/write %s without publication', async effect => {
@@ -214,8 +249,9 @@ it.skipIf(process.platform === 'win32')('returns failure without applying when t
   const f = await setup(), before = await readFile(f.path, 'utf8');
   const configureCodingTemplate = vi.fn((root: string, input: Parameters<typeof configureNativeCodingTemplate>[1], options: object) =>
     configureNativeCodingTemplate(root, input, options, person));
+  let stderr = '';
   const context = { root: f.root, env: f.options.env, configureCodingTemplate, stdin: { isTTY: true, setRawMode() {} },
-    stdout: { isTTY: true, write() {} }, stderr: { write() {} } };
+    stdout: { isTTY: true, write() {} }, stderr: { write(chunk: string) { stderr += chunk; } } };
   const cliHuman = await import('#surfaces/core/cli-human/index.js');
   const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValueOnce('no').mockResolvedValue(null);
   const base = ['coding', 'template'], provider = ['--provider', 'codex'], kind = ['--kind', 'feature'];
@@ -227,6 +263,22 @@ it.skipIf(process.platform === 'win32')('returns failure without applying when t
     expect(configureCodingTemplate).toHaveBeenCalledExactlyOnceWith(f.root, expect.objectContaining({ apply: false }), expect.anything());
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(declined).toBe(1);
+
+    let updated: Buffer | undefined;
+    ask.mockImplementationOnce(async card => {
+      expect(card.body?.join('\n')).toContain('codex-cli 0.159.2');
+      await f.mutate(config => { config.admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion = 'codex-cli 0.160.0'; });
+      updated = await readFile(f.path);
+      return 'apply';
+    });
+    const stale = await main([...base, ...provider, ...kind, '--lang', 'en'], context);
+    expect.soft(stale).toBe(78);
+    expect.soft(stderr).toContain('[CONFIG_CONCURRENT_REVISION_HOLD]');
+    expect.soft(stderr).toContain('Configuration changed concurrently; retry after the writer finishes.');
+    expect.soft(stderr).toContain('The proposal shown on the card has changed, so reopen the guide with deckent coding template to see the current proposal.');
+    expect(t('error.CONFIG_CONCURRENT_REVISION_HOLD', {}, 'tr')).toBe('Config eşzamanlı değişti; yazıcı tamamlandıktan sonra yeniden deneyin.');
+    expect(t('clisetup.coding.card.changed', {}, 'tr')).toBe('Kartta gösterilen öneri değiştiği için güncel öneriyi görmek üzere deckent coding template ile kılavuzu yeniden açın.');
+    expect(updated?.equals(await readFile(f.path))).toBe(true);
 
     const otherImage = `sha256:${'b'.repeat(64)}`;
     await f.mutate(config => {

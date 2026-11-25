@@ -42,6 +42,7 @@
   "clisetup.coding.card.apply": "Apply (project configuration)",
   "clisetup.coding.card.cancel": "Cancel, write nothing",
   "clisetup.coding.card.cancelled": "Cancelled; configuration was not changed.",
+  "clisetup.coding.card.changed": "The proposal shown on the card has changed, so reopen the guide with deckent coding template to see the current proposal.",
   "clisetup.coding.result.profile": "Profile: {profile}",
   "clisetup.coding.result.kind": "Task kind: {kind}",
   "clisetup.coding.result.toolchain": "CLI: {provider} {cli} · image {image}",
