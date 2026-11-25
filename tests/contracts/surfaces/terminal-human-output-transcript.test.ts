@@ -98,23 +98,7 @@ function workerSession() {
 describe('/transcript worker numbers', () => {
   it('reads the Attempt last listed at that number even when the observation reorders', async () => {
     const { ports, inspectTranscript, observe } = workerSession(), labels = labelsFor('en');
-    expect(await runLedgerCommand('workers', '', ports, labels)).toMatchObject([
-      { ordinal: 1, attempt: workerA.identity }, { ordinal: 2, attempt: workerB.identity },
-    ]);
-    observe(workerB, { ...workerA, identity: { ...workerA.identity! } });
-    const [entry] = await runLedgerCommand('transcript', '1', ports, labels);
-    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerA.identity);
-    expect(entry).toMatchObject({ level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') });
-    expect(await runLedgerCommand('transcript', workerB.identity.attemptId, ports, labels)).toMatchObject([
-      { level: 'info', text: expect.stringContaining('Transcript · worker 2 · task a1b2c3d4 · attempt 6d3c1b2a') },
-    ]);
-    await runLedgerCommand('transcript', '2', ports, labels);
-    expect(inspectTranscript).toHaveBeenNthCalledWith(2, workerB.identity);
-    expect(inspectTranscript).toHaveBeenNthCalledWith(3, workerB.identity);
-  });
-
-  it('keeps the number in an explicit Attempt transcript header before the first workers list', async () => {
-    const { ports, inspectTranscript, observe } = workerSession(), labels = labelsFor('en');
+    // A transcript can establish the binding before the first /workers list.
     observe(workerA, workerB, { ...workerA, taskId: 'legacy-1', identity: null, authority: 'legacy-activity' });
     expect(await runLedgerCommand('transcript', ATTEMPT, ports, labels)).toMatchObject([
       { level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') },
@@ -138,6 +122,23 @@ describe('/transcript worker numbers', () => {
       { level: 'info', text: expect.stringContaining('Transcript · worker 3 · task a1b2c3d4 · attempt 6d3c1b2a') },
     ]);
     expect(inspectTranscript.mock.calls).toEqual([[workerA.identity], [workerA.identity], [workerB.identity], [workerC.identity], [workerB.identity]]);
+
+    // The full list replaces those bindings after the observed attempts reorder.
+    inspectTranscript.mockClear();
+    observe(workerA, workerB);
+    expect(await runLedgerCommand('workers', '', ports, labels)).toMatchObject([
+      { ordinal: 1, attempt: workerA.identity }, { ordinal: 2, attempt: workerB.identity },
+    ]);
+    observe(workerB, { ...workerA, identity: { ...workerA.identity! } });
+    const [entry] = await runLedgerCommand('transcript', '1', ports, labels);
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(workerA.identity);
+    expect(entry).toMatchObject({ level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 5d3c1b2a') });
+    expect(await runLedgerCommand('transcript', workerB.identity.attemptId, ports, labels)).toMatchObject([
+      { level: 'info', text: expect.stringContaining('Transcript · worker 2 · task a1b2c3d4 · attempt 6d3c1b2a') },
+    ]);
+    await runLedgerCommand('transcript', '2', ports, labels);
+    expect(inspectTranscript).toHaveBeenNthCalledWith(2, workerB.identity);
+    expect(inspectTranscript).toHaveBeenNthCalledWith(3, workerB.identity);
   });
 
   it('reports a departed Attempt in EN and TR without reading the worker now at its number', async () => {
