@@ -305,6 +305,13 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         await authorization.authorize('inspect-content', target, reader.principal);
         return true;
       }, localPrincipalPeer()).catch(() => false);
+    let toolRan = false;
+    const diagnosisText = (failure: DeckentError | string) => typeof failure === 'string' ? failure
+      : toolRan && failure.code === 'TERMINAL_CHAT_REJECTED' && failure.params?.['refusal'] === 'quota'
+        ? t('headless.chat.quotaAfterTools', {}, language) : failure.localize?.(language).message ?? failure.message;
+    // The native loop can still be joining an earlier tool call when the provider result returns.
+    const failedRound = (state: string, failure: DeckentError | string | null): AgentRoundOutcome =>
+      failure ? { status: 'failed', state, get diagnosis() { return diagnosisText(failure); } } : { status: 'failed', state };
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
       onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], roundSignal: AbortSignal,
       agent?: Parameters<Parameters<typeof withNativeChatInvocation>[1]>[0]): Promise<AgentRoundOutcome> => {
@@ -317,7 +324,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         const returnedDiagnosis = () => {
           const returned = agent?.returnedRefusal();
           return !returned ? null : 'body' in returned
-            ? subscriptionRejectionError(returned.body, true)?.localize?.(language).message ?? null
+            ? subscriptionRejectionError(returned.body, true)
             : reasonText(returned.reason, returned.check);
         };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
@@ -335,7 +342,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const refusal = nativeRefusal() ?? (returned && await mayReadReturnedRefusal(invocation) ? returned : null);
           const diagnosis = refusal ?? (isHeadlessDiagnosticCode(failure.code)
             ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : null);
-          return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : refusal ?? failure.code, ...(diagnosis && { diagnosis }) };
+          return failedRound(roundSignal.aborted ? 'cancelled' : refusal ? diagnosisText(refusal) : failure.code, diagnosis ?? null);
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();
@@ -345,8 +352,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           if (!hasRetainedSubscriptionFailure(result) && !returned) return null;
           try {
             const inspected = await invocationContent(result);
+            if (!inspected.invocation || inspected.contentStatus === 'purged') return null;
             const retained = readRetainedSubscriptionFailure(result, inspected.responseContent);
-            return retained?.localize?.(language).message ?? (inspected.invocation && inspected.contentStatus !== 'purged' ? returned : null);
+            return retained ?? returned;
           } catch (error) {
             const { code } = queryFailure(error);
             // A fresh adapter check may supplement a temporarily unavailable read only under inspection authority.
@@ -356,7 +364,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         };
         if (freshModelInvocationCancelled(result) || outcome?.state === 'not-sent') {
           const diagnosis = refusalReason ?? (outcome?.state === 'unknown' && returnedDiagnosis() ? await subscriptionDiagnosis() : null);
-          return { status: 'failed', state: 'cancelled', ...(diagnosis && { diagnosis }) };
+          return failedRound('cancelled', diagnosis);
         }
         if (refusalReason) return { status: 'failed', state: refusalReason };
         const fresh = freshModelInvocationDiagnostic(result);
@@ -365,7 +373,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
           const retainedDiagnosis = await subscriptionDiagnosis();
-          if (retainedDiagnosis) return { status: 'failed', state: outcome.state, diagnosis: retainedDiagnosis };
+          if (retainedDiagnosis) return failedRound(outcome.state, retainedDiagnosis);
           if (outcome.state === 'unknown' && result.receipt.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
             && (!evidence || evidence.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && evidence.adapter.version === result.receipt.profile.adapter.version
               && evidence.reason === 'interrupted'))
@@ -486,7 +494,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           if (fresh) return diagnosed(fresh);
           if (!hasRetainedSubscriptionFailure(result)) return null;
           const failure = readRetainedSubscriptionFailure(result, (await invocationContent(result).catch(() => null))?.responseContent);
-          return failure ? { diagnosis: failure.localize!(language).message } : null;
+          return failure ? { diagnosis: diagnosisText(failure) } : null;
         } catch (error) { return diagnosed(queryFailure(error)); }
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
@@ -501,6 +509,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       },
       describe,
       async execute(tool, args, toolSignal, callId, execution) {
+        toolRan = true;
         await channel.drained();
         await recheckNative();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };

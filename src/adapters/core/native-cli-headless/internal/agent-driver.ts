@@ -126,7 +126,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
               if (!stoppedTurn || stoppedTurn.body.refusal === 'guard') {
                 refusal ??= 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED';
                 refusalCheck = stoppedTurn && 'field' in stoppedTurn.body ? stoppedTurn.body.field ?? 'guard' : 'proposal-order';
-              }
+              } else returned = { body: stoppedTurn.body };
               return rejectResult(stoppedTurn ?? reject('invalid-response', { refusal: 'guard', field: 'proposal-order' }));
             }
             if (evidence.reason === 'cancelled') combined.throwIfAborted();

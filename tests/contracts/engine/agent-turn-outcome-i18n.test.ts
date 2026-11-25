@@ -38,8 +38,8 @@ describe('terminal turn-outcome catalog guard', () => {
         describe: () => null, execute: async () => ({ status: 'ok', text: '' }), now: () => 1,
       });
       expect(result.note).toBe(locale === 'en'
-        ? 'The model round ended without an answer (unknown: interrupted); it is recorded and not retried. No tool call ran.'
-        : 'Model turu yanıt alınamadan sona erdi (sonuç belirsiz: yarıda kesildi). Sonuç kaydedildi; otomatik olarak tekrar denenmedi. Hiçbir araç çağrısı çalıştırılmadı.');
+        ? 'The model round ended without an answer (unknown: interrupted). It was not retried automatically. No tool call ran.'
+        : 'Model turu yanıt alınamadan sona erdi (sonuç belirsiz: yarıda kesildi). Tur otomatik olarak tekrar denenmedi. Hiçbir araç çağrısı çalıştırılmadı.');
     });
     it.each(['content-filter', 'context-window', 'network-error', 'resource-exhausted', 'aborted'] as const)(`${locale}: provider %s keeps usage and closes without a retry or tool effect`, async providerStop => {
       let sends = 0, executions = 0;

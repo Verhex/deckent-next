@@ -103,7 +103,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
   const { executeConfiguredTask } = await import('#composition/core/execution/index.js');
   const { main } = await import('#surfaces/index.js');
   const nativeConnection = await import('#adapters/core/native-connection/index.js');
-  const { recordedNativeCliWorkerSupervisor } = await import('#adapters/core/native-cli-worker/index.js');
+  const { recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, readRecordedNativeWorkerResult } = await import('#adapters/core/native-cli-worker/index.js');
   const root = await mkdtemp(join(tmpdir(), 'native-task-dispatch-')), project = join(root, 'project'), data = join(root, 'data');
   const credential = vi.spyOn(nativeConnection, 'readLocalNativeCredential');
   try {
@@ -212,6 +212,22 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       text = '';
       expect(await main(request, context)).toBe(0);
       expect.soft(text).toContain('The record contains the error code NATIVE_AGENT_PLUGIN_UNEXPECTED. The specific cause could not be determined.');
+      const heldDispatch = (await store.loadBoundDispatch(heldIdentity))!;
+      expect(heldDispatch.terminal).toBeNull();
+      const heldRun = await store.loadRun('s', 'held');
+      const custody = nativeWorkerCustodyFile(heldDispatch.request);
+      const saved = await custody.read();
+      if (saved.kind !== 'ready') throw new Error('fixture-missing-custody');
+      const savedRecord = saved.value as { result: { handle: string } };
+      await custody.write({ ...savedRecord, result: { handle: savedRecord.result.handle, result: { kind: 'exited', exitCode: 1 },
+        stdout: '', stderr: '', outputCompleteness: 'complete', interrupted: false } });
+      expect(await readRecordedNativeWorkerResult(heldDispatch.profile, heldDispatch.request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 } });
+      text = '';
+      expect(await main(request, context)).toBe(0);
+      expect.soft(text).toContain('This attempt has no final dispatch record, so its outcome is unknown.');
+      expect.soft(text).not.toContain('No process exit has been recorded');
+      expect(await store.loadBoundDispatch(heldIdentity)).toEqual(heldDispatch);
+      expect(await store.loadRun('s', 'held')).toEqual(heldRun);
       expect(run).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledOnce(); expect(credential).not.toHaveBeenCalled();
     } finally { store.close(); }

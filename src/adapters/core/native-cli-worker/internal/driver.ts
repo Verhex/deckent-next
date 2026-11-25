@@ -6,7 +6,7 @@ import { modelInvocationProfileDigest } from '#engine/index.js';
 import type { DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
-import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
+import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
 import { nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution, type ClaudeAgentResult } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
@@ -23,7 +23,8 @@ type ClaudeDriver = ToolSessionPort & { readonly signal: AbortSignal; line: Proc
 export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
   preflight(signal: AbortSignal): Promise<{ execution: NativeAgentExecution; preflight: Preflight }>;
-  claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
+  claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number;
+    quotaPolicy: ReturnType<typeof nativeQuotaPolicy> }): ClaudeDriver;
   runIsolated(entry: Entry, spawn: { executable: string; program: Preflight['program']; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
     line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null; cleanupError?: DeckentError }>;
@@ -54,7 +55,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       const prepared: Prepared = { profile: transport.profile, definition: input.binding.definition, entry, model: input.model,
         system: input.system, user: input.user, effortArgs };
       claude = entry.agent.transport.kind === 'claude-mcp' ? transport.claudeDriver({ entry, port: input.tools, model: input.model,
-        cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes }) : undefined;
+        cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes, quotaPolicy: nativeQuotaPolicy() }) : undefined;
       const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, gate.lookup);
       gate.bind(claude ?? { async propose(call, correlation, callSignal) {
         if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
