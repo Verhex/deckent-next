@@ -31,7 +31,7 @@ export async function captureAttachmentLocation(root: string): Promise<Attachmen
   if (current.dev !== info.dev || current.ino !== info.ino || current.uid !== info.uid || current.gid !== info.gid || current.mode !== info.mode) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   return { canonicalRoot, device: String(info.dev), inode: String(info.ino) };
 }
-/** One read-only producer seam; callers request it only for a retained L2 location. */
+/** Read-only filesystem evidence for L2 assessment and target recovery. */
 export async function observeAttachmentFilesystemIdentity(location: AttachmentLocation) {
   const observed = await inspectFilesystemIdentity(location.canonicalRoot, { device: location.device, inode: location.inode });
   return observed.status === 'available' ? observed.identity : null;
@@ -64,6 +64,7 @@ export async function prepareAttachmentDirectory(root: string, authorize: () => 
 }
 export class FileProjectAttachmentStore {
   private readonly registrationBytes = new WeakMap<InstallationRegistration, Buffer>();
+  private readonly attachmentBytes = new WeakMap<ProjectAttachment, Buffer>();
   constructor(readonly layout: ProductLayout, readonly options: ConfigLoadOptions, readonly maxBytes: number, readonly timeoutMs: number) {}
   get global(): ProductLayout {
     const options = this.options, config = resolveGlobalConfigPaths(options.env, options.platform).platformPath;
@@ -101,11 +102,12 @@ export class FileProjectAttachmentStore {
     if (process.platform === 'win32' || this.layout.platform === 'win32') return null;
     const present = await lstat(productResourcePath(this.layout, 'projectAttachment')).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     if (!present) return null;
-    const bytes = await this.read(this.layout, 'projectAttachment');
+    const bytes = await this.readBytes(this.layout, 'projectAttachment');
     if (bytes === null) return null;
-    let value: unknown; try { value = JSON.parse(bytes); } catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
+    let value: unknown; try { value = JSON.parse(bytes.toString('utf8')); } catch { return attachmentFailure('PROJECT_ATTACHMENT_INVALID'); }
     if (isNewerAttachmentVersion(value, 2)) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
     const parsed = readableProjectAttachmentSchema.safeParse(value);
+    if (parsed.success) this.attachmentBytes.set(parsed.data, bytes);
     return parsed.success ? parsed.data : attachmentFailure('PROJECT_ATTACHMENT_INVALID');
   }
   /** Caller holds this one lock across inventory reservation, the local installer journal and settlement. */
@@ -129,14 +131,43 @@ export class FileProjectAttachmentStore {
     return Buffer.byteLength(serializeJsonDocument(value)) <= this.readCap
       && Buffer.byteLength(serializeJsonDocument(normalizeAttachmentRegistration(value))) <= this.maxBytes;
   }
-  /** Only the source reconciliation and witnessed attach settlement use this v3 writer. */
-  async writeJoined(expected: InstallationRegistration, next: InstallationRegistration): Promise<void> {
+  private async checkRegistration(expected: InstallationRegistration) {
     const path = productResourcePath(this.global, 'installationRegistration');
     if (!heldRegistries.getStore()?.has(path)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const before = this.registrationBytes.get(expected);
+    if (before === undefined || !(await this.readBytes(this.global, 'installationRegistration'))?.equals(before))
+      return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+  }
+  async checkTarget(registration: InstallationRegistration, attachment: ProjectAttachment) {
+    await this.checkRegistration(registration);
+    await this.checkLocalBytes(this.attachmentBytes.get(attachment));
+  }
+  private async checkLocalBytes(expected: Buffer | undefined) {
+    if (!expected || !(await this.readBytes(this.layout, 'projectAttachment'))?.equals(expected))
+      return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+  }
+  fitsTarget(reference: ProjectAttachment, registration: InstallationRegistration) {
+    return Buffer.byteLength(serializeJsonDocument(reference)) <= this.maxBytes && this.fitsJoined(registration);
+  }
+  async writeTarget(expected: InstallationRegistration, local: ProjectAttachment, reference: ProjectAttachment, next: InstallationRegistration | null) {
+    const bytes = Buffer.from(serializeJsonDocument(reference));
+    if (!this.fitsTarget(reference, next ?? expected)) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
+    const check = () => this.checkTarget(expected, local);
+    await check();
+    if (!bytes.equals(this.attachmentBytes.get(local)!)) {
+      const path = await prepareProductFile(this.layout, 'projectAttachment');
+      await writeTextAtomic(path, bytes, check);
+    }
+    const checkWritten = () => this.checkLocalBytes(bytes);
+    await checkWritten();
+    if (next) await this.writeJoined(expected, next, checkWritten);
+    await checkWritten();
+  }
+  /** Used by custody holders that publish a canonical registration v3 record. */
+  async writeJoined(expected: InstallationRegistration, next: InstallationRegistration, checkPublishedLocal?: () => Promise<void>): Promise<void> {
     const check = async () => {
-      if (before === undefined || !(await this.readBytes(this.global, 'installationRegistration'))?.equals(before))
-        return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+      await checkPublishedLocal?.();
+      await this.checkRegistration(expected);
     };
     await check();
     const value = readableInstallationRegistrationSchema.parse(next);

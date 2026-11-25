@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
-import { configuredAttachmentStore, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
+import { configuredAttachmentStore, ensureConfiguredTerminalIdentity, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { FileProjectAttachmentStore, localProjectAttachmentPorts, readAttachmentBootstrapConfig, withInstallationJournal, attachmentLifecycle, captureAttachmentLocation, prepareAttachmentDirectory } from '#adapters/index.js';
@@ -755,6 +755,350 @@ it.skipIf(process.platform !== 'linux')('recovers the persisted H-back output af
     source: { location: { device: String(observedDevice), filesystemIdentity } },
   });
   expect(await readFile(firstCopy)).toEqual(legacy);
+});
+
+async function renumberingTarget() {
+  const fsid = registrationV3Fixture.source.location.filesystemIdentity;
+  const filesystemAt = vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'available', identity: fsid });
+  const f = await fixture(), target = await f.make(f.b), preview = await target.app.preview('target');
+  const { attachment } = await target.app.apply('target', preview.planDigest, randomUUID());
+  const sourceConfig = await loadComposedConfig(f.a, f.options), targetConfig = await loadComposedConfig(f.b, f.options);
+  const configPath = targetConfig.productLayout.bootstrapConfigPath;
+  const projectIdentityPath = join(productResourcePath(targetConfig.productLayout, 'projectIdentity'), 'identity.json');
+  const sourceRoot = sourceConfig.productLayout.root;
+  const refPath = productResourcePath(targetConfig.productLayout, 'projectAttachment');
+  const registryPath = productResourcePath(target.store.global, 'installationRegistration');
+  const identityPath = join(productResourcePath(sourceConfig.productLayout, 'installationIdentity'), 'identity.json');
+  const store = target.store, original = (await store.registration())!;
+  const identity = JSON.parse(await readFile(identityPath, 'utf8'));
+  const { machineDigest, canonicalRoot, inode } = identity.binding;
+  await writeFile(identityPath, JSON.stringify({ ...identity, binding: { schemaVersion: 1, machineDigest, canonicalRoot, device: '10', inode } }));
+  const ref = { ...attachment, location: { ...attachment.location, device: '20' } };
+  await writeFile(refPath, platform.serializeJsonDocument(ref));
+  await store.hold(() => store.write(original, installationRegistrationSchema.parse({ ...original, schemaVersion: 2,
+    source: { ...original.source, location: { ...original.source.location, device: '10' } },
+    entries: [{ ...original.entries[0], attachment: ref,
+      modelLease: { schemaVersion: 1, leaseId: randomUUID(), state: 'active', profiles: [] } }],
+  })));
+  const actual = await vi.importActual<typeof fs>('node:fs/promises');
+  const devices = { source: 20n, target: 20n };
+  const observeDevice = (path: unknown) => path === sourceRoot ? devices.source : path === f.b ? devices.target : null;
+  vi.mocked(fs.lstat).mockImplementation(async (...args) => {
+    const info = await actual.lstat(...args), device = observeDevice(args[0]);
+    return device !== null && typeof info.dev === 'bigint' ? Object.assign(info, { dev: device }) : info;
+  });
+  vi.mocked(fs.stat).mockImplementation(async (...args) => {
+    const info = await actual.stat(...args), device = observeDevice(args[0]);
+    return device !== null && typeof info.dev === 'bigint' ? Object.assign(info, { dev: device }) : info;
+  });
+  const write = () => loadConfiguredScopeContext(f.b, 'target', f.options, 'write');
+  const read = () => loadConfiguredScopeContext(f.b, 'target', f.options, 'read');
+  const source = () => loadConfiguredScopeContext(f.a, 'source', f.options, 'write');
+  const bytes = async () => ({ local: await readFile(refPath, 'utf8'), registry: await readFile(registryPath, 'utf8'), identity: await readFile(identityPath, 'utf8') });
+  const failRename = (path: string) => vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    if (to === path) throw Object.assign(new Error('fixture publication interruption'), { code: 'EIO' });
+    await actual.rename(from, to);
+  });
+  const restoreRename = () => vi.mocked(fs.rename).mockReset().mockImplementation(actual.rename);
+  const localAt = (device: string) => ({ ...ref, location: { ...ref.location, device } });
+  const useL1Cap = async () => {
+    const reconciled = (await store.registration())!;
+    const cap = jsonSize(normalizeAttachmentRegistration(reconciled));
+    const config = JSON.parse(await readFile(configPath, 'utf8'));
+    await writeFile(configPath, JSON.stringify({ ...config, installation: { ...config.installation, profileMaxBytes: cap } }));
+    clearConfigCache();
+    return cap;
+  };
+  return { f, store, fsid, filesystemAt, devices, ref, refPath, registryPath, configPath, projectIdentityPath,
+    write, read, source, bytes, failRename, restoreRename, localAt, useL1Cap };
+}
+
+it.skipIf(process.platform !== 'linux')('A2 reconciles the source first and a scoped terminal write reopens the exact L2 pair', async () => {
+  const r = await renumberingTarget();
+  r.devices.target = 30n;
+  const before = await r.bytes();
+  await expect(r.read()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  expect(await r.bytes()).toEqual(before);
+  r.filesystemAt.mockImplementation(async path => ({ status: 'available', identity: path === r.f.b ? { ...r.fsid, value: 'foreign' } : r.fsid }));
+  await expect(r.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  expect(await r.bytes()).toEqual(before);
+  r.filesystemAt.mockResolvedValue({ status: 'available', identity: r.fsid });
+  const config = JSON.parse(await readFile(r.configPath, 'utf8'));
+  await writeFile(r.configPath, JSON.stringify({ ...config, terminal: { ...config.terminal, autostartService: false } }));
+  clearConfigCache();
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(r.f.b);
+  for (const [key, value] of Object.entries(r.f.options.env)) vi.stubEnv(key, value);
+  vi.stubEnv('TERM', 'xterm');
+  const input = Object.assign(new PassThrough(), { isTTY: true });
+  input.write('/status\n/exit\n');
+  let output = '';
+  const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
+  const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(input as NodeJS.ReadStream),
+    vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream),
+    vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
+  try {
+    expect(await cliMain(['terminal', 'status', '--json'])).toBe(78);
+    expect(output).toContain('PROJECT_ATTACHMENT_CHANGED');
+    expect(await r.bytes()).toEqual(before);
+    output = '';
+    expect(await cliMain(['terminal', 'session', '--scope', 'target']), output).toBe(0);
+    expect(output).toContain(JSON.parse(before.identity).installationId);
+  } finally {
+    input.destroy(); cwd.mockRestore(); stdio.forEach(spy => spy.mockRestore()); vi.unstubAllEnvs();
+  }
+  const done = await r.bytes(), expected = { ...r.localAt('30'), schemaVersion: 2,
+    location: { ...r.localAt('30').location, filesystemIdentity: r.fsid } };
+  expect(done.local).toBe(JSON.stringify(expected, null, 2) + '\n');
+  expect(JSON.parse(done.registry)).toMatchObject({ source: { location: { device: '20', filesystemIdentity: r.fsid } },
+    entries: [{ attachment: expected }], lineage: { headDevice: '20', pastDevices: [] } });
+  expect(JSON.parse(done.identity).binding).toMatchObject({ schemaVersion: 3, device: '20' });
+  expect(await r.read()).toMatchObject({ projectId: r.ref.projectId });
+  await writeFile(r.refPath, before.local);
+  r.devices.target = 40n;
+  await expect(r.read()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
+  expect(await r.bytes()).toEqual(done);
+});
+
+it.skipIf(process.platform !== 'linux')('A2 reuses the durable L1 output at 30 and rederives a literal interrupted 20/30 pair at 40', async () => {
+  for (const interruption of [false, true]) {
+    const r = await renumberingTarget();
+    await r.source();
+    const withOtherReference = (await r.store.registration())!;
+    const entry = withOtherReference.entries[0]!;
+    await r.store.hold(async () => {
+      const current = (await r.store.registration())!;
+      await r.store.writeJoined(current, { ...current, entries: [...current.entries, {
+        ...entry, state: 'revoked', attachment: { ...r.localAt('30'), projectId: randomUUID(), commandId: randomUUID(),
+          location: { ...r.localAt('30').location, canonicalRoot: join(r.f.root, 'unreachable') } },
+      }] });
+    });
+    const cap = await r.useL1Cap(), start = await r.bytes();
+    const expected = (device: string, pastDevices: string[]) => {
+      const record = JSON.parse(start.registry);
+      record.entries[0].attachment = r.localAt(device);
+      record.lineage.pastDevices = pastDevices;
+      return { ...start, local: JSON.stringify(r.localAt(device), null, 2) + '\n', registry: JSON.stringify(record, null, 2) + '\n' };
+    };
+    r.devices.source = r.devices.target = 30n;
+    r.failRename(r.refPath);
+    await expect(r.write()).rejects.toBeDefined();
+    expect(await r.bytes()).toEqual(start);
+    if (interruption) {
+      r.failRename(r.registryPath);
+      await expect(r.write()).rejects.toBeDefined();
+      expect(await r.bytes()).toEqual({ ...start, local: expected('30', []).local });
+      // Keep the literal intermediate L1/30 and E=L1/20 for the next call.
+      expect(JSON.parse((await r.bytes()).registry).entries[0].attachment.location.device).toBe('20');
+    } else {
+      r.restoreRename();
+      const publish = FileProjectAttachmentStore.prototype.writeJoined;
+      const interrupt = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined').mockImplementationOnce(async function (
+        this: FileProjectAttachmentStore, ...args: Parameters<typeof publish>
+      ) {
+        await publish.call(this, ...args);
+        throw new Error('fixture interruption after verified registration commit');
+      });
+      try { await expect(r.write()).rejects.toBeDefined(); } finally { interrupt.mockRestore(); }
+      expect(await r.bytes()).toEqual(expected('30', ['30']));
+    }
+    r.restoreRename();
+    clearConfigCache();
+    r.devices.source = r.devices.target = 40n;
+    await expect(r.read()).rejects.toMatchObject({ code: interruption ? 'PROJECT_ATTACHMENT_DENIED' : 'PROJECT_ATTACHMENT_CHANGED' });
+    await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
+    expect(await r.bytes()).toEqual(expected('40', interruption ? ['40'] : ['30', '40']));
+    const end = (await r.store.registration())!;
+    expect(jsonSize(normalizeAttachmentRegistration(end))).toBe(cap);
+    expect(jsonSize(end)).toBeLessThanOrEqual(cap + attachmentRegistrationAllowance(cap));
+    // Cycling back to the head drops the last reference to 40 and never inserts the head in pastDevices.
+    r.devices.source = r.devices.target = 20n;
+    await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
+    expect(await r.bytes()).toEqual(expected('20', interruption ? [] : ['30']));
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('A2 refuses unproved provenance and authority and uses the head alone without filesystem identity', async () => {
+  const r = await renumberingTarget();
+  await r.source();
+  const start = await r.bytes();
+  const state = async (edit: (record: ReturnType<typeof JSON.parse>) => void, local = r.localAt('30')) => {
+    const record = JSON.parse(start.registry);
+    edit(record);
+    await writeFile(r.registryPath, JSON.stringify(record, null, 2) + '\n');
+    await writeFile(r.refPath, JSON.stringify(local, null, 2) + '\n');
+  };
+  const refuse = async (code: string) => {
+    const before = await r.bytes();
+    await expect(r.write()).rejects.toMatchObject({ code });
+    expect(await r.bytes()).toEqual(before);
+  };
+  r.devices.target = 40n;
+  await state(record => { record.entries[0].state = 'pending'; }, r.ref);
+  await refuse('PROJECT_ATTACHMENT_INCOMPLETE');
+  await state(record => { record.entries[0].state = 'revoked'; }, r.ref);
+  await refuse('PROJECT_ATTACHMENT_REVOKED');
+  await state(record => { record.unregistered = true; });
+  await refuse('PROJECT_ATTACHMENT_UNAVAILABLE');
+  await state(() => {}, { ...r.ref, commandId: randomUUID() });
+  await refuse('PROJECT_ATTACHMENT_DENIED');
+  await state(() => {}, { ...r.ref, actor: { ...r.ref.actor, subject: 'different' } });
+  await refuse('PROJECT_ATTACHMENT_PERSON_MISMATCH');
+  await state(() => {}, { ...r.ref, projectId: randomUUID() });
+  await refuse('PROJECT_ATTACHMENT_DENIED');
+  await state(() => {}, r.ref);
+  const project = await readFile(r.projectIdentityPath, 'utf8');
+  await writeFile(r.projectIdentityPath, JSON.stringify({ ...JSON.parse(project), projectId: randomUUID() }));
+  await refuse('PROJECT_ATTACHMENT_CHANGED');
+  await writeFile(r.projectIdentityPath, project);
+  await state(record => { record.lineage.toBinding = 'f'.repeat(64); }, r.ref);
+  await refuse('PROJECT_ATTACHMENT_CHANGED');
+  await state(record => {
+    delete record.source.location.filesystemIdentity;
+    record.lineage.toBinding = 'f'.repeat(64);
+  }, r.ref);
+  r.devices.source = 40n;
+  await refuse('PROJECT_ATTACHMENT_CHANGED');
+  r.devices.source = 20n;
+  for (const device of ['30', '1'.repeat(21)]) {
+    await state(record => { record.entries[0].attachment.location.device = device; }, r.localAt(device));
+    await refuse('PROJECT_ATTACHMENT_CHANGED');
+  }
+  await state(() => {}, r.ref);
+  await writeFile(r.refPath, '{invalid');
+  await refuse('PROJECT_ATTACHMENT_INVALID');
+  await state(() => {}, r.ref);
+  r.filesystemAt.mockImplementation(async path => ({ status: 'available', identity: path === r.f.b ? { ...r.fsid, value: 'foreign' } : r.fsid }));
+  await refuse('PROJECT_ATTACHMENT_CHANGED');
+  await state(() => {});
+  r.devices.target = 20n;
+  await refuse('PROJECT_ATTACHMENT_DENIED');
+
+  const head = await renumberingTarget();
+  head.filesystemAt.mockResolvedValue({ status: 'unavailable', reason: 'mount-unavailable' });
+  await head.source();
+  const retained = await head.bytes(), record = JSON.parse(retained.registry);
+  expect(record.lineage).toMatchObject({ headDevice: '20', filesystemIdentity: null });
+  expect(record.source.location).toMatchObject({ device: '20' });
+  expect(record.source.location.filesystemIdentity).toBeUndefined();
+  const intermediate = JSON.stringify(head.localAt('30'), null, 2) + '\n';
+  await writeFile(head.refPath, intermediate);
+  head.devices.target = 40n;
+  await expect(head.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+  expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+  head.devices.target = 20n;
+  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  expect(await head.bytes()).toEqual(retained);
+  record.lineage.pastDevices = ['10'];
+  record.entries[0].attachment = head.localAt('10');
+  await writeFile(head.registryPath, JSON.stringify(record, null, 2) + '\n');
+  await writeFile(head.refPath, JSON.stringify(head.localAt('10'), null, 2) + '\n');
+  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  expect(await head.bytes()).toEqual(retained);
+});
+
+it.skipIf(process.platform !== 'linux')('A2 serializes competing writes and rejects 104 or byte drift before local publication', async () => {
+  const hold = FileProjectAttachmentStore.prototype.hold;
+  for (const race of ['competing', 'revoke', 'detach', 'unregister', 'local', 'inventory'] as const) {
+    const r = await renumberingTarget();
+    await r.source();
+    r.devices.target = 30n;
+    const before = await r.bytes();
+    if (race === 'competing') {
+      let enter!: () => void;
+      const bothReady = new Promise<void>(resolve => { enter = resolve; });
+      let arrivals = 0;
+      const gate = vi.spyOn(FileProjectAttachmentStore.prototype, 'hold').mockImplementation(async function (
+        this: FileProjectAttachmentStore, work: () => Promise<unknown>,
+      ) {
+        if (++arrivals === 2) enter();
+        await bothReady;
+        return hold.call(this, work);
+      });
+      try {
+        const results = await Promise.allSettled([r.write(), r.write()]);
+        expect(results.filter(item => item.status === 'fulfilled')).toHaveLength(1);
+        expect(results.find(item => item.status === 'rejected')).toMatchObject({ reason: { code: 'PROJECT_ATTACHMENT_CHANGED' } });
+        expect((await r.bytes()).identity).toBe(before.identity);
+        await expect(r.read()).resolves.toMatchObject({ projectId: r.ref.projectId });
+      } finally { gate.mockRestore(); }
+      continue;
+    }
+    let raced = before;
+    const gate = vi.spyOn(FileProjectAttachmentStore.prototype, 'hold').mockImplementationOnce(async function (
+      this: FileProjectAttachmentStore, work: () => Promise<unknown>,
+    ) {
+      if (race === 'revoke' || race === 'detach' || race === 'unregister') {
+        await hold.call(r.store, async () => {
+          await r.store.writeRevocation((await r.store.registration())!,
+            { action: race === 'revoke' ? 'revoke' : 'detach', projectId: r.ref.projectId });
+          if (race === 'unregister') await r.store.writeRevocation((await r.store.registration())!, { action: 'unregister' });
+        });
+        raced = await r.bytes();
+      } else if (race === 'local') {
+        await writeFile(r.refPath, before.local + ' ');
+        raced = await r.bytes();
+      } else {
+        const readRegistration = FileProjectAttachmentStore.prototype.registration;
+        const drift = vi.spyOn(FileProjectAttachmentStore.prototype, 'registration').mockImplementation(async function (this: FileProjectAttachmentStore) {
+          const record = await readRegistration.call(this);
+          if (productResourcePath(this.layout, 'projectAttachment') === r.refPath) {
+            await writeFile(r.registryPath, before.registry + ' ');
+            raced = await r.bytes();
+          }
+          return record;
+        });
+        try { return await hold.call(this, work); } finally { drift.mockRestore(); }
+      }
+      return hold.call(this, work);
+    });
+    try {
+      await expect(r.write(), race).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+      expect(gate).toHaveBeenCalled();
+      expect(raced).not.toEqual(before);
+      expect(await r.bytes()).toEqual(raced);
+    } finally { gate.mockRestore(); }
+  }
+
+  const r = await renumberingTarget();
+  r.devices.target = 30n;
+  const target = await loadComposedConfig(r.f.b, r.f.options);
+  const policy = productResourcePath(target.productLayout, 'policy'), granted = await readFile(policy, 'utf8');
+  const before = await r.bytes(), publish = FileProjectAttachmentStore.prototype.writeJoined;
+  const sourcePublished = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined');
+  const withdrawAfterSourcePublication = async function (
+    this: FileProjectAttachmentStore, ...args: Parameters<typeof publish>
+  ) {
+    await publish.call(this, ...args);
+    await writeFile(policy, JSON.stringify({ ...JSON.parse(granted), revision: 'target-withdrawn', grants: [] }));
+  };
+  const completed = vi.fn();
+  const open = () => ensureConfiguredTerminalIdentity(r.f.b, 'target', r.f.options, completed);
+  sourcePublished.mockImplementationOnce(withdrawAfterSourcePublication);
+  try { await expect(open()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { sourcePublished.mockRestore(); }
+  const after = await r.bytes();
+  expect(after.local).toBe(before.local);
+  expect(JSON.parse(after.registry)).toMatchObject({ source: { location: { device: '20' } }, entries: JSON.parse(before.registry).entries });
+  expect(JSON.parse(after.identity).binding.device).toBe('20');
+  expect.soft(completed.mock.calls).toEqual([['device-only']]);
+
+  // Model registration publication ahead of the binding. H-back settles only the recorded source location.
+  const ahead = JSON.parse(after.registry);
+  [ahead.lineage.fromBinding, ahead.lineage.toBinding] = [ahead.lineage.toBinding, ahead.lineage.fromBinding];
+  ahead.source.location.device = '10';
+  await writeFile(r.registryPath, platform.serializeJsonDocument(ahead));
+  await writeFile(policy, granted);
+  const registrationPublished = vi.spyOn(FileProjectAttachmentStore.prototype, 'writeJoined').mockImplementationOnce(withdrawAfterSourcePublication);
+  try { await expect(open()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { registrationPublished.mockRestore(); }
+  expect(completed.mock.calls).toEqual([['device-only'], ['registration-only']]);
+  const registrationOnly = await r.bytes();
+  expect(registrationOnly.identity).toBe(after.identity);
+  expect(registrationOnly.local).toBe(before.local);
+  expect(JSON.parse(registrationOnly.registry)).toMatchObject({ source: { location: { device: '20' } }, entries: JSON.parse(before.registry).entries });
+
+  await writeFile(policy, granted);
+  await expect(r.write()).resolves.toMatchObject({ projectId: r.ref.projectId });
+  await expect(r.read()).resolves.toMatchObject({ projectId: r.ref.projectId });
 });
 
 it('uses the retained binding and the fresh observation for H-back, H-fwd and S2 without carrying dead or long device lineage', () => {

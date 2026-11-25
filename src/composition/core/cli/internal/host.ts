@@ -134,7 +134,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
-    ensureTerminalIdentity: (projectRoot, scopeId, options) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options)),
+    ensureTerminalIdentity: (projectRoot, scopeId, options, onSourceRepair) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options, onSourceRepair)),
     preflightTerminalIdentity: (projectRoot, options) => typed(preflightConfiguredTerminalIdentity(projectRoot, options)),
     resolveInstallationIdentity: (root, choice, options) => typed(resolveConfiguredInstallationIdentity(root, choice, options)),
     loadInstallationIdentity: (root, options) => typed(loadConfiguredInstallationIdentity(root, options)), loadProjectIdentity: (root, options) => typed(loadConfiguredProjectIdentity(root, options)),

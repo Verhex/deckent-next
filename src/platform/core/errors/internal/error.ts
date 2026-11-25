@@ -3,6 +3,11 @@ import type { Locale, Params } from '#platform/core/i18n/index.js';
 
 export type ErrorCategory = 'error' | 'usage' | 'config';
 
+/** Extra lines for human fatal output. The primary error owns the exit, JSON and crash handling. */
+export class FatalErrorWithDetails extends Error {
+  constructor(readonly primary: unknown, readonly lines: readonly string[]) { super(); }
+}
+
 /** Machine identity and localized presentation are separate from exit policy. */
 export class DeckentError extends CodedError {
   constructor(

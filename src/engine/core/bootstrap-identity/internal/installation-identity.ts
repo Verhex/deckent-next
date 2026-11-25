@@ -38,13 +38,14 @@ export interface InstallationIdentityStore {
   resolveRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }): Promise<InstallationIdentityResolutionView>;
 }
 export interface InstallationBindingSource { capture(): Promise<InstallationBindingCapability> }
+export type SourceRepairKind = 'registration-only' | 'device-only';
 export interface RegisteredInstallationBinding {
   readonly identity: InstallationIdentity;
   readonly binding: InstallationBinding | null;
   readonly capture: InstallationBindingCapture;
   readonly candidate: InstallationBinding;
   readonly outcome: InstallationBindingAssessment | 'bind';
-  commit(kind: 'registration-only' | 'device-only' | 'person', publishRegistration: () => Promise<void>): Promise<void>;
+  commit(kind: SourceRepairKind | 'person', publishRegistration: () => Promise<void>): Promise<void>;
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
 export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
