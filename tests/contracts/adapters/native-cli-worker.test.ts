@@ -407,6 +407,25 @@ it('fails a worker whose isolated process returns valid output with a cleanup er
       cleanupError: { code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'realm-program-close' } } });
     await driver.close();
     expect(await readdir(f.stateDir)).toEqual([]);
+    const completed = f.isolated.mock.results[0]!.value;
+    for (const finding of [
+      { reason: 'exit', exitCode: 23, signal: null, code: 'HEADLESS_WORKER_RESULT__REASON_EXIT__23' },
+      { reason: 'signal', exitCode: null, signal: 'SIGTERM', code: 'HEADLESS_WORKER_RESULT__REASON_SIGNAL' },
+      { reason: 'stopped', exitCode: 1, signal: null, code: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' },
+    ] as const) {
+      f.isolated.mockImplementationOnce(async (_entry, _spawn, _bounds, _signal, line) => {
+        if (finding.reason === 'stopped')
+          expect(line(JSON.stringify({ type: 'turn.failed', error: { message: 'Rate limit reached' } }))).toBe('stop');
+        const { reason, exitCode, signal } = finding;
+        return { ...await completed, reason, exitCode, signal };
+      });
+      const stopped = createNativeCliWorkerDriver(f.input, f.transport, signal);
+      const result = await stopped.run(f.bridge, signal);
+      expect.soft(result, finding.reason).toMatchObject({ termination: 'unverified', status: 'failed', text: '', failureCode: finding.code,
+        cleanupError: { params: { check: 'realm-program-close' } } });
+      expect.soft(result, finding.reason).not.toHaveProperty('refusal');
+      await stopped.close();
+    }
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
 

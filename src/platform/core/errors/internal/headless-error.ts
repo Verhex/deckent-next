@@ -15,7 +15,8 @@ export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unkn
   if (diagnostic) return ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params });
   if (refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' && (legacyCheck === 'login-lock' || legacyCheck === 'limits'))
     return headlessDiagnostic(refusal, { check: legacyCheck, reason: 'legacy-unverified' });
-  if (refusal === 'HEADLESS_PREFLIGHT_FAILED' && (legacyCheck === 'version' || legacyCheck === 'flags'))
+  if (refusal === 'HEADLESS_PREFLIGHT_FAILED' && (legacyCheck === 'version' || legacyCheck === 'flags'
+    || legacyCheck === 'spawn' || legacyCheck === 'config-dir'))
     return headlessDiagnostic(refusal, { check: legacyCheck, reason: 'legacy-unverified' });
   if (refusal === 'HEADLESS_LIMIT_REACHED' && legacyCheck === null) return headlessDiagnostic(refusal, { limit: 'legacy-unverified' });
   if (refusal === 'HEADLESS_LOGIN_BUSY' && legacyCheck === null) return headlessDiagnostic(refusal, { holder: 'legacy-family-unverified' });

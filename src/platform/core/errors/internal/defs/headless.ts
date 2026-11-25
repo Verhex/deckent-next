@@ -16,7 +16,7 @@ export const headlessErrors: ErrorDefinitions = errorTable('headless', plainErro
 }), plainErrors('headless.agent.reason.', {
   NATIVE_AGENT_CLI_UNAVAILABLE: 'error', NATIVE_AGENT_LOGIN_REQUIRED: 'error', NATIVE_AGENT_CAPABILITY_UNSEALED: 'error', NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED: 'error',
   NATIVE_AGENT_PLUGIN_UNEXPECTED: 'error', NATIVE_AGENT_BRIDGE_UNAVAILABLE: 'error', NATIVE_AGENT_ENVIRONMENT_REFUSED: 'error',
-}), diagnostic('HEADLESS_CLI_UNAVAILABLE'), diagnostic('HEADLESS_OWNER_MISMATCH'),
+}), diagnostic('HEADLESS_CLI_UNAVAILABLE'), diagnostic('HEADLESS_OWNER_MISMATCH'), diagnostic('HEADLESS_WORKER_RESULT'),
 diagnostic('HEADLESS_PREFLIGHT_FAILED'), diagnostic('HEADLESS_LOGIN_REQUIRED'),
 diagnostic('HEADLESS_REQUEST_INVALID'), diagnostic('HEADLESS_ISOLATION_UNAVAILABLE'), plainErrors('error.', { HEADLESS_DELEGATION_REFUSED: 'error' }), {
   NATIVE_AGENT_RECONNECT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('headless.agent.connection.reconnectRequired', p, l) }) },

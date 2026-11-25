@@ -313,6 +313,10 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
         'Önceki denetim CLI sürümüyle ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_PREFLIGHT_FAILED', 'flags', 'The previous check concerned CLI options. The specific cause could not be determined.',
         'Önceki denetim CLI seçenekleriyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'spawn', 'The previous check concerned running a CLI probe. The specific cause could not be determined.',
+        'Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'config-dir', 'The previous check concerned the CLI login configuration directory. The specific cause could not be determined.',
+        'Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_ISOLATION_UNAVAILABLE', 'login-lock', 'The previous check could not acquire the sign-in lock. The specific cause could not be verified.',
         'Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.'],
       ['HEADLESS_LIMIT_REACHED', null, 'The previous check recorded a resource limit. Which limit was reached could not be verified.',
@@ -359,14 +363,16 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
         identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } }));
     const parserRefusals = "option '--max-turns <turns>' argument 'invalid' is invalid. must be a number\noption '--system-prompt-file <file>' argument missing";
-    const replies = ['9.1.0 (Claude Code)', fullHelp(), parserRefusals, parserRefusals,
+    const preflightReplies = ['9.1.0 (Claude Code)', fullHelp(), parserRefusals, parserRefusals,
       JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })];
+    const replies = [...preflightReplies];
+    let stdoutBound = false;
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => {
       const body = replies.shift();
       return { schemaVersion: 1, requestId: input.requestId, started: true, reason: body === undefined ? 'output-limit' : 'exit',
-        exitCode: body === undefined ? null : 0, signal: null, stdoutBase64: Buffer.from(body ?? '').toString('base64'),
-        stderrBase64: body === undefined ? Buffer.from('/fixture/private-stderr').toString('base64') : '',
-        stdoutTruncated: false, stderrTruncated: body === undefined, durationMs: 1 };
+        exitCode: body === undefined ? null : 0, signal: null, stdoutBase64: Buffer.from(body ?? (stdoutBound ? '/fixture/private-stdout' : '')).toString('base64'),
+        stderrBase64: body === undefined && !stdoutBound ? Buffer.from('/fixture/private-stderr').toString('base64') : '',
+        stdoutTruncated: body === undefined && stdoutBound, stderrTruncated: body === undefined && !stdoutBound, durationMs: 1 };
     });
     const remove = files.rm;
     const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
@@ -381,13 +387,29 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       expect.soft(logins[0]).toMatchObject({ state: 'open', cliUpdated: null });
       expect.soft(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
       expect.soft(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
-      const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
-      expect(result).toMatchObject({ kind: 'rejected' });
-      if ('kind' in result) {
-        const body = readHeadlessRejection(result.evidence);
-        expect(body).toMatchObject({ refusal: 'response-limit' });
-        expect(body).not.toHaveProperty('field');
-        expect(JSON.stringify(body)).not.toContain('/fixture/private-stderr');
+      const recordPath = join(c.root, 'state', 'preflight.json');
+      const current = JSON.parse(await readFile(recordPath, 'utf8'));
+      for (const [minimum, prior] of [
+        ['9.0.1', { state: 'open', version: '2.0.0' }],
+        ['9.0.2', { ...current, schemaVersion: 1, updatedFrom: '2.0.0' }],
+        ['9.0.3', { ...current, schemaVersion: 2, updatedFrom: '2.0.0' }],
+      ] as const) {
+        await writeFile(recordPath, JSON.stringify(prior));
+        replies.push(...preflightReplies);
+        await c.port.preflight({ ...c.profile, adapter: { ...c.profile.adapter, definition: { ...c.profile.adapter.definition as object, minCliVersion: minimum } } });
+        expect.soft(JSON.parse(await readFile(recordPath, 'utf8'))).toMatchObject({ schemaVersion: 1, version: '9.1.0', updatedFrom: null });
+      }
+      for (const which of ['stderr', 'stdout']) {
+        stdoutBound = which === 'stdout';
+        const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
+        expect(result).toMatchObject({ kind: 'rejected' });
+        if ('kind' in result) {
+          const body = readHeadlessRejection(result.evidence);
+          expect(body).toMatchObject({ refusal: 'response-limit' });
+          expect(body).not.toHaveProperty('field');
+          expect(JSON.stringify(body)).not.toContain(`/fixture/private-${which}`);
+        }
+        await remove(join(c.root, 'state', 'run', headless.systemPromptFile));
       }
     } finally { cleanup.mockRestore(); runner.mockRestore(); }
   });
@@ -457,10 +479,25 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     await expect(prepareHeadlessConnection({ protocol: { family: c.profile.protocol.family, version: 'v1' }, minCliVersion: '9.0.0', stateDir: join(c.root, 'state'),
       executable: c.executable, configDir: c.configDir, env: {}, now: () => 1, isolation: unavailable })).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
     expect(await c.log()).toEqual([]);
-    // Doctor reads the retained update and names its executable without spawning or requiring an available realm.
-    const program = lstatSync(c.executable);
-    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', updatedFrom: '1.0.0', version: '2.0.0',
-      executable: c.executable, revision: headless.revision, size: program.size, mtimeMs: Math.trunc(program.mtimeMs) }));
+    // Doctor requires evidence for the preceding version even when the current executable matches.
+    const program = await resolveHeadlessExecutable(cleanupEntry, c.executable, process.getuid!());
+    const observed = { state: 'open', updatedFrom: '1.0.0', version: '2.0.0', executable: c.executable,
+      revision: headless.revision, size: program.size, mtimeMs: Math.trunc(program.mtimeMs) };
+    const update = async (record: object) => {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify(record));
+      return (await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated;
+    };
+    expect.soft(await update(observed)).toBeNull();
+    const sealed = { ...observed, schemaVersion: 2, revision: `${headless.revision}:${program.identity}` };
+    expect.soft(await update({ ...sealed, updatedFrom: 'not-a-version' })).toBeNull();
+    expect.soft(await update({ ...sealed, updatedFrom: observed.version })).toBeNull();
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ ...sealed, schemaVersion: 1 }));
+    const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    expect(doctor(logins, 'en')).toContain('channel open');
+    expect(doctor(logins, 'tr')).toContain('kanal açık');
+    expect(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
+    expect(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
+    await update(sealed);
     expect((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated).toEqual({ cli: 'fake-cli', from: '1.0.0', to: '2.0.0' });
     expect(await c.log()).toEqual([]);
   });

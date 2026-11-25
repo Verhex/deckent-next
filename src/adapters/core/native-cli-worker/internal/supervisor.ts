@@ -126,6 +126,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         outcome = this.unknown(settledFailure); break work;
       }
       if (result.termination !== 'confirmed') { outcome = this.unknown('NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }
+      if (result.stopped && !this.verification) { outcome = this.unknown(primaryFailure ?? 'NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }
       if (result.refusal) {
         if (!this.verification) { outcome = this.unknown(result.refusal); break work; }
         const reason = nativeWorkerGuardRefusal(result.refusal); this.verdict = { state: 'refused', reason };

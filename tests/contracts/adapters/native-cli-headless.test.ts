@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort, headlessConnectionAdapter } from '#adapters/core/native-cli-headless/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort, headlessConnectionAdapter, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry, snapshotKnownSecrets, type DeckentError } from '#platform/index.js';
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -96,8 +96,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     await utimes(c.executable, new Date(), new Date(Date.now() + 9000));
     await expect(c.call()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
     expect(JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0' });
-    // S7 (owner 2026-10-31): the person's path is kept and resolved per call. A self-update moves the symlink A → B and deletes A: one new check, then the
-    // call runs B (doctor: "CLI updated"); a path that leads nowhere is the typed "CLI missing — reconnect" refusal, before any spawn.
+    // S7 (owner 2026-10-31): a self-update moves the symlink A → B and deletes A. One new preflight opens B and records the measured transition in v1.
+    // Doctor shows the open channel. A path that leads nowhere gives the typed "CLI missing — reconnect" refusal before any spawn.
     const linked = await connection({ steps: happy() }), link = join(linked.root, 'codex'), binB = join(linked.root, 'release-b');
     await symlink(linked.executable, link); await mkdir(binB);
     const pinned = parseModelInvocationProfile({ ...linked.profile, adapter: { ...linked.profile.adapter, definition: { ...linked.profile.adapter.definition as object, executable: link } } });
@@ -108,7 +108,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     await rm(link); await symlink(b, link); await rm(linked.executable);
     await expect(run()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
     expect((await linked.log()).map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call', 'version', 'help', 'auth', 'call']);
-    expect(JSON.parse(await readFile(join(linked.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0', updatedFrom: '9.1.0', executable: b });
+    expect(JSON.parse(await readFile(join(linked.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ schemaVersion: 1, state: 'open', version: '9.3.0', updatedFrom: '9.1.0', executable: b });
+    expect((await readHeadlessLogins({ profiles: [pinned] }, pinned.scopeId))[0]).toMatchObject({ state: 'open', cliUpdated: null });
     await rm(b);
     const missing = await linked.port.preflight(pinned).catch((error: unknown) => error) as DeckentError;
     expect(missing).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
@@ -211,6 +212,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     for (const usage of [{}, { input_tokens: 2, output_tokens: 9 }, { input_tokens: 2, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: '9' }]) {
       expect(body(await c.call([{ line: initLine() }, { line: resultLine('x', { usage }) }]))).toMatchObject({ refusal: 'guard', field: 'usage' });
     }
+    expect(body(await c.call([{ line: initLine() }, { line: resultLine('x', { modelUsage: {} }) }])))
+      .toMatchObject({ refusal: 'invalid-output' });
   });
   it.each([
     ['a missing result', [{ line: initLine() }, { exit: 0 }]],

@@ -333,6 +333,16 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
 
 // Semantic expectations are independent of the catalog keys and of the case renderer.
 const diagnosticMeaning = new Map(`path-search-not-file	A candidate on PATH was not a regular file	PATH üzerindeki bir aday normal bir dosya değildi
+spawn/legacy-unverified	The previous check concerned running a CLI probe. The specific cause could not be determined.	Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.
+config-dir/legacy-unverified	The previous check concerned the CLI login configuration directory. The specific cause could not be determined.	Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.
+worker-result/exit	The launched isolation command exited with code 16.	Başlatılan yalıtım komutu 16 koduyla sonlandı.
+worker-result/signal	A signal was observed for the launched isolation command. The invocation outcome is unknown.	Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.
+worker-result/quota	The subscription CLI reported that the usage limit was reached.	Abonelik CLI'ı kullanım sınırına ulaşıldığını bildirdi.
+worker-result/quota-status-unrecognized	The subscription CLI did not report a recognized quota status.	Abonelik CLI'ı tanınan bir kota durumu bildirmedi.
+worker-result/invalid-output	The subscription CLI did not provide a usable response.	Abonelik CLI'ı kullanılabilir bir yanıt vermedi.
+worker-result/model-mismatch	The subscription CLI reported a different model from the one requested.	Abonelik CLI'ı istenenden farklı bir model bildirdi.
+worker-result/provider-error	The subscription CLI reported a provider error.	Abonelik CLI'ı bir sağlayıcı hatası bildirdi.
+worker-result/guard	A safety check refused the subscription CLI result.	Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti.
 agent-path-outside-roots	The configured directory is outside the permitted installation roots.	Yapılandırılan dizin izin verilen kurulum köklerinin dışında.
 agent-resolved-path-outside-roots	The resolved directory is outside the permitted installation roots that matched the original path.	Çözümlenen dizin, özgün yolla eşleşen izinli kurulum köklerinin dışında.
 agent-readiness-verifier-unavailable	Tool readiness could not be verified here.	Araç hazırlığı burada doğrulanamadı.
@@ -581,7 +591,7 @@ it('explains every provider diagnostic by operation and reason in English and Tu
   for (const row of headlessDiagnosticCases) {
     const fields: Readonly<Record<string, string | number>> = row.fields;
     const example = Object.fromEntries(Object.entries(row.extras ?? {}).map(([key, field]) => [key, field.example]));
-    const proof = headlessExpectationIds(fields);
+    const proof = row.code === 'HEADLESS_WORKER_RESULT' ? [`worker-result/${fields['reason']}`] : headlessExpectationIds(fields);
     const label = `${row.code} ${JSON.stringify(fields)}`;
     for (const [index, locale] of locales.entries()) {
       const rendered = ErrorRegistry.createError(row.code, { params: { ...fields, ...example }, locale }).message;
