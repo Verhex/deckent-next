@@ -327,6 +327,8 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
         'Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_PREFLIGHT_FAILED', 'config-dir', 'The previous check concerned the CLI login configuration directory. The specific cause could not be determined.',
         'Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'state-dir', 'The previous check concerned the state directory used by the sign-in lock. The specific cause could not be determined.',
+        'Önceki denetim oturum açma kilidinin kullandığı durum diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
       // Y30: 83cff36f8 also wrote check-only `launcher` and `executable-recheck` records.
       ['HEADLESS_ISOLATION_UNAVAILABLE', 'launcher', 'The previous check concerned the isolation launcher. The specific cause could not be determined.',
         'Önceki denetim yalıtım başlatıcısıyla ilgiliydi. Kesin neden belirlenemedi.'],

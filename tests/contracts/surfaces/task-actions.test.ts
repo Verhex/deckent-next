@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
-import { resolveProductPaths } from '#platform/index.js';
+import { resolveProductPaths, t } from '#platform/index.js';
 
 const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'layout' };
 const identityArgs = ['--scope', 's', '--run', 'r', '--task', 't', '--attempt', 'a', '--generation', '1', '--layout-revision', 'layout'];
@@ -29,6 +29,20 @@ it('executes only the exact reserved identity and never presents process exit as
     expect(await main(['task', 'execute', ...identityArgs, '--lang', lang], context)).toBe(0);
     expect(text.split('\n').slice(1, 3)).toEqual([first, sentence]); expect(text).not.toContain(old);
   }
+  const reason = 'fixture-unregistered-wait';
+  Object.assign(response.execution, { waiting: { reason } });
+  text = '';
+  expect(await main(['task', 'execute', ...identityArgs, '--json'], context)).toBe(0);
+  expect(JSON.parse(text).execution.waiting).toEqual({ reason });
+  text = '';
+  expect(await main(['task', 'execute', ...identityArgs, '--lang', 'en'], context)).toBe(0);
+  expect.soft(text.split('\n').slice(1, 3)).toEqual([
+    'This attempt has no final dispatch record, so its outcome is unknown.',
+    'A waiting reason is recorded. Its meaning could not be determined.',
+  ]);
+  expect(text).not.toContain(reason);
+  expect.soft(t('cli.task.execute.unresolved', {}, 'tr')).toBe('Bu denemenin son dağıtım kaydı yok, bu nedenle sonucu bilinmiyor.');
+  expect.soft(t('cli.task.execute.unverifiedReason', {}, 'tr')).toBe('Kayıtta bir bekleme nedeni var. Anlamı belirlenemedi.');
 });
 
 it.each([
@@ -47,7 +61,7 @@ it.each([
 
 it.each([
   ['prevented', null, 'Execution was prevented before launch permission was granted.'],
-  ['unresolved', null, 'the outcome is unknown'],
+  ['unresolved', null, 'This attempt has no final dispatch record, so its outcome is unknown.'],
 ] as const)('renders %s without inventing terminal evidence', async (status, terminal, phrase) => {
   let text = '';
   const context = { stdout: { write(value: string) { text += value; } },

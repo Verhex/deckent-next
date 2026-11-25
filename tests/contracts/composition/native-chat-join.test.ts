@@ -19,7 +19,9 @@ import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn, cancelPeerConfigu
 import { describeTerminalChat, inspectNativeChat } from '#composition/core/terminal-chat/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
-import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
+import { createNativeAgentDriver, nativeAgentFlagSetDigest, preflightNativeAgent } from '#adapters/core/native-cli-headless/index.js';
+import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/native-headless/agent.js';
+import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
@@ -39,9 +41,9 @@ async function unsupportedPeer() {
     variant: 'native-chat-linux-PTY', reason: 'platform-unsupported', platform: process.platform }));
   return true;
 }
-async function fixture(askEdits = true) {
+async function fixture(askEdits = true, headless?: { executable: string; configDir: string; stateDir: string; protocolFamily: string }) {
   const owner = readLocalOsIdentity();
-  const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state',
+  const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state', ...headless,
     delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] } } });
   cleanups.push(f.close);
   // No CLI/preflight/login runs: a code-only fake native port exercises the real composition, facade and durable stores.
@@ -58,7 +60,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { creditsAfterTool: false, paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { limitAfterTool: null as null | 'credits-required' | 'quota', paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -89,11 +91,15 @@ async function fixture(askEdits = true) {
           });
           expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'k11-fake-driver', version: '1' } } })).status).toBe(200);
           state.channels.push(localPrincipalChannel());
-          const args = state.creditsAfterTool ? { path: 'credits-result.txt', content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
+          const args = state.limitAfterTool ? { path: state.limitAfterTool === 'quota' ? 'quota-result.txt' : 'credits-result.txt',
+            content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: args, _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
-          if (state.creditsAfterTool) return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null,
-            Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'credits-required' })), false) };
+          if (state.limitAfterTool) {
+            const quota = state.limitAfterTool === 'quota';
+            return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, quota ? 'http-status' : 'interrupted', quota ? 429 : null,
+              Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: state.limitAfterTool, ...(quota && { status: 429 }) })), quota) };
+          }
           return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
@@ -179,7 +185,7 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
     expect(JSON.stringify(records[0])).toContain('"company":"first-run-mcp-edit-shell-tools"');
   } finally { db.close(); }
   Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
-  h.state.creditsAfterTool = true;
+  h.state.limitAfterTool = 'credits-required';
   const failed = await h.run('credits-after-tool');
   const sentence = 'The subscription asks for extra credits for this request.';
   expect(failed).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
@@ -189,18 +195,38 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
   expect.soft(t('error.HEADLESS_CREDITS_REQUIRED', {}, 'tr')).toBe('Abonelik bu istek için ek kredi istiyor.');
   expect(await h.run('credits-after-tool')).toMatchObject({ replayed: true, toolCalls: 1, note: failed.note });
   const oldAdvice = sentence + ' deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your provider account, then try again.';
+  const quotaSentence = 'Your subscription usage limit was reached. Check this turn’s earlier tool effects before repeating the work.';
+  const oldQuota = 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.';
   const openTurn = adapters.openSqliteAgentTurnStore;
   const history = vi.spyOn(adapters, 'openSqliteAgentTurnStore').mockImplementation(async (...args) => {
     const retained = await openTurn(...args), claim = retained.claim.bind(retained);
     retained.claim = async input => {
       const stored = await claim(input);
       if (stored.status !== 'finished' || !stored.outcome.note || stored.outcome.note.includes(oldAdvice)) return stored;
-      return { ...stored, outcome: { ...stored.outcome, note: stored.outcome.note.replace(sentence, oldAdvice) } };
+      return { ...stored, outcome: { ...stored.outcome, note: stored.outcome.note.replace(sentence, oldAdvice).replace(quotaSentence, oldQuota) } };
     };
     return retained;
   });
   try {
-    expect.soft((await h.run('credits-after-tool')).note).not.toMatch(/nothing was accepted|try again/u);
+    const calls = h.state.calls, replay = await h.run('credits-after-tool');
+    expect.soft(replay).toMatchObject({ replayed: true, recorded: true, toolCalls: 1 });
+    const [correction, saved] = replay.note?.split('\n', 2) ?? [];
+    expect.soft(correction).toBe(`Current correction: ${sentence}`);
+    expect.soft(correction).not.toMatch(/nothing was accepted|try again/u);
+    expect.soft(saved).toBe(`Saved note (historical wording): ${failed.note!.replace(sentence, oldAdvice)}`);
+    expect(h.state.calls).toBe(calls);
+    expect.soft(t('agent.turn.outcome.replayCorrection', { correction: '…' }, 'tr')).toBe('Güncel düzeltme: …');
+    expect.soft(t('agent.turn.outcome.replaySavedNote', { note: '…' }, 'tr')).toBe('Kaydedilen not (önceki ifade): …');
+    h.state.limitAfterTool = 'quota';
+    const quota = await h.run('quota-after-tool');
+    expect(quota).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+    expect(await readFile(join(h.f.project, 'quota-result.txt'), 'utf8')).toBe('retained before the refusal\n');
+    expect.soft(quota.note).toContain(quotaSentence);
+    expect.soft(quota.note).not.toMatch(/try again|choose another model/iu);
+    expect.soft(t('headless.chat.quotaAfterTools', {}, 'tr'))
+      .toBe('Aboneliğinizin kullanım sınırına ulaşıldı. İşi tekrarlamadan önce bu turdaki önceki araç çağrılarının etkilerini denetleyin.');
+    const replayedQuota = await h.run('quota-after-tool');
+    expect.soft(replayedQuota.note).toBe(`Current correction: ${quotaSentence}\nSaved note (historical wording): ${quota.note!.replace(quotaSentence, oldQuota)}`);
   } finally { history.mockRestore(); }
 });
 
@@ -316,6 +342,35 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
     expect.soft(result.note).toContain('usage limit');
   } finally { write.mockRestore(); }
+
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const c = await connection();
+  cleanups.push(cleanupConnections);
+  const protocolFamily = 'codex-jsonl', executable = await writeFakeAgentCli(join(c.root, 'bin'), protocolFamily,
+    { events: [{ type: 'turn.failed', error: { message: 'Rate limit reached' } }] });
+  const codex = await fixture(false, { executable, configDir: c.configDir, stateDir: join(c.root, 'codex-state'), protocolFamily });
+  Object.assign(codex.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  const sealed = await preflightNativeAgent(codex.profile, Date.now, testIsolation);
+  Object.assign(codex.execution, sealed.execution);
+  codex.runtime.driver = async ({ profile, execution, session }) => createNativeAgentDriver({ profile, execution, session, now: Date.now, isolation: testIsolation });
+  const quotaWithoutTools = 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.';
+  const rejectWrite = vi.fn(async () => { throw new Error('fixture-codex-record-failed'); });
+  const rejectStore = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordRejected: rejectWrite }));
+  try {
+    const result = await codex.run('codex-rejection-write-failed');
+    expect(rejectWrite).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain(quotaWithoutTools);
+    expect.soft(result.note).not.toContain('it is recorded');
+  } finally { rejectStore.mockRestore(); }
+  const unavailableRead = vi.spyOn(readerMethods, 'loadInspection').mockRejectedValue(new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE'));
+  try {
+    const result = await codex.run('codex-inspection-unavailable');
+    expect(unavailableRead).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain(quotaWithoutTools);
+  } finally { unavailableRead.mockRestore(); }
 });
 
 it('keeps the summary refusal before and after claim in the final note in EN and TR', async () => {

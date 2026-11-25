@@ -1,7 +1,8 @@
 import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
+import { TURN_NOTE_MAX_CHARS } from './metadata.js';
 import { LOCALES, t } from '#platform/index.js';
-import type { ChatTurnSteerOutcome } from '#domain/index.js';
+import { modelTextPrefix, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 /**
  * A turn with durable identity (T-L3): claim first; a finished turn of the same request replays its stored outcome (the final
@@ -18,11 +19,21 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   if (claimed.status === 'finished') {
     const { answer, finish, note: storedNote, rounds, toolCalls, steer = { joined: [], returned: [] } } = claimed.outcome;
     let note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
-    // Match only the full retired catalog wording in an authored note. The stored outcome remains the original evidence.
-    if (note) for (const locale of LOCALES) {
-      note = note.replaceAll(t('headless.chat.legacyCreditsAdvice', {}, locale), t('error.HEADLESS_CREDITS_REQUIRED', {}, locale));
-      note = note.replaceAll(t('headless.agent.legacySurfaceStopped', {}, locale), t('headless.agent.surfaceStopped', {}, locale));
-      note = note.replaceAll(t('headless.agent.legacyGuardStopped', {}, locale), t('headless.agent.surfaceStopped', {}, locale));
+    if (storedNote) {
+      const corrections = new Set<string>();
+      for (const locale of LOCALES) {
+        if (storedNote.includes(t('headless.chat.legacyCreditsAdvice', {}, locale)))
+          corrections.add(t('error.HEADLESS_CREDITS_REQUIRED', {}, input.language));
+        if (toolCalls > 0 && storedNote.includes(t('headless.chat.quotaFallback', {}, locale)))
+          corrections.add(t('headless.chat.quotaAfterTools', {}, input.language));
+        if (storedNote.includes(t('headless.agent.legacySurfaceStopped', {}, locale)) || storedNote.includes(t('headless.agent.legacyGuardStopped', {}, locale)))
+          corrections.add(t('headless.agent.surfaceStopped', {}, input.language));
+      }
+      if (corrections.size) {
+        const display = [...Array.from(corrections, correction => t('agent.turn.outcome.replayCorrection', { correction }, input.language)),
+          t('agent.turn.outcome.replaySavedNote', { note: storedNote }, input.language)].join('\n');
+        note = display.length <= TURN_NOTE_MAX_CHARS ? display : `${modelTextPrefix(display, TURN_NOTE_MAX_CHARS - 1)}…`;
+      }
     }
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });

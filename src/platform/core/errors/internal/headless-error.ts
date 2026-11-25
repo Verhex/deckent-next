@@ -1,4 +1,4 @@
-import type { Locale } from '#platform/core/i18n/index.js';
+import { resolveLocale, t, type Locale } from '#platform/core/i18n/index.js';
 import { readHeadlessDiagnosticCase, readHeadlessDiagnosticIdentifier, readLegacyHeadlessDiagnosticCase, type HeadlessDiagnosticArgs } from './headless-diagnostics.js';
 import { DeckentError } from './error.js';
 import { ErrorRegistry } from './registry.js';
@@ -27,6 +27,11 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
 export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unknown): DeckentError {
   const diagnostic = readHeadlessDiagnosticCase(refusal) ?? readLegacyHeadlessDiagnosticCase(refusal, legacyCheck);
   if (diagnostic) return ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params });
+  // The old check identifies an operation, without a cause that a fresh writer could record.
+  if (refusal === 'HEADLESS_PREFLIGHT_FAILED' && legacyCheck === 'state-dir') {
+    const localize = (locale: Locale) => ({ message: t('error.headless.stateLegacyUnverified', {}, locale) });
+    return new DeckentError(refusal, localize(resolveLocale()).message, undefined, undefined, undefined, undefined, undefined, 'error', undefined, localize);
+  }
   // Y30: a check-only historical record names its operation (83cff36f8 wrote `launcher` and `executable-recheck` too).
   if (refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' && (legacyCheck === 'login-lock' || legacyCheck === 'limits' || legacyCheck === 'launcher'))
     return headlessDiagnostic(refusal, { check: legacyCheck, reason: 'legacy-unverified' });

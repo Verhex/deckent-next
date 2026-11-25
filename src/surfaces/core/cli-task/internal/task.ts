@@ -345,16 +345,15 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if (action === 'execute') {
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.executeTask(context.root ?? process.cwd(), identity, options);
-    const reason = result.execution.status === 'unresolved' && result.execution.waiting
-      ? readFailureReasonText(result.execution.waiting.reason, locale) : undefined;
+    const waiting = result.execution.status === 'unresolved' ? result.execution.waiting : undefined;
+    const reason = waiting ? readFailureReasonText(waiting.reason, locale) : undefined;
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.task.execute.heading', data.execution.identity, locale),
       data.execution.status === 'terminal'
         ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? t('cli.value.none', {}, locale), signal: data.execution.terminal?.signal ?? t('cli.value.none', {}, locale) }, locale)
-        // C3: with a recorded reason the first line says only what is known (no final dispatch record), never that no exit was seen.
         : ({ prevented: t('cli.task.execute.prevented', {}, locale),
           unresolved: reason ? t('cli.task.execute.unresolvedReason', {}, locale) : t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
-      ...(reason ? [reason] : []),
+      ...(waiting ? [reason ?? t('cli.task.execute.unverifiedReason', {}, locale)] : []),
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }
