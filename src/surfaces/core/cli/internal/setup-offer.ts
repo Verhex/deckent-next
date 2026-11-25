@@ -12,8 +12,11 @@ export async function reportSetupCancellation(context: CommandContext, locale: L
 }
 
 export function reportAttachmentCancellation(context: CommandContext, locale: Locale, scopeId: string): 1 {
-  const scope = shellIdentity(redactSensitive(terminalSafeText(scopeId)));
-  emit(t('setup.attachment.cancelled', { scope }, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
+  const cleanedScope = terminalSafeText(scopeId);
+  const message = cleanedScope === scopeId && redactSensitive(cleanedScope) === scopeId
+    ? t('setup.attachment.cancelled', { scope: shellIdentity(scopeId) }, locale)
+    : t('setup.attachment.cancelled.originalScope', {}, locale);
+  emit(message, { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
   return 1;
 }
 
