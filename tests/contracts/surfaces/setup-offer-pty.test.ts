@@ -225,13 +225,16 @@ async function expectUnfinishedAttachmentStops(f: Awaited<ReturnType<typeof fixt
         ? Promise.resolve({ status: 'pending' }) : host.projectAttachment(root, input, ...options),
     });
   `];
-  for (const [lang, title, explanation] of [
-    ['en_US.UTF-8', titles[0], 'The attachment is unfinished. Resume the same attach command with its original command ID and preview digest.'],
-    ['tr_TR.UTF-8', titles[1], 'Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün.'],
-  ] as const) {
+  for (const [lang, title] of [['en_US.UTF-8', titles[0]], ['tr_TR.UTF-8', titles[1]]] as const) {
     const pending = await f.pty(`attachment-pending-${lang.slice(0, 2)}`, [[title, 'y']], { LANG: lang, NODE_ENV: 'production' }, [], target, pendingEntry);
     expect(pending.timeout, pending.output).toBeUndefined();
     expect(pending.output).toContain(title);
+    const scope = /Scope: ([a-f0-9-]{36})/u.exec(pending.output)?.[1];
+    expect(scope, pending.output).toBeDefined();
+    const command = `deckent terminal attach --scope ${scope} --preview`;
+    const explanation = lang.startsWith('tr')
+      ? `Proje bağlantısı tamamlanmadı. Güncel planı \`${command}\` ile önizleyin. Devam edebiliyorsanız önizlemedeki uygulama komutunu çalıştırın.`
+      : `The attachment did not complete. Preview the current plan with \`${command}\`. If you can proceed, run the apply command from the preview.`;
     expect(pending.output).toContain(`${explanation} [PROJECT_ATTACHMENT_INCOMPLETE]`);
     expect.soft(pending.status, `unfinished attachment (${lang})`).toBe(1);
     expect(pending.output).not.toMatch(/deckent workline|Step 1\/|Adım 1\/|Runtime service started|deckent servisi arka planda başlatıldı/u);

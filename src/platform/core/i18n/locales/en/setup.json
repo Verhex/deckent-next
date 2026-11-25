@@ -361,6 +361,7 @@
   "setup.session.title": "Open a session in this folder?",
   "setup.session.body": "Folder: {path}\nScope: {scope}\nConnection: {connections}\nCost type: {costs}\nWrites to: {writeRoot}\nCreates separate project policy, ledger and session state with revocable connection use. Tokens are not copied.",
   "setup.session.noConnection": "Not configured yet",
+  "setup.session.attachmentIncomplete": "The attachment did not complete. Preview the current plan with `deckent terminal attach --scope {scope} --preview`. If you can proceed, run the apply command from the preview.",
   "setup.attachment.register": "Register this source installation",
   "setup.attachment.apply": "Attach this project and grant revocable connection use",
   "setup.attachment.revoke": "Revoke this project attachment",

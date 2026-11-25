@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PACKAGE_NAME, ErrorRegistry, emit, loadConfig, loadConfigLanguage, resolveLocale, t, terminalSafeText, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
+import { PACKAGE_NAME, ErrorRegistry, emit, isCodedError, loadConfig, loadConfigLanguage, reportFatal, resolveLocale, t, terminalSafeText, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import { projectAttachmentCommandSchema } from '#domain/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import { shellIdentity } from '#surfaces/core/cli-kit/index.js';
@@ -61,7 +61,14 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       return;
     }
   }
-  const result = await context.projectAttachment(root, parsed.data, options, interaction);
+  let result: unknown;
+  try {
+    result = await context.projectAttachment(root, parsed.data, options, interaction);
+  } catch (error) {
+    if (parsed.data.action !== 'apply' || !isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
+    await reportFatal(ErrorRegistry.createError(error.code, { locale }), { ...context, locale });
+    return 1;
+  }
   emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value => {
     const output = `${apply ? t('setup.attach.saved', {}, locale) : t('setup.attach.preview', {}, locale)}\n${terminalSafeText(JSON.stringify(value, null, 2))}`;
     if (parsed.data.action !== 'preview' && parsed.data.action !== 'register-preview') return output;

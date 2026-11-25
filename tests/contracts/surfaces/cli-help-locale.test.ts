@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { dispatch, main } from '#surfaces/core/cli/index.js';
 import * as cliHuman from '#surfaces/core/cli-human/index.js';
-import { PACKAGE_VERSION, t } from '#platform/index.js';
+import { ErrorRegistry, PACKAGE_VERSION, t } from '#platform/index.js';
+import type { ProjectAttachmentCommand } from '#domain/index.js';
 
 let temporary: string, root: string, globalRoot: string, env: NodeJS.ProcessEnv;
 beforeEach(async () => {
@@ -176,6 +177,30 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
       }
     }
     expect(projectAttachment).not.toHaveBeenCalled();
+
+    confirm.mockResolvedValue('yes');
+    const incomplete = ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE');
+    projectAttachment.mockImplementation(async (_root: string, input: ProjectAttachmentCommand) => {
+      if (input.action === 'offer') return { kind: 'ready', scopeId: projectId, path: root, writeRoot: root,
+        planDigest: digest, preparation: { digest, connections: [] } };
+      throw incomplete;
+    });
+    let errors = '';
+    const context = { root, env, projectAttachment, stdin: { isTTY: true, pause: vi.fn() } as unknown as NodeJS.ReadStream,
+      stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
+    const generic = 'Hata: Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün. [PROJECT_ATTACHMENT_INCOMPLETE]\n';
+    const explicit = await main(['terminal', 'attach', ...cases[1]![0], '--apply'], context);
+    expect.soft([explicit, errors]).toEqual([1, generic]);
+
+    errors = '';
+    const restore = await main(['terminal', 'attach', '--restore', projectId, '--expect', digest, '--apply'], context);
+    expect([restore, errors]).toEqual([78, generic]);
+
+    errors = '';
+    const bare = await main([], { ...context, completeTerminalChat: vi.fn(), configChoiceSources: () => ({
+      list: async () => { throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); },
+    }) });
+    expect.soft([bare, errors]).toEqual([1, `Hata: Proje bağlantısı tamamlanmadı. Güncel planı \`deckent terminal attach --scope ${projectId} --preview\` ile önizleyin. Devam edebiliyorsanız önizlemedeki uygulama komutunu çalıştırın. [PROJECT_ATTACHMENT_INCOMPLETE]\n`]);
   } finally { confirm.mockRestore(); }
 });
 it('keeps environment locale available with invalid config', async () => {

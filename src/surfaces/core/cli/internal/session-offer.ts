@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { projectAttachmentOfferSchema } from '#domain/index.js';
-import { ErrorRegistry, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { askCliCard } from '#surfaces/core/cli-human/index.js';
+import { shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** The existing question card owns input until the typed attach settles; no credential or policy writer lives here. */
@@ -24,9 +25,15 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
   if (answer !== 'yes') return 'cancelled';
-  const result = await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);
+  let result: unknown;
+  try {
+    result = await context.projectAttachment(root, { action: 'apply', scopeId: offer.scopeId, expect: offer.planDigest, commandId: randomUUID() }, options);
+  } catch (error) {
+    if (!isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
+  }
   if ((result as { status?: unknown } | null)?.status !== 'attached') {
-    await reportFatal(ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE'), { ...context, locale });
+    const message = t('setup.session.attachmentIncomplete', { scope: shellIdentity(terminalSafeText(offer.scopeId)) }, locale);
+    await reportFatal(ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE', { message, locale }), { ...context, locale });
     return 1;
   }
   stdin.resume();
