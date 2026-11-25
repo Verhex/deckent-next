@@ -8,7 +8,7 @@ import { DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, projectResultBrief, ta
 import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { openingWorkText, runDetailLines } from '#surfaces/core/terminal-work/index.js';
+import { openingWorkText, runDetailLines, runLedgerCommand } from '#surfaces/core/terminal-work/index.js';
 import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
@@ -49,6 +49,32 @@ async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
   if (captureRoot && captureRoot.startsWith(`${tmpdir()}/`)) await writeFile(join(captureRoot, `${name}.txt`), view.stdout.frame);
 }
 function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary' }); }
+
+async function scrollTranscriptPicker() {
+  const initial = await ports().listWorkers(), source = initial.sources[0]!, first = source.workers[0]!;
+  const others = Array.from({ length: 6 }, (_, index) => ({
+    ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
+  }));
+  let workers = [first, ...others];
+  const inspect = vi.fn(ports().inspectTranscript!);
+  const ledger = ports({ inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) });
+  const view = await open('/transcript', ledger, 'en', 24);
+  await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker');
+  expect(view.stdout.frame).not.toContain('Task 7');
+
+  // An out-of-range read lets us observe which Attempt a number resolves to without binding it.
+  workers = [...others, first];
+  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
+  await runLedgerCommand('transcript', '7 9', ledger, labels);
+  expect(inspect).toHaveBeenLastCalledWith(first.identity);
+  view.stdin.write('\u001B[A');
+  await until(() => view.stdout.frame.includes('> Task 7'), 'scrolled worker');
+  await runLedgerCommand('transcript', '7 9', ledger, labels);
+  expect(inspect).toHaveBeenLastCalledWith(others.at(-1)!.identity);
+  view.stdin.write('\u001B[B');
+  await until(() => view.stdout.frame.includes('> Task 1'), 'first worker again');
+  return { view, inspect };
+}
 
 describe('SW-2 job windows', () => {
   it('112: a queued /run waits for quiet; its info window closes and a direct picker selects immediately', async () => {
@@ -123,11 +149,11 @@ describe('SW-2 job windows', () => {
     expect(failing.stdout.frame).not.toContain('Queue row headline'); await close(failing);
   });
   it('picks the worker and pages the complete transcript by keys in a short terminal', async () => {
-    const inspect = vi.fn(ports().inspectTranscript!), view = await open('/transcript', ports({ inspectTranscript: inspect }), 'en', 24);
-    await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker'); await choose(view);
+    const { view, inspect } = await scrollTranscriptPicker();
+    await choose(view);
     await until(() => view.stdout.frame.includes('TRANSCRIPT 0'), 'transcript'); await snapshot('transcript', view); expect(view.stdout.frame).not.toContain('TRANSCRIPT 89');
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
-    expect(inspect.mock.calls[0]![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    expect(inspect.mock.calls.at(-1)![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
   it.each(['y', 'n', ESC])('cancel picker excludes terminal/already cancelling runs; %s preserves revision authority', async key => {
     const cancel = vi.fn(async () => 'Cancellation requested');
@@ -241,7 +267,7 @@ it('keeps a listed worker number in the transcript picker and uses the full iden
     expect(view.stdout.frame).toContain(locale === 'en' ? 'Transcript · worker 2 · task task-id · attempt 5b0c9811' : 'Döküm · işçi 2 · görev task-id · deneme 5b0c9811');
     await settle(40); view.stdin.write(ESC);
     await until(() => captured.entries.length === summaryCount + 2, 'worker 2 summary'); await settle(40);
-    expect(captured.entries.at(-1)).toMatchObject({ text: expect.stringContaining(`${task} 2`) });
+    expect(captured.entries.at(-1)).toMatchObject({ text: `${locale === 'en' ? 'Transcript' : 'İşçi kaydı'}: ${task} 2` });
 
     workers = [replacement, first];
     view.stdin.write('/transcript\r');

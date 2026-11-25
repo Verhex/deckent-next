@@ -3,7 +3,7 @@
  * Up/Down move the highlight (wrapping), Enter commits the highlighted row, Esc or Ctrl+C closes it. The row Enter
  * commits is `pickerChoice(selected)` — passing the first row instead fails the Down-then-Enter tests.
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
@@ -28,6 +28,8 @@ export function ArrowPicker(props: {
   /** Optional already projected display spans; selection still binds the original row index. */
   readonly styledRows?: readonly (readonly Span[])[];
   readonly details?: readonly (string | undefined)[];
+  /** Original indexes of the rows committed to the viewport. */
+  readonly onRowsDrawn?: ((indexes: readonly number[]) => void) | undefined;
   readonly onSelect: (index: number) => void;
   readonly onCancel: () => void;
   /** False while another window owns the keyboard (the window stack); default true. */
@@ -77,14 +79,17 @@ export function ArrowPicker(props: {
   const shown = filterPickerRows(props.rows, filterText);
   const index = pickerChoice(selectedRef.current, shown.length);
   const first = pickerFirstRow(index, shown.length, ARROW_PICKER_ROWS);
+  const drawn = shown.slice(first, first + ARROW_PICKER_ROWS);
   const width = Math.max(1, Math.min(columns || FALLBACK_COLUMNS, props.maxColumns ?? Number.MAX_SAFE_INTEGER) - 1);
-  useCardCopyOptions(shown.slice(first, first + ARROW_PICKER_ROWS).map(original => props.rows[original]!));
+  const { onRowsDrawn } = props;
+  useLayoutEffect(() => { onRowsDrawn?.(drawn); }, [onRowsDrawn, drawn]);
+  useCardCopyOptions(drawn.map(original => props.rows[original]!));
   void generation;
   return (
     <Box flexDirection="column">
       {props.filter ? <Text {...palette.muted} wrap="truncate">{truncateEnd(props.filter.prompt(filterText), width, glyphs.ellipsis)}</Text> : null}
       {props.filter && shown.length === 0 ? <Text {...palette.warning} wrap="truncate">{props.filter.none}</Text> : null}
-      {shown.slice(first, first + ARROW_PICKER_ROWS).map((original, offset) => {
+      {drawn.map((original, offset) => {
         const at = first + offset, row = props.rows[original]!;
         const marked = `${at === index ? '>' : ' '} ${row}`;
         const fitted = truncateEnd(marked, width, glyphs.ellipsis);

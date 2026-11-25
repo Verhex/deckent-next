@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Locale } from '#platform/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 import { runLedgerCommand, TRANSCRIPT_PAGE_LINES } from '#surfaces/core/terminal-work/index.js';
-import type { WorkerAttemptIdentity } from '#surfaces/core/terminal-ledger/index.js';
+import { fillTemplate, type WorkerAttemptIdentity } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
 // TUI2 L3: /transcript shows the newest lines first and says where the earlier ones are; the headline carries short identities, the details line the full ones.
@@ -62,11 +62,17 @@ describe('/transcript paging', () => {
     const inspectTranscript = vi.fn<typeof ports.inspectTranscript>(async () => lines(100));
     const pagingPorts = { ...ports, inspectTranscript };
     const [range] = await runLedgerCommand('transcript', '1 9', pagingPorts, labelsFor('tr'));
-    expect(range).toMatchObject({ level: 'error', text: 'Bu dökümde yalnız 3 sayfa var: /transcript 1 1 en yeni satırları gösterir.' });
+    if (range?.kind !== 'notice') throw new Error('Expected range notice');
+    expect(range).toMatchObject({ level: 'error', text: `Bu dökümde yalnız 3 sayfa var: /transcript ${ATTEMPT} 1 en yeni satırları gösterir.` });
+    expect(fillTemplate(workSurfaceLabels('en').transcriptPage!.range, { pages: 3, ref: ATTEMPT }))
+      .toBe(`This transcript has only 3 page(s): /transcript ${ATTEMPT} 1 shows the newest lines.`);
     observe(workerB, workerA);
     const [newest] = await runLedgerCommand('transcript', '1 1', pagingPorts, labelsFor('en'));
     expect(newest).toMatchObject({ level: 'info', text: expect.stringContaining('Transcript · worker 1 · task a1b2c3d4 · attempt 6d3c1b2a') });
-    expect(inspectTranscript.mock.calls).toEqual([[workerA.identity], [workerB.identity]]);
+    const suggestedArgs = range.text.match(/\/transcript (\S+ 1) /u)![1]!;
+    const [suggested] = await runLedgerCommand('transcript', suggestedArgs, pagingPorts, labelsFor('en'));
+    expect(suggested).toMatchObject({ level: 'info', text: expect.stringContaining(`Details: task ${TASK} · attempt ${ATTEMPT}`) });
+    expect(inspectTranscript.mock.calls).toEqual([[workerA.identity], [workerB.identity], [workerA.identity]]);
   });
   it('the headline carries no raw UUID', async () => {
     for (const locale of ['en', 'tr'] as const) expect((await show(locale, '1')).text.split('\n')[0]).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/iu);
