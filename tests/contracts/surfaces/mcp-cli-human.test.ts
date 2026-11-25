@@ -18,25 +18,39 @@ vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
     askCliCard: async (request: CliCardRequest) => { shownCards.push([request.title, ...(request.body ?? [])].join('\n')); return cardAnswers.shift()?.() ?? 'yes'; } };
 });
 
+const readFault = vi.hoisted(() => ({ current: null as { file: string; lock: string } | null }));
+vi.mock('node:fs/promises', async importOriginal => {
+  const fs = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...fs, async readFile(path: Parameters<typeof fs.readFile>[0], options?: Parameters<typeof fs.readFile>[1]) {
+    const fault = readFault.current;
+    if (fault?.file === path && await fs.stat(fault.lock).then(() => true, () => false))
+      throw Object.assign(new Error('Fixture registry read failed'), { code: 'EIO' });
+    return fs.readFile(path, options);
+  } };
+});
+
 const changedEN = 'The selected MCP server changed. Open the list and confirm the current server again.';
 const changedTR = 'Seçtiğiniz MCP sunucusu değişti. Listeyi açıp güncel sunucuyu yeniden onaylayın.';
-async function pickedWithdrawal(verb: 'revoke' | 'remove', changed: boolean) {
+const unverifiedEN = 'The selected MCP server could not be verified. Check that the registry can be read, then reopen the list.';
+const unverifiedTR = 'Seçtiğiniz MCP sunucusu doğrulanamadı. Kayıt dosyasının okunabildiğini kontrol edip listeyi yeniden açın.';
+
+async function checkPickedWithdrawals() {
   const base = await mkdtemp(join(tmpdir(), 'deckent-mcp-confirm-')), root = join(base, 'project'), home = join(base, 'home');
   const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, '.deckent'), NO_COLOR: '1' };
   const registries = mcpRegistryPaths(root, env.DECKENT_GLOBAL_HOME);
-  const projectScope = verb === 'remove', pickedScope = projectScope ? 'project' : 'user';
   const entries = { user: { command: 'user-fixture' }, project: { command: 'project-fixture' } };
-  const replacement = { mcpServers: { fx: { command: 'replacement-fixture' } } };
-  const auditors: string[] = [], grants: string[] = [], stderr: string[] = [];
+  const project = { mcpServers: { fx: entries.project } };
+  const replacement = { mcpServers: { fx: { ...entries.project, timeoutMs: 5000 } } };
+  const auditors: string[] = [], grants: string[] = [];
   const context: McpCommandContext = { projectRoot: root, layout: resolveProductLayout({ projectRoot: root }), environment: env, secret: async () => undefined,
     principal: { issuer: 'fixture', subject: 'owner' }, sandboxes: [], ask: async () => null, describeNotice: () => '',
     audit: async target => { auditors.push(target.scope); },
     grants: { grant: async () => ({ status: 'none' }), revoke: async target => { grants.push(target.scope); return { status: 'none' }; } } };
+  const writeRegistry = (file: string, contents: unknown) => writeFile(file, JSON.stringify(contents), { mode: 0o600 });
   try {
     await mkdir(dirname(registries.project), { recursive: true });
     await mkdir(dirname(registries.personal), { recursive: true });
-    await writeFile(registries.personal, JSON.stringify({ mcpServers: { fx: entries.user } }), { mode: 0o600 });
-    if (projectScope) await writeFile(registries.project, JSON.stringify({ mcpServers: { fx: entries.project } }));
+    await writeRegistry(registries.personal, { mcpServers: { fx: entries.user } });
     const trustFiles = await Promise.all((['user', 'project'] as const).map(async scope => {
       const directory = await mcpTrustDirectory(scope, context, true);
       await updateMcpTrust(directory, () => [{ name: 'fx', scope, definitionDigest: mcpDefinitionDigest('fx', entries[scope]), decision: 'trusted', tools: [],
@@ -44,25 +58,74 @@ async function pickedWithdrawal(verb: 'revoke' | 'remove', changed: boolean) {
       return join(directory, MCP_TRUST_FILE);
     }));
     const readTrust = () => Promise.all(trustFiles.map(file => readFile(file, 'utf8')));
-    const before = await readTrust();
-    cardAnswers.push(() => `${pickedScope}:fx`);
-    if (projectScope) cardAnswers.push(() => 'remove');
-    cardAnswers.push(async () => {
-      if (changed) await writeFile(registries.project, JSON.stringify(projectScope ? replacement : { mcpServers: { fx: entries.project } }));
-      return 'apply';
-    });
-    let localized: string | undefined;
-    const code = await main(projectScope ? ['mcp', '--lang', 'en'] : ['mcp', 'revoke', '--lang', 'en'], {
-      root, env, stdout: { write: () => true }, stderr: { write: (line: string) => stderr.push(line) },
-      async runMcpCommand(_root: string, request: McpCommandRequest) {
-        try { return await runMcpCommand(request, context); }
-        catch (error) { if (error instanceof DeckentError) localized = error.localize?.('tr').message; throw error; }
-      },
-    } as never);
-    const after = await readTrust();
-    const observed = projectScope ? JSON.parse(await readFile(registries.project, 'utf8')) as unknown : undefined;
-    return { code, localized, stderr: stderr.join('').trim(), auditors, grants, before, after, observed, replacement };
+    const picked = async (verb: 'revoke' | 'remove', onConfirm?: () => void | Promise<void>) => {
+      const before = await readTrust();
+      const stderr: string[] = [];
+      auditors.length = grants.length = 0;
+      const projectScope = verb === 'remove';
+      cardAnswers.push(() => projectScope ? 'project:fx' : 'user:fx');
+      if (projectScope) cardAnswers.push(() => 'remove');
+      cardAnswers.push(async () => { await onConfirm?.(); return 'apply'; });
+      let localized: string | undefined;
+      const code = await main(projectScope ? ['mcp', '--lang', 'en'] : ['mcp', 'revoke', '--lang', 'en'], {
+        root, env, stdout: { write: () => true }, stderr: { write: (line: string) => stderr.push(line) },
+        async runMcpCommand(_root: string, request: McpCommandRequest) {
+          try { return await runMcpCommand(request, context); }
+          catch (error) { if (error instanceof DeckentError) localized = error.localize?.('tr').message; throw error; }
+        },
+      } as never);
+      readFault.current = null;
+      shownCards.length = 0;
+      return { code, localized, stderr: stderr.join('').trim(), auditors: [...auditors], grants: [...grants], before, after: await readTrust() };
+    };
+    const refuse = (result: Awaited<ReturnType<typeof picked>>, code: string, message: string) => {
+      expect.soft(result.code).toBe(1);
+      expect.soft(result.stderr).toBe(`Error: ${message} [${code}]`);
+      expect.soft(result.after).toEqual(result.before);
+      expect.soft([result.auditors, result.grants]).toEqual([[], []]);
+    };
+    const changedRevoke = await picked('revoke', () => writeRegistry(registries.project, project));
+    refuse(changedRevoke, 'MCP_SERVER_CHANGED', changedEN);
+    expect.soft(changedRevoke.localized).toBe(changedTR);
+    const changedRemove = await picked('remove', () => writeRegistry(registries.project, replacement));
+    refuse(changedRemove, 'MCP_SERVER_CHANGED', changedEN);
+    const readRegistry = async () => JSON.parse(await readFile(registries.project, 'utf8')) as unknown;
+    expect.soft(await readRegistry()).toEqual(replacement);
+
+    await writeRegistry(registries.project, project);
+    const blockedRead = (file: string, lockTarget: string) => () => {
+      readFault.current = { file, lock: join(`${lockTarget}.write-lock`, 'owner.json') };
+    };
+    const unreadableRemove = await picked('remove', blockedRead(registries.project, registries.project));
+    refuse(unreadableRemove, 'MCP_SERVER_UNVERIFIED', unverifiedEN);
+    expect.soft(unreadableRemove.localized).toBe(unverifiedTR);
+    expect.soft(await readRegistry()).toEqual(project);
+
+    // One successful sequence proves that each operation touches only its selected scope.
+    const removed = await picked('remove');
+    expect(removed).toMatchObject({ code: 0, auditors: ['project'], grants: ['project'] });
+    expect(await readRegistry()).toEqual({ mcpServers: {} });
+    expect(removed.after[0]).toBe(removed.before[0]);
+    expect(JSON.parse(removed.after[1]!).servers).toEqual([]);
+
+    const unreadableRevoke = await picked('revoke', blockedRead(registries.personal, trustFiles[0]!));
+    refuse(unreadableRevoke, 'MCP_SERVER_UNVERIFIED', unverifiedEN);
+    const mismatched = await picked('revoke', () => updateMcpTrust(dirname(trustFiles[0]!), state =>
+      state.servers.map(record => ({ ...record, definitionDigest: mcpDefinitionDigest('fx', entries.project) }))).then(() => undefined));
+    expect.soft(mismatched.code).toBe(1);
+    expect.soft(mismatched.stderr).toBe(`Error: ${changedEN} [MCP_SERVER_CHANGED]`);
+    expect.soft([mismatched.auditors, mismatched.grants]).toEqual([[], []]);
+    const previous = JSON.parse(mismatched.before[0]!);
+    expect.soft(JSON.parse(mismatched.after[0]!)).toEqual({ ...previous, revision: previous.revision + 1,
+      servers: [{ ...previous.servers[0], definitionDigest: mcpDefinitionDigest('fx', entries.project) }] });
+    await writeFile(trustFiles[0]!, mismatched.before[0]!);
+
+    const revoked = await picked('revoke');
+    expect(revoked).toMatchObject({ code: 0, auditors: ['user'], grants: ['user'] });
+    expect(JSON.parse(revoked.after[0]!).servers).toEqual([]);
+    expect(revoked.after[1]).toBe(revoked.before[1]);
   } finally {
+    readFault.current = null;
     cardAnswers.length = 0;
     shownCards.length = 0;
     await rm(base, { recursive: true, force: true });
@@ -128,16 +191,7 @@ it('prints the two revoke outcomes in EN and TR and preserves the same JSON rece
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'revoked' } })).toBe(`${enTrust}\nPolicy grant removed: calls to this server follow your company policy again.`);
   expect.soft(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'delegation' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
   expect(await revoke('en', { ...receipt, grant: { status: 'refused', reason: 'not-settled' } })).toBe(`${enTrust}\nThe policy grant could not be removed. Review the scope’s policy before trying again.`);
-  const changed = await pickedWithdrawal('revoke', true);
-  expect.soft(changed.code).toBe(1);
-  expect.soft(changed.stderr).toBe(`Error: ${changedEN} [MCP_SERVER_CHANGED]`);
-  expect.soft(changed.localized).toBe(changedTR);
-  expect.soft(changed.after).toEqual(changed.before);
-  expect.soft([changed.auditors, changed.grants]).toEqual([[], []]);
-  const unchanged = await pickedWithdrawal('revoke', false);
-  expect(unchanged).toMatchObject({ code: 0, auditors: ['user'], grants: ['user'] });
-  expect(JSON.parse(unchanged.after[0]!).servers).toEqual([]);
-  expect(unchanged.after[1]).toBe(unchanged.before[1]);
+
 });
 
 it('reports an unfinished requested trust step while retaining the registration receipt', async () => {
@@ -174,16 +228,7 @@ it('reports an unfinished requested trust step while retaining the registration 
   } as never);
   expect.soft(code).toBe(1);
   expect(out.join('').trimEnd()).toBe("Removed web (local)\nThis operation removed no policy grant. Removing one needs the grant owner's terminal.");
-  const changed = await pickedWithdrawal('remove', true);
-  expect.soft(changed.code).toBe(1);
-  expect.soft(changed.stderr).toBe(`Error: ${changedEN} [MCP_SERVER_CHANGED]`);
-  expect.soft(changed.observed).toEqual(changed.replacement);
-  expect.soft(changed.after).toEqual(changed.before);
-  expect.soft([changed.auditors, changed.grants]).toEqual([[], []]);
-  const unchanged = await pickedWithdrawal('remove', false);
-  expect(unchanged).toMatchObject({ code: 0, observed: { mcpServers: {} }, auditors: ['project'], grants: ['project'] });
-  expect(unchanged.after[0]).toBe(unchanged.before[0]);
-  expect(JSON.parse(unchanged.after[1]!).servers).toEqual([]);
+  await checkPickedWithdrawals();
   for (const [argv, locale, receipt, expected] of [
     [['approve', 'web'], 'en', { ...approve, approved: false, grant: { status: 'revoked' } },
       'web (local) was not approved; nothing is trusted.\nPolicy grant removed: calls to this server follow your company policy again.'],

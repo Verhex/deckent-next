@@ -193,11 +193,18 @@ const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layou
 }
 const fail = (code: string, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params });
 
+function verifyRevokeSelection(server: McpSelection | null, selected: McpSelection, projectFailed: boolean, personalFailed: boolean): void {
+  // Only a known higher-priority winner can make a failed registry read irrelevant.
+  if (server?.scope !== 'managed' && (personalFailed || (projectFailed && server?.scope !== 'local')))
+    throw fail('MCP_SERVER_UNVERIFIED');
+  if (!matchesSelection(server ?? undefined, selected)) throw fail('MCP_SERVER_CHANGED');
+}
+
 async function mutateRegistry<T>(path: string, mode: number, change: (raw: Record<string, unknown>) => T | Promise<T>, selectedKind?: 'project' | 'personal'): Promise<T> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   return withConfigWriteLock(path, async () => {
     const current = selectedKind && await readMcpRegistryFile(path, selectedKind);
-    if (current && !current.ok) throw fail('MCP_SERVER_CHANGED');
+    if (current && !current.ok) throw fail('MCP_SERVER_UNVERIFIED');
     const raw = current ? current.raw ?? {} : await rawFile(path), result = await change(raw);
     const temporary = join(dirname(path), `.mcp.json.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
     const handle = await open(temporary, 'wx', mode);
@@ -336,15 +343,19 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   }
   const server = find(request.name);
   const selected = request.verb === 'revoke' ? request.selected : undefined;
-  if (selected && !matchesSelection(server ?? undefined, selected)) throw fail('MCP_SERVER_CHANGED');
+  if (selected) {
+    const fileFailed = (path: string) => view.problems.some(problem => problem.name === null && problem.file === path);
+    verifyRevokeSelection(server, selected, fileFailed(view.paths.project), fileFailed(view.paths.personal));
+  }
   if (!server) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
   // Decision 14 (b): both forget this server's trust and withdraw the approver's tool grant. The next use asks again.
   if (request.verb === 'reset' || request.verb === 'revoke') {
     const grant = await recordMcpTrust(server, trustContext, request.verb, () => null, selected && (async current => {
       const { paths, projectKey } = view;
       const [project, personal] = await Promise.all([readMcpRegistryFile(paths.project, 'project'), readMcpRegistryFile(paths.personal, 'personal', projectKey)]);
-      const effective = resolveFiles(context, paths, project, personal).servers.find(entry => entry.name === request.name);
-      if (!matchesSelection(effective, selected) || (current && !matchesSelection(current, selected))) throw fail('MCP_SERVER_CHANGED');
+      const effective = resolveFiles(context, paths, project, personal).servers.find(entry => entry.name === request.name) ?? null;
+      verifyRevokeSelection(effective, selected, !project.ok, !personal.ok);
+      if (current && !matchesSelection(current, selected)) throw fail('MCP_SERVER_CHANGED');
     }));
     await forgetFailure(server.scope, server.name);
     return { schemaVersion: 1, [request.verb === 'reset' ? 'reset' : 'revoked']: { name: server.name, scope: server.scope }, ...(grant && grant.status !== 'none' ? { grant } : {}) };
