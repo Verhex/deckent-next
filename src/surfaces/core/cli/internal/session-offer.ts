@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { projectAttachmentOfferSchema } from '#domain/index.js';
-import { ErrorRegistry, isCodedError, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
+import { ErrorRegistry, isCodedError, redactSensitive, reportFatal, t, terminalSafeText, type ExitCode, type Locale } from '#platform/index.js';
 import { askCliCard } from '#surfaces/core/cli-human/index.js';
 import { shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -32,7 +32,10 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
     if (!isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
   }
   if ((result as { status?: unknown } | null)?.status !== 'attached') {
-    const message = t('setup.session.attachmentIncomplete', { scope: shellIdentity(terminalSafeText(offer.scopeId)) }, locale);
+    // reportFatal masks the composed message; a scope that cleaning or masking would alter is not offered as a command argument.
+    const composed = t('setup.session.attachmentIncomplete', { scope: shellIdentity(offer.scopeId) }, locale);
+    const message = terminalSafeText(offer.scopeId) === offer.scopeId && redactSensitive(composed) === composed
+      ? composed : t('setup.session.attachmentIncomplete.originalScope', {}, locale);
     await reportFatal(ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE', { message, locale }), { ...context, locale });
     return 1;
   }
