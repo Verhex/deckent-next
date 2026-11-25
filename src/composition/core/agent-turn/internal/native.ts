@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
+import { ModelInvocationError, NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationProfileDigest, configuredInvocationProfiles, type AgentRoundOutcome, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliAgent, nativeAgentCorrelationKind, createNativeToolBridge, withMcpPrincipal, type NativeToolBridgeLimits } from '#adapters/index.js';
 import { type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
@@ -10,6 +10,7 @@ export const connectedWorkerClis = (config: DeckentConfig, scopeId: string | nul
   .flatMap(row => { const agent = nativeCliAgent(row.protocol.family); return agent ? [{ id: row.id, provider: agent.id }] : []; });
 
 type Bridge = Awaited<ReturnType<typeof createNativeToolBridge>>;
+type ReturnedRefusal = Readonly<{ reason: NativeAgentReadinessReason; check: string } | { body: HeadlessRejectionBody }>;
 /** Code-only fan-in ports. Observations never spawn or confer consent. K5b owns the opaque admission pin. */
 export interface NativeChatRuntime {
   readonly readiness: SubscriptionReadinessReader;
@@ -25,6 +26,8 @@ export interface NativeChatRuntime {
     native(bridge: Bridge, secrets: { readonly configured: KnownSecretSnapshot; readonly turn: KnownSecretSnapshot }): ModelInvocationNativePort;
     // R5b: the refused stream check; owner 2026-11-05: unrecognised CLI events the turn went on through (identifier-only facts)
     refusal(): NativeAgentReadinessReason | null; refusalCheck?(): string | null; notices?(): readonly string[];
+    /** The refusal established by this turn's driver before invocation settlement. */
+    returnedRefusal?(): ReturnedRefusal | null;
     close(): Promise<void>;
   }>;
 }
@@ -33,7 +36,8 @@ export async function withNativeChatInvocation(input: { readonly runtime: Native
   readonly execution: NativeAgentExecution; readonly session: ToolSessionPort; readonly signal: AbortSignal;
   readonly knownSecrets: KnownSecretSnapshot; readonly onPaidUsage?: (limit: ClaudeRateLimit, signal?: AbortSignal) => Promise<void>; readonly paidExtraUsage?: 'continue' | 'stop-at-limit'; recheck(): Promise<void> },
   invoke: (binding: { readonly profileDigest: string; readonly port: ModelInvocationNativePort; admit(signal?: AbortSignal): Promise<void>;
-    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; notices(): readonly string[] }) => Promise<AgentRoundOutcome>): Promise<AgentRoundOutcome> {
+    recheck(): Promise<void>; refusal(): NativeAgentReadinessReason | null; refusalCheck(): string | null; returnedRefusal(): ReturnedRefusal | null;
+    notices(): readonly string[] }) => Promise<AgentRoundOutcome>): Promise<AgentRoundOutcome> {
   const entry = nativeCliAgent(input.profile.protocol.family);
   if (!entry) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const recheck = async () => { try { await input.recheck(); } catch (error) { await input.session.revoke().catch(() => undefined); throw error; } };
@@ -51,7 +55,8 @@ export async function withNativeChatInvocation(input: { readonly runtime: Native
       correlationKind: nativeAgentCorrelationKind(entry), signal: input.signal, knownSecrets: input.knownSecrets });
     const port = driver.native(bridge, { configured: input.knownSecrets, turn: bridge.known });
     outcome = await invoke({ profileDigest: modelInvocationProfileDigest(input.profile), port,
-      recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
+      recheck, refusal: () => driver.refusal(), refusalCheck: () => driver.refusalCheck?.() ?? null,
+      returnedRefusal: () => driver.returnedRefusal?.() ?? null, notices: () => driver.notices?.() ?? [], admit: signal => driver.admit(signal) });
   } finally {
     try { await bridge?.close(); } catch (error) { cleanupFailure = { error }; }
     try { await driver.close(); } catch (error) { cleanupFailure ??= { error }; }

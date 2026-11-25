@@ -5,7 +5,7 @@ import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/ind
 import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { FAMILY, PINNED, rateLimitLine } from '../../fixtures/native-headless/stream.js';
 import { cancelPeerConfiguredModelInvocation, notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
-import { createModelInvocationResponseEvidence, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import { createModelInvocationResponseEvidence, ModelInvocationStoreError, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -23,8 +23,8 @@ import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/ind
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
-import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
-import { clearConfigCache, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock } from '#platform/index.js';
+import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, modelInvocationProfileDigest } from '#engine/index.js';
+import { clearConfigCache, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock, t } from '#platform/index.js';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
 import * as adapters from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
@@ -58,7 +58,7 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { creditsAfterTool: false, paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -89,8 +89,11 @@ async function fixture(askEdits = true) {
           });
           expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'k11-fake-driver', version: '1' } } })).status).toBe(200);
           state.channels.push(localPrincipalChannel());
-          const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: JSON.parse(call.argumentsJson), _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
+          const args = state.creditsAfterTool ? { path: 'credits-result.txt', content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
+          const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: args, _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
+          if (state.creditsAfterTool) return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null,
+            Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'credits-required' })), false) };
           return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
@@ -175,6 +178,30 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
     expect(JSON.stringify(records[0])).toMatch(/"mode":"standart","cell":"edit-non-floor"/u);
     expect(JSON.stringify(records[0])).toContain('"company":"first-run-mcp-edit-shell-tools"');
   } finally { db.close(); }
+  Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  h.state.creditsAfterTool = true;
+  const failed = await h.run('credits-after-tool');
+  const sentence = 'The subscription asks for extra credits for this request.';
+  expect(failed).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+  expect(await readFile(join(h.f.project, 'credits-result.txt'), 'utf8')).toBe('retained before the refusal\n');
+  expect.soft(failed.note).toContain(sentence);
+  expect.soft(failed.note).not.toMatch(/nothing was accepted|try again/u);
+  expect.soft(t('error.HEADLESS_CREDITS_REQUIRED', {}, 'tr')).toBe('Abonelik bu istek için ek kredi istiyor.');
+  expect(await h.run('credits-after-tool')).toMatchObject({ replayed: true, toolCalls: 1, note: failed.note });
+  const oldAdvice = sentence + ' deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your provider account, then try again.';
+  const openTurn = adapters.openSqliteAgentTurnStore;
+  const history = vi.spyOn(adapters, 'openSqliteAgentTurnStore').mockImplementation(async (...args) => {
+    const retained = await openTurn(...args), claim = retained.claim.bind(retained);
+    retained.claim = async input => {
+      const stored = await claim(input);
+      if (stored.status !== 'finished' || !stored.outcome.note || stored.outcome.note.includes(oldAdvice)) return stored;
+      return { ...stored, outcome: { ...stored.outcome, note: stored.outcome.note.replace(sentence, oldAdvice) } };
+    };
+    return retained;
+  });
+  try {
+    expect.soft((await h.run('credits-after-tool')).note).not.toMatch(/nothing was accepted|try again/u);
+  } finally { history.mockRestore(); }
 });
 
 it('lease revocation during the unchanged approval card prevent the exact requested write', async () => {
@@ -239,6 +266,56 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
     expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
   }
+  if (phase !== 'send') return;
+  // Y25/Y26: a model refusal returned as the turn's rejection whose receipt cannot be recorded still names its check in the final note.
+  const h = await fixture(), driver = h.runtime.driver, open = adapters.openSqliteModelInvocationStore;
+  Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  const store = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordRejected: async () => { throw new Error('fixture-record-failed'); } }));
+  h.runtime.driver = async input => {
+    const opened = await driver(input), body = Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'model-mismatch', field: 'assistant', subtype: 'model-reported' }));
+    return { ...opened, returnedRefusal: () => ({ reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const, check: 'agent-surface:assistant' }),
+      native: (...args) => ({ ...opened.native(...args), send: async () => ({ kind: 'rejected' as const,
+        evidence: createModelInvocationResponseEvidence(input.profile.adapter, 'model-mismatch', null, body, true) }) }) };
+  };
+  try {
+    expect.soft((await h.run()).note).toBe("The model round ended without an answer. The CLI's tool surface or tool protocol could not be verified as expected."
+      + ' (agent-surface:assistant) No tool call ran.');
+  } finally { store.mockRestore(); }
+
+  const sample = await adapters.openSqliteModelInvocationReader(h.f.path, { busyTimeoutMs: 1000 });
+  const readerMethods = Object.getPrototypeOf(sample) as Pick<typeof sample, 'loadInspection'>;
+  sample.close();
+  const reader = vi.spyOn(readerMethods, 'loadInspection').mockRejectedValue(new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE'));
+  try {
+    const result = await h.run('model-inspection-unavailable');
+    expect(reader).toHaveBeenCalledOnce();
+    expect.soft(result.note).toContain('(agent-surface:assistant)');
+    expect(result).toMatchObject({ finish: 'error', answer: null, recorded: true });
+    const authorize = ModelInvocationPolicyAuthorization.prototype.authorize;
+    const policy = vi.spyOn(ModelInvocationPolicyAuthorization.prototype, 'authorize').mockImplementation(function (this: ModelInvocationPolicyAuthorization, ...args) {
+      if (args[0] === 'inspect-content') return Promise.reject(ErrorRegistry.createError('POLICY_DENIED'));
+      return authorize.apply(this, args);
+    });
+    try {
+      expect((await h.run('model-inspection-denied')).note).not.toContain('agent-surface:assistant');
+    } finally { policy.mockRestore(); }
+  } finally { reader.mockRestore(); }
+
+  const providerBody = { schemaVersion: 1, refusal: 'quota', status: 429 } as const;
+  const write = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordUnknown: async () => { throw new Error('fixture-unknown-record-failed'); } }));
+  h.runtime.driver = async input => {
+    const opened = await driver(input);
+    return { ...opened, returnedRefusal: () => ({ body: providerBody }),
+      native: (...args) => ({ ...opened.native(...args), send: async () => ({ kind: 'rejected' as const,
+        evidence: createModelInvocationResponseEvidence(input.profile.adapter, 'interrupted', null, Buffer.from(JSON.stringify(providerBody)), false) }) }) };
+  };
+  try {
+    const result = await h.run('provider-record-unknown-failed');
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain('usage limit');
+  } finally { write.mockRestore(); }
 });
 
 it('keeps the summary refusal before and after claim in the final note in EN and TR', async () => {

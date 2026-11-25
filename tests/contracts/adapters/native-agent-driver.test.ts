@@ -202,6 +202,12 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: "name=? prefix=1 offered=0" });
   expect(JSON.stringify(body)).not.toContain('secret-argument-canary');
   expect(f.propose).not.toHaveBeenCalled();
+  // Y25/Y26: a model check returns its own rejection (the receipt names it) and keeps its check for a turn whose receipt cannot be recorded.
+  const other = await (await fixture(registry.adapters.claude.capabilities.eventStream!, { events: [{ type: 'assistant', message: { model: 'other-model', content: [] } }] })).start();
+  const mismatch = await other.run();
+  expect(mismatch.kind === 'rejected' ? readHeadlessRejection(mismatch.evidence) : null).toMatchObject({ refusal: 'model-mismatch', field: 'assistant', subtype: 'model-reported' });
+  expect(other.driver.refusal()).toBeNull();
+  expect(other.driver.returnedRefusal()).toEqual({ reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', check: 'agent-surface:assistant' });
   await notPaused(f.profile);
 });
 it('R6b/R5b: Claude keepalive and thinking-token notices keep the turn; a keepalive naming an unknown call still stops it', async () => {
@@ -270,6 +276,7 @@ it('records Claude subscription limits in the existing strict refusal and render
     expect(body).toMatchObject({ resetsAtMs: 'resetsAt' in info ? 1792773600000 : null });
     expect(f.propose).not.toHaveBeenCalled();
     expect(h.driver.refusal()).toBeNull(); // A limit never becomes the misleading unexpected-tool notice.
+    if ('errorCode' in info) expect.soft(h.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'credits-required' } });
     for (const language of ['en', 'tr'] as const) {
       const text = nativeQuotaText(body!, language)!;
       expect(text).not.toMatch(/\{\w+\}/u); expect(text).not.toContain('\n'); expect(text).not.toContain('\u001b');
@@ -287,6 +294,11 @@ it('records Claude subscription limits in the existing strict refusal and render
       if (info.rateLimitType?.startsWith('odd')) { expect(body).toMatchObject({ field: 'odd__' + 'x'.repeat(19) }); expect(text).toContain('odd__' + 'x'.repeat(19)); }
     }
   }
+  // C4: a failed result with a registered provider status keeps that classification; the evidence stays incomplete (the outcome is not moved).
+  const failed = await (await fixture(families[0]!, { result: { is_error: true, subtype: 'error_during_execution', api_error_status: 429 } })).start(), settled = await failed.run();
+  expect(settled.kind === 'rejected' ? [settled.evidence.reason, settled.evidence.body.complete, readHeadlessRejection(settled.evidence)] : null)
+    .toMatchObject(['interrupted', false, { refusal: 'quota', status: 429 }]);
+  expect(failed.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'quota', status: 429 } });
 });
 
 it('D2 preserves a typed Codex usage limit and names a guard check without claiming an unexpected tool', async () => {
@@ -302,7 +314,8 @@ it('D2 preserves a typed Codex usage limit and names a guard check without claim
   for (const locale of ['en', 'tr'] as const) {
     expect(nativeQuotaText(body!, locale)).toContain(locale === 'en' ? 'usage limit' : 'kullanım sınırı');
     const text = nativeAgentReasonText(guard.driver.refusal()!, locale, false, true, guard.driver.refusalCheck());
-    expect(text).toContain(locale === 'en' ? 'safety check refused' : 'güvenlik denetimi');
+    expect(text).toBe(locale === 'en' ? "The CLI's tool surface or tool protocol could not be verified as expected. (usage)"
+      : "CLI'ın araç yüzeyi veya araç protokolü beklendiği gibi doğrulanamadı. (usage)");
     expect(text).not.toContain(locale === 'en' ? 'unexpected tool' : 'beklenmedik bir araç');
   }
 });

@@ -334,6 +334,8 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
 // Semantic expectations are independent of the catalog keys and of the case renderer.
 const diagnosticMeaning = new Map(`path-search-not-file	A candidate on PATH was not a regular file	PATH üzerindeki bir aday normal bir dosya değildi
 spawn/legacy-unverified	The previous check concerned running a CLI probe. The specific cause could not be determined.	Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.
+launcher/legacy-unverified	The previous check concerned the isolation launcher. The specific cause could not be determined.	Önceki denetim yalıtım başlatıcısıyla ilgiliydi. Kesin neden belirlenemedi.
+executable-recheck/legacy-unverified	The previous check concerned checking the program again. The specific cause could not be determined.	Önceki denetim programın yeniden denetlenmesiyle ilgiliydi. Kesin neden belirlenemedi.
 config-dir/legacy-unverified	The previous check concerned the CLI login configuration directory. The specific cause could not be determined.	Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.
 worker-result/exit	The launched isolation command exited with code 16.	Başlatılan yalıtım komutu 16 koduyla sonlandı.
 worker-result/signal	A signal was observed for the launched isolation command. The invocation outcome is unknown.	Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.
@@ -374,6 +376,10 @@ login-status-incomplete/line-limit	A line of the subscription status check outpu
 login-status-incomplete/stopped	The subscription status check was stopped.	Abonelik durum denetimi durduruldu.
 login-status-incomplete	subscription status check could not be completed	abonelik durum denetimi tamamlanamadı
 executable-changed/bind-race-diagnostic	process exited with a bind-race diagnostic	süreç, bağlama yarışı tanısıyla sonlandı
+executable-changed/legacy-unverified	verification of the executable	çalıştırılabilir dosyanın doğrulanması
+npm-layout-unknown/legacy-unverified	npm launcher layout	npm başlatıcısının yerleşimi
+npm-payload-missing/legacy-unverified	native program behind the npm launcher	npm başlatıcısının arkasındaki yerel program
+npm-payload-unverified/legacy-unverified	native program behind the npm launcher	npm başlatıcısının arkasındaki yerel program
 path-search-execute-denied	did not pass the execute-access check	çalıştırma erişimi denetimini geçemedi
 path-search-empty	was not found in the PATH directories checked	denetlenen PATH dizinlerinde bulunamadı
 path-search-unverified	A candidate on PATH could not be checked	PATH üzerindeki bir aday denetlenemedi
@@ -550,11 +556,11 @@ function headlessExpectationIds(fields: Readonly<Record<string, string | number>
   const { check, reason, native, exit, holder, limit, recheck } = fields;
   const entry = reason === 'missing' || reason === 'not-directory' ? 'npm/' + reason : 'selection/' + reason;
   if (native && reason) return ['npm-proof', String(reason), String(native)];
-  if (check === 'npm-payload-missing' || check === 'npm-payload-unverified') {
+  if ((check === 'npm-payload-missing' || check === 'npm-payload-unverified') && reason !== 'legacy-unverified') {
     const uncertainty = ['manifest-too-large', 'manifest-unreadable', 'changed-during-check', 'verification-unavailable'].includes(String(reason));
     return [uncertainty ? 'npm-unverified' : recheck ? 'npm-recheck' : 'npm-check', 'npm/' + reason];
   }
-  if (check === 'executable-recheck') return ['entry-recheck', reason === 'directory' ? 'selection/directory' : 'npm/' + reason];
+  if (check === 'executable-recheck' && reason !== 'legacy-unverified') return ['entry-recheck', reason === 'directory' ? 'selection/directory' : 'npm/' + reason];
   if (exit) return ['login-outcome/' + exit, 'login-outcome/unsaved'];
   if (holder) return ['holder/' + holder];
   if (limit) return ['limit/' + limit];

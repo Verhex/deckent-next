@@ -206,7 +206,9 @@ it('uses the shared quota rule and never permits worker paid usage without a liv
       const info = mode === 'group-rejected' ? { status: 'rejected' } : { status: 'allowed', overageInUse: true };
       const quota = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info });
       const late = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'must-not-be-accepted' }] } });
-      const descendant = `process.stdout.write(JSON.stringify({pid:process.pid})+'\\n'+${JSON.stringify(quota)}+'\\n');setInterval(()=>process.stdout.write(${JSON.stringify(late)}+'\\n'),40)`;
+      // The escaped holder ignores EPIPE: once custody destroys the pipes its next write would otherwise end it before the read below.
+      // Its own unref'ed 30 s watchdog bounds it if this test process dies before the `finally`; no assertion depends on it.
+      const descendant = `process.stdout.on('error',()=>{});setTimeout(()=>process.exit(0),30000).unref();process.stdout.write(JSON.stringify({pid:process.pid})+'\\n'+${JSON.stringify(quota)}+'\\n');setInterval(()=>process.stdout.write(${JSON.stringify(late)}+'\\n'),40)`;
       const parent = `const {spawn}=require('node:child_process');require('node:fs').writeFileSync(${JSON.stringify(effect)},'kept');process.stdout.write(JSON.stringify({type:'assistant',message:{content:[{type:'text',text:'partial output'}]}})+'\\n');spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{detached:${mode === 'escaped'},stdio:['ignore',process.stdout,process.stderr]});setInterval(()=>{},1000)`;
       const child = spawn(process.execPath, ['-e', parent], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
       const custody = createNativeChildCustody(child), kept: unknown[] = [], normalizer = createNormalizerState([], 0, nativeQuotaPolicy());
@@ -238,9 +240,12 @@ it('uses the shared quota rule and never permits worker paid usage without a liv
           expect(child.stdout.destroyed && child.stderr.destroyed).toBe(true);
           expect(performance.now() - atLimit).toBeGreaterThanOrEqual(950);
         } else {
-          // A reparented zombie has terminated and holds no pipes; kill(pid,0) alone cannot distinguish it.
+          // A reparented zombie has terminated and holds no pipes; kill(pid,0) alone cannot distinguish it. Linux closes the pipes inside the
+          // exit before it marks the zombie, so after `close` the process can still read R; with PF_EXITING (0x4, field 9) and no address space
+          // (vsize, field 23, is 0) it cannot run any code again.
           const stat = await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => 'gone');
-          expect(stat === 'gone' || /\) Z /u.test(stat)).toBe(true);
+          const fields = stat.slice(stat.lastIndexOf(') ') + 2).split(' '), [state] = fields, flags = fields[6], vsize = fields[20];
+          expect(stat === 'gone' || state === 'Z' || ((Number(flags) & 0x4) !== 0 && vsize === '0'), stat.slice(0, 120)).toBe(true);
           expect(afterLimit).toBe(0);
         }
       } finally {

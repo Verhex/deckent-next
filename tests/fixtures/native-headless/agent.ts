@@ -41,6 +41,8 @@ export interface FakeAgentScenario {
   readonly thinkingTokens?: boolean;
   /** Claude stream lines emitted right after init. */
   readonly events?: readonly Record<string, unknown>[];
+  /** Fields merged into the Claude agent call's final result line (an error result with its provider status). */
+  readonly result?: Record<string, unknown>;
 }
 export async function writeFakeAgentCli(dir: string, family: string, scenario: FakeAgentScenario = {}) {
   const entry = nativeCliAgent(family)!;
@@ -95,7 +97,7 @@ async function main() {
  }
  const text=(x.answer ?? 'agent completed')+(x.echoToken?' '+token:'')+(x.loginCanary?' '+x.loginCanary:'');
  if (x.loginCanary) console.error(x.loginCanary); if(x.echoToken) console.error(token);
- if (claude) { const half=Math.floor(text.length/2); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:text.slice(0,half)},{type:'text',text:text.slice(half)}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}}}); }
+ if (claude) { const half=Math.floor(text.length/2); await line({...s.assistant,message:{...s.assistant.message,model,content:[{type:'text',text:text.slice(0,half)},{type:'text',text:text.slice(half)}]}}); await line({...s.result,result:text,modelUsage:{[model]:{inputTokens:2,outputTokens:9}},...x.result}); }
  else { await line({type:'item.completed',item:{id:'answer',type:'agent_message',text}}); await line(s.codex.at(-1)); }
 }
 `, { mode: 0o700 });

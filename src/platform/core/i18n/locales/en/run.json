@@ -370,7 +370,7 @@
   "error.DISPATCH_PREPARATION_ABORTED.summary": "deckent parked this Run: a worker's dispatch preparation ended abnormally (the service process died) as often as runRuntime.maxPreparationAborts allows. No worker was started.",
   "remedy.DISPATCH_PREPARATION_ABORTED": "Find the cause in the service journal and the audit log (event dispatch-preparation-aborted names the phase), correct it, then resume the Run explicitly (deckent run resume); the next start counts from zero.",
   "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "Run progression stopped, but durable parking is unavailable. Restore cancel policy or storage access and restart the runtime; no new dispatch will be attempted by this driver.",
-  "cli.run.lifecycle.failure": "Progression failure: {code}. Correct the cause and explicitly resume before the deadline; live custody is retained.",
+  "cli.run.lifecycle.failure": "Progression failure: {code}.",
   "error.RUN_PROPOSAL_VERSION": "Unsupported RunProposal version.",
   "error.RUN_PROPOSAL_INVALID": "Invalid RunProposal; supply the versioned proposal with a graph, criteria, classes, ceiling, permissions and attribution.",
   "error.RUN_PROPOSAL_WORK_CLASS_REQUIRED": "Each proposed task needs one registered WorkClass consistent with its work input.",

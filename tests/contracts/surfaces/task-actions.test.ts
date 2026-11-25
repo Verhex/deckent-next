@@ -14,6 +14,21 @@ it('executes only the exact reserved identity and never presents process exit as
   expect(await main(['task', 'execute', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
   expect(text).toContain('exitCode=0'); expect(text).toContain('signal=none'); expect(text).toMatch(/not task acceptance/i);
   text = ''; expect(await main(['task', 'execute', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text)).toEqual(response);
+  // C3: an encoded or allowlisted reason in its sentence, any other registered code as the recorded code; the first line claims only the
+  // missing final record.
+  for (const [lang, reason, first, sentence, old] of [
+    ['en', 'NATIVE_WORKER_EFFECTS_UNKNOWN', 'This attempt has no final dispatch record, so its outcome is unknown; the recorded reason follows.',
+      'The native worker’s tool effects are unresolved. Inspect this Attempt and reconcile pending effects; do not repeat the work blindly.',
+      'No process exit has been recorded'],
+    ['tr', 'HEADLESS_CREDITS_REQUIRED', 'Bu denemenin son dağıtım kaydı yok, bu nedenle sonucu bilinmiyor; kaydedilen neden aşağıdadır.',
+      'Kayıtta HEADLESS_CREDITS_REQUIRED hata kodu var. Hatanın kesin nedeni belirlenemedi.', 'nothing was accepted'],
+    ['tr', 'HEADLESS_WORKER_RESULT__REASON_EXIT__23', 'Bu denemenin son dağıtım kaydı yok, bu nedenle sonucu bilinmiyor; kaydedilen neden aşağıdadır.',
+      'Başlatılan yalıtım komutu 23 koduyla sonlandı.', 'Süreç çıkışı henüz kaydedilmemiş'],
+  ] as const) {
+    text = ''; Object.assign(response.execution, { status: 'unresolved', terminal: null, outputRecorded: false, waiting: { reason } });
+    expect(await main(['task', 'execute', ...identityArgs, '--lang', lang], context)).toBe(0);
+    expect(text.split('\n').slice(1, 3)).toEqual([first, sentence]); expect(text).not.toContain(old);
+  }
 });
 
 it.each([

@@ -8,7 +8,7 @@ export { prepareNativeCliWorker, validateNativeCliWorkerSupervisorProfile } from
 export { nativeCliWorkerFence } from './internal/fence.js';
 export type { NativeCliWorkerFenceReader } from './internal/fence.js';
 export { createNativeWorkerEvents } from './internal/events.js';
-export { recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile } from './internal/recorded.js';
+export { recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, readRecordedNativeWorkerResult } from './internal/recorded.js';
 export { createNativeCliWorkerDriver } from './internal/driver.js';
 export type { NativeCliWorkerTransport } from './internal/driver.js';
 export { executionTask, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ executionTaskBase, validateExecutionSupervisorProfile, executionTaskSilenceDeadline, executionTaskHiddenPaths, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ executionTaskEffects,

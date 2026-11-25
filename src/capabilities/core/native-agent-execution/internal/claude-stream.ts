@@ -198,7 +198,9 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const rejection = result && (result.is_error || result.subtype !== 'success') && 'creditsErrors' in guards
         ? nativeClaudeResultRefusal(typeof result.api_error_status === 'number' ? result.api_error_status : null,
           Array.isArray(result.errors) ? result.errors : [], guards) : null;
-      if (exit.reason === 'cancelled' || controller.signal.aborted) { controller.abort(); return final = { kind: 'cancelled', subtype: result?.subtype === 'error_during_execution' ? 'error_during_execution' : 'incomplete' }; }
+      // C2: a provider status read from the terminal result stays next to the cancellation; the outcome is still cancelled.
+      if (exit.reason === 'cancelled' || controller.signal.aborted) { controller.abort(); return final = { kind: 'cancelled',
+        subtype: result?.subtype === 'error_during_execution' ? 'error_during_execution' : 'incomplete', ...(rejection && { rejection }) }; }
       controller.abort();
       if (exit.reason !== 'exit' || exit.exitCode !== 0 || exit.stdoutTruncated || exit.stderrTruncated || !result)
         return final = { kind: 'failed', subtype: 'incomplete', ...(rejection && { rejection }) };

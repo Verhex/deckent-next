@@ -26,20 +26,22 @@ export function retainActiveNativeWorker(request: SandboxRequest, supervisor: Ex
 export async function retainNativeWorkerResult(file: JsonRecordFile, request: SandboxRequest, profile: SupervisorProfile, result: unknown) {
   await file.write(recordSchema.parse({ schemaVersion: 1, request, profileDigest: digest(profile), result }));
 }
+/** Read saved custody bound to this exact request and profile, with no live observation. */
+export async function readRecordedNativeWorkerResult(profile: SupervisorProfile, request: SandboxRequest) {
+  const record = await nativeWorkerCustodyFile(request).read();
+  if (record.kind !== 'ready') return null;
+  const checked = recordSchema.safeParse(record.value);
+  if (!checked.success || !sameSandboxRequest(checked.data.request, request) || checked.data.profileDigest !== digest(profile)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+  return checked.data.result;
+}
+
 /** Same-process cancel reaches its actual owner. Restart can recover confirmed retained output; missing custody stays unknown. */
 export function recordedNativeCliWorkerSupervisor(profile: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource & {
   inspectActivity(request: SandboxRequest): Promise<{ state: 'running' | 'exited' | 'unknown'; handle: string | null }>;
 } {
   validateNativeCliWorkerSupervisorProfile(profile);
   const resolved = resolveNativeCliWorkerProfile(profile.parameters['task'] as import('#domain/index.js').ExecutionProfileDefinition);
-  const profileDigest = digest(profile);
-  const read = async (request: SandboxRequest) => {
-    const record = await nativeWorkerCustodyFile(request).read();
-    if (record.kind !== 'ready') return null;
-    const checked = recordSchema.safeParse(record.value);
-    if (!checked.success || !sameSandboxRequest(checked.data.request, request) || checked.data.profileDigest !== profileDigest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-    return checked.data.result;
-  };
+  const read = (request: SandboxRequest) => readRecordedNativeWorkerResult(profile, request);
   const get = async (request: SandboxRequest) => {
     const owner = active.get(key(request));
     if (owner && !isDeepStrictEqual(await owner.captureProfile(), profile)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');

@@ -33,5 +33,9 @@ it.each(['en', 'tr'] as const)('shows the durable progression failure code and d
   } as never)).toBe(0);
   // alpha.56 F2 (9ab5bc472): the state and its reason are words in the person's language, not the raw enum.
   expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain(locale === 'en' ? 'progression failed' : 'ilerleme başarısız');
-  expect(out.join('')).toContain(locale === 'en' ? 'explicitly resume' : 'açıkça devam');
+  expect(out.join('')).toContain(locale === 'en' ? 'Progression failure: SUPERVISOR_OPTIONS_INVALID.' : 'İlerleme hatası: SUPERVISOR_OPTIONS_INVALID.');
+  expect(out.join('')).not.toMatch(locale === 'en' ? /explicitly resume|live custody is retained/u : /açıkça devam|canlı yürütme sorumluluğu korunur/u);
+  // The parked reason alone supplies no resume instruction or custody claim.
+  expect(out.join('')).toContain(locale === 'en' ? 'The record contains the error code SUPERVISOR_OPTIONS_INVALID. The specific cause could not be determined.'
+    : 'Kayıtta SUPERVISOR_OPTIONS_INVALID hata kodu var. Hatanın kesin nedeni belirlenemedi.');
 });

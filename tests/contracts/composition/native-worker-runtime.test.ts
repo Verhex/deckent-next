@@ -101,6 +101,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
   const { execFileSync } = await import('node:child_process');
   const { openConfiguredAttemptStore } = await import('../support/configured-open.js');
   const { executeConfiguredTask } = await import('#composition/core/execution/index.js');
+  const { main } = await import('#surfaces/index.js');
   const nativeConnection = await import('#adapters/core/native-connection/index.js');
   const { recordedNativeCliWorkerSupervisor } = await import('#adapters/core/native-cli-worker/index.js');
   const root = await mkdtemp(join(tmpdir(), 'native-task-dispatch-')), project = join(root, 'project'), data = join(root, 'data');
@@ -201,6 +202,17 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const held = await executeConfiguredTask(project, heldIdentity, { ...options, nativeCliWorker: { ports, projectionRetired: true } });
       expect(held.execution).toMatchObject({ status: 'unresolved', outputRecorded: false, waiting: { reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED', legacy: false } });
       expect((await store.loadRun('s', 'held'))?.state.kind).toBe('parked');
+      const request = ['task', 'execute', '--scope', 's', '--run', heldIdentity.runId, '--task', heldIdentity.taskId,
+        '--attempt', heldIdentity.attemptId, '--generation', String(heldIdentity.generation), '--layout-revision', heldIdentity.layoutRevision, '--lang', 'en'];
+      let text = '';
+      const context = { root: project, env: options.env, stdout: { write(value: string) { text += value; } },
+        executeTask: (root: string, input: typeof heldIdentity) => executeConfiguredTask(root, input, { ...options, nativeCliWorker: { ports, projectionRetired: true } }) };
+      expect(await main([...request, '--json'], context)).toBe(0);
+      expect.soft(JSON.parse(text).execution).toEqual(held.execution);
+      text = '';
+      expect(await main(request, context)).toBe(0);
+      expect.soft(text).toContain('The record contains the error code NATIVE_AGENT_PLUGIN_UNEXPECTED. The specific cause could not be determined.');
+      expect(run).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledOnce(); expect(credential).not.toHaveBeenCalled();
     } finally { store.close(); }
   } finally { credential.mockRestore(); await rm(root, { recursive: true, force: true }); clearConfigCache(); }

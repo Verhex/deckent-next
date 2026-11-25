@@ -189,13 +189,6 @@ function isSealedPreflightRecord(record: Record<string, unknown>): boolean {
     && typeof record['revision'] === 'string' && /^.+:[a-f0-9]{64}$/u.test(record['revision']);
 }
 
-// Version 1 could inherit updatedFrom without evidence for that version.
-export function readPreflightVersionUpdate(record: unknown): { from: string; to: string } | null {
-  if (!isIdentifiedOpenPreflight(record) || record['schemaVersion'] !== 2 || !isSealedPreflightRecord(record)) return null;
-  const from = verifiedCliVersion(record['updatedFrom']), to = verifiedCliVersion(record['version']);
-  return from !== null && to !== null && compareToolchainVersions(from, to) !== 0 ? { from, to } : null;
-}
-
 // The record's existing revision field binds registry semantics to this installation's identity.
 export const headlessExecutableRevision = (entry: HeadlessEntry, program: HeadlessExecutable) => `${entry.headless.revision}:${program.identity}`;
 export const verifiedCliVersion = (input: unknown) => typeof input === 'string' && /^\d{1,9}\.\d{1,9}\.\d{1,9}$/u.test(input) ? input : null;

@@ -294,9 +294,19 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     expect.soft(doctor(stored, 'en')).not.toContain('identity differs');
     expect.soft(doctor(stored, 'en')).not.toContain('outside');
     expect(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8')).not.toContain(c.executable);
-    for (const check of ['executable-changed', 'npm-layout-unknown']) {
+    for (const [check, en, tr] of [
+      ['executable-changed', 'The previous check concerned verification of the executable. The specific cause could not be determined.',
+        'Önceki denetim çalıştırılabilir dosyanın doğrulanmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['npm-layout-unknown', 'The previous check concerned the npm launcher layout. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının yerleşimiyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ...['npm-payload-missing', 'npm-payload-unverified'].map(check => [check,
+        'The previous check concerned the native program behind the npm launcher. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının arkasındaki yerel programla ilgiliydi. Kesin neden belirlenemedi.'] as const),
+    ] as const) {
       await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check }));
-      expect.soft(doctor(await logins(), 'en')).toContain('The provider-program diagnostic could not be verified.');
+      const history = await logins();
+      expect.soft(doctor(history, 'en')).toContain(en);
+      expect.soft(doctor(history, 'tr')).toContain(tr);
     }
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check: 'realm-scratch-create' }));
     expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');
@@ -317,6 +327,11 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
         'Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_PREFLIGHT_FAILED', 'config-dir', 'The previous check concerned the CLI login configuration directory. The specific cause could not be determined.',
         'Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
+      // Y30: 83cff36f8 also wrote check-only `launcher` and `executable-recheck` records.
+      ['HEADLESS_ISOLATION_UNAVAILABLE', 'launcher', 'The previous check concerned the isolation launcher. The specific cause could not be determined.',
+        'Önceki denetim yalıtım başlatıcısıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'executable-recheck', 'The previous check concerned checking the program again. The specific cause could not be determined.',
+        'Önceki denetim programın yeniden denetlenmesiyle ilgiliydi. Kesin neden belirlenemedi.'],
       ['HEADLESS_ISOLATION_UNAVAILABLE', 'login-lock', 'The previous check could not acquire the sign-in lock. The specific cause could not be verified.',
         'Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.'],
       ['HEADLESS_LIMIT_REACHED', null, 'The previous check recorded a resource limit. Which limit was reached could not be verified.',
@@ -493,12 +508,13 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     expect.soft(await update({ ...sealed, updatedFrom: observed.version })).toBeNull();
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ ...sealed, schemaVersion: 1 }));
     const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
-    expect(doctor(logins, 'en')).toContain('channel open');
-    expect(doctor(logins, 'tr')).toContain('kanal açık');
+    // Z17: the open channel is the assessment the record holds, not a current verification.
+    expect(doctor(logins, 'en')).toContain('channel open at the last recorded check (not verified now)');
+    expect(doctor(logins, 'tr')).toContain('kanal son kaydedilen denetimde açık (şimdi doğrulanmadı)');
     expect(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
     expect(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
-    await update(sealed);
-    expect((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated).toEqual({ cli: 'fake-cli', from: '1.0.0', to: '2.0.0' });
+    // A26: a sealed v2 record proves its current program only; no writer proves the predecessor, so it shows no update either.
+    expect(await update(sealed)).toBeNull();
     expect(await c.log()).toEqual([]);
   });
   it('closes the channel typed when the realm itself cannot start (a launcher that refuses), and never runs the CLI outside it', async () => {

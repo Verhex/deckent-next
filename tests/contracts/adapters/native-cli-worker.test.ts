@@ -12,7 +12,7 @@ import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNat
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
   createNativeCliWorkerDriver, executionTask, executionTaskSilenceDeadline, executionTaskHiddenPaths, type NativeCliWorkerTransport,
   type NativeCliWorkerFenceReader, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type NativeCliWorkerDriver } from '#adapters/core/native-cli-worker/index.js';
-import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.js';
+import { nativeWorkerProcessResult, type NativeAgentExecution, type ToolSessionPort } from '#capabilities/index.js';
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
@@ -426,6 +426,16 @@ it('fails a worker whose isolated process returns valid output with a cleanup er
       expect.soft(result, finding.reason).not.toHaveProperty('refusal');
       await stopped.close();
     }
+    // C2: the deadline decides the outcome class; a provider status read from the Claude result keeps the reason, otherwise the deadline does.
+    const settle = (finished: Parameters<typeof nativeWorkerProcessResult>[3]) => nativeWorkerProcessResult({ reason: 'timeout', limit: null, exitCode: null, signal: null,
+      stdoutTruncated: false, stderrTruncated: false }, false, false, finished);
+    expect(settle({ kind: 'failed', rejection: { refusal: 'quota', status: 429, resetsAtMs: null } }))
+      .toEqual({ termination: 'confirmed', text: '', status: 'cancelled', failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' });
+    expect(settle({ kind: 'failed' })).toEqual({ termination: 'confirmed', text: '', status: 'cancelled', failureCode: 'NATIVE_WORKER_DEADLINE_REACHED' });
+    // C6: the Claude parser's own byte bound keeps the bound reason, not the general guard; the stop class is unchanged.
+    expect(nativeWorkerProcessResult({ reason: 'cancelled', limit: null, stdoutTruncated: false, stderrTruncated: false }, false, false,
+      { kind: 'refused', reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field: 'size' }))
+      .toEqual({ termination: 'confirmed', text: '', status: 'failed', stopped: true, failureCode: 'NATIVE_WORKER_OUTPUT_LIMIT' });
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
 
