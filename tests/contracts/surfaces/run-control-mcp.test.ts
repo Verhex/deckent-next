@@ -99,7 +99,7 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
   vi.spyOn(adapters, 'openSqliteInventoryReader').mockImplementation(async (...args) => {
     const reader = await openReader(...args), load = reader.loadRun.bind(reader), receipt = reader.loadRunReceipt.bind(reader);
     vi.spyOn(reader, 'loadRun').mockImplementation(async (...key) => {
-      lookup(...key);
+      await lookup(...key);
       if (readFailure) throw new AttemptStoreError('ATTEMPT_STORE_READ_UNAVAILABLE');
       return load(...key);
     });
@@ -183,7 +183,9 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
               expect.soft(locked.isError).toBe(true);
               expect.soft(locked.structuredContent).toBeUndefined();
               expect.soft({ ...body, message: body.message?.replace(/(?<=age )\d+(?=s)|(?<=yaş )\d+(?= sn)/g, 'AGE') }).toEqual({
-                schemaVersion: 1, code: 'CONFIG_WRITE_LOCKED', message: t('error.CONFIG_WRITE_LOCKED', { path: `${policyPath}.write-lock`, pid: process.pid, ageSeconds: 'AGE' }, locale) });
+                schemaVersion: 1, code: 'CONFIG_WRITE_LOCKED', message: locale === 'en'
+                  ? 'Configuration is locked (age AGEs). Retry after the writer finishes.'
+                  : 'Config kilitli (yaş AGE sn). Yazıcı tamamlandıktan sonra yeniden deneyin.' });
             } else expect.soft(locked).toEqual(absent);
           });
         }
@@ -247,6 +249,24 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           expect.soft(drifted).toEqual(absent);
           expect.soft([effects(), state(other.path)]).toEqual(before);
         } finally { broker.mockRestore(); await configure(data); }
+
+        const readProject = adapters.FileProjectIdentityStore.prototype.read;
+        const firstRead = vi.spyOn(adapters.FileProjectIdentityStore.prototype, 'read').mockImplementationOnce(async function (this: adapters.FileProjectIdentityStore) {
+          const project = await readProject.call(this);
+          await configure(moved);
+          return project;
+        });
+        try { expect.soft(await call({ ...hold, runId: 'drift', commandId: 'first-read-drift' })).toEqual(absent); }
+        finally { firstRead.mockRestore(); await configure(data); }
+
+        await setPolicy(runGrant('reserve'), inspectAbsent);
+        lookup.mockImplementationOnce(() => configure(moved));
+        try { expect.soft(await call()).toEqual(absent); }
+        finally { await configure(data); }
+
+        lookup.mockImplementationOnce(() => writeFile(policyPath, '{'));
+        try { published(await call(), 'POLICY_UNAVAILABLE', locale); }
+        finally { await setPolicy(runGrant('cancel')); }
 
         const afterDecision = (edit: () => Promise<void>) => vi.spyOn(RunDecisionApprovalBroker.prototype, 'authorize').mockImplementationOnce(async function (this: RunDecisionApprovalBroker, ...args) {
           const decision = await authorize.apply(this, args);

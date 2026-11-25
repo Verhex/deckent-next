@@ -73,7 +73,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       ['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', ''], ['Enter/Esc keep (default)', 'y', 'next'],
       ['(code: RUN_CONTROL_BINDING_CHANGED)', '', 'fresh'], ['h hold', '', 'next'],
     ]);
-    expect(squeeze(result.output)).toContain(squeeze("The project's installation changed. Reopen the intended project, read the Run again, and confirm."));
+    expect(squeeze(result.output)).toContain(squeeze('The target or authority facts read for this operation changed. Read the work again in the project you mean and confirm.'));
     expect(await runs()).toEqual(before);
   });
 });

@@ -18,7 +18,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
     const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain === 'nervous' ? runSafetyHoldOnceSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
     const control = !maintain && 'action' in command && (command.action === 'hold' || command.action === 'resume'), channel = control ? localPrincipalChannel() : undefined;
     const verifyBinding = (expected: string | undefined, actual: string) => {
-      if (expected !== actual) throw ErrorRegistry.createError(channel ? 'POLICY_DENIED' : 'RUN_CONTROL_BINDING_CHANGED');
+      if (expected !== actual) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     };
     const loadContext = async (expected?: string) => {
       const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, control ? 'read' : 'write', undefined,
@@ -67,5 +67,10 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       return Object.freeze({ schemaVersion: 1 as const, layout, lifecycle: { schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) } });
       } finally { approvals?.close(); }
     } finally { store?.close(); }
-  } catch (error) { throw queryFailure(error); }
+  } catch (error) {
+    // Preserve the binding refusal through policy reads, then conceal it at the MCP boundary.
+    if (error instanceof DeckentError && error.code === 'RUN_CONTROL_BINDING_CHANGED' && localPrincipalChannel())
+      throw ErrorRegistry.createError('POLICY_DENIED');
+    throw queryFailure(error);
+  }
 }
