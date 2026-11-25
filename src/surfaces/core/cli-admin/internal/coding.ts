@@ -215,7 +215,7 @@ async function template(context: AdminCommandContext, root: string, env: NodeJS.
   request: TemplateRequest, locale: Locale): Promise<TemplateResult> {
   try { return await context.configureCodingTemplate!(root, request, { env, heal: false }); }
   catch (error) {
-    if (request.digest !== undefined && isCodedError(error, 'CONFIG_CONCURRENT_REVISION_HOLD')) {
+    if (isCodedError(error, 'CONFIG_CONCURRENT_REVISION_HOLD') && error.params?.['reason'] === 'coding-template-proposal-changed') {
       throw ErrorRegistry.createError(error.code, { cause: error, locale, suggestion: t('clisetup.coding.card.changed', {}, locale) });
     }
     throw unadmittedImage(error, config, request, locale) ?? error;

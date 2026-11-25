@@ -146,10 +146,12 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
     if (plan.status === 'no-toolchain') refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
     return plan;
   };
-  const plan = planFor(read), digest = proposalDigest(read, plan);
-  if (request.apply && request.digest !== undefined && request.digest !== digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+  const plan = planFor(read), digest = sha256(JSON.stringify({ profile: plan.profile, registry: plan.registry }));
   const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, connection: request.connection ?? null, digest };
   if (!request.apply || !plan.changed) return { ...result, status: plan.changed ? 'preview' : 'unchanged', write: null };
+  if (request.digest !== undefined && request.digest !== digest) {
+    throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD', { params: { reason: 'coding-template-proposal-changed' } });
+  }
   const config = read.effective;
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) refuse('TERMINAL_SCOPE_REQUIRED');
