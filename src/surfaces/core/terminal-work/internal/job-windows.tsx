@@ -176,9 +176,20 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
   if (choice === null || execution.signal.aborted) return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   const index = Number(choice), worker = workers[index]!, text = await ledger.inspectTranscript!(worker.attempt!);
   const ordinal = safeOrdinal(index);
-  pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
   const ref = ordinal ?? worker.attempt!.attemptId;
-  await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: ref, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
+  const values = { n: ref, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) };
+  const headingPrefix = fillTemplate(work.transcriptHeader.split('{n}', 1)[0]!, values).replace(/\s/gu, '');
+  const heading: WindowLine = {
+    spans: [span(fillTemplate(work.transcriptHeader, values), { role: 'muted' })],
+    onDrawn: ordinal === undefined ? undefined : (visibleText, precedingText) => {
+      if (execution.signal.aborted || safeOrdinal(index) !== ordinal) return;
+      const before = precedingText.replace(/\s/gu, '');
+      if (before.length <= headingPrefix.length && (before + visibleText.replace(/\s/gu, '')).startsWith(`${headingPrefix}${ordinal}`)) {
+        pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
+      }
+    },
+  };
+  await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [heading,
     ...text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true }))] }, ['close']);
   return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: ref })}`;
 };

@@ -1,5 +1,6 @@
-import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Box, Text, useInput, usePaste, useWindowSize, type DOMElement, type Key } from 'ink';
+import { stripVTControlCharacters } from 'node:util';
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Box, Text, Transform, useInput, useIsScreenReaderEnabled, usePaste, useWindowSize, type DOMElement, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, wrapCells, wrapSpans, type Span, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
@@ -14,7 +15,18 @@ import { highlightCells } from './selection.js';
  * empty label continues the previous field in its value column).
  * `exact`: the value is a command, path, pattern or preview — it breaks at the cell limit and keeps every character (no word wrap).
  * `link`: every drawn row of the line is an OSC 8 hyperlink to this http(s) address, so a click on any piece of a wrapped link opens all of it. */
-export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean; link?: string }>;
+export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean; link?: string;
+  /** Report a visible display row and the preceding wrapped text of its logical line. */
+  onDrawn?: ((visibleText: string, precedingText: string) => void) | undefined }>;
+
+/** Ink runs Transform after clipping. Its screen-reader output instead emits the text tree at commit. */
+export function DrawnText({ children, text, onDrawn }: {
+  readonly children: ReactNode; readonly text: string; readonly onDrawn: (text: string) => void;
+}) {
+  const screenReader = useIsScreenReaderEnabled();
+  useLayoutEffect(() => { if (screenReader) onDrawn(text); }, [screenReader, onDrawn, text]);
+  return screenReader ? children : <Transform transform={line => { onDrawn(stripVTControlCharacters(line)); return line; }}>{children}</Transform>;
+}
 
 /** Breaks spans at exactly `width` cells, keeping every character (whitespace included) in order. */
 function hardWrapSpans(spans: readonly Span[], width: number): Span[][] {
@@ -329,8 +341,16 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
         {statusText ? <Text {...palette.muted} wrap="truncate">{statusText}</Text> : null}
       </Box>
       {noteText === null ? null : <Text {...palette.warning} wrap="truncate-end">{`! ${noteText}`}</Text>}
-      {rows.slice(first, first + visible).map((row, index) => (ends => { const range = picked ? cardRowRange(picked, first + index) : null;
-        return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end, palette.selection) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
+      {rows.slice(first, first + visible).map((row, index) => {
+        const at = first + index, logicalLine = rowLines[at]!.line;
+        const ends = hyperlinkEnds(links[at]), range = picked ? cardRowRange(picked, at) : null;
+        const text = <Text key={at} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end, palette.selection)
+          : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>;
+        const onDrawn = body[logicalLine]?.onDrawn;
+        if (!onDrawn) return text;
+        const precedingText = rows.slice(starts[logicalLine], at).map(plainText).join('');
+        return <DrawnText key={at} text={plainText(row)} onDrawn={line => onDrawn(line, precedingText)}>{text}</DrawnText>;
+      })}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
       {footer ? <WindowInputContext.Provider value={queuedList ? acceptsListInput : acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused, width)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
