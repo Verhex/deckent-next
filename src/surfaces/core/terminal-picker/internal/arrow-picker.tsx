@@ -28,8 +28,8 @@ export function ArrowPicker(props: {
   /** Optional already projected display spans; selection still binds the original row index. */
   readonly styledRows?: readonly (readonly Span[])[];
   readonly details?: readonly (string | undefined)[];
-  /** Original indexes of the rows committed to the viewport. */
-  readonly onRowsDrawn?: ((indexes: readonly number[]) => void) | undefined;
+  /** Resolve a visible row before drawing it, then commit that projection with the viewport. */
+  readonly projectDrawnRow?: ((index: number) => { readonly spans: readonly Span[]; readonly onDrawn: () => void }) | undefined;
   readonly onSelect: (index: number) => void;
   readonly onCancel: () => void;
   /** False while another window owns the keyboard (the window stack); default true. */
@@ -79,21 +79,23 @@ export function ArrowPicker(props: {
   const shown = filterPickerRows(props.rows, filterText);
   const index = pickerChoice(selectedRef.current, shown.length);
   const first = pickerFirstRow(index, shown.length, ARROW_PICKER_ROWS);
-  const drawn = shown.slice(first, first + ARROW_PICKER_ROWS);
+  const drawn = shown.slice(first, first + ARROW_PICKER_ROWS).map(original => {
+    const projected = props.projectDrawnRow?.(original);
+    return { original, text: projected ? projected.spans.map(item => item.text).join('') : props.rows[original]!,
+      spans: projected?.spans ?? props.styledRows?.[original], onDrawn: projected?.onDrawn };
+  });
   const width = Math.max(1, Math.min(columns || FALLBACK_COLUMNS, props.maxColumns ?? Number.MAX_SAFE_INTEGER) - 1);
-  const { onRowsDrawn } = props;
-  useLayoutEffect(() => { onRowsDrawn?.(drawn); }, [onRowsDrawn, drawn]);
-  useCardCopyOptions(drawn.map(original => props.rows[original]!));
+  useLayoutEffect(() => { for (const row of drawn) row.onDrawn?.(); }, [drawn]);
+  useCardCopyOptions(drawn.map(row => row.text));
   void generation;
   return (
     <Box flexDirection="column">
       {props.filter ? <Text {...palette.muted} wrap="truncate">{truncateEnd(props.filter.prompt(filterText), width, glyphs.ellipsis)}</Text> : null}
       {props.filter && shown.length === 0 ? <Text {...palette.warning} wrap="truncate">{props.filter.none}</Text> : null}
-      {drawn.map((original, offset) => {
-        const at = first + offset, row = props.rows[original]!;
-        const marked = `${at === index ? '>' : ' '} ${row}`;
+      {drawn.map(({ original, text, spans: projected }, offset) => {
+        const at = first + offset;
+        const marked = `${at === index ? '>' : ' '} ${text}`;
         const fitted = truncateEnd(marked, width, glyphs.ellipsis);
-        const projected = props.styledRows?.[original];
         const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
         return (
           <Text key={original} wrap="truncate" {...(at === index ? palette.selection : {})}>

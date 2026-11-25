@@ -28,7 +28,8 @@ export interface JobWindowLabels {
   readonly heldOver?: string;
 }
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
-  | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[]; onRowsDrawn?: (indexes: readonly number[]) => void }>;
+  | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[];
+    projectDrawnRow?: (index: number) => { readonly spans: readonly Span[]; readonly onDrawn: () => void } }>;
 
 /** Only projections, not hashes or command text, provide a run's human title. A generated id shows its head; a human task id stays whole (F2-6). */
 export function displayId(value: string): string { return shortId(value); }
@@ -100,10 +101,13 @@ export function JobWindow({ value, work, onAnswer }: { readonly value: JobWindow
   const projectSpans = (spans: readonly Span[]) => spans.flatMap(item => project(item.text).spans.map(part => ({ ...item, ...part })));
   const title = project(value.title).spans;
   if (value.kind === 'job-picker') {
-    const rows = value.rows.map(projectSpans);
+    const rows = value.rows.map(projectSpans), projectDrawnRow = value.projectDrawnRow;
     return <Window title={title} hints={work.window.pick} position={work.window.position} footerRows={ARROW_PICKER_ROWS + 2}
       footer={active => <ArrowPicker rows={rows.map(row => row.map(item => item.text).join(''))} styledRows={rows} active={active}
-        onRowsDrawn={value.onRowsDrawn} onSelect={index => onAnswer(String(index))} onCancel={() => onAnswer(null)} />} />;
+        projectDrawnRow={projectDrawnRow && (index => {
+          const row = projectDrawnRow(index);
+          return { ...row, spans: projectSpans(row.spans) };
+        })} onSelect={index => onAnswer(String(index))} onCancel={() => onAnswer(null)} />} />;
   }
   return <Window title={title} body={value.lines.map(line => ({ ...line, spans: projectSpans(line.spans), ...(line.label ? { label: projectSpans(line.label) } : {}) }))}
     hints={work.jobs?.hints ?? work.window.pick} position={work.window.position} onClose={() => onAnswer(null)} />;
@@ -149,14 +153,27 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
     return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   }
   const ordinals = workers.map(worker => workerDisplayOrdinal(ledger, worker.attempt!, worker.ordinal));
+  const rowSpans = (worker: WorkLedgerWorkerEntry, ordinal: number | undefined) => [
+    span(fillTemplate(work.workerLine.ordinal, { n: ordinal ?? worker.attempt!.attemptId }), { bold: true }),
+    span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })];
+  // A read may show a number after this picker opens and before this row is drawn.
+  const safeOrdinal = (index: number) => {
+    const planned = ordinals[index];
+    return workerDisplayOrdinal(ledger, workers[index]!.attempt!, planned) === planned ? planned : undefined;
+  };
   const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle,
-    rows: workers.map((worker, index) => [span(fillTemplate(work.workerLine.ordinal, { n: ordinals[index] ?? worker.attempt!.attemptId }), { bold: true }),
-      span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })]),
-    onRowsDrawn: indexes => { for (const index of indexes) pinWorkerOrdinal(ledger, workers[index]!.attempt!, ordinals[index]); },
+    rows: workers.map((worker, index) => rowSpans(worker, ordinals[index])),
+    projectDrawnRow: index => {
+      const worker = workers[index]!, ordinal = safeOrdinal(index);
+      return { spans: rowSpans(worker, ordinal), onDrawn: () => {
+        ordinals[index] = ordinal;
+        pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
+      } };
+    },
   }, workers.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return fillTemplate(labels.closed, { title: labels.transcriptTitle });
-  const worker = workers[Number(choice)]!, text = await ledger.inspectTranscript!(worker.attempt!);
-  const ordinal = workerDisplayOrdinal(ledger, worker.attempt!, worker.ordinal);
+  const index = Number(choice), worker = workers[index]!, text = await ledger.inspectTranscript!(worker.attempt!);
+  const ordinal = safeOrdinal(index);
   pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
   const ref = ordinal ?? worker.attempt!.attemptId;
   await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: ref, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },

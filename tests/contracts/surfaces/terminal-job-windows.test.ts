@@ -38,7 +38,9 @@ let renderDir: string;
 beforeEach(async () => { captured.entries = []; captured.seen = new WeakSet(); renderDir = await mkdtemp(join(tmpdir(), 'sw2-window-render-')); });
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); vi.useRealTimers(); await rm(renderDir, { recursive: true, force: true }); });
 const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false) => {
-  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale), ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS } : {}) }, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
+  const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale),
+    ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS, focus: { composer: 'INPUT FOCUS', window: 'WINDOW FOCUS' } } : {}) };
+  const view = mountWorkline({ labels, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
   await settle(30); view.stdin.write(`${command}\r`); return view;
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
@@ -52,10 +54,11 @@ function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captur
 
 async function scrollTranscriptPicker() {
   const initial = await ports().listWorkers(), source = initial.sources[0]!, first = source.workers[0]!;
-  const others = Array.from({ length: 6 }, (_, index) => ({
+  const [eighth, ...visible] = Array.from({ length: 7 }, (_, index) => ({
     ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
   }));
-  let workers = [first, ...others];
+  const intervening = { ...first, identity: { ...first.identity!, attemptId: `80${attemptId.slice(2)}` } };
+  let workers = [...visible, first, eighth!];
   const inspect = vi.fn(ports().inspectTranscript!);
   const ledger = ports({ inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) });
   const view = await open('/transcript', ledger, 'en', 24);
@@ -63,16 +66,27 @@ async function scrollTranscriptPicker() {
   expect(view.stdout.frame).not.toContain('Task 7');
 
   // An out-of-range read lets us observe which Attempt a number resolves to without binding it.
-  workers = [...others, first];
+  workers = [...visible.slice(1), first, visible[0]!, eighth!];
   const labels = { ...WORKLINE_TEST_LABELS, work: EN };
   await runLedgerCommand('transcript', '7 9', ledger, labels);
-  expect(inspect).toHaveBeenLastCalledWith(first.identity);
+  expect(inspect).toHaveBeenLastCalledWith(visible[0]!.identity);
+
+  // A successful read now shows 7 for another Attempt while the seventh picker row is still hidden.
+  workers = [...visible.slice(1), first, intervening, visible[0]!, eighth!];
+  const shown = await runLedgerCommand('transcript', '7', ledger, labels);
+  expect(shown).toMatchObject([{ level: 'info', text: expect.stringContaining('Transcript · worker 7') }]);
+  expect(inspect).toHaveBeenLastCalledWith(intervening.identity);
   view.stdin.write('\u001B[A');
-  await until(() => view.stdout.frame.includes('> Task 7'), 'scrolled worker');
-  await runLedgerCommand('transcript', '7 9', ledger, labels);
-  expect(inspect).toHaveBeenLastCalledWith(others.at(-1)!.identity);
+  await until(() => view.stdout.frame.includes('> Task 8'), 'scrolled worker');
+  expect(view.stdout.frame).toContain(`Task ${attemptId}`);
+  await runLedgerCommand('transcript', '8 9', ledger, labels);
+  expect(inspect).toHaveBeenLastCalledWith(eighth!.identity);
+  expect(await runLedgerCommand('transcript', '7', ledger, labels)).toEqual(shown);
+  expect(inspect).toHaveBeenLastCalledWith(intervening.identity);
   view.stdin.write('\u001B[B');
   await until(() => view.stdout.frame.includes('> Task 1'), 'first worker again');
+  view.stdin.write('\u001B[A\u001B[A');
+  await until(() => view.stdout.frame.includes(`> Task ${attemptId}`), 'select the full Attempt reference');
   return { view, inspect };
 }
 
@@ -152,6 +166,7 @@ describe('SW-2 job windows', () => {
     const { view, inspect } = await scrollTranscriptPicker();
     await choose(view);
     await until(() => view.stdout.frame.includes('TRANSCRIPT 0'), 'transcript'); await snapshot('transcript', view); expect(view.stdout.frame).not.toContain('TRANSCRIPT 89');
+    expect(view.stdout.frame).toContain(`Transcript · worker ${attemptId}`);
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
     expect(inspect.mock.calls.at(-1)![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
@@ -257,26 +272,29 @@ it('keeps a listed worker number in the transcript picker and uses the full iden
     const view = await open('/workers', ports({ listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }), inspectTranscript }), locale, 60, true);
     const task = locale === 'en' ? 'Task' : 'Görev';
     const summaryCount = captured.entries.length;
-    await until(() => view.stdout.frame.includes(`${task} 2`), 'listed worker 2'); await settle(40); view.stdin.write(ESC);
-    await until(() => captured.entries.length === summaryCount + 1, 'workers summary'); await settle(40);
+    const windowFocused = () => view.stdout.frame.includes('WINDOW FOCUS');
+    const composerReady = () => !windowFocused() && view.stdout.frame.includes('READY');
+    await until(() => view.stdout.frame.includes(`${task} 2`) && windowFocused(), 'listed worker 2 with window focus');
+    view.stdin.write(ESC);
+    await until(() => captured.entries.length === summaryCount + 1 && composerReady(), 'workers summary and composer ready');
 
     workers = [second, first];
     view.stdin.write('/transcript\r');
     await until(() => view.stdout.frame.includes(`> ${task} 2`), 'picker preserves worker 2'); await choose(view);
-    await until(() => view.stdout.frame.includes('SEALED OUTPUT'), 'worker 2 output');
+    await until(() => view.stdout.frame.includes('SEALED OUTPUT') && windowFocused(), 'worker 2 output with window focus');
     expect(view.stdout.frame).toContain(locale === 'en' ? 'Transcript · worker 2 · task task-id · attempt 5b0c9811' : 'Döküm · işçi 2 · görev task-id · deneme 5b0c9811');
-    await settle(40); view.stdin.write(ESC);
-    await until(() => captured.entries.length === summaryCount + 2, 'worker 2 summary'); await settle(40);
+    view.stdin.write(ESC);
+    await until(() => captured.entries.length === summaryCount + 2 && composerReady(), 'worker 2 summary and composer ready');
     expect(captured.entries.at(-1)).toMatchObject({ text: `${locale === 'en' ? 'Transcript' : 'İşçi kaydı'}: ${task} 2` });
 
     workers = [replacement, first];
     view.stdin.write('/transcript\r');
     await until(() => view.stdout.frame.includes(`> ${task} ${replacement.identity.attemptId}`), 'picker shows full Attempt ID'); await choose(view);
-    await until(() => view.stdout.frame.includes('SEALED OUTPUT'), 'replacement output');
+    await until(() => view.stdout.frame.includes('SEALED OUTPUT') && windowFocused(), 'replacement output with window focus');
     const heading = locale === 'en' ? 'Transcript · worker' : 'Döküm · işçi';
     expect(view.stdout.frame).toContain(`${heading} ${replacement.identity.attemptId}`);
     expect(inspectTranscript.mock.calls).toEqual([[second.identity], [replacement.identity]]);
-    await settle(40); view.stdin.write(ESC);
+    view.stdin.write(ESC);
     await until(() => captured.entries.length === summaryCount + 3, 'replacement summary');
     expect(captured.entries.at(-1)).toMatchObject({ text: expect.stringContaining(replacement.identity.attemptId) });
   }
