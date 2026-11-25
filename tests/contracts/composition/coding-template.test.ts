@@ -97,6 +97,53 @@ describe.skipIf(process.platform === 'win32')('guided coding template proposal',
     await expect(configureNativeCodingTemplate(f.root, { ...ordered, apply: true, digest: orderedPreview.digest }, f.options, person))
       .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
     expect(await readFile(f.path, 'utf8')).toBe(reordered); expect(await f.backups()).toEqual(expandedBackups); expect(f.auditCount()).toBe(expandedAudits);
+
+    const ask = vi.spyOn(await import('#surfaces/core/cli-human/index.js'), 'askCliCard');
+    const writer = vi.spyOn(await import('#composition/core/config/index.js'), 'createConfiguredConfigApplication');
+    const output = { en: '', tr: '' };
+    const guided = (locale: keyof typeof output) => main(['coding', 'template', '--provider', ordered.provider, '--kind', ordered.kind, '--lang', locale], {
+      root: f.root, env: f.options.env, stdin: { isTTY: true },
+      stdout: { isTTY: true, write(chunk: string) { output[locale] += chunk; } },
+      configureCodingTemplate: (root, input, options) => configureNativeCodingTemplate(root, input, options, person),
+    });
+    const effects = async () => ({ config: await readFile(f.path, 'utf8'), backups: await f.backups(), audits: f.auditCount() });
+    let trExit: Awaited<ReturnType<typeof guided>> | undefined;
+    let current = orderedPreview;
+    let beforeApply: Awaited<ReturnType<typeof effects>> | undefined;
+    try {
+      // Keep both cards open on the same proposal while the other operator binds the new profile.
+      ask.mockImplementationOnce(async () => {
+        trExit = await guided('tr');
+        return 'apply';
+      }).mockImplementationOnce(async () => {
+        await f.mutate(config => { config.execution.docker.memoryBytes *= 2; });
+        current = await configureNativeCodingTemplate(f.root, { ...ordered, apply: true }, f.options, person);
+        writer.mockClear();
+        beforeApply = await effects();
+        return 'apply';
+      });
+      expect([await guided('en'), trExit]).toEqual([0, 0]);
+      const proposedProfile = `${orderedPreview.profile.id}@${orderedPreview.profile.version}`;
+      expect(ask.mock.calls.map(([card]) => card.body)).toEqual([
+        expect.arrayContaining([`Profile: ${proposedProfile}`]), expect.arrayContaining([`Profil: ${proposedProfile}`]),
+      ]);
+      expect(current.status).toBe('applied');
+      expect(current.profile.id).not.toBe(orderedPreview.profile.id);
+      expect(writer).not.toHaveBeenCalled();
+      expect(await effects()).toEqual(beforeApply);
+      const profile = `${current.profile.id}@${current.profile.version}`, kind = ordered.kind, revision = current.registry.revision;
+      for (const [locale, heading, ...rows] of [
+        ['en', "This operation made no configuration changes. The kind's current coding profile is shown below.", `Profile: ${profile}`, `Task kind: ${kind}`, `Registry revision: ${revision}`],
+        ['tr', 'Bu işlem yapılandırmaya yazmadı. Görev türünün güncel kodlama profili aşağıda gösteriliyor.', `Profil: ${profile}`, `Görev türü: ${kind}`, `Kayıt revizyonu: ${revision}`],
+      ] as const) {
+        const [summary, ...details] = output[locale].trimEnd().split('\n');
+        expect(details).toEqual(expect.arrayContaining(rows));
+        expect.soft(summary).toBe(heading);
+      }
+    } finally {
+      ask.mockRestore();
+      writer.mockRestore();
+    }
   });
 });
 

@@ -195,14 +195,15 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   const discovery = values.get('--discovery');
   const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}) };
   const run = (decision: Pick<TemplateRequest, 'apply' | 'digest'>) => template(context, root, env, config, { ...request, ...decision }, locale);
-  const show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config, cliOf(context)) });
+  const show = (result: TemplateResult, guidedApply = false) => emit(output(result), { ...sinks,
+    render: value => renderTemplate(value, locale, config, cliOf(context), guidedApply) });
   if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run({ apply: flags.has('--apply') })); return; }
   const preview = await run({ apply: false });
   if (preview.status !== 'preview') { show(preview); return; }
   const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale, config, cliOf(context)),
     options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), role: 'no' }] }, io);
   if (answer !== 'apply') return cancelled();
-  show(await run({ apply: true, digest: preview.digest }));
+  show(await run({ apply: true, digest: preview.digest }), true);
 }
 /** Kinds a template can bind for `provider`: the kinds already on its admitted profiles, then the conventional new ones still free. */
 function templateKinds(config: DeckentConfig, pins: Pins, provider: string): string[] {
@@ -247,8 +248,9 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale, config:
       : discovery === 'repository' ? [t('clisetup.coding.result.discovery.repository', {}, locale)] : []),
     t('clisetup.coding.result.registry', { revision: value.registryRevision }, locale)];
 }
-function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf): string {
-  const head = value.status === 'preview' ? t('cli.coding.template.preview', {}, locale) : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale)
-    : t('cli.coding.template.unchanged', {}, locale);
+function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf, guidedApply: boolean): string {
+  const head = value.status === 'preview' ? t('cli.coding.template.preview', {}, locale)
+    : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale)
+    : guidedApply ? t('clisetup.coding.card.unchanged', {}, locale) : t('cli.coding.template.unchanged', {}, locale);
   return [head, ...templateLines(value, locale, config, cli), ...(value.status === 'preview' ? [t('clisetup.coding.applyHint', {}, locale)] : [])].join('\n');
 }
