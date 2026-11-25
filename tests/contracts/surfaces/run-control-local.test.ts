@@ -7,7 +7,7 @@ import { applyRunLifecycle } from '../../../src/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
-import { clearConfigCache, productResourcePath, t, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, resolveGlobalConfigPaths, t, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -120,6 +120,17 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     finally { await chmod(dirname(settings), 0o700); }
     expect(f.state()).toEqual(before);
   }
+  // A global-only SDK call (public option `globalOnly`) reads the global settings, yet locks the TARGET PROJECT's settings document:
+  // a held global lock does not stop it (it reaches the ledger's revision check), a held project lock refuses it.
+  const global = resolveGlobalConfigPaths(f.options.env, process.platform).platformPath, globalOnly = { ...f.options, globalOnly: true };
+  await mkdir(dirname(global), { recursive: true, mode: 0o700 });
+  await writeFile(global, JSON.stringify({ layout: { root: join(f.root, 'selected') }, installation: { machineIdentity: { source: join(f.root, 'machine-id') } },
+    configFile: { writeLockTimeoutMs: 1 } }), { mode: 0o600 });
+  await withConfigWriteLock(global, () => expect(applyRunLifecycle(f.root, { ...command, expectedRevision: 9 }, globalOnly)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' }));
+  const admitted = f.state(); // write admission pins the scope before the ledger refuses the stale revision (fa11dae98 order); no Run row
+  expect(admitted.map(tables => tables.slice(0, 3))).toEqual(before.map(tables => tables.slice(0, 3)));
+  await withConfigWriteLock(settings, () => expect(applyRunLifecycle(f.root, command, globalOnly)).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED', params: { path: `${settings}.write-lock` } }));
+  expect(f.state()).toEqual(admitted);
   // An SDK caller may pass the project as a relative path: the lock is the one the initial read resolved, so the hold completes.
   await expect(applyRunLifecycle(relative(process.cwd(), f.root), command, f.options)).resolves.toMatchObject({ lifecycle: { commandId: command.commandId } });
 });

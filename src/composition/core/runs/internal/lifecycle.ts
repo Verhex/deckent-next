@@ -1,4 +1,4 @@
-import { DeckentError, ErrorRegistry, productResourcePath, resolveLocale, withConfigWriteLock, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, productResourcePath, resolveLocale, resolveProductLayout, withConfigWriteLock, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteInventoryReader, type SqliteInventoryReader } from '#adapters/index.js';
 import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -12,7 +12,8 @@ export const holdConfiguredRunForNervous = (root: string, command: unknown, opti
 /** Owner 196: a hold or resume holds the lock of the governed and raw project settings writers (fixed bootstrap path) from before its last
  * bound read until its commit is classified. Not taken, it is refused before any Run effect and exits 1 like every refused Run control
  * (owner 155); taken, a failed release no longer changes the classified outcome (a committed hold is never reported as not done).
- * `settings` is the document the initial read resolved and read (one resolution of the project root, relative SDK roots included). */
+ * `settings` is the target project's own settings document at the project root the initial read resolved (relative SDK roots
+ * included), also when a global-only read used the global document (adapters/core/config-file/internal/documents.ts:10, same path). */
 async function withProjectSettingsLock<T>(settings: string, timeoutMs: number, work: () => Promise<T>): Promise<T> {
   const held: { outcome?: PromiseSettledResult<T> } = {};
   try {
@@ -74,7 +75,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
           if (!control) return commit();
           let entered = false;
           // Owner 196: the project settings lock first, the MCP policy lock inside it (the setup permission order).
-          return withProjectSettingsLock(productResourcePath(layout, 'config'), config.configFile.writeLockTimeoutMs, !channel ? commit
+          return withProjectSettingsLock(productResourcePath(resolveProductLayout({ projectRoot: config.projectRoot, platform: layout.platform }), 'config'), config.configFile.writeLockTimeoutMs, !channel ? commit
             : () => withLayoutPolicyLock(layout, () => { entered = true; return commit(); }).catch((error: unknown) => {
               throw entered || error instanceof DeckentError ? error : ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error });
             }));
