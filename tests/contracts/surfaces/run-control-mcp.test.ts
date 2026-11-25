@@ -14,16 +14,22 @@ import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { isCodedError, productResourcePath, t, withConfigWriteLock, writeConfig, type Locale } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { fixtureExecution } from '../support/execution-registry.js';
-const machine = vi.hoisted(() => ({ absent: false, contended: undefined as ((path: string) => void) | undefined, unlinkFault: undefined as string | undefined }));
+const machine = vi.hoisted(() => ({ absent: false, contended: undefined as ((path: string) => void) | undefined, unlinkFault: undefined as string | undefined,
+  watched: undefined as string | undefined, lockEvents: [] as string[] }));
 vi.mock('node:fs/promises', async importOriginal => {
   const original = await importOriginal<typeof import('node:fs/promises')>();
   return { ...original, readFile: (...args: Parameters<typeof original.readFile>) =>
     machine.absent && args[0] === '/etc/machine-id' ? Promise.reject(Object.assign(new Error('fixture machine id missing'), { code: 'ENOENT' })) : original.readFile(...args),
-  // Lock observation and release faults at the filesystem boundary: an occupied lock directory, a failing owner-record removal.
-  mkdir: (...args: Parameters<typeof original.mkdir>) => original.mkdir(...args).catch((error: NodeJS.ErrnoException) => {
+  // Lock observation and release faults at the filesystem boundary: the watched lock directory's creation and removal, an occupied lock
+  // directory, a failing owner-record removal.
+  mkdir: (...args: Parameters<typeof original.mkdir>) => original.mkdir(...args).then(made => {
+    if (args[0] === machine.watched) machine.lockEvents.push('acquired');
+    return made;
+  }, (error: NodeJS.ErrnoException) => {
     if (error.code === 'EEXIST') machine.contended?.(String(args[0]));
     throw error;
   }),
+  rmdir: (...args: Parameters<typeof original.rmdir>) => original.rmdir(...args).then(() => { if (args[0] === machine.watched) machine.lockEvents.push('released'); }),
   unlink: (...args: Parameters<typeof original.unlink>) => args[0] === machine.unlinkFault
     ? (machine.unlinkFault = undefined, Promise.reject(Object.assign(new Error('fixture release fault'), { code: 'EIO' }))) : original.unlink(...args) };
 });
@@ -267,10 +273,13 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
         const contended = new Promise<void>(done => { waited = done; });
         const governed = new ConfigApplication(adapters.createConfigFileDocuments(root, options), { witness: async () => {}, audit: async () => {},
           async authorize() { if (++authorizations === 2) { inside(); await publishing; } return 'fixture'; } }); // the second call is under the lock
+        // The caller may inspect the Run: a lock timeout would read M (CONFIG_WRITE_LOCKED); only a final read of B gives the general denial.
+        await setPolicy(runGrant('cancel', 'inspect'));
         const publication = governed.set({ keyPath: 'layout.root', value: moved, principal: { ...owner, scopeIds: [scopeId] }, scopeId, commandId: 'publication-first' });
         await holding;
         const baseline = [effects(), state(other.path), await keys()];
         machine.contended = path => { if (path === lockPath) waited(); };
+        machine.watched = lockPath; machine.lockEvents = [];
         try {
           const stale = call({ ...hold, runId: 'drift', commandId: 'publication-first' }, false);
           await Promise.race([contended, stale]);
@@ -278,8 +287,10 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           await publication;
           expect.soft(JSON.parse(await readFile(configPath, 'utf8')).layout.root).toBe(moved);
           expect.soft(await stale).toEqual(absent);
+          // The control took the lock only after the publication released it, then released it itself.
+          expect.soft(machine.lockEvents).toEqual(['released', 'acquired', 'released']);
           expect.soft([effects(), state(other.path), await keys()]).toEqual(baseline);
-        } finally { machine.contended = undefined; publish(); await publication.catch(() => undefined); await configure(data); }
+        } finally { machine.contended = machine.watched = undefined; publish(); await publication.catch(() => undefined); await configure(data); await setPolicy(runGrant('cancel')); }
 
         // Order (b): the Run wins. Paused after its last bound read and before write admission (the MCP recheck of its decision), it holds the
         // project settings lock: a raw publication cannot take it, another project's control completes, the publication lands after the receipt.
@@ -300,6 +311,7 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           if (args[4] !== undefined && args[0].commandId === 'run-first') { paused(); await proceeding; }
           return authorize.apply(this, args);
         });
+        let ledger: { mockRestore(): void } | undefined;
         const moveRaw = (writeLockTimeoutMs?: number) => writeConfig(configPath, { layout: { root: moved, resources: {} }, installation, ...(writeLockTimeoutMs ? { configFile: { writeLockTimeoutMs } } : {}) });
         try {
           const first = call({ ...hold, runId: 'run-first', commandId: 'run-first' }, false);
@@ -309,11 +321,26 @@ it.skipIf(process.platform === 'win32')('projects configured Run control disclos
           expect.soft(await readFile(configPath, 'utf8')).toBe(bytes);
           await expect.soft(applyConfiguredRunLifecycle(elsewhere, { schemaVersion: 1, scopeId, runId: 'elsewhere', commandId: 'elsewhere', expectedRevision: 0,
             action: 'hold', holdReason: 'wait' }, options)).resolves.toMatchObject({ lifecycle: { run: { revision: 1 } } });
+          // Still held inside the ledger commit itself: paused there, the one-try publication is refused again.
+          let committing!: () => void, commit!: () => void;
+          const atCommit = new Promise<void>(done => { committing = done; }), committed = new Promise<void>(done => { commit = done; });
+          ledger = vi.spyOn(adapters, 'openSqliteAttemptStore').mockImplementation(async (...args) => {
+            const store = await openWriter(...args), apply = store.commitRunLifecycle.bind(store);
+            vi.spyOn(store, 'commitRunLifecycle').mockImplementation(async (write, ...rest) => {
+              if (write.commandId === 'run-first') { committing(); await committed; }
+              return apply(write, ...rest);
+            });
+            return store;
+          });
           proceed();
+          await atCommit;
+          await expect.soft(moveRaw(1)).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
+          expect.soft(await readFile(configPath, 'utf8')).toBe(bytes);
+          commit();
           expect.soft((await first).structuredContent).toMatchObject({ lifecycle: { commandId: 'run-first', run: { revision: 1 } } });
           await moveRaw();
           expect.soft(JSON.parse(await readFile(configPath, 'utf8')).layout.root).toBe(moved);
-        } finally { proceed(); barrier.mockRestore(); await configure(data); }
+        } finally { proceed(); barrier.mockRestore(); ledger?.mockRestore(); await configure(data); }
 
         // Point 5(c): releasing the lock fails after the commit. The hold is recorded, so the caller receives the committed receipt; the owner
         // record of this live process stays (the existing stale-lock recovery reclaims it once the process has ended).

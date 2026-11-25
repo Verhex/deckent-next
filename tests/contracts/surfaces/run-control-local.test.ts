@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
@@ -120,4 +120,6 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     finally { await chmod(dirname(settings), 0o700); }
     expect(f.state()).toEqual(before);
   }
+  // An SDK caller may pass the project as a relative path: the lock is the one the initial read resolved, so the hold completes.
+  await expect(applyRunLifecycle(relative(process.cwd(), f.root), command, f.options)).resolves.toMatchObject({ lifecycle: { commandId: command.commandId } });
 });
