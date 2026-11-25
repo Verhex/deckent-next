@@ -5,10 +5,10 @@ import { createElement } from 'react';
 import { Text } from 'ink';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, projectResultBrief, targetQueueViewSchema, type RunView } from '#engine/index.js';
-import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
+import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts, type WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { openingWorkText, runDetailLines } from '#surfaces/core/terminal-work/index.js';
+import { openingWorkText, runDetailLines, runLedgerCommand } from '#surfaces/core/terminal-work/index.js';
 import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
@@ -38,7 +38,9 @@ let renderDir: string;
 beforeEach(async () => { captured.entries = []; captured.seen = new WeakSet(); renderDir = await mkdtemp(join(tmpdir(), 'sw2-window-render-')); });
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); vi.useRealTimers(); await rm(renderDir, { recursive: true, force: true }); });
 const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false) => {
-  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale), ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS } : {}) }, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
+  const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale),
+    ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS, focus: { composer: 'INPUT FOCUS', window: 'WINDOW FOCUS' } } : {}) };
+  const view = mountWorkline({ labels, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
   await settle(30); view.stdin.write(`${command}\r`); return view;
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
@@ -49,6 +51,91 @@ async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
   if (captureRoot && captureRoot.startsWith(`${tmpdir()}/`)) await writeFile(join(captureRoot, `${name}.txt`), view.stdout.frame);
 }
 function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary' }); }
+
+async function chooseScrolledTranscript() {
+  const base = ports(), initial = await base.listWorkers(), source = initial.sources[0]!, first = source.workers[0]!;
+  const [eighth, ...visible] = Array.from({ length: 7 }, (_, index) => ({
+    ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
+  }));
+  const intervening = { ...first, identity: { ...first.identity!, attemptId: `80${attemptId.slice(2)}` } };
+  let workers = [...visible, first, eighth!];
+  const inspect = vi.fn(base.inspectTranscript!);
+  const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
+  const view = await open('/transcript', ledger, 'en', 24, true);
+  await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker');
+  expect(view.stdout.frame).not.toContain('Task 7');
+
+  // An out-of-range read lets us observe which Attempt a number resolves to without binding it.
+  workers = [...visible.slice(1), first, visible[0]!, eighth!];
+  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
+  await runLedgerCommand('transcript', '7 9', ledger, labels);
+  expect(inspect).toHaveBeenLastCalledWith(visible[0]!.identity);
+
+  // A successful read now shows 7 for another Attempt while the seventh picker row is still hidden.
+  workers = [...visible.slice(1), first, intervening, visible[0]!, eighth!];
+  const shown = await runLedgerCommand('transcript', '7', ledger, labels);
+  expect(shown).toMatchObject([{ level: 'info', text: expect.stringContaining('Transcript · worker 7') }]);
+  expect(inspect).toHaveBeenLastCalledWith(intervening.identity);
+  view.stdin.write('\u001B[A');
+  await until(() => view.stdout.frame.includes('> Task 8'), 'scrolled worker');
+  expect(view.stdout.frame).toContain(`Task ${attemptId}`);
+  await runLedgerCommand('transcript', '8 9', ledger, labels);
+  expect(inspect).toHaveBeenLastCalledWith(eighth!.identity);
+  expect(await runLedgerCommand('transcript', '7', ledger, labels)).toEqual(shown);
+  expect(inspect).toHaveBeenLastCalledWith(intervening.identity);
+  view.stdin.write('\u001B[B');
+  await until(() => view.stdout.frame.includes('> Task 1'), 'first worker again');
+  view.stdin.write('\u001B[A\u001B[A');
+  await until(() => view.stdout.frame.includes(`> Task ${attemptId}`), 'select the full Attempt reference');
+  await choose(view);
+  return { view, inspect, first, observe: (...next: typeof workers) => { workers = next; } };
+}
+
+async function checkListedTranscriptPicker({ view, inspect, first, observe }: Awaited<ReturnType<typeof chooseScrolledTranscript>>) {
+  const second = { ...first, identity: { ...first.identity!, attemptId: '5b0c9811-1b2c-4d3e-8f90-a1b2c3d4e5f6', generation: 2 } };
+  const replacement = { ...first, identity: { ...first.identity!, attemptId: '6b0c9811-1b2c-4d3e-8f90-a1b2c3d4e5f6', generation: 3 } };
+  const windowFocused = () => view.stdout.frame.includes('WINDOW FOCUS');
+  const composerReady = () => !windowFocused() && view.stdout.frame.includes('READY');
+  const summaryCount = captured.entries.length;
+  inspect.mockClear();
+
+  // A fresh /workers list supplies the numbering for the rest of this Workline session.
+  await until(composerReady, 'composer ready after the scrolled transcript');
+  observe(first, second);
+  view.stdin.write('/workers\r');
+  await until(() => view.stdout.frame.includes('Task 2') && windowFocused(), 'listed worker 2 with window focus');
+  view.stdin.write(ESC);
+  await until(() => captured.entries.length === summaryCount + 1 && composerReady(), 'workers summary and composer ready');
+
+  observe(second, first);
+  view.stdin.write('/transcript\r');
+  await until(() => view.stdout.frame.includes('> Task 2') && windowFocused(), 'picker preserves worker 2');
+  view.stdin.write('\r');
+  await until(() => view.stdout.frame.includes('TRANSCRIPT 0') && windowFocused(), 'worker 2 output with window focus');
+  expect(view.stdout.frame).toContain('Transcript · worker 2 · task task-id · attempt 5b0c9811');
+  view.stdin.write(ESC);
+  await until(() => captured.entries.length === summaryCount + 2 && composerReady(), 'worker 2 summary and composer ready');
+  expect(captured.entries.at(-1)).toMatchObject({ text: 'Transcript: Task 2' });
+
+  observe(replacement, first);
+  view.stdin.write('/transcript\r');
+  await until(() => view.stdout.frame.includes(`> Task ${replacement.identity.attemptId}`) && windowFocused(), 'picker shows full Attempt ID');
+  view.stdin.write('\r');
+  await until(() => view.stdout.frame.includes('TRANSCRIPT 0') && windowFocused(), 'replacement output with window focus');
+  expect(view.stdout.frame).toContain(`Transcript · worker ${replacement.identity.attemptId}`);
+  expect(inspect.mock.calls).toEqual([[second.identity], [replacement.identity]]);
+  view.stdin.write(ESC);
+  await until(() => captured.entries.length === summaryCount + 3, 'replacement summary');
+  expect(captured.entries.at(-1)).toMatchObject({ text: expect.stringContaining(replacement.identity.attemptId) });
+
+  const tr = workSurfaceLabels('tr');
+  expect(fillTemplate(tr.transcriptHeader, { n: 2, task: 'task-id', attempt: '5b0c9811' }))
+    .toBe('Döküm · işçi 2 · görev task-id · deneme 5b0c9811');
+  expect(`${tr.jobs!.transcriptTitle}: ${fillTemplate(tr.workerLine.ordinal, { n: 2 })}`).toBe('İşçi kaydı: Görev 2');
+  const id = replacement.identity.attemptId;
+  expect(fillTemplate(tr.transcriptHeader, { n: id, task: 'task-id', attempt: '6b0c9811' })).toContain(`Döküm · işçi ${id}`);
+  expect(`${tr.jobs!.transcriptTitle}: ${fillTemplate(tr.workerLine.ordinal, { n: id })}`).toContain(id);
+}
 
 describe('SW-2 job windows', () => {
   it('112: a queued /run waits for quiet; its info window closes and a direct picker selects immediately', async () => {
@@ -123,11 +210,12 @@ describe('SW-2 job windows', () => {
     expect(failing.stdout.frame).not.toContain('Queue row headline'); await close(failing);
   });
   it('picks the worker and pages the complete transcript by keys in a short terminal', async () => {
-    const inspect = vi.fn(ports().inspectTranscript!), view = await open('/transcript', ports({ inspectTranscript: inspect }), 'en', 24);
-    await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker'); await choose(view);
+    const picker = await chooseScrolledTranscript(), { view, inspect } = picker;
     await until(() => view.stdout.frame.includes('TRANSCRIPT 0'), 'transcript'); await snapshot('transcript', view); expect(view.stdout.frame).not.toContain('TRANSCRIPT 89');
+    expect(view.stdout.frame).toContain(`Transcript · worker ${attemptId}`);
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
-    expect(inspect.mock.calls[0]![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    expect(inspect.mock.calls.at(-1)![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    await checkListedTranscriptPicker(picker);
   });
   it.each(['y', 'n', ESC])('cancel picker excludes terminal/already cancelling runs; %s preserves revision authority', async key => {
     const cancel = vi.fn(async () => 'Cancellation requested');
