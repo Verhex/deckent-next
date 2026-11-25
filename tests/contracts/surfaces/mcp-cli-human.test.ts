@@ -67,16 +67,21 @@ async function checkPickedWithdrawals() {
       if (projectScope) cardAnswers.push(() => 'remove');
       cardAnswers.push(async () => { await onConfirm?.(); return 'apply'; });
       let localized: string | undefined;
+      let receipt: unknown;
       const code = await main(projectScope ? ['mcp', '--lang', 'en'] : ['mcp', 'revoke', '--lang', 'en'], {
         root, env, stdout: { write: () => true }, stderr: { write: (line: string) => stderr.push(line) },
         async runMcpCommand(_root: string, request: McpCommandRequest) {
-          try { return await runMcpCommand(request, context); }
+          try {
+            const result = await runMcpCommand(request, context);
+            if (request.verb === verb) receipt = result;
+            return result;
+          }
           catch (error) { if (error instanceof DeckentError) localized = error.localize?.('tr').message; throw error; }
         },
       } as never);
       readFault.current = null;
       shownCards.length = 0;
-      return { code, localized, stderr: stderr.join('').trim(), auditors: [...auditors], grants: [...grants], before, after: await readTrust() };
+      return { code, receipt, localized, stderr: stderr.join('').trim(), auditors: [...auditors], grants: [...grants], before, after: await readTrust() };
     };
     const refuse = (result: Awaited<ReturnType<typeof picked>>, code: string, message: string) => {
       expect.soft(result.code).toBe(1);
@@ -120,8 +125,18 @@ async function checkPickedWithdrawals() {
       servers: [{ ...previous.servers[0], definitionDigest: mcpDefinitionDigest('fx', entries.project) }] });
     await writeFile(trustFiles[0]!, mismatched.before[0]!);
 
+    const gone = await picked('revoke', async () => {
+      await writeRegistry(registries.personal, { mcpServers: {} });
+      await writeFile(registries.project, '{');
+    });
+    refuse(gone, 'MCP_SERVER_CHANGED', changedEN);
+    expect.soft(gone.localized).toBe(changedTR);
+    await writeRegistry(registries.personal, { mcpServers: { fx: entries.user } });
+
+    // Both revoke reads see the restored user row and the same corrupt project file.
     const revoked = await picked('revoke');
-    expect(revoked).toMatchObject({ code: 0, auditors: ['user'], grants: ['user'] });
+    expect(revoked).toMatchObject({ code: 0, auditors: ['user'], grants: ['user'],
+      receipt: { schemaVersion: 1, revoked: { name: 'fx', scope: 'user' } } });
     expect(JSON.parse(revoked.after[0]!).servers).toEqual([]);
     expect(revoked.after[1]).toBe(revoked.before[1]);
   } finally {

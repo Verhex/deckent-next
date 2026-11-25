@@ -194,8 +194,9 @@ const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layou
 const fail = (code: string, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params });
 
 function verifyRevokeSelection(server: McpSelection | null, selected: McpSelection, projectFailed: boolean, personalFailed: boolean): void {
-  // Only a known higher-priority winner can make a failed registry read irrelevant.
-  if (server?.scope !== 'managed' && (personalFailed || (projectFailed && server?.scope !== 'local')))
+  // A failed read only prevents verification when that file holds the selected scope.
+  if ((selected.scope === 'project' && projectFailed) ||
+      ((selected.scope === 'local' || selected.scope === 'user') && personalFailed))
     throw fail('MCP_SERVER_UNVERIFIED');
   if (!matchesSelection(server ?? undefined, selected)) throw fail('MCP_SERVER_CHANGED');
 }
