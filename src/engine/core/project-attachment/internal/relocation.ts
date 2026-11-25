@@ -28,14 +28,14 @@ export function planTargetRepair(registration: ReadableInstallationRegistration,
 
   const { canonicalRoot, device, inode } = target, previous = entry.attachment;
   const decimalDevice = /^\d{1,20}$/u;
-  const proved = new Set([...lineage.pastDevices, lineage.headDevice, identity.binding.device]);
   if (previous.location.canonicalRoot !== canonicalRoot || previous.location.inode !== inode || !decimalDevice.test(device)
-    || (previous.schemaVersion === 1 && (!decimalDevice.test(previous.location.device) || !proved.has(previous.location.device)))) return null;
+    || (previous.schemaVersion === 1 && !decimalDevice.test(previous.location.device))) return null;
   if (assessAttachmentLocation(previous.location, target)) {
     if (!fits(previous, registration)) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
     return { attachment: previous, registration: null, operationId: lineage.headIntentId };
   }
-  if (previous.schemaVersion !== 1) return null;
+  const proved = new Set([...lineage.pastDevices, lineage.headDevice, identity.binding.device]);
+  if (previous.schemaVersion !== 1 || !proved.has(previous.location.device)) return null;
 
   const candidate = (attachment: ReadableProjectAttachment) => {
     const entries = registration.entries.map(item => item === entry ? { ...item, attachment } : item);
