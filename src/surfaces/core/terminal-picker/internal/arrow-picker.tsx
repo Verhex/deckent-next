@@ -23,13 +23,14 @@ function filterPickerRows(rows: readonly string[], filter: string): readonly num
 }
 
 export function ArrowPicker(props: {
+  /** Column limit before reserving the last cell. */
   readonly maxColumns?: number;
   readonly rows: readonly string[];
   /** Optional already projected display spans; selection still binds the original row index. */
   readonly styledRows?: readonly (readonly Span[])[];
   readonly details?: readonly (string | undefined)[];
-  /** Resolve a visible row before drawing it, then commit that projection with the viewport. */
-  readonly projectDrawnRow?: ((index: number) => { readonly spans: readonly Span[]; readonly onDrawn: () => void }) | undefined;
+  /** Resolve a viewport row before drawing it, then commit with the text left after clipping. */
+  readonly projectDrawnRow?: ((index: number) => { readonly spans: readonly Span[]; readonly onDrawn: (visibleText: string) => void }) | undefined;
   readonly onSelect: (index: number) => void;
   readonly onCancel: () => void;
   /** False while another window owns the keyboard (the window stack); default true. */
@@ -79,12 +80,16 @@ export function ArrowPicker(props: {
   const shown = filterPickerRows(props.rows, filterText);
   const index = pickerChoice(selectedRef.current, shown.length);
   const first = pickerFirstRow(index, shown.length, ARROW_PICKER_ROWS);
-  const drawn = shown.slice(first, first + ARROW_PICKER_ROWS).map(original => {
-    const projected = props.projectDrawnRow?.(original);
-    return { original, text: projected ? projected.spans.map(item => item.text).join('') : props.rows[original]!,
-      spans: projected?.spans ?? props.styledRows?.[original], onDrawn: projected?.onDrawn };
-  });
   const width = Math.max(1, Math.min(columns || FALLBACK_COLUMNS, props.maxColumns ?? Number.MAX_SAFE_INTEGER) - 1);
+  const drawn = shown.slice(first, first + ARROW_PICKER_ROWS).map((original, offset) => {
+    const projected = props.projectDrawnRow?.(original);
+    const text = projected ? projected.spans.map(item => item.text).join('') : props.rows[original]!;
+    const selected = first + offset === index, marker = selected ? '> ' : '  ';
+    const marked = marker + text, fitted = truncateEnd(marked, width, glyphs.ellipsis);
+    const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
+    return { original, text, selected, marker, fitted, visible, spans: projected?.spans ?? props.styledRows?.[original],
+      onDrawn: projected && (() => projected.onDrawn(marked.slice(marker.length, visible))) };
+  });
   useLayoutEffect(() => { for (const row of drawn) row.onDrawn?.(); }, [drawn]);
   useCardCopyOptions(drawn.map(row => row.text));
   void generation;
@@ -92,18 +97,12 @@ export function ArrowPicker(props: {
     <Box flexDirection="column">
       {props.filter ? <Text {...palette.muted} wrap="truncate">{truncateEnd(props.filter.prompt(filterText), width, glyphs.ellipsis)}</Text> : null}
       {props.filter && shown.length === 0 ? <Text {...palette.warning} wrap="truncate">{props.filter.none}</Text> : null}
-      {drawn.map(({ original, text, spans: projected }, offset) => {
-        const at = first + offset;
-        const marked = `${at === index ? '>' : ' '} ${text}`;
-        const fitted = truncateEnd(marked, width, glyphs.ellipsis);
-        const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
-        return (
-          <Text key={original} wrap="truncate" {...(at === index ? palette.selection : {})}>
-            {projected ? <SpanText selected={at === index} spans={[...sliceSpans([span(`${at === index ? '>' : ' '} `), ...projected], 0, visible),
-              ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
-          </Text>
-        );
-      })}
+      {drawn.map(({ original, selected, marker, fitted, visible, spans: projected }) => (
+        <Text key={original} wrap="truncate" {...(selected ? palette.selection : {})}>
+          {projected ? <SpanText selected={selected} spans={[...sliceSpans([span(marker), ...projected], 0, visible),
+            ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
+        </Text>
+      ))}
       {shown.length > 0 && props.details?.[shown[index]!] ? <Text {...palette.warning} wrap="wrap">{props.details[shown[index]!]}</Text> : null}
       {shown.length > first + ARROW_PICKER_ROWS
         ? <Text {...palette.muted} wrap="truncate">{`  +${shown.length - first - ARROW_PICKER_ROWS}`}</Text> : null}

@@ -37,10 +37,11 @@ const mounted: ReturnType<typeof mountWorkline>[] = [];
 let renderDir: string;
 beforeEach(async () => { captured.entries = []; captured.seen = new WeakSet(); renderDir = await mkdtemp(join(tmpdir(), 'sw2-window-render-')); });
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); vi.useRealTimers(); await rm(renderDir, { recursive: true, force: true }); });
-const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false) => {
+const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false,
+  screen?: { readonly columns: number; readonly onFrame: (frame: string) => void }) => {
   const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale),
     ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS, focus: { composer: 'INPUT FOCUS', window: 'WINDOW FOCUS' } } : {}) };
-  const view = mountWorkline({ labels, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
+  const view = mountWorkline({ labels, ledger, pollMs: 60_000 }, screen?.columns ?? 100, { rows, ...screen }); mounted.push(view);
   await settle(30); view.stdin.write(`${command}\r`); return view;
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
@@ -58,16 +59,33 @@ async function chooseScrolledTranscript() {
     ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
   }));
   const intervening = { ...first, identity: { ...first.identity!, attemptId: `80${attemptId.slice(2)}` } };
-  let workers = [...visible, first, eighth!];
+  let workers = [visible[1]!, visible[0]!, ...visible.slice(2), first, eighth!];
   const inspect = vi.fn(base.inspectTranscript!);
   const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
-  const view = await open('/transcript', ledger, 'en', 24, true);
+  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
+  // The terminal has room for the number, but the window's border and padding take it away.
+  const drawn = Promise.withResolvers<string>(), closed = Promise.withResolvers<void>();
+  const view = await open('/transcript', ledger, 'en', 24, true, { columns: 10, onFrame: frame => {
+    const row = frame.split('\n').find(line => line.includes('> T'));
+    if (row) drawn.resolve(row);
+    else if (captured.entries.length > 0) closed.resolve();
+  } });
+  expect(await drawn.promise).not.toContain('Task 1');
+  view.stdin.write('\u0003');
+  await closed.promise;
+
+  workers = [...visible, first, eighth!];
+  await runLedgerCommand('transcript', '1', ledger, labels);
+  expect(inspect.mock.calls).toEqual([[visible[0]!.identity]]);
+  captured.entries = [];
+  Object.assign(view.stdout, { columns: 100 }); view.stdout.emit('resize');
+  await view.instance.waitUntilRenderFlush();
+  view.stdin.write('/transcript\r');
   await until(() => view.stdout.frame.includes('> Task 1'), 'worker picker');
   expect(view.stdout.frame).not.toContain('Task 7');
 
   // An out-of-range read lets us observe which Attempt a number resolves to without binding it.
   workers = [...visible.slice(1), first, visible[0]!, eighth!];
-  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
   await runLedgerCommand('transcript', '7 9', ledger, labels);
   expect(inspect).toHaveBeenLastCalledWith(visible[0]!.identity);
 

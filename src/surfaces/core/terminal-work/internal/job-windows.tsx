@@ -29,7 +29,7 @@ export interface JobWindowLabels {
 }
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
   | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[];
-    projectDrawnRow?: (index: number) => { readonly spans: readonly Span[]; readonly onDrawn: () => void } }>;
+    projectDrawnRow?: (index: number) => { readonly spans: readonly Span[]; readonly onDrawn: (visibleText: string) => void } }>;
 
 /** Only projections, not hashes or command text, provide a run's human title. A generated id shows its head; a human task id stays whole (F2-6). */
 export function displayId(value: string): string { return shortId(value); }
@@ -103,7 +103,8 @@ export function JobWindow({ value, work, onAnswer }: { readonly value: JobWindow
   if (value.kind === 'job-picker') {
     const rows = value.rows.map(projectSpans), projectDrawnRow = value.projectDrawnRow;
     return <Window title={title} hints={work.window.pick} position={work.window.position} footerRows={ARROW_PICKER_ROWS + 2}
-      footer={active => <ArrowPicker rows={rows.map(row => row.map(item => item.text).join(''))} styledRows={rows} active={active}
+      footer={(active, width) => <ArrowPicker rows={rows.map(row => row.map(item => item.text).join(''))} styledRows={rows} active={active}
+        {...(projectDrawnRow ? { maxColumns: width + 1 } : {})}
         projectDrawnRow={projectDrawnRow && (index => {
           const row = projectDrawnRow(index);
           return { ...row, spans: projectSpans(row.spans) };
@@ -153,6 +154,7 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
     return fillTemplate(labels.closed, { title: labels.transcriptTitle });
   }
   const ordinals = workers.map(worker => workerDisplayOrdinal(ledger, worker.attempt!, worker.ordinal));
+  const ordinalPrefix = work.workerLine.ordinal.split('{n}', 1)[0]!;
   const rowSpans = (worker: WorkLedgerWorkerEntry, ordinal: number | undefined) => [
     span(fillTemplate(work.workerLine.ordinal, { n: ordinal ?? worker.attempt!.attemptId }), { bold: true }),
     span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })];
@@ -165,9 +167,9 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
     rows: workers.map((worker, index) => rowSpans(worker, ordinals[index])),
     projectDrawnRow: index => {
       const worker = workers[index]!, ordinal = safeOrdinal(index);
-      return { spans: rowSpans(worker, ordinal), onDrawn: () => {
+      return { spans: rowSpans(worker, ordinal), onDrawn: visibleText => {
         ordinals[index] = ordinal;
-        pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
+        if (ordinal !== undefined && visibleText.startsWith(`${ordinalPrefix}${ordinal}`)) pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
       } };
     },
   }, workers.map((_, index) => String(index)));
