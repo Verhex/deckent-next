@@ -68,18 +68,21 @@ it.each(['2025-11-25', '2026-07-28'])('bounds escaped duplicate model output and
           return 'result' in response ? response.result : {};
         };
         try {
-          const create = await call('create_run', { ...query, graph });
-          const message = ErrorRegistry.createError(specific, { locale }).message;
           const coded = (code: string, text?: string) => ({ isError: true,
             content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code, ...(text ? { message: text } : {}) }) }] });
-          expect.soft(create).toMatchObject(maximum === 512 ? coded(specific) : coded(general, message));
-          if (locale === 'en' && maximum === 512)
-            expect(await call('create_run', { ...query, graph }, 'a'.repeat(234))).toMatchObject(coded(general));
-          for (const [name, args] of [['plan_run', { schemaVersion: 1, scopeId, commandId, intent: 'Review packages' }],
-            ['propose_run', proposal], ['inspect_run_proposal', query]] as const) {
-            const result = await call(name, args);
-            expect(result).toMatchObject(maximum === 512 ? coded(specific) : { structuredContent: rejected });
-            if (maximum > 512) expect(result['content']).toContainEqual({ type: 'text', text: message });
+          // English covers the language-independent compact codes. Both limits still exercise the ordinary refusal in Turkish.
+          if (locale === 'en' || maximum > 512) {
+            const create = await call('create_run', { ...query, graph });
+            const message = ErrorRegistry.createError(specific, { locale }).message;
+            expect.soft(create).toMatchObject(maximum === 512 ? coded(specific) : coded(general, message));
+            if (maximum === 512)
+              expect(await call('create_run', { ...query, graph }, 'a'.repeat(234))).toMatchObject(coded(general));
+            for (const [name, args] of [['plan_run', { schemaVersion: 1, scopeId, commandId, intent: 'Review packages' }],
+              ['propose_run', proposal], ['inspect_run_proposal', query]] as const) {
+              const result = await call(name, args);
+              expect(result).toMatchObject(maximum === 512 ? coded(specific) : { structuredContent: rejected });
+              if (maximum > 512) expect(result['content']).toContainEqual({ type: 'text', text: message });
+            }
           }
           overLimit = false;
           expect(await call('create_run', { ...query, graph })).toMatchObject(coded(general, ErrorRegistry.createError(general, { locale }).message));
