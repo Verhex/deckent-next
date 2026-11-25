@@ -680,6 +680,8 @@
   "error.APPROVAL_INTERACTIVE_REQUIRED": "Onay kararı etkileşimli terminal girişi/çıkışı veya açık AI yetki politikası izni gerektirir. Terminal kanıtı insan kimliğini kanıtlamaz. Hiçbir karar kaydedilmedi.",
   "error.APPROVAL_ASSURANCE_INSUFFICIENT": "Bu onay bu yüzeyin sağladığından daha güçlü karar güvencesi gerektirir. Talebi açan turun terminal kartını kullanın. Hiçbir karar kaydedilmedi.",
   "error.MCP_SERVER_UNKNOWN": "Bu proje için {name} adlı MCP sunucusu kayıtlı değil.",
+  "error.MCP_SERVER_CHANGED": "Seçtiğiniz MCP sunucusu değişti. Listeyi açıp güncel sunucuyu yeniden onaylayın.",
+  "error.MCP_SERVER_UNVERIFIED": "Seçtiğiniz MCP sunucusu doğrulanamadı. Kayıt dosyasının okunabildiğini kontrol edip listeyi yeniden açın.",
   "error.MCP_SERVER_EXISTS": "{scope} kapsamında {name} adlı MCP sunucusu zaten var; önce kaldırın.",
   "error.MCP_SERVER_SCOPE_AMBIGUOUS": "{name} birden çok kapsamda kayıtlı ({scopes}); --scope verin.",
   "error.MCP_SERVER_ENTRY_INVALID": "{name} MCP sunucu girdisi geçersiz ({reason}).",

@@ -9,12 +9,14 @@ import { askMcpCard, mcpCancelled, mcpConfirmOptions, mcpLaunchText, mcpSafe, mc
   type McpListedServer } from './mcp-view.js';
 
 type Scope = 'local' | 'project' | 'user';
+type McpSelection = Pick<McpListedServer, 'scope' | 'definitionDigest'>;
 /** One `deckent mcp` request as the host runs it (the adapter's `McpCommandRequest`; the surface does not import adapters). */
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
-  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
+  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope; readonly selected?: McpSelection }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined; readonly unattended?: boolean }
-  | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
+  | { readonly verb: 'reset' | 'reconnect'; readonly name: string }
+  | { readonly verb: 'revoke'; readonly name: string; readonly selected?: McpSelection }
   | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
  * surface's (the host renders `lastStart.text` in it). */
@@ -157,7 +159,8 @@ async function mcpAct(context: CommandContext, locale: Locale, server: McpListed
     const answer = await askMcpCard(context, locale, { title: verb === 'revoke' ? t('climodels.mcp.card.revoke', { name: mcpSafe(server.name) }, locale) : t('climodels.mcp.card.remove', { name: mcpSafe(server.name) }, locale), body, options: mcpConfirmOptions(locale) });
     if (answer !== 'apply') { mcpCancelled(context, locale); return EXIT_CODES.error; }
   }
-  const request: McpCommandRequest = verb === 'remove' ? { verb, name: server.name, scope: server.scope as Scope } : { verb, name: server.name };
+  const { name, scope, definitionDigest } = server;
+  const request: McpCommandRequest = verb === 'approve' ? { verb, name } : { verb, name, selected: { scope, definitionDigest } };
   const result = await context.runMcpCommand!(root, request, options, trustAsker(context, locale), locale);
   emit(result, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: value => mcpResultText(value, verb, locale) });
   return mcpActionExit(request, result);

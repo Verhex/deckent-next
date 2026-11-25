@@ -31,7 +31,7 @@ export function mcpWizardSteps(transport: McpServerDraft['transport']): readonly
 type Draft = { transport: McpServerDraft['transport']; name: string; target: string; args: string[]; env: Record<string, string>; headers: Record<string, string>; realm: string;
   scope: McpServerDraft['scope'] };
 const emptyDraft = (): Draft => ({ transport: 'stdio', name: '', target: '', args: [], env: {}, headers: {}, realm: '', scope: 'local' });
-type View = Readonly<{ kind: 'list' } | { kind: 'detail'; name: string; lines: readonly PanelLine[] } | { kind: 'confirm'; name: string }
+type View = Readonly<{ kind: 'list' } | { kind: 'detail'; name: string; lines: readonly PanelLine[] } | { kind: 'confirm'; server: McpPanelList['servers'][number] }
   | { kind: 'wizard'; step: WizardStep; problem?: string } | { kind: 'busy' } | { kind: 'question'; question: McpTrustQuestion }>;
 /** Registry refusals of a name, checked before any trust card: the wizard goes back to its name step with the reason. */
 const NAME_REFUSALS: ReadonlySet<string> = new Set(['MCP_SERVER_NAME_INVALID', 'MCP_SERVER_EXISTS']);
@@ -62,6 +62,7 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   const [view, setView] = useState<View>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
+  const actionList = useRef<McpPanelList | null>(null);
   const draft = useRef<Draft>(emptyDraft());
   const answer = useRef<((value: boolean | null) => void) | null>(null);
   const checking = useRef<AbortController | null>(null);
@@ -83,7 +84,10 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   useEffect(() => { void reload().catch(error => { if (!checking.current?.signal.aborted) { exits.current.onError(error); exits.current.onClose(); } });
     return () => { checking.current?.abort(); answer.current?.(null); answer.current = null; };
   }, [reload]);
-  const back = (at: PickerState = PICKER_INITIAL) => { setState(at); setGeneration(value => value + 1); setView({ kind: 'list' }); };
+  const back = (at: PickerState = PICKER_INITIAL) => {
+    if (!at.trail.length) actionList.current = null;
+    setState(at); setGeneration(value => value + 1); setView({ kind: 'list' });
+  };
   const ask = (question: McpTrustQuestion) => new Promise<boolean | null>(resolve => { answer.current = resolve; setView({ kind: 'question', question }); });
   const run = async (work: () => Promise<readonly string[]>) => {
     checking.current?.abort();
@@ -97,8 +101,8 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   if (view.kind === 'question') return <QuestionWindow title={view.question.title} lines={view.question.lines} hints={view.question.prompt || words.trustKeys} position={labels.position}
     onAnswer={value => { const resolve = answer.current; answer.current = null; setView({ kind: 'busy' }); resolve?.(value); }} />;
   if (view.kind === 'detail') return <LinesWindow title={view.name} lines={view.lines} hints={words.hints} position={labels.position} onClose={() => back(state)} />;
-  if (view.kind === 'confirm') return <QuestionWindow title={`${words.actions.remove}: ${view.name}`} lines={[]} hints={words.trustKeys} position={labels.position}
-    onAnswer={value => { if (value) void run(() => port.remove(view.name)); else back(state); }} />;
+  if (view.kind === 'confirm') return <QuestionWindow title={`${words.actions.remove}: ${view.server.name}`} lines={[]} hints={words.trustKeys} position={labels.position}
+    onAnswer={value => { if (value) void run(() => port.remove(view.server.name, view.server.selected)); else back(state); }} />;
   if (view.kind === 'wizard') return <McpWizard step={view.step} problem={view.problem ?? null} port={port} labels={labels} draft={draft.current}
     onStep={step => setView({ kind: 'wizard', step })} onCancel={() => back()}
     onDone={finished => { checking.current?.abort(); setView({ kind: 'busy' }); port.add(finished, ask).then(async lines => { push([{ level: 'info', text: lines.join('\n') }]);
@@ -109,19 +113,26 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
       if (code === 'MCP_SERVER_ENTRY_INVALID') { setView({ kind: 'wizard', step: draft.current.transport === 'http' ? 'url' : 'command', problem: errorText(error) }); return; }
       onError(error); back();
     }); }} />;
+  const shown = actionList.current ?? list;
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { checking.current?.abort(); onClose(); return; }
     if (result.id === ADD) { draft.current = emptyDraft(); setView({ kind: 'wizard', step: 'transport' }); return; }
     const [name, action] = result.path;
-    if (!name || !action) { back(at); return; }
+    const server = (actionList.current ?? shown).servers.find(row => row.name === name);
+    if (!name || !action || !server) { back(at); return; }
     if (action === 'detail') { setView({ kind: 'busy' }); port.detail(name).then(lines => setView({ kind: 'detail', name, lines }), error => { onError(error); back(at); }); return; }
-    if (action === 'remove') { setView({ kind: 'confirm', name }); return; }
-    const key = list.servers.find(server => server.name === name)?.grantKey;
-    void run(() => action === 'grant' && key && port.grantKey ? port.grantKey(name, key, ask) : action === 'approve' ? port.approve(name, ask) : action === 'revoke' ? port.revoke(name) : port.reconnect(name));
+    if (action === 'remove') { setView({ kind: 'confirm', server }); return; }
+    const key = server.grantKey;
+    void run(() => action === 'grant' && key && port.grantKey ? port.grantKey(name, key, ask) : action === 'approve' ? port.approve(name, ask) : action === 'revoke' ? port.revoke(name, server.selected) : port.reconnect(name));
   };
-  const body: WindowLine[] = list.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
-  return <PickerWindow title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} bodyRows={BODY_ROWS}
-    tree={mcpPanelTree(list, words, glyphs.ascii)} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+  const body: WindowLine[] = shown.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
+  return <PickerWindow title={[span(words.title)]} body={[...body, ...shown.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} bodyRows={BODY_ROWS}
+    tree={mcpPanelTree(shown, words, glyphs.ascii)} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state}
+    onState={next => {
+      // Health refresh can update the list while the action menu is open.
+      actionList.current = next.trail.length ? shown : null;
+      setState(next);
+    }}
     onResult={result => chosen(result, state)} />;
 }
 

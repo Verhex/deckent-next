@@ -59,11 +59,11 @@ export const findMcpTrust = (state: McpTrustState, scopeName: McpTrustRecord['sc
   state.servers.find(record => record.scope === scopeName && record.name === name) ?? null;
 
 /** An unreadable record is never overwritten, and two writers never lose each other's change. */
-export async function updateMcpTrust(directory: string, change: (state: McpTrustState) => McpTrustState['servers']): Promise<McpTrustState> {
+export async function updateMcpTrust(directory: string, change: (state: McpTrustState) => McpTrustState['servers'] | Promise<McpTrustState['servers']>): Promise<McpTrustState> {
   return withConfigWriteLock(join(directory, MCP_TRUST_FILE), async () => {
     const current = await readMcpTrust(directory);
     if (!current.ok) throw ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason: current.reason } });
-    const next = fileSchema.parse({ schemaVersion: 1, revision: current.state.revision + 1, servers: change(current.state) });
+    const next = fileSchema.parse({ schemaVersion: 1, revision: current.state.revision + 1, servers: await change(current.state) });
     const temporary = join(directory, `.${MCP_TRUST_FILE}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
     const handle = await open(temporary, 'wx', 0o600);
     try { await handle.writeFile(`${JSON.stringify(next, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }

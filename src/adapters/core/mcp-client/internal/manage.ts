@@ -102,6 +102,9 @@ const resolveFiles = (context: McpRegistryContext, paths: ReturnType<typeof mcpR
 /** The status rule shared by the registry view and send admission (`expanded`: the entry's launch values expand). */
 const statusOf = (trustOk: boolean, record: McpTrustRecord | null, digest: string, expanded: boolean): McpServerStatus => !trustOk ? 'trust-store-unavailable' : !record ? 'pending-approval' : record.definitionDigest !== digest ? 'changed' : record.decision === 'declined' ? 'declined' : expanded ? 'trusted' : 'invalid-launch';
 const sendRefusalOf = (status: McpServerStatus): McpSendRefusal | null => status === 'trusted' ? null : status === 'trust-store-unavailable' ? 'trust-unavailable' : status === 'pending-approval' || status === 'declined' ? 'trust-revoked' : 'definition-changed';
+type McpSelection = { readonly scope: string; readonly definitionDigest: string };
+const matchesSelection = (server: McpSelection | undefined, selected: McpSelection) =>
+  server?.scope === selected.scope && server.definitionDigest === selected.definitionDigest;
 type VerifiedSendRefusal = Exclude<McpSendRefusal, 'trust-unavailable'>;
 /**
  * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — both registry files and the bound scope's trust record are read again
@@ -137,7 +140,7 @@ export function mcpSendAuthority(registry: McpRegistryContext) {
       if (!server) return !boundTrust.ok || resolved.problems.some(problem => problem.name === call.server) ? 'trust-revoked' : verified('trust-revoked');
       const trust = (server.scope === 'user') === (binding.scope === 'user') ? boundTrust : await storeOf(mcpTrustDirectory(server.scope, registry));
       if (!trust.ok) return 'trust-unavailable';
-      if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return verified('definition-changed');
+      if (!matchesSelection(server, binding)) return verified('definition-changed');
       const record = findMcpTrust(trust.state, server.scope, server.name);
       const refusal = sendRefusalOf(statusOf(true, record, server.definitionDigest, true));
       if (refusal) return refusal === 'trust-unavailable' ? refusal : verified(refusal);
@@ -160,10 +163,11 @@ export function mcpClientSettings(view: McpRegistryView, limits: { readonly resu
 /** One registry command (`deckent mcp …`, `/mcp`). Trust decisions show their cards through `ask` and write only product state, audited. */
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Exclude<McpScope, 'managed'>; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
-  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Exclude<McpScope, 'managed'> }
+  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Exclude<McpScope, 'managed'>; readonly selected?: McpSelection }
   /** `unattended`: approved without a card (`--yes`); refused for a record waiting for its re-approval (D6: by card only). */
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined; readonly unattended?: boolean }
-  | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
+  | { readonly verb: 'reset' | 'reconnect'; readonly name: string }
+  | { readonly verb: 'revoke'; readonly name: string; readonly selected?: McpSelection };
 export interface McpCommandContext extends McpRegistryContext {
   readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly issuer: string; readonly subject: string };
@@ -189,10 +193,20 @@ const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layou
 }
 const fail = (code: string, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params });
 
-async function mutateRegistry<T>(path: string, mode: number, change: (raw: Record<string, unknown>) => T): Promise<T> {
+function verifyRevokeSelection(server: McpSelection | null, selected: McpSelection, projectFailed: boolean, personalFailed: boolean): void {
+  // A failed read only prevents verification when that file holds the selected scope.
+  if ((selected.scope === 'project' && projectFailed) ||
+      ((selected.scope === 'local' || selected.scope === 'user') && personalFailed))
+    throw fail('MCP_SERVER_UNVERIFIED');
+  if (!matchesSelection(server ?? undefined, selected)) throw fail('MCP_SERVER_CHANGED');
+}
+
+async function mutateRegistry<T>(path: string, mode: number, change: (raw: Record<string, unknown>) => T | Promise<T>, selectedKind?: 'project' | 'personal'): Promise<T> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   return withConfigWriteLock(path, async () => {
-    const raw = await rawFile(path), result = change(raw);
+    const current = selectedKind && await readMcpRegistryFile(path, selectedKind);
+    if (current && !current.ok) throw fail('MCP_SERVER_UNVERIFIED');
+    const raw = current ? current.raw ?? {} : await rawFile(path), result = await change(raw);
     const temporary = join(dirname(path), `.mcp.json.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
     const handle = await open(temporary, 'wx', mode);
     try { await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
@@ -298,8 +312,10 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     return { schemaVersion: 1, added, trust: decided.decision, pinnedTools: decided.pinned, ...(grant ? { grant } : {}) };
   }
   if (request.verb === 'remove') {
+    const { selected, name } = request;
     const holders: Exclude<McpScope, 'managed'>[] = [];
     for (const scope of ['local', 'project', 'user'] as const) {
+      if (selected) { if (selected.scope === scope) holders.push(scope); continue; }
       if (request.scope && request.scope !== scope) continue;
       const servers = serversOf(await rawFile(fileOf(view, scope)), scope, view.projectKey, false);
       if (servers && Object.hasOwn(servers, request.name)) holders.push(scope);
@@ -309,17 +325,39 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     const scope = holders[0]!, path = fileOf(view, scope), held = view.servers.find(server => server.name === request.name && server.scope === scope);
     // MCP-REGISTRY-AUDIT: the audited revoke first, the registry file after it; a failed audit changes nothing, a failed registry write leaves the
     // server untrusted (it asks again), never trusted without its audit.
-    const grant = await recordMcpTrust({ name: request.name, scope, definitionDigest: held?.definitionDigest ?? '0'.repeat(64) }, trustContext, 'revoke', () => null);
-    await mutateRegistry(path, scope === 'project' ? 0o644 : 0o600, raw => { delete serversOf(raw, scope, view.projectKey, false)![request.name]; });
-    await forgetFailure(scope, request.name);
-    return { schemaVersion: 1, removed: { name: request.name, scope, file: path }, ...(grant && grant.status !== 'none' ? { grant } : {}) };
+    const withdraw = (definitionDigest: string) => recordMcpTrust({ name, scope, definitionDigest }, trustContext, 'revoke', () => null);
+    const namedGrant = selected ? null : await withdraw(held?.definitionDigest ?? '0'.repeat(64));
+    const grant = await mutateRegistry(path, scope === 'project' ? 0o644 : 0o600, async raw => {
+      const servers = serversOf(raw, scope, view.projectKey, false);
+      let result = namedGrant;
+      if (selected) {
+        const entry = mcpServerEntrySchema.safeParse(servers && Object.hasOwn(servers, name) ? servers[name] : undefined);
+        if (!entry.success || mcpScopedDigest(name, scope, entry.data, context.environment, context.knownSecrets) !== selected.definitionDigest)
+          throw fail('MCP_SERVER_CHANGED');
+        result = await withdraw(selected.definitionDigest);
+      }
+      delete servers![name];
+      return result;
+    }, selected ? scope === 'project' ? 'project' : 'personal' : undefined);
+    await forgetFailure(scope, name);
+    return { schemaVersion: 1, removed: { name, scope, file: path }, ...(grant && grant.status !== 'none' ? { grant } : {}) };
   }
   const server = find(request.name);
+  const selected = request.verb === 'revoke' ? request.selected : undefined;
+  if (selected) {
+    const fileFailed = (path: string) => view.problems.some(problem => problem.name === null && problem.file === path);
+    verifyRevokeSelection(server, selected, fileFailed(view.paths.project), fileFailed(view.paths.personal));
+  }
   if (!server) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
+  // Decision 14 (b): both forget this server's trust and withdraw the approver's tool grant. The next use asks again.
   if (request.verb === 'reset' || request.verb === 'revoke') {
-    // Decision 14 (b): both forget this server's decision and take the approver's tool grant with it (K1); the entry stays and its next use asks
-    // again with the cards (`/mcp approve` resets first: a decline is not final). Only the audit action and the answer key differ.
-    const grant = await recordMcpTrust(server, trustContext, request.verb, () => null);
+    const grant = await recordMcpTrust(server, trustContext, request.verb, () => null, selected && (async current => {
+      const { paths, projectKey } = view;
+      const [project, personal] = await Promise.all([readMcpRegistryFile(paths.project, 'project'), readMcpRegistryFile(paths.personal, 'personal', projectKey)]);
+      const effective = resolveFiles(context, paths, project, personal).servers.find(entry => entry.name === request.name) ?? null;
+      verifyRevokeSelection(effective, selected, !project.ok, !personal.ok);
+      if (current && !matchesSelection(current, selected)) throw fail('MCP_SERVER_CHANGED');
+    }));
     await forgetFailure(server.scope, server.name);
     return { schemaVersion: 1, [request.verb === 'reset' ? 'reset' : 'revoked']: { name: server.name, scope: server.scope }, ...(grant && grant.status !== 'none' ? { grant } : {}) };
   }
