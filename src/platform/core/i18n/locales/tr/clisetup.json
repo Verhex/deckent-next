@@ -43,6 +43,7 @@
   "clisetup.coding.card.cancel": "Vazgeç, hiçbir şey yazma",
   "clisetup.coding.card.cancelled": "Vazgeçildi; yapılandırma değişmedi.",
   "clisetup.coding.card.changed": "Kartta gösterilen öneri değiştiği için güncel öneriyi görmek üzere deckent coding template ile kılavuzu yeniden açın.",
+  "clisetup.coding.card.unchanged": "Bu işlem yapılandırmaya yazmadı. Görev türünün güncel kodlama profili aşağıda gösteriliyor.",
   "clisetup.coding.result.profile": "Profil: {profile}",
   "clisetup.coding.result.kind": "Görev türü: {kind}",
   "clisetup.coding.result.toolchain": "CLI: {provider} {cli} · imaj {image}",
