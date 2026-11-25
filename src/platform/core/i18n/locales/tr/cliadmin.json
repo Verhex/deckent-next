@@ -97,6 +97,7 @@
   "cli.backup.done.create": "Yedek oluşturuldu: {set} ({files} dosya, {made}).",
   "cli.backup.done.verify": "Yedek doğrulandı: {set} özgün ({files} dosya, oluşturma {made}).",
   "cli.backup.done.restore": "Yedek geri yüklendi: {set} (oluşturma {made}).",
+  "cli.backup.restore.incomplete": "Yedeği geri yükleme tamamlanmadı. Aynı `deckent backup restore` komutunu aynı yedek kümesi ve hedefle yeniden çalıştırın. İşlem hâlâ duruyorsa kurulum yöneticisinden yardım isteyin.",
   "cli.backup.done.preserved": "Değiştirilen dosyalar yanlarında saklandı: {paths}",
   "error.BACKUP_SET_REQUIRED": "{action} işlemi kurtarma setini ister: --set <yol> ekleyin. Varsayılan klasördeki setler: {sets}. Listelemek için: deckent backup",
   "error.BACKUP_PASSPHRASE_PROMPT_UNAVAILABLE": "Bu terminal yazılanı gizleyemiyor, bu yüzden parola sorulmadı. Parolayı standart girdiden verin (asla argüman olarak değil) ve yeniden çalıştırın.",

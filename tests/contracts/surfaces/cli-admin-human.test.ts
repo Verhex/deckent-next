@@ -3,6 +3,7 @@ import { rebindEvent, rebindIds, sealFutureAuditFixture } from '../../fixtures/a
 import { createHmacIntegrity } from '#platform/index.js';
 import { refusalSubject } from '../../fixtures/audit-refusal.js';
 import type { AuditListView, AuditEvent } from '#domain/index.js';
+import { ProjectAttachmentError } from '#engine/index.js';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
@@ -200,6 +201,14 @@ it('backup restore on a terminal: a running service is refused before the passph
   expect(executed).toEqual([{ command: expect.objectContaining({ action: 'restore', set: '/srv/r/manual-set', target: resolve(f.root), confirmTarget: resolve(f.root), scopeId: 'live' }), passphrase: CANARY }]);
   expect(stopped.out.text()).toContain('Replaced files kept next to them: /p/.deckent/policy.json.damaged-1');
   expect(stopped.out.text() + stopped.err.text()).not.toContain(CANARY);
+
+  card.answers = ['live', '/srv/r/manual-set', 'apply'];
+  const incomplete = io(f, { ...handlers(false), stdin: piped(`${CANARY}\n`),
+    executeBackup: async () => { throw new ProjectAttachmentError('PROJECT_ATTACHMENT_INCOMPLETE'); } });
+  const en = 'The backup restore is unfinished. Rerun the same `deckent backup restore` command with the same backup set and target. If it is still blocked, ask an installation administrator for help.';
+  const code = await main(['backup', 'restore'], incomplete.context);
+  expect.soft([code, incomplete.err.text(), incomplete.out.text()]).toEqual([1, `Error: ${en} [PROJECT_ATTACHMENT_INCOMPLETE]\n`, '']);
+  expect(t('cli.backup.restore.incomplete', {}, 'tr')).toBe('Yedeği geri yükleme tamamlanmadı. Aynı `deckent backup restore` komutunu aynı yedek kümesi ve hedefle yeniden çalıştırın. İşlem hâlâ duruyorsa kurulum yöneticisinden yardım isteyin.');
 });
 
 // ---- secret -----------------------------------------------------------------------------------------------------------------------------

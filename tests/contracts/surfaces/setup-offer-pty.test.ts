@@ -233,8 +233,8 @@ async function expectUnfinishedAttachmentStops(f: Awaited<ReturnType<typeof fixt
     expect(scope, pending.output).toBeDefined();
     const command = `deckent terminal attach --scope ${scope} --preview`;
     const explanation = lang.startsWith('tr')
-      ? `Proje bağlantısı tamamlanmadı. Güncel planı \`${command}\` ile önizleyin. Devam edebiliyorsanız önizlemedeki uygulama komutunu çalıştırın.`
-      : `The attachment did not complete. Preview the current plan with \`${command}\`. If you can proceed, run the apply command from the preview.`;
+      ? `Proje bağlantısı tamamlanmadı. Güncel planı \`${command}\` ile önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin.`
+      : `The attachment did not complete. Preview the current plan with \`${command}\`. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help.`;
     expect(pending.output).toContain(`${explanation} [PROJECT_ATTACHMENT_INCOMPLETE]`);
     expect.soft(pending.status, `unfinished attachment (${lang})`).toBe(1);
     expect(pending.output).not.toMatch(/deckent workline|Step 1\/|Adım 1\/|Runtime service started|deckent servisi arka planda başlatıldı/u);

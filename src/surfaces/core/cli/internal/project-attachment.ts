@@ -41,6 +41,7 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       usage: missing ? t('cli.help.bare.missing', { argument: flag! }, locale) + '\n' + t('cli.help.bare.details', { command: commandPath }, locale) : t('setup.attachment.help', {}, locale),
     } });
   }
+  const action = parsed.data.action;
   if (apply) {
     if (cliMode(context, switches.has('--json')).reason !== 'tty') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'project.attach' } });
     const actionLabel = { register: t('setup.attachment.register', {}, locale), apply: t('setup.attachment.apply', {}, locale),
@@ -50,7 +51,6 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       revoke: t('setup.attachment.title.revoke', {}, locale), 'lease-revoke': t('setup.attachment.title.leaseRevoke', {}, locale),
       detach: t('setup.attachment.title.detach', {}, locale), unregister: t('setup.attachment.title.unregister', {}, locale),
       relocate: t('setup.attachment.title.relocate', {}, locale), restore: t('setup.attachment.title.restore', {}, locale) };
-    const action = parsed.data.action;
     const answer = await askCliCard({ title: actionTitle[action as keyof typeof actionTitle], body: [t('setup.attachment.body', { action: action in actionLabel ? actionLabel[action as keyof typeof actionLabel] : action,
       path: terminalSafeText(root), scope: terminalSafeText(scopeId ?? revoke ?? '') }, locale)],
       options: [{ id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'no' },
@@ -64,9 +64,15 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
   let result: unknown;
   try {
     result = await context.projectAttachment(root, parsed.data, options, interaction);
+    if (action === 'apply' && (result as { status?: unknown } | null)?.status !== 'attached') {
+      throw ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE', { locale });
+    }
   } catch (error) {
-    if (parsed.data.action !== 'apply' || !isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
-    await reportFatal(ErrorRegistry.createError(error.code, { locale }), { ...context, locale });
+    if ((action !== 'apply' && action !== 'restore' && action !== 'relocate') || !isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
+    const message = action === 'apply' ? {} : { message: action === 'restore'
+      ? t('setup.attachment.incomplete.restore', {}, locale)
+      : t('setup.attachment.incomplete.relocate', {}, locale) };
+    await reportFatal(ErrorRegistry.createError(error.code, { ...message, locale }), { ...context, locale });
     return 1;
   }
   emit(result, { json: switches.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), render: value => {
