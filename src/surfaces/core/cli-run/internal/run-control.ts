@@ -74,10 +74,12 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
     runId = picked.runId;
     originalQuestion = choices.find(choice => choice.run === picked)?.question;
   }
-  if (!context.inspectRun || (action === 'cancel' ? !context.deliverRunCancellation : !context.applyRunLifecycle)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const bound = action === 'hold' || action === 'resume' && !answering;
+  const inspect = (bound ? context.inspectRunControl : undefined) ?? context.inspectRun;
+  if (!inspect || (action === 'cancel' ? !context.deliverRunCancellation : !context.applyRunLifecycle)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const reason = input.reason?.trim() || t('terminal.runControl.reasonDefault', {}, locale);
   for (let round = 0; ; round++) {
-    const { run, answerSource } = await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
+    const { run, answerSource, controlBinding } = await inspect(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
     const question = readTaskQuestion(run, answerTaskId, answerSource);
     if (!eligible(run, question)) {
@@ -110,7 +112,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
       }
       const command = runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: run.revision,
         ...(action === 'hold' ? { action, holdReason: reason } : input.quota !== undefined ? { action: 'quota-answer', choice: input.quota } : input.answer !== undefined ? { action: 'answer', answer: input.answer, taskId: input.taskId } : { action }) });
-      const after = (await context.applyRunLifecycle!(io.root, command, io.options))?.lifecycle.run;
+      const after = (await context.applyRunLifecycle!(io.root, command, io.options, ...(bound && controlBinding !== undefined ? [controlBinding] : [])))?.lifecycle.run;
       const params = { run: shownId(runId), command: commandId, revision: after?.revision ?? '—', state: after ? runStateWord(after, locale) : '—' };
       print(terminalSafeText(action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
         : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale)));

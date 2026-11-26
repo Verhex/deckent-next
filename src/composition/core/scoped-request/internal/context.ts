@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { ErrorRegistry, inspectProductFile, isCodedError, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, inspectProductFile, isCodedError, productResourcePath, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
 import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError,
@@ -15,15 +16,21 @@ import { admitInstallationRebinding, plainMacosRebinding } from './rebind.js';
 // any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
 type ScopeReadInputs = Readonly<{ config: ResolvedConfig; document: Awaited<ReturnType<ReturnType<typeof contextPolicySource>['load']>>;
   inspectSource: NonNullable<Parameters<typeof configuredInstallationProjectContext>[4]> }>;
-export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs) => timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected);
+type CheckRunControlLocation = (location: string) => void;
+const bindingDigest = (fields: readonly unknown[]) => createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+export const loadConfiguredScopeContext = (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs, checkLocation?: CheckRunControlLocation) =>
+  timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected, undefined, checkLocation);
 export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => {
   const verified = verifyLocalPeerIdentity(peer);
   return timedScopeContext(projectRoot, scopeId, options, () => verified, access);
 };
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>,
-  access: ScopeAccess, inspected?: ScopeReadInputs, onSourceRepair?: (kind: SourceRepairKind) => void) {
+  access: ScopeAccess, inspected?: ScopeReadInputs, onSourceRepair?: (kind: SourceRepairKind) => void, checkLocation?: CheckRunControlLocation) {
   const reading = access === 'read' ? inspected : undefined;
   const config = reading?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
+  const controlLocation = () => bindingDigest([config.projectRoot, config.company.id, config.installation.sharedRegistrationId, config.approvals.keyFile,
+    ...(['installationIdentity', 'ledger', 'policy', 'bindings', 'approvals'] as const).map(resource => productResourcePath(layout, resource))]);
+  checkLocation?.(controlLocation());
   const loadPolicy = async () => {
     try { return await contextPolicySource({ layout, config, ownerUid }).load(); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
@@ -43,20 +50,27 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   const sourceRepaired = writeAdmitted;
   const installationStore = installationContext.kind === 'legacy'
     ? new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation) : null;
-  const observed = installationStore ? await accessIdentity(installationStore, access) : installationContext.identity;
-  let installation = observed;
-  if (access === 'write') {
-    await admitWrite();
-    if (!sourceRepaired && installationStore && observed.status === 'available' && observed.pendingUpgrade) {
-      installation = await readBootstrapIdentity(async () => {
-        await installationStore.upgradeAdmittedBinding(observed.value.installationId);
-        return installationStore.read();
-      });
+  const projectStore = new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs);
+  const accessIdentities = async (mode: ScopeAccess) => {
+    const observed = installationStore ? await accessIdentity(installationStore, mode) : installationContext.identity;
+    let installation = observed;
+    if (mode === 'write') {
+      await admitWrite();
+      if (!sourceRepaired && installationStore && observed.status === 'available' && observed.pendingUpgrade) {
+        installation = await readBootstrapIdentity(async () => {
+          await installationStore.upgradeAdmittedBinding(observed.value.installationId);
+          return installationStore.read();
+        });
+      }
     }
-  }
-  const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
+    return { installation, project: await accessIdentity(projectStore, mode) };
+  };
+  const { installation, project } = await accessIdentities(access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
   return Object.freeze({ config, layout, installationLayout: installationContext.installationLayout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
+    runControlBinding: () => `${controlLocation()}:${bindingDigest([installationId, projectId, principal.id, principal.issuer, principal.subject, principal.assurance])}`,
+    // Complete write admission on this context's layout, company, policy and principal.
+    async admitWrite() { await accessIdentities('write'); },
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
 }
 /** Key creation and ledger access are independent: producers may require an existing key; observers open read-only without creating one. */

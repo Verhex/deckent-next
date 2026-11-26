@@ -23,10 +23,10 @@ import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTu
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 /** Same handlers as `deckent run` and `deckent run cancel`; the terminal's run card and `/cancel` use them through the ledger ports. */
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
-  models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic }>
+  models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic; controlBinding?: string }>
   & Pick<Awaited<ReturnType<RunInspectionApplication['inspectWithModels']>>, 'answerSource' | 'selectAnswerQuestion'>>;
 /** Same handler as `deckent run hold|resume|close` (the CLI's in-process lifecycle application); the terminal's Runs window keys use it through the ledger ports. */
-export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
+export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions, binding?: string) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   lifecycle: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }> | null>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 interface RuntimeServiceReadinessView {
@@ -107,6 +107,7 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   clearScratch?: TerminalScratchClearHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
   inspectRun?: RunQueryHandler;
+  inspectRunControl?: RunQueryHandler;
   deliverRunCancellation?: RunCancellationDeliveryHandler;
   applyRunLifecycle?: RunLifecycleHandler;
   inspectWorkerTranscript?: WorkerTranscriptHandler;

@@ -4,6 +4,7 @@ import { productResourcePath, withConfigWriteLock, type ProductLayout } from '#p
 import type { Policy } from '#domain/index.js';
 import { FilePolicySource, PolicyFileError } from '#adapters/index.js';
 import { type PolicySource, DispatchPolicyAuthorization } from '#engine/index.js';
+/** Managed policy and bindings updates share this lock with effects pinned to an authority revision. */
 export function withLayoutPolicyWriteLock<T>(layout: ProductLayout, work: () => Promise<T>) {
   return withConfigWriteLock(productResourcePath(layout, 'policy'), work, 5_000);
 }

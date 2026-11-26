@@ -399,6 +399,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       if (error instanceof DeckentError && error.code === 'MODEL_INVOCATION_RESULT_LIMIT') return invocationLimit(error.code);
       if (tool.boundedDelivery && error instanceof DeckentError && error.code === 'RUNTIME_SERVICE_RESPONSE_LIMIT') return failure(id, 'MCP_RESPONSE_LIMIT');
       if (tool.name === 'audit_provider_spending' && error instanceof DeckentError && error.code === 'PROVIDER_SPEND_RESULT_LIMIT') return failure(id, error.code, { error });
+      if (tool.name === 'control_run' && error instanceof DeckentError && error.code === 'CONFIG_WRITE_LOCKED')
+        return failure(id, error.code, { message: t('mcp.error.configWriteLocked', { ageSeconds: error.params?.['ageSeconds'] ?? 0 }, locale) });
       if (error instanceof DeckentError && error.code === 'QUERY_UNEXPECTED_FAILURE') {
         const params = queryErrorClientParams(error), message = redactSensitive(error.localize?.(locale).message ?? error.message);
         const result = coded({ code: error.code, ...(params ? { params } : {}), message });

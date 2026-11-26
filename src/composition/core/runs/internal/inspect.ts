@@ -13,8 +13,8 @@ async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['
   const db = openSqliteLedgerReadOnly(await path(), config.storage.sqlite), queue = new SqliteTargetQueue(db), limit = config.targetQueue.perTarget;
   try { return await observeRunQueue(queue.forRun(query.scopeId, query.runId, queueObservationReadLimit(limit)), queue, limit, principal, authorization, GIT_QUEUE_DISPLAY); } finally { db.close(); }
 }
-export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
-  return (await readConfiguredRun(projectRoot, input, options)).result;
+export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}, forControl = false) {
+  return (await readConfiguredRun(projectRoot, input, options, undefined, forControl)).result;
 }
 
 /** The local answer cards read the question and its source at the same Run revision. Null defers first-open selection to the Runs card. */
@@ -23,10 +23,10 @@ export async function inspectConfiguredRunAnswer(projectRoot: string, input: Run
   return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}), ...(selectAnswerQuestion ? { selectAnswerQuestion } : {}) });
 }
 
-async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) {
+async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl = false) {
   try {
     const query = runQuerySchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
+    const { config, layout, document, principal, path, runControlBinding } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const authorization = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,
@@ -41,6 +41,6 @@ async function readConfiguredRun(projectRoot: string, input: RunQuery, options: 
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
     const progression = await inspectConfiguredRunProgression(projectRoot, query, run.revision, options, principal);
-    return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(progression ? { progression } : {}) }), answerSource, selectAnswerQuestion };
+    return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run, ...(forControl ? { controlBinding: runControlBinding() } : {}), ...(progression ? { progression } : {}) }), answerSource, selectAnswerQuestion };
   } catch (error) { throw queryFailure(error); }
 }

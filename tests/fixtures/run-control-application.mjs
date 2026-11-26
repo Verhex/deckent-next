@@ -10,10 +10,18 @@ import { applyConfiguredRunLifecycle, inspectConfiguredRun } from '#composition/
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { DeckentError, ErrorRegistry, t } from '#platform/index.js';
+import { rename } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const locale = process.argv[2] === 'tr' ? 'tr' : 'en', root = process.cwd(), options = { env: process.env };
 const ledger = createWorklineLedgerPorts({ root, scopeId: 's', options, locale, workerHeartbeatMs: 60_000, renderRunCancellation: () => '',
-  inspectWorkers: inspectConfiguredWorkers, inspectRun: inspectConfiguredRun, inspectInventory: inspectConfiguredInventory, applyRunLifecycle: applyConfiguredRunLifecycle });
+  inspectWorkers: inspectConfiguredWorkers, inspectRun: inspectConfiguredRun, inspectInventory: inspectConfiguredInventory,
+  inspectRunControl: (project, input, config) => inspectConfiguredRun(project, input, config, true),
+  async applyRunLifecycle(...args) {
+    const replacement = process.env.DECKENT_TEST_RUN_CONTROL_NEXT_CONFIG;
+    if (replacement) await rename(replacement, join(root, '.deckent/config.json'));
+    return applyConfiguredRunLifecycle(...args);
+  } });
 const labels = { banner: 'BANNER', prompt: '', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING', hint: 'HINT',
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS' }, roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   commandUnavailable: 'NO-PORT {part}', ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS',

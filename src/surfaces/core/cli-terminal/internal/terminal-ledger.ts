@@ -57,6 +57,7 @@ export function createWorklineLedgerPorts(input: {
   readonly approvalPageSize?: number;
   readonly inspectWorkers?: WorkerObservationHandler;
   readonly inspectRun?: RunQueryHandler;
+  readonly inspectRunControl?: RunQueryHandler;
   /** The queue rows' summaries of a Run window, from the delivery card's reader; absent: the rows show without them. */
   readonly describeQueueSummaries?: DeliverySummaryReader;
   readonly inspectInventory?: InventoryQueryHandler;
@@ -90,6 +91,7 @@ export function createWorklineLedgerPorts(input: {
       const { run, selectAnswerQuestion } = await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options, null);
       return { run, ...optionalField('selectAnswerQuestion', selectAnswerQuestion) };
     },
+    ...(input.inspectRunControl ? { inspectRunControl: (runId: string) => input.inspectRunControl!(root, { schemaVersion: 1, scopeId, runId }, options) } : {}),
     async inspectRunObservation(runId: string) {
       const data = await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options);
       return data.run ? { ...data.run, progression: readRunProgressionDiagnostic(data.run, data.progression) } : null;
@@ -150,12 +152,12 @@ export function createWorklineLedgerPorts(input: {
     // Y1: the same lifecycle command as `deckent run hold|resume|close` against the revision the person confirmed; policy and the
     // service's state rules decide (a refusal is the typed error, rendered by the window). Nothing here pre-decides eligibility.
     ...(applyRunLifecycle ? {
-      async controlRun(runId: string, action: 'hold' | 'resume' | 'close', expectedRevision: number, typed?: string) {
+      async controlRun(runId: string, action: 'hold' | 'resume' | 'close', expectedRevision: number, typed?: string, binding?: string) {
         const commandId = `terminal-run-${action}-${randomUUID()}`, own = typed?.trim();
         const command = runLifecycleCommandSchema.parse(action === 'hold'
           ? { schemaVersion: 1, commandId, scopeId, runId, action, holdReason: own || t('terminal.runControl.reasonDefault', {}, locale), expectedRevision }
           : { schemaVersion: 1, commandId, scopeId, runId, action, expectedRevision });
-        const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
+        const result = await applyRunLifecycle(root, command, options, ...(binding === undefined ? [] : [binding])), run = result?.lifecycle.run;
         const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' };
         return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
           : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);

@@ -162,7 +162,10 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
       if (line === null || execution.signal.aborted) break;
       status = line; results.push(status); continue;
     }
-    const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId); selection.current = chosen.runId;
+    const chosen = runs[Number(index)]!;
+    const { run: fresh, controlBinding } = action !== 'close' && ledger.inspectRunControl
+      ? await ledger.inspectRunControl(chosen.runId) : { run: await ledger.inspectRun(chosen.runId), controlBinding: undefined };
+    selection.current = chosen.runId;
     if (execution.signal.aborted) break;
     if (!fresh) { status = fillTemplate(words.gone, { run: shortId(chosen.runId) }); results.push(status); continue; }
     if (!runControlActions(fresh).includes(action)) {
@@ -173,7 +176,7 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     if (execution.signal.aborted) break;
     if (answer !== 'allow') status = fillTemplate(words.kept, { run: shortId(fresh.runId) });
     else {
-      try { status = await ledger.controlRun!(fresh.runId, action, fresh.revision, action === 'hold' ? reason() : undefined); }
+      try { status = await ledger.controlRun!(fresh.runId, action, fresh.revision, action === 'hold' ? reason() : undefined, ...(controlBinding === undefined ? [] : [controlBinding])); }
       catch (error) { status = errorText(error); }
     }
     results.push(status);
