@@ -306,9 +306,12 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         return true;
       }, localPrincipalPeer()).catch(() => false);
     let toolRan = false;
-    const diagnosisText = (failure: DeckentError | string) => typeof failure === 'string' ? failure
-      : toolRan && failure.code === 'TERMINAL_CHAT_REJECTED' && failure.params?.['refusal'] === 'quota'
-        ? t('headless.chat.quotaAfterTools', {}, language) : failure.localize?.(language).message ?? failure.message;
+    const diagnosisText = (failure: DeckentError | string) => {
+      if (typeof failure === 'string') return failure;
+      const message = failure.localize?.(language).message ?? failure.message;
+      return toolRan && failure.code === 'TERMINAL_CHAT_REJECTED' && failure.params?.['refusal'] === 'quota'
+        ? `${t('headless.chat.quotaAfterTools', {}, language)} ${message}` : message;
+    };
     // The native loop can still be joining an earlier tool call when the provider result returns.
     const failedRound = (state: string, failure: DeckentError | string | null): AgentRoundOutcome =>
       failure ? { status: 'failed', state, get diagnosis() { return diagnosisText(failure); } } : { status: 'failed', state };

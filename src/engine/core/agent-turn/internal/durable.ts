@@ -24,14 +24,18 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
       for (const locale of LOCALES) {
         if (storedNote.includes(t('headless.chat.legacyCreditsAdvice', {}, locale)))
           corrections.add(t('error.HEADLESS_CREDITS_REQUIRED', {}, input.language));
-        if (toolCalls > 0 && storedNote.includes(t('headless.chat.quotaFallback', {}, locale)))
-          corrections.add(t('headless.chat.quotaAfterTools', {}, input.language));
+        if (toolCalls > 0) {
+          const quota = t('headless.chat.quotaFallback', {}, locale);
+          const checkEffects = t('headless.chat.quotaAfterTools', {}, locale);
+          if (storedNote.includes(quota) && !storedNote.includes(`${checkEffects} ${quota}`))
+            corrections.add(`${t('headless.chat.quotaAfterTools', {}, input.language)} ${t('headless.chat.quotaFallback', {}, input.language)}`);
+        }
         if (storedNote.includes(t('headless.agent.legacySurfaceStopped', {}, locale)) || storedNote.includes(t('headless.agent.legacyGuardStopped', {}, locale)))
           corrections.add(t('headless.agent.surfaceStopped', {}, input.language));
       }
       if (corrections.size) {
-        const display = [...Array.from(corrections, correction => t('agent.turn.outcome.replayCorrection', { correction }, input.language)),
-          t('agent.turn.outcome.replaySavedNote', { note: storedNote }, input.language)].join('\n');
+        const display = [t('agent.turn.outcome.replaySavedNote', { note: storedNote }, input.language),
+          ...Array.from(corrections, correction => t('agent.turn.outcome.replayCorrection', { correction }, input.language))].join('\n');
         note = display.length <= TURN_NOTE_MAX_CHARS ? display : `${modelTextPrefix(display, TURN_NOTE_MAX_CHARS - 1)}…`;
       }
     }
