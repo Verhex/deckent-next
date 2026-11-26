@@ -176,6 +176,12 @@ export function refuseRetiredModelActivation(models: Parameters<typeof retiredMo
 /** The deciding grant's terms are independent of revisions to unrelated policy cells. */
 export const modelActivationPolicyRule = (policy: Policy, principal: VerifiedPrincipal, id: string) =>
   principalGrants(policy, principal).find(grant => grant.id === id);
+/** Every rule the evaluator can match for this principal (grants incl. role-derived, then restrictions, in evaluation order). */
+export function principalPolicyRules(policy: Policy, principal: VerifiedPrincipal) {
+  const mine = (rule: Policy['restrictions'][number]) => rule.principals === 'all'
+    || rule.principals.some(item => item.issuer === principal.issuer && item.subject === principal.subject);
+  return [principalGrants(policy, principal).filter(mine), policy.restrictions.filter(mine)];
+}
 
 /** Only the channel's own facts and participating model rows make up an activation plan. */
 export async function checkCatalogActivationFacts(reader: ModelCatalogReader, scopeId: string,

@@ -217,6 +217,19 @@ it('requires an explicit disconnected old account for new authorization and writ
     expect(formatHumanError(noWitness, { locale: 'tr' })).toContain('Aboneliğiniz bağlı. Model açılmadı. Modeli yetkili bir terminalden açın.');
     expect(await readFile(f.ledger)).toEqual(beforeFresh);
     expect(await readFile(path, 'utf8')).toBe(before);
+
+    // The OAuth owner decided on the new account's secret record: revoking it while the subscription connects stops the model switch-on.
+    await oauth.disconnect((await oauth.list()).find(row => row.state === 'connected')!.connectionId);
+    host.witness = true;
+    state.catalog.mockImplementationOnce(async () => {
+      await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'oauth-secret-revoked', grants: [...policy.grants,
+        { id: 'deny-oauth-secrets', effect: 'deny', scopes: ['scope'], principals: me, actions: ['set'], resource: { kind: 'secret', ids: 'all' } }] }));
+      return [{ slug: 'a' }];
+    });
+    const revoked = await executeConfiguredSiwc(f.project, freshRequest, { env: f.env }).catch((error: unknown) => error);
+    expect(revoked).toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD', params: { connectionState: 'connected', activationState: 'unfinished' } });
+    expect(await readFile(f.ledger)).toEqual(beforeFresh);
+    expect(await readFile(path, 'utf8')).toBe(before);
   } finally { host.witness = true; state.oauth = null; state.owner = null; }
 
 });

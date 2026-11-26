@@ -398,19 +398,21 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
   expect(methodLog).toEqual(['GET', 'POST', 'GET', 'POST', 'GET', 'POST']);
   await writeFile(policyPath, policy);
 
-  // An unrelated setting, an unrelated policy rule and a reordered marker list stop neither an observing nor a writing reconnect.
+  // An unrelated setting, another person's policy rule and a reordered marker list stop neither an observing nor a writing reconnect.
   const layer = await readFile(f.path, 'utf8'), markers = getConfigFieldDefault('cli').agentEnvironment;
   const withCli = (cli: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
     const config = JSON.parse(layer);
     return writeFile(f.path, JSON.stringify({ ...config, ...extra, cli: { ...config.cli, ...cli } }));
   };
+  const withGrant = (grant: Record<string, unknown>, revision: string) => writeFile(policyPath, JSON.stringify({ ...JSON.parse(policy), revision, grants: [...JSON.parse(policy).grants, grant] }));
   const unrelated = async () => {
     await withCli({ agentEnvironment: [...markers].reverse() }, { language: 'tr' });
-    await writeFile(policyPath, JSON.stringify({ ...JSON.parse(policy), revision: 'connect-unrelated', grants: [...JSON.parse(policy).grants,
-      { id: 'unrelated', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }] }));
+    await withGrant({ id: 'unrelated', effect: 'deny', actions: ['activate', 'inspect'], scopes: 'all', principals: [{ ...me[0]!, subject: 'another-person' }], resource: { kind: 'model-activation', ids: 'all' } }, 'connect-unrelated');
   };
   const restore = async () => { await writeFile(f.path, layer); await writeFile(policyPath, policy); clearConfigCache(); };
-  const state = () => JSON.stringify([f.rows('SELECT * FROM model_activations'), f.rows('SELECT * FROM model_catalog_activations')]);
+  // The ledger's activation, catalog, receipt and audit rows; the configuration layer is restored after each case and compared where it matters.
+  const state = () => JSON.stringify(['model_activations', 'model_catalog_activations', 'model_catalog_channels', 'model_activation_receipts', 'audit_events']
+    .map(table => f.rows(`SELECT * FROM ${table}`)));
   const settled = state();
   expect(await asPerson(() => during(unrelated, 'observe-unrelated'))).toMatchObject({ status: 'connected',
     steps: { catalog: 'present', declaration: 'present', profile: 'present', activation: 'present' } });
@@ -426,17 +428,46 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
   await expect(asPerson(() => during(() => withCli({}, { service: { ...JSON.parse(layer).service, responseMaxBytes: 2_097_152 } }), 'plan-fact')))
     .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
   await restore();
+  // Revoking only the chat activation's inspect (the read the plan relied on) stops it too.
+  await expect(asPerson(() => during(() => withGrant({ id: 'deny-chat-inspect', effect: 'deny', actions: ['inspect'], scopes: ['scope'], principals: me,
+    resource: { kind: 'model-activation', ids: [modelActivationTargetId(connected.reference)] } }, 'connect-inspect-revoked'), 'inspect-revoked')))
+    .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  await restore();
   expect(state()).toBe(settled);
 
   const binding = await inspectModelBinding(f.project, connected.reference, f.options);
   if (binding.status !== 'declared') throw Error('binding');
-  const chat = await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference: connected.reference }, f.options);
-  await admitConfiguredModelActivation(f.project, { schemaVersion: 1, commandId: 'witness-off', scopeId: 'scope', reference: connected.reference, action: 'deactivate',
-    expectedRevision: chat.activation!.revision, expectedBinding: binding.binding }, f.options);
+  const switchOff = async (commandId: string) => {
+    const chat = await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference: connected.reference }, f.options);
+    await admitConfiguredModelActivation(f.project, { schemaVersion: 1, commandId, scopeId: 'scope', reference: connected.reference, action: 'deactivate',
+      expectedRevision: chat.activation!.revision, expectedBinding: binding.binding }, f.options);
+  };
+  await switchOff('witness-off');
   expect(await asPerson(() => during(unrelated, 'write-unrelated'))).toMatchObject({ status: 'connected',
     steps: { declaration: 'present', profile: 'present', activation: 'written' } });
   expect(JSON.parse(await readFile(f.path, 'utf8')).provider_invocation_profiles).toEqual(JSON.parse(layer).provider_invocation_profiles);
   await restore();
+
+  // Only the activation and its audit record remain: a changed audit signing key still stops the connect.
+  await switchOff('witness-off-key');
+  const off = state();
+  await expect(asPerson(() => during(() => withCli({}, { approvals: { ...JSON.parse(layer).approvals, keyFile: 'connect-other.key' } }), 'key-changed')))
+    .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  await restore();
+  expect(state()).toBe(off);
+
+  // An approval-bound plan keeps the whole policy document: a raised approval assurance stops it although its rule and verdict stay.
+  const approvalBound = (extra: Record<string, unknown>) => writeFile(policyPath, JSON.stringify({ schemaVersion: 2, roles: [], restrictions: [], separationOfDuties: [],
+    grants: JSON.parse(policy).grants.map((rule: { id: string }) => rule.id === 'config' ? { ...rule, effect: 'require-approval' } : rule), ...extra }));
+  await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 1, revision: 'connect-bindings', bindings: [] }), { mode: 0o600 });
+  await approvalBound({ revision: 'connect-approval' });
+  const unprofiled = JSON.parse(layer), own = JSON.stringify(connected.reference); // The profile is written again: an approval-bound config write.
+  unprofiled.provider_invocation_profiles.profiles = unprofiled.provider_invocation_profiles.profiles.filter((row: { reference: unknown }) => JSON.stringify(row.reference) !== own);
+  await writeFile(f.path, JSON.stringify(unprofiled)); clearConfigCache();
+  await expect(asPerson(() => during(() => approvalBound({ revision: 'connect-step-up',
+    approvalAssurance: [{ id: 'connect-step-up', scopes: ['scope'], subject: 'config-change', minimum: 'step-up-idp' }] }), 'approval-raised')))
+    .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  expect(state()).toBe(off);
 });
 
 const admitConfiguredModelActivation: typeof admit = (...args) => asPerson(() => admit(...args));
