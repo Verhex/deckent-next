@@ -97,6 +97,7 @@
   "cli.backup.done.create": "Backup created: {set} ({files} files, {made}).",
   "cli.backup.done.verify": "Backup verified: {set} is authentic ({files} files, made {made}).",
   "cli.backup.done.restore": "Backup restored from {set} (made {made}).",
+  "cli.backup.restore.incomplete": "The backup restore is unfinished. Rerun the same `deckent backup restore` command with the same backup set and target. If it is still blocked, ask an installation administrator for help.",
   "cli.backup.done.preserved": "Replaced files kept next to them: {paths}",
   "error.BACKUP_SET_REQUIRED": "{action} needs the recovery set: add --set <path>. Sets in the default folder: {sets}. List them with: deckent backup",
   "error.BACKUP_PASSPHRASE_PROMPT_UNAVAILABLE": "This terminal cannot hide typing, so the passphrase was not asked. Pipe it on standard input instead (never as an argument) and rerun.",

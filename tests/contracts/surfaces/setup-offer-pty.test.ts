@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
@@ -67,6 +67,17 @@ if status is None:
 read_for(0.2)
 sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
 `;
+/** The compiled CLI over the same PTY with only the attachment apply result supplied by the fixture: an unfinished attachment. */
+const PENDING_ENTRY = ['--input-type=module', '--eval', `
+  import { main } from ${JSON.stringify(resolve('dist/surfaces/core/cli/index.js'))};
+  import { createCliHost } from ${JSON.stringify(resolve('dist/composition/core/cli/internal/host.js'))};
+  const base = { root: process.cwd(), locale: process.env.LANG.slice(0, 2), signal: new AbortController().signal };
+  const host = createCliHost(base);
+  process.exitCode = await main([], { ...base, ...host,
+    projectAttachment: (root, input, ...options) => input.action === 'apply'
+      ? Promise.resolve({ status: 'pending' }) : host.projectAttachment(root, input, ...options),
+  });
+`];
 const roots: string[] = [];
 const services: { pid: number; root: string }[] = [];
 // /proc answers for a pid: present, gone (ENOENT/ESRCH) or unknown (any other read error, e.g. EACCES or EIO).
@@ -171,11 +182,11 @@ async function fixture(repository = false) {
   await symlink(process.execPath, join(bin, 'node'));
   // A person's terminal: no AI-agent or CI marker (the runner may itself run inside one), a real terminal type, no Deckent variables.
   const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/local/bin:/usr/bin:/bin`, HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
-    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
+    LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', GIT_OPTIONAL_LOCKS: process.env['GIT_OPTIONAL_LOCKS'] };
   // U7 recommends the nearest Git top: keep positive setup cases inside their own repository, never an ambient parent (such as /tmp).
   if (repository) await execute('git', ['init', '--quiet', root], { env, timeout: 10_000 });
-  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = []): Promise<Run> => {
-    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, cli, ...argv]), root], { env: { ...env, ...extra },
+  const pty = async (label: string, steps: Steps, extra: NodeJS.ProcessEnv = {}, argv: readonly string[] = [], cwd = root, entry = [cli]): Promise<Run> => {
+    const { stdout } = await execute(python, ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, ...entry, ...argv]), cwd], { env: { ...env, ...extra },
       timeout: 180_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as Run;
     const dir = process.env['DECKENT_I_S5_TRANSCRIPTS'];
@@ -241,7 +252,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(run.status, run.output.slice(-2000)).toBe(1);
   }, 180_000);
 
-  it('Yes, then completed setup: the terminal opens once on the selected root and /exit leaves with 0', async () => {
+  it('Yes, then completed setup: the terminal opens once on the selected root and /exit leaves with 0; in another folder the offered session exits 1 with its explanation when declined or unfinished and opens the attached root once on yes', async () => {
     await access(cli);
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
@@ -274,6 +285,42 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
       const stop = await f.deckent(['runtime', 'shutdown', '--reason', 'I-S5 test cleanup']);
       expect(stop.stdout + stop.stderr).toContain('shutdown accepted');
     }
+
+    // The completed setup registered its source (and chose English): bare `deckent` in an empty sibling folder offers a session on it. One
+    // run per outcome; n/Esc/Ctrl+D are askCliCard's keys (pinned on the setup card above); the Turkish texts are pinned by the no-tr row
+    // above, cli-help-locale.test.ts and the catalog line below.
+    const target = resolve(f.root, '..', 'attached'), offer = 'Open a session in this folder?';
+    await mkdir(target, { mode: 0o700 });
+    expect(t('setup.session.title', {}, 'tr')).toBe('Bu klasörde oturum aç?');
+    const declined = await f.pty('attachment-esc', [[offer, '\u001b']], {}, [], target);
+    expect(declined.timeout, declined.output).toBeUndefined();
+    expect.soft(declined.status, 'declined session offer').toBe(1);
+    const declinedScope = /Scope: ([a-f0-9-]{36})/u.exec(declined.output)?.[1];
+    const cancelled = (scope: string | undefined) => `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.`;
+    expect.soft(declined.output.replaceAll('\r', ''), 'declined session offer').toContain(cancelled(declinedScope));
+    expect(declined.output).not.toMatch(/deckent workline|Start setup\?/u);
+    const explicit = await f.pty('explicit-attachment-ctrl-d', [['Connect this folder to the selected installation?', '\u0004']], {},
+      ['terminal', 'attach', '--scope', 'target', '--apply', '--expect', 'a'.repeat(64), '--command-id', '11111111-1111-4111-8111-111111111111'], target);
+    expect(explicit.timeout, explicit.output).toBeUndefined();
+    expect.soft(explicit.status, 'declined explicit attach').toBe(1);
+    expect.soft(explicit.output.replaceAll('\r', ''), 'declined explicit attach').toContain(cancelled('target'));
+    expect(await readdir(target), 'declines write nothing').toEqual([]);
+    const pending = await f.pty('attachment-pending', [[offer, 'y']], { NODE_ENV: 'production' }, [], target, PENDING_ENTRY);
+    expect(pending.timeout, pending.output).toBeUndefined();
+    const scope = /Scope: ([a-f0-9-]{36})/u.exec(pending.output)?.[1];
+    expect(scope, pending.output).toBeDefined();
+    expect(pending.output).toContain(`The attachment did not complete. Preview the current plan with \`deckent terminal attach --scope ${scope} --preview\`. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help. [PROJECT_ATTACHMENT_INCOMPLETE]`);
+    expect.soft(pending.status, 'unfinished attachment').toBe(1);
+    expect(pending.output).not.toMatch(/deckent workline|Step 1\/|Runtime service started/u);
+    expect(await readdir(target), 'an unfinished attachment writes nothing').toEqual([]);
+    const attached = await f.pty('attachment-yes', [[offer, 'y'], ['Step 1/', '\u0003'], ['Connect a model with /provider', '/exit\r']], {}, [], target);
+    const attachedPid = /Runtime service started in the background \(pid (\d+)/u.exec(attached.output)?.[1];
+    if (attachedPid) services.push({ pid: Number(attachedPid), root: f.home });
+    expect(attached.timeout, attached.output.slice(-3000)).toBeUndefined();
+    expect(attached.status, attached.output.slice(-3000)).toBe(0);
+    expect(attached.output).toContain(`Project attached · ${target}`);
+    expect(attached.output.split('Step 1/')).toHaveLength(2);
+    expect(attached.output.split('\u001b[?1049h')).toHaveLength(3);
   }, 240_000);
 
   it.each([

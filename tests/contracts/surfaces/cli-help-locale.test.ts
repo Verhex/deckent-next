@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { dispatch, main } from '#surfaces/core/cli/index.js';
 import * as cliHuman from '#surfaces/core/cli-human/index.js';
-import { PACKAGE_VERSION, t } from '#platform/index.js';
+import { ErrorRegistry, PACKAGE_VERSION, t } from '#platform/index.js';
+import type { ProjectAttachmentCommand } from '#domain/index.js';
 
 let temporary: string, root: string, globalRoot: string, env: NodeJS.ProcessEnv;
 beforeEach(async () => {
@@ -140,6 +141,14 @@ it('ATTACHDOC: human previews give a complete apply command; JSON stays exact an
 });
 it('attachment confirmations name the selected action in EN/TR and never offer a write card to a pipe or agent', async () => {
   const projectId = '11111111-1111-4111-8111-111111111111', digest = 'a'.repeat(64);
+  const cancelled = (language: 'en' | 'tr', scope: string) => language === 'en'
+    ? `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.\n`
+    : `Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için bu klasörde \`deckent terminal attach --scope ${scope} --preview\` çalıştırın. \`deckent init\` burada yeni ve ayrı bir kurulum başlatır.\n`;
+  const maskedScope = 'token=demo';
+  const cancelledWithOriginalScope = {
+    en: 'Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, rerun the earlier preview in this folder with the original scope. `deckent init` starts a new, separate installation here.\n',
+    tr: 'Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için önceki önizlemeyi bu klasörde özgün kapsamla tekrar çalıştırın. `deckent init` burada yeni ve ayrı bir kurulum başlatır.\n',
+  };
   const cases: readonly [string[], string, string][] = [
     [['--register', '--scope', 'source', '--expect', digest], 'Register this source installation?', 'Bu kaynak kurulum kaydedilsin mi?'],
     [['--scope', 'target', '--expect', digest, '--command-id', projectId], 'Connect this folder to the selected installation?', 'Bu klasör seçilen kuruluma bağlansın mı?'],
@@ -158,13 +167,20 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
         confirm.mockClear(); let errors = '';
         const context = { root, env, projectAttachment, stdin: { isTTY: true } as NodeJS.ReadStream,
           stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
-        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(0);
+        const attach = args.includes('--command-id');
+        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(attach ? 1 : 0);
+        if (attach) expect.soft(errors).toBe(cancelled(language, 'target'));
         expect(confirm).toHaveBeenCalledOnce();
         const card = confirm.mock.calls[0]![0];
         expect(card.title).toBe(language === 'en' ? en : tr); expect(card.initial).toBe('no');
         expect(card.body?.join('\n')).toContain(language === 'en' ? 'Scope / project:' : 'Kapsam / proje:');
         if (args.includes('--relocate')) expect(card.body?.join('\n')).toContain(language === 'en'
           ? "Update the project or source's recorded location; keep its identity" : 'Proje veya kaynağın kayıtlı konumunu güncelle; kimliğini koru');
+        if (attach) {
+          errors = '';
+          const code = await main(['terminal', 'attach', '--scope', maskedScope, '--expect', digest, '--command-id', projectId, '--apply'], context);
+          expect.soft([code, errors], `explicit attach with a masked scope (${language})`).toEqual([1, cancelledWithOriginalScope[language]]);
+        }
         confirm.mockClear();
         for (const refused of [{ ...context, stdin: { isTTY: false } as NodeJS.ReadStream }, { ...context, env: { ...env, AI_AGENT: '1' } }]) {
           errors = '';
@@ -174,6 +190,67 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
       }
     }
     expect(projectAttachment).not.toHaveBeenCalled();
+
+    const incomplete = ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE');
+    const offer = (scopeId: string) => ({ kind: 'ready', scopeId, path: root, writeRoot: root,
+      planDigest: digest, preparation: { digest, connections: [] } });
+    projectAttachment.mockImplementation(async (_root: string, input: ProjectAttachmentCommand) => {
+      if (input.action === 'offer') return offer(projectId);
+      throw incomplete;
+    });
+    let errors = '', output = '';
+    const context = { root, env, projectAttachment, stdin: { isTTY: true, pause: vi.fn() } as unknown as NodeJS.ReadStream,
+      stdout: { isTTY: true, write: (text: string) => { output += text; } }, stderr: { write: (text: string) => { errors += text; } } };
+    const bareContext = { ...context, completeTerminalChat: vi.fn(), configChoiceSources: () => ({
+      list: async () => { throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); },
+    }) };
+    for (const language of ['en', 'tr'] as const) {
+      await config(language);
+      errors = ''; projectAttachment.mockClear();
+      expect.soft([await main([], bareContext), errors]).toEqual([1, cancelled(language, projectId)]);
+      expect(projectAttachment.mock.calls.map(([, input]) => input.action)).toEqual(['offer']);
+      errors = ''; projectAttachment.mockClear();
+      projectAttachment.mockResolvedValueOnce(offer(maskedScope));
+      expect.soft([await main([], bareContext), errors], `bare offer with a masked scope (${language})`).toEqual([1, cancelledWithOriginalScope[language]]);
+      expect(projectAttachment.mock.calls.map(([, input]) => input.action)).toEqual(['offer']);
+    }
+
+    errors = '';
+    confirm.mockResolvedValue('yes');
+    const generic = 'Hata: Proje bağlantısı tamamlanmamış. Özgün komut kimliği ve önizleme özetiyle aynı attach komutunu sürdürün. [PROJECT_ATTACHMENT_INCOMPLETE]\n';
+    const explicit = await main(['terminal', 'attach', ...cases[1]![0], '--apply'], context);
+    expect.soft([explicit, errors]).toEqual([1, generic]);
+
+    errors = ''; projectAttachment.mockResolvedValueOnce({ status: 'pending' });
+    const pending = await main(['terminal', 'attach', ...cases[1]![0], '--apply'], context);
+    expect.soft([pending, errors, output]).toEqual([1, generic, '']);
+
+    for (const [action, args, en, tr] of [
+      ['restore', cases[7]![0], 'The attachment restore is unfinished. Rerun the same `deckent terminal attach --restore` command with the original project ID and preview digest. If it is still blocked, ask an installation administrator for help.', 'Proje bağlantısını geri yükleme tamamlanmadı. Aynı `deckent terminal attach --restore` komutunu özgün proje kimliği ve önizleme özetiyle yeniden çalıştırın. İşlem hâlâ duruyorsa kurulum yöneticisinden yardım isteyin.'],
+      ['relocate', cases[6]![0], 'The location update is unfinished. Rerun the same `deckent terminal attach --relocate` command from the same folder with the original scope. If it is still blocked, ask an installation administrator for help.', 'Kayıtlı konumu güncelleme tamamlanmadı. Aynı `deckent terminal attach --relocate` komutunu aynı klasörde özgün kapsamla yeniden çalıştırın. İşlem hâlâ duruyorsa kurulum yöneticisinden yardım isteyin.'],
+    ] as const) {
+      errors = '';
+      const code = await main(['terminal', 'attach', ...args, '--apply'], context);
+      expect.soft([code, errors]).toEqual([1, `Hata: ${tr} [PROJECT_ATTACHMENT_INCOMPLETE]\n`]);
+      expect.soft(t(`setup.attachment.incomplete.${action}`, {}, 'en')).toBe(en);
+    }
+
+    errors = '';
+    const preview = await main(['terminal', 'attach', '--scope', 'target', '--preview'], context);
+    expect([preview, errors]).toEqual([78, generic]);
+
+    errors = '';
+    const bare = await main([], bareContext);
+    expect.soft([bare, errors]).toEqual([1, `Hata: Proje bağlantısı tamamlanmadı. Güncel planı \`deckent terminal attach --scope ${projectId} --preview\` ile önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin. [PROJECT_ATTACHMENT_INCOMPLETE]\n`]);
+    // The fatal renderer masks the composed message, so a scope it would alter is never offered as a command argument.
+    for (const [language, unfinished] of [
+      ['en', 'Error: The attachment did not complete. Preview the current plan again in this folder with the original scope. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help. [PROJECT_ATTACHMENT_INCOMPLETE]\n'],
+      ['tr', 'Hata: Proje bağlantısı tamamlanmadı. Güncel planı bu klasörde özgün kapsamla yeniden önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin. [PROJECT_ATTACHMENT_INCOMPLETE]\n'],
+    ] as const) {
+      await config(language);
+      errors = ''; projectAttachment.mockResolvedValueOnce(offer(maskedScope));
+      expect.soft([await main([], bareContext), errors], `unfinished bare attachment with a masked scope (${language})`).toEqual([1, unfinished]);
+    }
   } finally { confirm.mockRestore(); }
 });
 it('keeps environment locale available with invalid config', async () => {

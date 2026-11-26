@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { emit, ErrorRegistry, EXIT_CODES, loadConfig, loadConfigLanguage, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { DeckentError, emit, ErrorRegistry, EXIT_CODES, isCodedError, loadConfig, loadConfigLanguage, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { backupCommandSchema, type BackupCommand, type BackupResult } from '#engine/index.js';
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, formatAgo, formatBytes, formatClock, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
@@ -99,7 +99,13 @@ export async function backupCommand(argv: readonly string[], context: AdminComma
   // C-PRIO finding: a terminal that cannot hide typing is its own cause, never "wrong passphrase".
   if (stdin.isTTY && !(stdin as { setRawMode?: unknown }).setRawMode) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_PROMPT_UNAVAILABLE');
   const passphrase = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, t('cli.backup.passphrase', {}, locale)) : await readPiped(stdin);
-  const result = await context.executeBackup(root, input.data, passphrase, options);
+  let result: BackupResult;
+  try {
+    result = await context.executeBackup(root, input.data, passphrase, options);
+  } catch (error) {
+    if (action !== 'restore' || !isCodedError(error, 'PROJECT_ATTACHMENT_INCOMPLETE')) throw error;
+    throw new DeckentError(error.code, t('cli.backup.restore.incomplete', {}, locale));
+  }
   if (!json) emit(scopeNotice(scope, locale), adminSinks(context));
   emit(result, { json, render: data => renderResult(data, locale), ...adminSinks(context) });
   // S4B-4 §6.6: the purges recorded after this set are re-applied at the next start; an unreadable journal is named, never passed over.

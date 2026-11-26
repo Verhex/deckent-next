@@ -126,10 +126,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
         return (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
       });
       await shell?.host.close(); // the Workline did not take the shell (it closed or the launch returned early)
-      if (result === 'cancelled') {
-        await reportFatal(ErrorRegistry.createError('CLI_INSTALLATION_MISSING'), { ...context, argv, locale });
-        return 1;
-      }
+      if (result === 'cancelled') return (await import('./setup-offer.js')).reportSetupCancellation(context, locale);
+      if (typeof result === 'object') return (await import('./setup-offer.js')).reportAttachmentCancellation(context, locale, result.cancelledAttachmentScope);
       return result ?? 0;
     }
     // Installation on a Node.js below the supported floor is allowed to proceed, but never silently (a known heap overrun in older 24.x).
