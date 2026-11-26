@@ -26,7 +26,7 @@ export async function runList(values: ReadonlyMap<string, string>, json: boolean
   if (!scope) return;
   const limit = Number(values.get('--limit') ?? REGISTRY.list.runsShown);
   const all = await readScopeRuns(context, scope.scopeId), runs = all.slice(0, limit);
-  const refused = await refusedRequests(context, scope.scopeId);
+  const refused = await refusedRequests(context, scope.scopeId, json ? undefined : locale);
   emit({ schemaVersion: 1 as const, scopeId: scope.scopeId, runs, refused }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
     ...scopeLine(scope, locale),
     ...(data.runs.length ? [renderRunTable(data.runs, context, locale), t('cli.run.list.footer', { shown: data.runs.length, total: all.length }, locale)]
@@ -35,9 +35,11 @@ export async function runList(values: ReadonlyMap<string, string>, json: boolean
   ].join('\n')) });
 }
 /** BeUser D-08: requests the planner refused before any Run existed (none when no record or no reader). */
-export const refusedRequests = (context: RunCommandContext, scopeId: string) => context.listRefusedRequests?.(context.root ?? process.cwd(), scopeId, REGISTRY.list.refusedShown,
-  { env: context.env ?? process.env }).catch(() => []) ?? Promise.resolve([]);
-export function refusedLines(rows: readonly Readonly<{ atMs: number; code: string; title: string }>[], locale: Locale): string[] {
-  return rows.length ? ['', t('cli.run.refused.title', { count: rows.length }, locale), ...rows.map(row => t('cli.run.refused.row', { ago: formatAgo(row.atMs, Date.now(), locale),
-    code: row.code, title: row.title }, locale))] : [];
+export const refusedRequests = (context: RunCommandContext, scopeId: string, locale?: Locale) => context.listRefusedRequests?.(context.root ?? process.cwd(), scopeId, REGISTRY.list.refusedShown,
+  { env: context.env ?? process.env }, locale).catch(() => []) ?? Promise.resolve([]);
+export function refusedLines(rows: readonly Readonly<{ atMs: number; code: string; title: string; detail?: string }>[], locale: Locale): string[] {
+  return rows.length ? ['', t('cli.run.refused.title', { count: rows.length }, locale), ...rows.flatMap(row => [
+    t('cli.run.refused.row', { ago: formatAgo(row.atMs, Date.now(), locale), code: row.code, title: row.title }, locale),
+    ...(row.detail ? [`    ${row.detail}`] : []),
+  ])] : [];
 }

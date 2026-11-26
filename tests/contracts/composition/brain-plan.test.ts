@@ -1,4 +1,4 @@
-import { createNativeCodingTemplate } from '#adapters/index.js';
+import { createNativeCodingTemplate, openSqliteModelInvocationStore } from '#adapters/index.js';
 import * as workerImage from '#adapters/core/worker-image/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,13 +8,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun, inspectRun, inspectRunProposal, configuredApproval, reserveRunTasks } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
-import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
-import { exitCodeFor } from '#platform/index.js';
-import { brainRunId } from '#engine/index.js';
+import { inspectConfiguredModelInvocationCommand, invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { exitCodeFor, t } from '#platform/index.js';
+import { brainInvocationCommandId, brainRunId, ModelInvocationPurgeApplication, runRequestRefusedEvent, verifiedPrincipal } from '#engine/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
+import { inspectConfiguredRefusedRequests } from '#composition/core/run-planner/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
@@ -49,6 +51,34 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     const f = await fixture({ rejectStatus });
     for (let i = 0; i < 2; i++) await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', params: { reason: 'http-status', status: rejectStatus } });
     expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+    if (rejectStatus !== 400) return;
+    const context = await loadConfiguredScopeContext(f.project, command.scopeId, f.options, 'read');
+    const kept = await inspectConfiguredModelInvocationCommand(f.project, { schemaVersion: 1, scopeId: command.scopeId,
+      commandId: brainInvocationCommandId(command), reference: f.reference }, f.options);
+    expect(kept?.contentStatus).toBe('retained');
+    const purge = new ModelInvocationPurgeApplication(verifiedPrincipal(context.principal),
+      { authorize: async () => ({ revision: 'fixture', ruleId: 'fixture-purge' }) },
+      async () => openSqliteModelInvocationStore(f.path, context.config.storage.sqlite, 'forbid'), { now: Date.now });
+    const outcome = kept?.invocation?.outcome;
+    if (!kept || outcome?.state !== 'rejected' || !outcome.content) throw new Error('Expected a rejected receipt with content');
+    await purge.purge({ schemaVersion: 1, scopeId: command.scopeId, commandId: 'purge-refused-fixture', invocationId: kept.invocationId,
+      reference: f.reference, expectedContentDigest: outcome.content.digest });
+    const read = () => inspectConfiguredRefusedRequests(f.project, command.scopeId, 5, f.options, 'en');
+    expect.soft((await read())[0]).toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', detail: 'The rejection receipt records http-status (HTTP 400).' });
+    expect(t('cli.run.refused.receiptStatus', { reason: 'http-status', status: 400 }, 'tr')).toBe('Ret makbuzunda http-status (HTTP 400) kayıtlı.');
+    await withScopeAudit(context, audit => audit.record(runRequestRefusedEvent({ scopeId: command.scopeId, principal: context.principal,
+      policyRevision: context.document.revision, commandId: 'unmatched-refused-fixture', request: command.intent,
+      code: 'BRAIN_PROVIDER_REJECTED', atMs: Date.now() })));
+    const unmatched = (await read()).find(row => row.commandId === 'unmatched-refused-fixture');
+    expect(unmatched).toEqual(expect.objectContaining({ code: 'BRAIN_PROVIDER_REJECTED', title: command.intent }));
+    expect(unmatched).not.toHaveProperty('detail');
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    const grant = policy.grants.find((row: { id: string }) => row.id === 'invocation');
+    grant.actions = grant.actions.filter((action: string) => action !== 'inspect-content');
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    const short = (await read()).find(row => row.commandId === command.commandId);
+    expect(short).toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', title: command.intent });
+    expect(short).not.toHaveProperty('detail');
   });
   // D-02 (lead GO 2026-10-28, Jev c97aa511): an unregistered kind re-plans once (previous answer + refusal appended to the one user message, a derived
   // command id, spent like any Brain call); a second failure is the typed refusal naming the kinds and carrying the rejected plan; 0 disables it.

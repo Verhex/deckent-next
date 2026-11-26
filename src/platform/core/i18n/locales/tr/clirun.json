@@ -111,5 +111,16 @@
   "cli.run.report.channelColumns": "Kanal|Deneme|Ölçülen API (USD)|API ölçülmedi|Ölçülen abonelik çağrısı",
   "cli.run.report.channelEvidence": "Yalnız görülebilen denemeler; ölçülen tarife maliyeti sağlayıcı faturası değildir. Eksik abonelik sayıları bilinmiyor kalır. Fatura dönemi veya sıfırlama varsayılmaz.",
   "cli.run.refused.title": "Reddedilen istekler (en yeni {count}, iş oluşturulmadı):",
-  "cli.run.refused.row": "  {ago} · {code} · {title}"
+  "cli.run.refused.row": "  {ago} · {code} · {title}",
+  "cli.run.refused.receiptReason": "Ret makbuzunda {reason} kayıtlı.",
+  "cli.run.refused.receiptStatus": "Ret makbuzunda {reason} (HTTP {status}) kayıtlı.",
+  "cli.run.refused.httpStatus": "HTTP durumu {status}.",
+  "cli.run.refused.providerCode": "Sağlayıcı {code} kodunu bildirdi.",
+  "cli.run.refused.providerLogin": "Sağlayıcı, oturum açılması gerektiğini bildirdi.",
+  "cli.run.refused.quota": "Yanıtta abonelik kullanım sınırı bildirildi.",
+  "cli.run.refused.quotaStatus": "Bildirilen kota durumu {status}.",
+  "cli.run.refused.quotaReset": "Bildirilen kota sıfırlama zamanı {reset}.",
+  "cli.run.refused.check": "Denetim {check}.",
+  "cli.run.refused.stage": "Aşama {stage}.",
+  "cli.run.refused.errorClass": "Hata sınıfı {errorClass}."
 }

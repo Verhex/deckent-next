@@ -19,9 +19,13 @@ export function runRequestRefusedEvent(input: { readonly scopeId: string; readon
 }
 /** The newest refused requests of one scope, newest first (verified sealed records only). */
 export function listRefusedRunRequests(audit: AuditApplication, scopeId: string, limit: number): readonly RefusedRunRequest[] {
+  return listRefusedRunRequestEvents(audit, scopeId, limit).map(({ atMs, commandId, code, title }) => ({ atMs, commandId, code, title }));
+}
+/** The sealed actor is needed to verify a reader-side join. It stays inside the host's projection. */
+export function listRefusedRunRequestEvents(audit: AuditApplication, scopeId: string, limit: number) {
   return audit.listRecentKind(scopeId, 'run-request-refused', 0, limit).map(record => {
     const subject = record.event.subject as Refusal;
-    return { atMs: record.event.atMs, commandId: subject.commandId, code: subject.code, title: subject.title };
+    return { atMs: record.event.atMs, commandId: subject.commandId, code: subject.code, title: subject.title, principal: record.event.principal };
   });
 }
 

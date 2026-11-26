@@ -314,6 +314,19 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
   }
   if (phase !== 'send') return;
+  const cleanup = await fixture(), cleanupDriver = cleanup.runtime.driver;
+  cleanup.runtime.driver = async input => {
+    const opened = await cleanupDriver(input);
+    return { ...opened, native: (...args) => ({ ...opened.native(...args), send: async () => {
+      throw headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-run-remove' });
+    } }) };
+  };
+  const cleanupResult = await cleanup.run('guarded-cleanup-failed');
+  expect(cleanupResult).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true,
+    note: 'The model round ended without an answer. The agent turn’s temporary directory could not be removed. No tool call ran.' });
+  expect.soft(cleanup.events).toContainEqual({ kind: 'text', text: 'Check any tool results above and resolve the cleanup problem before sending another request.\n' });
+  expect.soft(t('headless.chat.runCleanupNext', {}, 'tr')).toBe('Yukarıdaki araç sonuçları varsa inceleyin ve yeni bir istek göndermeden önce temizlik sorununu giderin.');
+
   // Y25/Y26: a model refusal returned as the turn's rejection whose receipt cannot be recorded still names its check in the final note.
   const h = await fixture(), driver = h.runtime.driver, open = adapters.openSqliteModelInvocationStore;
   Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
@@ -460,9 +473,9 @@ it('keeps the summary refusal before and after claim in the final note in EN and
   }
 });
 
-it('derives verification execution and readiness from the same guarded observation', async () => {
+it('preserves the verification diagnosis and checks ordinary readiness again before using a sealed execution', async () => {
   if (await unsupportedPeer()) return;
-  const h = await fixture();
+  const h = await fixture(false);
   const common = { cli: true, login: true, environment: true, plugins: true, toolSurface: true, execution: h.execution };
   const mismatch = 'The operating-system user in the agent execution record differs from the configured user.\n';
   h.runtime.preflight = vi.fn(async () => undefined);
@@ -485,6 +498,16 @@ it('derives verification execution and readiness from the same guarded observati
   read.mockReset().mockResolvedValueOnce(common).mockResolvedValue({ ...common, bridge: false });
   await h.run('observed-bridge-refusal');
   expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
+  expect(h.state.calls).toBe(0);
+
+  h.events.length = 0;
+  read.mockReset().mockResolvedValueOnce({ ...common, toolSurface: null, plugins: null })
+    .mockResolvedValueOnce({ ...common, bridge: true })
+    .mockResolvedValue({ ...common, bridge: false });
+  const blocked = await h.run('new-ordinary-readiness-blocker');
+  expect.soft(read).toHaveBeenCalledTimes(3);
+  expect.soft(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
+  expect.soft(blocked.toolCalls).toBe(0);
   expect(h.state.calls).toBe(0);
 });
 

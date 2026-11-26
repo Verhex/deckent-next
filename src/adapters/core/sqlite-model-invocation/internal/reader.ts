@@ -3,7 +3,7 @@ import { readInvocationPlanUsage } from './plan-usage.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
+import { ProviderSpendError, ModelInvocationStoreError, verifyModelInvocationReceipt, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
 import { ledgerTransaction, openLedgerDatabase, MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
@@ -15,6 +15,16 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
   async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationRecord(this.db, scopeId, invocationId); }
   async loadReceipt(scopeInput: string, commandInput: string) {
     return loadInvocationCommandRecord(this.db, scopeInput, commandInput);
+  }
+  async loadReceiptMetadata(scopeInput: string, commandInput: string) {
+    const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
+    const row = this.db.prepare('SELECT invocation_id, record FROM model_invocations WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+    if (!row) return null;
+    if (typeof row.record !== 'string') throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+    const receipt = verifyModelInvocationReceipt(JSON.parse(row.record));
+    if (receipt.request.scopeId !== scopeId || receipt.request.commandId !== commandId || receipt.claim.invocationId !== row.invocation_id)
+      throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+    return receipt;
   }
   async loadObservationPage(scopeInput: string, after: string | null, limit: number) {
     const scopeId = invocationIdentity(scopeInput);

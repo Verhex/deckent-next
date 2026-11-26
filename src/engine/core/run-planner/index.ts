@@ -17,7 +17,7 @@ export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => b
 /** D-02: the configured corrective re-plans (`brain_planner.correctionRetries`, registry default 1, 0 disables). */
 export const brainCorrectionRetries = (config: unknown): number => brainPlannerConfigSchema.parse(config).correctionRetries;
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
-export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
+export const brainInvocationCommandId = (command: Pick<BrainPlanCommand, 'scopeId' | 'commandId'>) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
   selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null; language?: string }>) {
@@ -125,7 +125,11 @@ export const configuredBrainModel = (config: unknown): ModelReference | undefine
  * starts a new derived attempt instead, see `plan`).
  */
 function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvidence['adapter']; reason: string; httpStatus: number | null }>, data: string | null, adapterIds?: ReadonlySet<string>) {
-  const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }, adapterIds), create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
+  const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }, adapterIds);
+  return brainRejectionForBody(evidence, body);
+}
+export function brainRejectionForBody(evidence: Readonly<{ reason: string; httpStatus: number | null }>, body: import('#domain/index.js').HeadlessRejectionBody | null) {
+  const create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
   switch (body?.refusal) {
     case 'quota': return create('HEADLESS_QUOTA_EXHAUSTED', { params: typeof body.resetsAtMs === 'number' ? { resetsAtMs: body.resetsAtMs } : {} });
     case 'usage-unavailable': return create('SIWC_USAGE_UNAVAILABLE');

@@ -1,5 +1,5 @@
 import { DeckentError, didHeadlessLoginReturn, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
+import { blockingLoginCleanup, renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import type { PanelLine, ProviderModelOutcome } from '#surfaces/core/terminal-panels/index.js';
 import { type ProviderConnectHost, type ProviderDelegateClass, type ProviderPanelHost, type ProviderSubscriptionPort } from './context.js';
@@ -68,14 +68,19 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
         if (method !== undefined && !connect.loginMethods?.(kind).includes(method)) throw ErrorRegistry.createError('CLI_USAGE');
         const view = await connect.login({ connection: kind, ...(configDir ? { configDir } : {}), ...(method ? { loginMethod: method } : {}) }, options);
         if (!view) return { signedIn: false, refused: true, title: t('tui.provider.login.refusedTitle', { kind: label }, locale), lines: [] };
-        const signedIn = view.signedIn && view.exit === 'completed' && !view.cleanupIssue;
-        const title = view.cleanupIssue ? t('tui.provider.login.startedTitle', { kind: label }, locale)
+        const blocked = blockingLoginCleanup(view), refused = !!blocked || view.followUpFailed === true;
+        const signedIn = view.signedIn && view.exit === 'completed' && !blocked;
+        const title = blocked ? t('tui.provider.login.startedTitle', { kind: label }, locale)
           : signedIn && !view.statusIssue ? t('tui.provider.login.doneTitle', { kind: label }, locale)
           : view.exit === 'completed' && view.statusIssue ? t('tui.provider.login.completedUnverifiedTitle', { kind: label }, locale)
             : t('tui.provider.login.failedTitle', { kind: label }, locale);
-        return { signedIn, refused: !!view.cleanupIssue || view.followUpFailed === true, title,
+        const followUp = !refused && view.cleanupIssue;
+        return { signedIn, refused, title,
           lines: [...(signedIn && view.statusIssue ? [{ label: '', text: title, tone: 'warning' as const }] : []),
-            ...renderHeadlessLogin(view, locale, kind, process.stdin.isTTY && process.stdout.isTTY).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) }))] };
+            ...renderHeadlessLogin(view, locale, kind, process.stdin.isTTY && process.stdout.isTTY).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) })),
+            ...(followUp ? [{ label: '', tone: 'warning' as const, text: followUp.params?.['check'] === 'realm-gateway-close'
+              ? t('headless.login.gatewayDirectoryCleanup', {}, locale) : followUp.localize?.(locale).message ?? followUp.message },
+              { label: '', tone: 'warning' as const, text: t('headless.login.followUpCleanupNext', {}, locale) }] : [])] };
       } catch (error) {
         const known = error instanceof DeckentError && ErrorRegistry.has(error.code);
         const title = didHeadlessLoginReturn(error) ? t('tui.provider.login.startedTitle', { kind: label }, locale)

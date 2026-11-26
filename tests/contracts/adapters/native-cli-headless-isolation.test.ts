@@ -7,7 +7,7 @@ import { existsSync, lstatSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { Server as HttpServer } from 'node:http';
 import { Server as McpServer } from '@modelcontextprotocol/server';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
@@ -20,6 +20,7 @@ import { createClaudeAgentDriver, nativeWorkerProcessResult } from '#capabilitie
 import { ErrorRegistry } from '#platform/index.js';
 import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
+import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { doctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assistantLine, fullHelp, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -437,24 +438,46 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     const isolation = async () => ({ ...bubblewrapObservation('available'), status: 'available' as const,
       launcher: { source: 'system' as const, path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
         identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } });
-    const openGateway = egressGateway.openNativeEgressGateway;
+    const openGateway = egressGateway.openNativeEgressGateway, remove = files.rm;
+    let positive = true, failedPath: string | null = null;
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      await remove(...args);
+      if (args[0] === failedPath) throw new Error('fixture socket directory cleanup failure');
+    });
     const gateway = vi.spyOn(egressGateway, 'openNativeEgressGateway').mockImplementation(async input => {
       const opened = await openGateway(input);
+      if (!positive) { failedPath = dirname(opened.socketPath); return opened; }
       return { ...opened, async close() { await opened.close(); throw new Error('fixture gateway cleanup failure'); } };
     });
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
       schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 9, signal: null,
-      stdoutBase64: Buffer.from(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })).toString('base64'),
+      stdoutBase64: Buffer.from(JSON.stringify({ loggedIn: positive, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })).toString('base64'),
       stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
     }));
+    const login = () => runHeadlessLogin({ family: c.profile.protocol.family, stateDir: join(c.root, 'state'), configDir: c.configDir,
+      owned: true, executable: c.executable, sso: false, env: {}, now: Date.now, isolation });
     try {
-      const result = await runHeadlessLogin({ family: c.profile.protocol.family, stateDir: join(c.root, 'state'), configDir: c.configDir,
-        owned: true, executable: c.executable, sso: false, env: {}, now: Date.now, isolation });
+      const result = await login();
       expect(result).toMatchObject({ exit: 'cancelled', signedIn: true, statusIssue: { params: { check: 'login-status-positive-nonzero' } },
         cleanupIssue: { params: { check: 'realm-gateway-close' } } });
       expect(renderHeadlessLogin(result, 'en', 'fixture')).toContain('The sign-in command was interrupted.');
       expect(renderHeadlessLogin(result, 'tr', 'fixture')).toContain('Giriş komutu kesildi.');
-    } finally { gateway.mockRestore(); runner.mockRestore(); }
+      positive = false;
+      const nonpositive = await login();
+      expect.soft(nonpositive).toMatchObject({ exit: 'cancelled', signedIn: false, cleanupIssue: { params: { check: 'realm-gateway-close' } } });
+      for (const [locale, cause, next, retry] of [
+        ['en', 'The sign-in status check could not remove the isolated gateway’s temporary socket directory.', 'Resolve the cleanup problem before choosing Retry.', 'y: try again · n or Esc: back to the list'],
+        ['tr', 'Giriş durumu denetimi, yalıtılmış ağ geçidinin geçici soket dizinini kaldıramadı.', 'Yeniden denemeyi seçmeden önce temizlik sorununu giderin.', 'y: yeniden dene · n ya da Esc: listeye dön'],
+      ] as const) {
+        const panel = providerPanelPort(c.root, 'scope', { providerConnect: { kinds: [], endpoint: () => ({ ok: false, reason: 'unused' }),
+          probe: async () => { throw new Error('unexpected probe'); }, login: async () => nonpositive,
+          loginDir: async () => ({ owned: c.configDir }) }, connectModel: async () => { throw new Error('unexpected connect'); } }, {}, locale, String).subscription!;
+        const view = await panel.login('fixture', null);
+        expect.soft(view).toMatchObject({ refused: false, signedIn: false });
+        expect.soft(view.lines.map(line => line.text)).toEqual(expect.arrayContaining([cause, next]));
+        expect.soft(panel.words.retryKeys).toBe(retry);
+      }
+    } finally { cleanup.mockRestore(); gateway.mockRestore(); runner.mockRestore(); }
   });
 
   it('Doctor shows a completed negative parser probe even when its scratch cleanup fails', async () => {

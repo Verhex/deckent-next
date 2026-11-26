@@ -1,7 +1,51 @@
 import { isRunIntentResult, type RunPlanningResult, type RunIntentResult, type RunProposalResult } from '#engine/index.js';
-import { advisoryProposalPermissions, deriveProposalPermissions } from '#domain/index.js';
-import { currencyAmountText, terminalSafeText, redactForRecord, shortId, t, ErrorRegistry, type Locale } from '#platform/index.js';
+import { advisoryProposalPermissions, deriveProposalPermissions, type HeadlessRejectionBody } from '#domain/index.js';
+import { clockText, currencyAmountText, messageText, terminalSafeText, redactForRecord, shortId, t, ErrorRegistry, type Locale } from '#platform/index.js';
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
+
+const guardFields = new Set(['cliVersion', 'apiKeySource', 'permissionMode', 'tools', 'mcpServers', 'skills', 'plugins', 'pluginErrors', 'cwd',
+  'num_turns', 'usage', 'permission_denials', 'init', 'api_retry', 'result', 'json', 'after-turn', 'thread', 'turn', 'item',
+  'item.command_execution', 'item.file_change', 'item.mcp_tool_call', 'item.web_search', 'item.todo_list']);
+const modelFields = new Set(['init.model', 'modelUsage']);
+const outputStages = new Set(['model-unreported', 'error_during_execution', 'error_max_turns', 'error_max_budget_usd',
+  'error_max_structured_output_retries', 'turn-failed', 'no-answer', 'reconnect-limit', 'notice-limit', 'error']);
+const httpStatusText = (status: number | null | undefined, locale: Locale) =>
+  typeof status === 'number' && status >= 100 && status <= 599 ? t('cli.run.refused.httpStatus', { status }, locale) : null;
+const terminalRejection = (refusal: string, locale: Locale, check?: string) =>
+  ErrorRegistry.get('TERMINAL_CHAT_REJECTED', locale, { refusal, ...(check && { check }) })!.message;
+const words = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' ');
+
+export function renderRefusedPlanBody(body: HeadlessRejectionBody, facts: Readonly<{ providerCode: string | undefined;
+  quotaStatus: string | undefined; errorClass: string | undefined }>, locale: Locale): string | null {
+  if (body.schemaVersion === 3) return words(facts.providerCode
+    ? t('cli.run.refused.providerCode', { code: facts.providerCode }, locale) : null, httpStatusText(body.status, locale)) || null;
+  if (body.schemaVersion === 2 || body.schemaVersion === 4) return null;
+  const { refusal, field, subtype, resetsAtMs } = body, status = httpStatusText(body.status, locale);
+  switch (refusal) {
+    case 'quota': {
+      const details = words(
+        field && messageText(`headless.chat.quotaWindow.${field}`, locale),
+        facts.quotaStatus ? t('cli.run.refused.quotaStatus', { status: facts.quotaStatus }, locale) : null,
+        typeof resetsAtMs === 'number' && Number.isFinite(new Date(resetsAtMs).getTime()) ? t('cli.run.refused.quotaReset', { reset: clockText(resetsAtMs) }, locale) : null,
+        status);
+      return details ? words(t('cli.run.refused.quota', {}, locale), details) : null;
+    }
+    case 'credits-required': return status ? words(t('error.HEADLESS_CREDITS_REQUIRED', {}, locale), status) : null;
+    case 'login-required': return words(t('cli.run.refused.providerLogin', {}, locale), status);
+    case 'guard': return field && guardFields.has(field) ? terminalRejection(refusal, locale, field) : null;
+    case 'model-mismatch': return subtype === 'model-reported' ? words(terminalRejection(refusal, locale),
+      field && modelFields.has(field) ? t('cli.run.refused.check', { check: field }, locale) : null) : null;
+    case 'invalid-output': return words(terminalRejection(refusal, locale),
+      subtype && outputStages.has(subtype) ? t('cli.run.refused.stage', { stage: subtype }, locale) : null,
+      field && modelFields.has(field) ? t('cli.run.refused.check', { check: field }, locale) : null,
+      facts.errorClass ? t('cli.run.refused.errorClass', { errorClass: facts.errorClass }, locale) : null);
+    case 'resource-limit': return field === 'cpu-time' || field === 'processes' || field === 'memory'
+      ? ErrorRegistry.get('HEADLESS_LIMIT_REACHED', locale, { limit: field })!.message : null;
+    case 'provider-error': return words(terminalRejection(refusal, locale), status);
+    case 'response-limit': return terminalRejection(refusal, locale);
+  }
+}
+
 /** BeUser DR3-02: the configured pool's hold as read for the card (`deckent pool status`'s view); a held pool never refuses the Run, it waits. */
 export type PlanningPoolHold = Readonly<{ state: string; poolId: string; hold: Readonly<{ changedBy: Readonly<{ issuer: string; subject: string }>; reason: string | null }> | null }>;
 const heldPool = (pool?: PlanningPoolHold | null) => pool?.state === 'held' ? { pool: terminalSafeText(pool.poolId), by: terminalSafeText(pool.hold ? `${pool.hold.changedBy.issuer}/${pool.hold.changedBy.subject}` : '-'),

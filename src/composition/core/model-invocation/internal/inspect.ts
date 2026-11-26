@@ -16,6 +16,10 @@ export async function inspectConfiguredModelInvocationCommand(projectRoot: strin
   try { return await inspectionApplication(await loadInvocationContext(projectRoot, query.scopeId, options, 'read')).inspectCommand(query); }
   catch (error) { throw queryFailure(error); }
 }
+/** Internal planner reader, with the actual caller's current inspection policy. */
+export async function configuredInvocationInspection(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
+  return inspectionApplication(await loadInvocationContext(projectRoot, scopeId, options, 'read'));
+}
 /** Internal runtime wiring only; actual socket peer evidence is supplied out of band. */
 export async function inspectPeerConfiguredModelInvocation(projectRoot: string, input: ModelInvocationQuery,
   peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery) {

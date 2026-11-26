@@ -9,7 +9,7 @@ import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agent
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   ModelInvocationPolicyAuthorization, type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type Locale, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -111,21 +111,27 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         try {
           await host.nativeAgent.preflight(profile, preflightSignal);
           ({ execution, readiness } = await inspectNativeChatForVerification(profile, host.nativeAgent));
+          if (execution) {
+            const current = await inspectNativeChat(profile, host.nativeAgent);
+            if (current.state === 'unavailable') { execution = null; readiness = current; }
+          }
           diagnostic = readiness.diagnostic;
         } catch (error) {
           diagnostic = error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error : undefined;
           if (preflightSignal.aborted) {
             const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
             const notice = diagnostic?.params?.['check'] === 'cancelled' ? undefined : diagnostic?.localize?.(language).message;
-            if (notice && !channel.signal.aborted) channel.emit({ kind: 'text', text: notice + '\n' });
-            return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, notice);
+            const recorded = recordedNativeDiagnosis(diagnostic, language, notice);
+            if (notice && !channel.signal.aborted) emitNativeDiagnosis(channel, notice, recorded);
+            return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, recorded);
           }
           execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
         }
       }
       if (execution && readiness.state !== 'ready') {
         const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-        channel.emit({ kind: 'text', text: (diagnostic?.localize?.(language).message ?? t('headless.agent.readiness.verifying', {}, language)) + '\n' });
+        const display = diagnostic?.localize?.(language).message ?? t('headless.agent.readiness.verifying', {}, language);
+        emitNativeDiagnosis(channel, display, recordedNativeDiagnosis(diagnostic, language, display));
         await channel.drained();
       }
       if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, loaded, peer, options,
@@ -133,9 +139,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_CAPABILITY_UNSEALED' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
       const notice = diagnostic?.params?.['check'] === 'cancelled' ? undefined : diagnostic?.localize?.(language).message;
-      channel.emit({ kind: 'text', text: (notice ?? nativeChatReasonText(reason, language, readiness.state === 'unknown')) + '\n' });
+      const recorded = recordedNativeDiagnosis(diagnostic, language, notice);
+      if (notice) emitNativeDiagnosis(channel, notice, recorded);
+      else channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
       await channel.drained();
-      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, notice);
+      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, recorded);
     };
     if (observed.state !== 'unknown' || !host.nativeAgent?.preflight) return start();
     const key = runningKey(command.scopeId, command.turnId);
@@ -148,6 +156,18 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     finally { if (host.running.get(key)?.controller === controller) host.running.delete(key); }
   }
   return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel);
+}
+
+// Retry guidance is human-facing. The durable chat note keeps the original guard diagnosis.
+function recordedNativeDiagnosis(error: DeckentError | undefined, language: Locale, text: string | null | undefined) {
+  return error?.code === 'HEADLESS_LOGIN_BUSY' && error.params?.['holder'] === 'guard'
+    ? t('error.headless.loginBusy.guardRecorded', {}, language) : text ?? undefined;
+}
+/** Optional extra presentation cannot consume enough channel space to cause a new failure. */
+function emitNativeDiagnosis(channel: RuntimeServiceTurnChannel, display: string, existing?: string) {
+  const event = { kind: 'text' as const, text: display + '\n' };
+  if (existing === display || Buffer.byteLength(JSON.stringify(event)) <= channel.room()) channel.emit(event);
+  else if (existing) channel.emit({ kind: 'text', text: existing + '\n' });
 }
 
 async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: LocalPeerIdentity, options: ConfigLoadOptions,
@@ -345,7 +365,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const refusal = nativeRefusal() ?? (returned && await mayReadReturnedRefusal(invocation) ? returned : null);
           const diagnosis = refusal ?? (isHeadlessDiagnosticCode(failure.code)
             ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : null);
-          return failedRound(roundSignal.aborted ? 'cancelled' : refusal ? diagnosisText(refusal) : failure.code, diagnosis ?? null);
+          const recorded = typeof diagnosis === 'string' ? recordedNativeDiagnosis(failure, language, diagnosis) : diagnosis;
+          if (typeof diagnosis === 'string' && diagnosis !== recorded) emitNativeDiagnosis(channel, diagnosis);
+          return failedRound(roundSignal.aborted ? 'cancelled' : refusal ? diagnosisText(refusal) : failure.code, recorded ?? null);
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();
@@ -371,7 +393,14 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         }
         if (refusalReason) return { status: 'failed', state: refusalReason };
         const fresh = freshModelInvocationDiagnostic(result);
-        if (fresh?.localize) return { status: 'failed', state: 'unknown', diagnosis: fresh.localize(language).message };
+        if (fresh?.localize) {
+          const check = fresh.params?.['check'];
+          if (fresh.code === 'HEADLESS_PREFLIGHT_FAILED' && (check === 'agent-run-dispose' || check === 'agent-run-remove'))
+            emitNativeDiagnosis(channel, t('headless.chat.runCleanupNext', {}, language));
+          const display = fresh.localize(language).message, recorded = recordedNativeDiagnosis(fresh, language, display)!;
+          if (display !== recorded) emitNativeDiagnosis(channel, display);
+          return { status: 'failed', state: 'unknown', diagnosis: recorded };
+        }
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
@@ -478,7 +507,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
           const diagnosis = ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message;
           if (!diagnosis) return null;
           return { diagnosis: failure.code === 'HEADLESS_LOGIN_REQUIRED' && failure.params?.['reason'] === 'reported-signed-out'
-            ? `${diagnosis} ${t('agent.turn.outcome.compactionSignIn', {}, language)}` : diagnosis };
+            ? `${diagnosis} ${t('agent.turn.outcome.compactionSignIn', {}, language)}` : recordedNativeDiagnosis(failure, language, diagnosis)! };
         };
         try {
           await recheckNative();

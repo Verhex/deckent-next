@@ -123,7 +123,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       const permissions = await app.permissions({ principal, scopeId, keys: [keyPath], layers });
       return permissions === null ? null : { layers, decisions: permissions.map(({ layer, decision, ruleId }) => ({ layer, decision, ruleId })) };
     },
-    listRefusedRequests: (root, scopeId, limit, options) => inspectConfiguredRefusedRequests(root, scopeId, limit, options), // BeUser D-08
+    listRefusedRequests: inspectConfiguredRefusedRequests, // BeUser D-08
     changeDeliveryDismissal: changeConfiguredDeliveryDismissal, // BeUser M-33
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
     inspectToolchainRefresh,

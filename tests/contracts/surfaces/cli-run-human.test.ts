@@ -62,19 +62,24 @@ it('run list reads the /runs query, lists waiting Runs first with short ids and 
   const parked = { ...view([{ taskBrief: { ...brief('Answer the auditor'), title: 'Auditor question' }, phase: 'awaiting-decision' }]), runId: OTHER,
     state: { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2 } };
   const s = store([view([{ taskBrief: brief(`Post the invoice\nsecond line`), phase: 'accepted' }, {}]), parked]);
+  const readRefused = async (_root: string, _scope: string, _limit: number, _options: unknown, locale?: 'en' | 'tr') =>
+    [{ atMs: Date.now(), code: 'BRAIN_PROVIDER_REJECTED', title: 'Place purchase order',
+      ...(locale ? { detail: locale === 'en' ? 'The rejection receipt records http-status (HTTP 400).' : 'Ret makbuzunda http-status (HTTP 400) kayıtlı.' } : {}) }];
   for (const [locale, words] of [['en', ['a1b2c3', 'a1b2ff', 'parked (needs your input)', 'running', '1/2', 'Post the invoice', 'scope: s (default)']],
     ['tr', ['bekletildi: sizden bilgi bekliyor', 'çalışıyor', 'Kapsam: s (varsayılan)', 'gösterildi']]] as const) {
     const out = sinks();
-    await runList(new Map(), false, { ...s.context, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, locale, stdin: { isTTY: false }, stdout: out.stdout } as never, locale);
+    await runList(new Map(), false, { ...s.context, listRefusedRequests: readRefused, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, locale, stdin: { isTTY: false }, stdout: out.stdout } as never, locale);
     const text = out.out.join('');
     for (const word of words) expect(text).toContain(word);
     expect(text.indexOf('a1b2ff')).toBeLessThan(text.indexOf('a1b2c3')); // waiting first, although it is the older id in the query
     expect(text).not.toContain(LONG); expect(text).not.toContain('second line');
+    expect.soft(text).toContain(locale === 'en' ? 'The rejection receipt records http-status (HTTP 400).' : 'Ret makbuzunda http-status (HTTP 400) kayıtlı.');
   }
   expect(s.calls.filter(call => call.startsWith('ids:'))).toEqual(['ids:s', 'ids:s']);
   const json = sinks();
-  await runList(new Map([['--scope', 's']]), true, { ...s.context, root, stdout: json.stdout } as never, 'en');
+  await runList(new Map([['--scope', 's']]), true, { ...s.context, listRefusedRequests: readRefused, root, stdout: json.stdout } as never, 'en');
   expect(JSON.parse(json.out.join(''))).toMatchObject({ schemaVersion: 1, scopeId: 's', runs: [{ runId: OTHER }, { runId: LONG }] });
+  expect(JSON.parse(json.out.join('')).refused[0]).not.toHaveProperty('detail');
 });
 
 it('run list off a terminal without a scope or a configured default refuses with the valid scopes (CLI_SCOPE_REQUIRED, exit 2)', async () => {

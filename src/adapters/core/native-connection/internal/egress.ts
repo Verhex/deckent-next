@@ -89,6 +89,9 @@ export const nativeEgressLimits = () => Object.freeze({ connections: catalog.lim
  * that answers CONNECT to the provider's `providers.json` destinations and, only when explicitly supplied, the turn's exact sentinel HTTP MCP
  * route. Both share connection/idle/traffic bounds; CONNECT checks are unchanged. No subscription credential or bootstrap is handled here.
  */
+const gatewayDirectoryFailures = new WeakSet<DeckentError>();
+export const failedGatewayDirectoryRemoval = (error: DeckentError): boolean => gatewayDirectoryFailures.has(error);
+
 export async function openNativeEgressGateway(input: { readonly provider: NativeSubscription['provider']; readonly directory: string;
   readonly mcp?: { readonly sentinelHost: string; readonly path: string; readonly maxConnections: number; readonly progressIntervalMs: number;
     readonly handle: (request: IncomingMessage, response: ServerResponse, count: (bytes: number) => boolean) => Promise<void>;
@@ -138,7 +141,10 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     try { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
     catch { cleanup ??= headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-gateway-close' }); }
     try { await rm(directory, { recursive: true, force: true }); }
-    catch { cleanup ??= headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-gateway-close' }); }
+    catch {
+      cleanup ??= headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'realm-gateway-close' });
+      if (cleanup.code === 'HEADLESS_PREFLIGHT_FAILED' && cleanup.params?.['check'] === 'realm-gateway-close') gatewayDirectoryFailures.add(cleanup);
+    }
     if (cleanup) throw cleanup;
   };
   try {
