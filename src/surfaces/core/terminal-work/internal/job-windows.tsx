@@ -181,12 +181,19 @@ const transcriptWindow: JobWindowOpen = async (_command, panel, execution, ledge
   const headingPrefix = fillTemplate(work.transcriptHeader.split('{n}', 1)[0]!, values).replace(/\s/gu, '');
   const heading: WindowLine = {
     spans: [span(fillTemplate(work.transcriptHeader, values), { role: 'muted' })],
-    onDrawn: ordinal === undefined ? undefined : (visibleText, precedingText) => {
+    onDrawn: ordinal === undefined ? undefined : rows => {
       if (execution.signal.aborted || safeOrdinal(index) !== ordinal) return;
-      const before = precedingText.replace(/\s/gu, '');
-      if (before.length <= headingPrefix.length && (before + visibleText.replace(/\s/gu, '')).startsWith(`${headingPrefix}${ordinal}`)) {
-        pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
+      const digits = String(ordinal), start = headingPrefix.length;
+      let next = start;
+      for (const row of rows) {
+        const before = row.precedingText.replace(/\s/gu, ''), visible = row.text.replace(/\s/gu, '');
+        if (!(before + visible).startsWith(headingPrefix)) continue;
+        const offset = before.length;
+        const end = Math.min(offset + visible.length, start + digits.length);
+        if (offset > next || end <= next || visible.slice(next - offset, end - offset) !== digits.slice(next - start, end - start)) continue;
+        next = end;
       }
+      if (next === start + digits.length) pinWorkerOrdinal(ledger, worker.attempt!, ordinal);
     },
   };
   await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [heading,

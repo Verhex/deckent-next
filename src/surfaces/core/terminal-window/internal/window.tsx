@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
-import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, Transform, useInput, useIsScreenReaderEnabled, usePaste, useWindowSize, type DOMElement, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, wrapCells, wrapSpans, type Span, SpanText, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render-ink/index.js';
@@ -15,17 +15,42 @@ import { highlightCells } from './selection.js';
  * empty label continues the previous field in its value column).
  * `exact`: the value is a command, path, pattern or preview — it breaks at the cell limit and keeps every character (no word wrap).
  * `link`: every drawn row of the line is an OSC 8 hyperlink to this http(s) address, so a click on any piece of a wrapped link opens all of it. */
+type DrawnRow = Readonly<{ text: string; precedingText: string }>;
+type ReportRows = (rows: readonly DrawnRow[]) => void;
 export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean; link?: string;
-  /** Report a visible display row and the preceding wrapped text of its logical line. */
-  onDrawn?: ((visibleText: string, precedingText: string) => void) | undefined }>;
+  /** Report the visible rows of this logical line together, from one output frame. */
+  onDrawn?: ReportRows | undefined }>;
 
-/** Ink runs Transform after clipping. Its screen-reader output instead emits the text tree at commit. */
-export function DrawnText({ children, text, onDrawn }: {
-  readonly children: ReactNode; readonly text: string; readonly onDrawn: (text: string) => void;
+export function createWindowDrawing() {
+  let pending = new Map<ReportRows, DrawnRow[]>();
+  return {
+    add(report: ReportRows, row: DrawnRow) {
+      const rows = pending.get(report);
+      if (rows) rows.push(row); else pending.set(report, [row]);
+    },
+    finish(presented: boolean) {
+      if (!pending.size) return;
+      const frame = pending;
+      pending = new Map();
+      if (presented) for (const [report, rows] of frame) report(rows);
+    },
+  };
+}
+export const WindowDrawingContext = createContext<ReturnType<typeof createWindowDrawing> | null>(null);
+
+export function DrawnText({ children, text, precedingText = '', onDrawn }: {
+  readonly children: ReactNode; readonly text: string; readonly precedingText?: string; readonly onDrawn: ReportRows;
 }) {
-  const screenReader = useIsScreenReaderEnabled();
-  useLayoutEffect(() => { if (screenReader) onDrawn(text); }, [screenReader, onDrawn, text]);
-  return screenReader ? children : <Transform transform={line => { onDrawn(stripVTControlCharacters(line)); return line; }}>{children}</Transform>;
+  const screenReader = useIsScreenReaderEnabled(), drawing = useContext(WindowDrawingContext);
+  const report = (line: string) => {
+    const row = { text: stripVTControlCharacters(line), precedingText };
+    if (drawing) drawing.add(onDrawn, row); else onDrawn([row]);
+  };
+  // Ink visits Box state after building its accessible label. Returning false adds no state announcement.
+  // A nested Transform would also run during Yoga measurement.
+  return screenReader
+    ? <Box aria-label={text} aria-state={{ get selected() { report(text); return false; } }} />
+    : <Transform transform={line => { report(line); return line; }}>{children}</Transform>;
 }
 
 /** Breaks spans at exactly `width` cells, keeping every character (whitespace included) in order. */
@@ -349,7 +374,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
         const onDrawn = body[logicalLine]?.onDrawn;
         if (!onDrawn) return text;
         const precedingText = rows.slice(starts[logicalLine], at).map(plainText).join('');
-        return <DrawnText key={at} text={plainText(row)} onDrawn={line => onDrawn(line, precedingText)}>{text}</DrawnText>;
+        return <DrawnText key={at} text={plainText(row)} precedingText={precedingText} onDrawn={onDrawn}>{text}</DrawnText>;
       })}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
       {footer ? <WindowInputContext.Provider value={queuedList ? acceptsListInput : acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused, width)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
