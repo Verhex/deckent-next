@@ -145,6 +145,8 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
     ? `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.\n`
     : `Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için bu klasörde \`deckent terminal attach --scope ${scope} --preview\` çalıştırın. \`deckent init\` burada yeni ve ayrı bir kurulum başlatır.\n`;
   const maskedScope = 'token=demo';
+  const lifecycleCancelled = { en: 'Cancelled; nothing was changed.\n', tr: 'Vazgeçildi; hiçbir şey değiştirilmedi.\n' };
+  const registerCancelled = { en: 'Registration cancelled. The source installation was not registered.\n', tr: 'Kayıt iptal edildi. Kaynak kurulum kaydedilmedi.\n' };
   const cancelledWithOriginalScope = {
     en: 'Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, rerun the earlier preview in this folder with the original scope. `deckent init` starts a new, separate installation here.\n',
     tr: 'Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için önceki önizlemeyi bu klasörde özgün kapsamla tekrar çalıştırın. `deckent init` burada yeni ve ayrı bir kurulum başlatır.\n',
@@ -168,8 +170,9 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
         const context = { root, env, projectAttachment, stdin: { isTTY: true } as NodeJS.ReadStream,
           stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
         const attach = args.includes('--command-id');
-        expect(await main(['terminal', 'attach', ...args, '--apply'], context), errors).toBe(attach ? 1 : 0);
-        if (attach) expect.soft(errors).toBe(cancelled(language, 'target'));
+        // Owner decision 155: a cancelled card exits 1 and says so; register names its own outcome, the other lifecycle actions reuse the shared sentence.
+        expect.soft([await main(['terminal', 'attach', ...args, '--apply'], context), errors], `cancelled ${args[0]} (${language})`)
+          .toEqual([1, attach ? cancelled(language, 'target') : args[0] === '--register' ? registerCancelled[language] : lifecycleCancelled[language]]);
         expect(confirm).toHaveBeenCalledOnce();
         const card = confirm.mock.calls[0]![0];
         expect(card.title).toBe(language === 'en' ? en : tr); expect(card.initial).toBe('no');
@@ -190,6 +193,15 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
       }
     }
     expect(projectAttachment).not.toHaveBeenCalled();
+    // Without `--expect` the register preview runs first and may already have narrowed the folder permission, so the cancel never says nothing changed.
+    for (const language of ['en', 'tr'] as const) {
+      await config(language); let errors = ''; confirm.mockClear(); projectAttachment.mockClear().mockResolvedValueOnce({ planDigest: digest });
+      const context = { root, env, projectAttachment, stdin: { isTTY: true } as NodeJS.ReadStream,
+        stdout: { isTTY: true, write() {} }, stderr: { write: (text: string) => { errors += text; } } };
+      expect.soft([await main(['terminal', 'attach', '--register', '--scope', 'source', '--apply'], context), errors], `cancelled register after its preview (${language})`)
+        .toEqual([1, registerCancelled[language]]);
+      expect(projectAttachment.mock.calls.map(([, input]) => input.action)).toEqual(['register-preview']); expect(confirm).toHaveBeenCalledOnce();
+    }
 
     const incomplete = ErrorRegistry.createError('PROJECT_ATTACHMENT_INCOMPLETE');
     const offer = (scopeId: string) => ({ kind: 'ready', scopeId, path: root, writeRoot: root,
@@ -242,14 +254,17 @@ it('attachment confirmations name the selected action in EN/TR and never offer a
     errors = '';
     const bare = await main([], bareContext);
     expect.soft([bare, errors]).toEqual([1, `Hata: Proje bağlantısı tamamlanmadı. Güncel planı \`deckent terminal attach --scope ${projectId} --preview\` ile önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin. [PROJECT_ATTACHMENT_INCOMPLETE]\n`]);
-    // The fatal renderer masks the composed message, so a scope it would alter is never offered as a command argument.
+    // The fatal renderer masks the composed message, so a scope it would alter is never offered as a command argument;
+    // `Bearer` alone is unmasked, but the bearer-token pattern masks the word after it (`--preview`) in the composed sentence.
     for (const [language, unfinished] of [
       ['en', 'Error: The attachment did not complete. Preview the current plan again in this folder with the original scope. If the folder already has a pending or active connection, the apply command from a fresh preview will be refused. Resume with the original attach command or ask an installation administrator for help. [PROJECT_ATTACHMENT_INCOMPLETE]\n'],
       ['tr', 'Hata: Proje bağlantısı tamamlanmadı. Güncel planı bu klasörde özgün kapsamla yeniden önizleyin. Klasörde zaten bekleyen veya etkin bir bağlantı varsa yeni önizlemenin uygulama komutu reddedilir. Bu durumda özgün attach komutuyla sürdürün veya kurulum yöneticisinden yardım isteyin. [PROJECT_ATTACHMENT_INCOMPLETE]\n'],
     ] as const) {
       await config(language);
-      errors = ''; projectAttachment.mockResolvedValueOnce(offer(maskedScope));
-      expect.soft([await main([], bareContext), errors], `unfinished bare attachment with a masked scope (${language})`).toEqual([1, unfinished]);
+      for (const scope of [maskedScope, 'Bearer']) {
+        errors = ''; projectAttachment.mockResolvedValueOnce(offer(scope));
+        expect.soft([await main([], bareContext), errors], `unfinished bare attachment with scope ${scope} (${language})`).toEqual([1, unfinished]);
+      }
     }
   } finally { confirm.mockRestore(); }
 });

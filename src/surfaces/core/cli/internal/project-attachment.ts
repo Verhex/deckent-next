@@ -58,7 +58,9 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
     if (answer !== 'yes') {
       if (action === 'apply') return (await import('./setup-offer.js')).reportAttachmentCancellation(context, locale, parsed.data.scopeId);
-      return;
+      // Owner decision 155: a cancelled lifecycle card is not a success and the action is not sent; register's preview may already have narrowed the folder.
+      emit(action === 'register' ? t('setup.attachment.cancelled.register', {}, locale) : t('climodels.card.cancelled', {}, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
+      return 1;
     }
   }
   let result: unknown;
