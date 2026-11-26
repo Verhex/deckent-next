@@ -3,7 +3,7 @@ import { modelConnectCommandSchema, type ModelConnectResult } from '#domain/inde
 import { isDeepStrictEqual } from 'node:util';
 import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError, refuseRetiredModelActivation } from '#engine/index.js';
 import { SIWC_INFERENCE, providerSpendingConfiguredBudget, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
-import { DeckentError, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, isRecord, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -17,6 +17,10 @@ import { inspectConfiguredProviderSpendAccount } from '#composition/core/provide
 import { loadComposedConfig } from '#composition/core/root/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
+/** Connect checkpoints compare only the layer facts the plan is computed from: declarations, profiles, worker image pins and delivery frames. */
+const planFacts = (layer: Record<string, unknown>) => [layer['provider_catalog'], layer['provider_invocation_profiles'],
+  ...([['admission', 'registry'], ['service', 'responseMaxBytes'], ['mcp', 'responseMaxBytes']] as const).map(([section, key]) => {
+    const value = layer[section]; return isRecord(value) ? value[key] : undefined; })];
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   let siwc: ReturnType<typeof configuredSiwcConnect> | null = null;
@@ -43,7 +47,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (command && kind?.connect?.adapter === SIWC_INFERENCE.adapter.id) siwc = configuredSiwcConnect(projectRoot, command, options, host.siwcPresentation);
     const siwcModels = async () => (await siwc!.models()).map(row => row.slug);
     let pulled: readonly string[] | null = null;
-    const checkLayers = async () => sameLayers(await snapshotConfiguredConfig(projectRoot, options));
+    const checkLayers = async () => {
+      const snapshot = await snapshotConfiguredConfig(projectRoot, options);
+      if (observed && (!isDeepStrictEqual(planFacts(observed.global), planFacts(snapshot.global)) || !isDeepStrictEqual(planFacts(observed.project), planFacts(snapshot.project))))
+        throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+    };
     const app = new ModelConnectApplication({
       kind: id => kind?.id === id ? { ...kind, keyRequired: kind.key?.required ?? false } : null,
       defaults: registry.profileDefaults,

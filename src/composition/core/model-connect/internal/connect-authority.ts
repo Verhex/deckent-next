@@ -1,18 +1,39 @@
 import { isDeepStrictEqual } from 'node:util';
 import { type ModelConnectCommand, type ModelReference, type ProviderCatalogDocument } from '#domain/index.js';
-import { evaluateConfigWrite, subscriptionActor, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
+import { evaluateConfigWrite, subscriptionActor, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, ModelConnectApplication, modelActivationPolicyRule, type ModelConnectPorts } from '#engine/index.js';
 import { discoveredProviderCatalog, providerDiscoveryChannel, nativeCliHeadlessDefinitionSchema, localPrincipalChannel, localPrincipalPeer, SIWC_INFERENCE, type ProviderConnectKind } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { assertConfiguredActivationWitness, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { assertConfiguredActivationWitness, configuredAgentMarked, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { authorizeSiwcConnect } from './siwc.js';
 import { listConfiguredConnectionWorkspaces, type ModelDiscoveryHost } from './discovery.js';
 
+type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
+type Verdict = Readonly<{ ruleId: string | null; decision?: string; effect?: string }>;
+const hold = () => ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+/** As on the activation side: a later policy document stops connect only when a deciding grant, its terms or its verdict changes. */
+function decidingGrants() {
+  const rechecks: ((now: Context) => Promise<void>)[] = [];
+  return {
+    record<T extends Verdict>(context: Context, decision: T, decide: (at: Context) => T | Promise<T>) {
+      const terms = (at: Context, { ruleId, decision: verdict, effect }: Verdict) =>
+        [ruleId, verdict ?? effect, ruleId === null ? null : modelActivationPolicyRule(at.document, at.principal, ruleId)];
+      const basis = terms(context, decision), { document } = context;
+      rechecks.push(async now => {
+        if (now.document === document || isDeepStrictEqual(now.document, document)) return;
+        const fresh = await Promise.resolve().then(() => decide(now)).catch(() => { throw hold(); });
+        if (!isDeepStrictEqual(terms(now, fresh), basis)) throw hold();
+      });
+      return decision;
+    },
+    async recheck(now: Context) { for (const check of rechecks) await check(now); },
+  };
+}
+
 export function connectAuthority(root: string, command: ModelConnectCommand, options: ConfigLoadOptions, kind: ProviderConnectKind) {
   const { scopeId } = command;
   type Layers = Awaited<ReturnType<ModelConnectPorts['layers']>>;
-  type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
   const readCatalog = (channelId: string) => inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId, channelId }, options, { modelUse: false }).then(result => result.channels[0]);
   const catalogs = new Map<string, ReturnType<typeof readCatalog>>();
   const inspect = (channelId: string) => {
@@ -24,14 +45,16 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   let initial: Context | undefined;
   const channel = localPrincipalChannel(), peer = localPrincipalPeer();
   let witnessed = false;
+  const { record, recheck } = decidingGrants();
   const current = async () => {
     const now = await read();
     initial ??= now;
-    if (channel !== localPrincipalChannel() || peer !== localPrincipalPeer() || !isDeepStrictEqual(initial.principal, now.principal) || !isDeepStrictEqual(initial.document, now.document)
+    if (channel !== localPrincipalChannel() || peer !== localPrincipalPeer() || !isDeepStrictEqual(initial.principal, now.principal)
       || !isDeepStrictEqual(initial.layout, now.layout) || initial.config.company.id !== now.config.company.id
-      || !isDeepStrictEqual(initial.config.cli.agentEnvironment, now.config.cli.agentEnvironment)
+      || !isDeepStrictEqual(initial.config.cli.agentEnvironment, now.config.cli.agentEnvironment) && configuredAgentMarked(initial, options) !== configuredAgentMarked(now, options)
       || initial.installationId !== null && initial.installationId !== now.installationId
-      || initial.projectId !== null && initial.projectId !== now.projectId) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+      || initial.projectId !== null && initial.projectId !== now.projectId) throw hold();
+    await recheck(now);
     return now;
   };
   const attest = async (context: Context, fresh = false) => {
@@ -41,12 +64,19 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   };
   const witness = async () => attest(await current());
   const channelFor = (base: string | null) => kind.connect!.seed ?? providerDiscoveryChannel(kind, base);
-  const catalog = (context: Context, channelId: string, modelId: string | null, action: 'activate' | 'inspect' = 'activate', level: 'scope' | 'installation' = 'scope') =>
-    new ModelCatalogPolicyAuthorization(contextPolicySource(context, context.document)).authorize(action, scopeId, { channelId, modelId }, context.principal, level);
-  const chat = (context: Context, reference: ModelReference) =>
-    new ModelActivationPolicyAuthorization(contextPolicySource(context, context.document)).authorize('activate', { scopeId, reference }, context.principal);
+  const catalog = async (context: Context, channelId: string, modelId: string | null, action: 'activate' | 'inspect' = 'activate', level: 'scope' | 'installation' = 'scope') => {
+    const decide = (at: Context) => new ModelCatalogPolicyAuthorization(contextPolicySource(at, at.document)).authorize(action, scopeId, { channelId, modelId }, at.principal, level);
+    return record(context, await decide(context), decide);
+  };
+  const chat = async (context: Context, reference: ModelReference) => {
+    const decide = (at: Context) => new ModelActivationPolicyAuthorization(contextPolicySource(at, at.document)).authorize('activate', { scopeId, reference }, at.principal);
+    return record(context, await decide(context), decide);
+  };
   const config = (context: Context, writes: readonly { layer: 'global' | 'project'; keyPath: string }[]) => {
-    for (const item of writes) evaluateConfigWrite(context.document, context.principal, { ...item, commandId: command.commandId, scopeId, principal: context.principal });
+    for (const item of writes) {
+      const decide = (at: Context) => evaluateConfigWrite(at.document, at.principal, { ...item, commandId: command.commandId, scopeId, principal: at.principal });
+      record(context, decide(context), decide);
+    }
   };
   const workerFacts = async (reference: ModelReference, registration: ProviderCatalogDocument | null, reading = inspect) =>
     ModelConnectApplication.workerFacts(await reading(reference.providerId), reference, registration, Date.now());
@@ -94,7 +124,8 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
     await catalog(context, channelId, null);
     if (discovery) await catalog(context, channelFor(base), null, 'inspect');
     if ('reference' in command.model) { await chat(context, command.model.reference); knownWrites(context, layers, command.model.reference, false); }
-    if (hasOAuth) await authorizeSiwcConnect(context, scopeId, command.subscription?.connectionId, { root, options, command });
+    const secret = hasOAuth ? await authorizeSiwcConnect(context, scopeId, command.subscription?.connectionId, { root, options, command }) : undefined;
+    if (secret) record(context, await secret(context), secret);
     if (!kind.connect!.seed && 'nativeId' in command.model) await probeTarget(context, base ?? '', command.model.nativeId, layers);
     if (command.workspaceId) {
       const rows = await listConfiguredConnectionWorkspaces(root, scopeId, kind.id, base, options, host);

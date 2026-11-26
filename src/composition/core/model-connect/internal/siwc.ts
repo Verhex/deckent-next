@@ -82,9 +82,11 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
   const view = await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.inspect(definition.connectionId));
   return { models, ...view, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
 };
-/** A connected account's lease authorizes a refresh only if one is due; reauthorization requires that exact account's set permission. */
+/** A connected account's lease authorizes a refresh only if one is due; reauthorization requires that exact account's set permission.
+ * Returns the deciding secret-cell decision, re-runnable on a later policy document, when one was made. */
 export async function authorizeSiwcConnect(context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, scopeId: string, connectionId?: string,
   request?: { root: string; options: ConfigLoadOptions; command: ModelConnectCommand }) {
+  type Context = typeof context;
   if (request && context.installationId) {
     if (request.command.subscription?.newAccount) return;
     const rows = await withConfiguredSiwc(request.root, scopeId, request.options, 'inspect', app => app.list()).catch(() => null);
@@ -93,7 +95,12 @@ export async function authorizeSiwcConnect(context: Awaited<ReturnType<typeof lo
     connectionId = selected?.connectionId ?? connectionId;
   }
   const name = connectionId ? `${SIWC_PROTOCOL.connectionSecretPrefix}${connectionId.replaceAll('-', '').toUpperCase()}` : SIWC_PROTOCOL.hostSecretName;
-  const { effect } = await policySecretChangeAuthorization(context.document, context.principal)({ principal: context.principal, scopeId, name, action: 'set' });
-  const refusal = policyVerdictRefusal(effect, { deny: 'OAUTH_CONNECTION_DENIED' });
-  if (refusal) throw new OAuthConnectionError(refusal);
+  const decide = async (at: Context) => {
+    const decision = await policySecretChangeAuthorization(at.document, at.principal)({ principal: at.principal, scopeId, name, action: 'set' });
+    const refusal = policyVerdictRefusal(decision.effect, { deny: 'OAUTH_CONNECTION_DENIED' });
+    if (refusal) throw new OAuthConnectionError(refusal);
+    return decision;
+  };
+  await decide(context);
+  return decide;
 }
