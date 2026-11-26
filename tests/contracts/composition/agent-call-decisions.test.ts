@@ -731,6 +731,21 @@ describe('policy-turn record of refused and silently allowed calls (S5 D1)', () 
     expect(subject?.['samples']).toHaveLength(64);
     expect(f.events()).toBe(1);
     expect(broken.events()).toBe(0);
+    // Card R4-C: a local row keeps its key bytes, so its event id is the one pinned at da23e714d.
+    expect((group?.event as { eventId?: string } | undefined)?.eventId).toBe('df733ea8810e727b958379a01469c1398e2c8af7a2c6b94adc7a9cbc15f294d3');
+    // A CLI report groups by its own source: two reported elements are one exact row without a call; the same identity counts once.
+    // The same key with deckent-decision is a separate group, and the write gate refuses that cross pair (an owed row lost, so reported).
+    const deny = snapshot('deny', null) as { revision: string }, c = await fixture([deny]), same = {};
+    const report = { source: 'cli-reported', basis: 'cli-permission-denial', reason: 'permission-denials', role: 'provider-tool-permission', tool: { name: edit.name, version: edit.version } } as const;
+    for (const identity of [same, same, {}]) c.decisions.observeNative({ ...report, identity });
+    c.decisions.observe({ basis: 'cli-permission-denial' as never, reason: 'permission-denials', role: 'provider-tool-permission', identity: {} }, deny.revision, edit);
+    expect(await c.decisions.flushRefusals()).toBe('refusal-audit-loss');
+    const reported = c.auditRecords();
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.event).toMatchObject({ policyRevision: deny.revision, subject: { decisionSource: 'cli-reported', evidenceBasis: 'cli-permission-denial',
+      reasonCode: 'permission-denials', operationClass: 'invoke', tool: { name: 'edit_file', version: 1 }, target: { role: 'provider-tool-permission', identity: null },
+      count: 2, countBasis: 'exact', samples: [], overflow: false } });
+    expect(reported[0]?.event.subject).not.toHaveProperty('call');
   });
 
   it('seals a coordinator refusal for an unoffered tool without disclosing its name or executing it', async context => {

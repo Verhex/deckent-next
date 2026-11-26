@@ -171,6 +171,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   });
   return {
     observe: observed,
+    /** Card R4-C: a Native boundary refusal; its revision is the turn's or Attempt's decision context, its source and basis say who refused. */
+    observeNative: (observation: Omit<Parameters<typeof refusalAudit.observe>[0], 'policyRevision'>) => refusalAudit.observe({ ...observation, policyRevision: context.document.revision }),
     flushRefusals: refusalAudit.flush,
     observeCall(tool: AgentToolSpec, args: Record<string, unknown>, call: CallRef, decision: LocalRefusal) {
       const prior = stored.get(keyOf(tool, args));

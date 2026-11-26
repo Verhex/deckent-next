@@ -1,4 +1,4 @@
-import { AUDIT_POLICY_TURN_LIMITS, type AuditEvent, type LocalRefusalBasis } from '#domain/index.js';
+import { AUDIT_POLICY_TURN_LIMITS, type AuditEvent, type CliReportedRefusalBasis, type LocalRefusalBasis } from '#domain/index.js';
 import { TURN_NOTE_MAX_CHARS, type AuditApplication } from '#engine/index.js';
 import { sha256, t, type IntegrityAuthority, type Locale, type TrustedClock } from '#platform/index.js';
 import type { ChatTurnResult } from '#domain/index.js';
@@ -6,7 +6,8 @@ import type { ChatTurnResult } from '#domain/index.js';
 type Summary = Extract<AuditEvent['subject'], { kind: 'access-refusal-summary' }>;
 type Attempt = Pick<Summary, 'runId' | 'taskId' | 'attemptId' | 'generation'>;
 export type RefusalAuditLoss = 'refusal-audit-loss';
-export type LocalRefusal = { readonly basis: LocalRefusalBasis; readonly reason: string; readonly role: string;
+/** `source`: who refused (default deckent-decision); only the write gate's exact pairs are stored. */
+export type LocalRefusal = { readonly basis: LocalRefusalBasis | CliReportedRefusalBasis; readonly source?: 'deckent-decision' | 'cli-reported'; readonly reason: string; readonly role: string;
   readonly operationClass?: Summary['operationClass']; readonly operation?: Summary['operation']; readonly commandId?: string;
   readonly identity?: object; readonly keyed?: (authority: IntegrityAuthority) => Pick<Summary, 'invocationId' | 'target'> };
 type Decision = LocalRefusal & { readonly policyRevision: string; readonly call?: Summary['call']; readonly tool?: Summary['tool'] };
@@ -24,7 +25,7 @@ export function createRefusalAudit(input: { readonly scopeId: string; readonly t
       if (decision.identity) seen.add(decision.identity);
       try {
         const key = JSON.stringify([decision.basis, decision.reason, decision.role, decision.policyRevision, decision.operationClass,
-          decision.tool, decision.operation, decision.commandId]);
+          decision.tool, decision.operation, decision.commandId, ...(decision.source === 'cli-reported' ? [decision.source] : [])]); // a local key keeps its bytes
         const at = input.clock.sample().wallMs;
         let group = decision.keyed ? undefined : groups.get(key);
         if (!group) {
@@ -51,7 +52,7 @@ export function createRefusalAudit(input: { readonly scopeId: string; readonly t
               audit.record({ schemaVersion: 1, eventId: sha256(JSON.stringify(['access-refusal-summary:1', installationId, companyId, scopeId, principal, turnId, key])),
                 scopeId, principal, policyRevision: decision.policyRevision, atMs: last,
                 subject: { kind: 'access-refusal-summary', schemaVersion: 1, operationClass: decision.operationClass ?? 'invoke',
-                  decisionSource: 'deckent-decision', reasonCode: decision.reason, evidenceBasis: decision.basis,
+                  decisionSource: decision.source ?? 'deckent-decision', reasonCode: decision.reason, evidenceBasis: decision.basis,
                   ...(decision.tool ? { tool: decision.tool } : {}), ...(decision.operation ? { operation: decision.operation } : {}),
                   ...(decision.commandId ? { commandId: decision.commandId } : {}), target: { role: decision.role, identity: null }, ...keyed,
                   turnId, ...input.attempt, ...(count === 1 && decision.call ? { call: decision.call } : {}),

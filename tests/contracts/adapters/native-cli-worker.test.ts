@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, rmdir, writeFile, readdir, readFile, lstat, unlink 
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { GitRunWorkspaceProvider, sealAttemptWorkerEvents } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
@@ -468,6 +468,9 @@ async function checkWorkerReservation(scenario: 'settled' | 'cleanup' | 'expiry'
     const target = { scopeId: scoped.identity.scopeId, connectionId: f.input.binding.connectionId, reference, execution: seal };
     const file = nativeWorkerEvidenceFile(f.stateDir, process.getuid!(), 8192, nativeWorkerEvidenceKey(target));
     const prepare = (input: SandboxRequest) => prepareNativeCliWorker({ profile: task, request: input, ports, fence: f.host.fence, custody: nativeWorkerCustodyFile(input) });
+    // Card R4-C: the ports' loss latch answers per identity; the supervisor asks with its own request identity only.
+    ports.refusalAuditLoss = identity => isDeepStrictEqual(identity, scoped.identity) ? 'refusal-audit-loss' : undefined;
+    const observeRefusal = vi.fn<NonNullable<ToolSessionPort['observeRefusal']>>();
     ports.readiness = async () => ({ state: 'ready', execution: seal }); ports.f08 = () => readNativeWorkerEvidence(file, target);
     ports.verification = { acquire: async input => claimNativeWorkerVerification(file, target, input.identity.attemptId) };
     let driver: NativeCliWorkerDriver;
@@ -510,7 +513,7 @@ async function checkWorkerReservation(scenario: 'settled' | 'cleanup' | 'expiry'
         stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null };
     });
     const invokeAgent = vi.fn<NonNullable<AgentTurnPorts['invokeAgent']>>(async ({ session: host }) => {
-      ports.openTools = async () => ({ ...host, terminalFailure: () => approvalFailure });
+      ports.openTools = async () => ({ ...host, observeRefusal, terminalFailure: () => approvalFailure });
       const first = await prepare(scoped); if (first.state !== 'ready') throw new Error(JSON.stringify(first));
       if (project) {
         const c = await loadConfiguredScopeContext(project.project, scoped.identity.scopeId, project.options, 'read');
@@ -520,6 +523,13 @@ async function checkWorkerReservation(scenario: 'settled' | 'cleanup' | 'expiry'
       }
       const stopped = await first.supervisor.execute(scoped);
       expect(stopped).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, stderr: 'mcp-item-reservation' });
+      expect(observeRefusal).toHaveBeenCalledExactlyOnceWith({ source: 'deckent-decision', basis: 'native-item-reservation', reason: 'mcp-item-reservation',
+        role: 'item-reservation', tool: { name: tool.name, version: 1 }, identity: expect.objectContaining({ id: 'second' }) });
+      expect(first.supervisor.refusalAuditLoss()).toBe('refusal-audit-loss');
+      // The worker bridge's explicit port (the tool gate) forwards observations to the Attempt's tools.
+      const forwarded = { ...observeRefusal.mock.calls[0]![0], identity: {} };
+      driver.tools.observeRefusal?.(forwarded);
+      expect(observeRefusal).toHaveBeenLastCalledWith(forwarded);
       if (expireApproval) expect(stopped.stdout).toBe('APPROVAL_EXPIRED');
       if (!project) await first.supervisor.release(scoped);
       const recorded = recordedNativeCliWorkerSupervisor(await first.supervisor.captureProfile());
@@ -547,6 +557,7 @@ async function checkWorkerReservation(scenario: 'settled' | 'cleanup' | 'expiry'
     expect(await file.read()).toBeNull();
     ports.openTools = async () => f.host.tools;
     const second = await prepare(next); if (second.state !== 'ready') throw new Error(JSON.stringify(second));
+    expect(second.supervisor.refusalAuditLoss()).toBeUndefined();
     expect(await second.supervisor.execute(next)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } }); await second.supervisor.release(next);
     expect(await file.read()).toMatchObject({ attemptId: next.identity.attemptId, verdict: { state: 'verified' } });
     if (project) {

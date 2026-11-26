@@ -12,6 +12,7 @@ import { nativeQuotaPolicy, parseClaudeStreamLine } from '#adapters/core/native-
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 import { CODEX_FAMILY } from '../../fixtures/native-headless/codex.js';
 import { FAMILY, PINNED, assistantLine, happyLines, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
+import { a0Events } from '../../fixtures/native-agent-a0/fixture.js';
 
 describe('S3-1 headless registry data', () => {
   it('never copies identity files through configEphemeral, even when they are visible', () => {
@@ -317,6 +318,30 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     expect(delivered).toBe(1);
     expect(laterFailure.line(JSON.stringify({ ...resultLine('ok'), permission_denials: [{}] }))).toBe('stop');
     expect(laterFailure.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ kind: 'refused' });
+    // Card R4-C C1: one CLI report per plain-object element whose full tool name is host-offered, only after init with a non-empty session id
+    // that the terminal result repeats and a valid result envelope. The stop and its facts equal those of an unobserved port.
+    const reports: unknown[] = [], exit = { reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false } as const;
+    const deny = (result: Record<string, unknown>, offered: readonly (typeof tool)[] = [tool], sessionId: string | undefined = 's-1') => {
+      const before = reports.length, outcomes = [true, false].map(observe => {
+        const observed: ToolSessionPort = { ...port, session: { ...session, tools: offered }, ...(observe ? { observeRefusal: report => { reports.push(report); } } : {}) };
+        const driver = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port: observed, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 65536, quotaPolicy: nativeQuotaPolicy() });
+        driver.line(JSON.stringify(initLine({ tools: offered.map(entry => bridge.toolPrefix + entry.name), mcp_servers: [{ name: bridge.serverName, status: 'connected' }],
+          model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir', session_id: sessionId })));
+        return [driver.line(JSON.stringify(result)), driver.finish(exit)];
+      });
+      expect(outcomes[0]).toEqual(outcomes[1]);
+      return reports.length - before;
+    };
+    // The retained real Claude terminal record (A0 claude-tools, line 18) is the format positive: one offered element, one report.
+    const retained = (await a0Events('claude-tools')).find(event => event['type'] === 'result')!, slowWait = { ...tool, name: 'slow_wait' };
+    expect(deny(retained, [slowWait], String(retained['session_id']))).toBe(1);
+    expect(reports.at(-1)).toEqual({ source: 'cli-reported', basis: 'cli-permission-denial', reason: 'permission-denials', role: 'provider-tool-permission',
+      tool: { name: 'slow_wait', version: 1 }, identity: (retained['permission_denials'] as unknown[])[0] });
+    const offered = { tool_name: bridge.toolPrefix + tool.name };
+    expect(deny(resultLine('', { permission_denials: [offered, {}, null, 7, [offered], { tool_name: bridge.toolPrefix + 'unoffered' }, { tool_name: tool.name }, { ...offered }] }))).toBe(2);
+    for (const permission_denials of [[], undefined, 'x', [{}], [null]]) expect(deny(resultLine('', { permission_denials }))).toBe(0);
+    for (const [over, sessionId] of [[{ session_id: 's-2' }, 's-1'], [{ session_id: undefined }, undefined], [{ is_error: 'no' }, 's-1'], [{ subtype: 7 }, 's-1']] as const)
+      expect(deny(resultLine('', { permission_denials: [offered], ...over }), [tool], sessionId)).toBe(0);
     const broken = start(nativeQuotaPolicy(), 'continue', () => { throw new Error('notice-failed'); });
     expect(await broken.line(event)).toBe('stop');
     expect(broken.paidExtraUsage()).toBeNull();

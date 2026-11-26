@@ -122,9 +122,10 @@ async function workerFixture(ttl = 5000) {
   const options = { env: { ...f.env, DECKENT_GLOBAL_HOME: join(f.project, '..', 'global') } };
   const context = await (await import('#composition/core/scoped-request/index.js')).loadConfiguredScopeContext(f.project, 'scope', options, 'read');
   await adapters.openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
+  const loss = vi.fn();
   const port = await adapters.withMcpPrincipal(() => createConfiguredNativeCliWorkerRuntime(f.project, options)!.openTools({ protocolVersion: 1,
     identity: { scopeId: 'scope', runId: 'worker-run', taskId: 'worker-task', attemptId: 'worker-attempt', generation: 1, layoutRevision: 'layout' }, workspace: attempt, argv: [] },
-  {} as adapters.NativeCliWorkerBinding, new AbortController().signal, {}));
+  {} as adapters.NativeCliWorkerBinding, new AbortController().signal, {}, null, loss));
   const propose = (id: string, path: string, signal = new AbortController().signal) => adapters.withMcpPrincipal(() => port.propose({ id, name: 'write_file', argumentsJson: JSON.stringify({ path, content: id }) },
     { kind: 'claude-tool-use', toolUseId: id, deckentCallId: id }, signal));
   const pending = async () => {
@@ -135,7 +136,7 @@ async function workerFixture(ttl = 5000) {
     }
     throw new Error('worker-card-not-visible');
   };
-  return { ...f, attempt, port, propose, pending };
+  return { ...f, attempt, port, propose, pending, loss };
 }
 
 it('K23 witnessed worker approval writes only its Attempt; denial and unattended AI/SDK leave targets unchanged', async () => {
@@ -194,7 +195,18 @@ it('K23 witnessed worker approval writes only its Attempt; denial and unattended
     expect(f.port.recordedError?.({ id: 'revoked-output', name: 'write_file', argumentsJson: JSON.stringify({ path: 'src/revoked.ts', content: 'revoked-output' }) }, policyResult)).toBe('uncertain');
     expect(policyResult.outcome).toMatchObject({ status: 'error', text: expect.stringContaining('denied-by-policy') });
     await expect(readFile(join(f.attempt, 'src/revoked.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // Card R4-C: the worker port binds Native observations to this Attempt's writer; a real writer fault on one owed row reaches the
+    // loss callback once, only when the tools close, and the other row is sealed with this Attempt's custody.
+    f.port.observeRefusal?.({ source: 'deckent-decision', basis: 'native-item-reservation', reason: 'mcp-item-reservation', role: 'item-reservation', identity: {} });
+    f.port.observeRefusal?.({ source: 'deckent-decision', basis: 'tool-offer', reason: 'NATIVE_BRIDGE_TOOL_UNKNOWN', role: 'tool-surface', identity: {} });
+    f.exec("CREATE TRIGGER refuse_native_refusal BEFORE INSERT ON audit_events WHEN NEW.kind='access-refusal-summary' AND json_extract(NEW.record,'$.event.subject.evidenceBasis')='native-item-reservation' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+    expect(f.loss).not.toHaveBeenCalled();
     await adapters.withMcpPrincipal(() => f.port.cancel());
+    expect(f.loss).toHaveBeenCalledExactlyOnceWith('refusal-audit-loss');
+    const refusals = f.rows("SELECT record FROM audit_events WHERE kind = 'access-refusal-summary'").map(row => JSON.parse(String((row as { record: string }).record)).event.subject);
+    expect(refusals.filter(row => row.evidenceBasis === 'native-item-reservation')).toEqual([]);
+    expect(refusals.filter(row => row.evidenceBasis === 'tool-offer')).toEqual([expect.objectContaining({ runId: 'worker-run', taskId: 'worker-task',
+      attemptId: 'worker-attempt', generation: 1, count: 1, countBasis: 'exact', samples: [] })]);
     expect(f.policyTurns().flatMap(turn => turn.refused.calls)).toContainEqual(expect.objectContaining({ decision: 'deny', stage: 'effect', revision: expect.stringContaining(policy.revision),
       call: expect.objectContaining({ callId: 'revoked-output' }) }));
   } finally { await adapters.withMcpPrincipal(() => f.port.cancel()); }

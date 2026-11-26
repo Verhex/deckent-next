@@ -7,16 +7,19 @@ import type { AuditSubject } from './contract.js';
 const LOCAL_REFUSAL_BASES = [
   'fetch-address-policy', 'fetch-redirect-policy', 'fetch-preflight-policy', 'workspace-read-guard',
   'agent-tool-policy', 'tool-approval', 'tool-offer', 'mcp-send-trust', 'retained-response-authority', 'workspace-edit-guard', 'shell-local-guard',
-  'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence',
+  'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence', 'native-request-replay', 'native-item-reservation',
 ] as const;
 export type LocalRefusalBasis = typeof LOCAL_REFUSAL_BASES[number];
-const localRefusalBases: ReadonlySet<string> = new Set(LOCAL_REFUSAL_BASES);
+/** The one CLI-reported pair: a verified Native CLI's own permission-denial report (the CLI reported it; deckent did not decide it). */
+export type CliReportedRefusalBasis = 'cli-permission-denial';
+const localRefusalBases: ReadonlySet<string> = new Set(LOCAL_REFUSAL_BASES), cliReportedBasis: CliReportedRefusalBasis = 'cli-permission-denial';
 
 /** Writer admission only. Older readers can still verify all frozen v1 subjects. */
 export function canWriteAuditSubject(subject: AuditSubject): boolean {
   if (subject.kind === 'installation-rebind') return false;
   return subject.kind !== 'access-refusal-summary'
-    || subject.decisionSource === 'deckent-decision' && localRefusalBases.has(subject.evidenceBasis);
+    || subject.decisionSource === 'deckent-decision' && localRefusalBases.has(subject.evidenceBasis)
+    || subject.decisionSource === 'cli-reported' && subject.evidenceBasis === cliReportedBasis;
 }
 export const rebindAdmissionRecordSchema = z.discriminatedUnion('basis', [
   z.strictObject({ basis: z.literal('open-class') }),

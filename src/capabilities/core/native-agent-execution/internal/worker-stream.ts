@@ -37,7 +37,8 @@ export function nativeWorkerToolGate(port: ToolSessionPort, signal: AbortSignal)
         calls.set(call.id, { call: frozen, result, active: () => !callSignal.aborted && !signal.aborted && !controller.signal.aborted, selectedText: () => deliveries.get(result)?.(), recordedError: () => port.recordedError?.(frozen, result) }); if (port.terminalFailure?.()) controller.abort(); return result; }
       catch (error) { refused ||= !signal.aborted && !callSignal.aborted
         && (error instanceof NativeCliWorkerError || error instanceof ClaudeAgentError && error.field !== 'cancelled'); controller.abort(); throw error; }
-    }, cancel: () => port.cancel(), revoke: () => port.revoke() } satisfies ToolSessionPort,
+    }, observeRefusal: observation => port.observeRefusal?.(observation), // Card R4-C: this explicit bridge port forwards to its delegate.
+    cancel: () => port.cancel(), revoke: () => port.revoke() } satisfies ToolSessionPort,
   };
 }
 const workerResultCode = (reason: string) => headlessDiagnosticIdentifier('HEADLESS_WORKER_RESULT', { reason });

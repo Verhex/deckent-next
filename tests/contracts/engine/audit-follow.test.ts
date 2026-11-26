@@ -94,8 +94,10 @@ it('seals and appends only supported local decision pairs and consumes no sequen
     const audit = new AuditApplication(store, integrity);
     const query = { schemaVersion: 1 as const, scopeId: 'scope', after: 0, limit: 10 };
     const before = follow.read(query);
+    // Card R4-C: the CLI pair opens only as cli-reported + cli-permission-denial; both halves of each cross pair stay closed.
     for (const [decisionSource, evidenceBasis] of [['adapter-reported', 'fetch-address-policy'], ['cli-reported', 'fetch-address-policy'],
-      ['deckent-decision', 'unlisted-local-basis']] as const) {
+      ['deckent-decision', 'unlisted-local-basis'], ['deckent-decision', 'cli-permission-denial'], ['cli-reported', 'native-request-replay'],
+      ['adapter-reported', 'cli-permission-denial']] as const) {
       const invalid: AuditEvent = { ...event('scope', 2), subject: { ...refusalSubject, decisionSource, evidenceBasis } };
       expect(auditEventSchema.parse(invalid)).toEqual(invalid);
       expect(() => audit.record(invalid)).toThrow(expect.objectContaining({ code: 'AUDIT_INVALID' }));
@@ -110,11 +112,12 @@ it('seals and appends only supported local decision pairs and consumes no sequen
       expect(follow.read(query)).toEqual(before);
       db.exec('DROP TRIGGER refuse_audit_insert');
     } finally { db.close(); }
-    for (const [index, evidenceBasis] of ['fetch-address-policy', 'fetch-redirect-policy', 'fetch-preflight-policy', 'workspace-read-guard',
+    for (const [index, [decisionSource, evidenceBasis]] of [...['fetch-address-policy', 'fetch-redirect-policy', 'fetch-preflight-policy', 'workspace-read-guard',
       'agent-tool-policy', 'tool-approval', 'tool-offer', 'mcp-send-trust', 'retained-response-authority', 'workspace-edit-guard', 'shell-local-guard',
-      'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence'].entries()) {
+      'model-ingress-quarantine', 'shell-write-set', 'pre-effect-evidence', 'native-request-replay', 'native-item-reservation'].map(basis => ['deckent-decision', basis] as const),
+    ['cli-reported', 'cli-permission-denial'] as const].entries()) {
       const sequence = index + 2;
-      const input: AuditEvent = { ...event('scope', sequence), subject: { ...refusalSubject, decisionSource: 'deckent-decision', evidenceBasis } };
+      const input: AuditEvent = { ...event('scope', sequence), subject: { ...refusalSubject, decisionSource, evidenceBasis } };
       const seal = sealAuditRecord(input, sequence, integrity);
       expect(verifyAuditRecord(seal, integrity)).toEqual(seal);
       expect(audit.list('scope', sequence - 1, 10)).toEqual([]);

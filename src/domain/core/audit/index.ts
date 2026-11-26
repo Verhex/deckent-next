@@ -10,6 +10,6 @@ export { auditFollowQuerySchema, auditFollowPageSchema } from './internal/follow
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AuditFollowQuery, AuditFollowPage } from './internal/follow.js';
 export { auditRefusalMatchesPolicy } from './internal/correlation.js';
 export { canWriteAuditSubject, rebindAdmissionRecordSchema } from './internal/installation-rebind.js';
-export type { LocalRefusalBasis, RebindAdmissionRecord } from './internal/installation-rebind.js';
+export type { LocalRefusalBasis, CliReportedRefusalBasis, RebindAdmissionRecord } from './internal/installation-rebind.js';
 export { opaqueIdentitySchema } from './internal/opaque-identity.js';
 export type { OpaqueIdentity } from './internal/opaque-identity.js';

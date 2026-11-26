@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { parseCodexExecLine } from '#adapters/core/native-connection/index.js';
-import { CODEX_TOOL_ITEM_RESERVATION, type createClaudeAgentDriver, nativeAgentItemReason, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, type createClaudeAgentDriver, nativeAgentItemReason, observeNativeRefusal, nativeAgentToolResultSchema, nativeCliAgentSchema, nativeAgentBridgeSchema, toolSessionSchema, type NativeAgentToolResult, type ToolSession, type ToolSessionPort } from '#capabilities/index.js';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
 import { refuse } from './contract.js';
@@ -36,7 +36,8 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
   const reserved = new WeakMap<object, string>();
   let thread = false, started = false, completed = false, notices = 0, refusal: Refusal | null = null;
   const fail = (field: string) => refusal ??= reject('invalid-response', { refusal: 'guard', field });
-  return { refusal: () => refusal, accepts(call: Parameters<ToolSessionPort['propose']>[0]): boolean {
+  // Card R4-C: `observer` hears only the mcp-item-reservation branch (more than one active match, or an item held for another call).
+  return { refusal: () => refusal, accepts(call: Parameters<ToolSessionPort['propose']>[0], observer?: Pick<ToolSessionPort, 'session' | 'observeRefusal'>): boolean {
       if (refusal || !started || completed) return false;
       let args: unknown; try { args = JSON.parse(call.argumentsJson); } catch { return false; }
       const matches = [...active.values()].filter(item => item['tool'] === call.name && isDeepStrictEqual(item['arguments'], args));
@@ -44,7 +45,7 @@ export function codexAgentTurn(prepared: Prepared, preflight: HeadlessPreflight,
       if (!item) return false;
       const previous = reserved.get(item);
       if (matches.length !== 1 || previous !== undefined && previous !== call.id) {
-        fail(CODEX_TOOL_ITEM_RESERVATION);
+        fail(CODEX_TOOL_ITEM_RESERVATION); observeNativeRefusal(observer, 'item-reservation', call, call.name);
         return false;
       }
       reserved.set(item, call.id);

@@ -92,6 +92,6 @@ export async function openConfiguredNativeWorkerTools(root: string, request: Par
   // Cancellation before K1 reaches invokeAgent must not leave an unresolved openTools promise.
   void turn.then(() => lifetime.failed(ErrorRegistry.createError('NATIVE_AGENT_BRIDGE_UNAVAILABLE')), lifetime.failed);
   const session = await lifetime.opened;
-  return { ...session, terminalFailure: () => failure, propose: async (...args) => {
+  return { ...session, observeRefusal: decisions.observeNative, terminalFailure: () => failure, propose: async (...args) => {
     if (failure) throw ErrorRegistry.createError('APPROVAL_EXPIRED'); return session.propose(...args); }, cancel: () => lifetime.close(() => session.cancel(), turn), revoke: () => lifetime.close(() => session.revoke(), turn) };
 }

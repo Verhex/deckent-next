@@ -7,7 +7,7 @@ export type { NativeCliAgent, NativeAgentBridge, NativeAgentLoginMethod } from '
 export { nativeCliHeadlessDefinitionSchema, nativeAgentExecutionSchema, nativeAgentReadinessReasonSchema, nativeAgentReadinessSchema } from './internal/contract.js';
 export { localNativeAgentReadinessSchema } from './internal/contract.js';
 export type { NativeCliHeadlessDefinition, NativeAgentExecution, NativeAgentReadinessReason, NativeAgentReadiness } from './internal/contract.js';
-export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentCorrelationMeta, nativeAgentToolResultSchema } from './internal/session.js';
+export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentCorrelationMeta, nativeAgentToolResultSchema, observeNativeRefusal, type NativeRefusalObservation } from './internal/session.js';
 export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionClosure, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionCancellation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionRevocation } from './internal/session.js';
 export { nativeAgentInitReason, nativeAgentItemReason } from './internal/guards.js';
 export { parseNativeCliRegistry, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeCliCapabilitiesSchema, nativeEffortArgs, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type NativeCliCapabilities } from './internal/command-registry.js';

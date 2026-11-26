@@ -86,10 +86,15 @@ it('WER-A error completion needs prior unique reservation, durable evidence and 
   for (const shape of ['completed', 'failed']) for (const gap of ['not-reserved', 'ambiguous', 'rebound', 'unrecorded', 'not-selected', 'bytes-changed', 'cancelled']) {
     const driver = create(() => ({ call, result, active: () => gap !== 'cancelled', recordedError: () => gap === 'unrecorded' ? undefined : 'ordinary',
       selectedText: () => gap === 'not-selected' ? undefined : (gap === 'bytes-changed' ? ' ' : '') + JSON.stringify(result) }));
+    // Card R4-C R1: the observer is called only on the mcp-item-reservation branch; the other `false` reasons (not started, no match) stay silent.
+    let reserved = 0; const onReserved = { session, observeRefusal: () => { reserved++; } };
+    expect(driver.accepts(call, onReserved)).toBe(false);
     expect(feed(driver, [thread, turn, start()])).toEqual([null, null, null]);
+    expect(driver.accepts({ ...call, argumentsJson: '{"path":"other.txt"}' }, onReserved)).toBe(false);
     if (gap === 'ambiguous') expect(driver.line(JSON.stringify(start('another-item')))).toBeNull();
-    if (gap !== 'not-reserved') expect(driver.accepts(call)).toBe(gap !== 'ambiguous');
-    if (gap === 'ambiguous' || gap === 'rebound') expect(driver.accepts({ ...call, id: 'host-b' })).toBe(false);
+    if (gap !== 'not-reserved') expect(driver.accepts(call, onReserved)).toBe(gap !== 'ambiguous');
+    if (gap === 'ambiguous' || gap === 'rebound') expect(driver.accepts({ ...call, id: 'host-b' }, onReserved)).toBe(false);
+    expect(reserved, gap).toBe(gap === 'ambiguous' || gap === 'rebound' ? 1 : 0);
     const completed = finish('item_9', result);
     expect(driver.line(JSON.stringify({ ...completed, item: { ...completed.item, status: shape } })), shape + '/' + gap)
       .toMatchObject({ body: { refusal: 'guard', field: gap === 'ambiguous' || gap === 'rebound' ? 'mcp-item-reservation' : 'mcp-correlation' } });

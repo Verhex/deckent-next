@@ -7,7 +7,7 @@ import { dispatchNeedsObservation, inactivityWatch, type DispatchApplication, ty
 /** One observer for both backends. Heartbeat writes never count as native model activity or certify process death. */
 export async function startConfiguredWorkerObservation(input: {
   readonly store: Pick<SqliteAttemptStore, 'loadBoundDispatch'>; readonly app: DispatchApplication;
-  readonly supervisor: ExecutionSupervisor & { inspectActivity(request: SandboxRequest): Promise<{ state: Parameters<typeof dispatchNeedsObservation>[0]; handle: string | null }> };
+  readonly supervisor: ExecutionSupervisor & { inspectActivity(request: SandboxRequest): Promise<{ state: Parameters<typeof dispatchNeedsObservation>[0]; handle: string | null }>; refusalAuditLoss?(): WorkerActivity['refusalAuditLoss'] };
   readonly request: SandboxRequest; readonly backend: WorkerActivity['backend']; readonly provider: string;
   readonly heartbeatMs: number; readonly maxFileBytes: number; readonly stall: TaskStallPolicy | undefined;
   readonly gateway: { statistics(): GatewayActivityCounters } | undefined;
@@ -26,7 +26,7 @@ export async function startConfiguredWorkerObservation(input: {
     }
     const sample: WorkerActivity = { schemaVersion: 1, identity: request.identity, backend: input.backend, provider: input.provider, workspace: request.workspace,
       observedAt: Date.now(), process: activity.state, handle: activity.handle, terminal: record.terminal, outputRecorded: !!record.output };
-    const refusalAuditLoss = input.refusalAuditLoss?.();
+    const refusalAuditLoss = input.refusalAuditLoss ? input.refusalAuditLoss() : supervisor.refusalAuditLoss?.();
     if (!refusalAuditLoss) return sample;
     const marked = { ...sample, refusalAuditLoss };
     // Preserve the ordinary heartbeat and result at the writer's byte limit.

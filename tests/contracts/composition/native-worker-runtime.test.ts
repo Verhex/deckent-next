@@ -76,7 +76,12 @@ it('K17: worker ports use fresh K5 workload authority and the existing K6 reserv
     await ports.recheck(request, frozen, signal);
     const slot = await ports.capacity.acquire(request, frozen, signal); expect(slot.state).toBe('acquired');
     await ports.openTools(request, frozen, signal, { inputs: [] }); expect(runtime.openTools).toHaveBeenCalledOnce();
-    expect(runtime.openTools).toHaveBeenLastCalledWith(request, frozen, signal, { inputs: [] }, ceiling);
+    expect(runtime.openTools).toHaveBeenLastCalledWith(request, frozen, signal, { inputs: [] }, ceiling, expect.any(Function));
+    // Card R4-C: the loss callback handed to this request's tools latches the marker for exactly this Attempt identity.
+    expect(ports.refusalAuditLoss!(identity)).toBeUndefined();
+    vi.mocked(runtime.openTools).mock.calls[0]![5]!('refusal-audit-loss');
+    expect(ports.refusalAuditLoss!({ ...identity })).toBe('refusal-audit-loss');
+    expect(ports.refusalAuditLoss!({ ...identity, attemptId: 'other' })).toBeUndefined();
     if (slot.state === 'acquired') await slot.release();
     resourceState.resources[0]!.occupancy.execution = resource.capacity.executionSlots + 1;
     expect(await ports.capacity.acquire(request, frozen, signal)).toEqual({ state: 'waiting' });
@@ -145,6 +150,8 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         profileDigest: bound.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) };
       const run = vi.fn(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] }) }));
       const release = vi.fn(async () => undefined), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
+      // Card R4-C: a latch exposed by the injected ports, set when this Attempt's tools close (where the real writer's callback lands).
+      let lost: object | undefined;
       const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => undefined,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release }) },
         checkEnvironment: vi.fn<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>(async (request, _binding, requirements) => {
@@ -152,13 +159,17 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         }),
         openTools: vi.fn(async (request, _binding, _signal, context) => {
           expect(await readFile(join(request.workspace, 'note.txt'), 'utf8')).toBe('fixed base\n'); expect(context).toEqual({});
-          return { session, propose: vi.fn(), revoke: vi.fn(), cancel: async () => ({ kind: 'cancelled' as const, turnId: session.turnId, generation: session.generation,
-            termination: 'unverified' as const, effects: 'settled' as const, pendingCallIds: [] }) };
+          return { session, propose: vi.fn(), revoke: vi.fn(), cancel: async () => { if (request.identity.attemptId === identity.attemptId) lost = request.identity;
+            return { kind: 'cancelled' as const, turnId: session.turnId, generation: session.generation, termination: 'unverified' as const, effects: 'settled' as const, pendingCallIds: [] }; } };
         }), driver: vi.fn(async input => { expect(input).not.toHaveProperty('workspace'); return { tools: input.tools, run, close: async () => undefined }; }),
+        refusalAuditLoss: (asked: object) => lost && JSON.stringify(asked) === JSON.stringify(lost) ? 'refusal-audit-loss' as const : undefined,
         bridgeLimits: { idleMs: 1000, maxConnections: 2, replayMaxEntries: 2, replayMaxBytes: entry.bridge.frameMaxBytes * 2 } };
       const result = await executeConfiguredTask(project, identity, { ...options, nativeCliWorker: { ports, projectionRetired: false } });
       expect(result.execution).toMatchObject({ status: 'terminal', outputRecorded: true, terminal: { exitCode: 0 } });
       const dispatch = await store.loadBoundDispatch(identity); expect(dispatch?.profile.adapterId).toBe('native-cli-worker'); expect(dispatch?.containerId).toBeUndefined();
+      const { readWorkerSidecars } = await import('#adapters/core/worker-observation/index.js'), { dirname } = await import('node:path');
+      const sidecars = (request: { workspace: string; identity: typeof identity }) => readWorkerSidecars(dirname(request.workspace), 'worker', { maxFileBytes: 65536, maxEntries: 64, staleMs: 1000 }, Date.now(), request.identity);
+      expect(await sidecars(dispatch!.request)).toMatchObject({ result: { state: 'available' }, refusalAuditLoss: 'refusal-audit-loss' });
       expect(await store.loadWorkerEventLog('s', 'attempt')).toMatchObject({ eventCount: 1 });
       const restored = recordedNativeCliWorkerSupervisor(dispatch!.profile);
       expect(await restored.recoverOutput(dispatch!.request)).toMatchObject({ completeness: 'partial', stdout: expect.stringContaining('fixed note read') });
@@ -203,6 +214,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       run.mockResolvedValue({ termination: 'confirmed', status: 'failed', text: '', refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' });
       const held = await executeConfiguredTask(project, heldIdentity, { ...options, nativeCliWorker: { ports, projectionRetired: true } });
       expect(held.execution).toMatchObject({ status: 'unresolved', outputRecorded: false, waiting: { reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED', legacy: false } });
+      expect(await sidecars((await store.loadBoundDispatch(heldIdentity))!.request)).not.toHaveProperty('refusalAuditLoss');
       expect((await store.loadRun('s', 'held'))?.state.kind).toBe('parked');
       const request = ['task', 'execute', '--scope', 's', '--run', heldIdentity.runId, '--task', heldIdentity.taskId,
         '--attempt', heldIdentity.attemptId, '--generation', String(heldIdentity.generation), '--layout-revision', heldIdentity.layoutRevision, '--lang', 'en'];

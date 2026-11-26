@@ -62,7 +62,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         return { ...host, result: JSON.parse(bridge.project(JSON.stringify(host.result))) as typeof host.result };
       }, undefined, undefined, AbortSignal.any([combined, gate.signal]));
       gate.bind(claude ?? { async propose(call, correlation, callSignal) {
-        if (!turn?.accepts(call)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
+        if (!turn?.accepts(call, input.tools)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
         return input.tools.propose(call, correlation, callSignal);
       } });
       const launch = await nativeAgentLaunch(entry, { session: tools.session, runDir, configDir: input.binding.definition.configDir, model: input.model, system: input.system,

@@ -187,6 +187,8 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     if (this.result?.result.kind === 'exited') return { handle: this.handle, state: 'exited' as const };
     return this.driver?.inspectActivity ? this.driver.inspectActivity() : { handle: null, state: 'unknown' as const };
   }
+  /** Card R4-C: this Attempt's own refusal-audit loss, asked with its own request identity only. */
+  refusalAuditLoss() { return this.input.ports.refusalAuditLoss?.(this.input.request.identity); }
   /** Called only after DispatchApplication has retained output and terminal evidence. Unknown CLI/effects keep capacity for reconciliation. */
   async release(request: SandboxRequest): Promise<'absent'> {
     this.check(request); if (this.released) return 'absent';

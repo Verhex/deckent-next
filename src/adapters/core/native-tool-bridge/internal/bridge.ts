@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CallToolResult, Tool, RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
-import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema, withToolErrorClass,
+import { nativeAgentBridgeSchema, nativeAgentCorrelationMeta, nativeAgentCorrelationSchema, nativeAgentToolResultSchema, observeNativeRefusal, toolSessionSchema, withToolErrorClass,
   type NativeAgentBridge, type NativeAgentCorrelation, type ToolErrorClass, type ToolSessionPort } from '#capabilities/index.js';
 import { headlessDiagnostic, isCodedError, PACKAGE_VERSION, DeckentJsonSchemaValidator, combineKnownSecrets, redactForRecord, snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/index.js';
 import { bridgeBody, bridgeResponse, refuseBridge, type BridgeDelivery } from './http.js';
@@ -61,7 +61,11 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
     const correlation = nativeAgentCorrelationSchema.safeParse(nativeAgentCorrelationMeta(input.correlationKind, meta, deckentCallId));
     if (!correlation.success) return failure(deckentCallId, 'NATIVE_BRIDGE_CORRELATION_INVALID', 'session');
     const call = agentToolCallSchema.safeParse({ id: deckentCallId, name: request.params.name, argumentsJson: JSON.stringify(request.params.arguments ?? {}) });
-    if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN', 'session');
+    if (!call.success || !session.tools.some(tool => tool.name === call.data.name)) {
+      // Card R4-C: only a parsed, unoffered request is observed, and only before close begins (so before the owner's first refusal flush).
+      if (call.success && !closing) observeNativeRefusal(input.port, 'tool-unoffered', call.data);
+      return failure(deckentCallId, 'NATIVE_BRIDGE_TOOL_UNKNOWN', 'session');
+    }
     const key = correlation.data.kind === 'claude-tool-use' ? correlation.data.toolUseId : correlation.data.callId;
     const fingerprint = digest(JSON.stringify(request.params)).toString('hex'), previous = replay.get(key);
     const id = context.mcpReq.id, signal = context.mcpReq.signal, delivery = inFlight.get(id);
@@ -69,6 +73,8 @@ export async function createNativeToolBridge(input: NativeToolBridgeOptions) {
       const repeated = { ...call.data, id: previous.deckentCallId };
       if (previous.digest === fingerprint) return serve(previous.result, repeated, id, signal, delivery);
       input.port.checkResultDelivery?.(repeated);
+      // Card R4-C: a different request under a held correlation; the earlier request's position and effect are not carried over.
+      if (!closing) observeNativeRefusal(input.port, 'request-replay', call.data, call.data.name);
       return failure(deckentCallId, 'NATIVE_BRIDGE_REPLAY_CONFLICT', 'session');
     }
     if (closing) return failure(deckentCallId, 'NATIVE_BRIDGE_CLOSED', 'session');

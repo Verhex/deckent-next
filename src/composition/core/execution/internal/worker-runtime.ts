@@ -35,7 +35,7 @@ export function createConfiguredNativeCliWorkerRuntime(root: string, options: Co
     },
     checkEnvironment: nativeWorkerEnvironment(root, options),
     bridgeLimits,
-    openTools: (request, binding, signal, context, plan) => openConfiguredNativeWorkerTools(root, request, binding, signal, context, options, plan),
+    openTools: (request, binding, signal, context, plan, onLoss) => openConfiguredNativeWorkerTools(root, request, binding, signal, context, options, plan, onLoss),
     async driver(input, signal) {
       if (signal.aborted) throw ErrorRegistry.createError('DISPATCH_FENCED');
       const scopeId = input.binding.modelUsePin?.['scopeId'];

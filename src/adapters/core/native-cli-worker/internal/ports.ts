@@ -48,4 +48,6 @@ export interface NativeCliWorkerPorts {
     deadlineMs: number; outputBytes: number; execution: NativeAgentExecution; effort?: WorkerEffort; maxTurns?: number;
     onEvents?: (events: readonly WorkerEvent[]) => void }>, signal: AbortSignal): Promise<NativeCliWorkerDriver>;
   readonly bridgeLimits: NativeToolBridgeLimits;
+  /** Card R4-C: the refusal-audit loss observed for exactly this Attempt identity in this process; none for another identity or after restart. */
+  refusalAuditLoss?(identity: SandboxRequest['identity']): 'refusal-audit-loss' | undefined;
 }

@@ -63,7 +63,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
   // A classified refusal can precede cancellation, receipt settlement or an unavailable receipt read.
   let returned: { reason: NativeAgentReadinessReason; check: string } | { body: Refusal['body'] } | null = null;
   const port: ToolSessionPort = { session: input.session.session,
-    checkResultDelivery: call => input.session.checkResultDelivery?.(call) ?? true,
+    checkResultDelivery: call => input.session.checkResultDelivery?.(call) ?? true, observeRefusal: observation => input.session.observeRefusal?.(observation),
     selected(host, text, live) { deliveries.set(host, () => live() ? text : undefined); },
     async propose(call, correlation, signal) {
       if (!used || lifetime.signal.aborted || refusal) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-closed' });
@@ -72,7 +72,7 @@ export function createNativeAgentDriver(input: Readonly<{ profile: Prepared['pro
         if (!claude) refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
         return claude.propose(call, correlation, signal);
       }
-      if (!codex?.accepts(call)) {
+      if (!codex?.accepts(call, input.session)) {
         refusal = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED'; lifetime.abort();
         refuse('HEADLESS_REQUEST_INVALID', { reason: 'agent-order' });
       }

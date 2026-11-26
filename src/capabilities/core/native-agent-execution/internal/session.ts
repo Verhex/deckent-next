@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type ToolErrorClass } from '#capabilities/core/agent-tool-result/index.js';
 import { agentToolSpecSchema, agentToolOutcomeSchema, identitySchema, persistedString, type AgentToolCall } from '#domain/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION } from './readiness.js';
 
 import { positive } from './schema-parts.js';
 const callId = persistedString(z.string().min(1).max(256)).refine(value => !value.includes('\0'));
@@ -44,4 +45,24 @@ export interface ToolSessionPort {
   propose(call: AgentToolCall, correlation: NativeAgentCorrelation, signal: AbortSignal): Promise<NativeAgentToolResult>;
   cancel(): Promise<ToolSessionCancellation>;
   revoke(): Promise<ToolSessionRevocation>;
+  /** Host-only, best effort: a boundary refusal for the turn's or Attempt's refusal audit. Never from wire input; never changes the refusal. */
+  observeRefusal?(observation: NativeRefusalObservation): void;
+}
+// The audit write gate holds the same exact pairs; composition's sink type checks each basis against the domain vocabulary.
+type Pair = { source: 'deckent-decision'; basis: 'tool-offer' | 'native-request-replay' | 'native-item-reservation' } | { source: 'cli-reported'; basis: 'cli-permission-denial' };
+/** Card R4-C: each Native boundary refusal has fixed tokens (no wire text). `permission-denial` is a CLI report, never a deckent decision. */
+const NATIVE_REFUSALS = {
+  'tool-unoffered': { source: 'deckent-decision', basis: 'tool-offer', reason: 'NATIVE_BRIDGE_TOOL_UNKNOWN', role: 'tool-surface' },
+  'request-replay': { source: 'deckent-decision', basis: 'native-request-replay', reason: 'NATIVE_BRIDGE_REPLAY_CONFLICT', role: 'replay-slot' },
+  'item-reservation': { source: 'deckent-decision', basis: 'native-item-reservation', reason: CODEX_TOOL_ITEM_RESERVATION, role: 'item-reservation' },
+  'permission-denial': { source: 'cli-reported', basis: 'cli-permission-denial', reason: 'permission-denials', role: 'provider-tool-permission' },
+} as const satisfies Record<string, Pair & { reason: string; role: string }>;
+export type NativeRefusalObservation = (typeof NATIVE_REFUSALS)[keyof typeof NATIVE_REFUSALS] & Readonly<{ identity: object; tool?: Readonly<{ name: string; version: number }> }>;
+/** `identity`: the host-held refused request object (deduplication only, never stored). `name`: the host-offered tool's name; the stored
+ * tool is that host spec, omitted for an MCP tool or a name the session did not offer. Never throws into the refusal it observes. */
+export function observeNativeRefusal(port: Pick<ToolSessionPort, 'session' | 'observeRefusal'> | undefined, kind: keyof typeof NATIVE_REFUSALS, identity: object, name?: string): void {
+  try {
+    const tool = port?.session.tools.find(spec => spec.name === name && spec.toolClass !== 'mcp');
+    port?.observeRefusal?.({ ...NATIVE_REFUSALS[kind], identity, ...(tool ? { tool: { name: tool.name, version: tool.version } } : {}) });
+  } catch { /* best effort: the refusal, its reply and its stop stay as they are */ }
 }

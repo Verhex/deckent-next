@@ -41,7 +41,7 @@ async function fixture(family: string, scenario: FakeAgentScenario = {}, npm = f
   const closure = { turnId: session.turnId, generation: 1, pendingCallIds: [], termination: 'confirmed' as const, effects: 'unknown' as const };
   const propose = vi.fn<ToolSessionPort['propose']>(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: 1,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped read result' + (scenario.loginCanary ?? '') } }));
-  const port: ToolSessionPort = { session, propose, cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
+  const port: ToolSessionPort = { session, propose, observeRefusal: vi.fn(), cancel: async () => ({ ...closure, kind: 'cancelled' }), revoke: async () => ({ ...closure, kind: 'revoked' }) };
   const start = async (paidExtraUsage: 'continue' | 'stop-at-limit' = 'continue', onPaidUsage: (() => Promise<void>) | null = async () => undefined, host: SameTurnToolSessionPort = port, user = 'Read the scoped fixture.') => {
     const sealed = await preflightNativeAgent(profile, Date.now, testIsolation);
     const driver = createNativeAgentDriver({ profile, execution: sealed.execution, session: host, now: Date.now, isolation: testIsolation, paidExtraUsage, ...(onPaidUsage ? { onPaidUsage } : {}) });
@@ -548,6 +548,12 @@ it('Card 168 stops the Codex chat turn with the reservation reason and accepts t
     await expect(propose('second')).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID' });
     expect(first).toMatchObject({ deckentCallId: 'first', outcome: { status: 'ok', text: 'scoped read result' } });
     expect(f.propose).toHaveBeenCalledOnce();
+    // Card R4-C R1: one observation through the session, no call position; the chat bridge's port forwards observations to the same session.
+    expect(f.port.observeRefusal).toHaveBeenCalledExactlyOnceWith({ source: 'deckent-decision', basis: 'native-item-reservation', reason: 'mcp-item-reservation',
+      role: 'item-reservation', tool: { name, version: 1 }, identity: expect.objectContaining({ id: 'second' }) });
+    const forwarded = { ...vi.mocked(f.port.observeRefusal!).mock.calls[0]![0], identity: {} };
+    h.driver.port.observeRefusal?.(forwarded);
+    expect(f.port.observeRefusal).toHaveBeenLastCalledWith(forwarded);
     const result = await pending;
     expect(result.kind === 'rejected' && readHeadlessRejection(result.evidence)).toMatchObject({ refusal: 'guard', field: 'mcp-item-reservation' });
     expect(h.driver.refusalCheck()).toBe('mcp-item-reservation');

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { NativeAgentExecution } from '#capabilities/index.js';
 import { nativeCliWorkerFence, withMcpPrincipal, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
@@ -12,12 +13,13 @@ export interface NativeCliWorkerRuntime {
     execution?: NativeAgentExecution }>): Promise<NativeAgentExecution | null>;
   readonly verification?: NativeCliWorkerPorts['verification'];
   readonly driver: NativeCliWorkerPorts['driver'];
-  /** `plan`: the Run's recorded worker ceiling (R9; null: none recorded). */ readonly openTools: (...args: [...Parameters<NativeCliWorkerPorts['openTools']>, plan?: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null]) => ReturnType<NativeCliWorkerPorts['openTools']>;
+  /** `plan`: the Run's recorded worker ceiling (R9; null: none recorded). */ readonly openTools: (...args: [...Parameters<NativeCliWorkerPorts['openTools']>, plan?: import('#domain/index.js').RunExecutionSnapshot['workerMode'] | null, onRefusalAuditLoss?: (loss: 'refusal-audit-loss') => void]) => ReturnType<NativeCliWorkerPorts['openTools']>;
   readonly bridgeLimits: NativeCliWorkerPorts['bridgeLimits'];
   readonly checkEnvironment?: NativeCliWorkerPorts['checkEnvironment'];
 }
 export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: string, store: Pick<SqliteAttemptStore, 'loadRun' | 'loadRunResourceCapacity' | 'loadBoundDispatch' | 'load' | 'loadRunReceipt'>,
   options: ConfigLoadOptions, runtime: NativeCliWorkerRuntime): NativeCliWorkerPorts {
+  let lost: Parameters<NativeCliWorkerPorts['openTools']>[0]['identity'] | undefined; // Card R4-C: this Task call's observed refusal-audit loss
   const recheck: NativeCliWorkerPorts['recheck'] = async (request, binding, signal) => {
     if (signal.aborted || request.identity.scopeId !== scopeId || !await nativeCliWorkerFence(store, request.identity)) throw ErrorRegistry.createError('DISPATCH_FENCED');
     await recheckNativeWorkerUse(root, scopeId, binding, options);
@@ -47,7 +49,7 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
     } },
     async openTools(request, binding, signal, context) {
       await recheck(request, binding, signal); const plan = (await store.loadRun(scopeId, request.identity.runId))?.execution.workerMode ?? null;
-      const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context, plan));
+      const tools = await withMcpPrincipal(() => runtime.openTools(request, binding, signal, context, plan, () => { lost = request.identity; }));
       return { ...tools, terminalFailure: () => tools.terminalFailure?.() ?? null, propose: (...args) => withMcpPrincipal(() => tools.propose(...args)),
         cancel: () => withMcpPrincipal(() => tools.cancel()), revoke: () => withMcpPrincipal(() => tools.revoke()) };
     },
@@ -60,5 +62,6 @@ export function createConfiguredNativeCliWorkerPorts(root: string, scopeId: stri
       await withMcpPrincipal(() => runtime.checkEnvironment!(...args));
     } } : {}),
     bridgeLimits: runtime.bridgeLimits,
+    refusalAuditLoss: identity => lost && isDeepStrictEqual(identity, lost) ? 'refusal-audit-loss' : undefined,
   };
 }

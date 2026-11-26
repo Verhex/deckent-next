@@ -26,7 +26,7 @@ async function fixture(over: Partial<Parameters<typeof createNativeToolBridge>[0
   const submit = vi.fn<ToolSessionPort['propose']>(propose ?? (async (call) => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
     deckentCallId: call.id, outcome: { status: 'ok', text: 'scoped-result' } })));
   const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'unknown' as const };
-  const port: ToolSessionPort = { session, selected: vi.fn(), propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' as const })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' as const })) };
+  const port: ToolSessionPort = { session, selected: vi.fn(), observeRefusal: vi.fn(), propose: submit, cancel: vi.fn(async () => ({ ...closure, kind: 'cancelled' as const })), revoke: vi.fn(async () => ({ ...closure, kind: 'revoked' as const })) };
   const bridge = await createNativeToolBridge({ port, bridge: registry.bridge, correlationKind: 'claude-tool-use',
     limits: { idleMs: 300, maxConnections: 3, replayMaxEntries: 8, replayMaxBytes: registry.bridge.frameMaxBytes * 8 }, ...over });
   const gateway = await openNativeEgressGateway({ provider: registry.id, directory, mcp: bridge }); cleanup.push(() => gateway.close());
@@ -54,6 +54,11 @@ it('routes only the exact sentinel; exposes only session tools and sends correla
   expect(jsonMessages(forbidden)[0].result.isError).toBe(true);
   expect(resultEnvelope(forbidden).outcome.status).toBe('error');
   expect(f.submit).toHaveBeenCalledOnce();
+  // Card R4-C B1: only a parsed, unoffered request is observed (no tool identity); a schema-invalid call gets the same reply and no row.
+  expect(f.port.observeRefusal).toHaveBeenCalledExactlyOnceWith({ source: 'deckent-decision', basis: 'tool-offer', reason: 'NATIVE_BRIDGE_TOOL_UNKNOWN',
+    role: 'tool-surface', identity: expect.objectContaining({ name: 'decide_approval' }) });
+  expect(resultEnvelope(await f.send(rpc(5, 'Not-A-Tool-Name'), { headers })).outcome.text).toBe('NATIVE_BRIDGE_TOOL_UNKNOWN');
+  expect(f.port.observeRefusal).toHaveBeenCalledOnce();
   expect((await f.send(init, { path: '/mcp' })).status).toBe(403);
   expect((await f.send(init, { path: `${f.bridge.url}?redirect=1` })).status).toBe(403);
   expect((await f.send(init, { path: 'http://foreign.invalid/mcp' })).status).toBe(403);
@@ -117,12 +122,17 @@ it.each(['claude-tool-use', 'codex-mcp'] as const)('replays pending and complete
   try { await vi.waitFor(() => expect(acceptedReplay).toHaveBeenCalledOnce()); } finally { release(); }
   const [a, b] = await Promise.all([first, duplicate]); expect(resultEnvelope(a)).toEqual(resultEnvelope(b));
   expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
+  // Card R4-C B2: the 409 above and the exact repeats are not observed; only this different request under the same correlation is, once.
+  expect(f.port.observeRefusal).not.toHaveBeenCalled();
   expect(resultEnvelope(await f.send(call(2, { changed: true }), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_CONFLICT');
+  expect(f.port.observeRefusal).toHaveBeenCalledExactlyOnceWith({ source: 'deckent-decision', basis: 'native-request-replay', reason: 'NATIVE_BRIDGE_REPLAY_CONFLICT',
+    role: 'replay-slot', tool: { name: tool.name, version: 1 }, identity: expect.objectContaining({ argumentsJson: JSON.stringify({ changed: true }) }) });
   expect.soft(f.bridge.replayLimitReached).toBe(false);
   expect(resultEnvelope(await f.send(call(5), { headers })).outcome.text).toBe('NATIVE_BRIDGE_REPLAY_LIMIT'); expect(f.submit).toHaveBeenCalledOnce();
   expect.soft(f.bridge.replayLimitReached).toBe(true);
   expect(resultEnvelope(await f.send(call(2), { headers }))).toEqual(resultEnvelope(a));
   expect(f.submit).toHaveBeenCalledOnce();
+  expect(f.port.observeRefusal).toHaveBeenCalledOnce();
   await f.bridge.close();
   expect.soft(f.bridge.replayLimitReached).toBe(true);
 });

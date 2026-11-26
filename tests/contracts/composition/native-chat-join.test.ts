@@ -61,7 +61,7 @@ async function fixture(askEdits = true, headless?: { executable: string; configD
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
   const state = { limitAfterTool: null as null | 'credits-required' | 'quota', quotaWindow: null as null | { field: string; subtype: string; resetsAtMs: number },
-    paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+    paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], unoffered: false, calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -97,6 +97,8 @@ async function fixture(askEdits = true, headless?: { executable: string; configD
             content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: args, _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
+          // Card R4-C B1: an extra request for a tool the turn did not offer (the bridge refuses it; K1 never sees it).
+          if (state.unoffered) await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'decide_approval', arguments: {}, _meta: { 'claudecode/toolUseId': 'fake-use-unoffered' } } });
           if (state.limitAfterTool) {
             return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, quota ? 'http-status' : 'interrupted', quota ? 429 : null,
               Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: state.limitAfterTool, ...(quota && { status: 429, ...state.quotaWindow }) })), quota) };
@@ -175,7 +177,9 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
 it('R4a: in the person\'s default standart the AI write runs without a card and is audited as the person\'s mode relaxation', async () => {
   if (await unsupportedPeer()) return;
   const h = await fixture(false);
+  h.state.unoffered = true;
   expect(await h.run()).toMatchObject({ finish: 'stop', toolCalls: 1 });
+  h.state.unoffered = false;
   expect(h.events.some(event => event.kind === 'approval.requested')).toBe(false);
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8')).toBe('approved business result\n');
   const db = new DatabaseSync(h.f.path, { readOnly: true });
@@ -184,6 +188,13 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
     expect(records).toHaveLength(1);
     expect(JSON.stringify(records[0])).toMatch(/"mode":"standart","cell":"edit-non-floor"/u);
     expect(JSON.stringify(records[0])).toContain('"company":"first-run-mcp-edit-shell-tools"');
+    // Card R4-C B1 through the real bridge and the turn's binding: one sealed row for the verified AI actor and this turn, no call position.
+    const refusals = (db.prepare("SELECT record FROM audit_events WHERE kind = 'access-refusal-summary'").all() as { record: string }[]).map(row => JSON.parse(row.record));
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0].event.principal.issuer).toMatch(/\/mcp$/u);
+    expect(refusals[0].event).toMatchObject({ principal: records[0].event.principal, subject: { decisionSource: 'deckent-decision', evidenceBasis: 'tool-offer',
+      reasonCode: 'NATIVE_BRIDGE_TOOL_UNKNOWN', target: { role: 'tool-surface', identity: null }, turnId: 'k11-turn', count: 1, countBasis: 'exact', samples: [] } });
+    expect(refusals[0].event.subject).not.toHaveProperty('call'); expect(refusals[0].event.subject).not.toHaveProperty('tool');
   } finally { db.close(); }
   Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
   h.state.limitAfterTool = 'credits-required';

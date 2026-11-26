@@ -3,7 +3,7 @@ import { CodedError } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { ModelInvocationDeltaSink } from '#domain/index.js';
 import { nativeAgentInitReason } from './guards.js';
-import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionSchema, type NativeAgentCorrelation, type NativeAgentToolResult, type ToolSessionPort } from './session.js';
+import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, observeNativeRefusal, toolSessionSchema, type NativeAgentCorrelation, type NativeAgentToolResult, type ToolSessionPort } from './session.js';
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { parseNativeCliRegistry } from './command-registry.js';
 import { emitDelta, reportedCounters } from './stream.js';
@@ -217,6 +217,14 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       return notice(value);
     }
     terminal = true;
+    // Card R4-C: one CLI report per plain-object element whose full tool name the host offered, counted BEFORE offeredName reduces names and
+    // only when this terminal report is eligible (init's non-empty session id repeated, a valid envelope). A report, not a deckent decision.
+    if (Array.isArray(value.permission_denials) && typeof sessionId === 'string' && sessionId && value.session_id === sessionId
+      && typeof value.is_error === 'boolean' && typeof value.subtype === 'string') for (const denial of value.permission_denials) {
+      const name = record(denial)?.tool_name, prefix = entry.bridge.toolPrefix;
+      if (typeof name === 'string' && name.startsWith(prefix) && session.tools.some(tool => tool.name === name.slice(prefix.length)))
+        observeNativeRefusal(port, 'permission-denial', denial as object, name.slice(prefix.length));
+    }
     if (!Array.isArray(value.permission_denials) || value.permission_denials.length) return fail('permission-denials', undefined, Array.isArray(value.permission_denials)
       ? facts(value.permission_denials.map(denial => offeredName(record(denial)?.tool_name))) : 'shape');
     if (typeof value.is_error !== 'boolean' || typeof value.subtype !== 'string') return fail('result');
