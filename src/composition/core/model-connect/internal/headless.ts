@@ -10,7 +10,7 @@ import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConn
   type ProviderConnectKind } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { configuredBubblewrap } from '#composition/core/model-invocation/index.js';
-import { ErrorRegistry, automationMarker, inspectNativeStateCustody, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
+import { headlessDiagnostic, refuseHeadlessDiagnostic, ErrorRegistry, automationMarker, inspectNativeStateCustody, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
   resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 
 type Env = NodeJS.ProcessEnv;
@@ -19,14 +19,15 @@ const loginsLayout = (env: Env) => { const root = stateRoot(env); return resolve
 export const configuredHeadlessLoginRoot = (options: ConfigLoadOptions = {}) => productResourcePath(loginsLayout(options.env ?? process.env), 'headlessLogins');
 /** s3c (owner 2026-10-24): the Brain's own login dir of a CLI family under the global state root (layout `headlessLogins`, 0700, never backed up). */
 async function ownedLoginDir(family: string, env: Env): Promise<string> {
-  const resource = await prepareProductDirectory(loginsLayout(env), 'headlessLogins').catch(() => { throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'state-dir' } }); });
+  const resource = await prepareProductDirectory(loginsLayout(env), 'headlessLogins').catch(() => refuseHeadlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'managed-login-dir' }));
   return headlessOwnedLoginDir(family, resource);
 }
 /** PV 2a: why a CLI subscription cannot run on this host before anything is chosen (the same typed refusal connect and login give), or null. */
 export async function headlessIsolationRefusal(options: ConfigLoadOptions = {}): Promise<Error | null> {
   const capability = process.platform === 'linux' ? await configuredBubblewrap(options)().catch(() => null) : null;
   return capability?.status === 'available' && capability.launcher ? null
-    : ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: capability?.status === 'restricted' ? 'user-namespace' : 'launcher' } });
+    : capability?.status === 'restricted' ? headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'user-namespace' })
+      : headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'launcher', reason: process.platform === 'linux' ? 'unverified' : 'platform' });
 }
 /** The person at this terminal: a controlling TTY and no AI-agent or CI marker of the installation's list (PV: an agent with a PTY tool is not the person). */
 export const headlessPersonWitness = (env: Env, agents: readonly string[]): AuthorityWitness =>
@@ -70,7 +71,8 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
       if (existing.some(definition => {
         if (definition?.['sourceBinding'] === undefined) return false;
         const parsed = nativeCliHeadlessDefinitionSchema.safeParse(definition);
-        return !parsed.success || !isDeepStrictEqual(parsed.data.sourceBinding, sourceBinding);
+        if (!parsed.success) throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { params: { reason: 'source-binding-unverified' } });
+        return !isDeepStrictEqual(parsed.data.sourceBinding, sourceBinding);
       }))
         throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED');
       if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
@@ -111,8 +113,10 @@ export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: st
 export async function loginConfiguredHeadless(command: HeadlessLoginCommand, options: ConfigLoadOptions, confirm: (dir: Readonly<{ configDir: string; owned: boolean }>) => Promise<boolean>,
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }): Promise<HeadlessLoginResult | null> {
   const { family, owned } = await headlessLoginDir(command.connection, options, witness), env = options.env ?? process.env;
-  const configDir = command.configDir === undefined ? owned : isAbsolute(command.configDir) ? await realpath(command.configDir).catch(() => null) : null;
-  if (!configDir) throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'config-dir' } });
+  if (command.configDir !== undefined && !isAbsolute(command.configDir))
+    refuseHeadlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'relative-path' });
+  const configDir = command.configDir === undefined ? owned : await realpath(command.configDir)
+    .catch(() => refuseHeadlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir', reason: 'unresolved' }));
   if (!await confirm({ configDir, owned: configDir === owned })) return null;
   // Deckent's own state for this sign-in sits beside the connections' (the same per-login-dir lock), never in the login dir.
   const stateDir = join(stateRoot(env), 'headless', `login-${createHash('sha256').update(configDir).digest('hex').slice(0, 16)}`);

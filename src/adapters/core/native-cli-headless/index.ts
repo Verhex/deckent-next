@@ -16,8 +16,8 @@ export { nativeAgentInitReason, nativeAgentItemReason } from '#capabilities/inde
 export { headlessFlagSetDigest, nativeAgentFlagSetDigest } from './internal/env.js'; export { codexAgentArgv, codexAgentTurn, type CodexAgentResultLookup } from './internal/codex-agent.js';
 
 export { withLoginLock as withHeadlessLoginLock, loginLockPath as headlessLoginLockPath } from './internal/login-lock.js';
-export { prepareClaudeAgentRun, createClaudeAgentDriver, ClaudeAgentError } from './internal/claude-agent.js';
-export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ClaudeAgentResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ClaudeAgentDriver } from './internal/claude-agent.js';
+export { prepareClaudeAgentRun, createClaudeAgentDriver, ClaudeAgentError } from '#adapters/core/native-cli-claude-agent/index.js';
+export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ClaudeAgentResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ClaudeAgentDriver } from '#adapters/core/native-cli-claude-agent/index.js';
 export { headlessPreflight } from './internal/preflight.js';
 export type { HeadlessPreflight } from './internal/preflight.js';
 export { runHeadlessIsolated, headlessIsolationSeal } from './internal/realm.js';

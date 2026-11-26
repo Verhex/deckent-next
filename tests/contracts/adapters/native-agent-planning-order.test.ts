@@ -19,7 +19,7 @@ vi.mock('#adapters/core/native-cli-headless/internal/realm.js', async importOrig
   ...await importOriginal<typeof import('#adapters/core/native-cli-headless/internal/realm.js')>(), runHeadlessIsolated: vi.fn(),
 }));
 vi.mock('#adapters/core/native-cli-headless/internal/agent-observation.js', async importOriginal => ({
-  ...await importOriginal<typeof import('#adapters/core/native-cli-headless/internal/agent-observation.js')>(), preflightNativeAgent: vi.fn(), recordNativeAgentObservation: vi.fn(),
+  ...await importOriginal<typeof import('#adapters/core/native-cli-headless/internal/agent-observation.js')>(), preflightNativeAgent: vi.fn(), prepareNativeAgentObservation: vi.fn(async () => async () => {}),
 }));
 afterEach(async () => { vi.clearAllMocks(); await cleanupConnections(); });
 

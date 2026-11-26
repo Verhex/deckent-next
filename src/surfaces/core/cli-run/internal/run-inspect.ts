@@ -1,3 +1,4 @@
+import { readFailureReasonText, readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
@@ -81,6 +82,13 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
  */
 /** PRE7FU (c): every cancelled task of this Run stopped before launch (no worker was started: never dispatched, no quota-exhausted attempt behind
  * it) and nothing is in flight or unresolved; otherwise worker termination stays "not confirmed". From the recorded view only. */
+/** C3: an encoded failure in its diagnosis alone; any other code in the progression line, then the shared reason reader's line. */
+function failureLines(code: string, locale: Locale): string[] {
+  // The crash-loop and environment-timeout codes keep their own dedicated line below instead.
+  const encoded = readHeadlessDiagnosticIdentifier(code, locale), dedicated = code === 'DISPATCH_PREPARATION_ABORTED' || code === 'EXECUTION_ENVIRONMENT_TIMED_OUT';
+  const sentence = encoded || dedicated ? undefined : readFailureReasonText(code, locale);
+  return encoded ? [encoded] : [t('cli.run.lifecycle.failure', { code }, locale), ...(sentence ? [sentence] : [])];
+}
 function holdLines(run: RunView, locale: Locale): string[] {
   const reason = runHoldReasonText(run.state, locale), next = runHoldNextText(run.state, locale);
   return reason ? [t('cli.run.lifecycle.note', { note: reason }, locale), ...(next ? [`  ${next}`] : [])] : [];
@@ -106,7 +114,7 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: localTime(run.state.since, locale), deadline: localTime(run.state.deadline, locale) }, locale)] : []),
     // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
     ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
-      : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
+      : failureLines(run.state.failureCode, locale)].flat() : []),
     // Crash-loop breaker: the typed park reason in words (the per-attempt count and phase are in the audit event and the service journal).
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
     // E1: a timed-out environment check holds the Run (no answer, not an installation defect); its next step is an explicit re-run.

@@ -32,7 +32,7 @@ vi.mock('#adapters/core/native-cli-headless/internal/realm.js', async importOrig
 }));
 vi.mock('#adapters/core/native-cli-headless/internal/agent-observation.js', async importOriginal => ({
   ...await importOriginal<typeof import('#adapters/core/native-cli-headless/internal/agent-observation.js')>(),
-  preflightNativeAgent: vi.fn(), recordNativeAgentObservation: vi.fn(),
+  preflightNativeAgent: vi.fn(), prepareNativeAgentObservation: vi.fn(async () => async () => {}),
 }));
 
 const cleanups: (() => Promise<unknown>)[] = [];

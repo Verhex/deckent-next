@@ -115,6 +115,24 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(probes[0]).toMatchObject({ visibility: [false, false, false, false], writeAccess: 'EROFS' });
   });
 
+  it('describes a new non-program selection in both languages and leaves the connected-path refusal distinct', async () => {
+    const h = await harness(null), executable = join(h.f.data, 'plain-text.txt');
+    await writeFile(executable, 'A regular file with no execute permission.\n', { mode: 0o600 });
+    const error = await h.connect('g3-selection', { cli: { executable, configDir: h.configDir } })
+      .catch((failure: unknown) => failure) as platform.DeckentError;
+    for (const [locale, selected, connected] of [
+      ['en', 'The file you chose is not a program that can be run. It is a regular file without execute permission.',
+        'The subscription CLI is missing at the connected path'],
+      ['tr', 'Seçtiğiniz dosya çalıştırılabilir bir program değil. Çalıştırma izni olmayan bir normal dosya.',
+        "Abonelik CLI'ı bağlanan yolda yok"],
+    ] as const) {
+      expect.soft(error.localize?.(locale).message).toContain(selected);
+      expect.soft(error.localize?.(locale).message).not.toContain(connected);
+      expect(platform.ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', locale, { check: 'recorded-path-missing' })?.message).toContain(connected);
+    }
+    expect(await h.spawns()).toEqual([]);
+  });
+
   it('K29: connected profile authors v2 through governed config, lists its connection and returns the same kind to Docker', async () => {
     const h = await harness(null); await h.connect('k29-connect');
     const path = join(h.f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
@@ -477,7 +495,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
     const run = (env: Record<string, string>, commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
       connection: 'claude-cli-subscription', endpoint: null, model: { nativeId } }, { env: { ...h.f.env, ...env } });
-    await expect(run({ PATH: join(h.f.data, 'empty-bin') }, 'c-0')).rejects.toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
+    await expect(run({ PATH: join(h.f.data, 'empty-bin') }, 'c-0')).rejects.toMatchObject({
+      code: 'HEADLESS_CLI_UNAVAILABLE', params: { check: 'path-search-empty' },
+    });
     expect(await h.spawns()).toEqual([]);
     const owned = join(await realpath(home), '.deckent', 'headless', 'logins', 'claude');
     await expect(run({ PATH: bin }, 'c-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: owned, owned: true } });

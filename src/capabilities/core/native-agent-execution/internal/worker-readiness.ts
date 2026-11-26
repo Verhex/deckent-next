@@ -1,5 +1,6 @@
+import { DeckentError, headlessDiagnosticIdentifier, type HeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { nativeAgentExecutionSchema, nativeAgentReadinessSchema, type NativeAgentReadinessReason, type NativeAgentExecution } from './contract.js';
+import { nativeAgentExecutionSchema, localNativeAgentReadinessSchema, type NativeAgentReadinessReason, type NativeAgentExecution } from './contract.js';
 import type { NativeCliWorkerBinding } from './worker-profile.js';
 /** Worker refusals a readiness point reports as themselves; every other failure stays NATIVE_AGENT_ENVIRONMENT_REFUSED (fail-closed). */
 const WORKER_REFUSALS = ['NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_PLUGIN_UNEXPECTED', 'NATIVE_WORKER_F08_INVALID'] as const;
@@ -13,14 +14,23 @@ type ReadinessPoint = Readonly<{ readiness: unknown; f08(execution: NativeAgentE
 export async function nativeWorkerReadiness(binding: NativeCliWorkerBinding, flagDigest: string | undefined, executable: () => Promise<string | null>,
   ports: { readiness(binding: NativeCliWorkerBinding): Promise<unknown>; f08(binding: NativeCliWorkerBinding): Promise<unknown>; readinessPoint?(binding: NativeCliWorkerBinding): Promise<ReadinessPoint>;
     verification?: unknown }): Promise<{ state: 'ready'; execution: NativeAgentExecution; verification?: true } | { state: 'waiting';
-    reason: NativeAgentReadinessReason | 'NATIVE_WORKER_F08_REQUIRED' | typeof WORKER_REFUSALS[number] }> {
+    reason: NativeAgentReadinessReason | HeadlessDiagnosticIdentifier | 'NATIVE_WORKER_F08_REQUIRED' | typeof WORKER_REFUSALS[number] }> {
   try {
     const point = ports.readinessPoint ? await ports.readinessPoint(binding) : { readiness: await ports.readiness(binding), f08: () => ports.f08(binding) };
-    const readiness = nativeAgentReadinessSchema.parse(point.readiness);
-    if (readiness.state !== 'ready') return { state: 'waiting' as const, reason: readiness.reason };
+    const readiness = localNativeAgentReadinessSchema.parse(point.readiness);
+    if (readiness.state !== 'ready') {
+      const diagnostic = readiness.diagnostic;
+      const reason = diagnostic ? headlessDiagnosticIdentifier(diagnostic.code, diagnostic.params ?? {}) : undefined;
+      return { state: 'waiting' as const, reason: reason ?? readiness.reason };
+    }
     const { execution } = readiness;
-    if (execution.profileDigest !== binding.profileDigest || execution.flagSetDigest !== flagDigest || !await sealMatchesDefinition(execution, binding.definition, executable, true))
-      return { state: 'waiting' as const, reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' as const };
+    let diagnostic: HeadlessDiagnosticIdentifier | undefined;
+    const checked = () => executable().catch((error: unknown) => {
+      if (error instanceof DeckentError) diagnostic = headlessDiagnosticIdentifier(error.code, error.params ?? {});
+      return null;
+    });
+    if (execution.profileDigest !== binding.profileDigest || execution.flagSetDigest !== flagDigest || !await sealMatchesDefinition(execution, binding.definition, checked, true))
+      return { state: 'waiting' as const, reason: diagnostic ?? 'NATIVE_AGENT_CAPABILITY_UNSEALED' as const };
     const value = await point.f08(execution);
     if (value === null && ports.verification) return { state: 'ready' as const, execution, verification: true as const };
     const proof = nativeAgentExecutionSchema.safeParse(value);

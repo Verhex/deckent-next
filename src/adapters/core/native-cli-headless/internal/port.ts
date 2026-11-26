@@ -1,4 +1,4 @@
-import { nativeBuiltinPlugins, classifyClaudeRateLimit, type ClaudeRateLimit } from '#capabilities/index.js';
+import { nativeBuiltinPlugins, classifyClaudeRateLimit, nativeClaudeResultRefusal, nativeModelRefusal, type ClaudeRateLimit } from '#capabilities/index.js';
 import { getConfigFieldDefault, catalogParseObserver } from '#platform/index.js';
 import { headlessEgressReasons } from '#domain/index.js';
 import { realpath, rm, writeFile } from 'node:fs/promises';
@@ -30,28 +30,30 @@ const ms = (seconds: unknown) => typeof seconds === 'number' && seconds >= 0 && 
 /** Init guard: the exact CLI version, the pinned model, no tool, MCP server or skill, only plugins with registry-defined builtin provenance, the registry permission
  * mode, a claude.ai-login key source and the connection's own run dir as cwd. The first failing field is returned (the process is stopped). */
 export function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: Pick<Prepared, 'model'>, guards: ClaudeGuards, preflight: Pick<HeadlessPreflight, 'version'>, runDir: string): Refusal | null {
-  if (line.model !== prepared.model) return reject('model-mismatch', { refusal: 'model-mismatch', field: 'init.model' });
+  if (line.model !== prepared.model) return modelRefusal('init.model', [line.model]);
   const failed = line.cliVersion !== preflight.version ? 'cliVersion' : line.apiKeySource === null || !guards.apiKeySources.includes(line.apiKeySource) ? 'apiKeySource'
     : line.permissionMode !== guards.permissionMode ? 'permissionMode' : list(line.tools)?.length !== 0 ? 'tools' : list(line.mcpServers)?.length !== 0 ? 'mcpServers'
       : list(line.skills)?.length !== 0 ? 'skills' : nativeBuiltinPlugins(line.plugins, guards.plugins) === null ? 'plugins'
         : line.pluginErrors !== undefined && list(line.pluginErrors)?.length !== 0 ? 'pluginErrors' : line.cwd !== runDir ? 'cwd' : null;
   return failed ? reject('invalid-response', { refusal: 'guard', field: failed }) : null;
 }
+function modelRefusal(field: string, models: readonly unknown[]): Refusal {
+  const body = nativeModelRefusal(field, models);
+  return reject(body.refusal === 'model-mismatch' ? 'model-mismatch' : 'invalid-response', body);
+}
 /** Result guard and mapping: provider signals first (quota, credits, login), then turn/permission bounds and exact model usage. */
 function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards): Refusal | null {
   const status = line.apiErrorStatus;
   if (line.isError || line.subtype !== 'success') {
-    if (line.errors.some(error => guards.creditsErrors.includes(error))) return reject('http-status', { refusal: 'credits-required', status }, status);
-    if (status !== null && guards.quotaStatuses.includes(status)) return reject('http-status', { refusal: 'quota', status, resetsAtMs: null }, status);
-    if ((status !== null && guards.loginStatuses.includes(status)) || line.errors.some(error => guards.loginErrors.includes(error))) return reject('http-status', { refusal: 'login-required', status }, status);
-    if (status !== null && status >= 100 && status <= 599) return reject('http-status', { refusal: 'provider-error', status }, status);
+    const reported = nativeClaudeResultRefusal(status, line.errors, guards);
+    if (reported) return reject('http-status', reported, status);
     return reject('invalid-response', { refusal: 'invalid-output', subtype: line.subtype.slice(0, 64) });
   }
   if (count(line.data.num_turns) > prepared.entry.headless.maxTurns) return reject('invalid-response', { refusal: 'guard', field: 'num_turns' });
   if (!reportedCounters(line.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'])) return reject('invalid-response', { refusal: 'guard', field: 'usage' });
   if (list(line.data.permission_denials)?.length !== 0) return reject('invalid-response', { refusal: 'guard', field: 'permission_denials' });
   const models = Object.keys(line.modelUsage ?? {});
-  return models.length === 1 && models[0] === prepared.model ? null : reject('model-mismatch', { refusal: 'model-mismatch', field: 'modelUsage' });
+  return models.length === 1 && models[0] === prepared.model ? null : modelRefusal('modelUsage', models.filter(model => model !== prepared.model));
 }
 /** The governed result in the chat-completion shape the Brain reads; counters keep the reported model id and quota windows, never a cost. */
 function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress, builtinPlugins: readonly string[], paidExtraUsage: ClaudeRateLimit | null) {
@@ -79,7 +81,7 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
       if (line.kind === 'system' && line.subtype === 'api_retry') return reject('invalid-response', { refusal: 'guard', field: 'api_retry' });
       if ((line.kind === 'assistant' || line.kind === 'result') && !init) return reject('invalid-response', { refusal: 'guard', field: 'init' });
       if (line.kind === 'assistant') {
-        if (typeof line.message.model === 'string' && line.message.model !== prepared.model) return reject('model-mismatch', { refusal: 'model-mismatch', field: 'assistant.model' });
+        if (typeof line.message.model === 'string' && line.message.model !== prepared.model) return modelRefusal('assistant.model', [line.message.model]);
         for (const block of line.blocks) if (block.type === 'text' && typeof block.text === 'string' && block.text) emitDelta(onDelta, block.text);
       } else if (line.kind === 'rate-limit') {
         for (const [window, value] of line.windows) if (typeof value.utilization === 'number') quota[window] = { utilizationPermille: Math.round(Math.min(1, Math.max(0, value.utilization)) * PERMILLE), resetsAtMs: ms(value.resetsAt) };
@@ -178,7 +180,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta, options.knownSecrets ?? EMPTY_KNOWN_SECRETS);
       let refusal: Refusal | null = null;
       const onLine = async (raw: string, lineSignal?: AbortSignal): Promise<'stop' | void> => { refusal ??= await turn.line(raw, lineSignal); return refusal ? 'stop' : undefined; };
-      let evidence;
+      let evidence, promptFailure: { error: unknown } | undefined;
       try {
         await emptyRunDir(preflight.runDir);
         await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' });
@@ -189,7 +191,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
           stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
           stdinBase64: Buffer.from(prepared.user, 'utf8').toString('base64') }, signal, onLine);
-      } finally { await rm(promptFile, { force: true }); }
+      } finally { await rm(promptFile, { force: true }).catch((error: unknown) => { promptFailure = { error }; }); }
       // f5: every settled call names what the realm's gateway did (counts and refused host names only).
       const { egress } = evidence, settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER,
         value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });
@@ -201,12 +203,16 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const ended = turn.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, egress);
       if (ended && 'refusal' in ended) return settle(ended.refusal);
       if (!ended) {
+        if (evidence.reason === 'cancelled') signal?.throwIfAborted();
         if (evidence.reason !== 'exit' && evidence.reason !== 'signal') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
         const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.stderrAllow.rules, headless.limits.stderrSummaryBytes, options.knownSecrets ?? EMPTY_KNOWN_SECRETS), egress };
         return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, 'interrupted', null, Buffer.from(JSON.stringify(exited), 'utf8'), false) });
       }
+      if (evidence.cleanupError && evidence.reason === 'exit' && evidence.exitCode === 0) throw evidence.cleanupError;
       const response = ended.response;
-      return Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes ? settle(reject('response-limit', { refusal: 'response-limit' })) : response;
+      if (Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes) return settle(reject('response-limit', { refusal: 'response-limit' }));
+      if (promptFailure) throw promptFailure.error;
+      return response;
     },
   });
 }

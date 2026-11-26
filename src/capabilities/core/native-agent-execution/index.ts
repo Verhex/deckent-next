@@ -5,6 +5,7 @@ export type { SameTurnPlanningPort, SameTurnPlanningPin, SameTurnPlanningCall, S
 export { nativeCliAgentSchema, nativeAgentBridgeSchema, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ nativeAgentLoginMethodSchema } from './internal/registry.js';
 export type { NativeCliAgent, NativeAgentBridge, NativeAgentLoginMethod } from './internal/registry.js';
 export { nativeCliHeadlessDefinitionSchema, nativeAgentExecutionSchema, nativeAgentReadinessReasonSchema, nativeAgentReadinessSchema } from './internal/contract.js';
+export { localNativeAgentReadinessSchema } from './internal/contract.js';
 export type { NativeCliHeadlessDefinition, NativeAgentExecution, NativeAgentReadinessReason, NativeAgentReadiness } from './internal/contract.js';
 export { toolSessionSchema, nativeAgentCorrelationSchema, nativeAgentCorrelationMeta, nativeAgentToolResultSchema } from './internal/session.js';
 export type { ToolSession, ToolSessionPort, NativeAgentCorrelation, NativeAgentToolResult, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionClosure, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionCancellation, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ToolSessionRevocation } from './internal/session.js';
@@ -18,10 +19,11 @@ export { errorDiagnostic } from './internal/error-diagnostic.js';
 export * from './internal/worker-profile.js';
 export { nativeWorkerPreflight, nativeWorkerToolLifetime, nativeWorkerToolGate, nativeWorkerProcessResult } from './internal/worker-stream.js';
 export { nativeWorkerReadiness, sealMatchesDefinition } from './internal/worker-readiness.js';
-export { CODEX_TOOL_ITEM_RESERVATION, nativeAgentReasonText, nativeAgentPreflightReason } from './internal/readiness.js';
+export { CODEX_TOOL_ITEM_RESERVATION, nativeAgentReasonText, nativeAgentPreflightReason, nativeAgentContainmentDiagnostic, type NativeAgentDiagnostic } from './internal/readiness.js';
 export { prepareNativeWorkerObservation } from './internal/worker-preparation.js';
 export { nativeWorkerInputViews, nativeWorkerInputSandboxes, nativeWorkerEnvironmentProbe } from './internal/worker-inputs.js';
 export { nativeWorkerEnvironmentProbes, nativeWorkerTemplateEnvironment, nativeWorkerToolBounds, nativeWorkerBoundSandboxes, nativeWorkerContainedLayout, type NativeWorkerProbeRunner } from './internal/worker-environment.js';
 export { workerToolPreviewComplete, mintAttendedWorkerDecision, workerToolCardSummary, readWorkerToolCard, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type WorkerToolCard } from './internal/worker-card.js';
 export { nativeBuiltinPlugins } from './internal/plugins.js';
-export { classifyClaudeRateLimit, nativeQuotaRejection, nativeQuotaText, nativePaidUsageText, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './internal/quota.js';
+export { classifyClaudeRateLimit, nativeQuotaRejection, nativeQuotaText, nativePaidUsageText, nativeModelRefusal, nativeClaudeResultRefusal,
+  type ClaudeQuotaPolicy, type ClaudeRateLimit } from './internal/quota.js';

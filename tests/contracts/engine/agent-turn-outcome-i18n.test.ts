@@ -7,7 +7,8 @@ import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 describe('terminal turn-outcome catalog guard', () => {
   it('every producer outcome key has EN/TR text and identical placeholders; closures cannot return literal prose', () => {
-    const producers = ['loop.ts', 'durable.ts', 'store.ts'].map(file => readFileSync(`src/engine/core/agent-turn/internal/${file}`, 'utf8')).join('\n');
+    const producers = [...['loop.ts', 'durable.ts', 'store.ts'].map(file => `src/engine/core/agent-turn/internal/${file}`),
+      'src/composition/core/agent-turn/internal/turn.ts'].map(file => readFileSync(file, 'utf8')).join('\n');
     const used = [...producers.matchAll(/t\('(agent\.turn\.outcome\.[\w]+)'/g)].map(match => match[1]!);
     const en = MESSAGE_REGISTRY.catalogs.en, tr = MESSAGE_REGISTRY.catalogs.tr;
     const keys = Object.keys(en).filter(key => key.startsWith('agent.turn.outcome.'));
@@ -30,6 +31,16 @@ describe('terminal turn-outcome catalog guard', () => {
   });
 
   for (const locale of ['en', 'tr'] as const) {
+    it(`${locale}: an incomplete native invocation reports the round outcome without advice unsupported by its receipt`, async () => {
+      const result = await runAgentTurn({ language: locale, messages: [{ role: 'user', content: 'hi' }], tools: [],
+        signal: new AbortController().signal, emit: () => undefined }, {
+        invokeRound: async () => ({ status: 'failed', state: 'unknown: interrupted' }), authorize: async () => 'allow',
+        describe: () => null, execute: async () => ({ status: 'ok', text: '' }), now: () => 1,
+      });
+      expect(result.note).toBe(locale === 'en'
+        ? 'The model round ended without an answer (unknown: interrupted). It was not retried automatically. No tool call ran.'
+        : 'Model turu yanıt alınamadan sona erdi (sonuç belirsiz: yarıda kesildi). Tur otomatik olarak tekrar denenmedi. Hiçbir araç çağrısı çalıştırılmadı.');
+    });
     it.each(['content-filter', 'context-window', 'network-error', 'resource-exhausted', 'aborted'] as const)(`${locale}: provider %s keeps usage and closes without a retry or tool effect`, async providerStop => {
       let sends = 0, executions = 0;
       const events: { kind: string; note?: string | null }[] = [];

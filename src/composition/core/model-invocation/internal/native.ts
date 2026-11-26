@@ -10,7 +10,7 @@ import { modelInvocationProfileDigest, subscriptionActor, OAuthConnectionError, 
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, inspectNativeStateCustody, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
-import { createCatalogTariffLookup } from './catalog-tariff.js';
+import { createCatalogTariffLookup } from '#engine/index.js';
 import type { loadInvocationContext } from './context.js';
 
 export async function readHeadlessGovernedUse(profile: ModelInvocationProfile, options: ConfigLoadOptions): Promise<'outside-installation' | null> {

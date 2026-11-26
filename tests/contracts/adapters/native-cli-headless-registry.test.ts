@@ -277,6 +277,11 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
       driver.line(JSON.stringify(resultLine('ok')));
       expect(driver.finish({ reason: 'exit', exitCode: 0, stdoutTruncated: false, stderrTruncated: false }).kind).toBe('completed');
     }
+    // C2: a registered provider status read from the terminal result before cancellation stays next to the cancelled outcome.
+    const cancelled = start();
+    expect(cancelled.line(JSON.stringify(resultLine('', { is_error: true, subtype: 'error_during_execution', api_error_status: 429 })))).toBeUndefined();
+    expect(cancelled.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false }))
+      .toEqual({ kind: 'cancelled', subtype: 'error_during_execution', rejection: { refusal: 'quota', status: 429, resetsAtMs: null } });
     for (const overageStatus of ['future', true, {}, '', null]) {
       for (const choice of ['continue', 'stop-at-limit'] as const) {
         const driver = start(nativeQuotaPolicy(), choice);

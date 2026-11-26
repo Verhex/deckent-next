@@ -1,14 +1,16 @@
-import { nativeAgentReadinessSchema, nativeAgentReasonText, type NativeAgentReadiness } from '#capabilities/index.js';
-import { headlessGovernedUseText, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { localNativeAgentReadinessSchema, nativeAgentReasonText, type NativeAgentReadiness } from '#capabilities/index.js';
+import { headlessDiagnostic, headlessGovernedUseText, t, type ConfigLoadOptions, type DeckentError, type Locale } from '#platform/index.js';
 import type { ModelPanelView, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderPanelHost, ProviderWindowPort, SubscriptionReadinessPort } from './context.js';
 import presentation from './presentation.json' with { type: 'json' };
 
-const unknown = (): NativeAgentReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
-export function subscriptionReadinessText(value: NativeAgentReadiness, locale: Locale, connection?: string): string {
+type LocalReadiness = NativeAgentReadiness & { readonly diagnostic?: DeckentError };
+const unknown = (): LocalReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
+  diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) });
+export function subscriptionReadinessText(value: LocalReadiness, locale: Locale, connection?: string): string {
   if (value.state === 'ready') return t('headless.agent.readiness.ready', {}, locale);
   if (value.governedUse) { const { text, next } = headlessGovernedUseText(locale, connection); return `${text} ${next}`; }
-  const reason = nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
+  const reason = value.diagnostic?.localize?.(locale).message ?? nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
   return value.state === 'unknown' ? t('headless.agent.readiness.unknown', { reason }, locale) : t('headless.agent.readiness.unavailable', { reason }, locale);
 }
 /** The host owns K7's scoped observation read. No inspection can mint a seal or refresh a login. */
@@ -20,7 +22,10 @@ export function subscriptionReadinessPort(root: string, scopeId: string, host: P
     try {
       const values = await Promise.race([host.inspectSubscriptionReadiness(root, { scopeId, surface, references }, options),
         new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), presentation.readinessInspectionMs); })]);
-      return references.map((_, index) => { const parsed = nativeAgentReadinessSchema.safeParse(values?.[index]); return parsed.success ? parsed.data : unknown(); });
+      return references.map((_, index) => {
+        const parsed = localNativeAgentReadinessSchema.safeParse(values?.[index]);
+        return parsed.success ? parsed.data : unknown();
+      });
     } catch { return references.map(() => ({ state: 'unknown', reason: 'NATIVE_AGENT_ENVIRONMENT_REFUSED' })); }
     finally { if (timer !== undefined) clearTimeout(timer); }
   };

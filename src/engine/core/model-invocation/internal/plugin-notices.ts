@@ -1,7 +1,7 @@
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID } from '#domain/index.js';
 import { nativePaidUsageText, type ClaudeRateLimit } from '#capabilities/index.js';
 import { z } from 'zod';
-import { type ModelInvocationResult } from '#engine/index.js';
+import { type ModelInvocationResult } from './application.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 const metadata = z.looseObject({ cliVersion: z.string().min(1), builtinPlugins: z.array(z.string().min(1)) });
 const sessions = new WeakMap<object, { seen: Set<string>; pending: Promise<void> }>();

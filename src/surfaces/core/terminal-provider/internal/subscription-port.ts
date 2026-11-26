@@ -1,4 +1,4 @@
-import { ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, didHeadlessLoginReturn, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import type { PanelLine, ProviderModelOutcome } from '#surfaces/core/terminal-panels/index.js';
@@ -45,8 +45,13 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
       : id === 'device-auth' ? t('headless.agent.login.method.device-auth', {}, locale) : t('headless.agent.login.method.claudeai', {}, locale),
       command: `${twin(kind, configDir ?? null)} --login-method ${quoted(id)}` })),
     refusal(kind, usable) {
-      return { title: t('tui.provider.isolation.title', { kind: input.kindLabel(kind) }, locale), lines: [
-        { label: t('tui.provider.field.check', {}, locale), text: errorText(input.refusal()), tone: 'warning' },
+      const failure = input.refusal();
+      const check = failure instanceof DeckentError && failure.code === 'HEADLESS_ISOLATION_UNAVAILABLE' ? failure.params : undefined;
+      const unavailable = check?.['check'] === 'user-namespace' || check?.['check'] === 'launcher' && check['reason'] === 'platform';
+      const params = { kind: input.kindLabel(kind) };
+      const title = unavailable ? t('tui.provider.isolation.title', params, locale) : t('tui.provider.isolation.unverifiedTitle', params, locale);
+      return { title, lines: [
+        { label: t('tui.provider.field.check', {}, locale), text: errorText(failure), tone: 'warning' },
         { label: t('tui.provider.isolation.usableLabel', {}, locale), text: usable.length ? usable.join(', ') : t('tui.provider.isolation.noneUsable', {}, locale) },
         { label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.isolation.next', {}, locale), tone: 'muted' }] };
     },
@@ -63,11 +68,20 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
         if (method !== undefined && !connect.loginMethods?.(kind).includes(method)) throw ErrorRegistry.createError('CLI_USAGE');
         const view = await connect.login({ connection: kind, ...(configDir ? { configDir } : {}), ...(method ? { loginMethod: method } : {}) }, options);
         if (!view) return { signedIn: false, refused: true, title: t('tui.provider.login.refusedTitle', { kind: label }, locale), lines: [] };
-        const signedIn = view.signedIn && view.exit === 'completed';
-        return { signedIn, refused: false, title: signedIn ? t('tui.provider.login.doneTitle', { kind: label }, locale) : t('tui.provider.login.failedTitle', { kind: label }, locale),
-          lines: renderHeadlessLogin(view, locale, kind).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) })) };
+        const signedIn = view.signedIn && view.exit === 'completed' && !view.cleanupIssue;
+        const title = view.cleanupIssue ? t('tui.provider.login.startedTitle', { kind: label }, locale)
+          : signedIn && !view.statusIssue ? t('tui.provider.login.doneTitle', { kind: label }, locale)
+          : view.exit === 'completed' && view.statusIssue ? t('tui.provider.login.completedUnverifiedTitle', { kind: label }, locale)
+            : t('tui.provider.login.failedTitle', { kind: label }, locale);
+        return { signedIn, refused: !!view.cleanupIssue || view.followUpFailed === true, title,
+          lines: [...(signedIn && view.statusIssue ? [{ label: '', text: title, tone: 'warning' as const }] : []),
+            ...renderHeadlessLogin(view, locale, kind, process.stdin.isTTY && process.stdout.isTTY).split('\n').map((text, index) => ({ label: '', text, ...(index === 0 ? { tone: 'muted' as const } : signedIn ? {} : { tone: 'warning' as const }) }))] };
       } catch (error) {
-        return { signedIn: false, refused: true, title: t('tui.provider.login.refusedTitle', { kind: label }, locale), lines: [{ label: '', text: errorText(error), tone: 'warning' }] };
+        const known = error instanceof DeckentError && ErrorRegistry.has(error.code);
+        const title = didHeadlessLoginReturn(error) ? t('tui.provider.login.startedTitle', { kind: label }, locale)
+          : known ? t('tui.provider.login.refusedTitle', { kind: label }, locale) : t('tui.provider.login.unverifiedTitle', { kind: label }, locale);
+        const text = known ? errorText(error) : t('headless.login.operationUnverified', {}, locale);
+        return { signedIn: false, refused: true, title, lines: [{ label: '', text, tone: 'warning' }] };
       }
     },
     async connect(kind, configDir, delegate) {

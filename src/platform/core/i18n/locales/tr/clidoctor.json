@@ -105,7 +105,7 @@
   "doctor.check.binding.required": "Makine bağı zorunlu ama makine kimliği yok; kuruluma bağlı yazmalar reddedilir",
   "doctor.check.recovery": "Yarım kalan yedek geri yüklemesinden {count} dosya duruyor",
   "doctor.check.run.crashLoop": "{run} işi beklemede: deckent servisi bu işi başlatırken tekrar tekrar durdu (çökme döngüsü koruması, {code}). Nedenini okuyun, düzeltin, sonra işi sürdürün.",
-  "doctor.check.run.parked": "{run} işi tekrarlanan hatalardan sonra beklemede ({code}). Nedenini okuyun, düzeltin, sonra işi sürdürün.",
+  "doctor.check.run.parked": "{run} işi beklemede ({code}).",
   "doctor.check.audit.ok": "Denetim zinciri doğrulandı",
   "doctor.check.audit.problem": "Denetim zinciri: {status} ({reason})",
   "doctor.check.directory.private": "Kurulum klasörü yalnız size açık",

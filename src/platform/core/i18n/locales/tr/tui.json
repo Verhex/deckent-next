@@ -904,9 +904,10 @@
   "tui.provider.billing.subscription": "abonelik: API anahtarı yok, planınızın kullanım kotasını kullanır",
   "tui.provider.isolation.blocked": "Bu bilgisayarda kullanılamaz: yalnızca süreç yalıtımı (bubblewrap) içinde çalışır ve burada yok. Enter yerine neyi kullanabileceğinizi gösterir.",
   "tui.provider.isolation.title": "{kind} bu bilgisayarda çalışamaz",
+  "tui.provider.isolation.unverifiedTitle": "{kind}: yalıtım doğrulanamadı",
   "tui.provider.isolation.usableLabel": "Burada kullanılabilir",
   "tui.provider.isolation.noneUsable": "bu bilgisayarda başka sağlayıcı sunulmuyor",
-  "tui.provider.isolation.next": "Esc listeye döner: yukarıdaki sağlayıcılardan birini seçin (API anahtarı ya da yerel sunucu). Bu abonelik için: bubblewrap'i kurun ya da düzeltin (`deckent doctor` yalıtım alanı durumunu gösterir), sonra deckent'i yeniden başlatıp /provider'ı açın.",
+  "tui.provider.isolation.next": "Esc sağlayıcı listesine döner. Kullanılabilir olarak gösterilen sağlayıcılardan birini seçebilirsiniz.",
   "tui.provider.login.action": "CLI'ıyla giriş yap ve bağla…",
   "tui.provider.login.dirTitle": "Giriş dizini",
   "tui.provider.login.dirOwned": "deckent'in kendi giriş dizini (önerilen)",
@@ -1250,5 +1251,8 @@
   "tui.provider.beta": "Betada — bu bağlantı kullanılamayabilir",
   "tui.provider.apiTitle": "API sağlayıcıları",
   "terminal.delivery.candidateTitle": "{title} · aday hazır; teslim edilmedi",
-  "terminal.delivery.permissionHints": "y bu klasörün iznini daralt · n/Esc izni koru"
+  "terminal.delivery.permissionHints": "y bu klasörün iznini daralt · n/Esc izni koru",
+  "tui.provider.login.startedTitle": "{kind}: giriş komutu başladı",
+  "tui.provider.login.completedUnverifiedTitle": "{kind}: giriş komutu tamamlandı, durum denetimi doğrulanmadı",
+  "tui.provider.login.unverifiedTitle": "{kind}: giriş durumu kullanılamıyor"
 }

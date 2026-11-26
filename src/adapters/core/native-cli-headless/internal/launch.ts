@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { NativeAgentCorrelation, ToolSession } from '#capabilities/index.js';
 import { nativeCliAgentBridge, type nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeEgressLimits } from '#adapters/core/native-connection/index.js';
-import { prepareClaudeAgentRun } from './claude-agent.js';
+import { prepareClaudeAgentRun } from '#adapters/core/native-cli-claude-agent/index.js';
 import { codexAgentArgv } from './codex-agent.js';
 import { buildHeadlessEnv } from './env.js';
 

@@ -1,6 +1,7 @@
-import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { t, resolveLocale, clockText, currencyAmountText, messageText, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { isHeadlessDiagnosticCode, readHeadlessDiagnosticCase } from './headless-diagnostics.js';
 import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
-import { localHeadlessPathDetail, retainHeadlessPaths } from './headless-paths.js';
+import { localHeadlessPathDetail, retainHeadlessFailedCheck, retainHeadlessPaths } from './headless-paths.js';
 import { DeckentError } from './error.js';
 import { errorTable, plainErrors, type AuthorizationRefusal, type ErrorDefinition, type ErrorDefinitions, type ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
@@ -10,6 +11,31 @@ const workerKindIssues = (p: Params, l: Locale) => (['image-missing', 'image-unv
   const kinds = p[reason === 'image-missing' ? 'missingKinds' : 'unverifiedKinds'] || Object.entries(p).filter(([key]) => key.startsWith(`${reason}.`)).map(([, value]) => value).join(', ');
   return kinds ? [reason === 'image-missing' ? t('worker.kinds.image-missing', { kinds }, l) : t('worker.kinds.image-unverified', { kinds }, l)] : [];
 }).join(' ');
+function terminalChatRejection(p: Params, l: Locale): string {
+  switch (p['refusal']) {
+    case 'guard': {
+      const message = t('error.TERMINAL_CHAT_REJECTED.guard', p, l);
+      return typeof p['check'] === 'string' ? `${message} (${p['check']})` : message;
+    }
+    case 'quota-status-unrecognized': return t('headless.chat.quotaStatusUnrecognized', {}, l);
+    case 'response-limit': return t('error.TERMINAL_CHAT_REJECTED.responseLimit', p, l);
+    case 'login-required': return t('error.TERMINAL_CHAT_REJECTED.loginRequired', p, l);
+    case 'invalid-output': return t('error.TERMINAL_CHAT_REJECTED.invalidOutput', p, l);
+    case 'model-mismatch': return t('error.TERMINAL_CHAT_REJECTED.modelMismatch', p, l);
+    case 'provider-error': return t('error.TERMINAL_CHAT_REJECTED.providerError', p, l);
+    case 'siwc-quota': return t('siwc.usage.limit', p, l);
+    case 'quota': {
+      const window = p['window'], reset = p['resetsAtMs'];
+      if (typeof window !== 'string') return t('headless.chat.quotaFallback', {}, l);
+      const unknown = t('headless.chat.quotaUnknown', {}, l);
+      return t('headless.chat.quota', {
+        window: messageText(`headless.chat.quotaWindow.${window}`, l) ?? (window === '?' ? unknown : window),
+        reset: typeof reset === 'number' && Number.isFinite(new Date(reset).getTime()) ? clockText(reset) : unknown,
+      }, l);
+    }
+    default: return t('error.TERMINAL_CHAT_REJECTED', p, l);
+  }
+}
 function invocationInputSubject(p: Params, l: Locale): string {
   switch (p['subject']) {
     case 'cli.input.subject.queue': return t('cli.input.subject.queue', {}, l);
@@ -184,7 +210,9 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
 }, plainErrors('error.', { INSTALLATION_ROOT_FOREIGN: 'config', INSTALLATION_ROOT_INSIDE_DATA_ROOT: 'config', INSTALLATION_ROOT_WALK_UNSUPPORTED: 'config' }), {
   INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
-  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'declined' ? t('error.PROJECT_ATTACHMENT_DENIED.declined', p, l) : p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l) : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
+  PROJECT_ATTACHMENT_DENIED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'declined' ? t('error.PROJECT_ATTACHMENT_DENIED.declined', p, l) : p['reason'] === 'location-write' ? t('error.PROJECT_ATTACHMENT_DENIED.location-write', p, l) : p['reason'] === 'location' ? t('error.PROJECT_ATTACHMENT_DENIED.location', p, l)
+    : p['reason'] === 'source-binding-unverified' ? t('error.PROJECT_ATTACHMENT_DENIED.sourceBindingUnverified', {}, l)
+      : t('error.PROJECT_ATTACHMENT_DENIED', p, l) }) },
   PROJECT_ATTACHMENT_SOURCE_REGISTERED: { category: 'config', render: (p, l) => ({ message: p['identityChoice'] === 'keep' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.keep', p, l)
     : p['identityChoice'] === 'new' ? t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED.new', p, l) : t('error.PROJECT_ATTACHMENT_SOURCE_REGISTERED', p, l) }) },
   PROJECT_ATTACHMENT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: p['source'] ? t('error.PROJECT_ATTACHMENT_UNAVAILABLE.source', p, l) : t('error.PROJECT_ATTACHMENT_UNAVAILABLE', p, l) }) },
@@ -236,10 +264,16 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   MODEL_CONNECT_DECLARATION_CONFLICT: 'error', MODEL_CONNECT_KEY_NAME_UNAVAILABLE: 'usage', MODEL_CONNECT_SEED_UNAVAILABLE: 'error',
   MODEL_CONNECT_TARIFF_UNKNOWN: 'error', MODEL_CONNECT_TARIFF_UNVERIFIED: 'error', MODEL_CONNECT_KEY_INSECURE: 'usage', MODEL_CONNECT_DEFINITION_INVALID: 'error',
   TERMINAL_DEFAULT_MODEL_PROJECT_LAYER: 'config', TERMINAL_CHAT_MODEL_NOT_DECLARED: 'error', TERMINAL_CHAT_TRUNCATED: 'error', TERMINAL_CHAT_EMPTY: 'error',
-  TERMINAL_CHAT_CANCELLED: 'error', TERMINAL_CHAT_UNAVAILABLE: 'error', AGENT_TURN_IN_PROGRESS: 'error', AGENT_TURN_CONFLICT: 'error', AGENT_TURN_CORRUPT: 'error',
+  TERMINAL_CHAT_UNAVAILABLE: 'error', AGENT_TURN_IN_PROGRESS: 'error', AGENT_TURN_CONFLICT: 'error', AGENT_TURN_CORRUPT: 'error',
   AGENT_TURN_INVALID: 'usage', AGENT_TURN_REASONING_UNSUPPORTED: 'usage', AGENT_TURN_UNAVAILABLE: 'error', TERMINAL_TTY_REQUIRED: 'usage',
   INFERENCE_METRICS_UNREAD: 'error',
 }), {
+  TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: p['beforeSend'] === 'true'
+    ? t('error.TERMINAL_CHAT_CANCELLED.beforeSend', p, l) : t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
+  TERMINAL_CHAT_REJECTED: { category: 'error', render: (p, l) => ({ message: terminalChatRejection(p, l) }) },
+  TERMINAL_CHAT_PROCESS_EXIT: { category: 'error', render: (p, l) => ({ message: p['observedSignal'] === 'true'
+    ? t('agent.turn.failure.processSignal', {}, l) : t('agent.turn.failure.processExit', p, l) }) },
+  TERMINAL_CHAT_RECORDED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('agent.turn.failure.recordedCode', p, l) }) },
   INFERENCE_NOT_CONFIGURED: { category: 'error', render: (_p, l) => ({ message: t('inference.notConfigured', {}, l) }) },
 }, plainErrors('error.', {
   INFERENCE_PROFILE_UNKNOWN: 'usage', DECISION_INVALID: 'error', DECISION_UNAVAILABLE: 'error', DECISION_COMMAND_CONFLICT: 'error', DECISION_CORRUPT: 'error',
@@ -709,7 +743,7 @@ export const isAuthorizationRefusal = (code: unknown, options: { readonly includ
 /** S2-e4: the launch disposition a registered code carries; null = transient, an unregistered code included. */
 export const launchRefusal = (code: unknown): 'permanent' | 'held' | null => registered(code)?.launch ?? null;
 export const ErrorRegistry = Object.freeze({
-  retainHeadlessPaths, localHeadlessPathDetail,
+  retainHeadlessPaths, retainHeadlessFailedCheck, localHeadlessPathDetail,
   has(code: string): boolean { return Object.hasOwn(definitions, code); },
   get(code: string, locale: Locale = resolveLocale(), params: Params = {}): Readonly<ErrorEntry> | undefined {
     const definition = Object.hasOwn(definitions, code) ? definitions[code] : undefined;
@@ -719,6 +753,11 @@ export const ErrorRegistry = Object.freeze({
     return new Map(ERROR_CODES.map(code => [code, this.get(code, locale)!]));
   },
   createError(code: string, options: { message?: string; suggestion?: string; params?: Params; locale?: Locale; cause?: unknown } = {}): DeckentError {
+    if (isHeadlessDiagnosticCode(code)) options = {
+      ...(options.locale !== undefined && { locale: options.locale }),
+      // An empty parameter set can itself be a definite diagnosis.
+      params: readHeadlessDiagnosticCase({ code, params: options.params === undefined ? {} : options.params })?.params ?? { check: 'diagnostic-unverified' },
+    };
     const locale = options.locale ?? resolveLocale();
     const entry = this.get(code, locale, options.params);
     const category = Object.hasOwn(definitions, code) ? definitions[code]!.category : 'error';

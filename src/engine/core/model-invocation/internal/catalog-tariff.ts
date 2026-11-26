@@ -1,5 +1,5 @@
 import type { CatalogTariffLookup } from '#domain/index.js';
-import type { ModelCatalogReader } from '#engine/index.js';
+import type { ModelCatalogReader } from '#engine/core/model-activation/index.js';
 
 /**
  * Security review M4: the spend authority's re-read of a sealed catalog tariff. It returns the registered row's own `connect.tariff` term only

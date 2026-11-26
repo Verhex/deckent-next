@@ -848,6 +848,43 @@ it('native settlement failure is retained as unknown, fences new effects and can
   expect(result).toMatchObject({ finish: 'error' }); expect(result.note).toContain('unknown'); expect(checked).toBe(true); expect(executions).toBe(1);
 });
 
+it('retains a native guard reason when tool settlement also becomes unknown', async () => {
+  const p = ports([]);
+  p.value.execute = async () => ({ status: 'ok', text: 'effect happened' });
+  p.value.settled = async () => { throw new Error('store unavailable'); };
+  p.value.invokeAgent = async ({ session }, _delta, signal) => {
+    await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal);
+    return { status: 'failed', state: 'The native CLI reported a tool surface that differs from the one offered.' };
+  };
+  const result = await nativeRun(p.value);
+  expect(result).toMatchObject({ finish: 'error', toolCalls: 1 });
+  expect(result.note).toContain('unknown');
+  expect(result.note).toContain('The native CLI reported a tool surface that differs from the one offered.');
+});
+
+it('retains an observed native guard when an outer signal, service stop or delivery failure ends the turn', async () => {
+  const guard = 'The native CLI reported a tool surface that differs from the one offered.';
+  for (const [ending, finish, closure] of [
+    ['signal', 'cancelled', 'Cancelled. No tool call ran.'],
+    ['service', 'error', 'The runtime service stopped during this turn'],
+    ['delivery', 'error', 'RUNTIME_CHAT_EVENT_TOO_LARGE'],
+  ] as const) {
+    const p = ports([]), outer = new AbortController();
+    let ended = false;
+    p.value.serviceStopping = () => ended && ending === 'service';
+    p.value.contextFailure = () => ended && ending === 'delivery' ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null;
+    p.value.invokeAgent = async () => {
+      ended = true;
+      if (ending !== 'delivery') outer.abort();
+      return { status: 'failed', state: guard };
+    };
+    const result = await runAgentTurn({ messages: user, tools: [nativeShell], nativeSession: nativeSession(), signal: outer.signal, emit() {} }, p.value);
+    expect(result).toMatchObject({ finish, toolCalls: 0 });
+    expect.soft(result.note, ending).toContain(closure);
+    expect.soft(result.note, ending).toContain(guard);
+  }
+});
+
 it('native dispatch never falls back to pull and refuses returned tool calls as a second execution path', async () => {
   const missing = ports([]); expect(await nativeRun(missing.value)).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(missing.invoked).toEqual([]);
   const extra = ports([]);

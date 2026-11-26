@@ -4,8 +4,8 @@ import { createClaudeAgentDriver, toolSessionSchema, type ToolSessionPort } from
 import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/index.js';
 import { nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import { FAMILY, PINNED, rateLimitLine } from '../../fixtures/native-headless/stream.js';
-import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
-import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import { cancelPeerConfiguredModelInvocation, notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#composition/core/model-invocation/index.js';
+import { createModelInvocationResponseEvidence, ModelInvocationStoreError, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { writeFakeCli, uiLine, initLine, assistantLine, resultLine } from '../../fixtures/native-headless/stream.js';
 import { createServer, request, type Server } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,18 +14,21 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER_ID, firstRunPolicyTemplate, modelInvocationProfileSchema, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, firstRunPolicyTemplate, modelInvocationProfileSchema, type ModelInvocationClaim, type AgentTurnMessage, type AgentTurnStreamEvent, type AgentToolCall } from '#domain/index.js';
 import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn, cancelPeerConfiguredChatTurn, type NativeChatRuntime } from '#composition/core/agent-turn/index.js';
 import { describeTerminalChat, inspectNativeChat } from '#composition/core/terminal-chat/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
-import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
+import { createNativeAgentDriver, nativeAgentFlagSetDigest, preflightNativeAgent } from '#adapters/core/native-cli-headless/index.js';
+import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/native-headless/agent.js';
+import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
-import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, modelInvocationProfileDigest } from '#engine/index.js';
-import { clearConfigCache, redactForRecord, SystemTrustedClock } from '#platform/index.js';
+import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
+import { clearConfigCache, clockText, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock, t } from '#platform/index.js';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
+import * as adapters from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -38,9 +41,9 @@ async function unsupportedPeer() {
     variant: 'native-chat-linux-PTY', reason: 'platform-unsupported', platform: process.platform }));
   return true;
 }
-async function fixture(askEdits = true) {
+async function fixture(askEdits = true, headless?: { executable: string; configDir: string; stateDir: string; protocolFamily: string }) {
   const owner = readLocalOsIdentity();
-  const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state',
+  const f = await brainProviderFixture({ headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state', ...headless,
     delegatedUse: { consentedBy: { issuer: owner.issuer, subject: owner.subject }, atMs: 1, classes: ['ai'] } } });
   cleanups.push(f.close);
   // No CLI/preflight/login runs: a code-only fake native port exercises the real composition, facade and durable stores.
@@ -57,7 +60,8 @@ async function fixture(askEdits = true) {
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { limitAfterTool: null as null | 'credits-required' | 'quota', quotaWindow: null as null | { field: string; subtype: string; resetsAtMs: number },
+    paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -88,8 +92,15 @@ async function fixture(askEdits = true) {
           });
           expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'k11-fake-driver', version: '1' } } })).status).toBe(200);
           state.channels.push(localPrincipalChannel());
-          const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: JSON.parse(call.argumentsJson), _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
+          const quota = state.limitAfterTool === 'quota';
+          const args = state.limitAfterTool ? { path: quota ? `quota-${state.quotaWindow ? 'window-' : ''}result.txt` : 'credits-result.txt',
+            content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
+          const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: args, _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
+          if (state.limitAfterTool) {
+            return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, quota ? 'http-status' : 'interrupted', quota ? 429 : null,
+              Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: state.limitAfterTool, ...(quota && { status: 429, ...state.quotaWindow }) })), quota) };
+          }
           return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
       refusal: () => null,
@@ -102,7 +113,7 @@ async function fixture(askEdits = true) {
   const channel = { signal: new AbortController().signal, room: () => 1_000_000, drained: async () => true,
     emit(event: AgentTurnStreamEvent) { events.push(event); if (event.kind === 'approval.requested') offer(event); } };
   const command = { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn', messages: [{ role: 'user', content: 'write the business result' }] };
-  const run = (turnId = command.turnId) => runPeerConfiguredChatTurn(f.project, { ...command, turnId }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
+  const run = (turnId = command.turnId, messages: readonly AgentTurnMessage[] | typeof command.messages = command.messages) => runPeerConfiguredChatTurn(f.project, { ...command, turnId, messages }, peer, f.options, { maxResultBytes: 65_536 }, host, channel);
   const decide = (event: Awaited<typeof offered>, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', commandId: 'decide-k11', approvalId: event.approvalId,
     expectedRevision: event.revision, decision, reason: 'synthetic person decision', channel: 'local-terminal-card', decisionCapability: event.decisionCapability }, f.options, peer, undefined, {}, host.decisions, host.answers);
   return { f, profile, runtime, execution, state, host, peer, events, run, offered, decide };
@@ -114,6 +125,23 @@ it('shows tools only for a matching capability, and does not spawn on inspection
   // R4b: not yet observed is "unverified" (the first turn verifies it), never "no tools"; a known refusal is "none".
   expect((await describeTerminalChat(h.f.project, h.f.options)).tools).toBe('unverified');
   expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('available');
+  const ownerUid = h.execution.ownerUid, executable = h.execution.executable;
+  h.execution.ownerUid = ownerUid + 1;
+  const differentOwner = await describeTerminalChat(h.f.project, h.f.options, h.runtime);
+  expect(differentOwner.tools).toBe('none');
+  expect.soft(differentOwner.toolsDiagnostic?.localize?.('en').message)
+    .toBe('The operating-system user in the agent execution record differs from the configured user.');
+  expect.soft(differentOwner.toolsDiagnostic?.localize?.('tr').message)
+    .toBe('Ajan yürütme kaydındaki işletim sistemi kullanıcısı yapılandırılan kullanıcıdan farklı.');
+  h.execution.ownerUid = ownerUid;
+  h.execution.executable = '/fixture/different-recorded-program';
+  const differentProgram = await describeTerminalChat(h.f.project, h.f.options, h.runtime);
+  expect(differentProgram.tools).toBe('none');
+  expect.soft(differentProgram.toolsDiagnostic?.localize?.('en').message)
+    .toBe('The verified program path differs from the path in the agent execution record.');
+  expect.soft(differentProgram.toolsDiagnostic?.localize?.('tr').message)
+    .toBe('Doğrulanan program yolu ajan yürütme kaydındaki yoldan farklı.');
+  h.execution.executable = executable;
   h.execution.profileDigest = '0'.repeat(64);
   expect(await inspectNativeChat(h.profile, h.runtime)).toMatchObject({ state: 'unavailable', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
   expect((await describeTerminalChat(h.f.project, h.f.options, h.runtime)).tools).toBe('none');
@@ -157,6 +185,70 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
     expect(JSON.stringify(records[0])).toMatch(/"mode":"standart","cell":"edit-non-floor"/u);
     expect(JSON.stringify(records[0])).toContain('"company":"first-run-mcp-edit-shell-tools"');
   } finally { db.close(); }
+  Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  h.state.limitAfterTool = 'credits-required';
+  const failed = await h.run('credits-after-tool');
+  const sentence = 'The subscription asks for extra credits for this request.';
+  expect(failed).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+  expect(await readFile(join(h.f.project, 'credits-result.txt'), 'utf8')).toBe('retained before the refusal\n');
+  expect.soft(failed.note).toContain(sentence);
+  expect.soft(failed.note).not.toMatch(/nothing was accepted|try again/u);
+  expect.soft(t('error.HEADLESS_CREDITS_REQUIRED', {}, 'tr')).toBe('Abonelik bu istek için ek kredi istiyor.');
+  expect(await h.run('credits-after-tool')).toMatchObject({ replayed: true, toolCalls: 1, note: failed.note });
+  const oldAdvice = sentence + ' deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your provider account, then try again.';
+  const warning = 'Tool settlement is unknown.';
+  const savedCreditNote = failed.note!.replace(sentence, `${warning} ${oldAdvice}`);
+  const checkEffects = 'Check this turn’s earlier tool effects before repeating the work.';
+  const checkEffectsTr = 'İşi tekrarlamadan önce bu turdaki önceki araç çağrılarının etkilerini denetleyin.';
+  const oldQuota = 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.';
+  const historicalQuotaNote = failed.note!.replace(sentence, oldQuota);
+  const quotaDiagnosis = `${checkEffects} ${oldQuota}`;
+  let replayHistoricalQuota = false;
+  const openTurn = adapters.openSqliteAgentTurnStore;
+  const history = vi.spyOn(adapters, 'openSqliteAgentTurnStore').mockImplementation(async (...args) => {
+    const retained = await openTurn(...args), claim = retained.claim.bind(retained);
+    retained.claim = async input => {
+      const stored = await claim(input);
+      if (stored.status !== 'finished') return stored;
+      const note = input.turnId === 'credits-after-tool' ? savedCreditNote : replayHistoricalQuota ? historicalQuotaNote : stored.outcome.note;
+      return { ...stored, outcome: { ...stored.outcome, note } };
+    };
+    return retained;
+  });
+  try {
+    const calls = h.state.calls, replay = await h.run('credits-after-tool');
+    expect.soft(replay).toMatchObject({ replayed: true, recorded: true, toolCalls: 1 });
+    const [saved, correction] = replay.note?.split('\n', 2) ?? [];
+    expect.soft(correction).toBe(`Current correction: ${sentence}`);
+    expect.soft(correction).not.toMatch(/nothing was accepted|try again/u);
+    expect.soft(saved).toBe(`Saved note (historical wording): ${savedCreditNote}`);
+    const capacity = Buffer.byteLength(JSON.stringify({ ...replay, note: null })) + 105;
+    expect.soft(fitChatTurnResult({ ...replay, note: savedCreditNote.replace(oldAdvice, sentence) }, capacity).note).toContain(warning);
+    expect.soft(fitChatTurnResult(replay, capacity).note).toContain(warning);
+    expect(h.state.calls).toBe(calls);
+    expect.soft(t('agent.turn.outcome.replayCorrection', { correction: '…' }, 'tr')).toBe('Güncel düzeltme: …');
+    expect.soft(t('agent.turn.outcome.replaySavedNote', { note: '…' }, 'tr')).toBe('Kaydedilen not (önceki ifade): …');
+    h.state.limitAfterTool = 'quota';
+    const quota = await h.run('quota-after-tool');
+    expect(quota).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+    expect(await readFile(join(h.f.project, 'quota-result.txt'), 'utf8')).toBe('retained before the refusal\n');
+    expect.soft(quota.note).toContain(quotaDiagnosis);
+    expect.soft(quota.note?.replace(quotaDiagnosis, '')).not.toMatch(/try again|choose another model/iu);
+    expect.soft(t('headless.chat.quotaAfterTools', {}, 'tr')).toBe(checkEffectsTr);
+    expect.soft(t('headless.chat.quotaFallback', {}, 'tr')).toBe('Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.');
+    expect.soft(await h.run('quota-after-tool')).toMatchObject({ replayed: true, note: quota.note });
+    replayHistoricalQuota = true;
+    const replayedQuota = await h.run('quota-after-tool');
+    expect.soft(replayedQuota.note).toBe(`Saved note (historical wording): ${historicalQuotaNote}\nCurrent correction: ${quotaDiagnosis}`);
+
+    h.state.quotaWindow = { field: 'five_hour', subtype: 'rejected', resetsAtMs: 1792773600000 };
+    const windowQuota = await h.run('window-quota-after-tool');
+    const reset = clockText(h.state.quotaWindow.resetsAtMs);
+    expect.soft(windowQuota).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+    expect.soft(windowQuota.note).toContain(`${checkEffects} The subscription's usage limit is reached (five-hour window). Resets at: ${reset} (local time). deckent made no charge and stopped this turn instead of continuing on paid extra usage. Wait for the reset, sign in with another account (\`deckent models login --connection claude-cli-subscription\`), or use another connection.`);
+    expect.soft(t('headless.chat.quota', { window: t('headless.chat.quotaWindow.five_hour', {}, 'tr'), reset }, 'tr'))
+      .toBe(`Aboneliğinizin kullanım sınırına ulaşıldı (beş saatlik pencere). Sıfırlanma: ${reset} (yerel saat). deckent ücret almadı ve bu turu ücretli ek kullanımla sürdürmek yerine durdurdu. Sıfırlanmasını bekleyin, başka bir hesapla giriş yapın (\`deckent models login --connection claude-cli-subscription\`) veya başka bir bağlantı kullanın.`);
+  } finally { history.mockRestore(); }
 });
 
 it('lease revocation during the unchanged approval card prevent the exact requested write', async () => {
@@ -198,6 +290,202 @@ it('refuses a driver returning another tool session before any model send or eff
   expect(await h.run()).toMatchObject({ finish: 'error', recorded: true });
   expect(h.state.calls).toBe(0); expect(h.state.closes).toBe(1);
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
+});
+
+it.each(['admission', 'send'] as const)('renders a path-free typed refusal at the end of a turn after %s fails (EN/TR)', async phase => {
+  if (await unsupportedPeer()) return;
+  for (const [language, expected] of [
+    ['en', 'The model round ended without an answer. The sign-in lock directory could not be created. No tool call ran.'],
+    ['tr', 'Model turu yanıt alınamadan sona erdi. Giriş kilidi dizini oluşturulamadı. Hiçbir araç çağrısı çalıştırılmadı.'],
+  ] as const) {
+    const h = await fixture(), driver = h.runtime.driver;
+    Object.assign(h.f.options.env, { DECKENT_LANGUAGE: language });
+    const fail = async () => {
+      throw ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-directory-create' }),
+        '/fixture/turn-diagnostic-must-remain-local');
+    };
+    h.runtime.driver = async input => {
+      const opened = await driver(input);
+      return phase === 'admission' ? { ...opened, admit: fail } : { ...opened, native: (...args) => ({ ...opened.native(...args), send: fail }) };
+    };
+    const result = await h.run();
+    expect.soft(result.note).toBe(expected);
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
+  }
+  if (phase !== 'send') return;
+  // Y25/Y26: a model refusal returned as the turn's rejection whose receipt cannot be recorded still names its check in the final note.
+  const h = await fixture(), driver = h.runtime.driver, open = adapters.openSqliteModelInvocationStore;
+  Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  const store = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordRejected: async () => { throw new Error('fixture-record-failed'); } }));
+  h.runtime.driver = async input => {
+    const opened = await driver(input), body = Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'model-mismatch', field: 'assistant', subtype: 'model-reported' }));
+    return { ...opened, returnedRefusal: () => ({ reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' as const, check: 'agent-surface:assistant' }),
+      native: (...args) => ({ ...opened.native(...args), send: async () => ({ kind: 'rejected' as const,
+        evidence: createModelInvocationResponseEvidence(input.profile.adapter, 'model-mismatch', null, body, true) }) }) };
+  };
+  try {
+    expect.soft((await h.run()).note).toBe("The model round ended without an answer. The CLI's tool surface or tool protocol could not be verified as expected."
+      + ' (agent-surface:assistant) No tool call ran.');
+  } finally { store.mockRestore(); }
+
+  const sample = await adapters.openSqliteModelInvocationReader(h.f.path, { busyTimeoutMs: 1000 });
+  const readerMethods = Object.getPrototypeOf(sample) as Pick<typeof sample, 'loadInspection'>;
+  sample.close();
+  const reader = vi.spyOn(readerMethods, 'loadInspection').mockRejectedValue(new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE'));
+  try {
+    const result = await h.run('model-inspection-unavailable');
+    expect(reader).toHaveBeenCalledOnce();
+    expect.soft(result.note).toContain('(agent-surface:assistant)');
+    expect(result).toMatchObject({ finish: 'error', answer: null, recorded: true });
+    const authorize = ModelInvocationPolicyAuthorization.prototype.authorize;
+    const policy = vi.spyOn(ModelInvocationPolicyAuthorization.prototype, 'authorize').mockImplementation(function (this: ModelInvocationPolicyAuthorization, ...args) {
+      if (args[0] === 'inspect-content') return Promise.reject(ErrorRegistry.createError('POLICY_DENIED'));
+      return authorize.apply(this, args);
+    });
+    try {
+      expect((await h.run('model-inspection-denied')).note).not.toContain('agent-surface:assistant');
+    } finally { policy.mockRestore(); }
+  } finally { reader.mockRestore(); }
+
+  const providerBody = { schemaVersion: 1, refusal: 'quota', status: 429 } as const;
+  const write = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordUnknown: async () => { throw new Error('fixture-unknown-record-failed'); } }));
+  h.runtime.driver = async input => {
+    const opened = await driver(input);
+    return { ...opened, returnedRefusal: () => ({ body: providerBody }),
+      native: (...args) => ({ ...opened.native(...args), send: async () => ({ kind: 'rejected' as const,
+        evidence: createModelInvocationResponseEvidence(input.profile.adapter, 'interrupted', null, Buffer.from(JSON.stringify(providerBody)), false) }) }) };
+  };
+  try {
+    const result = await h.run('provider-record-unknown-failed');
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain('usage limit');
+  } finally { write.mockRestore(); }
+
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const c = await connection();
+  cleanups.push(cleanupConnections);
+  const protocolFamily = 'codex-jsonl', executable = await writeFakeAgentCli(join(c.root, 'bin'), protocolFamily,
+    { events: [{ type: 'turn.failed', error: { message: 'Rate limit reached' } }] });
+  const codex = await fixture(false, { executable, configDir: c.configDir, stateDir: join(c.root, 'codex-state'), protocolFamily });
+  Object.assign(codex.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  const sealed = await preflightNativeAgent(codex.profile, Date.now, testIsolation);
+  Object.assign(codex.execution, sealed.execution);
+  codex.runtime.driver = async ({ profile, execution, session }) => createNativeAgentDriver({ profile, execution, session, now: Date.now, isolation: testIsolation });
+  const quotaWithoutTools = 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.';
+  const rejectWrite = vi.fn(async () => { throw new Error('fixture-codex-record-failed'); });
+  const rejectStore = vi.spyOn(adapters, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => Object.assign(await open(...args),
+    { recordRejected: rejectWrite }));
+  try {
+    const result = await codex.run('codex-rejection-write-failed');
+    expect(rejectWrite).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain(quotaWithoutTools);
+    expect.soft(result.note).not.toContain('it is recorded');
+  } finally { rejectStore.mockRestore(); }
+  const unavailableRead = vi.spyOn(readerMethods, 'loadInspection').mockRejectedValue(new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE'));
+  try {
+    const result = await codex.run('codex-inspection-unavailable');
+    expect(unavailableRead).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true });
+    expect.soft(result.note).toContain(quotaWithoutTools);
+  } finally { unavailableRead.mockRestore(); }
+});
+
+it('keeps the summary refusal before and after claim in the final note in EN and TR', async () => {
+  if (await unsupportedPeer()) return;
+  const refusal = ErrorRegistry.retainHeadlessFailedCheck(headlessDiagnostic('HEADLESS_LOGIN_REQUIRED', { reason: 'reported-signed-out' }),
+    '/fixture/summary-diagnostic-must-remain-local');
+  const history: AgentTurnMessage[] = [...Array.from({ length: 16 }, (_, index): AgentTurnMessage => index % 2
+    ? { role: 'assistant', content: 'Earlier answer', toolCalls: [] } : { role: 'user', content: 'Earlier question' }),
+  { role: 'user', content: 'Continue' }];
+  for (const [language, expected] of [
+    ['en', 'The status check reported that the subscription CLI was signed out.'],
+    ['tr', "Durum denetimi abonelik CLI'ında oturum açılmadığını bildirdi."],
+  ] as const) {
+    const h = await fixture();
+    Object.assign(h.f.options.env, { DECKENT_LANGUAGE: language });
+    const config = { ...h.f.config, terminal: { ...h.f.config.terminal,
+      chat: { ...h.f.config.terminal.chat, compactionThresholdTokens: 1 } } };
+    await writeFile(join(h.f.project, '.deckent/config.json'), JSON.stringify(config));
+    clearConfigCache();
+    const preflight = vi.fn(async () => undefined);
+    const send = vi.fn<ReturnType<typeof adapters.createNativeCliHeadlessPort>['send']>(async () => { throw refusal; });
+    const port = vi.spyOn(adapters, 'createNativeCliHeadlessPort').mockReturnValue({
+      billingAxis: 'subscription', preflight, prepare: async () => ({}), send,
+    });
+    try {
+      preflight.mockRejectedValueOnce(refusal);
+      const admission = await h.run('summary-admission', history);
+      expect(preflight).toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      const returned = await h.run('summary-returned', history);
+      expect(send).toHaveBeenCalledOnce();
+      for (const result of [admission, returned]) {
+        expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0 });
+        expect.soft(result.note).toContain(expected);
+        expect.soft(result.note).toContain(language === 'en' ? 'Sign in through the subscription CLI' : 'abonelik CLI\'ı üzerinden oturum açın');
+        expect.soft(result.note).toMatch(language === 'en' ? /could not be compacted.*Nothing more was sent/u : /kısaltılamadı.*Yeni bir istek gönderilmedi/u);
+        expect.soft(result.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin|\/fixture\//u);
+      }
+      send.mockResolvedValueOnce({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(h.profile.adapter,
+        'response-limit', null, Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'resource-limit', field: 'cpu-time' })), true) });
+      const bounded = await h.run('summary-resource-bound', history);
+      expect.soft(bounded.note).toContain(language === 'en' ? 'The isolated process returned a status reserved for the CPU-time limit.'
+        : 'Yalıtılmış süreç, CPU süresi sınırına ayrılan çıkış kodunu döndürdü.');
+      expect.soft(bounded.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin/u);
+      for (const [scenario, body, reason, complete, en, tr] of [
+        ['guard', { schemaVersion: 1, refusal: 'guard', field: '/fixture/private-guard' }, 'invalid-response', true,
+          'A safety check refused the subscription CLI result.', "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti."],
+        ['output', { schemaVersion: 1, refusal: 'response-limit' }, 'response-limit', true,
+          'An output limit was reached while processing the subscription CLI call.', 'Abonelik CLI çağrısı işlenirken bir çıktı sınırına ulaşıldı.'],
+        ['signal', { schemaVersion: 4, refusal: 'process-exit', exitCode: null, signal: 'SIGTERM', stderrSummary: '/fixture/private-stderr' }, 'interrupted', false,
+          'A signal was observed for the launched isolation command. The invocation outcome is unknown.', 'Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.'],
+        ['code', { code: 'HEADLESS_PREFLIGHT_FAILED' }, 'interrupted', false,
+          'The record contains the error code HEADLESS_PREFLIGHT_FAILED. The specific cause could not be determined.',
+          'Kayıtta HEADLESS_PREFLIGHT_FAILED hata kodu var. Hatanın kesin nedeni belirlenemedi.'],
+      ] as const) {
+        send.mockResolvedValueOnce({ kind: 'rejected', evidence: createModelInvocationResponseEvidence(h.profile.adapter,
+          reason, null, Buffer.from(JSON.stringify(body)), complete) });
+        const result = await h.run(`summary-${scenario}`, history);
+        expect(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0 });
+        expect.soft(result.note).toContain(language === 'en' ? en : tr);
+        expect.soft(result.note).not.toMatch(/Send the message again|iletiyi yeniden gönderin|\/fixture\/|SIGTERM/u);
+      }
+      expect(h.events.some(event => event.kind === 'compacted')).toBe(false);
+      expect(h.state.calls).toBe(0);
+    } finally { port.mockRestore(); }
+  }
+});
+
+it('derives verification execution and readiness from the same guarded observation', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture();
+  const common = { cli: true, login: true, environment: true, plugins: true, toolSurface: true, execution: h.execution };
+  const mismatch = 'The operating-system user in the agent execution record differs from the configured user.\n';
+  h.runtime.preflight = vi.fn(async () => undefined);
+  const read = vi.fn<NativeChatRuntime['readiness']['read']>();
+  h.runtime.readiness.read = read;
+  for (const [turnId, later, bridge] of [['stale-bridge-refusal', { ...common, bridge: false }, true],
+    ['stale-unknown', { diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' }) }, undefined]] as const) {
+    h.events.length = 0;
+    read.mockReset().mockResolvedValueOnce(common)
+      .mockResolvedValueOnce({ ...common, ...(bridge === true && { bridge }), execution: { ...h.execution, ownerUid: h.execution.ownerUid + 1 } })
+      .mockResolvedValue(later);
+    const result = await h.run(turnId);
+    expect.soft(result.note).toContain(mismatch.trim());
+    expect.soft(h.events.find(event => event.kind === 'text')).toMatchObject({ text: mismatch });
+    expect.soft(read).toHaveBeenCalledTimes(2);
+    expect.soft((await h.run(turnId)).note).toBe(result.note);
+    expect(h.state.calls).toBe(0);
+  }
+  h.events.length = 0;
+  read.mockReset().mockResolvedValueOnce(common).mockResolvedValue({ ...common, bridge: false });
+  await h.run('observed-bridge-refusal');
+  expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
+  expect(h.state.calls).toBe(0);
 });
 
 it('owner 2026-11-05: an unrecognised CLI event the turn went on through is the turn\'s recorded note, not a pause', async () => {
@@ -294,6 +582,66 @@ it('cancels the first no-model preflight from the starting person before any mod
     expect(h.events.filter(event => event.kind === 'text')).toEqual([]);
     expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
   } finally { release.resolve(); await pending.catch(() => undefined); }
+});
+
+it('retains a preflight refusal in the replayed note when cancellation arrives first', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(), started = Promise.withResolvers<void>();
+  h.runtime.readiness.read = async () => ({ cli: true, login: true, environment: true, execution: h.execution });
+  h.runtime.preflight = async (_profile, signal) => {
+    started.resolve();
+    await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    throw headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'login-lock', reason: 'guard-unsafe' });
+  };
+  const pending = h.run();
+  await started.promise;
+  expect(await cancelPeerConfiguredChatTurn(h.f.project, { schemaVersion: 1, scopeId: 's', turnId: 'k11-turn' }, h.peer, h.f.options, h.host)).toMatchObject({ state: 'cancelling' });
+  const first = await pending;
+  expect(first).toMatchObject({ finish: 'cancelled', recorded: true });
+  expect.soft(first.note).toContain('The sign-in lock guard failed its safety check.');
+  delete h.runtime.preflight;
+  expect(await h.run()).toMatchObject({ finish: 'cancelled', replayed: true, note: first.note });
+  h.runtime.preflight = async () => { throw headlessDiagnostic('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'login-lock', reason: 'guard-unsafe' }); };
+  const fallback = await h.run('ordinary-fallback');
+  expect.soft(fallback.note).toContain('The sign-in lock guard failed its safety check.');
+  expect(await h.run('ordinary-fallback')).toMatchObject({ replayed: true, note: fallback.note });
+  expect(h.state.calls).toBe(0);
+});
+
+it('ends compaction when only its governed invocation was cancelled', async () => {
+  if (await unsupportedPeer()) return;
+  const h = await fixture(), sent = Promise.withResolvers<void>();
+  const config = { ...h.f.config, terminal: { ...h.f.config.terminal,
+    chat: { ...h.f.config.terminal.chat, compactionThresholdTokens: 1 } } };
+  await writeFile(join(h.f.project, '.deckent/config.json'), JSON.stringify(config));
+  clearConfigCache();
+  const history: AgentTurnMessage[] = [...Array.from({ length: 16 }, (_, index): AgentTurnMessage => index % 2
+    ? { role: 'assistant', content: 'Earlier answer', toolCalls: [] } : { role: 'user', content: 'Earlier question' }),
+  { role: 'user', content: 'Continue' }];
+  const port = vi.spyOn(adapters, 'createNativeCliHeadlessPort').mockReturnValue({
+    billingAxis: 'subscription', preflight: async () => undefined, prepare: async () => ({}),
+    async send(_prepared, signal) {
+      sent.resolve();
+      await new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }));
+      signal!.throwIfAborted();
+      throw new Error('fixture invocation did not abort');
+    },
+  });
+  const register = h.host.model.controllers.register.bind(h.host.model.controllers);
+  let claim!: ModelInvocationClaim;
+  const controller = vi.spyOn(h.host.model.controllers, 'register').mockImplementation((row, owner) => {
+    claim = row;
+    return register(row, owner);
+  });
+  try {
+    const pending = h.run('summary-invocation-cancelled', history);
+    await sent.promise;
+    await cancelPeerConfiguredModelInvocation(h.f.project, { schemaVersion: 1, commandId: 'cancel-summary-only', scopeId: 's',
+      targetCommandId: claim.commandId, expectedRequestDigest: claim.requestDigest, reference: h.profile.reference },
+      h.peer, h.f.options, undefined, h.host.model.controllers);
+    expect(await pending).toMatchObject({ finish: 'cancelled', answer: null, note: expect.stringContaining('The summary call was cancelled.') });
+    expect(h.state.calls).toBe(0);
+  } finally { controller.mockRestore(); port.mockRestore(); }
 });
 
 it('builtin notices use session memory once per terminal/version/name with EN/TR text and no persistent counters', async () => {

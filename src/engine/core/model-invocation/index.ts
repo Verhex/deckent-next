@@ -1,4 +1,4 @@
-export { ModelInvocationApplication, ModelInvocationPurgeApplication } from './internal/application.js';
+export { ModelInvocationApplication, ModelInvocationPurgeApplication, freshModelInvocationCancelled, freshModelInvocationDiagnostic } from './internal/application.js';
 export type { ModelInvocationAcquisitionInput } from './internal/acquisition.js';
 export type { ModelInvocationSpending, ModelInvocationSpendingAuthority, ModelInvocationSpendingInput } from './internal/spending.js';
 export type { ModelInvocationAuthorizer, ModelInvocationMeasurement, ModelInvocationNativePort, ModelInvocationNativeRegistry,
@@ -38,6 +38,8 @@ export { inspectModelSwitch, prepareModelSwitch } from './internal/model-switch.
 export type { ModelSwitchPorts, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ModelSwitchPreview } from './internal/model-switch.js';
 export { checkModelInvocationCapacity } from './internal/spending.js';
 export { openInvocationWorkspaceSelection } from './internal/workspace-selection.js';
+export { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './internal/plugin-notices.js';
+export { createCatalogTariffLookup } from './internal/catalog-tariff.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ InvocationWorkspace, WorkspaceSelectionContext, WorkspaceSelectionPorts } from './internal/workspace-selection.js';
 export { ModelInvocableNowApplication, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ modelInvocabilityRefusal, refuseInactiveModel } from './internal/invocable-now.js';
 export type { InvocableModel, InvocableModels, ModelInvocability, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ModelInvocabilityReason, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ ModelInvocabilityReasonKind, ModelInvocableNowChecks } from './internal/invocable-now.js';

@@ -608,6 +608,7 @@
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-siwc",
         "src/composition/core/config",
         "src/composition/core/provider-catalog",
         "src/composition/core/root",
@@ -620,6 +621,7 @@
         "src/engine/core/model-invocation",
         "src/platform/core/config",
         "src/platform/core/errors",
+        "src/platform/core/i18n",
         "src/capabilities/core/native-agent-execution",
         "src/composition/core/subscription-readiness",
         "src/engine/core/provider-catalog",
@@ -2084,7 +2086,9 @@
         "src/domain/core/agent-tool",
         "src/platform/core/errors",
         "src/platform/core/i18n",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/capabilities/core/native-agent-execution",
+        "src/platform/core/output"
       ],
       "plan": "PROVIDERS"
     },
@@ -2176,7 +2180,6 @@
         "src/engine/core/workspaces",
         "src/platform/core/integrity",
         "src/engine/core/runtime",
-        "src/adapters/core/provider-siwc",
         "src/composition/core/secrets",
         "src/composition/core/scoped-request",
         "src/adapters/core/mcp-start-diagnosis",
@@ -2230,7 +2233,6 @@
     "src/composition/core/model-invocation": {
       "dependencies": [
         "src/capabilities/core/native-agent-execution",
-        "src/platform/core/output",
         "src/adapters/core/provider-connect",
         "src/adapters/core/local-keyring",
         "src/adapters/core/contract",
@@ -4806,7 +4808,15 @@
         "src/platform/core/redaction",
         "src/adapters/core/file-lock",
         "src/platform/core/utils",
-        "src/platform/core/state-root"
+        "src/platform/core/state-root",
+        "src/adapters/core/native-cli-claude-agent"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/native-cli-claude-agent": {
+      "dependencies": [
+        "src/capabilities/core/native-agent-execution",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -5619,6 +5629,7 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/native-cli-registry",
+        "src/adapters/core/agent-workspace-floor",
         "src/composition/core/root",
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation",

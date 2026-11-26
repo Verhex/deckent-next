@@ -1,5 +1,5 @@
 import type { ClaudeRateLimit } from '#capabilities/index.js';
-import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './plugin-notices.js';
+import { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#engine/index.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
 import { isDeepStrictEqual } from 'node:util';

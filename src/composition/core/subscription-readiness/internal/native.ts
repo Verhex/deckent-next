@@ -1,8 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
+import { realpath } from 'node:fs/promises';
+import { isAbsolute, relative } from 'node:path';
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { modelInvocationProfileDigest, configuredInvocationProfiles } from '#engine/index.js';
-import { readNativeAgentObservation, isNativeCliHeadlessAdapter, nativeAgentFlagSetDigest, nativeCliAgent } from '#adapters/index.js';
+import { readNativeAgentObservation, isNativeCliHeadlessAdapter, nativeAgentFlagSetDigest, nativeCliAgent, agentGlobalStateRoots } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
+import { nativeAgentContainmentDiagnostic, type NativeAgentDiagnostic } from '#capabilities/index.js';
 import { inspectNativeStateCustody, type ConfigLoadOptions } from '#platform/index.js';
 import type { SubscriptionReadinessQuery, SubscriptionReadinessReader, SubscriptionReadinessSurface } from './readiness.js';
 
@@ -21,10 +24,29 @@ export function configuredNativeChatReadiness(projectRoot: string, options: Conf
         && isDeepStrictEqual(profile.reference, query.reference) && isNativeCliHeadlessAdapter(profile.adapter));
     const expected = profile && nativeReadinessQuery(profile, query.surface);
     if (!profile || !expected || expected.profileDigest !== query.profileDigest || expected.flagSetDigest !== query.flagSetDigest) return null;
-    const observed = await readNativeAgentObservation(profile, Date.now, display); // R8e: display reads the last verification; gates never pass `display`
+    let diagnostic: NativeAgentDiagnostic | undefined;
+    const observed = await readNativeAgentObservation(profile, Date.now, display, error => { diagnostic = error; }); // R8e: display reads the last verification; gates never pass `display`
     const custody = await inspectNativeStateCustody(profile.adapter.definition, options.env);
-    if (custody === 'outside-installation') return { ...(observed ? { environment: false } : {}), governedUse: custody };
-    if (observed && custody !== 'inside-installation') return { environment: false };
+    if (custody === 'outside-installation') return { ...(observed ? { environment: false } : {}), governedUse: custody, ...(diagnostic ? { diagnostic } : {}) };
+    if (!observed) return diagnostic ? { diagnostic } : null;
+    if (custody !== 'inside-installation') {
+      // K15 seals installation-global roots. A custom login outside them has no tool-realm custody proof; name the established containment cause.
+      const inside = (root: string, path: string) => { const rel = relative(root, path); return rel === '' || !isAbsolute(rel) && rel !== '..' && !rel.startsWith('../'); };
+      const roots = agentGlobalStateRoots([options.env ?? process.env, process.env]);
+      for (const path of [profile.adapter.definition['configDir'], profile.adapter.definition['stateDir']]) {
+        if (typeof path !== 'string') return { environment: false };
+        const resolved = await realpath(path).catch(() => null);
+        const local = roots.filter(root => inside(root, path));
+        const candidates = await Promise.all(local.map(root => realpath(root).catch(() => null)));
+        if (!resolved || !candidates.some(root => root && inside(root, resolved))) {
+          if (!local.length) return { environment: false, diagnostic: nativeAgentContainmentDiagnostic(false) };
+          if (resolved && candidates.every(root => root !== null))
+            return { environment: false, diagnostic: nativeAgentContainmentDiagnostic(true) };
+          return { environment: false };
+        }
+      }
+      return { environment: false };
+    }
     return observed;
   } };
   return Object.freeze(reader);

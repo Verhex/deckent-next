@@ -904,9 +904,10 @@
   "tui.provider.billing.subscription": "subscription: no API key, uses your plan's usage quota",
   "tui.provider.isolation.blocked": "Not usable on this computer: it runs only inside process isolation (bubblewrap), which is not available here. Enter shows what you can use instead.",
   "tui.provider.isolation.title": "{kind} cannot run on this computer",
+  "tui.provider.isolation.unverifiedTitle": "{kind}: isolation could not be verified",
   "tui.provider.isolation.usableLabel": "Usable here",
   "tui.provider.isolation.noneUsable": "no other provider is offered on this computer",
-  "tui.provider.isolation.next": "Esc returns to the list: choose one of the providers above (an API key or a local server). For this subscription: install or fix bubblewrap (`deckent doctor` shows the sandbox state), then start deckent again and open /provider.",
+  "tui.provider.isolation.next": "Esc returns to the provider list. You can choose any provider shown as usable.",
   "tui.provider.login.action": "Sign in with its CLI and connect…",
   "tui.provider.login.dirTitle": "Login directory",
   "tui.provider.login.dirOwned": "deckent's own login directory (recommended)",
@@ -1250,5 +1251,8 @@
   "tui.provider.beta": "Beta — this connection may be unavailable",
   "tui.provider.apiTitle": "API providers",
   "terminal.delivery.candidateTitle": "{title} · candidate ready; not delivered",
-  "terminal.delivery.permissionHints": "y narrow this folder · n/Esc keep its permission"
+  "terminal.delivery.permissionHints": "y narrow this folder · n/Esc keep its permission",
+  "tui.provider.login.startedTitle": "{kind}: sign-in command started",
+  "tui.provider.login.completedUnverifiedTitle": "{kind}: sign-in command completed, status check unconfirmed",
+  "tui.provider.login.unverifiedTitle": "{kind}: sign-in status unavailable"
 }

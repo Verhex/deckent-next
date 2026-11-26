@@ -7,15 +7,16 @@ import { nativeAgentCorrelationSchema, nativeAgentToolResultSchema, toolSessionS
 import type { NativeAgentReadinessReason } from './contract.js';
 import type { parseNativeCliRegistry } from './command-registry.js';
 import { emitDelta, reportedCounters } from './stream.js';
-import { classifyClaudeRateLimit, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './quota.js';
+import { classifyClaudeRateLimit, nativeClaudeResultRefusal, nativeModelRefusal, type ClaudeQuotaPolicy, type ClaudeRateLimit } from './quota.js';
 type StreamExit = Readonly<{ reason: string; exitCode: number | null; stdoutTruncated: boolean; stderrTruncated: boolean }>;
 type Registry = ReturnType<typeof parseNativeCliRegistry>;
 type Command = Registry['adapters'][string];
 type Entry = { id: string; command: Command; headless: NonNullable<Command['headless']>; agent: NonNullable<Command['agent']>; bridge: NonNullable<Registry['agentBridge']> };
 type Call = Parameters<ToolSessionPort['propose']>[0];
 type ToolResult = Awaited<ReturnType<ToolSessionPort['propose']>>;
-type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string; limit?: ClaudeRateLimit }>;
-/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error' }>
+type Rejection = ReturnType<typeof nativeModelRefusal>;
+type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; field: string; detail?: string; limit?: ClaudeRateLimit; rejection?: Rejection }>;
+/** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error'; rejection?: Rejection }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string, signal?: AbortSignal): 'stop' | void | Promise<'stop' | void>;
   finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[]; paidExtraUsage(): ClaudeRateLimit | null }>;
@@ -68,6 +69,10 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
   const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string, limit?: ClaudeRateLimit): 'stop' => {
     failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }), ...(limit ? { limit } : {}) }; controller.abort(); return 'stop';
   };
+  const failModel = (field: string, models: readonly unknown[]): 'stop' => {
+    failure ??= { kind: 'refused', reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field, rejection: nativeModelRefusal(field, models) };
+    controller.abort(); return 'stop';
+  };
   const charge = (size: number) => { bytes += size; return Number.isSafeInteger(bytes) && bytes <= options.outputMaxBytes; };
   // A model-chosen name is echoed only when it is a tool Deckent offered: an arbitrary name could carry anything.
   const offeredName = (value: unknown) => typeof value === 'string' && value.startsWith(entry.bridge.toolPrefix)
@@ -97,7 +102,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (init) return fail('init');
       const reason = nativeAgentInitReason(entry.agent, entry.bridge, session, value);
       if (reason) return fail('init', reason);
-      if (value.model !== model || value.claude_code_version !== cliVersion || value.cwd !== runDir
+      if (value.model !== model) return failModel('init-binding', [value.model]);
+      if (value.claude_code_version !== cliVersion || value.cwd !== runDir
         || value.plugin_errors !== undefined && (!Array.isArray(value.plugin_errors) || value.plugin_errors.length !== 0)) return fail('init-binding');
       builtinPlugins = nativeBuiltinPlugins(value.plugins, pluginPolicy)!;
       sessionId = value.session_id;
@@ -118,7 +124,9 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (value.parent_tool_use_id !== undefined && value.parent_tool_use_id !== null) return fail('subagent');
     if (value.type === 'assistant') {
       const message = record(value.message);
-      if (!message || message.model !== model || !Array.isArray(message.content)) return fail('assistant');
+      if (!message) return fail('assistant');
+      if (message.model !== model) return failModel('assistant', [message.model]);
+      if (!Array.isArray(message.content)) return fail('assistant');
       if (wire) {
         const id = message.id, top = typeof id === 'string' && id.length > 0 && message.type === 'message' && message.role === 'assistant'
           && value.parent_tool_use_id === null && value.session_id === sessionId;
@@ -217,7 +225,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     usage = reportedCounters(value.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens']);
     if (typeof value.result !== 'string' || !usage) return fail('usage');
     const models = record(value.modelUsage);
-    if (!models || Object.keys(models).length !== 1 || !Object.hasOwn(models, model)) return fail('model-usage');
+    if (!models || Object.keys(models).length !== 1 || !Object.hasOwn(models, model))
+      return failModel('model-usage', Object.keys(models ?? {}).filter(reported => reported !== model));
     if ([...calls.values()].some(call => !call.streamed || !call.settled)) return fail('correlation-incomplete');
     if (wire?.active) {
       if (value.api_error_status != null) return fail('planning-api-error-status');
@@ -271,10 +280,18 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (final) return final;
       ended = true;
       if (failure) return final = failure;
-      if (exit.reason === 'cancelled' || controller.signal.aborted) { controller.abort(); return final = { kind: 'cancelled', subtype: result?.subtype === 'error_during_execution' ? 'error_during_execution' : 'incomplete' }; }
+      const guards = entry.headless.guards;
+      const rejection = result && (result.is_error || result.subtype !== 'success') && 'creditsErrors' in guards
+        ? nativeClaudeResultRefusal(typeof result.api_error_status === 'number' ? result.api_error_status : null,
+          Array.isArray(result.errors) ? result.errors : [], guards) : null;
+      // C2: a provider status read from the terminal result stays next to the cancellation; the outcome is still cancelled.
+      if (exit.reason === 'cancelled' || controller.signal.aborted) { controller.abort(); return final = { kind: 'cancelled',
+        subtype: result?.subtype === 'error_during_execution' ? 'error_during_execution' : 'incomplete', ...(rejection && { rejection }) }; }
       controller.abort();
-      if (exit.reason !== 'exit' || exit.exitCode !== 0 || exit.stdoutTruncated || exit.stderrTruncated || !result) return final = { kind: 'failed', subtype: 'incomplete' };
-      if (result.is_error || result.subtype !== 'success') return final = { kind: 'failed', subtype: result.subtype === 'error_during_execution' ? 'error_during_execution' : 'provider-error' };
+      if (exit.reason !== 'exit' || exit.exitCode !== 0 || exit.stdoutTruncated || exit.stderrTruncated || !result)
+        return final = { kind: 'failed', subtype: 'incomplete', ...(rejection && { rejection }) };
+      if (result.is_error || result.subtype !== 'success')
+        return final = { kind: 'failed', subtype: result.subtype === 'error_during_execution' ? 'error_during_execution' : 'provider-error', ...(rejection && { rejection }) };
       return final = { kind: 'completed', text: result.result as string, usage: usage!,
         stopReason: typeof result.stop_reason === 'string' ? result.stop_reason : null };
     },

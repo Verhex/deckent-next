@@ -370,7 +370,7 @@
   "error.DISPATCH_PREPARATION_ABORTED.summary": "deckent bu işi park etti: bir işçinin gönderim hazırlığı olağan dışı sona erdi (servis süreci öldü) ve runRuntime.maxPreparationAborts sınırına ulaştı. İşçi başlatılmadı.",
   "remedy.DISPATCH_PREPARATION_ABORTED": "Nedeni servis günlüğünde ve denetim kaydında bulun (dispatch-preparation-aborted olayı aşamayı adlandırır), düzeltin, sonra işi açıkça devam ettirin (deckent run resume); sonraki başlangıç sıfırdan sayar.",
   "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "İş ilerlemesi durduruldu. Servis bu işi kalıcı olarak beklemeye alamadı (RUN_PROGRESSION_PARK_UNAVAILABLE). İptal politikasını veya depolama erişimini inceleyin. Kendi izinlerinizle bekletmeyi veya iptal etmeyi deneyin; yeni otomatik başlangıç için bu işi iptal edip yeniden önerin. Bu yürütücü yeni dağıtım denemeyecek.",
-  "cli.run.lifecycle.failure": "İlerleme hatası: {code}. Nedeni düzeltip süre dolmadan açıkça devam ettirin; canlı yürütme sorumluluğu korunur.",
+  "cli.run.lifecycle.failure": "İlerleme hatası: {code}.",
   "error.RUN_PROPOSAL_VERSION": "RunProposal sürümü desteklenmiyor.",
   "error.RUN_PROPOSAL_INVALID": "RunProposal geçersiz; graf, kriterler, sınıflar, tavan, izinler ve aktörle sürümlü öneri verin.",
   "error.RUN_PROPOSAL_WORK_CLASS_REQUIRED": "Her öneri görevi, iş girdisiyle tutarlı kayıtlı bir WorkClass gerektirir.",

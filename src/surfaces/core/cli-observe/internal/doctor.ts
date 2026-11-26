@@ -1,6 +1,6 @@
 import { lstat } from 'node:fs/promises';
 import {
-  ErrorRegistry, loadConfig, productResourcePath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
+  ErrorRegistry, isHeadlessDiagnosticIdentifier, loadConfig, productResourcePath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
@@ -9,6 +9,7 @@ import { configuredInvocationProfiles, configServiceState, hasCapacityRoom } fro
 import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
+import { cliMode } from '#surfaces/core/cli-human/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
 import { offerDoctorFixes } from './doctor-fix.js';
@@ -100,7 +101,10 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
     // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
     stuckRuns: monitor?.installs.flatMap(install => install.runs)
-      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []) ?? null,
+      .flatMap(run => {
+        const code = run.blocker?.code === 'parked' ? run.blocker.detail : null;
+        return code && (/^[A-Z][A-Z0-9_]+$/u.test(code) || isHeadlessDiagnosticIdentifier(code)) ? [{ runId: run.runId, code }] : [];
+      }) ?? null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins({ profiles: configuredInvocationProfiles(config) }, scopeId, options).catch(() => null) : null,
   };
 }
@@ -174,7 +178,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness, locale);
-  const checks = [...doctorChecks(data, facts, locale)];
+  const checks = [...doctorChecks(data, { ...facts, showLocalHeadlessPaths: cliMode(context, args.json).mode === 'interactive' }, locale)];
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, next: permission.command });
   if (await context.inspectLegacyProjectInstructions?.(root).catch(() => false)) checks.push({ group: 'setup', id: 'instructions.legacy', state: 'warning',

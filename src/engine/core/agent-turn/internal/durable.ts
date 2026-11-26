@@ -1,8 +1,9 @@
 import { storedToolCalls } from './tool-error.js';
 import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
-import { t } from '#platform/index.js';
-import type { ChatTurnSteerOutcome } from '#domain/index.js';
+import { TURN_NOTE_MAX_CHARS } from './metadata.js';
+import { LOCALES, t } from '#platform/index.js';
+import { modelTextPrefix, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 /**
  * A turn with durable identity (T-L3): claim first; a finished turn of the same request replays its stored outcome (the final
@@ -18,7 +19,27 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   const claimed = await store.claim(claim);
   if (claimed.status === 'finished') {
     const { answer, finish, note: storedNote, rounds, toolCalls, steer = { joined: [], returned: [] } } = claimed.outcome;
-    const note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
+    let note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
+    if (storedNote) {
+      const corrections = new Set<string>();
+      for (const locale of LOCALES) {
+        if (storedNote.includes(t('headless.chat.legacyCreditsAdvice', {}, locale)))
+          corrections.add(t('error.HEADLESS_CREDITS_REQUIRED', {}, input.language));
+        if (toolCalls > 0) {
+          const quota = t('headless.chat.quotaFallback', {}, locale);
+          const checkEffects = t('headless.chat.quotaAfterTools', {}, locale);
+          if (storedNote.includes(quota) && !storedNote.includes(`${checkEffects} ${quota}`))
+            corrections.add(`${t('headless.chat.quotaAfterTools', {}, input.language)} ${t('headless.chat.quotaFallback', {}, input.language)}`);
+        }
+        if (storedNote.includes(t('headless.agent.legacySurfaceStopped', {}, locale)) || storedNote.includes(t('headless.agent.legacyGuardStopped', {}, locale)))
+          corrections.add(t('headless.agent.surfaceStopped', {}, input.language));
+      }
+      if (corrections.size) {
+        const display = [t('agent.turn.outcome.replaySavedNote', { note: storedNote }, input.language),
+          ...Array.from(corrections, correction => t('agent.turn.outcome.replayCorrection', { correction }, input.language))].join('\n');
+        note = display.length <= TURN_NOTE_MAX_CHARS ? display : `${modelTextPrefix(display, TURN_NOTE_MAX_CHARS - 1)}…`;
+      }
+    }
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });
     return Object.freeze({ finish, note, rounds, toolCalls, answer, appendedCount: 0,

@@ -1,6 +1,7 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { persistedString, counterSchema, delegatedUseConsentSchema, identitySchema } from '#domain/index.js';
+import { DeckentError, readHeadlessDiagnosticCase } from '#platform/index.js';
 
 import { cliVersion, hexDigest } from './schema-parts.js';
 
@@ -29,8 +30,10 @@ export type NativeAgentExecution = z.infer<typeof nativeAgentExecutionSchema>;
 export const nativeAgentReadinessReasonSchema = z.enum(['NATIVE_AGENT_CLI_UNAVAILABLE', 'NATIVE_AGENT_LOGIN_REQUIRED', 'NATIVE_AGENT_CAPABILITY_UNSEALED',
   'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'NATIVE_AGENT_PLUGIN_UNEXPECTED', 'NATIVE_AGENT_BRIDGE_UNAVAILABLE', 'NATIVE_AGENT_ENVIRONMENT_REFUSED']);
 export type NativeAgentReadinessReason = z.infer<typeof nativeAgentReadinessReasonSchema>;
-export const nativeAgentReadinessSchema = z.discriminatedUnion('state', [
-  z.strictObject({ state: z.literal('ready'), execution: nativeAgentExecutionSchema }).readonly(),
-  z.strictObject({ state: z.enum(['unavailable', 'unknown']), reason: nativeAgentReadinessReasonSchema, governedUse: z.literal('outside-installation').optional() }).readonly(),
-]);
+const ready = z.strictObject({ state: z.literal('ready'), execution: nativeAgentExecutionSchema }).readonly();
+const incomplete = z.strictObject({ state: z.enum(['unavailable', 'unknown']), reason: nativeAgentReadinessReasonSchema, governedUse: z.literal('outside-installation').optional() });
+export const nativeAgentReadinessSchema = z.discriminatedUnion('state', [ready, incomplete.readonly()]);
+export const localNativeAgentReadinessSchema = z.discriminatedUnion('state', [ready, incomplete.extend({
+  diagnostic: z.instanceof(DeckentError).refine(error => readHeadlessDiagnosticCase({ code: error.code, params: error.params }) !== null).optional(),
+}).readonly()]);
 export type NativeAgentReadiness = z.infer<typeof nativeAgentReadinessSchema>;

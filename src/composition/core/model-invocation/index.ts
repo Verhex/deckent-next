@@ -10,9 +10,9 @@ export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliv
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
 export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
 export { readHeadlessGovernedUse } from './internal/native.js';
-export { createCatalogTariffLookup } from './internal/catalog-tariff.js';
+export { createCatalogTariffLookup } from '#engine/index.js';
 export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredContinuationPin, carryContinuationPin } from './internal/continuation.js';
 export { invokePeerConfiguredAgentModel } from './internal/invoke.js';
 export { configuredBubblewrap } from './internal/native.js';
 export { invoke as invokeConfiguredModelWithOptions } from './internal/invoke.js';
-export { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from './internal/plugin-notices.js';
+export { notifyNativeBuiltinPlugins, notifyNativePaidUsage } from '#engine/index.js';

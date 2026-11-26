@@ -1,24 +1,24 @@
 import { agentToolResult } from '#engine/index.js';
-import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
+import { aiProposalRequester, textOnlyModelInvocationRequest, canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, freshModelInvocationCancelled, freshModelInvocationDiagnostic, modelInvocationProfileDigest, isolatesAsSubscription } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
   type ChatTurnCommand, type ModelInvocationProfile,
   type ModelInvocationContentDescriptor, type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type BrainPlanCommand, type BrainPlanObserver, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
+import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolUndo, agentTurnAdmission, settleAgentToolApproval, configuredInvocationProfiles, boundApprovalPreview, prepareApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, AI_PROPOSAL_TOOL_SPECS, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
-  type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
-import { t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+  ModelInvocationPolicyAuthorization, type ModelInvocationDelivery, type RunPlanningResult } from '#engine/index.js';
+import { DeckentError, isHeadlessDiagnosticCode, t, messageText, globalStateRoot, getConfigKnownSecrets, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { agentMcpToolScope, agentGlobalStateRoots, terminalTextChatFamilies, agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
-  SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
+  readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   withMcpPrincipal, withLocalPrincipalChannel, localPrincipalPeer, isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { withNativeChatInvocation, nativeChatReasonText, nativeChatPreflightReason, type NativeChatRuntime } from './native.js';
-import { nativeQuotaText, type ClaudeRateLimit, type NativeAgentExecution } from '#capabilities/index.js';
+import type { ClaudeRateLimit, NativeAgentExecution } from '#capabilities/index.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
@@ -27,7 +27,7 @@ import { createChatSameTurnPlanning, type CreateServiceSameTurnPlanning } from '
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredAgentModel, notifyNativePaidUsage, invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { terminalModelHere, inspectNativeChat, nativeChatVerificationExecution } from '#composition/core/terminal-chat/index.js';
+import { terminalModelHere, inspectNativeChat, inspectNativeChatForVerification, hasRetainedSubscriptionFailure, readRetainedSubscriptionFailure, subscriptionRejectionError } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -114,31 +114,38 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const observed = await inspectNativeChat(profile, host.nativeAgent);
     const start = async (controller?: AbortController) => {
       let readiness = observed;
+      let diagnostic = observed.diagnostic;
       let execution = readiness.state === 'ready' ? readiness.execution : null;
       if (readiness.state === 'unknown' && host.nativeAgent?.preflight) {
+        const preflightSignal = AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]);
         try {
-          await host.nativeAgent.preflight(profile, AbortSignal.any([host.signal, channel.signal, ...(controller ? [controller.signal] : [])]));
-          execution = await nativeChatVerificationExecution(profile, host.nativeAgent);
-          readiness = await inspectNativeChat(profile, host.nativeAgent);
-          if (readiness.state === 'unavailable') execution = null;
+          await host.nativeAgent.preflight(profile, preflightSignal);
+          ({ execution, readiness } = await inspectNativeChatForVerification(profile, host.nativeAgent));
+          diagnostic = readiness.diagnostic;
         } catch (error) {
-          if (controller?.signal.aborted || host.signal.aborted || channel.signal.aborted)
-            return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
+          diagnostic = error instanceof DeckentError && isHeadlessDiagnosticCode(error.code) ? error : undefined;
+          if (preflightSignal.aborted) {
+            const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
+            const notice = diagnostic?.params?.['check'] === 'cancelled' ? undefined : diagnostic?.localize?.(language).message;
+            if (notice && !channel.signal.aborted) channel.emit({ kind: 'text', text: notice + '\n' });
+            return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, notice);
+          }
           execution = null; readiness = { state: 'unavailable', reason: nativeChatPreflightReason(error) };
         }
       }
       if (execution && readiness.state !== 'ready') {
         const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-        channel.emit({ kind: 'text', text: t('headless.agent.readiness.verifying', {}, language) + '\n' });
+        channel.emit({ kind: 'text', text: (diagnostic?.localize?.(language).message ?? t('headless.agent.readiness.verifying', {}, language)) + '\n' });
         await channel.drained();
       }
       if (execution && host.nativeAgent) return withMcpPrincipal(() => runChatTurn(projectRoot, loaded, peer, options,
         delivery, host, channel, { profile, execution, witness: witness.principal }, controller));
-      const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_BRIDGE_UNAVAILABLE' : readiness.reason;
+      const reason = readiness.state === 'ready' ? 'NATIVE_AGENT_CAPABILITY_UNSEALED' : readiness.reason;
       const language = resolveLocale(undefined, options.env ?? process.env, witness.config.language);
-      channel.emit({ kind: 'text', text: nativeChatReasonText(reason, language, readiness.state === 'unknown') + '\n' });
+      const notice = diagnostic?.params?.['check'] === 'cancelled' ? undefined : diagnostic?.localize?.(language).message;
+      channel.emit({ kind: 'text', text: (notice ?? nativeChatReasonText(reason, language, readiness.state === 'unknown')) + '\n' });
       await channel.drained();
-      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller);
+      return runChatTurn(projectRoot, loaded, peer, options, delivery, host, channel, undefined, controller, notice);
     };
     if (observed.state !== 'unknown' || !host.nativeAgent?.preflight) return start();
     const key = runningKey(command.scopeId, command.turnId);
@@ -155,7 +162,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
 async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   delivery: ModelInvocationDelivery, host: RuntimeChatTurnHost, channel: RuntimeServiceTurnChannel,
-  native?: { readonly profile: import('#domain/index.js').ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>['principal'] }, controller?: AbortController): Promise<ChatTurnResult> {
+  native?: { readonly profile: import('#domain/index.js').ModelInvocationProfile; readonly execution: NativeAgentExecution; readonly witness: Awaited<ReturnType<typeof loadPeerInvocationContext>>['principal'] }, controller?: AbortController,
+  preflightNotice?: string): Promise<ChatTurnResult> {
   const { command, config, reference, profile } = loaded;
   const clock = new SystemTrustedClock();
   // Native execution authenticates the AI actor separately from the person who witnessed the turn.
@@ -308,13 +316,43 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     }, AbortSignal.any([signal, ...(lineSignal ? [lineSignal] : [])]));
     const pluginNotices = new Set<string>(), cliNotices = new Set<string>(), steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey: principalKeyOf(native?.witness ?? context.principal), controller: cancel, steer });
+    const invocationContent = async (result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>) =>
+      (await withLocalPrincipalChannel(undefined, () => inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()));
+    const mayReadReturnedRefusal = (target: { scopeId: string; reference: ModelInvocationCommand['reference'] }) =>
+      withLocalPrincipalChannel(undefined, async () => {
+        const reader = await loadPeerInvocationContext(projectRoot, target.scopeId, options, peer, 'read');
+        const authorization = new ModelInvocationPolicyAuthorization(reader.policy);
+        await authorization.authorize('inspect', target, reader.principal);
+        await authorization.authorize('inspect-content', target, reader.principal);
+        return true;
+      }, localPrincipalPeer()).catch(() => false);
+    let toolRan = false;
+    const diagnosisText = (failure: DeckentError | string) => {
+      if (typeof failure === 'string') return failure;
+      const message = failure.localize?.(language).message ?? failure.message;
+      return toolRan && failure.code === 'TERMINAL_CHAT_REJECTED' && failure.params?.['refusal'] === 'quota'
+        ? `${t('headless.chat.quotaAfterTools', {}, language)} ${message}` : message;
+    };
+    // The native loop can still be joining an earlier tool call when the provider result returns.
+    const failedRound = (state: string, failure: DeckentError | string | null, reason?: 'provider-quota'): AgentRoundOutcome =>
+      failure ? { status: 'failed', state, ...(reason ? { reason } : {}), get diagnosis() { return diagnosisText(failure); } }
+        : { status: 'failed', state, ...(reason ? { reason } : {}) };
     const invokeRound = async ({ round, messages, tools: declared }: Parameters<AgentTurnPorts['invokeRound']>[0],
       onDelta: Parameters<AgentTurnPorts['invokeRound']>[1], roundSignal: AbortSignal,
       agent?: Parameters<Parameters<typeof withNativeChatInvocation>[1]>[0]): Promise<AgentRoundOutcome> => {
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        const nativeRefusal = () => { const reason = agent?.refusal(), check = agent?.refusalCheck(); return reason ? `${nativeChatReasonText(reason, language, false, true, check)}${check ? ` (${check})` : ''}` : null; };
+        const reasonText = (reason?: Parameters<typeof nativeChatReasonText>[0] | null, check?: string | null) =>
+          reason ? nativeChatReasonText(reason, language, false, true, check) : null;
+        const nativeRefusal = () => reasonText(agent?.refusal(), agent?.refusalCheck());
+        const returnedDiagnosis = () => {
+          const returned = agent?.returnedRefusal();
+          return !returned ? null : 'body' in returned
+            ? subscriptionRejectionError(returned.body, true)
+            : reasonText(returned.reason, returned.check);
+        };
         let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
@@ -331,37 +369,51 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
             : await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, show, roundSignal,
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
-          // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
-          const stopped = roundSignal.aborted ? 'cancelled' : nativeRefusal();
-          if (stopped) return { status: 'failed', state: stopped };
-          const failure = queryFailure(error);
+          const failure = queryFailure(error), returned = returnedDiagnosis();
+          const refusal = nativeRefusal() ?? (returned && await mayReadReturnedRefusal(invocation) ? returned : null);
+          const diagnosis = refusal ?? (isHeadlessDiagnosticCode(failure.code)
+            ? ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message : null);
           const state = failure.code === 'SIWC_STORE_NOT_PERSONAL' && failure.params?.['reason'] === 'binding-changed'
             ? failure.localize?.(language).message ?? failure.message : failure.code;
-          return { status: 'failed', state };
+          return failedRound(roundSignal.aborted ? 'cancelled' : refusal ? diagnosisText(refusal) : state, diagnosis ?? null);
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();
-        if (refusalReason) return { status: 'failed', state: refusalReason };
         const outcome = result.receipt.outcome;
+        const subscriptionDiagnosis = async () => {
+          const returned = result.replayed ? null : returnedDiagnosis();
+          if (!hasRetainedSubscriptionFailure(result) && !returned) return null;
+          try {
+            const inspected = await invocationContent(result);
+            if (!inspected.invocation || inspected.contentStatus === 'purged') return null;
+            const retained = readRetainedSubscriptionFailure(result, inspected.responseContent);
+            return retained ?? returned;
+          } catch (error) {
+            const { code } = queryFailure(error);
+            // A fresh adapter check may supplement a temporarily unavailable read only under inspection authority.
+            return returned && (code === 'MODEL_INVOCATION_UNAVAILABLE' || code === 'MODEL_INVOCATION_OUTCOME_UNKNOWN' || code === 'QUERY_UNEXPECTED_FAILURE')
+              && await mayReadReturnedRefusal(invocation) ? returned : null;
+          }
+        };
+        if (freshModelInvocationCancelled(result) || outcome?.state === 'not-sent') {
+          const diagnosis = refusalReason ?? (outcome?.state === 'unknown' && returnedDiagnosis() ? await subscriptionDiagnosis() : null);
+          return failedRound('cancelled', diagnosis);
+        }
+        if (refusalReason) return { status: 'failed', state: refusalReason };
+        const fresh = freshModelInvocationDiagnostic(result);
+        if (fresh?.localize) return { status: 'failed', state: 'unknown', diagnosis: fresh.localize(language).message };
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           if (sameTurn?.planning.active) return { status: 'failed', state: 'BRAIN_SAME_TURN_REFUSED' };
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          const cliSubscription = evidence && profile && profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
-            && profile.adapter.id === evidence.adapter.id && profile.adapter.version === evidence.adapter.version;
-          if (evidence && (evidence.adapter.id === SIWC_INFERENCE.adapter.id || cliSubscription)) {
-            const inspected = await withLocalPrincipalChannel(undefined, () => inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
-              invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options), localPrincipalPeer()).catch(() => null);
-            const content = inspected?.responseContent;
-            const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([evidence.adapter.id])) : null;
-            const limitText = cliSubscription && body ? nativeQuotaText(body, language) : null;
-            if (limitText) return { status: 'failed', state: limitText,
-              ...(outcome.state === 'rejected' && body?.refusal === 'quota' ? { reason: 'provider-quota' } : {}) };
-            if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
-            if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
-            if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
-            if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };
-          }
+          const retainedDiagnosis = await subscriptionDiagnosis();
+          // A provider quota rejection of the CLI subscription keeps its typed reason (the tool-call limit does not replace it).
+          if (retainedDiagnosis) return failedRound(outcome.state, retainedDiagnosis, outcome.state === 'rejected' && typeof retainedDiagnosis !== 'string'
+            && retainedDiagnosis.code === 'TERMINAL_CHAT_REJECTED' && retainedDiagnosis.params?.['refusal'] === 'quota' ? 'provider-quota' : undefined);
+          if (outcome.state === 'unknown' && result.receipt.profile.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID
+            && (!evidence || evidence.adapter.id === NATIVE_CLI_HEADLESS_ADAPTER_ID && evidence.adapter.version === result.receipt.profile.adapter.version
+              && evidence.reason === 'interrupted'))
+            return { status: 'failed', state: 'unknown', diagnosis: t('agent.turn.failure.causeUndetermined', {}, language) };
           if (evidence?.adapter.id === 'openai-chat-http' && (evidence.httpStatus === 400 || evidence.httpStatus === 429)) {
             const diagnosis = providerRequestDiagnosis(profile);
             if (evidence.httpStatus === 429) {
@@ -411,7 +463,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         binding => invokeRound(input, onDelta, agentSignal, binding)) } : {}),
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
-        hostNote: () => [...pluginNotices, ...(cliNotices.size ? [t('headless.agent.cliNotices', { events: [...cliNotices].join(', ') }, language)] : [])].join(' ') || null,
+      hostNote: () => [preflightNotice, ...pluginNotices, ...(cliNotices.size ? [t('headless.agent.cliNotices', { events: [...cliNotices].join(', ') }, language)] : [])].filter(Boolean).join(' ') || null,
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       // alpha.64: the proposal tools are decided by the AI actor's v20 rules; the turn's `policy-turn` record names them like every other call.
@@ -462,17 +514,33 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
         }
       },
       async summarize({ sequence, messages: older }, summarySignal) {
-        await recheckNative();
-        // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
-        const transcript = agentCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
-        const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
-          scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language) },
-            { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
-          ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
-        const result = await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
-        if (result?.receipt.outcome?.state !== 'responded') return null;
-        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result)) ?? 'unreadable';
+        const diagnosed = (failure: DeckentError) => {
+          if (!isHeadlessDiagnosticCode(failure.code)) return null;
+          if (failure.code === 'HEADLESS_PREFLIGHT_FAILED' && failure.params?.['check'] === 'cancelled') return { cancelled: true as const };
+          const diagnosis = ErrorRegistry.get(failure.code, language, failure.params ?? { check: 'diagnostic-unverified' })?.message;
+          if (!diagnosis) return null;
+          return { diagnosis: failure.code === 'HEADLESS_LOGIN_REQUIRED' && failure.params?.['reason'] === 'reported-signed-out'
+            ? `${diagnosis} ${t('agent.turn.outcome.compactionSignIn', {}, language)}` : diagnosis };
+        };
+        try {
+          await recheckNative();
+          // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
+          const transcript = agentCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
+          const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
+            scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+            nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language) },
+              { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
+            ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
+          const result = await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal);
+          const outcome = result.receipt.outcome;
+          if (outcome?.state === 'responded') return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result)) ?? 'unreadable';
+          if (freshModelInvocationCancelled(result) || outcome?.state === 'not-sent') return { cancelled: true as const };
+          const fresh = freshModelInvocationDiagnostic(result);
+          if (fresh) return diagnosed(fresh);
+          if (!hasRetainedSubscriptionFailure(result)) return null;
+          const failure = readRetainedSubscriptionFailure(result, (await invocationContent(result).catch(() => null))?.responseContent);
+          return failure ? { diagnosis: diagnosisText(failure) } : null;
+        } catch (error) { return diagnosed(queryFailure(error)); }
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);
@@ -486,6 +554,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       },
       describe,
       async execute(tool, args, toolSignal, callId, execution) {
+        toolRan = true;
         await channel.drained();
         await recheckNative();
         if (!workspace) return agentToolResult({ status: 'error' as const, text: `[deckent] ${tool.name}: error=unknown-tool` }, 'session');
@@ -531,6 +600,7 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
     store?.close();
   }
 }
+
 /** Cancels a running turn of the same principal at once; another principal's turn or an unknown id is `not-running`. */
 export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   host: RuntimeChatTurnHost): Promise<ChatTurnCancellationResult> {

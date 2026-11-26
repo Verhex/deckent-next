@@ -3,11 +3,12 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { HeadlessEgress } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
+import type { DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { codexAgentTurn, nativeAgentLaunch } from '#adapters/core/native-cli-headless/index.js';
-import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped } from '#adapters/core/native-connection/index.js';
+import { createNativeLineObserver, createNormalizerState, createCodexState, flushUnmapped, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import type { ProcessCommand, ProcessEvidence, ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
-import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution } from '#capabilities/index.js';
+import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerPreflight, nativeWorkerToolGate, nativeWorkerProcessResult, type ToolSessionPort, type NativeAgentExecution, type ClaudeAgentResult } from '#capabilities/index.js';
 import type { NativeCliWorkerPorts, NativeCliWorkerDriver } from './ports.js';
 import { NativeCliWorkerError } from './profile.js';
 
@@ -17,15 +18,16 @@ type Entry = NonNullable<ReturnType<typeof nativeCliAgent>>;
 type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 'executable' | 'args' | 'cwd' | 'env' | 'schemaVersion'>;
 type Bridge = Parameters<NativeCliWorkerDriver['run']>[0];
 type ClaudeDriver = ToolSessionPort & { readonly signal: AbortSignal; line: ProcessLineConsumer;
-  finish(evidence: ProcessEvidence): { kind: 'completed'; text: string } | { kind: 'refused'; reason: import('#capabilities/index.js').NativeAgentReadinessReason } | { kind: 'cancelled' | 'failed' } };
+  finish(evidence: ProcessEvidence): ClaudeAgentResult | { kind: 'completed'; text: string } };
 /** K16 binds its public preflight/realm and K2 exports here. No adapter-internal import or host-spawn alternative. */
 export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
   preflight(signal: AbortSignal): Promise<{ execution: NativeAgentExecution; preflight: Preflight }>;
-  claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number }): ClaudeDriver;
+  claudeDriver(input: { entry: Entry; port: ToolSessionPort; model: string; cliVersion: string; runDir: string; outputMaxBytes: number;
+    quotaPolicy: ReturnType<typeof nativeQuotaPolicy> }): ClaudeDriver;
   runIsolated(entry: Entry, spawn: { executable: string; program: Preflight['program']; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
     promptFile: string; mcpConfigFile?: string; mcp: Bridge; now: () => number }, bounds: Bounds, signal: AbortSignal,
-    line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null }>;
+    line: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: string | null; cleanupError?: DeckentError }>;
 }
 
 /** F2-7: the worker-event class of each bridged Deckent tool (its own spec's class), so a read, edit or command reads as one and an edited path counts as changed. */
@@ -53,7 +55,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       const prepared: Prepared = { profile: transport.profile, definition: input.binding.definition, entry, model: input.model,
         system: input.system, user: input.user, effortArgs };
       claude = entry.agent.transport.kind === 'claude-mcp' ? transport.claudeDriver({ entry, port: input.tools, model: input.model,
-        cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes }) : undefined;
+        cliVersion: checked.preflight.version, runDir, outputMaxBytes: input.outputBytes, quotaPolicy: nativeQuotaPolicy() }) : undefined;
       const turn = claude ? undefined : codexAgentTurn(prepared, checked.preflight, tools.session, id => {
         const host = gate.lookup(id);
         if (!host || host.result.outcome.status === 'ok') return host;
@@ -68,18 +70,20 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         timeoutMs: input.deadlineMs, outputMaxBytes: input.outputBytes }); dispose = launch.dispose;
       const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
-      let refused = false;
+      let lineStopped = false;
       const evidence = await transport.runIsolated(entry, { ...launch.spawn, executable: checked.preflight.executable, program: checked.preflight.program, stateDir: input.binding.definition.stateDir,
         mcp: bridge, now: Date.now }, launch.bounds, AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
         const stop = claude ? claude.line(raw) === 'stop' : !!turn!.line(raw);
-        if (stop) { refused = true; return 'stop'; }
+        if (stop) { lineStopped = true; return 'stop'; }
         observer.observe(Buffer.from(raw + '\n'));
       });
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
-      if (result && 'refusal' in result && 'field' in result.refusal.body && result.refusal.body.field === CODEX_TOOL_ITEM_RESERVATION)
+      // A clean-up failure keeps the established classification below; the turn-only refusal applies to a settled run.
+      if (!evidence.cleanupError && result && 'refusal' in result && 'field' in result.refusal.body && result.refusal.body.field === CODEX_TOOL_ITEM_RESERVATION)
         return { termination: 'confirmed', status: 'failed', text: CODEX_TOOL_ITEM_RESERVATION, refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
-      return nativeWorkerProcessResult(evidence, combined.aborted, refused || gate.refused(), finished, result && 'response' in result ? result : undefined, gate.terminalFailure());
+      return nativeWorkerProcessResult(evidence, combined.aborted, gate.refused(), finished,
+        result ? { ...result, lineStopped } : undefined, gate.terminalFailure());
     },
     async close() {
       // A thrown runner has no process-end proof; retain private files for reconciliation rather than remove a live CLI's files.

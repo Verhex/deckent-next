@@ -1,5 +1,6 @@
 import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { mkdir, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
+import * as files from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { parseModelBindingDefinition, modelInvocationProfileSchema, readHeadlessRejection, type AgentTurnEvent, type ModelInvocationDelta, type ModelInvocationDeltaSink } from '#domain/index.js';
@@ -17,11 +18,13 @@ import { runDurableAgentTurn, type AgentTurnPorts } from '#engine/core/agent-tur
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { connection, cleanupConnections, testIsolation } from '../../fixtures/native-headless/connection.js';
-import { fakeCodexNpm } from '../../fixtures/native-headless/codex.js';
+import * as processRunner from '#adapters/core/process-runner/index.js';
+import { codexAnswer, fakeCodexNpm } from '../../fixtures/native-headless/codex.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli, type FakeAgentScenario } from '../../fixtures/native-headless/agent.js';
 import { assistantLine, initLine, PINNED, resultLine } from '../../fixtures/native-headless/stream.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 const close: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const fn of close.splice(0).reverse()) await fn(); await cleanupConnections(); });
 const families = [registry.adapters.claude.capabilities.eventStream, registry.adapters.codex.headless.protocolFamily];
@@ -84,6 +87,57 @@ it('keeps no-model preflight observations incomplete, never upgrades text seals,
   expect(await readNativeAgentObservation(f.profile, () => Date.now() + f.entry.agent.observationMaxAgeMs! + 1)).toBeNull();
   await writeFile(String(f.profile.adapter.definition['executable']), '\n', { flag: 'a' });
   expect(await readNativeAgentObservation(f.profile)).toBeNull();
+});
+
+it('does not mark the guarded surface ready when native run-file removal fails', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  const f = await fixture(families[1]!), h = await f.start();
+  const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async (input, signal, onLine) => {
+    for (const line of codexAnswer('guarded fixture answer')) {
+      expect(await onLine?.(JSON.stringify(line), signal ?? new AbortController().signal)).not.toBe('stop');
+    }
+    return { schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+  });
+  const remove = files.rm, failed = vi.fn();
+  const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+    await remove(...args);
+    if (typeof args[0] === 'string' && /\/agent-run-[^/]+$/u.test(args[0])) { failed(); throw new Error('fixture run-directory disposal failed'); }
+  });
+  try {
+    await expect(h.run()).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'agent-run-remove' } });
+    expect(runner).toHaveBeenCalledOnce();
+    expect(failed).toHaveBeenCalledOnce();
+    expect(await readNativeAgentObservation(f.profile)).toMatchObject({ toolSurface: null, bridge: null });
+  } finally { cleanup.mockRestore(); runner.mockRestore(); }
+});
+
+it('keeps a newer observation and skips a readiness write prepared for a changed program', async () => {
+  if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
+  for (const change of ['newer observation', 'program identity'] as const) {
+    const f = await fixture(families[1]!), h = await f.start();
+    const stateDir = join(f.c.root, 'state');
+    const names = (await readdir(stateDir)).filter(name => name.startsWith('agent-'));
+    expect(names).toHaveLength(1);
+    const path = join(stateDir, names[0]!);
+    const original = await readFile(path, 'utf8');
+    const checkedAtMs = Date.now() + 60_000;
+    const expected = change === 'newer observation' ? JSON.stringify({ ...JSON.parse(original), checkedAtMs }) : original;
+    const remove = files.rm, duringDisposal = vi.fn();
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      await remove(...args);
+      if (typeof args[0] !== 'string' || !/\/agent-run-[^/]+$/u.test(args[0])) return;
+      duringDisposal();
+      if (change === 'newer observation') await writeFile(path, expected, { mode: 0o600 });
+      else await writeFile(f.program, '\n', { flag: 'a' });
+    });
+    try {
+      expect(await h.run()).toMatchObject({ native: { choices: [{ message: { content: 'agent completed' } }] } });
+      expect(duringDisposal).toHaveBeenCalledOnce();
+      expect(await readFile(path, 'utf8'), change).toBe(expected);
+      expect((await readdir(stateDir)).filter(name => name.startsWith('agent-'))).toEqual(names);
+    } finally { cleanup.mockRestore(); }
+  }
 });
 
 it('runs both real isolated CLI drivers through R with exact correlation, readonly MCP config and no token/login canary in deltas or receipts', async () => {
@@ -319,6 +373,12 @@ it('R5b: retains which Claude stream check refused and identifier-only facts, ne
   expect(body).toMatchObject({ refusal: 'guard', field: 'agent-surface:tool-use', subtype: "name=? prefix=1 offered=0" });
   expect(JSON.stringify(body)).not.toContain('secret-argument-canary');
   expect(f.propose).not.toHaveBeenCalled();
+  // Y25/Y26: a model check returns its own rejection (the receipt names it) and keeps its check for a turn whose receipt cannot be recorded.
+  const other = await (await fixture(registry.adapters.claude.capabilities.eventStream!, { events: [{ type: 'assistant', message: { model: 'other-model', content: [] } }] })).start();
+  const mismatch = await other.run();
+  expect(mismatch.kind === 'rejected' ? readHeadlessRejection(mismatch.evidence) : null).toMatchObject({ refusal: 'model-mismatch', field: 'assistant', subtype: 'model-reported' });
+  expect(other.driver.refusal()).toBeNull();
+  expect(other.driver.returnedRefusal()).toEqual({ reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', check: 'agent-surface:assistant' });
   await notPaused(f.profile);
 });
 it('R6b/R5b: Claude keepalive and thinking-token notices keep the turn; a keepalive naming an unknown call still stops it', async () => {
@@ -357,7 +417,13 @@ it('keeps cancelled calls unknown, closes the process and removes token-bearing 
   if (!await nativeAgentRealmAvailable(expect.getState().testPath ?? 'unknown', expect.getState().currentTestName ?? 'unknown')) return;
   for (const family of families) {
     const f = await fixture(family!, { hang: true }), h = await f.start();
-    await expect(h.run(AbortSignal.timeout(750))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    const signal = AbortSignal.timeout(750);
+    const pending = h.run(signal);
+    await expect(pending).rejects.toThrow();
+    expect(signal.aborted).toBe(true);
+    await expect(pending).rejects.toBe(signal.reason);
+    expect(h.deltas.map(delta => delta.text).join('')).toContain('K16-WAITING');
+    expect((await readdir(join(f.c.root, 'state'))).filter(name => name.startsWith('agent-run-'))).toEqual([]);
     expect(await readdir(join(f.c.root, 'state', 'run'))).toEqual([]);
     expect(await readNativeAgentObservation(f.profile)).not.toMatchObject({ toolSurface: true });
     expect(f.propose).not.toHaveBeenCalled();
@@ -381,6 +447,7 @@ it('records Claude subscription limits in the existing strict refusal and render
     expect(body).toMatchObject({ resetsAtMs: 'resetsAt' in info ? 1792773600000 : null });
     expect(f.propose).not.toHaveBeenCalled();
     expect(h.driver.refusal()).toBeNull(); // A limit never becomes the misleading unexpected-tool notice.
+    if ('errorCode' in info) expect.soft(h.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'credits-required' } });
     for (const language of ['en', 'tr'] as const) {
       const text = nativeQuotaText(body!, language)!;
       expect(text).not.toMatch(/\{\w+\}/u); expect(text).not.toContain('\n'); expect(text).not.toContain('\u001b');
@@ -398,6 +465,11 @@ it('records Claude subscription limits in the existing strict refusal and render
       if (info.rateLimitType?.startsWith('odd')) { expect(body).toMatchObject({ field: 'odd__' + 'x'.repeat(19) }); expect(text).toContain('odd__' + 'x'.repeat(19)); }
     }
   }
+  // C4: a failed result with a registered provider status keeps that classification; the evidence stays incomplete (the outcome is not moved).
+  const failed = await (await fixture(families[0]!, { result: { is_error: true, subtype: 'error_during_execution', api_error_status: 429 } })).start(), settled = await failed.run();
+  expect(settled.kind === 'rejected' ? [settled.evidence.reason, settled.evidence.body.complete, readHeadlessRejection(settled.evidence)] : null)
+    .toMatchObject(['interrupted', false, { refusal: 'quota', status: 429 }]);
+  expect(failed.driver.returnedRefusal()).toMatchObject({ body: { refusal: 'quota', status: 429 } });
 });
 
 it('D2 preserves a typed Codex usage limit and names a guard check without claiming an unexpected tool', async () => {
@@ -413,7 +485,8 @@ it('D2 preserves a typed Codex usage limit and names a guard check without claim
   for (const locale of ['en', 'tr'] as const) {
     expect(nativeQuotaText(body!, locale)).toContain(locale === 'en' ? 'usage limit' : 'kullanım sınırı');
     const text = nativeAgentReasonText(guard.driver.refusal()!, locale, false, true, guard.driver.refusalCheck());
-    expect(text).toContain(locale === 'en' ? 'safety check refused' : 'güvenlik denetimi');
+    expect(text).toBe(locale === 'en' ? "The CLI's tool surface or tool protocol could not be verified as expected. (usage)"
+      : "CLI'ın araç yüzeyi veya araç protokolü beklendiği gibi doğrulanamadı. (usage)");
     expect(text).not.toContain(locale === 'en' ? 'unexpected tool' : 'beklenmedik bir araç');
   }
 });

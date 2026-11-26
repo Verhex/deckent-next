@@ -1,11 +1,11 @@
 import type { NativeAgentExecution } from '#capabilities/index.js';
 import { nativeCliWorkerFence, withMcpPrincipal, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type SqliteAttemptStore } from '#adapters/index.js';
 import { inspectSubscriptionReadiness, nativeReadinessQuery, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, type ConfigLoadOptions, type HeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { recheckNativeWorkerUse, resolveNativeWorkerUse, assertNativeWorkerReservation, type NativeWorkerUse } from '#composition/core/runs/index.js';
 /** K16 owns the shared isolated driver/readiness; K1 owns the tool session. No invocation claim is opened for this Run worker. */
 export interface NativeCliWorkerRuntime {
-  prepare?(profile: import('#domain/index.js').ModelInvocationProfile): Promise<import('#capabilities/index.js').NativeAgentReadinessReason | null>;
+  prepare?(profile: import('#domain/index.js').ModelInvocationProfile): Promise<import('#capabilities/index.js').NativeAgentReadinessReason | HeadlessDiagnosticIdentifier | null>;
   readonly readiness: SubscriptionReadinessReader;
   /** `use`: the point's fresh K5 resolution, reused by its evidence target; `execution`: the seal its readiness read (no second observation read). */
   f08(query: Readonly<{ scopeId: string; reference: import('#domain/index.js').ModelReference; binding: NativeCliWorkerBinding; use?: NativeWorkerUse;

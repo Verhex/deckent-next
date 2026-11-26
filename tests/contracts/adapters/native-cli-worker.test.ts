@@ -1,6 +1,6 @@
 import { withRecordedToolError, errorCallArgs } from '../../fixtures/native-headless/recorded-error.js';
 import { expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile, readdir, readFile, lstat, unlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, rmdir, writeFile, readdir, readFile, lstat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -18,7 +18,7 @@ import { createNativeCliWorkerProfile, resolveNativeCliWorkerProfile, inspectNat
   validateNativeCliWorkerSupervisorProfile, nativeCliWorkerFence, recordedNativeCliWorkerSupervisor, nativeWorkerCustodyFile, createNativeWorkerEvents,
   createNativeCliWorkerDriver, executionTask, executionTaskSilenceDeadline, executionTaskHiddenPaths, type NativeCliWorkerTransport,
   type NativeCliWorkerFenceReader, type NativeCliWorkerBinding, type NativeCliWorkerPorts, type NativeCliWorkerDriver } from '#adapters/core/native-cli-worker/index.js';
-import type { NativeAgentExecution, ToolSessionPort } from '#capabilities/index.js';
+import { nativeWorkerProcessResult, type NativeAgentExecution, type ToolSessionPort } from '#capabilities/index.js';
 import { sandboxObservationSchema, type SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
@@ -130,8 +130,20 @@ it('K12: unsealed, stale F08, mismatched executable and unavailable readiness ne
   expect(await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence })).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_F08_REQUIRED' });
   f.ports.f08 = async () => ({ ...execution, cliVersion: '2.1.316' });
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_WORKER_F08_REQUIRED' });
-  f.ports.readiness = async () => ({ state: 'ready', execution: { ...execution, executable: '/foreign/cli' } });
-  expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  const directory = await mkdtemp(join(tmpdir(), 'deckent-worker-recheck-'));
+  const executable = join(directory, 'program');
+  const recorded = { ...binding, definition: { ...binding.definition, executable } };
+  try {
+    f.ports.readiness = async () => ({ state: 'ready', execution: { ...execution, executable: '/foreign/cli' } });
+    expect(await inspectNativeCliWorker(recorded, f.ports)).toEqual({
+      state: 'waiting', reason: 'HEADLESS_CLI_UNAVAILABLE__CHECK_RECORDED_PATH_MISSING',
+    });
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    expect(await inspectNativeCliWorker(recorded, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+  } finally {
+    await rm(executable, { force: true });
+    await rmdir(directory);
+  }
   f.ports.readiness = async () => ({ state: 'unknown', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
   expect(await inspectNativeCliWorker(binding, f.ports)).toEqual({ state: 'waiting', reason: 'NATIVE_AGENT_LOGIN_REQUIRED' });
   expect(f.ports.capacity.acquire).not.toHaveBeenCalled(); expect(f.ports.driver).not.toHaveBeenCalled();
@@ -281,6 +293,22 @@ it('K17: K1 effects-settled closure and separate confirmed CLI termination can f
   const q = await prepared(refused);
   expect(await q.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' } });
   await expect(q.supervisor.release(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL'); expect(refused.release).not.toHaveBeenCalled();
+  const cleanup = fixture();
+  cleanup.run.mockResolvedValue({ termination: 'unverified', status: 'failed', text: '',
+    refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED',
+    cleanupError: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'lock-marker-remove' } }) });
+  const unresolved = await prepared(cleanup);
+  expect(await unresolved.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' },
+    stdout: '', stderr: '', outputCompleteness: 'unavailable' });
+  await expect(unresolved.supervisor.release(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
+  const lateCleanup = fixture();
+  lateCleanup.run.mockResolvedValue({ termination: 'confirmed', status: 'failed', text: '', refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' });
+  lateCleanup.ports.driver = async input => ({ tools: input.tools, run: lateCleanup.run,
+    async close() { throw new Error('fixture driver disposal failure'); } });
+  const late = await prepared(lateCleanup);
+  expect(await late.supervisor.execute(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' },
+    stdout: '', stderr: '', outputCompleteness: 'unavailable' });
+  await expect(late.supervisor.release(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
 });
 it('K17: confirmed redacted output survives owner release; restored control never spawns and rejects changed custody', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'native-worker-custody-')), f = fixture();
@@ -559,6 +587,49 @@ it('Card 168 retains approval expiry alongside a reservation refusal', async () 
   await checkWorkerReservation('expiry');
 });
 
+it('fails a worker whose isolated process returns valid output with a cleanup error', async () => {
+  const f = await transportFixture('codex-jsonl'), signal = new AbortController().signal;
+  const isolated = f.isolated.getMockImplementation()!;
+  f.isolated.mockImplementation(async (...args) => ({ ...await isolated(...args),
+    cleanupError: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'realm-program-close' } }) }));
+  try {
+    const driver = createNativeCliWorkerDriver(f.input, f.transport, signal);
+    expect(await driver.run(f.bridge, signal)).toMatchObject({ status: 'failed', text: '',
+      cleanupError: { code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'realm-program-close' } } });
+    await driver.close();
+    expect(await readdir(f.stateDir)).toEqual([]);
+    const completed = f.isolated.mock.results[0]!.value;
+    for (const finding of [
+      { reason: 'exit', exitCode: 23, signal: null, code: 'HEADLESS_WORKER_RESULT__REASON_EXIT__23' },
+      { reason: 'signal', exitCode: null, signal: 'SIGTERM', code: 'HEADLESS_WORKER_RESULT__REASON_SIGNAL' },
+      { reason: 'stopped', exitCode: 1, signal: null, code: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' },
+    ] as const) {
+      f.isolated.mockImplementationOnce(async (_entry, _spawn, _bounds, _signal, line) => {
+        if (finding.reason === 'stopped')
+          expect(line(JSON.stringify({ type: 'turn.failed', error: { message: 'Rate limit reached' } }))).toBe('stop');
+        const { reason, exitCode, signal } = finding;
+        return { ...await completed, reason, exitCode, signal };
+      });
+      const stopped = createNativeCliWorkerDriver(f.input, f.transport, signal);
+      const result = await stopped.run(f.bridge, signal);
+      expect.soft(result, finding.reason).toMatchObject({ termination: 'unverified', status: 'failed', text: '', failureCode: finding.code,
+        cleanupError: { params: { check: 'realm-program-close' } } });
+      expect.soft(result, finding.reason).not.toHaveProperty('refusal');
+      await stopped.close();
+    }
+    // C2: the deadline decides the outcome class; a provider status read from the Claude result keeps the reason, otherwise the deadline does.
+    const settle = (finished: Parameters<typeof nativeWorkerProcessResult>[3]) => nativeWorkerProcessResult({ reason: 'timeout', limit: null, exitCode: null, signal: null,
+      stdoutTruncated: false, stderrTruncated: false }, false, false, finished);
+    expect(settle({ kind: 'failed', rejection: { refusal: 'quota', status: 429, resetsAtMs: null } }))
+      .toEqual({ termination: 'confirmed', text: '', status: 'cancelled', failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' });
+    expect(settle({ kind: 'failed' })).toEqual({ termination: 'confirmed', text: '', status: 'cancelled', failureCode: 'NATIVE_WORKER_DEADLINE_REACHED' });
+    // C6: the Claude parser's own byte bound keeps the bound reason, not the general guard; the stop class is unchanged.
+    expect(nativeWorkerProcessResult({ reason: 'cancelled', limit: null, stdoutTruncated: false, stderrTruncated: false }, false, false,
+      { kind: 'refused', reason: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', field: 'size' }))
+      .toEqual({ termination: 'confirmed', text: '', status: 'failed', stopped: true, failureCode: 'NATIVE_WORKER_OUTPUT_LIMIT' });
+  } finally { await rm(f.stateDir, { recursive: true, force: true }); }
+});
+
 it('K22: first Attempt verifies once, retains F08 only after terminal custody, then the next Attempt uses its seal', async () => {
   const { nativeWorkerEvidenceFile } = await import('#adapters/core/native-cli-worker/index.js');
   const { claimNativeWorkerVerification, readNativeWorkerEvidence, nativeWorkerEvidenceKey } = await import('#capabilities/index.js');
@@ -625,12 +696,22 @@ it('K24 cancellation during preflight settles without spawning; a genuine prefli
   try {
     const error = Object.assign(new Error('preflight stopped before model spawn'), { code: 'HEADLESS_PREFLIGHT_FAILED' });
     const preflight = vi.spyOn(f.transport, 'preflight').mockImplementation(async signal => {
-      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); throw error;
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); signal.throwIfAborted();
+      throw error;
     });
     const driver = createNativeCliWorkerDriver(f.input, f.transport, cancel.signal), pending = driver.run(f.bridge, cancel.signal);
     cancel.abort();
     expect(await pending).toMatchObject({ status: 'cancelled', termination: 'confirmed' });
     await driver.close(); expect(f.isolated).not.toHaveBeenCalled(); expect(await readdir(f.stateDir)).toEqual([]);
+    const race = new AbortController();
+    preflight.mockImplementationOnce(async signal => {
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      throw error;
+    });
+    const racing = createNativeCliWorkerDriver(f.input, f.transport, race.signal), racingResult = racing.run(f.bridge, race.signal);
+    race.abort();
+    await expect.soft(racingResult).rejects.toBe(error);
+    await racing.close();
     preflight.mockRejectedValue(error);
     const live = createNativeCliWorkerDriver(f.input, f.transport, new AbortController().signal);
     await expect(live.run(f.bridge, new AbortController().signal)).rejects.toBe(error); await live.close();

@@ -2,20 +2,141 @@
 // it only the system prefixes, its own executable, the person's bound login dir and its private run dir; its network is the provider allowlist
 // through the gateway. A scripted fake CLI probes the realm from inside: no real CLI, no model call, no real credential.
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import * as files from 'node:fs/promises';
 import { existsSync, lstatSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
+import { Server as HttpServer } from 'node:http';
+import { Server as McpServer } from '@modelcontextprotocol/server';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
+import * as processRunner from '#adapters/core/process-runner/index.js';
+import * as egressGateway from '#adapters/core/native-connection/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
-import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
-import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
-import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
+import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin, resolveHeadlessExecutable, runHeadlessIsolated } from '#adapters/core/native-cli-headless/index.js';
+import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
+import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
+import { createClaudeAgentDriver, nativeWorkerProcessResult } from '#capabilities/core/native-agent-execution/index.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
+import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
+import { doctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { assistantLine, fullHelp, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
+import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 const servers: Server[] = [];
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 afterEach(async () => { await cleanupConnections(); await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve)))); });
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
+const cleanupEntry = nativeCliAgent('claude-code-stream-json')!;
+async function workerCleanupFixture() {
+  const c = await connection(), stateDir = join(c.root, 'state'), runDir = join(stateDir, 'work');
+  await mkdir(runDir, { recursive: true, mode: 0o700 });
+  const info = lstatSync(process.execPath, { bigint: true });
+  const isolation = async () => ({ ...bubblewrapObservation('available'), status: 'available' as const,
+    launcher: { source: 'system' as const, path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+      identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } });
+  const program = await resolveHeadlessExecutable(cleanupEntry, c.executable, process.getuid!());
+  const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+    schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+    stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+  }));
+  const run = async (mcp?: Awaited<ReturnType<typeof createNativeToolBridge>>, line?: Parameters<typeof runHeadlessIsolated>[5]) => {
+    let refused = false;
+    const evidence = await runHeadlessIsolated(cleanupEntry, isolation, { program, executable: c.executable, args: [], env: {},
+      stateDir, runDir, configDir: c.configDir, mcp, now: Date.now }, { timeoutMs: 1000, outputBytes: 4096, stderrBytes: 4096,
+      maxLineBytes: 4096, interruptGraceMs: 100 }, undefined, line && (async (raw, signal) => {
+      const decision = await line(raw, signal);
+      refused ||= decision === 'stop';
+      return decision;
+    }));
+    expect(runner).toHaveBeenCalledOnce();
+    expect(evidence).toMatchObject({ started: true, exitCode: 0 });
+    return nativeWorkerProcessResult(evidence, false, refused, refused ? undefined : { kind: 'completed', text: 'otherwise usable work' });
+  };
+  return { ...c, run, runDir, runner };
+}
+
+it.skipIf(process.platform !== 'linux')('keeps a worker guard refusal when removing its login marker fails', async () => {
+  const f = await workerCleanupFixture(), remove = files.rm, removalFailed = vi.fn();
+  const guard = createClaudeAgentDriver({ entry: cleanupEntry, model: 'fixture-model', cliVersion: '9.1.0', runDir: f.runDir,
+    outputMaxBytes: 4096, quotaPolicy: egressGateway.nativeQuotaPolicy(),
+    port: { session: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, tools: [], approvalTtlMs: 1000 },
+      propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() } });
+  const finish = f.runner.getMockImplementation()!;
+  f.runner.mockImplementationOnce(async (request, signal, onLine) => {
+    expect(await onLine?.('{"type":"assistant"}', signal ?? new AbortController().signal)).toBe('stop');
+    return finish(request, signal, onLine);
+  });
+  const marker = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+    if (typeof args[0] === 'string' && args[0].endsWith('.lock')) {
+      expect(f.runner).toHaveBeenCalledOnce();
+      expect(guard.signal.aborted).toBe(true);
+      removalFailed();
+      throw new Error('fixture marker removal failure');
+    }
+    return remove(...args);
+  });
+  try {
+    const result = await f.run(undefined, guard.line);
+    expect(removalFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '',
+      cleanupError: { params: { check: 'lock-marker-remove' } } });
+    expect(result).toHaveProperty('refusal', 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED');
+  } finally { marker.mockRestore(); f.runner.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when closing the enumerated configuration directory fails', async () => {
+  const f = await workerCleanupFixture(), openDirectory = files.opendir, closeFailed = vi.fn();
+  const directory = vi.spyOn(files, 'opendir').mockImplementation(async (...args) => {
+    const opened = await openDirectory(...args);
+    if (args[0] === f.configDir) {
+      const close = opened.close.bind(opened);
+      opened.close = async () => { await close(); closeFailed(); throw new Error('fixture configuration directory close error'); };
+    }
+    return opened;
+  });
+  try {
+    const result = await f.run();
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '', cleanupError: { params: { check: 'realm-config-directory-close' } } });
+  } finally { directory.mockRestore(); f.runner.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when the gateway server close callback reports an error', async () => {
+  const f = await workerCleanupFixture(), close = HttpServer.prototype.close, closeFailed = vi.fn();
+  const gateway = vi.spyOn(HttpServer.prototype, 'close').mockImplementation(function (this: HttpServer, callback) {
+    return close.call(this, () => { closeFailed(); callback?.(new Error('fixture gateway close callback error')); });
+  });
+  try {
+    const result = await f.run();
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: 'failed', termination: 'unverified', text: '', cleanupError: { params: { check: 'realm-gateway-close' } } });
+  } finally { gateway.mockRestore(); f.runner.mockRestore(); }
+});
+
+it.skipIf(process.platform !== 'linux')('blocks worker completion when the bridge already failed to close', async () => {
+  const f = await workerCleanupFixture();
+  const bridge = await createNativeToolBridge({ bridge: cleanupEntry.bridge, correlationKind: 'claude-tool-use',
+    limits: { idleMs: 300, maxConnections: 2, replayMaxEntries: 4, replayMaxBytes: cleanupEntry.bridge.frameMaxBytes * 4 },
+    port: { session: { schemaVersion: 1, turnId: 'fixture-turn', generation: 1, tools: [], approvalTtlMs: 1000 },
+      propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() } });
+  const close = McpServer.prototype.close;
+  const sdk = vi.spyOn(McpServer.prototype, 'close').mockImplementationOnce(async function (this: McpServer) {
+    await close.call(this); throw new Error('fixture first bridge close error');
+  });
+  try {
+    const first = bridge.close();
+    await expect(first).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'realm-bridge-close' } });
+    expect(await f.run(bridge)).toMatchObject({ status: 'failed', termination: 'unverified', text: '',
+      cleanupError: { params: { check: 'realm-bridge-close' } } });
+    expect(bridge.close()).toBe(first);
+    await expect(bridge.close()).rejects.toMatchObject({ params: { check: 'realm-bridge-close' } });
+    expect(sdk).toHaveBeenCalledOnce();
+  } finally { sdk.mockRestore(); f.runner.mockRestore(); }
+});
+
 const happy = (probe: IsolationProbe): FakeStep[] => [{ line: uiLine() }, { line: initLine() }, { isolation: probe }, { line: assistantLine('{"ok":true}') },
   { line: rateLimitLine() }, { line: resultLine('{"ok":true}') }];
 type Results = { read: Record<string, string>; list: Record<string, string[] | string>; write: Record<string, string>; replace: Record<string, string>;
@@ -165,15 +286,251 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
 
 describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () => {
   const unavailable = async () => bubblewrapObservation('unavailable', 'no bubblewrap launcher');
+  const doctor = (logins: DoctorCheckFacts['headlessLogins'], locale: 'en' | 'tr', checkId = 'work.brainLogin') => doctorChecks({
+    platform: 'linux', host: { cpuCores: 1, totalMemMB: 1024, recommendedMaxWorkers: 1 }, company: { companyId: 'default' },
+    principal: { id: 'fixture' }, secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null,
+  }, { scopeId: 'scope', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null,
+    retiringModels: [], poolStatus: 'unconfigured', toolchainUpdateEnabled: false, imageId: null, headlessLogins: logins }, locale)
+    .find(row => row.id === checkId)?.text;
+
+  it('Doctor preserves the bind-race diagnostic after persistence and treats ambiguous legacy checks as unverified', async () => {
+    const c = await connection({}, {}, 'a'.repeat(64), async () => launcher);
+    const path = join(c.root, 'bin', 'fake-launcher');
+    await writeFile(path, '#!/bin/sh\necho "bwrap: Race condition binding dirfd" >&2\nexit 1\n', { mode: 0o700 });
+    const info = lstatSync(path, { bigint: true }), launcher = { ...bubblewrapObservation('available'), status: 'available' as const,
+      launcher: { source: 'system' as const, path, version: '0.13.0', sha256: null, overlay: true,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } };
+    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ params: { check: 'executable-changed', reason: 'bind-race-diagnostic' } });
+    const logins = () => readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    const stored = await logins();
+    expect.soft(doctor(stored, 'en')).toContain('The process exited with a bind-race diagnostic.');
+    expect.soft(doctor(stored, 'tr')).toContain('Süreç, bağlama yarışı tanısıyla sonlandı.');
+    expect.soft(doctor(stored, 'en')).not.toContain('identity differs');
+    expect.soft(doctor(stored, 'en')).not.toContain('outside');
+    expect(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8')).not.toContain(c.executable);
+    for (const [check, en, tr] of [
+      ['executable-changed', 'The previous check concerned verification of the executable. The specific cause could not be determined.',
+        'Önceki denetim çalıştırılabilir dosyanın doğrulanmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['npm-layout-unknown', 'The previous check concerned the npm launcher layout. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının yerleşimiyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ...['npm-payload-missing', 'npm-payload-unverified'].map(check => [check,
+        'The previous check concerned the native program behind the npm launcher. The specific cause could not be determined.',
+        'Önceki denetim npm başlatıcısının arkasındaki yerel programla ilgiliydi. Kesin neden belirlenemedi.'] as const),
+    ] as const) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check }));
+      const history = await logins();
+      expect.soft(doctor(history, 'en')).toContain(en);
+      expect.soft(doctor(history, 'tr')).toContain(tr);
+    }
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_PREFLIGHT_FAILED', check: 'realm-scratch-create' }));
+    expect(doctor(await logins(), 'en')).toContain('The temporary directory for the isolated login view could not be created.');
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_ISOLATION_UNAVAILABLE', check: 'limits' }));
+    const legacy = await logins();
+    expect.soft(doctor(legacy, 'en')).toContain('The check recorded an isolation refusal. The previous check concerned isolation limits. The specific cause could not be determined.');
+    expect.soft(doctor(legacy, 'tr')).toContain('Önceki denetim yalıtım sınırlarıyla ilgiliydi. Kesin neden belirlenemedi.');
+    expect(legacy[0]?.isolation).toBe('unavailable');
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'HEADLESS_LOGIN_REQUIRED', check: null }));
+    expect.soft(doctor(await logins(), 'en')).toContain('The previous check recorded a sign-in requirement. The specific reason could not be verified.');
+    expect.soft(doctor(await logins(), 'tr')).toContain('Önceki denetimde oturum açma gerekliliği kaydedildi. Kesin neden doğrulanamadı.');
+    for (const [refusal, check, en, tr] of [
+      ['HEADLESS_PREFLIGHT_FAILED', 'version', 'The previous check concerned the CLI version. The specific cause could not be determined.',
+        'Önceki denetim CLI sürümüyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'flags', 'The previous check concerned CLI options. The specific cause could not be determined.',
+        'Önceki denetim CLI seçenekleriyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'spawn', 'The previous check concerned running a CLI probe. The specific cause could not be determined.',
+        'Önceki denetim CLI yoklamasının çalıştırılmasıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'config-dir', 'The previous check concerned the CLI login configuration directory. The specific cause could not be determined.',
+        'Önceki denetim CLI oturum açma yapılandırma diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'state-dir', 'The previous check concerned the state directory used by the sign-in lock. The specific cause could not be determined.',
+        'Önceki denetim oturum açma kilidinin kullandığı durum diziniyle ilgiliydi. Kesin neden belirlenemedi.'],
+      // Y30: 83cff36f8 also wrote check-only `launcher` and `executable-recheck` records.
+      ['HEADLESS_ISOLATION_UNAVAILABLE', 'launcher', 'The previous check concerned the isolation launcher. The specific cause could not be determined.',
+        'Önceki denetim yalıtım başlatıcısıyla ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_PREFLIGHT_FAILED', 'executable-recheck', 'The previous check concerned checking the program again. The specific cause could not be determined.',
+        'Önceki denetim programın yeniden denetlenmesiyle ilgiliydi. Kesin neden belirlenemedi.'],
+      ['HEADLESS_ISOLATION_UNAVAILABLE', 'login-lock', 'The previous check could not acquire the sign-in lock. The specific cause could not be verified.',
+        'Önceki denetim oturum açma kilidini alamadı. Kesin neden doğrulanamadı.'],
+      ['HEADLESS_LIMIT_REACHED', null, 'The previous check recorded a resource limit. Which limit was reached could not be verified.',
+        'Önceki denetimde bir kaynak sınırı kaydedildi. Hangi sınıra ulaşıldığı doğrulanamadı.'],
+      ['HEADLESS_LOGIN_BUSY', null, 'The previous check recorded a busy sign-in lock. The holder could not be verified.',
+        'Önceki denetimde oturum açma kilidi meşgul olarak kaydedildi. Kilidi kimin tuttuğu doğrulanamadı.'],
+    ] as const) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal, check }));
+      const history = await logins();
+      expect.soft(doctor(history, 'en')).toContain(en);
+      expect.soft(doctor(history, 'tr')).toContain(tr);
+    }
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '9.0.0' }));
+    expect.soft((await logins())[0]?.state).toBe('unknown');
+    expect.soft(doctor(await logins(), 'en')).toContain('The previous subscription CLI check record could not be interpreted.');
+  });
+
+  it('Doctor and the shared error renderer treat malformed diagnostic cases as unverified for every code', async () => {
+    const c = await connection({}, {}, 'a'.repeat(64), unavailable);
+    await mkdir(join(c.root, 'state'), { mode: 0o700 });
+    for (const code of new Set(headlessDiagnosticCases.map(row => row.code))) {
+      const params = { invalid: '/private/g3-r9-diagnostic-canary' };
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: { code, params } }));
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      const error = ErrorRegistry.createError(code, { params });
+      for (const [locale, expected] of [['en', 'The provider-program diagnostic could not be verified.'],
+        ['tr', 'Sağlayıcı programına ilişkin tanı doğrulanamadı.']] as const) {
+        expect.soft(doctor(logins, locale), code).toContain(expected);
+        expect.soft(error.localize?.(locale).message, code).toBe(expected);
+      }
+      expect(JSON.stringify(error)).not.toContain(params.invalid);
+    }
+    for (const version of ['2.0.0', '10.0.0']) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed',
+        refusal: { code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'version', reason: 'too-old', version, minimum: '2.0.0' } } }));
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect(doctor(logins, 'en')).toContain('The provider-program diagnostic could not be verified.');
+      expect(doctor(logins, 'tr')).toContain('Sağlayıcı programına ilişkin tanı doğrulanamadı.');
+    }
+  });
+  it('keeps the text response limit when deleting the prompt fails', async () => {
+    const info = lstatSync(process.execPath, { bigint: true });
+    const c = await connection({}, {}, 'a'.repeat(64), async () => ({ ...bubblewrapObservation('available'), status: 'available',
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } }));
+    const parserRefusals = "option '--max-turns <turns>' argument 'invalid' is invalid. must be a number\noption '--system-prompt-file <file>' argument missing";
+    const preflightReplies = ['9.1.0 (Claude Code)', fullHelp(), parserRefusals, parserRefusals,
+      JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })];
+    const replies = [...preflightReplies];
+    let stdoutBound = false;
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => {
+      const body = replies.shift();
+      return { schemaVersion: 1, requestId: input.requestId, started: true, reason: body === undefined ? 'output-limit' : 'exit',
+        exitCode: body === undefined ? null : 0, signal: null, stdoutBase64: Buffer.from(body ?? (stdoutBound ? '/fixture/private-stdout' : '')).toString('base64'),
+        stderrBase64: body === undefined && !stdoutBound ? Buffer.from('/fixture/private-stderr').toString('base64') : '',
+        stdoutTruncated: body === undefined && stdoutBound, stderrTruncated: body === undefined && !stdoutBound, durationMs: 1 };
+    });
+    const remove = files.rm;
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      if (args[0] === join(c.root, 'state', 'run', headless.systemPromptFile)) throw new Error('fixture prompt cleanup failure');
+      return remove(...args);
+    });
+    try {
+      await mkdir(join(c.root, 'state'), { mode: 0o700 });
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '2.0.0', executable: '' }), { mode: 0o600 });
+      await c.port.preflight(c.profile);
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect.soft(logins[0]).toMatchObject({ state: 'open', cliUpdated: null });
+      expect.soft(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
+      expect.soft(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
+      const recordPath = join(c.root, 'state', 'preflight.json');
+      const current = JSON.parse(await readFile(recordPath, 'utf8'));
+      for (const [minimum, prior] of [
+        ['9.0.1', { state: 'open', version: '2.0.0' }],
+        ['9.0.2', { ...current, schemaVersion: 1, updatedFrom: '2.0.0' }],
+        ['9.0.3', { ...current, schemaVersion: 2, updatedFrom: '2.0.0' }],
+      ] as const) {
+        await writeFile(recordPath, JSON.stringify(prior));
+        replies.push(...preflightReplies);
+        await c.port.preflight({ ...c.profile, adapter: { ...c.profile.adapter, definition: { ...c.profile.adapter.definition as object, minCliVersion: minimum } } });
+        expect.soft(JSON.parse(await readFile(recordPath, 'utf8'))).toMatchObject({ schemaVersion: 1, version: '9.1.0', updatedFrom: null });
+      }
+      for (const which of ['stderr', 'stdout']) {
+        stdoutBound = which === 'stdout';
+        const result = await c.port.send(await c.port.prepare(c.profile, binding, request()));
+        expect(result).toMatchObject({ kind: 'rejected' });
+        if ('kind' in result) {
+          const body = readHeadlessRejection(result.evidence);
+          expect(body).toMatchObject({ refusal: 'response-limit' });
+          expect(body).not.toHaveProperty('field');
+          expect(JSON.stringify(body)).not.toContain(`/fixture/private-${which}`);
+        }
+        await remove(join(c.root, 'state', 'run', headless.systemPromptFile));
+      }
+    } finally { cleanup.mockRestore(); runner.mockRestore(); }
+  });
+
+  it('preserves the sign-in command exit and the positive nonzero status when realm cleanup fails', async () => {
+    const c = await connection({ loginExit: 130 });
+    const info = lstatSync(process.execPath, { bigint: true });
+    const isolation = async () => ({ ...bubblewrapObservation('available'), status: 'available' as const,
+      launcher: { source: 'system' as const, path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } });
+    const openGateway = egressGateway.openNativeEgressGateway;
+    const gateway = vi.spyOn(egressGateway, 'openNativeEgressGateway').mockImplementation(async input => {
+      const opened = await openGateway(input);
+      return { ...opened, async close() { await opened.close(); throw new Error('fixture gateway cleanup failure'); } };
+    });
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 9, signal: null,
+      stdoutBase64: Buffer.from(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', configDirectory: c.configDir })).toString('base64'),
+      stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      const result = await runHeadlessLogin({ family: c.profile.protocol.family, stateDir: join(c.root, 'state'), configDir: c.configDir,
+        owned: true, executable: c.executable, sso: false, env: {}, now: Date.now, isolation });
+      expect(result).toMatchObject({ exit: 'cancelled', signedIn: true, statusIssue: { params: { check: 'login-status-positive-nonzero' } },
+        cleanupIssue: { params: { check: 'realm-gateway-close' } } });
+      expect(renderHeadlessLogin(result, 'en', 'fixture')).toContain('The sign-in command was interrupted.');
+      expect(renderHeadlessLogin(result, 'tr', 'fixture')).toContain('Giriş komutu kesildi.');
+    } finally { gateway.mockRestore(); runner.mockRestore(); }
+  });
+
+  it('Doctor shows a completed negative parser probe even when its scratch cleanup fails', async () => {
+    const info = lstatSync(process.execPath, { bigint: true });
+    const c = await connection({}, {}, 'a'.repeat(64), async () => ({ ...bubblewrapObservation('available'), status: 'available',
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } }));
+    const remove = files.rm;
+    const cleanup = vi.spyOn(files, 'rm').mockImplementation(async (...args) => {
+      if (typeof args[0] === 'string' && /\/probe-[^/]+$/u.test(args[0])) throw new Error('fixture probe cleanup failure');
+      return remove(...args);
+    });
+    const replies = ['9.1.0 (Claude Code)', fullHelp(), 'parser output without the required refusal'];
+    const openGateway = egressGateway.openNativeEgressGateway;
+    const closeFailed = vi.fn();
+    const gateway = vi.spyOn(egressGateway, 'openNativeEgressGateway').mockImplementation(async input => {
+      const opened = await openGateway(input);
+      return { ...opened, async close() {
+        await opened.close();
+        if (!replies.length) { closeFailed(); throw new Error('fixture realm gateway cleanup failure'); }
+      } };
+    });
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async input => ({
+      schemaVersion: 1, requestId: input.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+      stdoutBase64: Buffer.from(replies.shift() ?? '').toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      await expect.soft(c.port.preflight(c.profile)).rejects.toMatchObject({ params: { check: 'flags', reason: 'parser-unverified' } });
+      expect(cleanup.mock.calls.some(([path]) => typeof path === 'string' && /\/probe-[^/]+$/u.test(path))).toBe(true);
+      expect(closeFailed).toHaveBeenCalledOnce();
+      const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+      expect(doctor(logins, 'en')).toContain('parser');
+      expect(doctor(logins, 'tr')).toContain('ayrıştırıcı');
+    } finally { cleanup.mockRestore(); gateway.mockRestore(); runner.mockRestore(); }
+  });
   it('refuses typed before any spawn when no bubblewrap launcher is usable (preflight and connect)', async () => {
     const c = await connection({ steps: happy({}) }, {}, 'a'.repeat(64), unavailable);
     await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE', params: { check: 'launcher' } });
     await expect(prepareHeadlessConnection({ protocol: { family: c.profile.protocol.family, version: 'v1' }, minCliVersion: '9.0.0', stateDir: join(c.root, 'state'),
       executable: c.executable, configDir: c.configDir, env: {}, now: () => 1, isolation: unavailable })).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
     expect(await c.log()).toEqual([]);
-    // Doctor reads the retained update and names its executable without spawning or requiring an available realm.
-    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', updatedFrom: '1.0.0', version: '2.0.0' }));
-    expect((await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated).toEqual({ cli: 'fake-cli', from: '1.0.0', to: '2.0.0' });
+    // Doctor requires evidence for the preceding version even when the current executable matches.
+    const program = await resolveHeadlessExecutable(cleanupEntry, c.executable, process.getuid!());
+    const observed = { state: 'open', updatedFrom: '1.0.0', version: '2.0.0', executable: c.executable,
+      revision: headless.revision, size: program.size, mtimeMs: Math.trunc(program.mtimeMs) };
+    const update = async (record: object) => {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify(record));
+      return (await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId))[0]?.cliUpdated;
+    };
+    expect.soft(await update(observed)).toBeNull();
+    const sealed = { ...observed, schemaVersion: 2, revision: `${headless.revision}:${program.identity}` };
+    expect.soft(await update({ ...sealed, updatedFrom: 'not-a-version' })).toBeNull();
+    expect.soft(await update({ ...sealed, updatedFrom: observed.version })).toBeNull();
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ ...sealed, schemaVersion: 1 }));
+    const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    // Z17: the open channel is the assessment the record holds, not a current verification.
+    expect(doctor(logins, 'en')).toContain('channel open at the last recorded check (not verified now)');
+    expect(doctor(logins, 'tr')).toContain('kanal son kaydedilen denetimde açık (şimdi doğrulanmadı)');
+    expect(doctor(logins, 'en', 'work.cliUpdated')).toBeUndefined();
+    expect(doctor(logins, 'tr', 'work.cliUpdated')).toBeUndefined();
+    // A26: a sealed v2 record proves its current program only; no writer proves the predecessor, so it shows no update either.
+    expect(await update(sealed)).toBeNull();
     expect(await c.log()).toEqual([]);
   });
   it('closes the channel typed when the realm itself cannot start (a launcher that refuses), and never runs the CLI outside it', async () => {

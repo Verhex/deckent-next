@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { KnownSecretSnapshot, JsonRecordFile } from '#platform/index.js';
+import { DeckentError, headlessDiagnosticIdentifier, type KnownSecretSnapshot, type JsonRecordFile } from '#platform/index.js';
 import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type WorkerEvent } from '#domain/index.js';
 import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
@@ -86,7 +86,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
     let interruptCause: SandboxResult['interruptCause'];
     const stop = () => { interruptCause ??= sandboxInterruptCause(deadline.aborted ? 'deadline' : 'signal', signal?.reason); };
     combined.addEventListener('abort', stop, { once: true }); if (combined.aborted) stop();
-    let tools: ToolSessionPort | undefined, outcome: SandboxResult, diagnostic: typeof CODEX_TOOL_ITEM_RESERVATION | undefined;
+    let tools: ToolSessionPort | undefined, outcome: SandboxResult, diagnostic: typeof CODEX_TOOL_ITEM_RESERVATION | undefined, settledFailure: string | undefined, primaryFailure: string | undefined;
     try { work: {
       const ready = await inspectNativeCliWorker(this.resolved.binding, this.input.ports);
       if (ready.state !== 'ready') { outcome = this.unknown(ready.reason); break work; }
@@ -123,7 +123,14 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       // The last fence and lease check is immediately before the sole CLI spawn; the runtime receives no workspace path.
       await guard(); this.started = true;
       const result = await this.driver.run(this.bridge, combined);
+      primaryFailure = result.refusal ?? result.failureCode;
+      if (result.cleanupError) {
+        settledFailure = primaryFailure
+          ?? headlessDiagnosticIdentifier(result.cleanupError.code, result.cleanupError.params ?? {}) ?? 'NATIVE_WORKER_STOP_UNCONFIRMED';
+        outcome = this.unknown(settledFailure); break work;
+      }
       if (result.termination !== 'confirmed') { outcome = this.unknown('NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }
+      if (result.stopped && !this.verification) { outcome = this.unknown(primaryFailure ?? 'NATIVE_WORKER_TERMINATION_UNKNOWN'); break work; }
       if (result.refusal) {
         const turnOnly = result.refusal === 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' && result.text === CODEX_TOOL_ITEM_RESERVATION;
         if (!this.verification && !turnOnly) { outcome = this.unknown(result.refusal); break work; }
@@ -141,16 +148,20 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       if (Buffer.byteLength(stdout) > this.resolved.options.outputBytes) { outcome = this.unknown('NATIVE_WORKER_OUTPUT_LIMIT'); break work; }
       outcome = { handle: this.handle, result: { kind: 'exited', exitCode: result.status === 'completed' && !combined.aborted ? 0 : 1 },
         stdout, stderr: '', outputCompleteness: 'complete', interrupted: combined.aborted, ...(interruptCause ? { interruptCause } : {}) };
-    } } catch { outcome = this.unknown(combined.aborted ? 'NATIVE_WORKER_STOP_UNCONFIRMED' : 'NATIVE_CLI_WORKER_UNAVAILABLE'); }
+    } } catch (error) {
+      settledFailure = error instanceof DeckentError ? headlessDiagnosticIdentifier(error.code, error.params ?? {}) : undefined;
+      outcome = this.unknown(settledFailure ?? (combined.aborted ? 'NATIVE_WORKER_STOP_UNCONFIRMED' : 'NATIVE_CLI_WORKER_UNAVAILABLE'));
+    }
     finally {
       combined.removeEventListener('abort', stop);
       // Failed/unverified tool settlement cannot become a successful process result.
       const [closed, cancelled, disposed] = await Promise.allSettled([this.bridge?.close(), tools?.cancel(), this.driver?.close()]);
-      if ([closed, cancelled, disposed].some(result => result.status === 'rejected')) outcome = this.unknown('NATIVE_WORKER_STOP_UNCONFIRMED');
-      else if (cancelled.status === 'fulfilled') {
+      if (!settledFailure && [closed, cancelled, disposed].some(result => result.status === 'rejected'))
+        outcome = this.unknown(primaryFailure ?? 'NATIVE_WORKER_STOP_UNCONFIRMED');
+      else if (!settledFailure && cancelled.status === 'fulfilled') {
         const closure = cancelled.value;
         if (tools && (!closure || closure.turnId !== tools.session.turnId || closure.generation !== tools.session.generation
-          || closure.effects !== 'settled' || closure.pendingCallIds.length)) outcome = this.unknown('NATIVE_WORKER_EFFECTS_UNKNOWN');
+          || closure.effects !== 'settled' || closure.pendingCallIds.length)) outcome = this.unknown(primaryFailure ?? 'NATIVE_WORKER_EFFECTS_UNKNOWN');
       }
     }
     if (!diagnostic) return outcome;

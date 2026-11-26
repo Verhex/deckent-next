@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, DeckentError, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
 import * as adapters from '#adapters/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
@@ -631,7 +631,8 @@ it('G3 shows the local executable paths and verified version reason in the provi
   const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
   const failure = ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'version', reason: 'exit', exitCode: '91' } });
   ErrorRegistry.retainHeadlessPaths(failure, '/g3-fixture/bin/codex', '/g3-fixture/payload/codex');
-  const wrapped = ErrorRegistry.createError(failure.code, { cause: failure, params: { ...failure.params, connectPhase: 'before-profile-write' } });
+  const wrapped = new DeckentError(failure.code, failure.message, failure.suggestion, failure.docLink, failure.whatHappened, failure.why, failure.howToFix,
+    failure.category, { cause: failure }, failure.localize, { ...failure.params, connectPhase: 'before-profile-write' });
   for (const locale of ['en', 'tr'] as const) {
     const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [kind], probe: async () => {
       throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE');
@@ -639,7 +640,7 @@ it('G3 shows the local executable paths and verified version reason in the provi
     const view = await port.connect({ kind: kind.id, endpoint: null, key: null });
     expect(view.stored).toBe(false);
     const text = view.lines.map(row => row.text).join('\n');
-    expect(text).toContain(locale === 'en' ? 'version command exited with code 91' : 'sürüm komutu 91 koduyla çıktı');
+    expect(text).toContain(locale === 'en' ? 'version check reported exit code 91' : 'sürüm denetimi 91 çıkış kodunu bildirdi');
     expect(text).toContain(locale === 'en' ? 'Chosen file: /g3-fixture/bin/codex · Checked file: /g3-fixture/payload/codex'
       : 'Seçilen dosya: /g3-fixture/bin/codex · Denetlenen dosya: /g3-fixture/payload/codex');
     expect(JSON.stringify(wrapped)).not.toContain('/g3-fixture/');
@@ -690,10 +691,10 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const claude = { ...connectHost('ok').kinds[2]!, id: 'claude-cli-subscription', available: true, pull: 'available' as const, connectFamily: 'claude-code-stream-json', secretName: null };
   const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
   const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [claude], probe: async () => { throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE'); } },
-    connectModel: async () => { throw ErrorRegistry.createError('HEADLESS_LOGIN_REQUIRED'); } }, options, 'en', error => formatHumanError(error, { locale: 'en', noColor: true }));
+    connectModel: async () => { throw ErrorRegistry.createError('HEADLESS_LOGIN_REQUIRED', { params: { reason: 'status-unconfirmed' } }); } }, options, 'en', error => formatHumanError(error, { locale: 'en', noColor: true }));
   const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
   const text = outcome.lines.map(line => line.text).join('\n');
-  expect(text).toContain('deckent models login --connection <connection>'); expect(text).toContain('claude-cli-subscription or codex-cli-subscription'); expect(outcome.stored).toBe(false);
+  expect(text).toContain('The status check did not confirm an eligible subscription.'); expect(text).not.toContain('The chat turn failed.'); expect(outcome.stored).toBe(false);
   // PV 3: the /provider sign-in: the person check refuses before any dir or spawn; the person's run names the Brain's own dir, the CLI's own sign-in result,
   // and the connect carries only the dir and the consent the card gave (never MCP); a dir the person names goes as `cli.configDir`.
   const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
@@ -844,21 +845,59 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   const login = { ...codex, headlessLogin: true }, listed4 = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [login] },
     inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: chat }) as never, inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: codex.id,
       access: 'allowed', models: chat.map((row, index) => ({ modelId: row.nativeId, activation: { state: index < 3 ? 'active' : 'inactive', revision: 1 } })) }] }) as never }, options, 'en', errorText).inspect();
-  const label = listed4.kinds[0]!.label, unsealed = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en');
+  const label = listed4.kinds[0]!.label, unsealed = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
+    diagnostic: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'agent-readiness-verifier-unavailable' } }) }, 'en');
   expect(listed4.kinds[0]!.detail).toContain('3 model(s) connected');
   expect(listed4.notes.filter(note => note.startsWith(label))).toEqual([`${label} · 3 model(s) connected: ${unsealed}`, `${label} / c3: ${t('tui.model.state.off', {}, 'en')}`]);
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
   expect(none.kinds[0]!.detail).toBe('-');
   // PV 2a: without usable isolation the CLI subscription row is disabled with its reason before anything is chosen; its card names the typed cause and the rows usable here.
   const host = { ...secrets().host, connectModel: async () => { throw new Error('NOT_REACHED'); }, providerConnect: { ...connectHost('ok'), kinds: [{ ...codex, billing: 'subscription' as const, headlessLogin: true },
-    connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
+    connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher', reason: 'unverified' } }),
     loginDir: async () => ({ owned: '/x' }), login: async () => null } };
   const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
-  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.HEADLESS_ISOLATION_UNAVAILABLE', {}, 'en') }); expect(listed.kinds[0]!.detail).toBe("subscription: no API key, uses your plan's usage quota"); // BeUser r-rest 4: no dangling "· -"
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('error.headless.isolation.launcher-unverified', {}, 'en') }); expect(listed.kinds[0]!.detail).toBe("subscription: no API key, uses your plan's usage quota"); // BeUser r-rest 4: no dangling "· -"
   expect(listed.kinds[1]!.blocked).toBeNull();
   const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
   expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);
+  expect.soft(card.title).toBe(`${listed.kinds[0]!.label}: isolation could not be verified`);
+  const localize = (error: unknown) => (error as DeckentError).localize!('tr').message;
+  const turkish = providerPanelPort(root, 'scope', host, options, 'tr', localize), turkishView = await turkish.inspect();
+  const turkishCard = turkish.subscription!.refusal('codex-cli-subscription', []);
+  expect.soft(turkishCard.title).toBe(`${turkishView.kinds[0]!.label}: yalıtım doğrulanamadı`);
+  expect.soft(turkishCard.lines[0]!.text).toBe('Yalıtım başlatıcısı doğrulanamadı. Abonelik CLI’ı kapalı kalıyor.');
+  const unsupported = { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () =>
+    ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher', reason: 'platform' } }) } };
+  for (const [locale, statement] of [['en', 'cannot run on this computer'], ['tr', 'bu bilgisayarda çalışamaz']] as const) {
+    const port = providerPanelPort(root, 'scope', unsupported, options, locale, errorText), view = await port.inspect();
+    expect(port.subscription!.refusal('codex-cli-subscription', []).title).toBe(`${view.kinds[0]!.label} ${statement}`);
+  }
   expect((await providerPanelPort(root, 'scope', { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () => null } }, options, 'en', errorText).inspect()).kinds[0]!.blocked).toBeNull();
+});
+
+it('the sign-in panel preserves command start when saving its outcome fails', async () => {
+  const { root, options } = await project({});
+  const base = connectHost('ok'), id = 'codex-cli-subscription';
+  const codex = { ...base.kinds[1]!, id, labelKey: 'tui.provider.kind.codexCli' as const, headlessLogin: true, billing: 'subscription' as const };
+  for (const [locale, started, refused, unsaved] of [
+    ['en', 'sign-in command started', 'sign-in not started', 'deckent could not save the outcome.'],
+    ['tr', 'giriş komutu başladı', 'giriş başlatılmadı', 'deckent sonucu kaydedemedi.'],
+  ] as const) {
+    let commandReturned = true;
+    const providerConnect = { ...base, kinds: [codex], loginDir: async () => ({ owned: '/fixture/login' }),
+      login: async () => { throw commandReturned ? ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', {
+        params: { check: 'login-record-write', exit: 'failed' },
+      }) : ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); } };
+    const port = providerPanelPort(root, 'scope', { providerConnect, connectModel: async () => { throw new Error('connect not reached'); } },
+      options, locale, error => formatHumanError(error, { locale, noColor: true })).subscription!;
+    const postCommand = await port.login(id, null);
+    expect.soft(postCommand.title).toContain(started);
+    expect.soft(postCommand.title).not.toContain(refused);
+    expect.soft(postCommand.lines.map(line => line.text).join('\n')).toContain(unsaved);
+    expect(postCommand.signedIn).toBe(false);
+    commandReturned = false;
+    expect((await port.login(id, null)).title).toContain(refused);
+  }
 });
 
 it('K13: registry login methods reach the same typed login, Codex is visible and the SIWC beta stays hidden in EN/TR', async () => {
@@ -899,7 +938,7 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     state = undefined;
     // R2a: unknown stays selectable (the guarded first turn verifies it); only unavailable blocks.
     const unknown = await subscriptionModelView(plain, port, locale);
-    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
+    expect(unknown.choices[0]!.blocked).toBeNull(); expect(unknown.choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
     expect(unknown.choices[0]!.detail).not.toContain('OLD TEXT READY'); expect(unknown.choices[1]).toEqual(plain.choices[1]);
     expect((await port.inspect()).notes.join('\n')).toContain(unknown.choices[0]!.detail);
     state = { state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE' };
@@ -908,23 +947,33 @@ it('K13: text invocability never mints agent readiness; the model and provider s
     expect(unchecked.choices[0]!.detail).not.toContain(t('headless.agent.reason.NATIVE_AGENT_CLI_UNAVAILABLE', {}, locale)); expect(unchecked.choices[0]!.blocked).toBeNull();
     state = { state: 'unavailable', reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' };
     expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('headless.agent.reason.NATIVE_AGENT_PLUGIN_UNEXPECTED', {}, locale));
+    state = { ...state, diagnostic: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'agent-owner-mismatch' } }) } as NativeAgentReadiness;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.blocked).toContain(t('error.headless.agentOwnerMismatch', {}, locale));
     state = { state: 'ready', execution: { schemaVersion: 1, capability: 'NativeAgentExecution', executable: '/fixture/cli', cliVersion: '1.2.3',
       profileDigest: 'a'.repeat(64), flagSetDigest: 'b'.repeat(64), ownerUid: 1000 } };
     const ready = await subscriptionModelView(plain, port, locale);
     expect(ready.choices[0]!.blocked).toBeNull(); expect(ready.choices[0]!.detail).toBe(t('headless.agent.readiness.ready', {}, locale));
     expect(calls.at(-1)).toEqual({ scopeId: 'scope', surface: 'chat', references: [reference] });
+    const readyFacts = state;
+    state = { ...readyFacts, diagnostic: { message: CANARY } } as NativeAgentReadiness;
+    const malformed = await subscriptionModelView(plain, port, locale);
+    expect.soft(malformed.choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
+    expect.soft(malformed.choices[0]!.detail).not.toContain(CANARY);
+    state = { ...readyFacts, unrelated: true } as NativeAgentReadiness;
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
     // A later missing observation cannot retain an earlier ready projection: every view build reads again (no cross-build cache).
     state = undefined; const builds = calls.length;
-    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
+    expect((await subscriptionModelView(plain, port, locale)).choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
     expect(calls).toHaveLength(builds + 1);
     const absent = providerPanelPort(root, 'scope', { providerConnect: host.providerConnect }, options, locale, errorText);
-    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('headless.agent.unknown.sealed', {}, locale));
+    expect((await subscriptionModelView(plain, absent, locale)).choices[0]!.detail).toContain(t('error.headless.agentReadinessVerifierUnavailable', {}, locale));
   }
   // R3c: a login with several models gives one note (onboarding pushes notes to scrollback), not one per model.
   state = undefined; calls.length = 0;
   const two = await providerPanelPort(root, 'scope', { ...host, inspectInvocableModels: async () => ({ scopeId: 'scope', models: [{ reference, nativeId: 'fixture', availability: { invocable: true, reason: null } },
     { reference: { ...reference, modelId: 'fixture-2' }, nativeId: 'fixture-2', availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText).inspect();
-  expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' }, 'en')}`]);
+  const unverified = 'Agent readiness unknown: Tool readiness could not be verified here.';
+  expect(two.notes.filter(note => note.startsWith(two.kinds[0]!.label))).toEqual([`${two.kinds[0]!.label} · 2 model(s) connected: ${unverified}`]);
   expect(calls).toEqual([{ scopeId: 'scope', surface: 'chat', references: [reference, { ...reference, modelId: 'fixture-2' }] }]); // KG6 F5: one host read per view build
   // R8e: the production CLI host reads the seal a guarded turn wrote, so /provider says ready (without the host wiring it stayed "unknown").
   const sealedRoot = await mkdtemp(join(tmpdir(), 'deckent-r8e-')); roots.push(sealedRoot);
@@ -960,7 +1009,8 @@ it('K13: unavailable observation readers are bounded and never leak their error 
     const stalled = providerPanelPort(root, 'scope', { providerConnect, inspectSubscriptionReadiness: () => new Promise(() => {}) }, options, 'en', errorText);
     const result = stalled.subscriptionReadiness!.inspect('chat', reference);
     await vi.runAllTimersAsync();
-    expect(await result).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' });
+    expect(await result).toEqual({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
+      diagnostic: expect.objectContaining({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'agent-readiness-verifier-unavailable' } }) });
     expect(vi.getTimerCount()).toBe(0);
   } finally { vi.useRealTimers(); }
 });

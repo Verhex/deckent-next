@@ -7,12 +7,30 @@ import { join, resolve } from 'node:path';
 import * as adapters from '#adapters/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
+import { prepareNativeWorkerObservation } from '#capabilities/core/native-agent-execution/index.js';
+import { headlessDiagnostic, readHeadlessDiagnosticIdentifier } from '#platform/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { nativeAgentRealmAvailable, writeFakeAgentCli } from '../../fixtures/native-headless/agent.js';
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+
+it('keeps the current release refusal after a successful reread, and reports the last observation when no claim was obtained', async () => {
+  const read = vi.fn<Parameters<typeof prepareNativeWorkerObservation>[0]['read']>()
+    .mockImplementationOnce(async diagnose => { diagnose(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' })); return null; })
+    .mockResolvedValueOnce({});
+  const preflight = vi.fn();
+  const reason = await prepareNativeWorkerObservation({ read, preflight, claim: async () => ({ async release() {
+    throw new Error('fixture cleanup path');
+  } }) });
+  expect(readHeadlessDiagnosticIdentifier(reason!, 'en')).toBe('The worker preparation lock could not be released.');
+  expect(preflight).not.toHaveBeenCalled();
+  read.mockImplementationOnce(async diagnose => { diagnose(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-owner-mismatch' })); return null; });
+  const busy = await prepareNativeWorkerObservation({ read, preflight, claim: async () => null });
+  expect(readHeadlessDiagnosticIdentifier(busy!, 'en')).toContain('operating-system user');
+  expect(preflight).not.toHaveBeenCalled();
+});
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'k26-preparation-')); roots.push(root);
   const global = join(root, 'global'), configDir = join(global, 'headless', 'logins', 'fixture'), stateDir = join(global, 'headless', 'connections', 'fixture'), bin = join(root, 'bin');
@@ -69,6 +87,16 @@ it('K26: a preflight failure returns its typed wait without starting a model or 
     expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_LOGIN_REQUIRED');
     expect(preflight).toHaveBeenCalledTimes(1); expect(driver).not.toHaveBeenCalled();
     expect(await h.runtime.readiness.read(h.query)).toBeNull(); expect(h.f.posts).toBe(0);
+    preflight.mockRejectedValue(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'lock-directory-create' }));
+    const reason = await h.runtime.prepare!(h.profile);
+    expect(reason).toBe('HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE');
+    expect(readHeadlessDiagnosticIdentifier(reason!, 'en')).toBe('The sign-in lock directory could not be created.');
+    expect(readHeadlessDiagnosticIdentifier(reason!, 'tr')).toBe('Giriş kilidi dizini oluşturulamadı.');
+    preflight.mockRejectedValue(headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'version', reason: 'exit', exitCode: '17' }));
+    const exited = await h.runtime.prepare!(h.profile);
+    expect(readHeadlessDiagnosticIdentifier(exited!, 'en')).toContain('version check reported exit code 17');
+    expect(readHeadlessDiagnosticIdentifier(exited!, 'tr')).toContain('sürüm denetimi 17 çıkış kodunu bildirdi');
+    expect(readHeadlessDiagnosticIdentifier(exited!.replace(/17$/u, '/private/provider-output'), 'en')).toBe('The provider-program diagnostic could not be verified.');
     // An unmapped code, even an inherited property name, is the environment refusal.
     preflight.mockRejectedValue({ code: 'constructor' }); expect(await h.runtime.prepare!(h.profile)).toBe('NATIVE_AGENT_ENVIRONMENT_REFUSED');
   } finally { await h.f.close(); }

@@ -8,5 +8,5 @@ export async function inspectNativeCliWorker(binding: NativeCliWorkerBinding, po
   const entry = nativeCliAgent(binding.protocolFamily);
   const { executable, ownerUid } = binding.definition;
   return nativeWorkerReadiness(binding, entry ? nativeAgentFlagSetDigest(entry) : undefined,
-    () => entry ? resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable, () => null) : Promise.resolve(null), ports);
+    () => entry ? resolveHeadlessExecutable(entry, executable, ownerUid).then(program => program.executable) : Promise.resolve(null), ports);
 }

@@ -149,10 +149,71 @@ describe('terminal chat turn is one governed model invocation', () => {
     const empty = ports(async () => reply('   '));
     await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, empty.value))
       .rejects.toMatchObject({ code: 'TERMINAL_CHAT_EMPTY' });
+    const cancelled = ports(async () => ({ ...reply(''), receipt: { outcome: { state: 'not-sent', reason: 'cancelled-before-permission' } }, response: null }) as ModelInvocationResult);
+    await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, cancelled.value))
+      .rejects.toMatchObject({ code: 'TERMINAL_CHAT_CANCELLED' });
+    expect(cancelled.cancelled).toEqual([]);
     const failing = ports(async () => { throw new DeckentError('MODEL_INVOCATION_UNAVAILABLE', 'down'); });
     await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, failing.value))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });
     expect(failing.invoked).toHaveLength(1); expect(failing.cancelled).toEqual([]);
+  });
+
+  it('shows the retained refusal after send permission, even if cancellation was requested', async () => {
+    const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 64 } } });
+    const adapter = { id: 'native-cli-headless', version: 1 };
+    const cases = [
+      { body: { code: 'HEADLESS_PREFLIGHT_FAILED' }, state: 'unknown', reason: 'interrupted',
+        en: 'The record contains the error code HEADLESS_PREFLIGHT_FAILED. The specific cause could not be determined.',
+        tr: 'Kayıtta HEADLESS_PREFLIGHT_FAILED hata kodu var. Hatanın kesin nedeni belirlenemedi.' },
+      { body: { schemaVersion: 1, refusal: 'response-limit' }, state: 'rejected', reason: 'response-limit',
+        en: 'An output limit was reached while processing the subscription CLI call.', tr: "Abonelik CLI çağrısı işlenirken bir çıktı sınırına ulaşıldı." },
+      { body: { schemaVersion: 1, refusal: 'guard', field: '/private/fixture-guard' }, state: 'rejected', reason: 'invalid-response',
+        en: 'A safety check refused the subscription CLI result.', tr: "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti." },
+      { body: { schemaVersion: 1, refusal: 'model-mismatch', field: 'modelUsage' }, state: 'rejected', reason: 'model-mismatch',
+        en: 'The subscription CLI did not provide a usable response.', tr: "Abonelik CLI'ı kullanılabilir bir yanıt vermedi." },
+      { body: { schemaVersion: 1, refusal: 'model-mismatch', field: 'init.model', subtype: 'model-reported' }, state: 'rejected', reason: 'model-mismatch',
+        en: 'The subscription CLI reported a different model from the one requested.', tr: "Abonelik CLI'ı istenenden farklı bir model bildirdi." },
+      { body: { schemaVersion: 1, refusal: 'guard', field: 'agent-surface:rate-limit-status', subtype: '/private/fixture-status' }, state: 'rejected', reason: 'invalid-response',
+        en: 'The subscription CLI did not report a recognized quota status.', tr: "Abonelik CLI'ı tanınan bir kota durumu bildirmedi." },
+      { body: { schemaVersion: 1, refusal: 'resource-limit', field: 'cpu-time' }, state: 'rejected', reason: 'response-limit',
+        en: 'The isolated process returned a status reserved for the CPU-time limit.', tr: 'Yalıtılmış süreç, CPU süresi sınırına ayrılan çıkış kodunu döndürdü.' },
+      { body: { schemaVersion: 4, refusal: 'process-exit', exitCode: 23, signal: null, stderrSummary: '/private/fixture-stderr' }, state: 'unknown', reason: 'interrupted',
+        en: 'The launched isolation command exited with code 23.', tr: 'Başlatılan yalıtım komutu 23 koduyla sonlandı.' },
+      { body: { schemaVersion: 4, refusal: 'process-exit', exitCode: null, signal: 'fixture-secret', stderrSummary: '/private/fixture-stderr' }, state: 'unknown', reason: 'interrupted',
+        en: 'A signal was observed for the launched isolation command. The invocation outcome is unknown.', tr: 'Başlatılan yalıtım komutunda bir sinyal gözlendi. Çağrının sonucu belirsiz.' },
+      { body: { schemaVersion: 1, refusal: 'login-required' }, state: 'rejected', reason: 'http-status',
+        en: 'The subscription CLI reported that sign-in is required.', tr: 'Abonelik CLI\'ı oturum açılması gerektiğini bildirdi.' },
+      { body: { schemaVersion: 1, refusal: 'invalid-output', subtype: '/private/fixture-output' }, state: 'rejected', reason: 'invalid-response',
+        en: 'The subscription CLI did not provide a usable response.', tr: 'Abonelik CLI\'ı kullanılabilir bir yanıt vermedi.' },
+      { body: { schemaVersion: 1, refusal: 'quota' }, state: 'rejected', reason: 'http-status',
+        en: 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.',
+        tr: 'Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.' },
+      { body: { schemaVersion: 3, refusal: 'service-unavailable', status: 503 }, state: 'rejected', reason: 'http-status',
+        en: 'The plan is temporarily unavailable. Try later.', tr: 'Plan geçici olarak kullanılamıyor. Sonra deneyin.' },
+      { body: { schemaVersion: 2, refusal: 'plan-unavailable' }, state: 'rejected', reason: 'http-status',
+        en: 'This ChatGPT plan cannot be used here. Choose another connection or manage your plan.',
+        tr: 'Bu ChatGPT planı burada kullanılamıyor. Başka bir bağlantı seçin veya planınızı yönetin.' },
+    ] as const;
+    const controller = new AbortController();
+    controller.abort();
+    for (const { body, state, reason, en, tr } of cases) {
+      const result = { ...reply(''), response: null, receipt: { claim: { invocationId: 'invocation' }, profile: { adapter },
+        outcome: { state, evidence: { adapter, reason } } } } as unknown as ModelInvocationResult;
+      const p = ports(async () => result);
+      const inspect = async (_root: string, query: unknown) => {
+        expect(query).toEqual({ schemaVersion: 2, scopeId: 'team-a', invocationId: 'invocation', reference, includeResponseContent: true });
+        return { responseContent: { kind: 'response-body' as const, schemaVersion: 1 as const, descriptor: {} as never,
+          data: Buffer.from(JSON.stringify(body)).toString('base64') } };
+      };
+      const failure = completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 'team-a', messages: [{ role: 'user', content: 'hi' }],
+        options: f.options, signal: controller.signal }, { ...p.value, inspect });
+      await expect(failure).rejects.toBeInstanceOf(DeckentError);
+      const error = await failure.catch((error: DeckentError) => error);
+      expect.soft((error as DeckentError).localize?.('en').message).toBe(en);
+      expect.soft((error as DeckentError).localize?.('tr').message).toBe(tr);
+      expect(p.cancelled).toEqual([]);
+    }
   });
 
   it('extracts trimmed assistant content and returns null for non-chat shapes', () => {

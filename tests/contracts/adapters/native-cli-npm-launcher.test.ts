@@ -1,16 +1,19 @@
 import { fstatSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, sep } from 'node:path';
+import * as files from 'node:fs/promises';
+import { delimiter, dirname, join, relative, sep } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, resolveHeadlessExecutable, runHeadlessLogin,
+import { createNativeCliHeadlessPort, headlessPreflight, nativeCliHeadless, prepareHeadlessConnection, readHeadlessLogins, readHeadlessSealedVersion, resolveHeadlessExecutable, runHeadlessIsolated, runHeadlessLogin,
   type HeadlessIsolation } from '#adapters/core/native-cli-headless/index.js';
 import * as processRunner from '#adapters/core/process-runner/index.js';
 import { ErrorRegistry, reportFatal, type DeckentError } from '#platform/index.js';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
-import { CODEX_FAMILY, codexAnswer, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
+import { CODEX_FAMILY, codexAnswer, codexHelp, fakeCodexNpm, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { FAMILY } from '../../fixtures/native-headless/stream.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
 
 afterEach(cleanupConnections);
 const realm = await measureTestShellHost();
@@ -22,6 +25,17 @@ async function fixture(scenario: Partial<FakeCodexScenario> = {}) {
   const read = async () => (await readFile(logPath, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)
     .map(line => JSON.parse(line) as { mode: string; program: string });
   return { ...paths, definition, profile: c.profile, logPath, read, stateDir: definition.stateDir };
+}
+
+async function fixtureIsolation(beforeSeal?: (seal: number) => Promise<void>): Promise<HeadlessIsolation> {
+  const launcher = await lstat(process.execPath, { bigint: true });
+  let seals = 0;
+  return async () => {
+    await beforeSeal?.(++seals);
+    return { status: 'available', rejected: [], restriction: null, detail: null,
+      launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
+        identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') } };
+  };
 }
 
 describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 'linux' || process.arch !== 'x64')('G3 npm CLI identity in the Linux realm', () => {
@@ -130,8 +144,8 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
   });
 
   it.each([
-    [{ versionExit: 204 }, { reason: 'exit', exitCode: '204' }, 'version command exited with code 204', 'sürüm komutu 204 koduyla çıktı'],
-    [{ version: 'raw-version-canary' }, { reason: 'unreadable' }, 'version line could not be read', 'sürüm satırı okunamadı'],
+    [{ versionExit: 204 }, { reason: 'exit', exitCode: '204' }, 'version check reported exit code 204', 'sürüm denetimi 204 çıkış kodunu bildirdi'],
+    [{ version: 'raw-version-canary' }, { reason: 'unreadable' }, 'version check did not yield a readable version', 'sürüm denetimi okunabilir bir sürüm üretmedi'],
     [{ version: 'codex-cli 0.100.0' }, { reason: 'too-old', version: '0.100.0', minimum: '0.159.2' }, 'needs 0.159.2 or later. Update', '0.159.2 veya daha yeni bir sürüm gerektiriyor. CLI’ı güncelleyip'],
   ] as const)('diagnoses the version command for %j without a path or raw output in shared data', async (scenario, params, en, tr) => {
     const f = await fixture({ ...scenario, versionStderr: 'raw-stderr-canary account@example.invalid' });
@@ -153,11 +167,21 @@ describe.skipIf(realm.bubblewrap.status !== 'available' || process.platform !== 
     expect(await f.read()).toMatchObject([{ mode: 'version', program: f.payload }]);
   });
 
-  it('keeps a signal separate from a normal nonzero version exit', async () => {
+  it('distinguishes the shared signal diagnostic from a signal observed by the runner', async () => {
     const f = await fixture({ versionSignal: 'SIGTERM' });
-    await expect(headlessPreflight(entry, f.definition, Date.now, testIsolation)).rejects.toMatchObject({
-      code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'signal' },
-    });
+    const reported = await headlessPreflight(entry, f.definition, Date.now, testIsolation).catch((error: unknown) => error) as DeckentError;
+    expect(reported).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'relay-signal-diagnostic' } });
+    expect(reported.localize?.('en').message).toBe('The version check exited with a signal diagnostic. The channel stays closed.');
+    expect(reported.localize?.('tr').message).toBe('Sürüm denetimi bir sinyal tanısıyla sonlandı. Kanal kapalı kalır.');
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => ({
+      schemaVersion: 1, requestId: command.requestId, started: true, reason: 'signal', exitCode: null, signal: 'SIGTERM',
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1,
+    }));
+    try {
+      await expect(headlessPreflight(entry, f.definition, Date.now, testIsolation)).rejects.toMatchObject({
+        code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'signal' },
+      });
+    } finally { runner.mockRestore(); }
   });
 
   it('keeps interactive sign-in on the selected launcher and checks status with the isolated native file', async () => {
@@ -242,6 +266,444 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
   };
   const classify = (executable: string) => resolveHeadlessExecutable(entry, executable, process.getuid!());
 
+  it('keeps the manifest reason and local entry when either recheck cannot verify the npm program', async () => {
+    for (const stage of ['before-bind', 'after-auth-status'] as const) {
+      const f = await fixture(), manifestPath = join(f.platformRoot, 'package.json');
+      const isolation = await fixtureIsolation(async seal => {
+        if (stage === 'before-bind' && seal === 2) await chmod(manifestPath, 0o664);
+      });
+      const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => {
+        if (stage === 'before-bind') throw new Error('Unexpected spawn after a refused bind');
+        const auth = command.args.at(-1) === 'status';
+        if (auth) await chmod(manifestPath, 0o664);
+        const stdout = command.args.at(-1) === '--version' ? 'codex-cli 9.1.0' : codexHelp();
+        return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+          stdoutBase64: Buffer.from(stdout).toString('base64'), stderrBase64: auth ? Buffer.from('Logged in using ChatGPT').toString('base64') : '',
+          stdoutTruncated: false, stderrTruncated: false, durationMs: 0 };
+      });
+      try {
+        const error = await headlessPreflight(entry, f.definition, Date.now, isolation).catch((failure: unknown) => failure) as DeckentError;
+        const params = { check: 'npm-payload-unverified', reason: 'group-or-other-writable', recheck: 1 };
+        expect.soft(error, stage).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+        expect.soft(error.localize?.('en').message).toContain('The program could not be checked again. The entry is writable by the group or by other users.');
+        expect.soft(error.localize?.('tr').message).toContain('Program yeniden denetlenemedi. Bu dosya veya dizine grup veya diğer kullanıcılar yazabilir.');
+        expect.soft(error.localize?.('en').message).not.toContain('changed');
+        expect.soft(error.localize?.('tr').message).not.toContain('değişti');
+        for (const locale of ['en', 'tr'] as const) {
+          expect.soft(ErrorRegistry.localHeadlessPathDetail(error, locale, f.root)).toContain(`~/${relative(f.root, manifestPath)}`);
+        }
+        let shared = '';
+        await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+        expect.soft(JSON.parse(shared)).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+        expect.soft(shared + JSON.stringify(error)).not.toContain(f.root);
+        expect(runner).toHaveBeenCalledTimes(stage === 'before-bind' ? 0 : 3);
+      } finally { runner.mockRestore(); }
+    }
+  });
+
+  it('reports an empty PATH search for a new connection in both languages without a local path', async () => {
+    const f = await fixture(), bin = join(f.root, 'empty-bin');
+    await mkdir(bin);
+    const error = await prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+      ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: { PATH: bin }, now: Date.now, isolation: await fixtureIsolation() })
+      .catch((failure: unknown) => failure) as DeckentError;
+    expect.soft(error).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE', params: { check: 'path-search-empty' } });
+    for (const [locale, message] of [
+      ['en', `The provider's program was not found in the PATH directories checked. The search covers up to the first ${entry.headless.connect.pathSearchDirectories} absolute directories.`],
+      ['tr', `Sağlayıcının programı denetlenen PATH dizinlerinde bulunamadı. Arama en fazla ilk ${entry.headless.connect.pathSearchDirectories} mutlak dizini kapsar.`],
+    ] as const) {
+      expect.soft(error.localize?.(locale).message).toBe(message);
+      expect(ErrorRegistry.localHeadlessPathDetail(error, locale)).toBeUndefined();
+    }
+    let shared = '';
+    await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+    expect(shared + JSON.stringify(error)).not.toContain(bin);
+    expect(await f.read()).toEqual([]);
+  });
+
+  it('reports a PATH search cut between directories without claiming the program was absent', async () => {
+    const f = await fixture(), bin = join(f.root, 'empty-bin'), controller = new AbortController();
+    const first = join(bin, entry.command.executable), second = join(dirname(f.chosen), entry.command.executable);
+    await mkdir(bin);
+    const stat = files.stat;
+    const lookup = vi.spyOn(files, 'stat').mockImplementation(async (...args: Parameters<typeof stat>) => {
+      if (args[0] === first) controller.abort();
+      return stat(...args);
+    });
+    try {
+      const error = await prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+        ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: { PATH: [bin, dirname(f.chosen)].join(delimiter) },
+        now: Date.now, isolation: await fixtureIsolation(), signal: controller.signal }).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.params).toEqual({ check: 'path-search-incomplete', bound: entry.headless.connect.pathSearchDirectories });
+      expect.soft(error.localize?.('en').message).toBe(`The PATH search for the provider's program could not be completed. The search covers up to the first ${entry.headless.connect.pathSearchDirectories} absolute directories.`);
+      expect.soft(error.localize?.('tr').message).toBe(`Sağlayıcının programı için PATH araması tamamlanamadı. Arama en fazla ilk ${entry.headless.connect.pathSearchDirectories} mutlak dizini kapsar.`);
+      expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en')).toBeUndefined();
+      expect.soft(JSON.stringify(error)).not.toContain(bin);
+      expect(lookup.mock.calls.some(([path]) => path === first)).toBe(true);
+      expect(lookup.mock.calls.some(([path]) => path === second)).toBe(false);
+    } finally { lookup.mockRestore(); }
+  });
+
+  it('distinguishes an unreadable PATH candidate from completed absence and keeps looking for a later candidate', async () => {
+    const f = await fixture(), bin = join(f.root, 'unreadable-bin');
+    const executable = entry.command.executable, candidate = join(bin, executable), stat = files.stat;
+    await mkdir(bin);
+    const lookup = vi.spyOn(files, 'stat').mockImplementation(async (...args: Parameters<typeof stat>) => {
+      if (args[0] === candidate) throw Object.assign(new Error('candidate lookup failed'), { code: 'EIO' });
+      return stat(...args);
+    });
+    const prepare = async (path: string, configDir?: string) => prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+      ownedConfigDir: f.definition.configDir, configDir, stateDir: f.stateDir, env: { PATH: path }, now: Date.now, isolation: await fixtureIsolation() });
+    try {
+      const error = await prepare(bin).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.localize?.('en').message).toContain('A candidate on PATH could not be checked.');
+      expect.soft(error.localize?.('tr').message).toContain('PATH üzerindeki bir aday denetlenemedi.');
+      expect.soft(error.localize?.('en').message).not.toContain('was not found');
+      expect.soft(error.localize?.('tr').message).not.toContain('bulunamadı');
+      expect(JSON.stringify(error)).not.toContain(candidate);
+      await expect(prepare([bin, dirname(f.chosen)].join(delimiter), 'relative-directory')).rejects.toMatchObject({
+        params: { check: 'config-dir', reason: 'relative-path' },
+      });
+    } finally { lookup.mockRestore(); }
+    const absent = await prepare(bin).catch((failure: unknown) => failure) as DeckentError;
+    expect(absent.localize?.('en').message).toContain('was not found in the PATH directories checked');
+    expect(absent.localize?.('tr').message).toContain('denetlenen PATH dizinlerinde');
+    await writeFile(candidate, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const access = files.access;
+    const execute = vi.spyOn(files, 'access').mockImplementation(async (...args) => {
+      if (args[0] === candidate) throw Object.assign(new Error('candidate disappeared after stat'), { code: 'ENOENT' });
+      return access(...args);
+    });
+    try {
+      const error = await prepare(bin).catch((failure: unknown) => failure) as DeckentError;
+      expect(error.localize?.('en').message).toContain('A regular file was found on PATH, but its execute access could not be verified.');
+      expect(error.localize?.('tr').message).toContain('PATH üzerinde normal bir dosya bulundu ancak çalıştırma erişimi doğrulanamadı.');
+      expect(JSON.stringify(error)).not.toContain(candidate);
+      await expect(prepare([bin, dirname(f.chosen)].join(delimiter), 'relative-directory')).rejects.toMatchObject({
+        params: { check: 'config-dir', reason: 'relative-path' },
+      });
+    } finally { execute.mockRestore(); }
+  });
+
+  it.each([
+    ["bwrap: Can't find source path /proc/self/fd/3: No such file or directory", 'executable-bind-unverified',
+      'The process exited with a bind-source diagnostic.', 'Süreç, bağlama kaynağına ilişkin bir tanıyla sonlandı.'],
+    ['bwrap: Race condition binding dirfd', 'executable-changed',
+      'The process exited with a bind-race diagnostic.', 'Süreç, bağlama yarışı tanısıyla sonlandı.'],
+  ])('reports the bind result %s using its own evidence', async (stderr, check, en, tr) => {
+    const f = await fixture();
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => ({
+      schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 1, signal: null,
+      stdoutBase64: '', stderrBase64: Buffer.from(stderr).toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 0,
+    }));
+    try {
+      const error = await headlessPreflight(entry, f.definition, Date.now, await fixtureIsolation()).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check } });
+      expect.soft(error.localize?.('en').message).toContain(en);
+      expect.soft(error.localize?.('tr').message).toContain(tr);
+      expect.soft(error.localize?.('en').message).not.toContain('before it could start');
+      expect.soft(error.localize?.('tr').message).not.toContain('başlatılmadan önce');
+      expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', f.root)).toContain(relative(f.root, f.payload));
+      expect(JSON.stringify(error)).not.toContain(f.root);
+    } finally { runner.mockRestore(); }
+  });
+
+  it.each([
+    [true, { check: 'executable-changed' }],
+    [false, { check: 'executable-recheck', reason: 'verification-unavailable' }],
+  ])('uses the available identity comparison on fd stat failure (difference: %s)', async (differs, params) => {
+    const f = await fixture(), open = files.open, lstatFixture = files.lstat;
+    let pinned = false;
+    const pin = vi.spyOn(files, 'open').mockImplementation(async (...args) => {
+      const file = await open(...args);
+      if (args[0] === f.payload) {
+        pinned = true;
+        vi.spyOn(file, 'stat').mockRejectedValueOnce(Object.assign(new Error('fixture fd stat failure'), { code: 'EIO' }));
+      }
+      return file;
+    });
+    const identity = vi.spyOn(files, 'lstat').mockImplementation(async (...args: Parameters<typeof lstatFixture>) => {
+      const info = await lstatFixture(...args);
+      if (args[0] === f.payload && pinned && differs) Object.assign(info, { ino: BigInt(info.ino) + 1n });
+      return info;
+    });
+    const runner = vi.spyOn(processRunner, 'runNodeProcess');
+    try {
+      await expect(headlessPreflight(entry, f.definition, Date.now, await fixtureIsolation())).rejects.toMatchObject({
+        code: 'HEADLESS_PREFLIGHT_FAILED', params,
+      });
+      expect(pinned).toBe(true);
+      expect(runner).not.toHaveBeenCalled();
+    } finally { pin.mockRestore(); identity.mockRestore(); runner.mockRestore(); }
+  });
+
+  it('distinguishes an unsuccessful read of the recorded launcher from its removal', async () => {
+    const f = await fixture(), realpath = files.realpath;
+    const lookup = vi.spyOn(files, 'realpath').mockImplementation(async (...args: Parameters<typeof realpath>) => {
+      if (args[0] === f.chosen) throw Object.assign(new Error('fixture lookup failure'), { code: 'EIO' });
+      return realpath(...args);
+    });
+    try {
+      const error = await classify(f.chosen).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.params).toEqual({ check: 'recorded-path-unverified' });
+      expect.soft(error.localize?.('en').message).toBe('The subscription CLI could not be verified at its recorded path.');
+      expect.soft(error.localize?.('tr').message).toBe('Abonelik CLI’ı kayıtlı yolunda doğrulanamadı.');
+      expect(JSON.stringify(error)).not.toContain(f.root);
+    } finally { lookup.mockRestore(); }
+  });
+
+  it('uses the selection diagnosis for an empty explicit path', async () => {
+    const f = await fixture();
+    await expect(prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+      executable: '', ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: {}, now: Date.now, isolation: await fixtureIsolation() }))
+      .rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'selected-file', reason: 'relative-path' } });
+  });
+
+  it('distinguishes a PATH candidate that could not be resolved from a user selection', async () => {
+    const f = await fixture(), realpath = files.realpath;
+    const lookup = vi.spyOn(files, 'realpath').mockImplementation(async (...args: Parameters<typeof realpath>) => {
+      if (args[0] === f.chosen) throw Object.assign(new Error('fixture lookup failure'), { code: 'EIO' });
+      return realpath(...args);
+    });
+    try {
+      const error = await prepareHeadlessConnection({ protocol: { family, version: 'v1' }, minCliVersion: f.definition.minCliVersion,
+        ownedConfigDir: f.definition.configDir, stateDir: f.stateDir, env: { PATH: dirname(f.chosen) }, now: Date.now, isolation: await fixtureIsolation() })
+        .catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.params).toEqual({ check: 'path-candidate-unverified', reason: 'unavailable' });
+      expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', dirname(f.chosen))).toContain('~/codex');
+      expect(JSON.stringify(error)).not.toContain(f.root);
+    } finally { lookup.mockRestore(); }
+  });
+
+  it('describes an observed zero link count without claiming a comparison', async () => {
+    const f = await fixture(), lstatFixture = files.lstat;
+    const links = vi.spyOn(files, 'lstat').mockImplementation(async (...args: Parameters<typeof lstatFixture>) => {
+      const info = await lstatFixture(...args);
+      if (args[0] === f.payload) Object.assign(info, { nlink: 0n });
+      return info;
+    });
+    try {
+      await expect(classify(f.chosen)).rejects.toMatchObject({ params: { check: 'npm-payload-unverified', reason: 'no-hard-links' } });
+    } finally { links.mockRestore(); }
+  });
+
+  it('reports a manifest parse failure separately from a registered-field mismatch', async () => {
+    const f = await fixture(), path = join(f.platformRoot, 'package.json');
+    await writeFile(path, '{');
+    await expect(classify(f.chosen)).rejects.toMatchObject({ params: { check: 'npm-payload-unverified', reason: 'manifest-invalid' } });
+  });
+
+  it('reports an incomplete manifest content read after a successful open', async () => {
+    const f = await fixture(), path = join(f.platformRoot, 'package.json'), open = files.open;
+    const opened = vi.spyOn(files, 'open').mockImplementation(async (...args) => {
+      const file = await open(...args);
+      if (args[0] === path) vi.spyOn(file, 'read').mockRejectedValueOnce(Object.assign(new Error('fixture read failure'), { code: 'EIO' }));
+      return file;
+    });
+    try {
+      await expect(classify(f.chosen)).rejects.toMatchObject({ params: { check: 'npm-payload-unverified', reason: 'manifest-unreadable' } });
+    } finally { opened.mockRestore(); }
+  });
+
+  it('reports when manifest and native checks gave no proof for a package selection', async () => {
+    const f = await fixture(), executable = join(f.root, 'other-tool');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    await unlink(join(f.root, 'package.json'));
+    const error = await classify(executable).catch((failure: unknown) => failure) as DeckentError;
+    expect.soft(error.params).toEqual({ check: 'npm-layout-unknown', reason: 'manifest-exclusion-unverified', native: 'native-read-incomplete' });
+    expect.soft(error.localize?.('en').message).toContain('The package launcher declarations could not be fully checked.');
+    expect.soft(error.localize?.('tr').message).toContain('Paketin başlatıcı bildirimleri tam olarak denetlenemedi.');
+    expect(JSON.stringify(error)).not.toContain(f.root);
+  });
+
+  it('preserves a manifest identity difference when native proof also fails', async () => {
+    const f = await fixture(), executable = join(f.root, 'other-tool'), manifestPath = join(f.root, 'package.json'), lstatFixture = files.lstat;
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const lookup = vi.spyOn(files, 'lstat').mockImplementation(async (...args: Parameters<typeof lstatFixture>) => {
+      const info = await lstatFixture(...args);
+      if (String(args[0]).startsWith('/proc/self/fd/') && String(args[0]).endsWith('/package.json')) Object.assign(info, { ino: BigInt(info.ino) + 1n });
+      return info;
+    });
+    try {
+      const error = await classify(executable).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.params).toEqual({ check: 'npm-layout-unknown', reason: 'manifest-exclusion-changed', native: 'native-read-incomplete' });
+      expect.soft(JSON.stringify(error)).not.toContain(manifestPath);
+    } finally { lookup.mockRestore(); }
+  });
+
+  it('keeps an observed manifest descriptor difference distinct from a failed descriptor stat', async () => {
+    const f = await fixture(), executable = join(f.root, 'other-tool'), open = files.open;
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    for (const [varied, closeFails] of [[true, false], [false, false], [true, true]] as const) {
+      const closeError = vi.fn(() => { throw Object.assign(new Error('fixture package descriptor close failed'), { code: 'EIO' }); });
+      const lookup = vi.spyOn(files, 'open').mockImplementation(async (...args) => {
+        const file = await open(...args);
+        if (String(args[0]).startsWith('/proc/self/fd/') && String(args[0]).endsWith('/package.json')) {
+          const stat = file.stat.bind(file);
+          let checks = 0;
+          vi.spyOn(file, 'stat').mockImplementation((async (...options: Parameters<typeof file.stat>) => {
+            if (++checks === 2 && !varied) throw Object.assign(new Error('fixture descriptor stat failed'), { code: 'EIO' });
+            const info = await stat(...options);
+            if (checks === 2) Object.assign(info, { ino: BigInt(info.ino) + 1n });
+            return info;
+          }) as typeof file.stat);
+        }
+        if (closeFails && args[0] === f.root) {
+          const close = file.close.bind(file);
+          vi.spyOn(file, 'close').mockImplementation(async () => { await close(); closeError(); });
+        }
+        return file;
+      });
+      try {
+        const error = await classify(executable).catch((failure: unknown) => failure) as DeckentError;
+        expect.soft(error.localize?.('en').message).toContain(varied ? 'The package directory or manifest changed during the launcher check.'
+          : 'The package launcher declarations could not be fully checked.');
+        expect.soft(error.localize?.('tr').message).toContain(varied ? 'Başlatıcı denetimi sırasında paket dizini veya bildirim dosyası değişti.'
+          : 'Paketin başlatıcı bildirimleri tam olarak denetlenemedi.');
+        expect.soft(error.localize?.('en').message).toContain('The required bytes for the native program check could not be read completely.');
+        expect.soft(error.localize?.('tr').message).toContain('Yerel program denetimi için gereken baytların tamamı okunamadı.');
+        expect(JSON.stringify(error)).not.toContain(f.root);
+        if (closeFails) expect(closeError).toHaveBeenCalledOnce();
+      } finally { lookup.mockRestore(); }
+    }
+  });
+
+  it('preserves a native file identity difference observed after manifest exclusion failed', async () => {
+    const f = await fixture(), executable = join(f.root, 'other-tool'), open = files.open;
+    await writeFile(executable, elfProgram(), { mode: 0o700 });
+    await unlink(join(f.root, 'package.json'));
+    const opened = vi.spyOn(files, 'open').mockImplementation(async (...args) => {
+      const file = await open(...args);
+      if (args[0] === executable) {
+        const stat = file.stat.bind(file);
+        vi.spyOn(file, 'stat').mockImplementationOnce(async () => {
+          const info = await stat({ bigint: true });
+          return Object.assign(info, { ino: info.ino + 1n });
+        });
+      }
+      return file;
+    });
+    try {
+      await expect(classify(executable)).rejects.toMatchObject({
+        params: { check: 'npm-layout-unknown', reason: 'manifest-exclusion-unverified', native: 'native-file-changed' },
+      });
+    } finally { opened.mockRestore(); }
+  });
+
+  it('identifies a bind target mismatch as a difference between paths', async () => {
+    const f = await fixture(), program = await classify(f.chosen);
+    await expect(runHeadlessIsolated(entry, await fixtureIsolation(), { executable: f.chosen, program, args: [], env: {}, stateDir: f.stateDir,
+      runDir: join(f.stateDir, 'run'), configDir: f.definition.configDir, now: Date.now }, { timeoutMs: 100, outputBytes: 512 }))
+      .rejects.toMatchObject({ params: { check: 'executable-bind-target-mismatch' } });
+  });
+
+  it('describes a realm directory that overlaps the selected npm package', async () => {
+    const f = await fixture(), program = await classify(f.chosen);
+    await expect(runHeadlessIsolated(entry, await fixtureIsolation(), { executable: f.payload, program, args: [], env: {}, stateDir: f.stateDir,
+      runDir: f.root, configDir: f.definition.configDir, now: Date.now }, { timeoutMs: 100, outputBytes: 512 }))
+      .rejects.toMatchObject({ params: { check: 'npm-package-directory-overlap' } });
+  });
+
+  it('describes an isolation support executable that overlaps the selected npm package', async () => {
+    const f = await fixture(), isolation = entry.headless.isolation;
+    const localEntry = { ...entry, headless: { ...entry.headless, isolation: { ...isolation, limits: { ...isolation.limits, limiter: f.payload } } } };
+    await expect(headlessPreflight(localEntry, f.definition, Date.now, await fixtureIsolation()))
+      .rejects.toMatchObject({ params: { check: 'npm-package-runtime-overlap' } });
+  });
+
+  it('describes launch arguments that could not be prepared', async () => {
+    const f = await fixture(), isolation = entry.headless.isolation;
+    const localEntry = { ...entry, headless: { ...entry.headless, isolation: { ...isolation, limits: { ...isolation.limits, openFiles: 0 } } } };
+    await expect(headlessPreflight(localEntry, f.definition, Date.now, await fixtureIsolation()))
+      .rejects.toMatchObject({ params: { check: 'realm-command-unverified' } });
+  });
+
+  it('distinguishes a missing config directory from one reported by the CLI', async () => {
+    const f = await fixture();
+    const error = await headlessPreflight(entry, { ...f.definition, configDir: join(f.root, 'absent') }, Date.now, await fixtureIsolation())
+      .catch((failure: unknown) => failure) as DeckentError;
+    expect.soft(error.params).toEqual({ check: 'config-dir', reason: 'missing' });
+    expect.soft(error.localize?.('en').message).toContain('The login directory was not found.');
+    expect(JSON.stringify(error)).not.toContain(f.root);
+  });
+
+  it('reports a probe output limit without implying a timeout or launch failure', async () => {
+    const f = await fixture();
+    const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async command => ({
+      schemaVersion: 1, requestId: command.requestId, started: true, reason: 'output-limit', exitCode: null, signal: null,
+      stdoutBase64: '', stderrBase64: '', stdoutTruncated: true, stderrTruncated: false, durationMs: 0,
+    }));
+    try {
+      const error = await headlessPreflight(entry, f.definition, Date.now, await fixtureIsolation()).catch((failure: unknown) => failure) as DeckentError;
+      expect.soft(error.params).toEqual({ check: 'spawn', reason: 'output-limit' });
+      expect.soft(error.localize?.('en').message).toBe('The subscription CLI check output exceeded its limit. The channel stays closed.');
+      expect(error.localize?.('tr').message).toBe('Abonelik CLI denetim çıktısı sınırını aştı. Kanal kapalı kalıyor.');
+    } finally { runner.mockRestore(); }
+  });
+
+  it('reports the first npm check locally and carries only its reason in the shared refusal', async () => {
+    const { root: home } = await connection(), prefix = join(home, 'npm');
+    const f = await fakeCodexNpm(prefix, { logPath: join(home, 'unused.log') });
+    const manifestPath = join(f.platformRoot, 'package.json'), manifestBytes = await readFile(manifestPath);
+    const expectedPath = `~/${relative(home, f.payload)}`;
+    const refused = async (path: string, reason: string, expected = true) => {
+      const error = await classify(f.chosen).catch((failure: unknown) => failure) as DeckentError;
+      const params = { check: reason === 'missing' ? 'npm-payload-missing' : 'npm-payload-unverified', reason };
+      expect.soft(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+      expect.soft(error.params).toEqual(params);
+      expect.soft(JSON.stringify(error)).not.toContain(home);
+      let shared = '';
+      await expect(reportFatal(error, { json: true, locale: 'en', stderr: { write: text => { shared += text; } } })).resolves.toBe(1);
+      expect.soft(JSON.parse(shared)).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params });
+      expect.soft(shared).not.toContain(home);
+      const local = ErrorRegistry.localHeadlessPathDetail(error, 'en', home);
+      expect.soft(local).toContain(`Failed check at: ${path === home ? '~' : `~/${relative(home, path)}`}`);
+      if (expected) expect.soft(local).toContain(`Expected native program location (unverified): ${expectedPath}`);
+      else expect.soft(local).not.toContain('Expected native program location');
+      return error;
+    };
+
+    await chmod(manifestPath, 0o664);
+    await chmod(home, 0o775);
+    await refused(home, 'group-or-other-writable', false);
+    await chmod(home, 0o700);
+    const writable = await refused(manifestPath, 'group-or-other-writable');
+    expect.soft(writable.localize?.('en').message).toContain('writable by the group or by other users');
+    expect.soft(writable.localize?.('tr').message).toContain('grup veya diğer kullanıcılar yazabilir');
+    await chmod(manifestPath, 0o644);
+
+    await writeFile(manifestPath, JSON.stringify({ name: 'different', version: '0.169.0-linux-x64' }));
+    await link(f.payload, `${f.payload}.alias`);
+    await refused(manifestPath, 'manifest-mismatch');
+    await writeFile(manifestPath, manifestBytes);
+    await refused(f.payload, 'multiple-hard-links');
+    await unlink(`${f.payload}.alias`);
+    await unlink(f.payload);
+    await refused(f.payload, 'missing');
+    const otherLink = join(prefix, 'bin', 'different');
+    await symlink(f.launcher, otherLink);
+    const unknown = await classify(otherLink).catch((error: unknown) => error);
+    expect(unknown).toMatchObject(unknownLayout);
+    expect(ErrorRegistry.localHeadlessPathDetail(unknown, 'en', home)).not.toContain(expectedPath);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('reports the first directory whose owner is outside the trusted set', async () => {
+    const f = await fixture(), prefix = dirname(dirname(f.chosen));
+    const wrongOwnerUid = process.getuid!() + 1, inspect = files.lstat;
+    // A lane-specific TMPDIR may add non-root ancestors before the package fixture.
+    const ancestors = vi.spyOn(files, 'lstat').mockImplementation(async (...args: Parameters<typeof inspect>) => {
+      const info = await inspect(...args), path = args[0];
+      if (typeof path === 'string' && prefix.startsWith(path + sep)) Object.assign(info, { uid: BigInt(wrongOwnerUid) });
+      return info;
+    });
+    try {
+      const error = await resolveHeadlessExecutable(entry, f.chosen, wrongOwnerUid).catch((failure: unknown) => failure);
+      expect.soft(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'npm-payload-unverified', reason: 'untrusted-owner' } });
+      expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', prefix)).toContain('Failed check at: ~/lib/node_modules/@openai/codex');
+      expect.soft(ErrorRegistry.localHeadlessPathDetail(error, 'en', prefix)).not.toContain('Expected native program location');
+    } finally { ancestors.mockRestore(); }
+  });
+
   async function packageProgram(content: unknown, bytes: string | Buffer = '#!/bin/sh\nexit 0\n', mode = 0o700) {
     const connectionFixture = await fixture();
     const packageRoot = join(dirname(connectionFixture.stateDir), 'node_modules', '@example', 'other-layout'), executable = join(packageRoot, 'tool');
@@ -261,15 +723,8 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
   }
 
   async function expectPreflightBind(f: Awaited<ReturnType<typeof fixture>>, executable: string, packageRoot?: string, replace?: () => Promise<void>) {
-    const launcher = await lstat(process.execPath, { bigint: true }), expected = await lstat(executable, { bigint: true });
-    let seals = 0;
-    const isolation: HeadlessIsolation = async () => {
-      if (++seals === 2) await replace?.();
-      return { status: 'available', rejected: [], restriction: null, detail: null,
-        launcher: { source: 'system', path: process.execPath, version: '0.13.0', sha256: null, overlay: false,
-          identity: [launcher.dev, launcher.ino, launcher.size, launcher.mtimeNs, launcher.ctimeNs].join(':') } };
-    };
-    const stopped = new Error('version probe captured before spawn');
+    const expected = await lstat(executable, { bigint: true });
+    const isolation = await fixtureIsolation(async seal => { if (seal === 2) await replace?.(); });
     const runner = vi.spyOn(processRunner, 'runNodeProcess').mockImplementation(async (command, _signal, _onLine, fd) => {
       expect(fd).toBeDefined();
       expect(fstatSync(fd!, { bigint: true })).toMatchObject({ dev: expected.dev, ino: expected.ino, ctimeNs: expected.ctimeNs });
@@ -286,15 +741,22 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
         const hostBinds = args.flatMap((arg, i) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? args.slice(i + 1, i + 3) : []);
         expect(hostBinds.filter(path => path === packageRoot || path.startsWith(packageRoot + sep))).toEqual([]);
       }
-      throw stopped;
+      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 17, signal: null,
+        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     });
     try {
-      const preflight = expect(headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation));
+      const preflight = headlessPreflight(entry, { ...f.definition, executable }, Date.now, isolation);
       if (replace) {
-        await preflight.rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'executable-changed' } });
+        const error = await preflight.catch((failure: unknown) => failure) as DeckentError;
+        expect(error).toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'executable-changed' } });
+        expect(error.localize?.('en').message).toContain('The provider program identity differs from the identity checked earlier.');
+        expect(error.localize?.('tr').message).toContain('Sağlayıcı programının kimliği daha önce denetlenen program kimliğinden farklı.');
         expect(runner).not.toHaveBeenCalled();
       } else {
-        await preflight.rejects.toBe(stopped);
+        // An assertion failure inside the runner takes the unverified-process route, never this observed exit case.
+        await expect(preflight).rejects.toMatchObject({
+          code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'version', reason: 'exit', exitCode: '17' },
+        });
         expect(runner).toHaveBeenCalledOnce();
       }
     } finally { runner.mockRestore(); }
@@ -388,6 +850,13 @@ describe.skipIf(process.platform !== 'linux' || process.arch !== 'x64')('G3 pack
         const { executable } = await packageProgram(content);
         await expect(classify(executable)).rejects.toMatchObject(unknownLayout);
       }
+      const missing = await packageProgram({ ...manifest, bin: 'missing/command' });
+      const lookup = await classify(missing.executable).catch((error: unknown) => error) as DeckentError;
+      expect(lookup).toMatchObject(unknownLayout);
+      expect(lookup.localize?.('en').message).toContain('A declared launcher path has a missing component.');
+      expect(lookup.localize?.('tr').message).toContain('Bildirilen başlatıcı yolunun bir bileşeni bulunamadı.');
+      expect(ErrorRegistry.localHeadlessPathDetail(lookup, 'en', missing.packageRoot)).toBe('Failed check at: ~/missing');
+      expect(JSON.stringify(lookup)).not.toContain(missing.packageRoot);
       const { executable, packageRoot } = await packageProgram(undefined);
       const manifestPath = join(packageRoot, 'package.json'), outside = join(dirname(packageRoot), 'outside');
       await writeFile(outside, '#!/bin/sh\nexit 0\n', { mode: 0o700 });

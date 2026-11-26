@@ -45,13 +45,15 @@ async function readAt(dir: FileHandle, name: string) {
   const file = await open(at(dir, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: unknown) => {
     if (missing(error)) return null; throw new PinnedFileError('unsafe'); });
   if (!file) return null;
+  let failed = false;
   try {
     const info = await file.stat();
     if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.()) throw new PinnedFileError('unsafe');
     const bytes = await file.readFile(), after = await file.stat();
     if (after.size !== info.size || after.mtimeMs !== info.mtimeMs || bytes.length !== info.size) throw new PinnedFileError('changed');
     return { bytes, mode: info.mode & 0o777, identity: { dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, digest: digest(bytes) } };
-  } finally { await file.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally { await file.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 /** The name an interrupted removal moved the file aside to (it is resumed under that name, never left behind as a stray). */
 const asideOf = async (dir: FileHandle, name: string) => (await readdir(at(dir, '.'))).find(entry => entry.startsWith(`.${name}.`) && entry.endsWith('.removing')) ?? null;
@@ -59,7 +61,10 @@ const asideOf = async (dir: FileHandle, name: string) => (await readdir(at(dir, 
 export async function readPinnedFile(path: string): Promise<{ readonly bytes: Buffer; readonly mode: number; readonly identity: PinnedFileIdentity } | null> {
   const dir = await openPinnedParent(path);
   if (!dir) return null;
-  try { const aside = await asideOf(dir, basename(path)); return await readAt(dir, basename(path)) ?? (aside ? await readAt(dir, aside) : null); } finally { await dir.close(); }
+  let failed = false;
+  try { const aside = await asideOf(dir, basename(path)); return await readAt(dir, basename(path)) ?? (aside ? await readAt(dir, aside) : null); }
+  catch (error) { failed = true; throw error; }
+  finally { await dir.close().catch((error: unknown) => { if (!failed) throw error; }); }
 }
 const same = (a: PinnedFileIdentity, b: PinnedFileIdentity) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.digest === b.digest;
 /**

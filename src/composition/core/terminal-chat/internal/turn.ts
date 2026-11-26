@@ -1,14 +1,14 @@
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { resolveTerminalModel } from '#adapters/index.js';
-import { inspectNativeChat, nativeChatVerifiedAtMs } from './native.js';
+import { inspectNativeChat, nativeChatVerifiedAtMs, hasRetainedSubscriptionFailure, readRetainedSubscriptionFailure } from './native.js';
 import { configuredNativeChatReadiness, type SubscriptionReadinessReader } from '#composition/core/subscription-readiness/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER_ID, type ModelInvocationProfile } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
-import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, configuredInvocationProfiles, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationQuery, ModelReference } from '#domain/index.js';
+import { textOnlyModelInvocationRequest, agentTurnAdmission, modelInvocationRequestDigest, configuredInvocationProfiles, type AgentTurnAdmission, type ModelInvocationResult, type ModelInvocationInspection } from '#engine/index.js';
+import { ErrorRegistry, headlessDiagnostic, isHeadlessDiagnosticCode, DeckentError, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
   OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -28,6 +28,7 @@ type TerminalChatPlan = Readonly<{
   /** NF-7: with `tools: 'unverified'` only because the last verification passed the K16 age, when it was recorded (the next turn rechecks). */
   toolsVerifiedAtMs?: number;
   governedUse?: 'outside-installation';
+  toolsDiagnostic?: DeckentError;
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
 export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}, snapshot?: ModelInspectionSnapshot): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
@@ -41,6 +42,7 @@ export async function terminalModelHere(projectRoot: string, options: ConfigLoad
 /** Governed model invocation service; the shipped executable wires the local runtime client. */
 export interface TerminalChatInvocationPorts {
   invoke(projectRoot: string, command: ModelInvocationCommand, options: ConfigLoadOptions, signal?: AbortSignal): Promise<ModelInvocationResult>;
+  inspect?(projectRoot: string, query: ModelInvocationQuery, options: ConfigLoadOptions): Promise<Pick<ModelInvocationInspection, 'responseContent'>>;
   cancel(projectRoot: string, command: ModelInvocationCancellationCommand, options: ConfigLoadOptions): Promise<unknown>;
 }
 interface TerminalChatTurnInput {
@@ -73,14 +75,18 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const effectiveScope = scopeId ?? snapshot?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   const profile = nativeChatProfile(configuredInvocationProfiles(config), effectiveScope, reference);
   const native = profile ? await inspectNativeChat(profile, runtime) : null;
+  const headlessModel = binding.status === 'declared' && binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null);
+  const toolsDiagnostic = native?.diagnostic ?? (native?.state === 'unavailable' ? ErrorRegistry.createError(native.reason)
+    : headlessModel && !native ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) : undefined);
   // NF-7: the age keeps gating turns; the person is told when tools were last verified instead of "not verified yet".
   const verifiedAtMs = profile && native?.state === 'unknown' && !native.governedUse ? await nativeChatVerifiedAtMs(profile, configuredNativeChatReadiness(projectRoot, options, true, snapshot ? configuredInvocationProfiles(snapshot.config) : undefined)).catch(() => null) : null;
 
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
-    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null) ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
+    tools: binding.status !== 'declared' ? 'unknown' : headlessModel ? native?.state === 'ready' ? 'available' : native?.state === 'unknown' ? 'unverified' : 'none' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more,
     ...(native && native.state !== 'ready' && native.governedUse ? { governedUse: native.governedUse } : {}),
-    ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}) });
+    ...(verifiedAtMs !== null ? { toolsVerifiedAtMs: verifiedAtMs } : {}),
+    ...(toolsDiagnostic && { toolsDiagnostic }) });
 }
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
   settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {
@@ -127,9 +133,20 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
   try {
     outcome = await ports.invoke(input.projectRoot, command, input.options, input.signal);
   } catch (error) {
-    if (!input.signal?.aborted) throw error;
+    if (!input.signal?.aborted || error instanceof DeckentError && isHeadlessDiagnosticCode(error.code)) throw error;
     await ports.cancel(input.projectRoot, terminalChatCancellation(command), input.options).catch(() => undefined);
     throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
+  }
+  const settled = outcome.receipt.outcome;
+  if (settled?.state === 'not-sent') throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED', { params: { beforeSend: 'true' } });
+  if (settled?.state === 'rejected' || settled?.state === 'unknown' || settled === null) {
+    if (hasRetainedSubscriptionFailure(outcome)) {
+      const inspected = await ports.inspect?.(input.projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+        invocationId: outcome.receipt.claim.invocationId, reference: command.reference, includeResponseContent: true }, input.options).catch(() => null);
+      const failure = readRetainedSubscriptionFailure(outcome, inspected?.responseContent);
+      if (failure) throw failure;
+    }
+    throw ErrorRegistry.createError(settled?.state === 'rejected' ? 'TERMINAL_CHAT_REJECTED' : 'MODEL_INVOCATION_OUTCOME_UNKNOWN');
   }
   const text = extractOpenAiChatTextFromInvocation(outcome);
   const truncated = openAiChatStoppedAtLength(outcome);
