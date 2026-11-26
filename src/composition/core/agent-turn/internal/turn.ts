@@ -331,7 +331,12 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
               async text => { channel.emit({ kind: 'text', text }); if (!await channel.drained()) throw new Error('notice-not-delivered'); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
           // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
-          return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : nativeRefusal() ?? queryFailure(error).code };
+          const stopped = roundSignal.aborted ? 'cancelled' : nativeRefusal();
+          if (stopped) return { status: 'failed', state: stopped };
+          const failure = queryFailure(error);
+          const state = failure.code === 'SIWC_STORE_NOT_PERSONAL' && failure.params?.['reason'] === 'binding-changed'
+            ? failure.localize?.(language).message ?? failure.message : failure.code;
+          return { status: 'failed', state };
         }
         for (const name of agent?.notices() ?? []) cliNotices.add(name); // owner 2026-11-05: the turn's note, never a pause
         const refusalReason = nativeRefusal();

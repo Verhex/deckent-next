@@ -253,8 +253,11 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   for (const connection of f.siwcConnections ?? []) {
     const state = connection.code ? ErrorRegistry.get(connection.code, l, { reason: connection.reason ?? '' })?.message ?? connection.code
       : connection.planUse ? t('siwc.status.usingPlan', {}, l) : t('siwc.doctor.disabled', {}, l);
+    const custodyUnverified = connection.code === 'SIWC_STORE_NOT_PERSONAL'
+      && (!connection.reason || connection.reason === 'binding-changed' || connection.reason === 'unbound-store');
     rows.push(row('work', 'work.chatgptConnection', connection.planUse ? 'ok' : 'warning',
-      t('siwc.doctor.connection', { model: terminalSafeText(connection.reference.modelId), state }, l), scoped(`deckent models connect --connection ${connection.connection}`, f)));
+      t('siwc.doctor.connection', { model: terminalSafeText(connection.reference.modelId), state }, l),
+      custodyUnverified ? undefined : scoped(`deckent models connect --connection ${connection.connection}`, f)));
   }
   for (const connection of f.modelConnections ?? []) if (connection.stale || connection.tools !== 'available') rows.push(row('work', 'work.modelConnection', 'warning',
     `${terminalSafeText(connection.profile)} · ${connection.stale ? ErrorRegistry.get('MODEL_INVOCATION_PROFILE_CONFLICT', l)?.message : connection.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, l) : t('terminal.admin.model.toolsUnknown', {}, l)}`, scoped('deckent models connect', f)));

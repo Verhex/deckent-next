@@ -1,6 +1,6 @@
 {
   "error.SECRET_SESSION_RESERVED": "Oturum bilgileri adla okunamaz, verilemez, yazılamaz veya silinemez. models login veya models logout kullanın.",
-  "error.SIWC_STORE_NOT_PERSONAL": "Kişisel yerel depo kontrolü doğrulanamadı. Bağlantıyı kesin; oturum kayıtlarını depo değiştirerek taşımayın.",
+  "error.SIWC_STORE_NOT_PERSONAL": "Kişisel yerel depo kontrolü doğrulanamadı.",
   "error.SUBSCRIPTION_RAW_USE_REFUSED": "AI çağrılarında bu aboneliği yalnız deckent özellikleri kullanabilir. Diğer araçların doğrudan model erişimi reddedilir.",
   "siwc.card.title": "ChatGPT ile devam et",
   "siwc.card.body": "Uygun istekler ChatGPT planınızdan düşer. deckent bu bağlantı için ücret almaz. Tarayıcınızda deckent uygulamasına izin verin.",
@@ -33,6 +33,9 @@
   "siwc.status.usingPlan": "ChatGPT planı kullanılıyor · kullanımı yönet",
   "siwc.help": "models connect|login|logout --connection <ChatGPT bağlantısı> --scope <kapsam> [--connection-id <kimlik>] (yalnız kişi TTY). Arka plan/API iznini değiştirmek veya kaldırmak için yeniden bağlanın. Başka bir hesap için logout sonrasında --new-account kullanın; limitlerde otomatik hesap değişmez.",
   "siwc.custody.personalRequired": "Kendi yerel deponuzu kullanıp ChatGPT bağlantısını yeniden kurun.",
+  "siwc.custody.bindingChanged": "deckent kişisel depoyu doğrulayamadığı için aboneliğe erişilemiyor. Bağlantıyı kesip yeniden bağlamak depo doğrulama sorununu gidermez. Kurulum yöneticisinden kişisel depo klasörünü, bağlı olduğu aygıtı ve bağ kaydını kontrol etmesini isteyin.",
+  "siwc.custody.connectionBindingChanged": "Bağlantının kayıtlı bağı, doğrulanan kişisel depoyla eşleşmiyor. Bağlantıyı kesin ve kendi terminalinizden yeniden bağlanın.",
+  "siwc.custody.storeRelocation": "Abonelik oturum kayıtları başka bir depoya taşınamaz.",
   "siwc.custody.cleanupPending": "Eski oturum temizliği tamamlanmadı. Yeniden bağlanmadan önce uzlaştırın.",
   "siwc.custody.nonPersonOwner": "Girişi kişi kendi terminalinden yapmalıdır.",
   "siwc.notEligible": "Bu ChatGPT planı burada kullanılamıyor. Başka bir bağlantı seçin veya planınızı yönetin.",

@@ -7,7 +7,7 @@ export function assertPublicSecretName(name: string): void {
 /** A move cannot infer personal custody or transfer a renewable grant from encryption alone. */
 export function assertSecretRelocation(name: string, descriptor: SecretStoreDescriptor): void {
   assertSecretStorageProtection(name, descriptor);
-  if (name.startsWith(RENEWABLE_SECRET_PREFIX)) throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL');
+  if (name.startsWith(RENEWABLE_SECRET_PREFIX)) throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { operation: 'switchSecretStore' } });
 }
 /** A user-confirmed downgrade cannot waive the renewable-credential storage invariant. */
 export function assertSecretStorageProtection(name: string, descriptor: SecretStoreDescriptor): void {

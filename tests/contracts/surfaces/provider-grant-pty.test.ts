@@ -72,6 +72,15 @@ it('solo: listing the models asks the first-use card; y records the sealed grant
     // The beta custody denial remains exercised, while the public ChatGPT row is now the person's Codex CLI.
     expect(sign).toContain('K13-HIDDEN-SIWC-BETA: fixture-only');
     expect(sign).toContain(locale === 'en' ? 'Sign in with ChatGPT (Codex CLI)' : 'ChatGPT ile giriş (Codex CLI)');
+    const message = locale === 'en'
+      ? 'Subscription access is unavailable because deckent could not verify the personal store. Disconnecting and reconnecting does not fix the store verification problem. Ask the installation administrator to check the personal store folder, its backing device and its binding record.'
+      : 'deckent kişisel depoyu doğrulayamadığı için aboneliğe erişilemiyor. Bağlantıyı kesip yeniden bağlamak depo doğrulama sorununu gidermez. Kurulum yöneticisinden kişisel depo klasörünü, bağlı olduğu aygıtı ve bağ kaydını kontrol etmesini isteyin.';
+    const binding = words((await inPty(loginFixture, home, env, `chatgpt-binding-${locale}`, [
+      [keys, '\r', 'next'], [noApi, '\r', 'next'], ['FIXTURE-OAUTH-CONNECT-REACHED', ''],
+      [locale === 'en' ? 'record.' : 'isteyin.', '\u0003', 'next'],
+    ])).output);
+    expect(binding).toContain(message);
+    expect(binding).not.toMatch(/Disconnect the connection|Bağlantıyı kesin|deckent (?:models|init|secret|recovery)\b|`/u);
     const claude = words((await inPty(loginFixture, home, env, `claude-${locale}`, [
       [signIn, 'Claude'], [`${locale === 'en' ? 'filter' : 'filtre'}: Claude`, '\r', 'fresh'], [locale === 'en' ? 'Sign in with its CLI and connect…' : "CLI'ıyla giriş yap ve bağla…", '\r', 'next'],
       [locale === 'en' ? 'Login directory' : 'Giriş dizini', '\r', 'next'],

@@ -8,7 +8,7 @@ import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CO
 import { ModelInvocationError, modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { modelInvocationProfileDigest, subscriptionActor, OAuthConnectionError, ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
-import { getConfigKnownSecrets, globalStateRoot, inspectNativeStateCustody, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, globalStateRoot, inspectNativeStateCustody, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
 import { createCatalogTariffLookup } from './catalog-tariff.js';
 import type { loadInvocationContext } from './context.js';
@@ -109,7 +109,13 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       if (agent) { await agent.recheck(); return agent.admit(signal); }
       if (profile.adapter.id === SIWC_INFERENCE.adapter.id) {
         const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
-        return withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); }, readOnly ? snapshot : undefined);
+        return withConfiguredSiwcModel(context.config.projectRoot, profile, context.principal, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); }, readOnly ? snapshot : undefined)
+          .catch((error: unknown) => {
+            if (error instanceof OAuthConnectionError && error.code === 'SIWC_STORE_NOT_PERSONAL' && error.reason === 'binding-changed') {
+              throw ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
+            }
+            throw error;
+          });
       }
       return isNativeCliHeadlessAdapter(profile.adapter)
         ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options, readOnly ? snapshot : undefined);
