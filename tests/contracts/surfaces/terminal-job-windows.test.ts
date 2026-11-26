@@ -1,8 +1,10 @@
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough, Writable } from 'node:stream';
+import { stripVTControlCharacters } from 'node:util';
 import { createElement } from 'react';
-import { Text } from 'ink';
+import { Box, Text, useApp } from 'ink';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, projectResultBrief, targetQueueViewSchema, type RunView } from '#engine/index.js';
 import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts, type WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
@@ -10,8 +12,12 @@ import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { openingWorkText, runDetailLines, runLedgerCommand } from '#surfaces/core/terminal-work/index.js';
 import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
+import { CLEAR_VISIBLE_SCREEN, resolveWorklinePalette, WorklineApp } from '#surfaces/core/terminal/index.js';
+import { openTerminalHost } from '#surfaces/core/terminal-host/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
+import { panelFixture } from '../support/workline-panel-fixture.js';
+import { terminalScreen } from '../../fixtures/terminal-screen.js';
 
 const captured = vi.hoisted(() => ({ entries: [] as WorkLedgerEntry[], seen: new WeakSet<object>() }));
 vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
@@ -60,19 +66,32 @@ async function chooseScrolledTranscript() {
   }));
   const intervening = { ...first, identity: { ...first.identity!, attemptId: `80${attemptId.slice(2)}` } };
   let workers = [visible[1]!, visible[0]!, ...visible.slice(2), first, eighth!];
-  const inspect = vi.fn(base.inspectTranscript!);
+  const reading = Promise.withResolvers<void>(), transcript = Promise.withResolvers<string>();
+  const inspect = vi.fn(base.inspectTranscript!).mockImplementationOnce(() => { reading.resolve(); return transcript.promise; });
   const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
   const labels = { ...WORKLINE_TEST_LABELS, work: EN };
   // The terminal has room for the number, but the window's border and padding take it away.
-  const drawn = Promise.withResolvers<string>(), closed = Promise.withResolvers<void>();
+  const drawn = Promise.withResolvers<string>();
   const view = await open('/transcript', ledger, 'en', 24, true, { columns: 10, onFrame: frame => {
     const row = frame.split('\n').find(line => line.includes('> T'));
     if (row) drawn.resolve(row);
-    else if (captured.entries.length > 0) closed.resolve();
   } });
   expect(await drawn.promise).not.toContain('Task 1');
+  view.stdin.write('\r');
+  await reading.promise;
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(visible[1]!.identity);
+  await view.instance.waitUntilRenderFlush();
+  if (view.stdout.frame.includes('WINDOW FO')) {
+    view.stdin.write('\u000f');
+    await view.instance.waitUntilRenderFlush();
+  }
+  expect(view.stdout.frame).toContain('INPUT FOC');
   view.stdin.write('\u0003');
-  await closed.promise;
+  transcript.resolve('CANCELLED READ');
+  await view.instance.waitUntilRenderFlush();
+  expect(captured.entries).toEqual([]);
+  expect(view.stdout.frame).not.toContain('Trans…');
+  inspect.mockClear();
 
   workers = [...visible, first, eighth!];
   await runLedgerCommand('transcript', '1', ledger, labels);
@@ -107,6 +126,111 @@ async function chooseScrolledTranscript() {
   await until(() => view.stdout.frame.includes(`> Task ${attemptId}`), 'select the full Attempt reference');
   await choose(view);
   return { view, inspect, first, observe: (...next: typeof workers) => { workers = next; } };
+}
+
+async function checkClippedTranscriptPickerHeightAndRefusal() {
+  const base = ports(), initial = await base.listWorkers(), source = initial.sources[0]!, first = source.workers[0]!;
+  let workers = [first, ...Array.from({ length: 5 }, (_, index) => ({
+    ...first, identity: { ...first.identity!, attemptId: `${index + 1}0${attemptId.slice(2)}` },
+  }))];
+  const inspect = vi.fn(base.inspectTranscript!);
+  const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...initial, sources: [{ ...source, workers }] }) };
+  const labels = { ...WORKLINE_TEST_LABELS, work: EN };
+  const view = mountWorkline({ labels, ledger, fullscreen: true, pollMs: 60_000 }, 100, { rows: 8 });
+  mounted.push(view);
+  await view.instance.waitUntilRenderFlush();
+  view.stdin.write('/transcript\r');
+  await view.instance.waitUntilRenderFlush();
+  expect(view.stdout.frame).toContain('Task 5');
+  expect(view.stdout.frame).not.toContain('Task 4');
+  view.stdin.write('\u0003');
+  await view.instance.waitUntilRenderFlush();
+  expect(view.stdout.frame).not.toContain('Task 5');
+
+  workers = [...workers].reverse();
+  await runLedgerCommand('transcript', '4', ledger, labels);
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(workers[3]!.identity);
+  view.instance.unmount();
+  captured.entries = [];
+  captured.seen = new WeakSet();
+
+  const refused = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
+  await until(() => refused.stdout.frame.includes('> Task 1'), 'picker'); await choose(refused);
+  await until(() => refused.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(refused); onlySummary();
+}
+
+async function checkTranscriptNumber(presentation: 'resize-hidden' | 'editor' | 'accessible' | 'both digits' | 'first digit' | 'last digit') {
+  const accessible = presentation === 'resize-hidden' || presentation === 'editor' || presentation === 'accessible';
+  const resizeHidden = presentation === 'resize-hidden' || presentation === 'accessible';
+  vi.stubEnv('INK_SCREEN_READER', String(accessible));
+  const base = ports(), report = await base.listWorkers(), source = report.sources[0]!, first = source.workers[0]!;
+  let workers = Array.from({ length: 10 }, (_, i) => ({ ...first, identity: { ...first.identity!, attemptId: `${i + 10}${attemptId.slice(2)}` } }));
+  const tenth = workers[9]!;
+  const transcript = Promise.withResolvers<string>();
+  const inspect = vi.fn(base.inspectTranscript!).mockReturnValueOnce(transcript.promise);
+  const ledger = { ...base, inspectTranscript: inspect, listWorkers: async () => ({ ...report, sources: [{ ...source, workers }] }) };
+  const work = { ...EN, transcriptHeader: '{n}', jobs: { ...EN.jobs!, hints: '' } };
+  const labels = { ...WORKLINE_TEST_LABELS, work };
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  let output = '', holdFlush = false;
+  const hidden = Promise.withResolvers<() => void>();
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: presentation === 'accessible' ? 5 : 8, rows: 60 });
+  const write = stdout.write.bind(stdout);
+  stdout.write = ((chunk: unknown, ...args: unknown[]) => {
+    if (holdFlush && chunk === '' && typeof args[0] === 'function') { holdFlush = false; hidden.resolve(args[0] as () => void); return true; }
+    return Reflect.apply(write, stdout, [chunk, ...args]);
+  }) as typeof stdout.write;
+  const editor = Promise.withResolvers<void>();
+  let suspend!: ReturnType<typeof useApp>['suspendTerminal'];
+  function EditorControl() { suspend = useApp().suspendTerminal; return null; }
+  const host = await openTerminalHost({ palette: resolveWorklinePalette('none'), stdin: stdin as never, stdout: stdout as never,
+    fullscreen: presentation !== 'editor', ascii: presentation === 'accessible', view: context => createElement(Box, { flexDirection: 'column' }, createElement(EditorControl),
+      createElement(WorklineApp, { ...panelFixture({ ledger }), labels, ledger, fullscreen: context.fullscreen, target: 'fixture',
+        decisionArmMs: 0, systemPrompt: 'SYSTEM', historyMessages: 40, completeTurn: async () => 'unused', errorText: String, pollMs: 60_000 })) });
+  let release: (() => void) | undefined, suspension: Promise<unknown> | undefined;
+  try {
+    await host.flushed();
+    const opened = output.length;
+    stdin.write('/transcript\r'); await host.flushed();
+    if (presentation === 'accessible') {
+      // Five ASCII columns cut the ellipsis: a screen reader hears the drawn marker piece of each row, not the cut ellipsis.
+      const lines = stripVTControlCharacters(output.slice(opened)).split('\n'), more = lines.lastIndexOf('  +4');
+      expect(lines.slice(more - 6, more)).toEqual(['>', ' ', ' ', ' ', ' ', ' ']);
+    }
+    stdin.write(`${ESC}[A`); await host.flushed();
+    stdin.write('\r'); await host.flushed();
+    expect(inspect.mock.calls, presentation).toEqual([[tenth.identity]]);
+    if (presentation === 'editor') suspension = suspend(() => editor.promise);
+    if (presentation !== 'editor') {
+      holdFlush = resizeHidden;
+      Object.assign(stdout, { columns: accessible ? 8 : 5, rows: accessible || presentation === 'both digits' ? 60 : 12 });
+      stdout.emit('resize');
+      if (resizeHidden) release = await hidden.promise;
+      await host.flushed();
+    }
+    const start = output.length;
+    transcript.resolve('BODY');
+    await host.flushed();
+    if (presentation === 'last digit') { stdin.write(`${ESC}[B`); await host.flushed(); }
+    const shown = presentation === 'accessible' || presentation === 'both digits';
+    if (accessible) {
+      if (presentation === 'accessible') { release?.(); release = undefined; await host.flushed(); }
+      expect(stripVTControlCharacters(output.slice(start)).split('\n').includes('10'), presentation).toBe(shown);
+    } else {
+      const bytes = output.slice(output.lastIndexOf(CLEAR_VISIBLE_SCREEN));
+      const digits = terminalScreen(bytes.replaceAll('\n', '\r\n'), stdout.columns, stdout.rows).match(/│ [10] │/gu);
+      expect(digits, presentation).toEqual(presentation === 'both digits' ? ['│ 1 │', '│ 0 │'] : [presentation === 'first digit' ? '│ 1 │' : '│ 0 │']);
+    }
+    workers = [...workers].reverse();
+    // The rich composer routes slash arguments to the bare window; this is the existing typed reader.
+    await runLedgerCommand('transcript', '10', ledger, labels);
+    expect.soft(inspect.mock.calls.at(-1), presentation).toEqual([(shown ? tenth : workers[9]!).identity]);
+  } finally {
+    const closed = host.close();
+    release?.(); editor.resolve(); await suspension;
+    await closed;
+    vi.unstubAllEnvs();
+  }
 }
 
 async function checkListedTranscriptPicker({ view, inspect, first, observe }: Awaited<ReturnType<typeof chooseScrolledTranscript>>) {
@@ -234,6 +358,7 @@ describe('SW-2 job windows', () => {
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
     expect(inspect.mock.calls.at(-1)![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
     await checkListedTranscriptPicker(picker);
+    for (const presentation of ['both digits', 'first digit', 'last digit'] as const) await checkTranscriptNumber(presentation);
   });
   it.each(['y', 'n', ESC])('cancel picker excludes terminal/already cancelling runs; %s preserves revision authority', async key => {
     const cancel = vi.fn(async () => 'Cancellation requested');
@@ -305,9 +430,8 @@ describe('SW-2 job windows', () => {
     expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
   it('keeps policy refusal inside a transcript window and leaves only one summary after close', async () => {
-    const view = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
-    await until(() => view.stdout.frame.includes('> Task 1'), 'picker'); await choose(view);
-    await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    await checkClippedTranscriptPickerHeightAndRefusal();
+    for (const presentation of ['resize-hidden', 'editor', 'accessible'] as const) await checkTranscriptNumber(presentation);
   });
 });
 

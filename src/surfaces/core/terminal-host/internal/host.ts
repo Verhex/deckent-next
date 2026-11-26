@@ -8,7 +8,7 @@ import type { TerminalHandover } from './handoff.js';
 import { createResizeOwnership, ResizeFrame } from './resize-frame.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, PALETTE_NOTICES_OFF, PALETTE_NOTICES_ON,
-  type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
+  createWindowDrawing, WindowDrawingContext, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import LIMITS from './host-limits.json' with { type: 'json' };
 
 /** The terminal bell: audible or a taskbar/tab flash by the terminal's own setting; the one signal every terminal and multiplexer passes through. */
@@ -126,10 +126,12 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const context: TerminalHostContext = { fullscreen, transcriptExit, theme, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard } : {}),
     ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
     ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: clipboard } : {}) };
+  const drawing = createWindowDrawing();
   const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
       createElement(TerminalHandoverContext.Provider, { value: handover ?? null },
-        fullscreen ? createElement(ResizeFrame, { stdout: out, ownership: resizeOwnership }, view(context)) : view(context))) });
+        createElement(WindowDrawingContext.Provider, { value: drawing },
+          fullscreen ? createElement(ResizeFrame, { stdout: out, ownership: resizeOwnership }, view(context)) : view(context)))) });
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(tree(view, palette),
@@ -137,6 +139,8 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
     // a terminal without it keeps its keys and Alt+Enter stands in. Ink switches the mode off on unmount and around a suspension (the editor).
     { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true, kittyKeyboard: { mode: 'auto' as const } } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
+      // Ink calls this after projecting one frame, bypassing it while an external view owns the terminal.
+      onRender: () => drawing.finish(out.isTTY === true && out.writable && !out.destroyed),
       stdout: options.clearScreen === false ? out : mainScreenOutput(out) });
   const releaseTiming = timingEnabled ? installTimingFlush(async () => { await yieldToInput(); await instance.waitUntilRenderFlush(); }) : undefined;
   const stop = () => instance.unmount();
