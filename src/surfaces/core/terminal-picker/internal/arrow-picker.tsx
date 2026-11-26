@@ -8,7 +8,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
 import { DrawnText, useCardCopyOptions, useWindowInputGuard } from '#surfaces/core/terminal-window/index.js';
-import { truncateEnd, sliceSpans, span, type Span, useRenderGlyphs, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
+import { truncateEnd, plainText, sliceSpans, span, type Span, useRenderGlyphs, SpanText } from '#surfaces/core/terminal-render-ink/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
 const FALLBACK_COLUMNS = 80;
@@ -96,11 +96,12 @@ export function ArrowPicker(props: {
       {props.filter ? <Text {...palette.muted} wrap="truncate">{truncateEnd(props.filter.prompt(filterText), width, glyphs.ellipsis)}</Text> : null}
       {props.filter && shown.length === 0 ? <Text {...palette.warning} wrap="truncate">{props.filter.none}</Text> : null}
       {drawn.map(({ original, selected, marker, fitted, visible, spans: projected, onDrawn }) => {
+        const final = projected && [...sliceSpans([span(marker), ...projected], 0, visible), ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])];
         const row = <Text key={original} wrap="truncate" {...(selected ? palette.selection : {})}>
-          {projected ? <SpanText selected={selected} spans={[...sliceSpans([span(marker), ...projected], 0, visible),
-            ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
+          {final ? <SpanText selected={selected} spans={final} /> : fitted}
         </Text>;
-        return onDrawn ? <DrawnText key={original} text={fitted} onDrawn={rows => {
+        // A screen reader hears what the row draws: a cut ASCII ellipsis keeps the marker piece, not the ellipsis prefix.
+        return onDrawn ? <DrawnText key={original} text={final ? plainText(final) : fitted} onDrawn={rows => {
           for (const { text } of rows) onDrawn(text.slice(marker.length, visible));
         }}>{row}</DrawnText> : row;
       })}
