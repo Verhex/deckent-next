@@ -33,7 +33,7 @@ import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
 import { withRefusalAuditLoss, type LocalRefusal } from './refusal-audit.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiProviderRefusal, providerRequestDiagnosis,
+import { nativeCliAgent, extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiProviderRefusal, providerRequestDiagnosis,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
  * swept), and how `fetch_url` reaches the network (the system transport; only an in-process test passes another). */
@@ -295,7 +295,9 @@ async function runChatTurn(projectRoot: string, loaded: ChatTurnStart, peer: Loc
       model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcpTools.prompt,
       // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
-      shell: posture, session: await sessionOf(), responseStyle: readTerminalResponseStyle(config) });
+      shell: posture, session: await sessionOf(), responseStyle: readTerminalResponseStyle(config),
+      // CHAT-ROUTE: the registry's agent entry runs the CLI with its own tools off (its only tools are this turn's, through the bridge), so the prompt says how changes happen.
+      bridgedCli: !!native && nativeCliAgent(native.profile.protocol.family) !== null });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, ...(native ? { native: { execution: native.execution, modelUse: pin } } : {}), maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);

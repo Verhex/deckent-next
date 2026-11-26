@@ -24,6 +24,8 @@ describe.skipIf(process.platform !== 'linux')('the session context reaches the m
     expect(first).toMatchObject({ card: false, status: 'ok' });
     const prompt = lastPrompt(f);
     expect(prompt.startsWith(`[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`)).toBe(true);
+    // CHAT-ROUTE: an API transport declares no CLI of its own, so the change-route section never appears.
+    expect(prompt).not.toContain('Changes in this session:');
     expect(modeLine(prompt)).toContain('- Permission mode: standart — ');
     expect(prompt).toContain('- Thinking: as the model is served');
     expect(prompt).toContain('edit_file, write_file: an ordinary file runs at once; a protected path asks the person');

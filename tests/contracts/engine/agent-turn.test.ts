@@ -680,6 +680,30 @@ it('tells the model its per-answer output limit and how to write large content i
   expect(rule(render([['write_file', 'edit']], 16384))).toMatch(/at most 16384 output tokens; .*current last lines\)\.$/);
   expect(rule(render([['write_file', 'edit']]))).toMatch(/at most a limited number of output tokens;/);
   expect(rule(render([['read_file', 'read']], 8192))).toBeUndefined();
+  // CHAT-ROUTE (W23/W23B 2026-11-26): on a CLI whose own tools are off (`bridgedCli`), the prompt says how changes happen, naming exactly the
+  // offered change tools that policy does not refuse; with none it points to /do. Without the declaration the text is unchanged.
+  const changeTools: [string, AgentToolSpec['toolClass']][] = [['read_file', 'read'], ['edit_file', 'edit'], ['write_file', 'edit'], ['run_shell', 'shell'], ['scratch_write', 'edit'], ['propose_work', 'read']];
+  const routed = (names: [string, AgentToolSpec['toolClass']][], refused: string[] = []) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, model, language: 'tr', bridgedCli: true,
+    tools: names.map(([name, toolClass]) => spec(name, toolClass)), session: { schemaVersion: 2, deckent: 'v', scopeId: 's', sessionId: null, mode: null, thinking: 'on',
+      model: { nativeId: 'n', providerId: 'p', modelId: 'm', capabilities: [] }, sessionState: false, surfaces: [], rules: [],
+      tools: names.map(([name]) => ({ name, effects: [{ cell: 'read' as const, effect: refused.includes(name) ? 'refused' as const : 'asks' as const }] })) } }).split('\n');
+  const section = (lines: string[]) => lines.slice(lines.indexOf('Changes in this session:'), lines.indexOf('Working style:') - 1);
+  const cli = '- You run inside a CLI whose own built-in tools are off or refused here. A read-only sandbox it may describe applies to those tools only, not to'
+    + ' this session: do not tell the person the session is read-only.';
+  expect(section(routed(changeTools))).toEqual(['Changes in this session:', cli,
+    '- Changes go only through the deckent tools offered here: edit_file, write_file for a direct file change; propose_work for work a worker should do;'
+      + ' run_shell for commands. A built-in tool of the CLI stops the turn.',
+    '- When the person asks for a change, make the fitting call instead of answering that you cannot. Policy and the permission mode decide each call:'
+      + ' it may run at once, open a card the person decides, or be refused, and its result says which. Make the call; do not predict its outcome.']);
+  expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell']))[2]).toBe('- Changes go only through the deckent tools offered here: propose_work for work a worker'
+    + ' should do. A built-in tool of the CLI stops the turn.');
+  const none = ['Changes in this session:', cli, '- No deckent tool that changes the project is available to you in this turn: when the person asks for a change, say that'
+    + ' you cannot make it here and point them to /do <request>, which plans and runs it as a job.'];
+  expect(section(routed([['read_file', 'read'], ['scratch_write', 'edit']]))).toEqual(none);
+  expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell', 'propose_work']))).toEqual(none);
+  const plainLines = render(changeTools, 8192);
+  expect(plainLines.join('\n')).toBe(renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: changeTools.map(([name, toolClass]) => spec(name, toolClass)), model, language: 'tr',
+    outputLimitTokens: 8192, bridgedCli: false })); expect(plainLines).not.toContain('Changes in this session:');
 });
 
 it('keeps the text streamed before a cancellation in the history, ending with the cancelled-mid-answer line', async () => {

@@ -1,8 +1,8 @@
 import { isAbsolute, relative, sep } from 'node:path';
-import type { AgentToolSpec, AgentTurnMessage, ShellRealm } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, type AgentToolSpec, type AgentTurnMessage, type ShellRealm } from '#domain/index.js';
 import { PACKAGE_VERSION, type ProductLayout } from '#platform/index.js';
 import { AGENT_CONTEXT_CARRY_VERSION, AGENT_CONTEXT_RENDER_VERSION } from './carry.js';
-import { renderAgentSessionContext, type AgentSessionSnapshot } from './session-context.js';
+import { renderAgentSessionContext, SCRATCH_EDIT_TOOLS, type AgentSessionSnapshot } from './session-context.js';
 
 /**
  * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
@@ -68,6 +68,25 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
 }
 
 /**
+ * CHAT-ROUTE (W23/W23B 2026-11-26: on a native agent CLI a cold change request was answered "this session is read-only" although edit_file,
+ * write_file and propose_work were offered): how changes happen when the CLI's own tools are off. Names the offered change tools that the
+ * turn's policy snapshot does not refuse in every cell (project edit tools, the work proposal, the shell); with none, the person's /do. Text only.
+ */
+function changeRoute(tools: readonly AgentToolSpec[], session: AgentSessionSnapshot | null | undefined): string[] {
+  const usable = (tool: AgentToolSpec) => !session?.tools.find(entry => entry.name === tool.name)?.effects.every(entry => entry.effect === 'refused');
+  const named = (pick: (tool: AgentToolSpec) => boolean) => tools.filter(tool => pick(tool) && usable(tool)).map(tool => tool.name).join(', ');
+  const routes = [[named(tool => tool.toolClass === 'edit' && !SCRATCH_EDIT_TOOLS.has(tool.name)), 'for a direct file change'],
+    [named(tool => tool.name === AI_PROPOSAL_REGISTRY.tools.work), 'for work a worker should do'], [named(tool => tool.toolClass === 'shell'), 'for commands']].filter(([names]) => names);
+  return ['', 'Changes in this session:', '- You run inside a CLI whose own built-in tools are off or refused here. A read-only sandbox it may describe applies to'
+    + ' those tools only, not to this session: do not tell the person the session is read-only.',
+  ...(routes.length ? [`- Changes go only through the deckent tools offered here: ${routes.map(([names, use]) => `${names} ${use}`).join('; ')}. A built-in tool of the CLI stops the turn.`,
+    '- When the person asks for a change, make the fitting call instead of answering that you cannot. Policy and the permission mode decide each call: it may run'
+      + ' at once, open a card the person decides, or be refused, and its result says which. Make the call; do not predict its outcome.']
+    : ['- No deckent tool that changes the project is available to you in this turn: when the person asks for a change, say that you cannot make it here and'
+      + ' point them to /do <request>, which plans and runs it as a job.'])];
+}
+
+/**
  * The service's instructions for an agent turn: which model runs (its catalog reference), where the model works (project root, Deckent
  * data root, configuration, the conversation's scratch area) and that Deckent's own state is protected, which tools exist by class and
  * that policy and the permission mode decide each call, how bounded results continue, and one progress line between tool rounds.
@@ -93,8 +112,11 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
   readonly session?: AgentSessionSnapshot | null;
   /** T6 (alpha.54): the person's configured response style (`terminal.responseStyle`); a null instruction (the default style) adds nothing, so the text and
    * the request digest of a turn without a chosen style stay as they were. */
-  readonly responseStyle?: { readonly id: string; readonly instruction: string | null } | null }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session, responseStyle } = input;
+  readonly responseStyle?: { readonly id: string; readonly instruction: string | null } | null;
+  /** CHAT-ROUTE: the turn runs through a native agent CLI whose own tools are off (its registry agent entry: every effect through deckent's bridge);
+   * absent or false adds nothing, so every other transport's text and request digest stay as they were (the T6 and MCP precedent). */
+  readonly bridgedCli?: boolean | null }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session, responseStyle, bridgedCli } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
@@ -148,6 +170,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       '- A read repeated with the same arguments returns a reference to the earlier result, not new content.');
   }
   if (session) lines.push('', renderAgentSessionContext(session));
+  if (bridgedCli) lines.push(...changeRoute(tools, session));
   const offers = (name: string) => tools.some(tool => tool.name === name);
   lines.push('', 'Working style:',
     ...(tools.length ? ['- Between tool rounds, write one short line to the user: what you found or what you will do next.'] : []),
