@@ -96,6 +96,7 @@
   "cli.approval.card.reasonDefault": "Reason recorded: \"Approved on the terminal\" (give your own with --reason).",
   "cli.approval.card.nothing": "No answer; nothing was decided.",
   "cli.approval.card.expired": "This approval expired. No decision was recorded.",
+  "cli.approval.card.unconfirmed": "The service did not confirm this decision.",
   "cli.approval.reason.allow": "Approved on the terminal",
   "cli.approval.reason.deny": "Denied on the terminal",
   "cli.approval.missingInput": "Missing argument: --input <file|->. On your own terminal run it without --input to choose and answer on a card.\nFields: deckent approval {action} --schema\nExample: {example}",

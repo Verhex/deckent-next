@@ -40,11 +40,23 @@ describe('/mcp human output', () => {
     expect(await run('tr', 'approve fx', {})).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(await run('en', 'reconnect fx', {})).toEqual(['fx restarts the next time it is used']);
     const revoked = { revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } };
+    const reset = { reset: { name: 'fx', scope: 'local' }, grant: revoked.grant };
+    expect.soft(await run('en', 'approve fx', reset)).toEqual(['Trust for fx was reset. The approval card opens on your next message.',
+      'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    expect.soft(await run('tr', 'approve fx', reset)).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.',
+      'Bu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.']);
+    expect.soft(await run('en', 'approve fx', { ...reset, grant: { status: 'refused', reason: 'failed' } })).toEqual([
+      'Trust for fx was reset. The approval card opens on your next message.', 'The policy grant could not be removed. Review the scope’s policy before trying again.']);
+    expect.soft(await run('tr', 'approve fx', { ...reset, grant: { status: 'revoked' } })).toEqual([
+      'fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.', 'Politika izni kaldırıldı: bu sunucuya çağrılar yeniden şirket politikanıza bağlı.']);
     expect.soft(await run('en', 'revoke fx', revoked)).toEqual(['Trust for fx was revoked. Approve it again before starting the server.',
       'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
     expect(await run('tr', 'revoke fx', revoked)).toEqual(['fx için güven geri alındı. Sunucuyu başlatmadan önce yeniden onaylayın.',
       'Bu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.']);
     expect(await run('tr', 'remove fx', { removed: { scope: 'user' } })).toEqual(['fx kaldırıldı (kullanıcı)']);
+    const removed = { removed: { name: 'fx', scope: 'user' }, grant: revoked.grant };
+    expect.soft(await run('en', 'remove fx', removed)).toEqual(['Removed fx (user)', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    expect(await run('tr', 'remove fx', removed)).toEqual(['fx kaldırıldı (kullanıcı)', 'Bu işlem politika izni kaldırmadı. Kaldırma işlemi için izin sahibinin terminali gerekir.']);
     expect(await run('en', 'frobnicate')).toEqual(['Usage: /mcp [list] | /mcp approve|reconnect|revoke|remove <name>']);
   });
 });

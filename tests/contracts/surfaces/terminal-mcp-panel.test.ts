@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mcpPanelPort, type McpPanelRequest } from '#surfaces/core/cli-terminal/index.js';
-import type { McpTrustQuestion } from '#surfaces/core/terminal-panels/index.js';
+import type { McpServerDraft, McpTrustQuestion } from '#surfaces/core/terminal-panels/index.js';
 import { t } from '#platform/index.js';
 
 // T3 L4 PANELS — `/mcp`: the window's port over the host's registry command (the same handler as `deckent mcp`). It changes nothing itself:
@@ -17,6 +17,9 @@ function host(results: Partial<Record<McpPanelRequest['verb'], unknown>>, cards:
 }
 const SERVER = { name: 'files', scope: 'local', file: '/home/u/.deckent/mcp.json', status: 'changed', realm: 'host', command: 'npx', args: ['-y', 'files'], envNames: ['TOKEN'],
   definitionDigest: 'a'.repeat(64), pinnedTools: 2, lastStart: { text: 'files did not start: exit 1', phase: 'launch' } };
+const REFUSED_GRANT = { status: 'refused', reason: 'principal' };
+const GRANT_REFUSAL_EN = 'Trusted, but no policy grant was written: the approval came from another person than this service runs for.';
+const GRANT_REFUSAL_TR = 'Güvenildi ama politika izni yazılmadı: onay, bu servisin çalıştığı kişiden başka birinden geldi.';
 
 describe('/mcp window port', () => {
   it('lists and details from the registry (nothing starts): status, tools, realm, scope, pins, last start; host is a warning', async () => {
@@ -25,7 +28,7 @@ describe('/mcp window port', () => {
     const port = mcpPanelPort('/p', run, {}, 'tr');
     const list = await port.list();
     expect(list.servers).toEqual([{ name: 'files', scope: 'yerel', state: 'changed', status: 'bağlı değil — onaydan sonra değişti, yeniden onay gerekir', attention: true, tools: '2 araç',
-      realm: 'host', launch: 'npx -y files', trusted: false }]);
+      realm: 'host', launch: 'npx -y files', trusted: false, selected: { scope: 'local', definitionDigest: SERVER.definitionDigest } }]);
     expect(list.problems).toEqual(['proje MCP dosyasında sorun: invalid json']);
     // YTK-40: the window words a waiting server exactly as `deckent mcp list` does (one renderer): a pre-alpha.48 trust says why it asks again.
     const moved = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'pending-approval', reason: 'trust-moved' }] } }).run, {}, 'tr').list();
@@ -78,35 +81,52 @@ describe('/mcp window port', () => {
       variables: [{ name: 'HOME_DIR', set: false }], envNames: ['TOKEN'], realm: 'prefer-sandbox' },
     { phase: 'tools', name: 'files', scope: 'user', file: '/g/mcp.json', definitionDigest: 'c'.repeat(64), command: 'npx', args: [], envNames: [], realm: 'prefer-sandbox',
       tools: [{ name: 'read_file', digest: 'd'.repeat(64), description: 'Reads a file', alwaysAsk: false }] }];
-    const { run, requests, answers } = host({ add: { added: { name: 'files', scope: 'user', file: '/g/mcp.json' }, trust: 'trusted', pinnedTools: 1 } }, cards);
+    const add = { added: { name: 'files', scope: 'user', file: '/g/mcp.json' }, trust: 'trusted', pinnedTools: 1, grant: REFUSED_GRANT };
+    const { run, requests, answers } = host({ add }, cards);
     const asked: McpTrustQuestion[] = [];
-    const lines = await mcpPanelPort('/p', run, {}, 'en').add({ transport: 'stdio', name: 'files', target: 'npx', args: ['-y', 'files'], env: { TOKEN: 's3cret' }, headers: {},
-      realm: 'prefer-sandbox', scope: 'user' }, async question => { asked.push(question); return true; });
+    const draft: McpServerDraft = { transport: 'stdio', name: 'files', target: 'npx', args: ['-y', 'files'], env: { TOKEN: 's3cret' }, headers: {},
+      realm: 'prefer-sandbox', scope: 'user' };
+    const lines = await mcpPanelPort('/p', run, {}, 'en').add(draft, async question => { asked.push(question); return true; });
     expect(requests).toEqual([{ verb: 'add', scope: 'user', name: 'files', approve: true, entry: { type: 'stdio', command: 'npx', args: ['-y', 'files'], env: { TOKEN: 's3cret' }, realm: 'prefer-sandbox' } }]);
     expect(answers).toEqual([true, true]);
     expect(asked.map(question => question.title)).toEqual(['Start the MCP server files to read its tools?', 'Trust files and pin these tools?']);
     expect(asked[0]!.lines.map(line => line.text)).toEqual(expect.arrayContaining(['npx -y files', 'HOME_DIR (not set)', 'TOKEN']));
     expect(JSON.stringify(asked)).not.toContain('s3cret');
     expect(asked[1]!.lines.map(line => line.text)).toContain('read_file dddddddddddd — Reads a file');
-    expect(lines).toEqual(['Added files (user): /g/mcp.json', 'files is trusted; 1 tool pinned.']);
+    expect.soft(lines).toEqual(['Added files (user): /g/mcp.json', 'files is trusted; 1 tool pinned.', GRANT_REFUSAL_EN]);
+    expect.soft(await mcpPanelPort('/p', host({ add }, cards).run, {}, 'tr').add(draft, async () => true)).toEqual([
+      'files eklendi (kullanıcı): /g/mcp.json', 'files güvenilir; 1 araç sabitlendi.', GRANT_REFUSAL_TR]);
+    const unanswered = { ...add, trust: 'unanswered', pinnedTools: 0, grant: { status: 'revoked' } };
+    expect.soft(await mcpPanelPort('/p', host({ add: unanswered }, cards).run, {}, 'tr').add(draft, async () => null)).toEqual([
+      'files eklendi (kullanıcı): /g/mcp.json', 'Henüz güvenilmedi: bir mesaj onu ilk kullandığında güven ister.',
+      'Politika izni kaldırıldı: bu sunucuya çağrılar yeniden şirket politikanıza bağlı.']);
   });
   it('an HTTP draft is one `add` of a `type: http` entry with its headers (the registry validates the URL); revoke, reconnect and remove are their own requests', async () => {
+    const grant = { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' };
     const { run, requests } = host({ add: { added: { name: 'remote', scope: 'local', file: '/p/.deckent/mcp.local.json' }, trust: 'trusted', pinnedTools: 2 },
-      revoke: { revoked: { name: 'fx', scope: 'local' }, grant: { status: 'refused', reason: 'AUTHORITY_WITNESS_REQUIRED' } }, remove: { removed: { scope: 'project' } } });
+      revoke: { revoked: { name: 'fx', scope: 'local' }, grant }, remove: { removed: { name: 'files', scope: 'project' }, grant } });
     const port = mcpPanelPort('/p', run, {}, 'en');
+    const local = { scope: 'local', definitionDigest: SERVER.definitionDigest }, project = { ...local, scope: 'project' };
     expect(await port.add({ transport: 'http', name: 'remote', target: 'https://mcp.example.com/mcp', args: [], env: {}, headers: { Authorization: 'Bearer $DECK:GH' }, realm: '',
       scope: 'local' }, async () => true)).toEqual(['Added remote (local): /p/.deckent/mcp.local.json', 'remote is trusted; 2 tools pinned.']);
     expect(port.transports.find(choice => choice.id === 'http')!.blocked).toBeUndefined();
-    expect(await port.revoke('fx')).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
-    await port.reconnect('files'); expect(await port.remove('files')).toEqual(['Removed files (project)']);
+    expect(await port.revoke('fx', local)).toEqual(['Trust for fx was revoked. Approve it again before starting the server.', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
+    await port.reconnect('files');
+    expect.soft(await port.remove('files', project)).toEqual(['Removed files (project)', 'This operation removed no policy grant. Removing one needs the grant owner\'s terminal.']);
     expect(requests).toEqual([{ verb: 'add', scope: 'local', name: 'remote', approve: true, entry: { type: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GH' } } },
-      { verb: 'revoke', name: 'fx' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
+      { verb: 'revoke', name: 'fx', selected: local }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files', selected: project }]);
   });
   it('G3: approve sends no alwaysAsk list, so a re-approval keeps the locks the CLI set', async () => {
     const { run, requests } = host({ approve: { approved: true, pinnedTools: 2 } });
     expect(await mcpPanelPort('/p', run, {}, 'en').approve('files', async () => true)).toEqual(['files is trusted; 2 tools pinned.']);
     expect(requests).toEqual([{ verb: 'approve', name: 'files' }]);
     expect(requests[0]).not.toHaveProperty('alwaysAsk');
+    const refused = host({ approve: { approved: true, pinnedTools: 2, grant: REFUSED_GRANT } });
+    expect.soft(await mcpPanelPort('/p', refused.run, {}, 'en').approve('files', async () => true)).toEqual(['files is trusted; 2 tools pinned.', GRANT_REFUSAL_EN]);
+    expect.soft(await mcpPanelPort('/p', refused.run, {}, 'tr').approve('files', async () => true)).toEqual(['files güvenilir; 2 araç sabitlendi.', GRANT_REFUSAL_TR]);
+    const declined = host({ approve: { approved: false, pinnedTools: 0, grant: REFUSED_GRANT } });
+    expect.soft(await mcpPanelPort('/p', declined.run, {}, 'en').approve('files', async () => false)).toEqual([
+      'files was not trusted; it asks again before it starts.', 'The policy grant could not be removed. Review the scope’s policy before trying again.']);
   });
   it('K4 realms: the networked sandbox comes first (the default of an entry without a realm), host last with its warning; an HTTP server runs nowhere here', async () => {
     const port = mcpPanelPort('/p', host({}).run, {}, 'en');

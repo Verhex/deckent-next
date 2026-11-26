@@ -421,6 +421,7 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   APPROVAL_ATTENDED_REQUIRED: 'error', APPROVAL_INTERACTIVE_REQUIRED: 'error', APPROVAL_ASSURANCE_INSUFFICIENT: 'error',
   // MCP-CLIENT scoped registry and approval (`deckent mcp add|add-json|list|get|remove|approve`).
   MCP_SERVER_UNKNOWN: 'usage', MCP_SERVER_EXISTS: 'usage', MCP_SERVER_SCOPE_AMBIGUOUS: 'usage', MCP_SERVER_ENTRY_INVALID: 'config', MCP_SERVER_NAME_INVALID: 'usage',
+  MCP_SERVER_CHANGED: 'error', MCP_SERVER_UNVERIFIED: 'error',
   MCP_SANDBOX_UNAVAILABLE: 'error', MCP_SERVER_START_FAILED: 'error',
 }), {
   // MCP-SANDBOX-PATHS (2026-09-29): the default realm's bubblewrap view cannot reach what the server needs (params: name, kind, and role/path/target

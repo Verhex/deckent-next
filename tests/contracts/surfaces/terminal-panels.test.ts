@@ -216,13 +216,14 @@ describe('window height on a short terminal (owner 2026-10-07: capped to the ter
 
 function mcpPort(log: unknown[], answers: (boolean | null)[]): McpPanelPort {
   return {
-    list: async () => ({ servers: [{ name: 'files', scope: 'local', state: 'connected', status: 'trusted', attention: false, tools: '2 tools', realm: 'sandbox', launch: 'npx files', trusted: true }],
+    list: async () => ({ servers: [{ name: 'files', scope: 'local', state: 'connected', status: 'trusted', attention: false, tools: '2 tools', realm: 'sandbox', launch: 'npx files',
+      trusted: true, selected: { scope: 'local', definitionDigest: 'a'.repeat(64) } }],
       problems: [] }),
     detail: async name => [{ label: 'Status', text: `trusted ${name}` }, { label: 'Tools', text: 'read_file 0123456789ab' }],
-    revoke: async name => { log.push(['revoke', name]); return [`revoked ${name}`]; },
+    revoke: async (name, selected) => { log.push(['revoke', name, selected]); return [`revoked ${name}`]; },
     approve: async (name, ask) => { answers.push(await ask({ title: `Trust ${name}?`, lines: [{ label: 'Command', text: 'npx files' }], prompt: 'y/n' })); return ['approved']; },
     reconnect: async name => { log.push(['reconnect', name]); return ['reconnect']; },
-    remove: async name => { log.push(['remove', name]); return ['removed']; },
+    remove: async (name, selected) => { log.push(['remove', name, selected]); return ['removed']; },
     add: async (draft: McpServerDraft, ask: (question: McpTrustQuestion) => Promise<boolean | null>) => {
       log.push(['add', draft]);
       if (draft.name === 'taken') throw Object.assign(new Error('exists'), { code: 'MCP_SERVER_EXISTS' });
@@ -263,11 +264,11 @@ describe('/mcp window', () => {
     expect(view.frame()).toContain('read_file 0123456789ab');
     await view.press(ESC, 80); // back to files' actions, on Details
     await view.press(`${DOWN}${DOWN}${ENTER}`, 80); // Revoke trust
-    expect(log).toEqual([['revoke', 'files']]); expect(calls.notices.at(-1)).toEqual({ level: 'info', text: 'revoked files' });
+    expect(log).toEqual([['revoke', 'files', { scope: 'local', definitionDigest: 'a'.repeat(64) }]]); expect(calls.notices.at(-1)).toEqual({ level: 'info', text: 'revoked files' });
     await view.press(`${DOWN}${ENTER}${DOWN}${DOWN}${DOWN}${DOWN}${ENTER}`, 60); // Remove → asks
     expect(log).toHaveLength(1);
     await armed(view.frame, 'y yes'); await view.press('y', 80);
-    expect(log.at(-1)).toEqual(['remove', 'files']);
+    expect(log.at(-1)).toEqual(['remove', 'files', { scope: 'local', definitionDigest: 'a'.repeat(64) }]);
   });
   it('the add wizard: HTTP is locked until its transport lands; env values are masked; a taken name goes back to the name step; the trust window answers', async () => {
     const log: unknown[] = [], answers: (boolean | null)[] = [];

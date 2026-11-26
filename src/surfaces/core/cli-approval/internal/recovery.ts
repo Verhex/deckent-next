@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import type { RecoveryPolicyCommand, RecoveryPolicyRow, RecoveryPolicyView, RecoveryReviewItem, RecoveryVerdictOutcome } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -68,7 +68,7 @@ const flags = (argv: readonly string[], from: number) => {
  * and the promotion of each measured rule at its version — with on/off and their measured exits. On a person's terminal one row can be switched
  * (pick → card → apply); the card re-reads the view inside the change. Off a terminal (pipe, CI, agent, `TERM=dumb`, `--json`) it only reads.
  */
-export async function policyRecoveryCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function policyRecoveryCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   const host = context.recovery; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const values = flags(argv, 2), root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, locale = commandLocale(context, values.lang);
   const print = (text: string) => emit(text, sinksOf(context));
@@ -89,7 +89,7 @@ export async function policyRecoveryCommand(argv: readonly string[], context: Ap
     t('cli.policy.recovery.scope', { scope: scope.scopeId }, locale),
     ...(action === 'grant' && row.exits === false ? [t('cli.policy.recovery.exitsUnmet', {}, locale)] : [])];
   if (await ask({ title: toggleTitle(action, what, locale), body, options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), role: 'yes' },
-    { id: 'no', label: t('cli.policy.toggle.no', {}, locale), role: 'no' }] }) !== 'apply') return;
+    { id: 'no', label: t('cli.policy.toggle.no', {}, locale), role: 'no' }] }) !== 'apply') return EXIT_CODES.error;
   const result = await host.changePolicy(root, { schemaVersion: 1, scopeId: scope.scopeId, kind: row.kind, id: row.id, action, expectedRevision: view.revision }, options);
   print([result.status === 'applied' ? t('cli.policy.recovery.applied', {}, locale) : t('cli.policy.recovery.current', {}, locale), policyTable(result.view, context, locale)].join('\n'));
 }
@@ -99,7 +99,7 @@ export async function policyRecoveryCommand(argv: readonly string[], context: Ap
  * `deckent recovery review [--scope]`: the person's blind review card (owner Q-A5) — each model-decided case without its choice, then the person's
  * answer is sealed and only then the model's choice is shown. A person's terminal only.
  */
-export async function recoveryCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function recoveryCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   const host = context.recovery; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const review = argv[1] === 'review', values = flags(argv, review ? 2 : 1), root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const locale = commandLocale(context, values.lang), print = (text: string) => emit(text, sinksOf(context));
@@ -113,6 +113,7 @@ export async function recoveryCommand(argv: readonly string[], context: Approval
   const items = await host.reviewPending(root, { schemaVersion: 1, scopeId: scope.scopeId }, options);
   print([scopeNotice(scope, locale), items.length ? t('recovery.review.pending', { count: items.length }, locale) : t('recovery.review.none', {}, locale)].join('\n'));
   const answers = { continue: ['lost', 'continue-new-attempt'], escalate: ['lost', 'escalate-human'], 'not-lost': ['not-lost', null] } as const;
+  let skipped = false;
   for (const item of items) {
     const body = [t('recovery.review.rule', { rule: item.rule ? `${item.rule.id}@${item.rule.version}` : '-', activity: item.activity ?? '-', launcher: item.launcher ?? '-' }, locale),
       t('recovery.review.gate', { result: item.gate.result, settled: item.gate.settled, intents: item.gate.intents }, locale),
@@ -121,11 +122,12 @@ export async function recoveryCommand(argv: readonly string[], context: Approval
       { id: 'continue', label: t('recovery.review.choice.continue', {}, locale), key: 'c' }, { id: 'escalate', label: t('recovery.review.choice.escalate', {}, locale), key: 'p' },
       { id: 'not-lost', label: t('recovery.review.choice.notLost', {}, locale), key: 'n' }, { id: 'skip', label: t('recovery.review.choice.skip', {}, locale), key: 's' },
       { id: 'stop', label: t('recovery.review.choice.stop', {}, locale), key: 'q' }] });
-    if (answer === null || answer === 'stop') return;
-    if (answer === 'skip' || !(answer in answers)) continue;
+    if (answer === null || answer === 'stop') return EXIT_CODES.error;
+    if (answer === 'skip' || !(answer in answers)) { skipped = true; continue; }
     const [detection, choice] = answers[answer as keyof typeof answers];
     const outcome = await host.reviewAnswer(root, { schemaVersion: 1, scopeId: scope.scopeId, caseId: item.caseId, detection, choice }, options);
     print(t('recovery.review.reveal', { model: actionWord(outcome.model.action, locale), verdict: outcome.agreed === null ? t('recovery.review.verdict.notLost', {}, locale)
       : outcome.agreed ? t('recovery.review.verdict.agreed', {}, locale) : t('recovery.review.verdict.disagreed', {}, locale) }, locale));
   }
+  if (skipped) return EXIT_CODES.error;
 }

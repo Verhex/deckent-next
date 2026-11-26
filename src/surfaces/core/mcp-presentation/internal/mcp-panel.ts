@@ -2,6 +2,7 @@ import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { McpChoice, McpPanelList, McpPanelPort, McpPanelState, McpServerDraft, McpTrustAsk, PanelLine } from '#surfaces/core/terminal-panels/index.js';
 import type { SecretGrantCardPort } from '#surfaces/core/terminal-kit/index.js';
 type Scope = 'local' | 'project' | 'user';
+type McpSelection = McpPanelList['servers'][number]['selected'];
 /** KER-17/D11-R1: why a `$DECK:` entry cannot launch, as the registry summary carries it (`refusal`, the adapter's typed field; `reason` is only its string form). */
 type SecretRefusal = { readonly kind: 'secret-refused'; readonly code: string; readonly key: string } | { readonly kind: 'secret-unresolved'; readonly key: string } | { readonly kind: 'secret-reference-in-project-file' };
 /** The key a person may allow on the first-use card: only a server refused for a missing grant (`/mcp` and the after-turn offer). */
@@ -10,23 +11,49 @@ export const mcpGrantKey = (server: { readonly refusal?: SecretRefusal | undefin
 /** The registry commands the terminal's `/mcp` window runs (the same `deckent mcp` handler; this unit never imports the CLI or the adapter). */
 export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
-  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
+  | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope; readonly selected?: McpSelection }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
-  | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
+  | { readonly verb: 'reset' | 'reconnect'; readonly name: string }
+  | { readonly verb: 'revoke'; readonly name: string; readonly selected?: McpSelection };
 /** The host's MCP registry command (`McpCommandHandler`): `ask` answers one trust card (yes, no, or null: no answer, nothing recorded). */
 export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale, signal?: AbortSignal) => Promise<unknown>;
 /** Trust withdrawal and policy-grant removal settle independently. */
 export function mcpRevokeLines(value: unknown, locale: Locale): string[] {
-  const { revoked, grant } = (value ?? {}) as { revoked?: { name: string }; grant?: { status: string; reason?: string } };
-  const lines: string[] = [];
-  if (revoked) lines.push(t('cli.mcp.revoke.trustRemoved', { name: revoked.name }, locale));
-  if (grant?.status === 'revoked') lines.push(t('cli.mcp.grant.revoked', {}, locale));
-  else if (grant?.status === 'refused') {
-    const witnessRequired = grant.reason === 'AUTHORITY_WITNESS_REQUIRED' || grant.reason === 'APPROVAL_INTERACTIVE_REQUIRED';
-    lines.push(witnessRequired ? t('cli.mcp.revoke.grantWitness', {}, locale) : t('cli.mcp.revoke.grantRefused', {}, locale));
-  }
-  else lines.push(t('cli.mcp.revoke.grantUnchanged', {}, locale));
+  const { revoked } = (value ?? {}) as { revoked?: { name: string } };
+  const lines = revoked ? [t('cli.mcp.revoke.trustRemoved', { name: revoked.name }, locale)] : [];
+  lines.push(mcpGrantWithdrawalLine(value, locale) ?? t('cli.mcp.revoke.grantUnchanged', {}, locale));
   return lines;
+}
+
+export function mcpRemoveLines(value: unknown, locale: Locale, name?: string): string[] {
+  const { removed } = (value ?? {}) as { removed?: { name?: string; scope?: string } };
+  const lines = [t('terminal.mcp.removed', { name: name ?? removed?.name ?? '-', scope: scopeWord(removed?.scope ?? '-', locale) }, locale)];
+  const withdrawal = mcpGrantWithdrawalLine(value, locale);
+  if (withdrawal) lines.push(withdrawal);
+  return lines;
+}
+
+type McpGrantOutcome = { status: string; reason?: string };
+export function mcpGrantWithdrawalLine(value: unknown, locale: Locale): string | null {
+  const { grant } = (value ?? {}) as { grant?: McpGrantOutcome };
+  if (grant?.status === 'revoked') return t('cli.mcp.grant.revoked', {}, locale);
+  if (grant?.status !== 'refused') return null;
+  const witnessRequired = grant.reason === 'AUTHORITY_WITNESS_REQUIRED' || grant.reason === 'APPROVAL_INTERACTIVE_REQUIRED';
+  return witnessRequired ? t('cli.mcp.revoke.grantWitness', {}, locale) : t('cli.mcp.revoke.grantRefused', {}, locale);
+}
+
+/** The K1 grant outcome in the person's words (null: none to say). */
+export function mcpGrantLine(grant: unknown, locale: Locale, context: 'write' | 'withdrawal' = 'write'): string | null {
+  const value = grant as { status?: unknown; reason?: unknown } | null | undefined;
+  if (!value || typeof value !== 'object') return null;
+  if (context === 'withdrawal') return value.status === 'none'
+    ? t('cli.mcp.revoke.grantUnchanged', {}, locale) : mcpGrantWithdrawalLine({ grant }, locale);
+  if (value.status === 'granted') return t('cli.mcp.grant.granted', {}, locale);
+  if (value.status === 'revoked') return t('cli.mcp.grant.revoked', {}, locale);
+  if (value.status !== 'refused') return null;
+  const reason = value.reason === 'delegation' ? t('mcp.grant.reason.delegation', {}, locale) : value.reason === 'administer' ? t('mcp.grant.reason.administer', {}, locale)
+    : value.reason === 'unsupported' ? t('mcp.grant.reason.unsupported', {}, locale) : value.reason === 'principal' ? t('mcp.grant.reason.principal', {}, locale) : String(value.reason ?? '-');
+  return t('cli.mcp.grant.refused', { reason }, locale);
 }
 type ServerSummary = { health?: 'connected' | 'not-started' | 'failed' | 'tools-changed' | 'timed-out'; failure?: string; detail?: string; name: string; scope: string; file?: string; status: string; reason?: string; refusal?: SecretRefusal; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
   headerNames?: string[]; pinnedTools?: number; definitionDigest?: string; lastStart?: { text?: string; phase?: string };
@@ -127,9 +154,10 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
     async list(input = {}): Promise<McpPanelList> {
       input.signal?.throwIfAborted();
       const listed = (await call({ verb: 'list', health: input.health ?? false }, undefined, input.signal)) as { servers?: unknown; problems?: unknown };
-      const servers = array<ServerSummary>(listed.servers).map(server => { const previous = panelState(server), state = input.checking && server.status === 'trusted' ? 'checking' : previous, grantKey = card ? mcpGrantKey(server) : undefined; return { state, name: server.name, scope: scopeWord(server.scope, locale), status: state === 'checking' ? `${panelWord(server, state, locale)} · ${panelWord(server, previous, locale)}` : panelWord(server, state, locale),
+      const servers = array<ServerSummary & { definitionDigest: string }>(listed.servers).map(server => { const previous = panelState(server), state = input.checking && server.status === 'trusted' ? 'checking' : previous, grantKey = card ? mcpGrantKey(server) : undefined; return { state, name: server.name, scope: scopeWord(server.scope, locale), status: state === 'checking' ? `${panelWord(server, state, locale)} · ${panelWord(server, previous, locale)}` : panelWord(server, state, locale),
         attention: state !== 'connected', tools: server.pinnedTools ? toolsWord(server.pinnedTools, locale) : '',
         realm: realmWord(server.realm, locale).split(':')[0]!, launch: [server.command ?? '', ...array<string>(server.args)].join(' '), trusted: server.status === 'trusted',
+        selected: { scope: server.scope, definitionDigest: server.definitionDigest },
         ...(grantKey ? { grantKey } : {}) }; });
       const problems = array<{ name: string | null; scope: string; reason: string }>(listed.problems).map(problem => problem.name === null
         ? t('terminal.mcp.problemFile', { scope: scopeWord(problem.scope, locale), reason: problem.reason }, locale)
@@ -153,28 +181,32 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
         { label: t('tui.panel.mcp.field.grant', {}, locale), text: grantWord(server.grant, locale), ...(server.grant?.status === 'granted' ? {} : { tone: 'muted' as const }) },
         { label: t('tui.panel.mcp.field.definition', {}, locale), text: digest12(server.definitionDigest), tone: 'muted' as const }];
     },
-    async revoke(name) { return mcpRevokeLines(await call({ verb: 'revoke', name }), locale); },
+    async revoke(name, selected) { return mcpRevokeLines(await call({ verb: 'revoke', name, selected }), locale); },
     async approve(name, ask) {
-      const result = (await call({ verb: 'approve', name }, asking(ask))) as { approved?: boolean; pinnedTools?: number };
-      return [result.approved ? t('tui.panel.mcp.approved', { name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale) : t('tui.panel.mcp.notApproved', { name }, locale)];
+      const result = (await call({ verb: 'approve', name }, asking(ask))) as { approved?: boolean; pinnedTools?: number; grant?: McpGrantOutcome };
+      const trust = result.approved ? t('tui.panel.mcp.approved', { name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale) : t('tui.panel.mcp.notApproved', { name }, locale);
+      const grant = result.approved
+        ? result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null
+        : mcpGrantLine(result.grant, locale, 'withdrawal');
+      return grant ? [trust, grant] : [trust];
     },
     ...(card ? { async grantKey(name: string, key: string, ask: McpTrustAsk) { if (!await card.offer()) return [t('terminal.mcp.status.secretRefused', { key }, locale)]; // KER-17 audit: the person-only first-use card
       if (await ask(await card.question(key, root)) !== true) return [t('mcp.grant.notNow', { key }, locale)]; await card.grant(key); return [t('mcp.grant.given', { key, name }, locale)]; } } : {}),
     async reconnect(name) { await call({ verb: 'reconnect', name }); return [t('terminal.mcp.reconnect', { name }, locale)]; },
-    async remove(name) {
-      const removed = (await call({ verb: 'remove', name })) as { removed?: { scope?: string } };
-      return [t('terminal.mcp.removed', { name, scope: scopeWord(removed.removed?.scope ?? '-', locale) }, locale)];
-    },
+    async remove(name, selected) { return mcpRemoveLines(await call({ verb: 'remove', name, selected }), locale, name); },
     async add(draft: McpServerDraft, ask) {
       // The registry command validates the entry (https only; plain http only on this machine; no `$DECK:` header in a project file).
       const entry = draft.transport === 'http' ? { type: 'http', url: draft.target, ...(Object.keys(draft.headers).length ? { headers: draft.headers } : {}) }
         : { type: 'stdio', command: draft.target, ...(draft.args.length ? { args: draft.args } : {}), ...(Object.keys(draft.env).length ? { env: draft.env } : {}),
           ...(draft.realm ? { realm: draft.realm } : {}) };
       const result = (await call({ verb: 'add', scope: draft.scope, name: draft.name, entry, approve: true }, asking(ask))) as
-        { added?: { name: string; scope: string; file: string }; trust?: string; pinnedTools?: number };
+        { added?: { name: string; scope: string; file: string }; trust?: string; pinnedTools?: number; grant?: McpGrantOutcome };
       const trust = result.trust === 'trusted' ? t('tui.panel.mcp.approved', { name: draft.name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale)
         : result.trust === 'declined' ? t('tui.panel.mcp.addedDeclined', {}, locale) : t('tui.panel.mcp.addedPending', {}, locale);
-      return [t('tui.panel.mcp.added', { name: draft.name, scope: scopeWord(draft.scope, locale), file: result.added?.file ?? '-' }, locale), trust];
+      const added = t('tui.panel.mcp.added', { name: draft.name, scope: scopeWord(draft.scope, locale), file: result.added?.file ?? '-' }, locale);
+      const grant = result.trust === 'declined' || result.trust === 'unanswered' ? mcpGrantLine(result.grant, locale, 'withdrawal')
+        : result.grant?.status === 'refused' ? mcpGrantLine(result.grant, locale) : null;
+      return grant ? [added, trust, grant] : [added, trust];
     },
     transports: [choice('stdio', t('tui.panel.mcp.transport.stdio', {}, locale), t('tui.panel.mcp.transport.stdioDetail', {}, locale)),
       choice('http', t('tui.panel.mcp.transport.http', {}, locale), t('tui.panel.mcp.transport.httpDetail', {}, locale))],

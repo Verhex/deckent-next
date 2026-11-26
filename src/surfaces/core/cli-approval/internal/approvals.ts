@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ExitCode, type Locale } from '#platform/index.js';
 import { approvalCommandSchema, approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { approvalRecordSchema, requiresPersonRunInputDecision, type ApprovalRecord } from '#domain/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -46,7 +46,7 @@ function parse(argv: readonly string[]): Parsed {
  * - `decide` without `--input`: the same pick and card on a terminal; anywhere else the missing `--input` is named (exit 2).
  * Every decision goes through the same `decideApproval` operation (runtime service) as the terminal; nothing here decides on its own.
  */
-export async function approvalsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
+export async function approvalsCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);
   if (args.help) { emit(t('cli.approval.help', {}, locale), sinks); return; }
   if (args.schema) { emit(inputSchemaText(SCHEMAS[args.action]), sinks); return; }
@@ -72,8 +72,12 @@ function renderResult(value: unknown, locale: Locale, verbose: boolean, style: C
       ...(unreadable ? [t('cli.approval.unreadable', { count: unreadable }, locale)] : [])].join('\n');
   }
   if (value === null) return t('cli.approval.notFound', {}, locale);
-  const record = approvalRecordSchema.safeParse(typeof value === 'object' && 'record' in value ? (value as { record: unknown }).record : value);
+  const record = approvalResultRecord(value);
   return record.success ? approvalLines(record.data, now, locale, verbose).join('\n') : JSON.stringify(value, null, 2);
+}
+
+function approvalResultRecord(value: unknown) {
+  return approvalRecordSchema.safeParse(value !== null && typeof value === 'object' && 'record' in value ? value.record : value);
 }
 
 type Scan = Readonly<{ records: readonly ApprovalRecord[]; truncated: boolean; raw: readonly unknown[] }>;
@@ -90,7 +94,7 @@ async function scan(list: (input: unknown) => Promise<unknown>, scopeId: string,
   return { records: readableApprovals(raw, Date.now()), truncated: true, raw };
 }
 
-async function personApprovals(args: Parsed, context: ApprovalCommandContext, locale: Locale, approvals: Readonly<{ pageSize: number; sessionTtlMs: number }>): Promise<void> {
+async function personApprovals(args: Parsed, context: ApprovalCommandContext, locale: Locale, approvals: Readonly<{ pageSize: number; sessionTtlMs: number }>): Promise<void | ExitCode> {
   if (args.action === 'inspect' || args.action === 'renew') throw missingInput(args.action, locale);
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, sinks = sinksOf(context), list = context.listApprovals;
   const interactive = cliMode(context, args.json).mode === 'interactive';
@@ -100,24 +104,32 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
   const configured = ((await loadConfig(root, options)).terminal as { scopeId?: unknown } | undefined)?.scopeId, io = cardIo(context, locale, approvals.sessionTtlMs);
   const scope = await resolveCommandScope({ command: `${registry.command} ${args.action}`, locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: args.action === 'decide', interactive, listScopes: scopeLister(context, root, options), pick: io.ask });
-  if (!scope) return;
+  const noSelection = args.action === 'decide' ? EXIT_CODES.error : undefined;
+  if (!scope) return noSelection;
   let view = await scan(list, scope.scopeId, approvals.pageSize);
   if (args.json) { emit(view.raw, { ...sinks, json: true }); return; }
   const print = (text: string) => emit(text, sinks);
   if (args.action === 'list') print(listText(view, scope, locale, cliTableStyle(context)));
   if (!interactive) return;
   // The person's terminal: pick a waiting approval and answer it on the card; repeat until "leave" or nothing waits (bounded rounds).
+  let exit: ExitCode | undefined;
   for (let round = 0; round < APPROVAL_LIST.menuRounds; round++) {
     const now = Date.now(), waiting = view.records.filter(record => isPending(record, now));
-    if (!waiting.length) { if (args.action === 'decide' || round > 0) print(t('cli.approval.noneWaiting', { scope: scope.scopeId }, locale)); return; }
+    if (!waiting.length) {
+      if (args.action === 'decide' || round > 0) print(t('cli.approval.noneWaiting', { scope: scope.scopeId }, locale));
+      return round === 0 ? noSelection : exit;
+    }
     const picked = await io.ask({ title: t('cli.approval.pick.title', { count: waiting.length }, locale),
       options: [...waiting.slice(0, APPROVAL_LIST.rowsShown).map(record => ({ id: record.request.approvalId, label: approvalPickLabel(record, locale) })),
         { id: LEAVE, label: t('cli.approval.pick.leave', {}, locale), key: 'q' }] });
     const record = waiting.find(item => item.request.approvalId === picked);
-    if (!record) return;
-    print(await answerOnCard(record, args.reason, scope.scopeId, context, io.ask, locale));
+    if (!record) return round === 0 && picked !== LEAVE ? noSelection : exit;
+    const answer = await approvalCardOutcome(record, args.reason, scope.scopeId, context, io.ask, locale);
+    print(answer.text);
+    if (!answer.recorded) exit = EXIT_CODES.error;
     view = await scan(list, scope.scopeId, approvals.pageSize);
   }
+  return exit;
 }
 
 /**
@@ -127,6 +139,11 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
  */
 export async function answerOnCard(record: ApprovalRecord, reason: string | undefined, scopeId: string, context: ApprovalCommandContext,
   ask: ReturnType<typeof cardIo>['ask'], locale: Locale): Promise<string> {
+  return (await approvalCardOutcome(record, reason, scopeId, context, ask, locale)).text;
+}
+
+async function approvalCardOutcome(record: ApprovalRecord, reason: string | undefined, scopeId: string, context: ApprovalCommandContext,
+  ask: ReturnType<typeof cardIo>['ask'], locale: Locale): Promise<{ text: string; recorded: boolean }> {
   const own = reason?.trim(), now = Date.now(), { expiresAt } = record.request;
   const request = record.request;
   const preview = request.schemaVersion === 3 && request.subject.kind === 'run-create' ? request.preview : undefined;
@@ -139,14 +156,20 @@ export async function answerOnCard(record: ApprovalRecord, reason: string | unde
     exactBody: packageReview, markHiddenBody: packageReview,
     ...(!canAllow ? { notice: t('terminal.approval.window.reviewIncomplete', {}, locale) } : {}),
     options: canAllow ? options : options.map(option => option.role === 'yes' ? { ...option, disabled: true, label: t('terminal.approval.window.choice.unavailable', {}, locale) } : option) }, expiresAt);
-  if (Date.now() >= expiresAt) return t('cli.approval.card.expired', {}, locale);
-  if (answer !== 'no' && (answer !== 'once' || !canAllow)) return t('cli.approval.card.nothing', {}, locale);
+  if (Date.now() >= expiresAt) return { text: t('cli.approval.card.expired', {}, locale), recorded: false };
+  if (answer !== 'no' && (answer !== 'once' || !canAllow)) return { text: t('cli.approval.card.nothing', {}, locale), recorded: false };
   if (!context.decideApproval) throw ErrorRegistry.createError('CLI_USAGE');
-  const decision = answer === 'once' ? 'allow' : 'deny';
-  const result = await context.decideApproval({ schemaVersion: 1, scopeId, approvalId: record.request.approvalId, commandId: `cli-${randomUUID()}`,
+  const decision = answer === 'once' ? 'allow' : 'deny', commandId = `cli-${randomUUID()}`, { approvalId } = record.request;
+  const result = await context.decideApproval({ schemaVersion: 1, scopeId, approvalId, commandId,
     expectedRevision: record.revision, decision, channel: 'local-cli',
     reason: own || (decision === 'allow' ? t('cli.approval.reason.allow', {}, locale) : t('cli.approval.reason.deny', {}, locale)), ...(own ? { approverNote: true } : {}) });
-  return renderResult(result, locale, false, { width: Number.POSITIVE_INFINITY, ascii: false });
+  const receipt = approvalResultRecord(result);
+  if (receipt.success && receipt.data.status === 'decided' && receipt.data.request.approvalId === approvalId && receipt.data.request.scopeId === scopeId
+    && receipt.data.revision === record.revision + 1 && receipt.data.decision?.commandId === commandId && receipt.data.decision.decision === decision) {
+    return { text: approvalLines(receipt.data, Date.now(), locale).join('\n'), recorded: true };
+  }
+  const text = result === null ? t('cli.approval.notFound', {}, locale) : t('cli.approval.card.unconfirmed', {}, locale);
+  return { text, recorded: false };
 }
 
 function listText(view: Scan, scope: ScopeResolution, locale: Locale, style: CliTableStyle): string {

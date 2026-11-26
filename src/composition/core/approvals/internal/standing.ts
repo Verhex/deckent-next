@@ -1,8 +1,8 @@
-import { automationMarker, ErrorRegistry, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
+import { automationMarker, ErrorRegistry, inspectProductFile, isCodedError, SystemTrustedClock, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { executionPermissionCoverage, verifiedPrincipal, ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_TOOL_NAMES, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, assertAuthorityWitness, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAuditStore, readLocalOsIdentity } from '#adapters/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -80,7 +80,7 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
     const code = (error as { code?: unknown })?.code;
     return { status: 'refused', reason: code === 'POLICY_DENIED' ? 'delegation' : String(code ?? 'failed') };
   };
-  const isApprover = (person: Person) => person.issuer === approver.issuer && person.subject === approver.subject;
+  const isApprover = (person: Pick<Person, 'issuer' | 'subject'>) => person.issuer === approver.issuer && person.subject === approver.subject;
   const run = (work: (grants: McpToolGrants, person: Person) => Promise<McpToolGrantOutcome>) => withPolicyAdministration(root, scopeId, options, 'write', (deps, person) =>
     isApprover(person) ? work(new McpToolGrants(deps), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
     // A person refused write access to this scope holds no authority to grant there either (the same reason as the delegation bound's).
@@ -95,13 +95,16 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
         const aiMarked = automationMarker(process.env, markers) === 'agent' || automationMarker(options.env ?? process.env, markers) === 'agent';
         const localPerson = channel === undefined && !aiMarked;
         const witnessed = localPerson && await attestLocalInteractiveTerminal(peer?.pid, peer?.uid);
-        if (localPerson && !witnessed) {
-          // Use the validated read snapshot so a failed policy read cannot be mistaken for absence.
+        if (localPerson) {
+          // Only an unmarked local caller can use a validated or guarded absence observation.
           const absent = await withPolicyAdministration(root, scopeId, options, 'read', async (deps, person, document) => {
             if (!isApprover(person)) return false;
             const grants = new McpToolGrants({ ...deps, policy: { load: async () => document } });
             return (await grants.inspect({ scopeId, principal: person, server })).status === 'none';
-          }).catch(() => false);
+          }).catch(async (error: unknown) => {
+            if (!isCodedError(error, 'POLICY_UNAVAILABLE') || !isApprover(readLocalOsIdentity())) return false;
+            return inspectProductFile(config.productLayout, 'policy').then(() => false, error => isCodedError(error, 'MANAGED_FILE_MISSING'));
+          });
           if (absent) return { status: 'none' };
         }
         await assertAuthorityWitness('mcpToolGrantRevoke', channel, { attest: async () => witnessed });

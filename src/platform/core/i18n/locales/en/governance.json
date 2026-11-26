@@ -681,6 +681,8 @@
   "error.APPROVAL_INTERACTIVE_REQUIRED": "Approval decisions require interactive terminal input and output, or an explicit AI policy grant. Terminal evidence does not prove human identity. Nothing was decided.",
   "error.APPROVAL_ASSURANCE_INSUFFICIENT": "This approval needs stronger decision assurance than this surface supplies. Use the terminal card that started the turn. No decision was recorded.",
   "error.MCP_SERVER_UNKNOWN": "No MCP server named {name} is registered for this project.",
+  "error.MCP_SERVER_CHANGED": "The selected MCP server changed. Open the list and confirm the current server again.",
+  "error.MCP_SERVER_UNVERIFIED": "The selected MCP server could not be verified. Check that the registry can be read, then reopen the list.",
   "error.MCP_SERVER_EXISTS": "An MCP server named {name} already exists in the {scope} scope; remove it first.",
   "error.MCP_SERVER_SCOPE_AMBIGUOUS": "{name} is registered in several scopes ({scopes}); pass --scope.",
   "error.MCP_SERVER_ENTRY_INVALID": "The MCP server entry {name} is not valid ({reason}).",

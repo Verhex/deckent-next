@@ -85,7 +85,7 @@ it('a person on a terminal decides on the card (arrow keys), --yes never skips i
   // A cancelled card (Esc, Ctrl+C) answers nothing: the adapter records nothing for null.
   card.answers = [null];
   const cancelled = host();
-  expect(await main(['mcp', 'approve', 'fx'], cancelled.context)).toBe(0);
+  expect(await main(['mcp', 'approve', 'fx'], cancelled.context)).toBe(1);
   expect(cancelled.out.text()).not.toMatch(/approved: true/u);
 });
 

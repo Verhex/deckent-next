@@ -1,13 +1,11 @@
 import { authorityDocuments, delegationWithin, mcpGrantRuleIds, mcpToolGrantChange, mcpToolGrantRevokeChange, planPolicyChange } from '#domain/index.js';
 import { isCodedError, isAuthorizationRefusal, sha256 } from '#platform/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
-
 /** Why a trusted server's tools got no grant: the approver does not hold this authority in that scope (`delegation`), may not change policy
  * through the governed chain at all (`administer`), the policy cannot carry it (`unsupported`: v1 or unreadable), the change did not settle, or
  * another refusal (its code). Trust itself is recorded either way. */
 export type McpToolGrantOutcome = { readonly status: 'granted' | 'revoked' | 'none' } | { readonly status: 'refused'; readonly reason: string };
 export interface McpToolGrantTarget { readonly scope: 'managed' | 'local' | 'project' | 'user'; readonly name: string }
-
 /**
  * MCP trust → permission (L1 K1, Jev 8e908338; owner 2026-10-07 `mcp-server` kind, Jev 04f75210): the approver's own `mcp-server` grant for
  * exactly this server (it covers the server's pinned tools; `require-approval` + `modeEligible`, Jev 71eeb4ab), written and removed only through

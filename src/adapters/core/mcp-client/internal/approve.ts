@@ -76,14 +76,19 @@ const mcpTrustNote = (scope: McpScope, moved: boolean, locale: Locale) => [...sc
 /** Writes one decision: the audit event first (no event, no change), then the record under the file's write lock (recomputed on what is there).
  * A decline, reset or revoke then removes the approver's tool grant of the server (K1: no grant outlives its trust); its outcome is returned. */
 export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scope' | 'definitionDigest'>, context: McpTrustContext, action: McpTrustChange['action'],
-  change: (current: McpTrustRecord | null) => McpTrustRecord | null): Promise<McpToolGrantResult | null> {
+  change: (current: McpTrustRecord | null) => McpTrustRecord | null, verify?: (current: McpTrustRecord | null) => Promise<void>): Promise<McpToolGrantResult | null> {
   const directory = await context.directory(server.scope), mine = (record: McpTrustRecord) => record.scope === server.scope && record.name === server.name;
-  const before = await readMcpTrust(directory);
-  if (!before.ok) throw ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason: before.reason } });
-  const preview = change(before.state.servers.find(mine) ?? null);
-  await context.audit({ action, scope: server.scope, name: server.name, definitionDigest: server.definitionDigest, toolsDigest: preview ? toolsDigest(preview.tools) : null });
-  await updateMcpTrust(directory, state => {
+  const audit = (next: McpTrustRecord | null) => context.audit({ action, scope: server.scope, name: server.name, definitionDigest: server.definitionDigest,
+    toolsDigest: next ? toolsDigest(next.tools) : null });
+  if (!verify) {
+    const before = await readMcpTrust(directory);
+    if (!before.ok) throw ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason: before.reason } });
+    await audit(change(before.state.servers.find(mine) ?? null));
+  }
+  await updateMcpTrust(directory, async state => {
     const current = state.servers.find(mine) ?? null, next = change(current);
+    // A selected target is checked under the trust lock, before the audit or grant withdrawal.
+    if (verify) { await verify(current); await audit(next); }
     return [...state.servers.filter(record => record !== current), ...(next ? [next] : [])];
   });
   if (action === 'trust' || action === 'reconnect' || !context.grants) return null;
@@ -118,7 +123,10 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     name: server.name, definitionDigest: server.definitionDigest, tools, decision, reconnect: keep(current), approvedAtMs: (context.now ?? Date.now)(),
     principal: { issuer: context.principal.issuer, subject: context.principal.subject } });
   // A decline keeps the owner's existing always-ask locks on the declined record (a later approval inherits them); nothing else stays pinned.
-  const decline = async () => { await recordMcpTrust(server, context, 'decline', record('declined', (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk))); return { decision: 'declined' as const, pinned: 0 }; };
+  const decline = async () => {
+    const grant = await recordMcpTrust(server, context, 'decline', record('declined', (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk)));
+    return { decision: 'declined' as const, pinned: 0, ...(grant ? { grant } : {}) };
+  };
   const started = await ask(launchCard);
   if (started === null) return { decision: 'unanswered', pinned: 0 };
   if (!started) return decline();
