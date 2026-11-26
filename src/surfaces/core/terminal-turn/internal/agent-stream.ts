@@ -123,18 +123,17 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. */
+/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. Only the turn's own positions count:
+ * after an optional policy-record warning, the failed-round closure's diagnosis, the whole note, or its last sentence. Any other shape gets no step. */
 function headlessTurnGuidance(note: string | null): string | null {
   if (note === null) return null;
   for (const locale of LOCALES) {
-    const failedWith = (diagnosis: string) => {
-      const summary = t('agent.turn.outcome.noTools', {}, locale);
-      const prefix = t('agent.turn.outcome.failedDiagnosis', { diagnosis, summary }, locale).split(summary)[0]!;
-      return note.startsWith(prefix);
-    };
-    const guard = t('error.headless.loginBusy.guard', {}, locale);
-    if (failedWith(guard) || note === guard || note.endsWith(` ${guard}`)) return t('headless.chat.loginBusyNext', {}, locale);
-    if (failedWith(t('error.headless.agentRunDispose', {}, locale)) || failedWith(t('error.headless.agentRunRemove', {}, locale)))
+    const audit = `${t('agent.policyTurn.auditFailed', {}, locale)} `, rest = note.startsWith(audit) ? note.slice(audit.length) : note;
+    const summary = t('agent.turn.outcome.noTools', {}, locale);
+    const names = (cause: string) => rest === cause || rest.endsWith(` ${cause}`)
+      || rest.startsWith(t('agent.turn.outcome.failedDiagnosis', { diagnosis: cause, summary }, locale).split(summary)[0]!);
+    if (names(t('error.headless.loginBusy.guard', {}, locale))) return t('headless.chat.loginBusyNext', {}, locale);
+    if (names(t('error.headless.agentRunDispose', {}, locale)) || names(t('error.headless.agentRunRemove', {}, locale)))
       return t('headless.chat.runCleanupNext', {}, locale);
   }
   return null;

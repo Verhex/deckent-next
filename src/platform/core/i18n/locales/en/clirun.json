@@ -111,16 +111,5 @@
   "cli.run.report.channelColumns": "Channel|Attempts|Measured API (USD)|API unmeasured|Measured subscription calls",
   "cli.run.report.channelEvidence": "Visible attempts only; measured tariff cost is not provider billing. Missing subscription counts stay unknown. No billing period or reset is inferred.",
   "cli.run.refused.title": "Refused requests (newest {count}, no Run was created):",
-  "cli.run.refused.row": "  {ago} · {code} · {title}",
-  "cli.run.refused.receiptReason": "The rejection receipt records {reason}.",
-  "cli.run.refused.receiptStatus": "The rejection receipt records {reason} (HTTP {status}).",
-  "cli.run.refused.httpStatus": "HTTP status {status}.",
-  "cli.run.refused.providerCode": "The provider reported code {code}.",
-  "cli.run.refused.providerLogin": "The provider reported that sign-in is required.",
-  "cli.run.refused.quota": "The reply reports a subscription usage limit.",
-  "cli.run.refused.quotaStatus": "Reported quota status {status}.",
-  "cli.run.refused.quotaReset": "Reported reset time {reset}.",
-  "cli.run.refused.check": "Check {check}.",
-  "cli.run.refused.stage": "Stage {stage}.",
-  "cli.run.refused.errorClass": "Error class {errorClass}."
+  "cli.run.refused.row": "  {ago} · {code} · {title}"
 }

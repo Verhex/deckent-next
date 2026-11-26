@@ -3782,9 +3782,6 @@
       "dependencies": [
         "src/domain/core/run",
         "src/domain/core/model-invocation",
-        "src/adapters/core/native-cli-registry",
-        "src/adapters/core/native-connection",
-        "src/surfaces",
         "src/engine/core/run-planner",
         "src/engine/core/model-invocation",
         "src/platform/core/errors",
@@ -3825,7 +3822,6 @@
     "src/surfaces/core/run-planning": {
       "dependencies": [
         "src/domain/core/run",
-        "src/domain/core/model-invocation",
         "src/platform/core/i18n",
         "src/platform/core/errors",
         "src/platform/core/output",

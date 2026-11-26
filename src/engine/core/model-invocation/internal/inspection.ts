@@ -16,7 +16,6 @@ const legacyPlugins = z.object({ cliVersion: z.string().min(1), builtinPlugins: 
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null; readonly planUsage?: ModelInvocationPlanUsageRead | null }
 export interface ModelInvocationInspectionReader {
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
-  loadReceiptMetadata?(scopeId: string, commandId: string): Promise<ModelInvocationReceipt | null>;
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
   loadObservationPage?(scopeId: string, after: string | null, limit: number): Promise<{ records: readonly ModelInvocationInspectionRecord[]; next: string | null }>;
   close(): void;
@@ -94,29 +93,6 @@ export class ModelInvocationInspectionApplication {
       invocationId = receipt.claim.invocationId;
     } finally { reader.close(); }
     return this.inspect({ schemaVersion: 2, scopeId: query.scopeId, invocationId, reference: query.reference }, credential);
-  }
-  /** A sealed planner audit row can identify a command without retaining its model reference. Use the receipt's own reference for both read grants. */
-  async inspectRejectedCommand(scopeId: string, commandId: string, credential?: unknown): Promise<ModelInvocationInspection | null> {
-    try {
-      await authenticate(this.verifier, credential, scopeId);
-      const reader = await this.openReader();
-      let receipt: ModelInvocationReceipt;
-      try {
-        if (!reader.loadReceiptMetadata) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
-        const metadata = await reader.loadReceiptMetadata(scopeId, commandId).catch(() => null);
-        if (!metadata) return null;
-        receipt = metadata;
-        if (receipt.claim.scopeId !== scopeId || receipt.request.commandId !== commandId) return null;
-        if (receipt.outcome?.state !== 'rejected') return null;
-      } finally { reader.close(); }
-      return await this.inspect({ schemaVersion: 2, scopeId, invocationId: receipt.claim.invocationId,
-        reference: receipt.request.reference, includeResponseContent: true }, credential);
-    } catch (error) {
-      if (error && typeof error === 'object' && 'code' in error
-        && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED'
-          || error.code === 'AUTHENTICATION_REQUIRED' || error.code === 'AUTHENTICATION_SCOPE_DENIED')) return null;
-      throw error;
-    }
   }
   async inspect(input: unknown, credential?: unknown, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection> {
     validateInvocationDelivery(delivery);

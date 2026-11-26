@@ -1,6 +1,6 @@
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import type { ConfigLoadOptions, Locale, ProductLayout } from '#platform/index.js';
+import type { ConfigLoadOptions, ProductLayout } from '#platform/index.js';
 import type { DispatchInventoryInput, DispatchInventoryPage, WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 import type { MonitorHandler } from './command.js';
 
@@ -14,7 +14,6 @@ export interface MonitorCommandContext extends CliBaseContext, ConfigCommandCont
   inspectInventory?: InventoryQueryHandler;
   /** MONITOR: the whole observe-only snapshot (data lane, composition); `deckent monitor` and `/monitor` fail typed without it. */
   inspectMonitor?: MonitorHandler;
-  /** BeUser D-08: details are requested only by human listings that supply a locale. */
-  listRefusedRequests?: (root: string, scopeId: string, limit: number, options: ConfigLoadOptions, locale?: Locale) =>
-    Promise<readonly Readonly<{ atMs: number; code: string; title: string; detail?: string }>[]>;
+  /** BeUser D-08: the newest refused work requests of a scope (sealed audit records), for the snapshot's "refused requests" line. */
+  listRefusedRequests?: (root: string, scopeId: string, limit: number, options: ConfigLoadOptions) => Promise<readonly Readonly<{ atMs: number; code: string; title: string }>[]>;
 }

@@ -1,12 +1,12 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { brainInvocationCommandId, brainRejectionForBody, readSubscriptionRejection, type ModelInvocationInspectionApplication, type RefusedRunRequest, configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, listRefusedRunRequestEvents, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
-import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { SIWC_INFERENCE, SIWC_USAGE_LIMIT_STATUS, siwcRejection, siwcResponsesDefinitionSchema, nativeCliHeadless, nativeQuotaPolicy, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
+import { SIWC_INFERENCE, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
-import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, carryContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel, configuredInvocationInspection } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, carryContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -15,7 +15,6 @@ import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.
 import { configuredWorkerSetupFact } from './internal/intent-facts.js';
 import { preflightConfiguredRunIntent, transitionConfiguredRunIntent } from './internal/intents.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
-import { loadProposalViews } from '#surfaces/index.js';
 export { inspectConfiguredRoleModels, inspectConfiguredBrainModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
  * shows planning progress (a quota wait, owner Q-H4) passes it; without it a quota refusal is the typed refusal at once. */
@@ -134,85 +133,9 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
   }
 }
 /** BeUser D-08: the newest refused work requests of one scope (none when the scope has no audit key yet). */
-export async function inspectConfiguredRefusedRequests(root: string, scopeId: string, limit: number, options: ConfigLoadOptions = {}, locale?: Locale) {
-  try {
-    const c = await loadConfiguredScopeContext(root, scopeId, options, 'read');
-    if (!locale) return await withScopeAudit(c, audit => listRefusedRunRequests(audit, scopeId, limit), false, 'read');
-    const rows = await withScopeAudit(c, audit => listRefusedRunRequestEvents(audit, scopeId, limit), false, 'read');
-    const inspection = rows.length ? await configuredInvocationInspection(root, scopeId, options).catch(() => null) : null;
-    const projected: (ReturnType<typeof listRefusedRunRequests>[number] & { detail?: string })[] = [];
-    for (const { principal, ...row } of rows) {
-      const detail = inspection && await refusedPlanDetail(inspection, { ...row, principal, scopeId }, locale).catch(() => null);
-      projected.push(detail ? { ...row, detail } : row);
-    }
-    return projected;
-  }
+export async function inspectConfiguredRefusedRequests(root: string, scopeId: string, limit: number, options: ConfigLoadOptions = {}) {
+  try { const c = await loadConfiguredScopeContext(root, scopeId, options, 'read'); return await withScopeAudit(c, audit => listRefusedRunRequests(audit, scopeId, limit), false, 'read'); }
   catch { return []; }
-}
-
-const subscriptionAdapters = new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID, SIWC_INFERENCE.adapter.id]);
-const plannerRejectionCodes = new Set(['HEADLESS_QUOTA_EXHAUSTED', 'SIWC_USAGE_UNAVAILABLE', 'SIWC_SERVICE_UNAVAILABLE',
-  'HEADLESS_CREDITS_REQUIRED', 'HEADLESS_LOGIN_REQUIRED', 'HEADLESS_GUARD_FAILED', 'BRAIN_OUTPUT_INVALID',
-  'HEADLESS_LIMIT_REACHED', 'BRAIN_PROVIDER_REJECTED']);
-
-type RefusedIdentity = RefusedRunRequest & Readonly<{ scopeId: string; principal: Readonly<{ issuer: string; subject: string }> }>;
-/** Only the initial command is derivable from the audit row. A successor can fail before it claims a receipt. */
-async function refusedPlanDetail(inspection: ModelInvocationInspectionApplication, row: RefusedIdentity, locale: Locale) {
-  if (!plannerRejectionCodes.has(row.code)) return null;
-  const commandId = brainInvocationCommandId(row);
-  const read = await inspection.inspectRejectedCommand(row.scopeId, commandId);
-  const receipt = read?.invocation;
-  if (receipt?.outcome?.state !== 'rejected' || receipt.request.commandId !== commandId || receipt.outcome.observedAtMs > row.atMs
-    || receipt.actor.issuer !== row.principal.issuer || receipt.actor.subject !== row.principal.subject) return null;
-  const { evidence } = receipt.outcome;
-  if (evidence.adapter.id === SIWC_INFERENCE.adapter.id && evidence.httpStatus === SIWC_USAGE_LIMIT_STATUS) {
-    const profile = siwcResponsesDefinitionSchema.safeParse(receipt.profile.adapter.definition);
-    if (!profile.success || profile.data.schemaVersion === 2 && profile.data.apiContinuation) return null;
-  }
-  const data = read?.responseContent?.kind === 'response-body' ? read.responseContent.data : null;
-  const body = data === null ? null : readSubscriptionRejection({ adapter: evidence.adapter, body: { data } }, subscriptionAdapters);
-  if (body) {
-    if (row.code !== brainRejectionForBody(evidence, body).code || body.refusal === 'quota' && typeof body.resetsAtMs === 'number') return null;
-    const guards = nativeCliHeadless(receipt.profile.protocol.family)?.headless.guards;
-    const errorClass = body.schemaVersion === 5 && guards && 'errorAllow' in guards
-      && (body.errorClass === 'unclassified' || guards.errorAllow.rules.some(rule => rule.errorClass === body.errorClass)) ? body.errorClass : undefined;
-    const providerCode = body.schemaVersion === 3 && body.code;
-    const classified = body.schemaVersion === 3 && providerCode ? siwcRejection({ error: { code: providerCode } }, body.status) : null;
-    const reportedStatus = body.refusal === 'quota' ? body.subtype : undefined;
-    const policy = reportedStatus ? nativeQuotaPolicy() : null;
-    const quotaStatus = policy && reportedStatus && [...policy.claudeAllowedStatuses, ...policy.claudeRejectedStatuses].includes(reportedStatus)
-      ? reportedStatus : undefined;
-    const [planning] = await loadProposalViews();
-    return planning.renderRefusedPlanBody(body, { errorClass, quotaStatus,
-      providerCode: classified?.schemaVersion === 3 && classified.code === providerCode ? classified.code : undefined }, locale);
-  }
-  const { reason, httpStatus } = evidence;
-  if (!matchesReceiptFamily(row.code, evidence.adapter.id, receipt.profile.protocol.family, reason, httpStatus)) return null;
-  return httpStatus === null ? t('cli.run.refused.receiptReason', { reason }, locale)
-    : t('cli.run.refused.receiptStatus', { reason, status: httpStatus }, locale);
-}
-/** Without the typed reply, only compatible envelopes that exclude another attempt qualify. */
-function matchesReceiptFamily(code: string, adapter: string, family: string, reason: string, status: number | null): boolean {
-  const generic = code === 'BRAIN_PROVIDER_REJECTED';
-  if (adapter === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
-    // Even an absent HTTP status can accompany an overage whose reset permits another attempt.
-    if (reason === 'http-status') {
-      const guards = nativeCliHeadless(family)?.headless.guards;
-      if (status === null || !guards || !('quotaStatuses' in guards) || guards.quotaStatuses.includes(status)) return false;
-      return generic || code === 'HEADLESS_CREDITS_REQUIRED' || code === 'HEADLESS_LOGIN_REQUIRED';
-    }
-    return generic
-      || code === 'HEADLESS_GUARD_FAILED' && (reason === 'model-mismatch' || reason === 'invalid-response')
-      || code === 'BRAIN_OUTPUT_INVALID' && reason === 'invalid-response'
-      || code === 'HEADLESS_LIMIT_REACHED' && reason === 'response-limit';
-  }
-  if (adapter === SIWC_INFERENCE.adapter.id && reason === 'http-status') {
-    if (status === null || status === SIWC_USAGE_LIMIT_STATUS) return false;
-    const refusal = siwcRejection(null, status)?.refusal;
-    return generic || code === 'HEADLESS_LOGIN_REQUIRED' && refusal === 'login-required'
-      || (code === 'SIWC_USAGE_UNAVAILABLE' || code === 'SIWC_SERVICE_UNAVAILABLE') && refusal === 'service-unavailable';
-  }
-  return generic;
 }
 export { transitionConfiguredRunIntent } from './internal/intents.js';
 /** Explicit person's start only; ordinary /do replay keeps the durable intent parked/released/starting. */

@@ -1,5 +1,5 @@
 export { invokeConfiguredModel, invokeConfiguredFeatureModel, prepareConfiguredFeatureContinuation, invokePeerConfiguredFeatureModel, invokeConfiguredModelAs, prepareConfiguredModelAs, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel, measureConfiguredModel } from './internal/invoke.js';
-export { inspectConfiguredModelInvocation, inspectConfiguredModelInvocationCommand, inspectPeerConfiguredModelInvocation, configuredInvocationInspection } from './internal/inspect.js';
+export { inspectConfiguredModelInvocation, inspectConfiguredModelInvocationCommand, inspectPeerConfiguredModelInvocation } from './internal/inspect.js';
 export { purgePeerConfiguredModelInvocationContent } from './internal/purge.js';
 export { cancelPeerConfiguredModelInvocation } from './internal/cancel.js';
 export type { RuntimeModelInvocationHost } from './internal/invoke.js';

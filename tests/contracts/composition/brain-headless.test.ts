@@ -6,7 +6,6 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planRun } from '../../../src/index.js';
-import { inspectConfiguredRefusedRequests } from '#composition/core/run-planner/index.js';
 import { createHash } from 'node:crypto';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { readLocalOsIdentity, openSqliteModelActivationStore } from '#adapters/index.js';
@@ -70,11 +69,6 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-4 Brain through th
     const h = await fixture([...steps]);
     for (let attempt = 0; attempt < 2; attempt++) await expect(planRun(h.f.project, command, h.f.options)).rejects.toMatchObject({ code, ...(params ? { params } : {}) });
     expect(await h.calls()).toHaveLength(1);
-    if (_label === 'N2 an API key source') {
-      const [row] = await inspectConfiguredRefusedRequests(h.f.project, command.scopeId, 1, h.f.options, 'en');
-      expect(row).toMatchObject({ commandId: command.commandId, code, detail: 'A safety check refused the subscription CLI result. (apiKeySource)' });
-      expect(JSON.stringify(row)).not.toContain('ANTHROPIC_API_KEY');
-    }
   });
 });
 

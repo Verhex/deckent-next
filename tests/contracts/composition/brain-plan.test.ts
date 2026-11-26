@@ -1,5 +1,4 @@
-import { createNativeCodingTemplate, openSqliteModelInvocationStore } from '#adapters/index.js';
-import * as adapters from '#adapters/index.js';
+import { createNativeCodingTemplate } from '#adapters/index.js';
 import * as workerImage from '#adapters/core/worker-image/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -9,16 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun, inspectRun, inspectRunProposal, configuredApproval, reserveRunTasks } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
-import { configuredInvocationInspection, inspectConfiguredModelInvocationCommand, invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
-import { exitCodeFor, headlessDiagnostic, t } from '#platform/index.js';
-import { brainInvocationCommandId, brainQuotaAttemptCommandId, brainRunId, createModelInvocationResponseEvidence,
-  ModelInvocationPurgeApplication, runRequestRefusedEvent, verifiedPrincipal } from '#engine/index.js';
-import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
+import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { exitCodeFor } from '#platform/index.js';
+import { brainRunId } from '#engine/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { main } from '#surfaces/core/cli/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
-import { inspectConfiguredRefusedRequests } from '#composition/core/run-planner/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
@@ -53,70 +49,6 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     const f = await fixture({ rejectStatus });
     for (let i = 0; i < 2; i++) await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', params: { reason: 'http-status', status: rejectStatus } });
     expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
-    if (rejectStatus !== 400) return;
-    const context = await loadConfiguredScopeContext(f.project, command.scopeId, f.options, 'read');
-    const kept = await inspectConfiguredModelInvocationCommand(f.project, { schemaVersion: 1, scopeId: command.scopeId,
-      commandId: brainInvocationCommandId(command), reference: f.reference }, f.options);
-    expect(kept?.contentStatus).toBe('retained');
-    const purge = new ModelInvocationPurgeApplication(verifiedPrincipal(context.principal),
-      { authorize: async () => ({ revision: 'fixture', ruleId: 'fixture-purge' }) },
-      async () => openSqliteModelInvocationStore(f.path, context.config.storage.sqlite, 'forbid'), { now: Date.now });
-    const outcome = kept?.invocation?.outcome;
-    if (!kept || outcome?.state !== 'rejected' || !outcome.content) throw new Error('Expected a rejected receipt with content');
-    await purge.purge({ schemaVersion: 1, scopeId: command.scopeId, commandId: 'purge-refused-fixture', invocationId: kept.invocationId,
-      reference: f.reference, expectedContentDigest: outcome.content.digest });
-    const read = () => inspectConfiguredRefusedRequests(f.project, command.scopeId, 5, f.options, 'en');
-    expect.soft((await read())[0]).toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', detail: 'The rejection receipt records http-status (HTTP 400).' });
-    expect(t('cli.run.refused.receiptStatus', { reason: 'http-status', status: 400 }, 'tr')).toBe('Ret makbuzunda http-status (HTTP 400) kayıtlı.');
-    await withScopeAudit(context, audit => audit.record(runRequestRefusedEvent({ scopeId: command.scopeId, principal: context.principal,
-      policyRevision: context.document.revision, commandId: 'unmatched-refused-fixture', request: command.intent,
-      code: 'BRAIN_PROVIDER_REJECTED', atMs: Date.now() })));
-    const unmatched = (await read()).find(row => row.commandId === 'unmatched-refused-fixture');
-    expect(unmatched).toEqual(expect.objectContaining({ code: 'BRAIN_PROVIDER_REJECTED', title: command.intent }));
-    expect(unmatched).not.toHaveProperty('detail');
-    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    const grant = policy.grants.find((row: { id: string }) => row.id === 'invocation');
-    grant.actions = grant.actions.filter((action: string) => action !== 'inspect-content');
-    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
-    const short = (await read()).find(row => row.commandId === command.commandId);
-    expect(short).toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', title: command.intent });
-    expect(short).not.toHaveProperty('detail');
-    const reader = await configuredInvocationInspection(f.project, command.scopeId, f.options);
-    await expect.soft(reader.inspectRejectedCommand(command.scopeId, brainInvocationCommandId(command))).resolves.toBeNull();
-    await expect(reader.inspectRejectedCommand(command.scopeId, 'missing-invocation-fixture')).resolves.toBeNull();
-
-    // The first retained invocation is genuine. The quota successor stops in admission before it can claim a receipt.
-    const subscription = await fixture({ noCharge: true, headless: { executable: process.execPath, configDir: '/fixture-login', stateDir: '/fixture-state' } });
-    await writeFile(join(subscription.project, '.deckent/config.json'), JSON.stringify({ ...subscription.config,
-      brain_planner: { quotaWait: { maxWaitMs: 1000, marginMs: 0, maxAttempts: 2 } } }));
-    clearConfigCache();
-    let retrying = false;
-    const send = vi.fn(async () => ({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(
-      subscription.config.provider_invocation_profiles.profiles[0]!.adapter, 'http-status', 429,
-      Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'quota', resetsAtMs: 1, status: 429 })), true) }));
-    vi.spyOn(adapters, 'createNativeCliHeadlessPort').mockReturnValue({ billingAxis: 'subscription', prepare: async () => ({}), send,
-      preflight: async () => { if (retrying) throw headlessDiagnostic('HEADLESS_LOGIN_REQUIRED', { reason: 'reported-signed-out' }); } });
-    await expect(planRun(subscription.project, command, subscription.options, undefined, progress => {
-      if (progress.kind === 'quota-wait') retrying = true;
-    })).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
-    expect(retrying).toBe(true);
-    expect(send).toHaveBeenCalledOnce();
-    const firstId = brainInvocationCommandId(command);
-    const lookup = (commandId: string) => inspectConfiguredModelInvocationCommand(subscription.project,
-      { schemaVersion: 1, scopeId: command.scopeId, commandId, reference: subscription.reference }, subscription.options);
-    const first = (await lookup(firstId))!;
-    const rejection = first.invocation?.outcome;
-    if (rejection?.state !== 'rejected' || !rejection.content) throw new Error('Expected the first quota receipt');
-    expect(await lookup(brainQuotaAttemptCommandId(command, 2, { commandId: firstId, invocationId: first.invocationId }))).toBeNull();
-    const scoped = await loadConfiguredScopeContext(subscription.project, command.scopeId, subscription.options, 'read');
-    const purgeFirst = new ModelInvocationPurgeApplication(verifiedPrincipal(scoped.principal),
-      { authorize: async () => ({ revision: 'fixture', ruleId: 'fixture-purge' }) },
-      async () => openSqliteModelInvocationStore(subscription.path, scoped.config.storage.sqlite, 'forbid'), { now: Date.now });
-    await purgeFirst.purge({ schemaVersion: 1, scopeId: command.scopeId, commandId: 'purge-quota-fixture', invocationId: first.invocationId,
-      reference: subscription.reference, expectedContentDigest: rejection.content.digest });
-    const [login] = await inspectConfiguredRefusedRequests(subscription.project, command.scopeId, 1, subscription.options, 'en');
-    expect(login).toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED', title: command.intent });
-    expect(login).not.toHaveProperty('detail');
   });
   // D-02 (lead GO 2026-10-28, Jev c97aa511): an unregistered kind re-plans once (previous answer + refusal appended to the one user message, a derived
   // command id, spent like any Brain call); a second failure is the typed refusal naming the kinds and carrying the rejected plan; 0 disables it.

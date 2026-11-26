@@ -63,7 +63,7 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
       if (held) { write(io.project(held, 'prose')); held = ''; }
       const guidance = delta.notices?.filter(item => !item.key) ?? [];
       if (answer.length === 0 && delta.note) { write(io.project(delta.note, 'prose')); answer = delta.note; }
-      else if (delta.finish === 'error' && delta.note && guidance.length) {
+      else if (delta.note && guidance.length) { // a step is printed only with the cause it follows, whatever the finish
         if (lastChar !== '\n') write('\n');
         write(io.project(delta.note, 'prose'));
       }
