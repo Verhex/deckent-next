@@ -2,13 +2,13 @@ import { runProposalCommand } from './run-proposal.js';
 import { cliUsage, commandLocale, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, renderInputSchema } from '#surfaces/core/cli-human/index.js';
 import { projectInputSchema } from '#engine/index.js';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand, type WorkerAdmissionWarning } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { taskGraphSchema, validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { RunCommandContext } from './context.js';
-import { renderRunCancellation } from './cancellation.js';
+import { renderRunCancellation, runCancellationExitCode } from './cancellation.js';
 import { renderRunInspect } from './run-inspect.js';
 import { runList } from './run-list.js';
 import { runControlFlow } from './run-control.js';
@@ -38,7 +38,7 @@ export type RunAdmissionHandler = (root: string, command: RunAdmission, options:
 /** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
 export type RunDeliveryAdmissionHandler = (root: string, command: RunDeliveryAdmission, options: ConfigLoadOptions) => ReturnType<RunAdmissionHandler>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
-export async function runCommand(argv: readonly string[], context: RunCommandContext): Promise<void> {
+export async function runCommand(argv: readonly string[], context: RunCommandContext): Promise<ExitCode | void> {
   const action = argv[1];
   const languageAt = argv.indexOf('--lang');
   const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
@@ -75,13 +75,15 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   if (control && interactive && !values.has('--command-id') && !values.has('--expected-revision')) {
     const answer = values.get('--answer'), taskId = values.get('--task'), quota = quotaChoice(values.get('--quota'), usage);
     if ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim()) || (quota !== undefined && answer !== undefined)) throw usage('--answer');
-    await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer, ...(quota ? { quota } : {}) });
-    return;
+    return runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer, ...(quota ? { quota } : {}) });
   }
   // A change never takes a silent default: no --scope names the valid scopes (CLI_SCOPE_REQUIRED) instead of blaming another flag.
   const io = interactive && !values.get('--scope') ? await runHumanIo(context, locale) : undefined;
   const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: values.get('--scope'), mutating: true, interactive, ...(io ? { ask: io.ask } : {}) });
-  if (!scope) return;
+  if (!scope) {
+    if (!control) io?.print(t('cli.run.control.nothing', {}, locale));
+    return EXIT_CODES.error;
+  }
   const scopeId = scope.scopeId; const typedRunId = values.get('--id');
   if (!typedRunId) throw usage('--id');
   // A short id resolves on every action that names an existing Run; never on `create`, whose --id names the new Run.
@@ -149,7 +151,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     if (!context.deliverRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderRunCancellation(data, commandId, scopeId, runId, locale) });
-    return;
+    return runCancellationExitCode(result);
   }
   throw usage();
 }

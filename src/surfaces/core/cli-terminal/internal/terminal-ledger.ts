@@ -86,6 +86,10 @@ export function createWorklineLedgerPorts(input: {
     ...optionalField('workerHeartbeatMs', workerHeartbeatMs),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
+    async inspectRunAnswer(runId: string) {
+      const { run, selectAnswerQuestion } = await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options, null);
+      return { run, ...optionalField('selectAnswerQuestion', selectAnswerQuestion) };
+    },
     async inspectRunObservation(runId: string) {
       const data = await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options);
       return data.run ? { ...data.run, progression: readRunProgressionDiagnostic(data.run, data.progression) } : null;

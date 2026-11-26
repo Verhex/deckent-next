@@ -2,7 +2,7 @@ export { runCancellationSchema, runCreateSchema, runReservationSchema, runProjec
 export type { ExecutionPool, RunCancellation, RunCreate, RunReservation, RunProjection, RunReceipt, RunStore } from './internal/store.js';
 export { RunApplication, RunInspectionApplication, runCommandSchema, runQuerySchema } from './internal/application.js';
 export type { RunCommand, RunQuery, RunAuthorization, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ RunModelEvidence } from './internal/application.js';
-export { runViewSchema, projectRunView } from './internal/view.js';
+export { runViewSchema, openTaskQuestion, projectRunView } from './internal/view.js';
 export type { RunView } from './internal/view.js';
 export { RunCancellationCoordinator } from './internal/cancellation.js';
 export type { RunCancellationSettlement, RunCancellationSettlementStore } from './internal/settlement.js';

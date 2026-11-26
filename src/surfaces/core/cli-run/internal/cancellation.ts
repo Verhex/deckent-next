@@ -1,7 +1,18 @@
-import { t, type Locale } from '#platform/index.js';
+import { EXIT_CODES, t, type ExitCode, type Locale } from '#platform/index.js';
 import type { RunCancellationDeliveryHandler } from '#surfaces/core/cli-terminal/index.js';
+
+type RunCancellationResult = Awaited<ReturnType<RunCancellationDeliveryHandler>>;
+
+function unconfirmedCancellations(data: RunCancellationResult): number {
+  return data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
+}
+
+export function runCancellationExitCode(data: RunCancellationResult): ExitCode {
+  return unconfirmedCancellations(data) ? EXIT_CODES.error : EXIT_CODES.success;
+}
+
 /** Human rendering of a typed cancellation delivery; shared by `run cancel` and the terminal `/cancel` card. */
-export function renderRunCancellation(data: Awaited<ReturnType<RunCancellationDeliveryHandler>>, commandId: string, scopeId: string, runId: string, locale: Locale): string {
+export function renderRunCancellation(data: RunCancellationResult, commandId: string, scopeId: string, runId: string, locale: Locale): string {
   const labels = {
     terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
     denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
@@ -9,7 +20,7 @@ export function renderRunCancellation(data: Awaited<ReturnType<RunCancellationDe
     'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
   };
   const deliveryLabels = { queued: t('cli.run.cancel.deliveryQueued', {}, locale), claimed: t('cli.run.cancel.deliveryClaimed', {}, locale), exhausted: t('cli.run.cancel.deliveryExhausted', {}, locale), terminal: labels.terminal, prevented: labels.prevented };
-  const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
+  const unconfirmed = unconfirmedCancellations(data);
   return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
     ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
     ...data.delivery.outcomes.flatMap(item => [t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale),

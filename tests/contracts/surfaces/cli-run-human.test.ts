@@ -1,11 +1,11 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { summarizeWorkCosts } from '#domain/index.js';
+import { summarizeWorkCosts, type AttemptIdentity } from '#domain/index.js';
 import { inventoryCommand, renderHumanReport, reportCommand, runControlFlow, runList } from '#surfaces/core/cli-run/index.js';
 
 /**
@@ -15,6 +15,7 @@ import { inventoryCommand, renderHumanReport, reportCommand, runControlFlow, run
  */
 const ESC = '\u001b';
 const LONG = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', OTHER = 'a1b2ffff00000000000000000000000000000000000000000000000000000000';
+const ANSWER_SOURCE = { scopeId: 's', runId: LONG, layoutRevision: 'l', taskId: 't0', attemptId: 'attempt-1', generation: 1 } satisfies AttemptIdentity;
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project(config: Record<string, unknown> = {}) {
@@ -42,11 +43,15 @@ function view(tasks: readonly Task[] = [{}], extra: Record<string, unknown> = {}
       unresolvedEffects: false, ...task })), ...extra };
 }
 /** A context whose Run store holds the given views; every read and write is recorded. */
-function store(views: readonly ReturnType<typeof view>[]) {
+function store(views: readonly ReturnType<typeof view>[], source?: AttemptIdentity) {
   const calls: string[] = [], byId = new Map(views.map(item => [item.runId, item]));
   return { calls, byId, context: {
     async inspectSurfaceRunIds(_root: string, scopeId: string) { calls.push(`ids:${scopeId}`); return views.map(item => item.runId); },
-    async inspectRun(_root: string, query: { runId: string }) { calls.push(`inspect:${query.runId.slice(0, 6)}`); return { schemaVersion: 1, layout: {}, run: byId.get(query.runId) ?? null }; },
+    async inspectRun(_root: string, query: { runId: string }, _options?: unknown, answerTaskId?: string) {
+      calls.push(`inspect:${query.runId.slice(0, 6)}`);
+      return { schemaVersion: 1, layout: {}, run: byId.get(query.runId) ?? null,
+        ...(source?.taskId === answerTaskId && source ? { answerSource: { ...source, runId: query.runId } } : {}) };
+    },
     async applyRunLifecycle(_root: string, command: Record<string, unknown>) { calls.push(`apply:${JSON.stringify(command)}`); const current = byId.get(command['runId'] as string)!;
       return { schemaVersion: 1, lifecycle: { schemaVersion: 1, commandId: command['commandId'], run: { ...current, revision: current.revision + 1 } } }; },
     async deliverRunCancellation(_root: string, command: Record<string, unknown>) { calls.push(`cancel:${JSON.stringify(command)}`);
@@ -97,8 +102,17 @@ it('a short id resolves on inspect and on the AI control path; an ambiguous pref
   const missing = await run(['run', 'inspect', '--scope', 's', '--id', 'ffff0000', '--lang', 'tr'], s.context, root);
   expect(missing.code).toBe(1); expect(missing.err).toContain('Kayıtlı iş bulunamadı: ffff0000.');
   s.calls.length = 0;
-  const cancelled = await run(['run', 'cancel', '--scope', 's', '--id', 'a1b2ff', '--command-id', 'c-1', '--expected-revision', '7', '--json'], s.context, root);
+  const cancelArgv = ['run', 'cancel', '--scope', 's', '--id', 'a1b2ff', '--command-id', 'c-1', '--expected-revision', '7', '--json'];
+  const cancelled = await run(cancelArgv, s.context, root);
   expect(cancelled.code).toBe(0); expect(s.calls.find(call => call.startsWith('cancel:'))).toContain(`"runId":"${OTHER}"`);
+  const settled = ['not-dispatched', 'prevented', 'terminal'].map((status, index) => ({ taskId: `t${index}`, attemptId: `a${index}`, status }));
+  for (const status of [null, 'unresolved', 'denied', 'unavailable']) {
+    const payload = { schemaVersion: 1, layout: {}, delivery: { schemaVersion: 2, runId: OTHER, scopeId: 's', cancellationRequested: true,
+      outcomes: status ? [...settled, { taskId: 't3', attemptId: 'a3', status }] : settled } };
+    const result = await run(cancelArgv, { ...s.context, async deliverRunCancellation() { return payload; } }, root);
+    expect.soft(result.code, status ?? 'settled').toBe(status ? 1 : 0);
+    expect(JSON.parse(result.text)).toEqual(payload); expect(result.err).toBe('');
+  }
 });
 
 it('negative: the AI and pipe control path still requires --command-id and --expected-revision and writes nothing without them', async () => {
@@ -122,19 +136,27 @@ it('TTY control: the picker offers only Runs whose state allows it; declined or 
   registerProviderConfig();
   const root = await project({ terminal: { scopeId: 's' } });
   const finished = { ...view(), runId: OTHER, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' } };
-  for (const answers of [['s', LONG, 'no'], ['s', LONG, null], [null]]) {
+  for (const answers of [['s', LONG, 'no'], ['s', LONG, null], ['s', null], [null]]) {
     const s = store([view(), finished]), printed: string[] = [], cards = scripted([...answers]);
-    await runControlFlow('cancel', { ...s.context, root, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) } as never,
+    const code = await runControlFlow('cancel', { ...s.context, root, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) } as never,
       { locale: 'en', root, options: { env: { HOME: join(root, 'h') } }, ask: cards.ask as never, print: text => printed.push(text) }, {});
+    expect.soft(code).toBe(1);
     expect(s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'))).toEqual([]);
-    if (answers.length > 1) {
+    if (answers.length >= 2) {
       expect(cards.asked[1]!.options.map(option => option.id)).toEqual([LONG]); // the finished Run is not offered
       expect(cards.asked[1]).toMatchObject({ initial: LONG }); // Enter takes the first (waiting first, newest) Run
-      expect(printed.join('\n')).toContain('Run a1b2c3d4 was not cancelled.'); // the terminal /cancel words
-    } else expect(printed).toEqual(['Nothing was sent.']);
+    }
+    if (answers.length === 3) expect(printed.join('\n')).toContain('Run a1b2c3d4 was not cancelled.'); // the terminal /cancel words
+    else expect(printed).toEqual(['Nothing was sent.']);
     // A change never takes the configured default silently: the scope card came first, the default preselected.
     expect(cards.asked[0]).toMatchObject({ initial: 's' });
   }
+  const s = store([finished]), printed: string[] = [], cards = scripted([]);
+  const code = await runControlFlow('cancel', { ...s.context, root } as never,
+    { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's' });
+  expect.soft(code).toBe(1);
+  expect(cards.asked).toHaveLength(0); expect(s.calls).toEqual(['ids:s', 'inspect:a1b2ff']);
+  expect(printed).toEqual(["No Run in scope s can take 'deckent run cancel' now."]);
 });
 
 it('TTY cancel and close show a named cancelled Run without a card or write', async () => {
@@ -145,11 +167,193 @@ it('TTY cancel and close show a named cancelled Run without a card or write', as
   ] as const) {
     const s = store([view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } })]);
     const printed: string[] = [], cards = scripted(['yes']);
-    await runControlFlow(action, s.context as never, { locale, root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: LONG });
+    const code = await runControlFlow(action, s.context as never, { locale, root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: LONG });
+    expect.soft(code, action).toBe(1);
     expect.soft(cards.asked, action).toHaveLength(0);
     expect.soft(s.calls, action).toEqual(['ids:s', 'inspect:a1b2c3']);
     expect.soft(printed, action).toEqual([notice]);
   }
+});
+
+it('main reports the interactive Run-control result with the matching cards and sends', async () => {
+  const root = await project();
+  const cancelled = view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } });
+  const mount = vi.spyOn(await import('../../../src/surfaces/core/cli-human/internal/card-view.js'), 'mountCliCard');
+  try {
+    for (const [scenario, answer, sends, cards, notice] of [
+      ['fresh refusal', 'yes', 0, 0, 'Run a1b2c3d4 is cancelled. No action was sent.'],
+      ['conflict', 'yes', 1, 1, 'Run a1b2c3d4 is cancelled. No action was sent.'],
+      ['decline', 'no', 0, 1, 'Run a1b2c3d4 was not cancelled.'],
+      ['partial delivery', 'yes', 1, 1, 'Attention: termination not confirmed for 1 of 1 attempts.'],
+    ] as const) {
+      mount.mockReset().mockResolvedValue(answer);
+      const s = store([scenario === 'fresh refusal' ? cancelled : view()]);
+      const out = sinks();
+      const deliver = vi.fn(async () => {
+        if (scenario === 'conflict') {
+          s.byId.set(LONG, { ...cancelled, revision: 8 });
+          throw Object.assign(new Error('stale'), { code: 'RUN_STORE_CONFLICT' });
+        }
+        return { schemaVersion: 1, layout: {}, delivery: { schemaVersion: 2, runId: LONG, scopeId: 's', cancellationRequested: true,
+          outcomes: [{ taskId: 't0', attemptId: 'a0', status: 'unresolved' }] } };
+      });
+      const code = await main(['run', 'cancel', '--scope', 's', '--id', LONG, '--lang', 'en'], { ...s.context, root,
+        env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdin: { isTTY: true, setRawMode() {} },
+        stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr, deliverRunCancellation: deliver } as never);
+      expect.soft(code, scenario).toBe(1);
+      expect(mount, scenario).toHaveBeenCalledTimes(cards);
+      expect(deliver, scenario).toHaveBeenCalledTimes(sends);
+      expect(s.calls, scenario).toEqual(scenario === 'conflict' ? ['ids:s', 'inspect:a1b2c3', 'inspect:a1b2c3'] : ['ids:s', 'inspect:a1b2c3']);
+      expect(out.out.join(''), scenario).toContain(notice); expect(out.err).toEqual([]);
+      if (scenario === 'partial delivery') expect(out.out.join('')).toContain('cancellation request recorded');
+    }
+  } finally { mount.mockRestore(); }
+});
+
+it('interactive resume answers require an open question on the fresh Run and after every conflict', async () => {
+  const root = await project();
+  const deadline = Date.now() + 60_000;
+  const decision = { reason: 'needs-input', since: 1, deadline, question: 'Which region?' };
+  const waitingTask = { phase: 'awaiting-decision', decision };
+  const taskPark = { state: { kind: 'parked', reason: 'needs-input', since: 1, deadline } };
+  const quotaPark = { state: { kind: 'parked', reason: 'quota-ask', since: 1, deadline } };
+  const elapsedDecision = view([{ ...waitingTask, decision: { ...decision, deadline: 2 } }, waitingTask], taskPark);
+  const elapsedPark = view([waitingTask], { state: { ...taskPark.state, deadline: 2 } });
+  const mount = vi.spyOn(await import('../../../src/surfaces/core/cli-human/internal/card-view.js'), 'mountCliCard');
+  try {
+    for (const [flags, payload, open, closed] of [
+      [['--task', 't0', '--answer', 'west'], { action: 'answer', taskId: 't0', answer: 'west' },
+        view([waitingTask, waitingTask], taskPark), view([{ phase: 'pending' }, waitingTask], taskPark)],
+      [['--quota', 'next-candidate'], { action: 'quota-answer', choice: 'next-candidate' },
+        view([{ phase: 'pending' }], { ...quotaPark, quotaWaits: [{ taskId: 't0', since: 1, deadline: 2, resetsAtMs: null, retryLimitReached: false }] }),
+        view([{ phase: 'pending' }], { ...quotaPark, quotaWaits: [] })],
+    ] as const) {
+      const terminal = view([], { state: { kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' } });
+      for (const [scenario, first, afterConflict, conflicts, count, exit] of [
+        ['already closed', terminal, closed, 0, 0, 1],
+        ['closes on conflict', open, closed, 1, 1, 1],
+        ['stays open', open, open, 2, 3, 0],
+        ...(payload.action === 'answer' ? [
+          ['elapsed decision on inspection', elapsedDecision, closed, 0, 0, 1],
+          ['elapsed decision on conflict', open, elapsedDecision, 1, 1, 1],
+          ['elapsed Run park', elapsedPark, closed, 0, 0, 1],
+        ] as const : []),
+      ] as const) {
+        const label = `${payload.action}: ${scenario}`;
+        mount.mockReset().mockResolvedValue('yes');
+        const s = store([first], ANSWER_SOURCE);
+        const out = sinks();
+        const apply = vi.fn(async (r: string, command: Record<string, unknown>) => {
+          const revision = s.byId.get(LONG)!.revision;
+          if (revision < 7 + conflicts) {
+            s.byId.set(LONG, { ...afterConflict, revision: revision + 1 });
+            throw Object.assign(new Error('stale'), { code: 'RUN_STORE_CONFLICT' });
+          }
+          return s.context.applyRunLifecycle(r, command);
+        });
+        const code = await main(['run', 'resume', '--scope', 's', '--id', LONG, '--lang', 'en', ...flags], { ...s.context, root,
+          env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdin: { isTTY: true, setRawMode() {} },
+          stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr, applyRunLifecycle: apply } as never);
+        const revisions = [7, 8, 9].slice(0, count);
+        expect.soft(code, label).toBe(exit);
+        expect.soft(mount, label).toHaveBeenCalledTimes(count);
+        expect.soft(apply, label).toHaveBeenCalledTimes(count);
+        expect.soft(apply.mock.calls.map(([, command]) => command), label).toMatchObject(revisions.map(expectedRevision => ({
+          ...payload, runId: LONG, scopeId: 's', expectedRevision,
+        })));
+        for (const [index, revision] of revisions.entries()) expect.soft(mount.mock.calls[index]?.[0].body?.join('\n'), label).toContain(`revision ${revision}`);
+        if (exit) expect.soft(out.out.join(''), label).toContain('Run a1b2c3d4 has no open question for that answer.');
+        expect(out.err, label).toEqual([]);
+      }
+    }
+    const s = store([elapsedDecision, { ...view([waitingTask], taskPark), runId: OTHER }], ANSWER_SOURCE);
+    const cards = scripted([null]);
+    await runControlFlow('resume', { ...s.context, root } as never,
+      { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: () => {} }, { scopeId: 's', taskId: 't0', answer: 'west' });
+    expect(cards.asked[0]?.options.map(option => option.id)).toEqual([OTHER]);
+    expect(s.calls.filter(call => call.startsWith('apply:'))).toEqual([]);
+  } finally { mount.mockRestore(); }
+});
+
+it('interactive resume never offers the typed answer for a replacement question', async () => {
+  const root = await project();
+  const deadline = Date.now() + 60_000;
+  const initialQuestion = 'Which region?';
+  const waiting = (question: string, revision: number) => view([{ phase: 'awaiting-decision',
+    decision: { reason: 'needs-input', since: 1, deadline, question } }], { revision });
+  const laterSource = { ...ANSWER_SOURCE, attemptId: 'attempt-2', generation: 2 };
+  const mount = vi.spyOn(await import('../../../src/surfaces/core/cli-human/internal/card-view.js'), 'mountCliCard');
+  try {
+    for (const [locale, notice] of [
+      ['en', 'Task t0 has a new question. Read it and enter a new answer. No answer was sent for the new question.'],
+      ['tr', 't0 görevinin yeni bir sorusu var. Soruyu okuyup yeni bir yanıt girin. Yeni soru için yanıt gönderilmedi.'],
+    ] as const) {
+      for (const [scenario, picker, nextQuestion, nextSource] of [
+        ['later Attempt on conflict', false, 'Which database?', laterSource],
+        ['changed text on conflict', false, 'Which database?', ANSWER_SOURCE],
+        ['changed generation on conflict', false, initialQuestion, { ...ANSWER_SOURCE, generation: 2 }],
+        ['replacement after picking', true, 'Which database?', laterSource],
+      ] as const) {
+        const label = `${locale}: ${scenario}`;
+        const s = store([waiting(initialQuestion, 7)]);
+        let source = ANSWER_SOURCE;
+        const replace = () => {
+          s.byId.set(LONG, waiting(nextQuestion, 8));
+          source = nextSource;
+        };
+        mount.mockReset().mockResolvedValue('yes');
+        if (picker) mount.mockImplementationOnce(async () => { replace(); return LONG; });
+        const inspectRun = async (...args: Parameters<typeof s.context.inspectRun>) => ({
+          ...await s.context.inspectRun(...args), ...(args[3] === 't0' ? { answerSource: source } : {}),
+        });
+        const applyRunLifecycle = vi.fn(async (r: string, command: Record<string, unknown>) => {
+          if (command['expectedRevision'] === 7) {
+            replace();
+            throw Object.assign(new Error('stale'), { code: 'RUN_STORE_CONFLICT' });
+          }
+          return s.context.applyRunLifecycle(r, command);
+        });
+        const out = sinks();
+        const code = await main(['run', 'resume', '--scope', 's', ...(picker ? [] : ['--id', LONG]), '--lang', locale, '--task', 't0', '--answer', 'west'],
+          { ...s.context, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdin: { isTTY: true, setRawMode() {} },
+            stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr, inspectRun, applyRunLifecycle } as never);
+        expect.soft(code, label).toBe(1);
+        expect.soft(mount, label).toHaveBeenCalledTimes(1);
+        expect.soft(applyRunLifecycle, label).toHaveBeenCalledTimes(picker ? 0 : 1);
+        if (!picker) expect.soft(applyRunLifecycle.mock.calls[0]?.[1], label).toMatchObject({ action: 'answer', taskId: 't0', answer: 'west', expectedRevision: 7 });
+        expect.soft(out.out.join('').split('\n').filter(line => line === notice), label).toEqual([notice]);
+        expect.soft(out.err, label).toEqual([]);
+      }
+    }
+  } finally { mount.mockRestore(); }
+});
+
+it('closing the create or reserve scope picker exits 1 without a write, and a zero-task reservation exits 0', async () => {
+  const root = await project();
+  const mount = vi.spyOn(await import('../../../src/surfaces/core/cli-human/internal/card-view.js'), 'mountCliCard').mockResolvedValue(null);
+  const create = vi.fn();
+  const reserve = vi.fn(async () => ({ schemaVersion: 1, layout: {}, reservation: { schemaVersion: 1, commandId: 'one', run: view([]), identities: [] } }));
+  const context = { root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdin: { isTTY: true, setRawMode() {} },
+    createRun: create, reserveRunTasks: reserve, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) };
+  const flags = ['--id', LONG, '--command-id', 'one', '--lang', 'en'];
+  try {
+    for (const [action, input] of [['create', ['--graph', '-']], ['reserve', ['--expected-revision', '7']]] as const) {
+      mount.mockClear();
+      const out = sinks();
+      const code = await main(['run', action, ...flags, ...input], { ...context, stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr } as never);
+      expect.soft(code, action).toBe(1);
+      expect.soft(out.out.join(''), action).toBe('Nothing was sent.\n');
+      expect(mount, action).toHaveBeenCalledTimes(1);
+      expect(create, action).not.toHaveBeenCalled(); expect(reserve, action).not.toHaveBeenCalled();
+      expect(out.err, action).toEqual([]);
+    }
+    mount.mockResolvedValue('s');
+    const out = sinks();
+    const code = await main(['run', 'reserve', ...flags, '--expected-revision', '7'], { ...context, stdout: { ...out.stdout, isTTY: true }, stderr: out.stderr } as never);
+    expect(code).toBe(0);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(out.err).toEqual([]);
+  } finally { mount.mockRestore(); }
 });
 
 it('TTY hold: the revision is read just before the card, the card names scope and Run, the command id comes from the system; a stale Run is read again and asked again', async () => {
@@ -162,7 +366,8 @@ it('TTY hold: the revision is read just before the card, the card names scope an
     return apply(r, command);
   };
   const printed: string[] = [], cards = scripted(['yes', 'yes']);
-  await runControlFlow('hold', s.context as never, { locale: 'tr', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+  const code = await runControlFlow('hold', s.context as never, { locale: 'tr', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+  expect.soft(code).toBe(0);
   expect(cards.asked).toHaveLength(2);
   expect(cards.asked[0]!.title).toContain('Month-end close');
   expect(cards.asked[0]!.body!.join('\n')).toContain('Kapsam: s'); expect(cards.asked[0]!.body!.join('\n')).toContain('revizyon 7');
@@ -181,7 +386,8 @@ it('TTY cancel and close: a yes sends one command with a system command id at th
   for (const action of ['cancel', 'close'] as const) {
     const target = action === 'close' ? view([{ phase: 'pending' }], { state: { kind: 'parked', reason: 'operator-hold', note: 'Release window', since: 1, deadline: 2 } }) : view();
     const s = store([target]), printed: string[] = [], cards = scripted(['yes']);
-    await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+    const code = await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+    expect.soft(code, action).toBe(0);
     expect(cards.asked).toHaveLength(1);
     const writes = s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'));
     expect(writes).toHaveLength(1);

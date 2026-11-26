@@ -9,7 +9,7 @@ import type { McpPanelRun } from '#surfaces/core/mcp-presentation/index.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
 import type { DeliveryPortHost } from '#surfaces/core/delivery-port/index.js';
-import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
+import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunInspectionApplication, RunQuery, RunView, SurfaceSnapshotAccess,
   TaskWorkerModel } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink, ProductLayout } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
@@ -22,8 +22,9 @@ import type { TerminalSessionStoreView, WorklineProps } from '#surfaces/core/ter
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 /** Same handlers as `deckent run` and `deckent run cancel`; the terminal's run card and `/cancel` use them through the ledger ports. */
-export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
-  models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic }>>;
+export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
+  models?: readonly TaskWorkerModel[]; progression?: import('#engine/index.js').RunProgressionDiagnostic }>
+  & Pick<Awaited<ReturnType<RunInspectionApplication['inspectWithModels']>>, 'answerSource' | 'selectAnswerQuestion'>>;
 /** Same handler as `deckent run hold|resume|close` (the CLI's in-process lifecycle application); the terminal's Runs window keys use it through the ledger ports. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   lifecycle: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }> | null>;

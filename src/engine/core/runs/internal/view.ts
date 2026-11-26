@@ -40,6 +40,18 @@ export const runViewSchema = z.strictObject({
   }).readonly()).readonly(),
 }).readonly();
 export type RunView = z.infer<typeof runViewSchema>;
+
+/** Read the task question that is open in this view. The lifecycle application validates the write. */
+export function openTaskQuestion(run: RunView, taskId?: string): Readonly<{ taskId: string; question: string }> | null {
+  const now = Date.now();
+  if (run.cancellationRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && run.state.deadline <= now)) return null;
+  for (const task of run.tasks ?? []) {
+    const decision = task.decision;
+    if ((taskId === undefined || task.id === taskId) && task.phase === 'awaiting-decision'
+      && decision?.reason === 'needs-input' && decision.question && decision.deadline > now) return { taskId: task.id, question: decision.question };
+  }
+  return null;
+}
 export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = [],
   exclusions: readonly WorkerTreeExclusionRecord[] = []): RunView {
   const parsed = safeParseRun(input);
