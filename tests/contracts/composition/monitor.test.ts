@@ -18,7 +18,7 @@ import { mcpApplications } from '#composition/core/mcp/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { loadConfig, clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
+import { loadConfig, clearConfigCache, prepareProductDirectory, productResourcePath, t } from '#platform/index.js';
 import { prepareMonitorInstall, readMonitorRunResults, FileArtifactStore } from '#adapters/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { patchExclusions, patchFile } from '#engine/index.js';
@@ -322,7 +322,10 @@ describe('inspectMonitor content authorization (security)', () => {
     const loss = 'refusal-audit-loss';
     const first = { scopeId: 's', runId: 'a/b', taskId: 't', attemptId: 'a/a', layoutRevision: 'layout', generation: 1 };
     const second = { ...first, scopeId: 's/a', runId: 'b', attemptId: 'a' };
-    const scopes = [first.scopeId, second.scopeId];
+    // N3-8R: a recorded zero-file patch (third) and a denied or unreadable one (fourth) under the same old key, both rejected as no-change-produced.
+    const third = { ...first, runId: 'z/c', attemptId: 'z/z' }, fourth = { ...first, scopeId: 's/z', runId: 'c', attemptId: 'z' };
+    const scopes = [first.scopeId, second.scopeId, fourth.scopeId];
+    let unreadable: { scopeId: string; digest: string } | undefined;
     const current = await project(root, 'collision', scopes, scopes, ['output', 'runs']);
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
@@ -359,7 +362,33 @@ describe('inspectMonitor content authorization (security)', () => {
         await store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId, runId,
           source: { schemaVersion: 1, adapter: { id: 'git', version: name === 'first' ? 2 : 1 }, sourceFingerprint: 'a'.repeat(64) }, baseRevision: 'b'.repeat(40) });
       }
+      const workInput = { schemaVersion: 1 as const, task: 'Change a file', scope: { paths: ['src/**'] }, acceptance: 'A file changes',
+        model: { channelId: 'fixture', modelId: 'fixture-model-1', auxiliaryModelIds: [] }, effort: 'high' as const, noChangeAllowed: false };
+      for (const [identity, name, checks] of [[third, 'third', ['passed', 'not-run']], [fourth, 'fourth', ['not-run', 'not-run']]] as const) {
+        const { scopeId, runId, layoutRevision } = identity;
+        await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision }, graph: { ...graph, schemaVersion: 3 as const,
+          tasks: graph.tasks.map(task => ({ ...task, workInput })) }, execution: fixtureExecution(graph), now: 12_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: 22_800, identities: [identity] });
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(root, name, 'tree'), argv: ['x'] } };
+        await store.claimDispatch(dispatchAdmission(claim));
+        await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: 32_800 });
+        const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: name + ' report', changedFiles: [],
+          checks: checks.map((outcome, index) => ({ command: `check-${index}`, outcome })), openIssues: [] } };
+        await store.retainDispatchOutput(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '' }))));
+        await store.finishDispatch(claim, { handle: 'h-' + name, exitCode: 0, interrupted: false });
+        const patch = await artifacts.put(scopeId, Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity,
+          source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) }, baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64),
+          exclusions: patchExclusions, changes: [] })));
+        await store.retainDispatchPatch(claim, patch);
+        const dispatch = (await store.readDispatch(claim.request))!, run = (await store.loadRun(scopeId, runId))!;
+        await store.commitTaskEvaluation({ commandId: 'evaluate-' + name, actor, expectedRevision: run.revision, dispatch, evaluation: { schemaVersion: 1, evaluationId: 'evaluate-' + name,
+          identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'pass', evidenceIds: ['fixture'] }],
+          workspaceChange: { schemaVersion: 1, patchDigest: patch.digest, changedFiles: 0 } } });
+        if (identity === fourth) unreadable = { scopeId, digest: patch.digest };
+      }
     } finally { store.close(); }
+    // The fourth Attempt's patch bytes are gone: with read-output it is unreadable, without it denied; its own report stays readable.
+    await rm(join(await prepareProductDirectory(current.layout, 'artifacts'), createHash('sha256').update(unreadable!.scopeId).digest('hex'), unreadable!.digest));
 
     const config = await loadConfig(current.dir, current.options);
     const permitFirst = vi.fn(async (identity: typeof first) => identity.scopeId === first.scopeId);
@@ -399,10 +428,11 @@ describe('inspectMonitor content authorization (security)', () => {
 
     const policyPath = productResourcePath(current.layout, 'policy');
     const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; scopes: string[] }[] };
+    const surface = await loadMonitorSurface();
     for (const bothAllowed of [false, true]) {
       await writeFile(policyPath, JSON.stringify({ ...policy, revision: bothAllowed ? 'both' : 'first-only',
         grants: policy.grants.map(grant => grant.id === 'output' ? { ...grant, scopes: bothAllowed ? scopes : [first.scopeId] } : grant) }));
-      const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+      const snapshot = await inspectMonitor(current.dir, current.options), install = snapshot.installs[0]!;
       const worker = (identity: typeof first) => install.workers.find(row => row.identity?.scopeId === identity.scopeId && row.identity.runId === identity.runId);
       const run = (identity: typeof first) => install.runs.find(row => row.scopeId === identity.scopeId && row.runId === identity.runId);
       const lastAttempt = (identity: typeof first) => run(identity)?.tasks[0]?.lastAttempt;
@@ -425,6 +455,20 @@ describe('inspectMonitor content authorization (security)', () => {
       expect.soft(lastAttempt(second)?.diagnostics ?? []).toEqual(bothAllowed ? [] : ['output-denied']);
       const collidedWorkers = install.workers.filter(row => row.identity?.runId === first.runId || row.identity?.runId === second.runId);
       expect.soft(collidedWorkers.map(row => row.identity)).toEqual([second, first]);
+      // N3-8R: the final worker detail keeps the zero-file sentence and the not-run count on the Attempt that recorded them.
+      expect.soft(worker(third)?.human).toMatchObject({ patch: { state: 'recorded', fileCount: 0 }, resultBrief: { evaluation: { reason: 'no-change-produced' } } });
+      expect.soft(worker(fourth)?.human).toMatchObject({ patch: { state: bothAllowed ? 'unavailable' : 'denied' }, resultBrief: { evaluation: { reason: 'no-change-produced' } },
+        ...(bothAllowed ? { finalReport: { status: 'reported', report: { summary: 'fourth report' } } } : {}) });
+      const detail = (identity: typeof first, locale: 'en' | 'tr') => surface.buildMonitorView({ ...snapshot, installs: [{ ...install, workers: [worker(identity)!] }] }, locale, true)
+        .tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().map(line => line.map(span => span.text).join('')).join('\n');
+      for (const locale of ['en', 'tr'] as const) {
+        const zero = t('monitor.human.verifiedNoFileChanges', { files: 0 }, locale), notRun = (count: number) => t('monitor.human.reportedChecksNotRun', { count }, locale);
+        const own = detail(third, locale), other = detail(fourth, locale);
+        expect.soft(own).toContain(`${zero}\n${notRun(1)}`);
+        expect.soft(other).toContain(t(bothAllowed ? 'monitor.human.patchUnavailable' : 'monitor.human.patchDenied', {}, locale));
+        expect.soft(other).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+        for (const text of [zero, notRun(1), notRun(2)]) expect.soft(other).not.toContain(text);
+      }
     }
   });
 });

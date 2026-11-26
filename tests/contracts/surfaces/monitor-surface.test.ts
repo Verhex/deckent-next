@@ -19,7 +19,7 @@ import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
-import { MONITOR_BLOCKER_CODES, MonitorSourceMemo, type MonitorBlockerCode } from '#engine/index.js';
+import { MONITOR_BLOCKER_CODES, MonitorSourceMemo, type MonitorBlockerCode, type MonitorWorkerContent } from '#engine/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
@@ -894,6 +894,34 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
   expect(deniedText).toContain('politika izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
+  { // N3-8: a proven zero-file patch says so and attributes the not-run count to the worker report; missing, denied and unavailable patches do not.
+    const sample = finishedHumanSnapshot(humanWorkerSnapshot()), install = sample.installs[0]!, worker = install.workers[0]!;
+    const base = worker.human!, finalReport = base.finalReport!;
+    const report = { ...finalReport, report: { ...finalReport.report, checks: [...finalReport.report.checks, { command: 'npm run lint', outcome: 'not-run' as const }] } };
+    const evaluation = { verdict: 'rejected', reason: 'no-change-produced' } as const;
+    const human = { ...base, evaluationReason: evaluation.reason, finalReport: report,
+      resultBrief: { schemaVersion: 1 as const, attemptId: worker.identity!.attemptId, claimLabel: 'CLAIM' as const, report, evaluation, runDelivery: null, openIssues: [] } };
+    const expected = {
+      en: ['The worker changed no files (0 recorded).', 'Worker report: 1 check(s) not run.'],
+      tr: ['İşçi hiçbir dosyayı değiştirmedi (kayıtlı dosya sayısı: 0).', 'İşçi beyanı: 1 denetim çalıştırılmadı.'],
+    };
+    for (const locale of ['en', 'tr'] as const) {
+      const detailFor = (patch: MonitorWorkerContent['patch']) => surface.buildMonitorView({ ...sample, installs: [{ ...install, workers: [{ ...worker, human: { ...human, patch } }] }] }, locale, true)
+        .tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().map(line => line.map(span => span.text).join('')).join('\n');
+      const detail = detailFor(human.patch);
+      expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+      expect(detail).toContain(locale === 'en' ? "Worker's claim" : 'İşçinin beyanı');
+      expect(detail).toContain('claimed-only.ts');
+      expect(detail).toContain(expected[locale].join('\n'));
+      for (const [state, key] of [['missing', 'monitor.human.patchMissing'], ['denied', 'monitor.human.patchDenied'], ['unavailable', 'monitor.human.patchUnavailable']] as const) {
+        const detail = detailFor({ state, fileCount: null, files: [], truncated: false, baseCommit: null });
+        expect(detail).toContain(t(key, {}, locale));
+        expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+        expect(detail).not.toContain(expected[locale][0]);
+        expect(detail).not.toContain(t('monitor.human.emptyPatch', {}, locale));
+      }
+    }
+  }
 });
 
 it('H1 token absence stays unknown; an explicit sealed zero remains zero', () => {
