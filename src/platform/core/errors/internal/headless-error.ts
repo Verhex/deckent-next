@@ -1,4 +1,4 @@
-import { resolveLocale, t, type Locale } from '#platform/core/i18n/index.js';
+import { LOCALES, resolveLocale, t, type Locale } from '#platform/core/i18n/index.js';
 import { readHeadlessDiagnosticCase, readHeadlessDiagnosticIdentifier, readLegacyHeadlessDiagnosticCase, type HeadlessDiagnosticArgs } from './headless-diagnostics.js';
 import { DeckentError } from './error.js';
 import { ErrorRegistry } from './registry.js';
@@ -24,9 +24,37 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
   throw headlessDiagnostic(...args);
 }
 
+// The sandbox's argument-count refusal stores its writer's sentence. Only an exact catalog round trip in either language yields its counts.
+const SANDBOX_COUNTS = ['count', 'bound', 'home', 'protective', 'pins', 'remounts', 'tail', 'other'] as const;
+const sandboxViewText = (counts: Readonly<Record<string, string | number>>, isolated: boolean, locale: Locale) =>
+  `${t('shell.sandboxArgumentCountExceeded', counts, locale)} ${isolated ? t('shell.sandboxIsolatedArgumentCountRemedy', {}, locale) : t('shell.sandboxArgumentCountRemedy', {}, locale)}`;
+function readSandboxViewRecord(stored: unknown): DeckentError | null {
+  if (typeof stored !== 'string') return null;
+  for (const written of LOCALES) for (const remedy of [true, false]) {
+    const shape = sandboxViewText(Object.fromEntries(SANDBOX_COUNTS.map((name, index) => [name, `@@${index}@@`])), remedy, written);
+    const match = new RegExp(`^${shape.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/@@(\d)@@/gu, '(?<c$1>0|[1-9]\\d{0,8})')}$`, 'u').exec(stored);
+    if (!match?.groups) continue;
+    const [count = 0, bound = 0, home = 0, protective = 0, pins = 0, remounts = 0, tail = 0, other = 0] = SANDBOX_COUNTS.map((_, index) => Number(match.groups![`c${index}`]));
+    const counts = Object.freeze({ count, bound, home, protective, pins, remounts, tail, other });
+    if (count !== home + protective + pins + remounts + tail + other || sandboxViewText(counts, remedy, written) !== stored) continue;
+    const localize = (locale: Locale) => ({ message: sandboxViewText(counts, remedy, locale) });
+    return new DeckentError('SANDBOX_VIEW_TOO_LARGE', localize(resolveLocale()).message, undefined, undefined, undefined, undefined, undefined, 'error', undefined, localize, counts);
+  }
+  return null;
+}
+/** The re-read sandbox argument-count refusal: its code with exactly its eight safe counts (no stored text), for display schemas. */
+export function isSandboxViewDiagnostic(error: DeckentError): boolean {
+  const params = error.params ?? {}, count = (name: string) => params[name] as number;
+  return error.code === 'SANDBOX_VIEW_TOO_LARGE' && Object.keys(params).length === SANDBOX_COUNTS.length
+    && SANDBOX_COUNTS.every(name => Number.isSafeInteger(params[name]) && count(name) >= 0)
+    && count('count') === SANDBOX_COUNTS.slice(2).reduce((sum, name) => sum + count(name), 0);
+}
+
 export function readHeadlessDiagnosticRecord(refusal: unknown, legacyCheck: unknown): DeckentError {
   const diagnostic = readHeadlessDiagnosticCase(refusal) ?? readLegacyHeadlessDiagnosticCase(refusal, legacyCheck);
   if (diagnostic) return ErrorRegistry.createError(diagnostic.code, { params: diagnostic.params });
+  const sandbox = refusal === 'SANDBOX_VIEW_TOO_LARGE' ? readSandboxViewRecord(legacyCheck) : null;
+  if (sandbox) return sandbox;
   // The old check identifies an operation, without a cause that a fresh writer could record.
   if (refusal === 'HEADLESS_PREFLIGHT_FAILED' && legacyCheck === 'state-dir') {
     const localize = (locale: Locale) => ({ message: t('error.headless.stateLegacyUnverified', {}, locale) });

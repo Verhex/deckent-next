@@ -3,7 +3,7 @@ export type { NativeCliHeadlessDefinition, HeadlessRejectionBody } from './inter
 export { buildHeadlessEnv } from './internal/env.js';
 export { createNativeCliHeadlessPort } from './internal/port.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ NativeCliHeadlessPort } from './internal/port.js';
-export { prepareHeadlessConnection, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ headlessConsent, headlessConnectionAdapter, readHeadlessLogins, readHeadlessSealedVersion } from './internal/connect.js';
+export { prepareHeadlessConnection, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ headlessConsent, headlessConnectionAdapter, readHeadlessLogins, readHeadlessSealedVersion, readHeadlessClosedRefusal } from './internal/connect.js';
 /** The CLI headless step a protocol family has (registry data), for callers that shape a request for it. */
 export { nativeCliHeadless, nativeCliAgentBridge } from '#adapters/core/native-cli-registry/index.js';
 export { headlessOwnedLoginDir, runHeadlessLogin } from './internal/login.js';

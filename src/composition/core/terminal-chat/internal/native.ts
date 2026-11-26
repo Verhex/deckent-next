@@ -88,7 +88,7 @@ export function readRetainedSubscriptionFailure(result: ModelInvocationResult, c
 const SUBSCRIPTION_GUARD_CHECKS: ReadonlySet<string> = new Set([
   'cliVersion', 'apiKeySource', 'permissionMode', 'tools', 'mcpServers', 'skills', 'plugins', 'pluginErrors', 'cwd', 'num_turns',
   'usage', 'permission_denials', 'init', 'api_retry', 'result', 'json', 'after-turn', 'thread', 'turn', 'item', 'item.command_execution',
-  'item.file_change', 'item.mcp_tool_call', 'item.web_search', 'item.todo_list', 'notice', 'item-order', 'item-text', 'item-replay',
+  'item.file_change', 'item.mcp_tool_call', 'item.web_search', 'item.todo_list', 'notice', 'item-order', 'item-text', 'item-replay', 'mcp-item-reservation',
   'mcp-tool', 'mcp-start', 'mcp-order', 'mcp-update', 'mcp-result', 'mcp-correlation', 'pending-tools', 'pending-items', 'event', 'proposal-order',
   'agent-surface:init', 'agent-surface:init-binding', 'agent-surface:event', 'agent-surface:before-init', 'agent-surface:after-result',
   'agent-surface:subagent', 'agent-surface:assistant', 'agent-surface:block', 'agent-surface:text', 'agent-surface:json',

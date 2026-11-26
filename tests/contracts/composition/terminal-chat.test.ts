@@ -170,6 +170,8 @@ describe('terminal chat turn is one governed model invocation', () => {
         en: 'An output limit was reached while processing the subscription CLI call.', tr: "Abonelik CLI çağrısı işlenirken bir çıktı sınırına ulaşıldı." },
       { body: { schemaVersion: 1, refusal: 'guard', field: '/private/fixture-guard' }, state: 'rejected', reason: 'invalid-response',
         en: 'A safety check refused the subscription CLI result.', tr: "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti." },
+      { body: { schemaVersion: 1, refusal: 'guard', field: 'mcp-item-reservation' }, state: 'rejected', reason: 'invalid-response',
+        en: 'A safety check refused the subscription CLI result. (mcp-item-reservation)', tr: "Bir güvenlik denetimi abonelik CLI'ının sonucunu reddetti. (mcp-item-reservation)" },
       { body: { schemaVersion: 1, refusal: 'model-mismatch', field: 'modelUsage' }, state: 'rejected', reason: 'model-mismatch',
         en: 'The subscription CLI did not provide a usable response.', tr: "Abonelik CLI'ı kullanılabilir bir yanıt vermedi." },
       { body: { schemaVersion: 1, refusal: 'model-mismatch', field: 'init.model', subtype: 'model-reported' }, state: 'rejected', reason: 'model-mismatch',

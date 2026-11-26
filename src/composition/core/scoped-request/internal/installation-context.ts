@@ -26,7 +26,12 @@ export async function configuredInstallationProjectContext(config: ResolvedConfi
       }
     },
     loadSource: root => loadComposedConfig(root, { ...options, heal: false, force: true }),
-    inspectSource: (root, scope, person, locked) => inspectSource(root, scope, person, options, locked),
+    // A target repair returns before the ordinary source read below: keep the source layout it verified under the lock.
+    inspectSource: async (root, scope, person, locked) => {
+      const observed = await inspectSource(root, scope, person, options, locked);
+      installationLayout = observed.config.productLayout;
+      return observed;
+    },
     admitSource: async (source, sourceScope) => {
       await admitWrite();
       if (source.projectRoot === config.projectRoot && sourceScope === scopeId) return;

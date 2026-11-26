@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { persistedString, counterSchema, delegatedUseConsentSchema, identitySchema } from '#domain/index.js';
-import { DeckentError, readHeadlessDiagnosticCase } from '#platform/index.js';
+import { DeckentError, isSandboxViewDiagnostic, readHeadlessDiagnosticCase } from '#platform/index.js';
 
 import { cliVersion, hexDigest } from './schema-parts.js';
 
@@ -34,6 +34,7 @@ const ready = z.strictObject({ state: z.literal('ready'), execution: nativeAgent
 const incomplete = z.strictObject({ state: z.enum(['unavailable', 'unknown']), reason: nativeAgentReadinessReasonSchema, governedUse: z.literal('outside-installation').optional() });
 export const nativeAgentReadinessSchema = z.discriminatedUnion('state', [ready, incomplete.readonly()]);
 export const localNativeAgentReadinessSchema = z.discriminatedUnion('state', [ready, incomplete.extend({
-  diagnostic: z.instanceof(DeckentError).refine(error => readHeadlessDiagnosticCase({ code: error.code, params: error.params }) !== null).optional(),
+  diagnostic: z.instanceof(DeckentError).refine(error => readHeadlessDiagnosticCase({ code: error.code, params: error.params }) !== null
+    || isSandboxViewDiagnostic(error)).optional(),
 }).readonly()]);
 export type NativeAgentReadiness = z.infer<typeof nativeAgentReadinessSchema>;

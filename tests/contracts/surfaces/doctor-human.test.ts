@@ -8,7 +8,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as surface from '#surfaces/index.js';
 import { main } from '#surfaces/core/cli/index.js';
-import { ErrorRegistry, t, clearConfigCache, loadConfig, productResourcePath, serializeJsonDocument } from '#platform/index.js';
+import { ErrorRegistry, t, clearConfigCache, loadConfig, productResourcePath, readHeadlessDiagnosticRecord, serializeJsonDocument } from '#platform/index.js';
 import { registerProviderConfig, captureAttachmentLocation } from '#adapters/index.js';
 import { evaluatePolicy, firstRunExecutionRules, mcpPrincipalRef, readableInstallationRegistrationSchema, resolvePolicyBindings } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -486,9 +486,9 @@ describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     registerProviderConfig();
     const root = await project({ terminal: { scopeId: 'fixture' } });
-    let legacy = true;
+    let legacy = true, logins: NonNullable<DoctorCheckFacts['headlessLogins']> = [];
     const run = async (args: string[]) => { const out: string[] = [];
-      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
+      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, readHeadlessLogins: async () => logins, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
         .catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
       return out.join(''); };
     const grouped = await run([]);
@@ -512,6 +512,21 @@ describe('deckent doctor (command)', () => {
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
     for (const key of ['platform', 'host', 'node', 'status', 'poolReadiness', 'secretStore', 'shellRealm', 'imageRefresh', 'recoveryFiles']) expect(Object.keys(json)).toContain(key);
+    // A Brain login's re-read sandbox argument-count refusal is an optional field: code, safe counts and the row's sentence; an altered or
+    // missing record adds nothing (the row keeps its generic text).
+    const sandbox = 'The launcher needs 9007 arguments and can accept at most 9000. Argument counts: HOME masks 0, project/state and host protection 8994, ancestor pins 0, final read-only remounts 2, command tail 7, other setup 4. Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry';
+    const login = (check: unknown) => ({ state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/fixture/login', consent: [], isolation: null,
+      connection: 'claude-cli-subscription', profileId: 'fixture-profile', diagnostic: readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', check) });
+    expect(json).not.toHaveProperty('headlessLoginRefusals');
+    logins = [login(sandbox)];
+    const withRefusal = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
+    expect(withRefusal.headlessLoginRefusals).toEqual([{ profileId: 'fixture-profile', connection: 'claude-cli-subscription', code: 'SANDBOX_VIEW_TOO_LARGE',
+      params: { count: 9007, bound: 9000, home: 0, protective: 8994, pins: 0, remounts: 2, tail: 7, other: 4 }, message: sandbox }]);
+    for (const old of [sandbox.replace('9007', '9008'), null]) {
+      logins = [login(old)];
+      expect(JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''))).not.toHaveProperty('headlessLoginRefusals');
+    }
+    logins = [];
     await mkdir(join(env.HOME, '.deckent'), { recursive: true });
     await writeFile(join(env.HOME, '.deckent/config.json'), JSON.stringify({ identity: { profile: { id: 'core:solo', version: 1 } } }));
     clearConfigCache();

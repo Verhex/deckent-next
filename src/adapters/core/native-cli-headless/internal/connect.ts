@@ -1,7 +1,7 @@
 import { compareToolchainVersions, prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { DeckentError, headlessDiagnostic, isRecord, readHeadlessDiagnosticRecord } from '#platform/index.js';
+import { DeckentError, headlessDiagnostic, isRecord, isSandboxViewDiagnostic, readHeadlessDiagnosticRecord } from '#platform/index.js';
 import { headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { searchExecutable } from '#adapters/core/setup-detect-execution/index.js';
@@ -99,6 +99,12 @@ async function readPreflight(definition: NativeCliHeadlessDefinition) {
   catch { return { record: null, diagnostic: preflightRecordDiagnostic() }; }
 }
 const preflightRecordDiagnostic = () => headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'preflight-record-unreadable' });
+/** Display only: a closed preflight record's re-read sandbox argument-count refusal, as Doctor shows it (null for any other or no record). */
+export async function readHeadlessClosedRefusal(definition: unknown) {
+  const parsed = nativeCliHeadlessDefinitionSchema.safeParse(definition), record = parsed.success ? (await readPreflight(parsed.data)).record : null;
+  const refusal = record?.state === 'closed' ? readHeadlessDiagnosticRecord(record.refusal, record.check) : null;
+  return refusal && isSandboxViewDiagnostic(refusal) ? refusal : null;
+}
 
 async function currentPreflightRefusal(record: PreflightRecord, family: string, definition: NativeCliHeadlessDefinition): Promise<DeckentError | null> {
   const entry = nativeCliHeadless(family);

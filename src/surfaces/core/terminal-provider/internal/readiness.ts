@@ -9,7 +9,10 @@ const unknown = (): LocalReadiness => ({ state: 'unknown', reason: 'NATIVE_AGENT
   diagnostic: headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-readiness-verifier-unavailable' }) });
 export function subscriptionReadinessText(value: LocalReadiness, locale: Locale, connection?: string): string {
   if (value.state === 'ready') return t('headless.agent.readiness.ready', {}, locale);
-  if (value.governedUse) { const { text, next } = headlessGovernedUseText(locale, connection); return `${text} ${next}`; }
+  if (value.governedUse) { // A verified diagnosis that arrived with the outside sign-in directory is shown with it.
+    const { text, next } = headlessGovernedUseText(locale, connection), diagnosis = value.diagnostic?.localize?.(locale).message;
+    return diagnosis ? `${text} ${diagnosis} ${next}` : `${text} ${next}`;
+  }
   const reason = value.diagnostic?.localize?.(locale).message ?? nativeAgentReasonText(value.reason, locale, value.state === 'unknown');
   return value.state === 'unknown' ? t('headless.agent.readiness.unknown', { reason }, locale) : t('headless.agent.readiness.unavailable', { reason }, locale);
 }
