@@ -17,6 +17,7 @@ export interface InstallationContextPorts {
   registration(): Promise<InstallationRegistration | null>;
   attachment(): Promise<ProjectAttachment | null>;
   source(source: InstallationSource): Promise<{ readonly identity: InstallationIdentityRead; readonly source: InstallationSource }>;
+  repairSource?(source: InstallationSource, requireActiveTarget: (current: InstallationRegistration | null) => InstallationRegistration): Promise<void>;
   target(): Promise<{ readonly canonicalRoot: string; readonly device: string; readonly inode: string; readonly projectId: string | null }>;
   observeFilesystemIdentity?(location: AttachmentLocation): Promise<FilesystemIdentity | null>;
   legacy(): Promise<InstallationIdentityRead>;
@@ -48,11 +49,18 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   if (entry.state !== 'active') return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   const target = await ports.target();
   if (target.projectId !== attachment.projectId || !await matchesObservedAttachmentLocation(ports, attachment.location, target)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-  const observed = await ports.source(registration.source).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
-  if (!await matchesObservedAttachmentSource(ports, registration.source, observed.source) || observed.identity.status !== 'available'
+  const requireActiveTarget = (current: InstallationRegistration | null) => {
+    if (!current || current.unregistered || current.registrationId !== registration.registrationId
+      || !isDeepStrictEqual(current.entries.find(item => item.attachment.projectId === attachment.projectId), entry)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+    return current;
+  };
+  await ports.repairSource?.(registration.source, requireActiveTarget);
+  const current = ports.repairSource ? requireActiveTarget(await ports.registration()) : registration;
+  const observed = await ports.source(current.source).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
+  if (!await matchesObservedAttachmentSource(ports, current.source, observed.source) || observed.identity.status !== 'available'
     || observed.identity.pendingWrite || observed.identity.value.installationId !== registration.source.installationId
     || observed.identity.value.realmSeal) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
-  return Object.freeze({ kind: 'attached', identity: observed.identity, source: registration.source, attachment });
+  return Object.freeze({ kind: 'attached', identity: observed.identity, source: current.source, attachment });
 }
 /** Only the existing identity is returned; losing the reference target never creates a replacement. */
 export function existingSharedIdentity(identity: InstallationIdentityRead, sourceRoot?: string): InstallationIdentity {

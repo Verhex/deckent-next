@@ -218,8 +218,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   context.onLocale?.(locale);
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
-  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options, scopeId) : null;
+  const describeChat = () => context.describeTerminalChatPlan?.(root, options, scopeId) ?? Promise.resolve(null);
   if (parsed.action === 'chat-plan') {
+    const chat = await describeChat();
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
     return;
@@ -235,7 +236,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ?? { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' } as const,
   project: await context.loadProjectIdentity?.(root, options) ?? { status: 'unavailable', reason: 'unsupported' } as const });
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat, await readIdentity());
+    const payload = statusPayload(tty, config, await describeChat(), await readIdentity());
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -247,10 +248,6 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
   const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
-  if (chat?.governedUse) {
-    const limit = headlessGovernedUseText(locale, chat.reference?.providerId);
-    accessNotices.push({ level: 'warning', text: limit.text }, { level: 'info', text: limit.next });
-  }
   // Astra 2860 R1: a launch shell the person closed ends the launch before each effect (identity admission, service start, setup, sessions).
   const left = () => context.terminalShell !== undefined && !context.terminalShell.host.open();
   if (left()) return;
@@ -270,6 +267,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     }
     if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
+  }
+  const chat = await describeChat();
+  if (chat?.governedUse) {
+    const limit = headlessGovernedUseText(locale, chat.reference?.providerId);
+    accessNotices.unshift({ level: 'warning', text: limit.text }, { level: 'info', text: limit.next });
   }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.

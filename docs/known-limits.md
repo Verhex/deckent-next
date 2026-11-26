@@ -918,6 +918,14 @@ installation; this beta may offer no way out there short of restoring a backup. 
 is planned for beta.2.1. beta.2 is the reader release; it does not repair registered-source recovery.
 
 
+### Beta.2.1 binding writer candidate
+
+An authorized scoped write can upgrade a matching retained binding when the capture includes both machine and verified filesystem identity. The installation ID is preserved. A refused scoped write keeps the identity bytes and creates no first copy. The first compatible record is retained as `identity.pre-v3.json` beside `identity.json`. Ordinary backup and restore carry both files. Deeper rollback requires the writer-capable release, a stopped plain installation, verified current and first-copy digests, and evidence that the selected older reader accepts the retained record. Managed replacement requires the same installation ID in both files. A `--new` copy cannot restore its predecessor's ID.
+
+A witnessed `deckent terminal attach --relocate --scope <sourceScope> --apply` keeps the registered source ID after a genuine move. Authorized source writes can also reconcile supported device-only changes. A later attachment uses the reconciled source. A crash between publication of registration and identity can leave the source unavailable on beta.2. On that half-written state, beta.2 refuses `--keep` at the registered source and `--relocate` on the v3 registration. Return to beta.2.1 for recovery against the fresh source evidence. A witnessed move interrupted at the same point can be retried through the witnessed relocation command once the old root is proved absent.
+
+Repeated-target repair and installer replay across a reconciled target remain separate work. The beta.2 binary switch and installed recovery walks require release acceptance.
+
 Beta.2 rebinding limits (owner answers 79/81/82/88/89/92/93/94):
 
 - Any copy retaining machine id (including a configured identity file), path and root inode passes as device-only:

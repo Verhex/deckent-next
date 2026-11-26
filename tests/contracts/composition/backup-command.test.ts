@@ -23,6 +23,7 @@ import { openConfiguredArtifactStore } from '../support/configured-open.js';
 import { restoreHoldPath } from '#platform/index.js';
 import { startBackupSchedule } from '#composition/core/backup/index.js';
 import type { BackupScheduleEvent } from '#engine/index.js';
+const filesystem = await import('#adapters/core/installation-files/internal/filesystem-identity.js');
 const roots: string[] = [], workers: Worker[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const phrase = 'CANARY-backup-operator-secret-🐦';
 afterEach(async () => {
@@ -61,7 +62,15 @@ async function audit(f: Awaited<ReturnType<typeof fixture>>) {
   return Promise.all((await readdir(dir)).map(async name => verifyAuditRecord(JSON.parse(await readFile(join(dir, name), 'utf8')), integrity)));
 }
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] CLI → application → online WAL backup under concurrent writes → verify → restore preserves a consistent ledger, artifacts, key and relocation', async () => {
+  const filesystemProbe = vi.spyOn(filesystem, 'inspectFilesystemIdentity').mockResolvedValue({ status: 'unavailable', reason: 'native-unavailable' });
   const f = await fixture();
+  const identityDirectory = productResourcePath(f.layout, 'installationIdentity');
+  const original = await readFile(join(identityDirectory, 'identity.json'));
+  filesystemProbe.mockResolvedValue({ status: 'available', identity: { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' } });
+  await new FileInstallationIdentityStore(f.layout, 2000).upgradeAdmittedBinding(f.installationId);
+  const upgraded = await readFile(join(identityDirectory, 'identity.json'));
+  expect(JSON.parse(upgraded.toString()).binding).toMatchObject({ schemaVersion: 3 });
+  expect(await readFile(join(identityDirectory, 'identity.pre-v3.json'))).toEqual(original);
   const worker = new Worker(`const { parentPort, workerData } = require('node:worker_threads'); const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(workerData, { timeout: 1000 }); db.exec('PRAGMA journal_mode=WAL');
     let count = 0; function batch() { db.exec('BEGIN IMMEDIATE'); for (let i=0;i<100;i++) db.prepare('INSERT INTO backup_load(value) VALUES(?)').run('value-'+(++count));
@@ -86,13 +95,17 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   const result = await call(f, 'restore');
   expect(result.relocation?.required).toBe(true); expect(result.relocation?.changedPaths).toContain('/layout/root');
   const restored = resolveProductLayout({ projectRoot: f.target });
+  const restoredIdentity = productResourcePath(restored, 'installationIdentity');
+  expect(await readFile(join(restoredIdentity, 'identity.json'))).toEqual(upgraded);
+  expect(await readFile(join(restoredIdentity, 'identity.pre-v3.json'))).toEqual(original);
   expect(await readFile(join(restored.root, 'artifacts/result.txt'), 'utf8')).toBe('retained artifact');
   expect(await readFile(join(restored.root, 'approvals/authority.key'))).toEqual(await readFile(join(f.layout.root, 'approvals/authority.key')));
   const db = new DatabaseSync(productResourcePath(restored, 'ledger'), { readOnly: true });
   expect(db.prepare('SELECT n FROM backup_count').get()?.n).toBe(count); db.close();
   await expect(new FileInstallationIdentityStore(restored, 2000).read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
-  await new FileInstallationIdentityStore(restored, 2000).resolveRelocation({ choice: 'keep', admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } }, { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
+  await new FileInstallationIdentityStore(restored, 2000).resolvePlainRelocation({ choice: 'keep', admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } }, { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
   expect((await new FileInstallationIdentityStore(restored, 2000).read())).toMatchObject({ value: { installationId: f.installationId } });
+  expect(await readFile(join(restoredIdentity, 'identity.pre-v3.json'))).toEqual(original);
   for (const name of ['MANIFEST.sha256','ledger.db','ledger.fingerprint.json','state.archive.json.gz','authority.key.enc']) expect((await stat(join(f.set,name))).mode & 0o777).toBe(0o600);
   // S1 O6: create, verify and restore leave no SQLite sidecar in the set.
   expect((await readdir(f.set)).sort()).toEqual(['MANIFEST.sha256','authority.key.enc','ledger.db','ledger.fingerprint.json','state.archive.json.gz']);
@@ -106,6 +119,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   expect(JSON.stringify(records)).not.toContain(phrase);
   const { gunzipSync } = await import('node:zlib');
   expect(gunzipSync(await readFile(join(f.set, 'state.archive.json.gz'))).toString()).not.toContain((await readFile(join(f.layout.root, 'approvals/authority.key'))).toString('base64'));
+  filesystemProbe.mockRestore();
 }, 30000);
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] tampered manifest and wrong passphrase refuse before any target state is published, and are audited without secrets', async () => {
   const f = await fixture(); await call(f,'create');

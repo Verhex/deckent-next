@@ -4,10 +4,10 @@ import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { BEUSER_GENESIS_PATH, parseBeuserRealmSeal, assertUnsealedInstallation, type BeuserRealmSeal } from '#engine/index.js';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
-  installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, REBIND_CLASS, type RebindClass, type InstallationBindingCapture } from '#domain/index.js';
-import { assessInstallationBinding, classifyInstallationRebinding, InstallationIdentityError, type InstallationIdentityResolutionInput, type RebindAdmission, type InstallationBindingCapability, type InstallationIdentityStore,
+  installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, REBIND_CLASS, type RebindClass, type InstallationBinding } from '#domain/index.js';
+import { assessInstallationBinding, classifyInstallationRebinding, InstallationIdentityError, PolicyAuthorizationError, ProjectAttachmentError, type RegisteredInstallationBinding, type InstallationIdentityResolutionInput, type RebindAdmission, type InstallationBindingCapability, type InstallationIdentityStore,
   type InstallationBindingSource, type InstallationIdentityRead } from '#engine/index.js';
-import { productResourcePath, HOST_LIMITS_REGISTRY, type ProductLayout } from '#platform/index.js';
+import { productResourcePath, HOST_LIMITS_REGISTRY, sha256, type ProductLayout } from '#platform/index.js';
 import { IdentityFile } from './identity-file.js';
 import { localInstallationBindingSource, type InstallationBindingSettings } from './installation-binding.js';
 
@@ -20,13 +20,24 @@ function assess(record: IdentityRecord, captured: InstallationBindingCapability)
   if (record.schemaVersion === 1) return captured.strength === 'weak' ? 'bind' : 'relocated';
   return assessInstallationBinding(record.binding, captured);
 }
-const bound = (installationId: string, binding: InstallationBindingCapture, lastResolution: unknown, realmSeal?: BeuserRealmSeal) =>
-  realmSeal ? installationIdentityRecordSchema.parse({ schemaVersion: 3, installationId, binding: retainedInstallationBinding(binding), lastResolution, realmSeal })
-    : boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding: retainedInstallationBinding(binding), lastResolution });
+const bound = (installationId: string, binding: InstallationBinding, lastResolution: unknown, realmSeal?: BeuserRealmSeal) =>
+  realmSeal ? installationIdentityRecordSchema.parse({ schemaVersion: 3, installationId, binding, lastResolution, realmSeal })
+    : boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding, lastResolution });
 const identity = (record: IdentityRecord) => installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.installationId, ...('realmSeal' in record && record.realmSeal ? { realmSeal: record.realmSeal } : {}) });
 const refuseNewerBindingWrite = (record: IdentityRecord | null) => {
-  if (record && record.schemaVersion !== 1 && record.binding.schemaVersion === 3) throw new InstallationIdentityError('INSTALLATION_IDENTITY_NEWER_BINDING');
+  if (record && hasFilesystemBinding(record)) throw new InstallationIdentityError('INSTALLATION_IDENTITY_NEWER_BINDING');
 };
+const hasFilesystemBinding = (record: IdentityRecord) => record.schemaVersion !== 1 && record.binding.schemaVersion === 3;
+function publishableBinding(capture: Exclude<InstallationBindingCapability, { status: 'unsupported' }>): InstallationBinding {
+  const { filesystemIdentity } = capture;
+  return capture.strength === 'machine' && filesystemIdentity
+    ? { ...capture, schemaVersion: 3, filesystemIdentity } : retainedInstallationBinding(capture);
+}
+function upgradedBinding(record: IdentityRecord, captured: InstallationBindingCapability, outcome: Outcome): InstallationBinding | null {
+  if (record.schemaVersion === 1 || hasFilesystemBinding(record) || (outcome !== 'match' && outcome !== 'strengthen')
+    || 'status' in captured || captured.strength !== 'machine' || !captured.filesystemIdentity) return null;
+  return publishableBinding(captured);
+}
 
 /** One local metadata transition owner. Binding evidence detects relocation; it grants no authority. */
 export class FileInstallationIdentityStore implements InstallationIdentityStore {
@@ -65,12 +76,16 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     return new IdentityFile<IdentityRecord, InstallationBindingCapability>(this.layout, 'installationIdentity', {
       parse: value => installationIdentityRecordSchema.parse(value),
       prepare,
-      create: async captured => {
-        const installationId = randomUUID(), binding = captured ?? await prepare(), seal = await this.genesis();
-        if (seal && 'status' in binding) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
-        return 'status' in binding ? installationIdentitySchema.parse({ schemaVersion: 1, installationId }) : bound(installationId, binding, null, seal);
+      create: async binding => {
+        if (!binding) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNAVAILABLE');
+        const installationId = randomUUID(), seal = await this.genesis();
+        if ('status' in binding) {
+          if (seal) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
+          return installationIdentitySchema.parse({ schemaVersion: 1, installationId });
+        }
+        return bound(installationId, publishableBinding(binding), null, seal);
       },
-      isError: (error: unknown) => error instanceof InstallationIdentityError,
+      isError: (error: unknown) => error instanceof InstallationIdentityError || error instanceof ProjectAttachmentError || error instanceof PolicyAuthorizationError,
       error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', INCOMPLETE: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
         LOCKED: 'INSTALLATION_IDENTITY_LOCKED', UNSUPPORTED: 'INSTALLATION_IDENTITY_UNSUPPORTED', MASKED: 'INSTALLATION_IDENTITY_MASKED' } as const)[reason]),
     }, this.lockTimeoutMs);
@@ -88,7 +103,8 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     if ('status' in captured) return { status: 'available', value: identity(record), bindingCapability: 'unsupported' };
     const required = this.settings.requireMachineBinding === true && captured.strength !== 'machine';
     return { status: 'available', value: identity(record), bindingCapability: 'supported', binding: { strength: captured.strength, source: captured.source },
-      ...(outcome === 'bind' || outcome === 'strengthen' || required ? { pendingWrite: true as const } : {}) };
+      ...(outcome === 'bind' || outcome === 'strengthen' || required ? { pendingWrite: true as const } : {}),
+      ...(upgradedBinding(record, captured, outcome) ? { pendingUpgrade: true as const } : {}) };
   }
   /**
    * Owned-init preflight (init apply/resume, direct policy setup) before their first persistent effect: configured source validity,
@@ -127,15 +143,82 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       const fresh = await source.capture(); this.requireMachine(fresh);
       const again = assess(current, fresh);
       if (again === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
-      if ((again !== 'bind' && again !== 'strengthen') || 'status' in fresh) return current;
+      if ((again !== 'bind' && again !== 'strengthen') || 'status' in fresh || upgradedBinding(current, fresh, again)) return current;
       refuseNewerBindingWrite(current);
-      return bound(current.installationId, fresh, current.schemaVersion !== 1 ? current.lastResolution : null, 'realmSeal' in current ? current.realmSeal : undefined);
+      return bound(current.installationId, retainedInstallationBinding(fresh), current.schemaVersion !== 1 ? current.lastResolution : null, 'realmSeal' in current ? current.realmSeal : undefined);
     }));
   }
+  /** Only the caller that has made a positive write decision can take the retained upgrade path. */
+  async upgradeAdmittedBinding(expectedId?: string) {
+    const observed = await this.read();
+    if (observed.status !== 'available') throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    if (expectedId !== undefined && observed.value.installationId !== expectedId) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+    if (!observed.pendingUpgrade) return observed.value;
+    const source = this.source();
+    return this.file(() => source.capture()).edit(async ({ current, retain, replace }) => {
+      const record = current.record;
+      await this.checkSeal(record);
+      if (record.installationId !== observed.value.installationId) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+      const captured = await source.capture(), outcome = assess(record, captured);
+      if (outcome === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
+      this.requireMachine(captured);
+      const binding = upgradedBinding(record, captured, outcome);
+      if (!binding || record.schemaVersion === 1) return identity(record);
+      await retain();
+      await replace(bound(record.installationId, binding, record.lastResolution, 'realmSeal' in record ? record.realmSeal : undefined));
+      return identity(record);
+    });
+  }
+  /** Managed rollback primitive. The recovery caller supplies held authority and the selected reader's compatibility proof. */
+  async restorePreV3(proof: { readonly currentDigest: string; readonly preimageDigest: string;
+    authorize(): Promise<void>; verifyReader(bytes: Buffer): Promise<boolean> }) {
+    const source = this.source();
+    return this.file(() => source.capture()).edit(async ({ current, companion, replace }) => {
+      await proof.authorize();
+      await this.checkSeal(current.record);
+      const retained = await companion();
+      if (!retained || !hasFilesystemBinding(current.record) || hasFilesystemBinding(retained.record)
+        || identity(current.record).realmSeal || identity(retained.record).realmSeal || retained.record.installationId !== current.record.installationId
+        || sha256(current.bytes) !== proof.currentDigest || sha256(retained.bytes) !== proof.preimageDigest
+        || !await proof.verifyReader(Buffer.from(retained.bytes))) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+      await replace(retained.bytes);
+      return identity(retained.record);
+    });
+  }
+  /** The attachment writer holds registration custody for this entire callback. */
+  async withRegisteredBinding<T>(principal: { readonly issuer: string; readonly subject: string }, work: (locked: RegisteredInstallationBinding) => Promise<T>) {
+    const source = this.source();
+    return this.file(() => source.capture()).edit(async ({ current: { record }, retain, replace, verify }) => {
+      await this.checkSeal(record);
+      const value = identity(record);
+      if (value.realmSeal) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+      const capture = await source.capture();
+      if ('status' in capture) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
+      const outcome = assess(record, capture) as RegisteredInstallationBinding['outcome'];
+      const binding = record.schemaVersion === 1 ? null : record.binding, candidate = publishableBinding(capture);
+      return work({ identity: value, binding, capture, candidate, outcome, commit: async (kind, publishRegistration) => {
+        await verify();
+        this.requireMachine(capture);
+        if (kind === 'registration-only') { await publishRegistration(); await verify(); return; }
+        if (kind === 'device-only' && (outcome !== 'relocated' || classifyInstallationRebinding(binding, capture) !== REBIND_CLASS.deviceOnly))
+          throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+        if (outcome === 'match') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
+        const resolution = kind === 'person' ? installationIdentityResolutionSchema.parse({ schemaVersion: 1, choice: 'keep',
+          previousInstallationId: value.installationId, installationId: value.installationId, at: new Date().toISOString(), principal })
+          : record.schemaVersion === 1 ? null : record.lastResolution;
+        if (candidate.schemaVersion === 3 && !hasFilesystemBinding(record)) await retain();
+        await replace(bound(value.installationId, candidate, resolution), publishRegistration);
+      } });
+    });
+  }
   /** Gate preflight only; the writer repeats this comparison with a fresh capture under its lock. */
-  async inspectRebinding() {
+  inspectRebinding() { return this.inspectResolution(false); }
+
+  inspectPlainRebinding() { return this.inspectResolution(true); }
+
+  private async inspectResolution(plain: boolean) {
     const source = this.source(), record = await this.file(() => source.capture()).load();
-    refuseNewerBindingWrite(record);
+    if (!plain) refuseNewerBindingWrite(record);
     if (!record) return { class: null, installationId: null };
     await this.checkSeal(record);
     const captured = await source.capture();
@@ -144,16 +227,27 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     return { class: assess(record, captured) === 'relocated' ? classifyInstallationRebinding(record.schemaVersion === 1 ? null : record.binding, captured) : null,
       installationId: record.installationId };
   }
-  async resolveRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }) {
+  resolveRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }) {
+    return this.resolve(input, principal, false);
+  }
+
+  /** Explicit recovery with the caller's attachment lifecycle check repeated before publication. */
+  resolvePlainRelocation(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string }, assertPlain?: () => Promise<void>) {
+    return this.resolve(input, principal, true, assertPlain);
+  }
+
+  private async resolve(input: InstallationIdentityResolutionInput, principal: { readonly issuer: string; readonly subject: string },
+    plain: boolean, assertPlain?: () => Promise<void>) {
     const choice = input?.choice;
     if (!installationIdentityChoiceSchema.safeParse(choice).success) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
     const source = this.source();
     let change: RebindClass | null = null, basis: RebindAdmission['basis'] = 'open-class';
     // Refuse before creating a lock companion; repeat under the lock against a concurrent newer writer.
-    refuseNewerBindingWrite(await this.file(() => source.capture()).load());
-    const record = await this.file(() => source.capture()).update(async current => {
+    const file = this.file(() => source.capture());
+    if (!plain) refuseNewerBindingWrite(await file.load());
+    const record = await file.edit(async ({ current: { record: current }, retain, replace }) => {
       await this.checkSeal(current);
-      refuseNewerBindingWrite(current);
+      if (!plain) refuseNewerBindingWrite(current);
       if ('realmSeal' in current && current.realmSeal) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
       const captured = await source.capture();
       if ('status' in captured) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
@@ -172,7 +266,12 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       const parsed = installationIdentityResolutionSchema.safeParse({ schemaVersion: 1, choice, previousInstallationId: current.installationId,
         installationId, at: new Date().toISOString(), principal });
       if (!parsed.success) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
-      return bound(installationId, captured, parsed.data);
+      const binding = plain ? publishableBinding(captured) : retainedInstallationBinding(captured);
+      await assertPlain?.();
+      if (binding.schemaVersion === 3 && !hasFilesystemBinding(current)) await retain();
+      const next = bound(installationId, binding, parsed.data);
+      await replace(next, assertPlain);
+      return next;
     });
     if (record.schemaVersion !== 2 || !record.lastResolution) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
     return { ...record.lastResolution, ...(choice === 'keep' ? { class: change, basis } : {}) };

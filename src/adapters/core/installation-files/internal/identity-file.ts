@@ -1,7 +1,8 @@
 import { lstat, mkdir, stat, statfs } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { CodedError, ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
-  withConfigWriteLock, writeJsonAtomic, type ProductLayout } from '#platform/index.js';
+import { CodedError, HOST_LIMITS_REGISTRY, ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
+  serializeJsonDocument, withConfigWriteLock, writeJsonAtomic, writeTextAtomic, type ProductLayout } from '#platform/index.js';
+import { InstallationFileError, publishInstallationFile, readPrivateInstallationBytes } from './publication.js';
 
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
 /** The poll step keeps a concurrent first publication cheap to observe; the bound is the writer-lock timeout. */
@@ -25,6 +26,15 @@ async function maskedDirectory(directory: string): Promise<boolean> {
 class IdentityFileError extends CodedError { constructor(readonly reason: Failure) { super(reason); } }
 /** `prepare` runs under the writer lock before the record directory is created, so its refusal leaves no retained (lost-looking) directory. */
 interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?(): Promise<P>; create(prepared: P | undefined): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
+export const IDENTITY_FIRST_COPY = 'identity.pre-v3.json';
+interface IdentityPreimage<T> { readonly record: T; readonly bytes: Buffer }
+interface IdentityEdit<T> {
+  readonly current: IdentityPreimage<T>;
+  companion(): Promise<IdentityPreimage<T> | null>;
+  verify(): Promise<void>;
+  retain(): Promise<void>;
+  replace(next: T | Buffer, beforeReplace?: () => Promise<void>): Promise<void>;
+}
 
 /** Shared first-publication mechanism. A retained directory with a missing record means lost or
  * interrupted publication (INCOMPLETE, its own recoverable reason), never a fresh identity. The bounded config lock serializes writers;
@@ -84,17 +94,65 @@ export class IdentityFile<T, P = undefined> {
 
   /** Existing-record replacement uses the same custody and atomic writer as first publication. Returning the current record unchanged writes nothing. */
   async update(change: (record: T) => Promise<T>): Promise<T> {
+    return this.edit(async ({ current, replace }) => {
+      const next = await change(current.record);
+      if (next !== current.record) await replace(next);
+      return next;
+    });
+  }
+
+  async edit<R>(work: (edit: IdentityEdit<T>) => Promise<R>): Promise<R> {
     try {
       const directory = productResourcePath(this.layout, this.resource);
       await inspectProductDirectory(this.layout, this.resource);
       await prepareProductCompanionPath(this.layout, this.resource, '-lock');
       return await withConfigWriteLock(directory, async () => {
         await inspectProductDirectory(this.layout, this.resource);
-        const current = await this.read(directory);
-        if (!current) throw new IdentityFileError('INCOMPLETE');
-        const next = await change(current);
-        if (next !== current) await writeJsonAtomic(join(directory, 'identity.json'), next);
-        return next;
+        const directoryBefore = await lstat(directory, { bigint: true });
+        const request = (basename: string) => ({ root: directory, path: join(directory, basename), maxBytes: HOST_LIMITS_REGISTRY.jsonDocumentReadBytes });
+        const active = request('identity.json'), retained = request(IDENTITY_FIRST_COPY);
+        const bytes = await readPrivateInstallationBytes(active);
+        if (!bytes) throw new IdentityFileError('INCOMPLETE');
+        const activeBefore = await lstat(active.path, { bigint: true });
+        const parse = (raw: Buffer): IdentityPreimage<T> => {
+          try { return { record: this.codec.parse(JSON.parse(raw.toString('utf8'))), bytes: raw }; }
+          catch { throw new IdentityFileError('INVALID'); }
+        };
+        const check = async (read: typeof active, expected: Buffer, sync = false) => {
+          await inspectProductDirectory(this.layout, this.resource);
+          if (!(await readPrivateInstallationBytes(read, sync))?.equals(expected)) throw new IdentityFileError('INVALID');
+          const namedDirectory = await lstat(directory, { bigint: true });
+          if (namedDirectory.dev !== directoryBefore.dev || namedDirectory.ino !== directoryBefore.ino) throw new IdentityFileError('INVALID');
+          if (read === active && expected === bytes) {
+            const named = await lstat(active.path, { bigint: true });
+            if (named.dev !== activeBefore.dev || named.ino !== activeBefore.ino) throw new IdentityFileError('INVALID');
+          }
+        };
+        return work({
+          current: parse(bytes),
+          verify: () => check(active, bytes),
+          companion: async () => {
+            const raw = await readPrivateInstallationBytes(retained);
+            return raw && parse(raw);
+          },
+          retain: async () => {
+            await check(active, bytes);
+            await publishInstallationFile({ ...retained, transactionId: IDENTITY_FIRST_COPY }, bytes, true);
+            await check(retained, bytes);
+          },
+          replace: async (next, beforeReplace) => {
+            const output = Buffer.isBuffer(next) ? next : Buffer.from(serializeJsonDocument(next));
+            await check(active, bytes);
+            await beforeReplace?.();
+            try { await writeTextAtomic(active.path, output, () => check(active, bytes)); }
+            catch (error) {
+              // A rename followed by a sync error may already have published. Settle only the exact intended bytes.
+              if (!(await readPrivateInstallationBytes(active))?.equals(output)) throw error;
+              await check(active, output, true);
+            }
+            await check(active, output);
+          },
+        });
       }, this.lockTimeoutMs);
     } catch (error) { return this.fail(error); }
   }
@@ -102,6 +160,7 @@ export class IdentityFile<T, P = undefined> {
   private fail(error: unknown): never {
     const code = (error as { code?: string }).code;
     if (this.codec.isError?.(error)) throw error;
+    if (error instanceof InstallationFileError && ['INSTALLATION_FILE_CONFLICT', 'INSTALLATION_FILE_UNSAFE', 'INSTALLATION_FILE_INVALID'].includes(error.code)) throw this.codec.error('INVALID');
     throw this.codec.error(error instanceof IdentityFileError ? error.reason : code === 'CONFIG_WRITE_LOCKED'
       ? 'LOCKED' : code === 'MANAGED_FILE_UNSUPPORTED' ? 'UNSUPPORTED' : 'UNAVAILABLE');
   }

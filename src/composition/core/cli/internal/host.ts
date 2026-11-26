@@ -16,7 +16,7 @@ import { configuredProjectInstructions, inspectLegacyProjectInstructions } from 
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { inspectConfiguredAdminPaths } from './admin-paths.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
-import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
+import { ensureConfiguredTerminalIdentity, preflightConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, openExternalEditor, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
 import { openDeliveryRuns, settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
@@ -138,6 +138,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
     ensureTerminalIdentity: (projectRoot, scopeId, options) => typed(ensureConfiguredTerminalIdentity(projectRoot, scopeId, options)),
+    preflightTerminalIdentity: (projectRoot, options) => typed(preflightConfiguredTerminalIdentity(projectRoot, options)),
     resolveInstallationIdentity: (root, choice, options) => typed(resolveConfiguredInstallationIdentity(root, choice, options)),
     loadInstallationIdentity: (root, options) => typed(loadConfiguredInstallationIdentity(root, options)), loadProjectIdentity: (root, options) => typed(loadConfiguredProjectIdentity(root, options)),
     stopRuntimeService: (projectRoot, options, reason) => stopConfiguredRuntimeService(projectRoot, options, reason), inspectBackupSets: inspectConfiguredBackupSets, inspectAdminPaths: inspectConfiguredAdminPaths,

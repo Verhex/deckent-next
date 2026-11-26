@@ -24,12 +24,12 @@
     }
   },
   "purgeMembers": {
-    "ledger": "",
-    "bindings": "",
-    "policy": "",
-    "installationIdentity": "identity.json",
-    "approvals": "{keyFile}",
-    "projectAttachment": ""
+    "ledger": [""],
+    "bindings": [""],
+    "policy": [""],
+    "installationIdentity": ["identity.json", "identity.pre-v3.json"],
+    "approvals": ["{keyFile}"],
+    "projectAttachment": [""]
   },
   "treeMembers": {
     "audit": {

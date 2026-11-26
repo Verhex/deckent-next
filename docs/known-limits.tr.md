@@ -915,6 +915,14 @@ Kaynağın **bağlı projeleri varsa** ilk komut, her biri ayrılana kadar (`dec
 `PROJECT_ATTACHMENT_SOURCE_REGISTERED` ile reddedilir. Bu yol taşınmış kurulumda doğrulanmadı; bu betada orada yedekten
 geri yüklemek dışında çıkış olmayabilir. Koruma olduğu gibi kalır; bağ düzeltmesi beta.2.1 için planlanıyor. beta.2 okuyucu sürümüdür; kayıtlı kaynağı kurtarmayı düzeltmez.
 
+### Beta.2.1 kurulum bağı yazıcı adayı
+
+Makine ve doğrulanmış dosya sistemi kimliği birlikte varsa, yetkili kapsam yazısı saklanan uyumlu bağı aynı kurulum kimliğiyle yükseltebilir. Reddedilen yazı kimlik baytlarını korur ve ilk kopyayı oluşturmaz. İlk uyumlu kayıt, `identity.json` yanında `identity.pre-v3.json` olarak aynen saklanır. Olağan yedekleme ve geri yükleme iki dosyayı da taşır. Daha eski bir okuyucuya dönüş için yazıcı sürümü, durdurulmuş bağımsız bir kurulum, mevcut ve ilk kopya özetlerinin doğrulanması ve seçilen eski okuyucunun bu kaydı kabul ettiğine dair kanıt gerekir. Yönetilen geri yüklemede iki dosyanın kurulum kimliği aynı olmalıdır. `--new` ile oluşturulan kopya önceki kurulum kimliğini geri yükleyemez.
+
+Tanıklı `deckent terminal attach --relocate --scope <sourceScope> --apply` komutu, gerçek taşıma sonrasında kaynak kurulum kimliğini korur. Yetkili kaynak yazısı desteklenen aygıt numarası değişikliklerini de uzlaştırabilir. Sonraki proje bağlama işlemi uzlaştırılmış kaynağı kullanır. Kayıt ve kimlik yayımları arasındaki kesinti, kaynağı beta.2'de kullanılamaz bırakabilir. Bu durumda beta.2 kayıtlı kaynakta `--keep` seçeneğini ve v3 kayıtta `--relocate` işlemini reddeder. Yeni kaynak kanıtıyla onarım için beta.2.1'e dönün. Aynı noktada kesilen tanıklı taşıma, eski kökün artık bulunmadığı doğrulandıktan sonra tanıklı taşıma komutuyla sürdürülebilir.
+
+Tekrarlanan hedef onarımı ve uzlaştırılmış hedefte kurulum işleminin yeniden yürütülmesi ayrı çalışmalardır. Gerçek beta.2 ikilisine dönüş ve kurulu kurtarma yürüyüşleri sürüm kabulü gerektirir.
+
 beta.2 yeniden bağlama sınırları (owner yanıtları 79/81/82/88/89/92/93/94):
 
 - Makine kimliğini (yapılandırılmış kimlik dosyası dahil), yolu ve kök inode'unu koruyan her kopya `device-only` sayılır

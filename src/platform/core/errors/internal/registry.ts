@@ -565,7 +565,12 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   CONFIG_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_FILE_INVALID', p, l), suggestion: t('remedy.CONFIG_FILE_INVALID', p, l), whatHappened: t('what.CONFIG_FILE_INVALID', p, l), why: t('why.CONFIG_FILE_INVALID', p, l), howToFix: Object.freeze(t('fix.CONFIG_FILE_INVALID', p, l).split('\n')) }) },
 }, plainErrors('error.', {
   UNSUPPORTED_PLATFORM: 'error', HOME_NOT_RESOLVED: 'config', PATH_TRAVERSAL: 'usage', INVALID_TASK_ID: 'usage', ACTOR_UNVERIFIED: 'usage', CONFIG_UNSAFE_KEY: 'config',
-  CONFIG_BACKUP_PRUNE_FAILED: 'config', CONFIG_READ_IO_HOLD: 'config', CONFIG_CONCURRENT_REVISION_HOLD: 'config', CONFIG_APPROVAL_STALE: 'config',
+  CONFIG_BACKUP_PRUNE_FAILED: 'config',
+}), {
+  CONFIG_READ_IO_HOLD: { category: 'config', render: (p, l) => ({ message: p.reason === 'installation-authority-global-config' && typeof p.path === 'string' && p.path
+    ? t('error.CONFIG_READ_IO_HOLD.installationAuthority', p, l) : t('error.CONFIG_READ_IO_HOLD', p, l) }) },
+}, plainErrors('error.', {
+  CONFIG_CONCURRENT_REVISION_HOLD: 'config', CONFIG_APPROVAL_STALE: 'config',
   CONFIG_APPROVAL_REQUIRED: 'config', CONFIG_WRITE_LOCKED: 'config', CONFIG_VERSION_UNSUPPORTED: 'config', CONFIG_SECTION_DUPLICATE: 'config',
   CONFIG_RECORD_INVALID: 'config', CONFIG_SECTION_INVALID: 'config', CONFIG_KEY_UNKNOWN: 'usage', LAYOUT_VERSION_UNSUPPORTED: 'config', LAYOUT_ROOT_INVALID: 'config',
   LAYOUT_RESOURCE_INVALID: 'config', LAYOUT_RESOURCE_UNKNOWN: 'config', LAYOUT_PATH_UNEXPRESSIBLE: 'config', CONFIG_VALIDATION: 'config',

@@ -6,3 +6,4 @@ export { ProjectAttachmentRelocationApplication } from './internal/relocation.js
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ AttachmentRelocationPorts } from './internal/relocation.js';
 export { attachmentLifecycleIdentity, settleRemovedAttachment, attachmentMutationFenced } from './internal/lifecycle.js';
 export { verifySharedAttachmentRestore } from './internal/restore.js';
+export { planSourceRepair } from './internal/source-repair.js';

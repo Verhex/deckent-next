@@ -166,7 +166,10 @@ it.skipIf(process.platform !== 'linux')('purges only the exact backed-up authori
     // M1: private same-user files in canonical trees and member directories are no recorded member of this installation.
     const strays = [join(data, 'runs/customer-record'), join(data, 'audit/company-record'), join(data, 'installation-identity/foreign-note'), join(data, 'approvals/other-company.key')];
     for (const path of strays) await writeFile(path, 'FOREIGN KEEP', { mode: 0o600 });
-    const members = [ledger, join(data, 'bindings.json'), join(data, 'policy.json'), join(data, 'installation-identity/identity.json'), join(data, 'approvals', keyFile)];
+    const companion = join(data, 'installation-identity/identity.pre-v3.json'), identityRecord = join(data, 'installation-identity/identity.json');
+    const firstCopy = await readFile(identityRecord);
+    await writeFile(companion, firstCopy, { mode: 0o600 });
+    const members = [ledger, join(data, 'bindings.json'), join(data, 'policy.json'), identityRecord, companion, join(data, 'approvals', keyFile)];
     const policyBytes = await readFile(join(data, 'policy.json'));
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
     const plan = await previewConfiguredUninstall(project, ALL, options);
@@ -192,7 +195,9 @@ it.skipIf(process.platform !== 'linux')('purges only the exact backed-up authori
     expect(await readFile(join(project, '.deckent/customer'), 'utf8')).toBe('KEEP PROJECT');
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
     const finalSet = result.backup.destination!, verified = await verifyBackupSet(finalSet, phrase, getConfigFieldDefault('installation').packageMeasurement);
-    expect(verified.state.installationId).toBe(plan.installation.id); verified.close();
+    expect(verified.state.installationId).toBe(plan.installation.id);
+    expect(verified.state.entries.find(entry => entry.resource === 'installationIdentity' && entry.path === 'identity.pre-v3.json')?.content).toBe(firstCopy.toString('base64'));
+    verified.close();
     // M14: both uninstall sets' audited create and verify (intent + succeeded each) stay in the persisted folder beside the sets (no rename).
     expect(await readdir(join(finalSet, '..', 'backup-audit'))).toHaveLength(8);
     const replay = await previewConfiguredUninstall(project, ALL, options);
@@ -216,6 +221,7 @@ it.skipIf(process.platform !== 'linux')('purges only the exact backed-up authori
     // recreated file, retires the intent and releases the hold; the installation then previews normally.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: finalSet, target: project, confirmTarget: project }, phrase, options);
     expect(await readFile(join(data, 'policy.json'))).toEqual(policyBytes);
+    expect(await readFile(companion)).toEqual(firstCopy);
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await readdir(data)).some(name => name.startsWith('policy.json.damaged-'))).toBe(true);
     await expect(lstat(join(directory, 'final-tail.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(join(directory, `${plan.planDigest}.restored.json`))).toBeTruthy();
@@ -537,6 +543,29 @@ async function projectInstallation(root: string) {
   };
   return { project, local, options, phrase, install };
 }
+
+it.skipIf(process.platform !== 'linux')('allows a fresh identity once tier-all removal has verified and removed both identity members', async () => {
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-purge-binding-'));
+  try {
+    const { project, options, phrase, install } = await projectInstallation(root), layout = await install();
+    const directory = productResourcePath(layout, 'installationIdentity'), path = join(directory, 'identity.json');
+    const retained = JSON.parse(await readFile(path, 'utf8')), companion = join(directory, 'identity.pre-v3.json');
+    const { schemaVersion, machineDigest, canonicalRoot, device, inode } = retained.binding;
+    const preimage = schemaVersion === 3 ? { ...retained, binding: { schemaVersion: 1, machineDigest, canonicalRoot, device, inode } } : retained;
+    await writeFile(companion, JSON.stringify(preimage), { mode: 0o600 });
+    const ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const plan = await previewConfiguredUninstall(project, ALL, options);
+    expect(plan.items.some(item => item.action === 'remove' && item.members?.includes(companion))).toBe(true);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'purge-identity-pair', planDigest: plan.planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => true }, options)).resolves.toMatchObject({ status: 'completed' });
+    await expect(lstat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+    const fresh = await new FileInstallationIdentityStore(layout).loadOrCreate();
+    expect(fresh.installationId).not.toBe(retained.installationId);
+    await expect(lstat(companion)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
 
 it.skipIf(process.platform !== 'linux')('fails closed when a kept policy file changed before an interrupted keep-work tail resumes: nothing more is deleted, the tail stays unknown [verify-not-run: platform custody unavailable]', async () => {
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');

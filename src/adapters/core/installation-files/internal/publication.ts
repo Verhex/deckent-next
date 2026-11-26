@@ -1,4 +1,4 @@
-import { CodedError } from '#platform/index.js';
+import { CodedError, HOST_LIMITS_REGISTRY } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { link, lstat, mkdir, open, unlink } from 'node:fs/promises';
@@ -62,20 +62,20 @@ async function directories(root: string, parent: string, uid: bigint, create: bo
   return true;
 }
 interface ReadResult { readonly bytes: Buffer; readonly stat: BigIntStats }
-async function readStable(path: string, maxBytes: number, uid: bigint, links: readonly bigint[]): Promise<ReadResult | null> {
+async function readStable(path: string, maxBytes: number, uid: bigint, links: readonly bigint[], privateMode = false): Promise<ReadResult | null> {
   let linked: BigIntStats;
   try { linked = await lstat(path, { bigint: true }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; return unavailable(error); }
   const validate = (stat: BigIntStats) => {
     if (!stat.isFile() || stat.isSymbolicLink()) unsafe(path, stat, 'type');
     if (stat.uid !== uid) unsafe(path, stat, 'owner');
-    if (![0o400n, 0o600n].includes(stat.mode & 0o777n)) unsafe(path, stat, 'mode');
+    if (privateMode ? (stat.mode & 0o7777n) !== 0o600n : ![0o400n, 0o600n].includes(stat.mode & 0o777n)) unsafe(path, stat, 'mode');
     if (!links.includes(stat.nlink)) unsafe(path, stat, 'links');
     if (stat.size < 0n || stat.size > BigInt(maxBytes)) unsafe(path, stat, 'size');
   };
   validate(linked); let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW); const opened = await handle.stat({ bigint: true }); validate(opened);
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); const opened = await handle.stat({ bigint: true }); validate(opened);
     if (opened.dev !== linked.dev || opened.ino !== linked.ino) fail('INSTALLATION_FILE_UNSAFE');
     const bytes = Buffer.alloc(Number(opened.size)); let offset = 0;
     while (offset < bytes.length) { const result = await handle.read(bytes, offset, bytes.length - offset, offset); if (!result.bytesRead) break; offset += result.bytesRead; }
@@ -89,7 +89,7 @@ async function readStable(path: string, maxBytes: number, uid: bigint, links: re
 async function syncExactFile(path: string, identity: BigIntStats, links: readonly bigint[]) {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW); const opened = await handle.stat({ bigint: true });
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); const opened = await handle.stat({ bigint: true });
     if (!opened.isFile() || opened.uid !== identity.uid || opened.dev !== identity.dev || opened.ino !== identity.ino
       || opened.size !== identity.size || opened.mtimeNs !== identity.mtimeNs || opened.ctimeNs !== identity.ctimeNs
       || ![0o400n, 0o600n].includes(opened.mode & 0o777n) || !links.includes(opened.nlink)) fail('INSTALLATION_FILE_CONFLICT');
@@ -118,16 +118,17 @@ export async function inspectInstallationFile(request: InstallationFileRequest):
 
 /** Cooperative fresh-init publisher. The caller owns the durable journal and fixed writer lock;
  * same-UID hostile mutation is outside this adapter's custody guarantee. */
-export async function publishInstallationFile(request: InstallationFilePublishRequest, content: string): Promise<InstallationFilePublication> {
+export async function publishInstallationFile(request: InstallationFilePublishRequest, content: string | Buffer, privateMode = false): Promise<InstallationFilePublication> {
   const checked = inputs(request);
-  if (typeof request.transactionId !== 'string' || !request.transactionId || request.transactionId.length > 256 || typeof content !== 'string') fail('INSTALLATION_FILE_INVALID');
-  if (Buffer.byteLength(content, 'utf8') > checked.maxBytes) fail('INSTALLATION_FILE_INVALID');
-  const bytes = Buffer.from(content, 'utf8');
+  if (typeof content !== 'string' && !Buffer.isBuffer(content)) fail('INSTALLATION_FILE_INVALID');
+  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
+  if (typeof request.transactionId !== 'string' || !request.transactionId
+    || request.transactionId.length > HOST_LIMITS_REGISTRY.installationPublicationTransactionIdLength || bytes.length > checked.maxBytes) fail('INSTALLATION_FILE_INVALID');
   const targetDigest = digest(bytes), transaction = digest(`deckent.installation-file.v1\n${request.transactionId}\n${checked.path}`);
   const temporary = resolve(dirname(checked.path), `.${basename(checked.path)}.${transaction}.${targetDigest}.installing`);
   await directories(checked.root, dirname(checked.path), checked.uid, true);
-  let target = await readStable(checked.path, checked.maxBytes, checked.uid, [1n, 2n]);
-  let staged = await readStable(temporary, checked.maxBytes, checked.uid, [1n, 2n]);
+  let target = await readStable(checked.path, checked.maxBytes, checked.uid, [1n, 2n], privateMode);
+  let staged = await readStable(temporary, checked.maxBytes, checked.uid, [1n, 2n], privateMode);
   if (target) {
     if (digest(target.bytes) !== targetDigest) fail('INSTALLATION_FILE_CONFLICT');
     if (!staged) { if (target.stat.nlink !== 1n) fail('INSTALLATION_FILE_UNSAFE');
@@ -152,14 +153,14 @@ export async function publishInstallationFile(request: InstallationFilePublishRe
       if (staged) await handle.truncate(0);
       await handle.writeFile(bytes); await handle.sync();
     } catch (error) { unavailable(error); } finally { await handle?.close(); }
-    staged = await readStable(temporary, checked.maxBytes, checked.uid, [1n]);
+    staged = await readStable(temporary, checked.maxBytes, checked.uid, [1n], privateMode);
     if (!staged || !staged.bytes.equals(bytes)) fail('INSTALLATION_FILE_UNAVAILABLE');
   }
   await syncExactFile(temporary, staged.stat, [1n]);
   try { await link(temporary, checked.path); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') unavailable(error);
-    target = await readStable(checked.path, checked.maxBytes, checked.uid, [1n]);
+    target = await readStable(checked.path, checked.maxBytes, checked.uid, [1n], privateMode);
     await removeExactTemporary(temporary, staged.stat, 1n);
     if (!target || digest(target.bytes) !== targetDigest) fail('INSTALLATION_FILE_CONFLICT');
     await syncExactFile(checked.path, target.stat, [1n]); await syncDirectory(dirname(checked.path));
@@ -173,7 +174,23 @@ export async function publishInstallationFile(request: InstallationFilePublishRe
 
 /** Bounded, no-follow, stable bytes under the same custody as installer preimages; never heals or creates. */
 export async function readInstallationFile(request: InstallationFileRequest): Promise<string | null> {
+  return (await readInstallationFileBytes(request))?.toString('utf8') ?? null;
+}
+
+export async function readInstallationFileBytes(request: InstallationFileRequest): Promise<Buffer | null> {
   const checked = inputs(request);
   if (!await directories(checked.root, dirname(checked.path), checked.uid, false)) return null;
-  return (await readStable(checked.path, checked.maxBytes, checked.uid, [1n]))?.bytes.toString('utf8') ?? null;
+  return (await readStable(checked.path, checked.maxBytes, checked.uid, [1n]))?.bytes ?? null;
+}
+
+/** Identity replacement needs the original bytes and the stricter identity mode. */
+export async function readPrivateInstallationBytes(request: InstallationFileRequest, sync = false): Promise<Buffer | null> {
+  const { path, root, maxBytes, uid } = inputs(request);
+  if (!await directories(root, dirname(path), uid, false)) return null;
+  const current = await readStable(path, maxBytes, uid, [1n], true);
+  if (current && sync) {
+    await syncExactFile(path, current.stat, [1n]);
+    await syncDirectory(dirname(path));
+  }
+  return current?.bytes ?? null;
 }

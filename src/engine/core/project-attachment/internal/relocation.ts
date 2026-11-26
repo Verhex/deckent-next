@@ -1,11 +1,11 @@
-import { installationRegistrationSchema, projectAttachmentSchema, isNewAttachmentRegistration, isNewAttachment, type InstallationSource, type ProjectAttachment, type AttachmentLocation, type AttachmentPerson } from '#domain/index.js';
+import { installationRegistrationSchema, projectAttachmentSchema, isNewAttachmentRegistration, isNewAttachment, type ReadableInstallationRegistration, type ProjectAttachment, type AttachmentLocation, type AttachmentPerson } from '#domain/index.js';
 import type { ResolvedConfig } from '#platform/index.js';
 import type { AttachmentRegistryPort } from './application.js';
 import { attachmentFailure, sameAttachmentPerson, sameProjectAttachmentAuthority } from './context.js';
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttachmentRelocationPorts {
   readonly config: ResolvedConfig; readonly store: AttachmentRegistryPort & { attachment(): Promise<import('#domain/index.js').ReadableProjectAttachment | null> }; readonly actor: AttachmentPerson;
   authorize(): Promise<void>; location(): Promise<AttachmentLocation>; projectId(): Promise<string | null>; exists(root: string): Promise<boolean>;
-  keepIdentity(): Promise<string>; source(root: string, scopeId: string, actor: AttachmentPerson): Promise<{ source: InstallationSource }>;
+  reconcileSource(registry: ReadableInstallationRegistration, witnessed: boolean): Promise<unknown>;
   publish(before: ProjectAttachment, after: ProjectAttachment, settle: () => Promise<void>): Promise<unknown>;
 }
 /** A live old root is a copy, never an implicit move. Reconciliation retains the installation and project identities. */
@@ -17,7 +17,7 @@ export class ProjectAttachmentRelocationApplication {
       const registry = await store.registration();
       if (!registry || !sameAttachmentPerson(registry.source.owner, actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
       const reference = await store.attachment();
-      if (isNewAttachmentRegistration(registry) || isNewAttachment(reference)) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
+      if (isNewAttachment(reference) || (isNewAttachmentRegistration(registry) && (reference || witnessed))) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
       if (reference) {
         const entry = registry.entries.find(item => item.attachment.projectId === reference.projectId);
         if (!entry || reference.scopeId !== scopeId || config.installation.sharedRegistrationId !== registry.registrationId
@@ -32,12 +32,7 @@ export class ProjectAttachmentRelocationApplication {
       }
       if (config.installation.sharedRegistrationId || scopeId !== registry.source.scopeId) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
       if (registry.source.projectRoot !== config.projectRoot && await this.ports.exists(registry.source.projectRoot)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-      if (await this.ports.keepIdentity() !== registry.source.installationId) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-      const observed = await this.ports.source(config.projectRoot, scopeId, actor);
-      if (observed.source.installationId !== registry.source.installationId || observed.source.projectId !== registry.source.projectId || observed.source.companyId !== registry.source.companyId)
-        return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
-      await store.write(registry, installationRegistrationSchema.parse({ ...registry, source: observed.source }));
-      return { schemaVersion: 1, status: 'relocated', installationId: registry.source.installationId };
+      return this.ports.reconcileSource(registry, witnessed);
     });
   }
 }

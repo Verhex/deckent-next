@@ -2,7 +2,7 @@ import { configuredInvocationProfiles } from '#engine/core/provider-catalog/inde
 import { verifiedPrincipal } from '#engine/core/authentication/index.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { installationRegistrationSchema, isNewAttachmentRegistration, isNewAttachment, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
+import { installationRegistrationSchema, readableInstallationRegistrationSchema, isNewAttachmentRegistration, isNewAttachment, modelInvocationProfileSchema, type ModelUseLease } from '#domain/index.js';
 import { attachmentFailure, sameAttachmentPerson } from '#engine/core/project-attachment/index.js';
 import { modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 import { ModelActivationApplication } from '#engine/core/model-activation/index.js';
@@ -14,15 +14,17 @@ import { inspectModelUsePreparation } from './preparation.js';
 import type { ModelUseWritePorts } from './ports.js';
 
 /** The witnessed attach action authorizes this join; config and activation are still written only by their applications. */
-export async function grantModelUse(ports: ModelUseWritePorts, root: string, scopeId: string, expectedPreparation?: string) {
+export async function grantModelUse(ports: ModelUseWritePorts, root: string, scopeId: string, expectedPreparation?: string, attachCommandId?: string) {
   const config = await ports.config(root), store = ports.store(config);
   const actor = await ports.authorize(config);
   return store.hold(async () => {
     let registry = await store.registration();
-    if (isNewAttachmentRegistration(registry) || isNewAttachment(await store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
+    if ((isNewAttachmentRegistration(registry) && !(attachCommandId && store.writeJoined))
+      || isNewAttachment(await store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
     const context = await ports.shared(config, scopeId, actor);
     if (!registry || !context.source || !context.attachment || !sameAttachmentPerson(registry.source.owner, actor)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const attachment = context.attachment, entry = registry.entries.find(item => item.attachment.projectId === attachment.projectId)!;
+    if (registry.schemaVersion === 3 && attachment.commandId !== attachCommandId) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     if (entry.modelLease?.state === 'revoked') return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
     const { source, selected, preparation, selection } = await inspectModelUsePreparation(ports, context.source.projectRoot, context.source.scopeId);
     if (expectedPreparation && preparation.digest !== expectedPreparation) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
@@ -39,9 +41,12 @@ export async function grantModelUse(ports: ModelUseWritePorts, root: string, sco
       sourceDigest: modelInvocationProfileDigest(profile), targetDigest: modelInvocationProfileDigest(targetProfiles[index]!), bindingDigest: profile.bindingDigest })) };
     if (entry.modelLease && !isDeepStrictEqual(entry.modelLease.profiles, lease.profiles)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     if (entry.modelLease?.state === 'active') return entry.modelLease;
-    const publish = async (value: ModelUseLease) => { const next = installationRegistrationSchema.parse({ ...registry, schemaVersion: 2,
+    const publish = async (value: ModelUseLease) => { const before = registry!;
+      const next = readableInstallationRegistrationSchema.parse({ ...before, schemaVersion: before.schemaVersion === 3 ? 3 : 2,
       entries: registry!.entries.map(item => item.attachment.projectId === attachment.projectId ? { ...item, modelLease: value } : item) });
-      await store.write(registry, next); registry = next; };
+      if (before.schemaVersion === 3 && store.writeJoined) await store.writeJoined(before, next);
+      else await store.write(before, next);
+      registry = next; };
     await publish(lease);
     const target = await ports.context(root, scopeId);
     const set = (keyPath: string, value: unknown) => ports.write(target, keyPath, value, `${leaseId}.${keyPath}`);

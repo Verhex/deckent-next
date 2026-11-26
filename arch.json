@@ -1167,6 +1167,7 @@
     },
     "src/platform/core/utils": {
       "dependencies": [
+        "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/integrity"
       ],
@@ -1848,7 +1849,9 @@
         "src/platform/core/common",
         "src/domain/core/project-attachment",
         "src/platform/core/integrity",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/engine/core/policy",
+        "src/engine/core/project-attachment"
       ],
       "plan": "INSTALLATION"
     },
@@ -5483,6 +5486,7 @@
     },
     "src/engine/core/project-attachment": {
       "dependencies": [
+        "src/domain/core/command",
         "src/domain/core/primitives",
         "src/domain/core/model-invocation",
         "src/domain/core/project-attachment",

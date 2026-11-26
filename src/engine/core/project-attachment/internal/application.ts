@@ -1,6 +1,6 @@
 import { isCodedError } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { installationRegistrationSchema, projectAttachmentSchema, identitySchema, persistedUuid, isNewAttachmentRegistration, isNewAttachment, type AttachmentRevocation, type FilesystemIdentity, type ReadableInstallationRegistration as InstallationRegistration, type InstallationSource,
+import { installationRegistrationSchema, readableInstallationRegistrationSchema, projectAttachmentSchema, identitySchema, persistedUuid, isNewAttachmentRegistration, isNewAttachment, type AttachmentRevocation, type FilesystemIdentity, type ReadableInstallationRegistration as InstallationRegistration, type InstallationSource,
   type ProjectAttachment, type AttachmentLocation, type AttachmentPerson, type AttachmentPreparation } from '#domain/index.js';
 import { attachmentFailure, existingSharedIdentity, sameAttachmentPerson, matchesObservedAttachmentSource } from './context.js';
 import type { InstallationIdentityRead } from '#engine/core/bootstrap-identity/index.js';
@@ -11,6 +11,7 @@ export interface AttachmentRegistryPort {
   writeRevocation(expected: InstallationRegistration, change: AttachmentRevocation): Promise<void>;
   attachment?(): Promise<import('#domain/index.js').ReadableProjectAttachment | null>;
   write(expected: InstallationRegistration | null, next: InstallationRegistration): Promise<void>;
+  writeJoined?(expected: InstallationRegistration, next: InstallationRegistration): Promise<void>;
 }
 export interface ProjectAttachmentPorts {
   readonly store: AttachmentRegistryPort;
@@ -36,8 +37,9 @@ export class ProjectAttachmentApplication {
     existingSharedIdentity(observed.identity, registration.source.projectRoot);
     return observed.identity;
   }
-  private async assertWritable(registration: InstallationRegistration | null) {
-    if (isNewAttachmentRegistration(registration) || isNewAttachment(await this.ports.store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
+  private async assertWritable(registration: InstallationRegistration | null, attach = false) {
+    if ((isNewAttachmentRegistration(registration) && !(attach && this.ports.store.writeJoined))
+      || isNewAttachment(await this.ports.store.attachment?.())) return attachmentFailure('PROJECT_ATTACHMENT_NEWER_RECORD');
   }
   registrationPreview(root: string, scopeId: string) { return this.ports.observe ? this.ports.observe(() => this.registrationPreviewCore(root, scopeId)) : this.registrationPreviewCore(root, scopeId); }
   private async registrationPreviewCore(root: string, scopeId: string) {
@@ -93,8 +95,12 @@ export class ProjectAttachmentApplication {
     return this.ports.store.hold(async () => {
       let registration = await this.ports.store.registration();
       if (!registration || registration.unregistered) return attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE');
-      await this.assertWritable(registration);
+      await this.assertWritable(registration, true);
       const current = await this.preview(scopeId);
+      const write = async (expected: InstallationRegistration, next: InstallationRegistration) => {
+        if (expected.schemaVersion === 3 && this.ports.store.writeJoined) await this.ports.store.writeJoined(expected, next);
+        else await this.ports.store.write(expected, next);
+      };
       let entry = registration.entries.find(item => item.attachment.commandId === commandId);
       if (entry) {
         if (entry.preparationDigest && entry.preparationDigest !== current.preparation?.digest) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
@@ -106,8 +112,9 @@ export class ProjectAttachmentApplication {
         entry = { attachment: projectAttachmentSchema.parse({ schemaVersion: 1, registrationId: registration.registrationId,
           projectId: current.target.projectId ?? randomUUID(), companyId: registration.source.companyId, scopeId, actor: this.ports.actor,
           location: current.target.location, commandId }), planDigest: expect, state: 'pending' as const, ...(current.preparation ? { preparationDigest: current.preparation.digest } : {}) };
-        const next = installationRegistrationSchema.parse({ ...registration, ...(current.preparation ? { schemaVersion: 2 } : {}), entries: [...registration.entries, entry] });
-        await this.ports.store.write(registration, next); registration = next;
+        const next = readableInstallationRegistrationSchema.parse({ ...registration,
+          ...(current.preparation && registration.schemaVersion === 1 ? { schemaVersion: 2 } : {}), entries: [...registration.entries, entry] });
+        await write(registration, next); registration = next;
       }
       const attachment = projectAttachmentSchema.parse(entry.attachment);
       await this.ports.ensureProject(attachment.projectId);
@@ -115,7 +122,7 @@ export class ProjectAttachmentApplication {
       const result = entry.state === 'active' && this.ports.verify ? await this.ports.verify(attachment) : await this.ports.install(attachment, () => this.currentSource(registration!));
       await this.currentSource(registration);
       if (entry.state !== 'active') {
-        await this.ports.store.write(registration, installationRegistrationSchema.parse({ ...registration,
+        await write(registration, readableInstallationRegistrationSchema.parse({ ...registration,
           entries: registration.entries.map(item => item.attachment.projectId === attachment.projectId ? { ...item, state: 'active' } : item) }));
       }
       return Object.freeze({ schemaVersion: 1 as const, status: 'attached' as const, attachment, installationId: registration.source.installationId, result, preparation: current.preparation });

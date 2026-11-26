@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
+import { FileInstallationIdentityStore, localInstallationBindingSource } from '#adapters/core/installation-files/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { installationBindingCaptureSchema } from '#domain/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
@@ -51,6 +51,13 @@ async function fixture(name = 'installation') {
   return { parent, root, layout: resolveProductLayout({ projectRoot: root }), path: join(root, '.deckent/installation-identity/identity.json') };
 }
 const alpha6 = async (path: string) => alpha6RecordSchema.safeParse(JSON.parse(await readFile(path, 'utf8'))).success;
+function producerlessStore(layout: ReturnType<typeof resolveProductLayout>, settings?: Parameters<typeof localInstallationBindingSource>[1]) {
+  const source = localInstallationBindingSource(layout, settings);
+  return new FileInstallationIdentityStore(layout, undefined, { capture: async () => {
+    const value = await source.capture();
+    return 'status' in value ? value : { ...value, filesystemIdentity: undefined };
+  } }, settings);
+}
 /**
  * The alpha.6 store read path: the same IdentityFile (unchanged between alpha.6 and this branch on the read/load path) with the alpha.6
  * record parser and alpha.6 error mapping. Used to show what a rolled-back release does with a record it cannot express.
@@ -62,7 +69,7 @@ const alpha6Reader = (layout: ReturnType<typeof resolveProductLayout>) => new Id
 });
 
 describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility with alpha.6 (expand/contract)', () => {
-  it('R never writes v3 on publication, strengthening or --keep/--new even when the capture carries filesystem identity', async () => {
+  it('preserves the alpha.6 shapes on producer-less strengthening and recovery, and the weak observation writes no filesystem identity', async () => {
     const filesystemIdentity = { kind: 'linux.ext4.statfs-fsid.v1', value: '033b6aacc3f1ba86' };
     for (const source of ['platform', 'configured'] as const) {
       const f = await fixture();
@@ -74,7 +81,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
         expect(record.binding.schemaVersion).toBe(version); expect(record.binding).not.toHaveProperty('filesystemIdentity');
       };
       await written(2);
-      capture = installationBindingCaptureSchema.parse({ ...capture, strength: 'machine', source, machineDigest: 'a'.repeat(64) });
+      capture = installationBindingCaptureSchema.parse({ ...capture, strength: 'machine', source, machineDigest: 'a'.repeat(64), filesystemIdentity: undefined });
       await store.loadOrCreate(); await written(source === 'platform' ? 1 : 2);
       for (const choice of ['keep', 'new'] as const) {
         capture = installationBindingCaptureSchema.parse({ ...capture, device: choice === 'keep' ? '2050' : '2051' });
@@ -82,6 +89,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
       }
       // An actual alpha.6 parser refuses a future binding without attempting a repair.
       const record = JSON.parse(await readFile(f.path, 'utf8'));
+      capture = installationBindingCaptureSchema.parse({ ...capture, filesystemIdentity });
       await writeFile(f.path, JSON.stringify({ ...record, binding: { ...capture, schemaVersion: 3 } }));
       const bytes = await readFile(f.path, 'utf8');
       await expect(alpha6Reader(f.layout).loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
@@ -93,7 +101,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
   it('a new platform machine binding is written in the alpha.6 v1 shape and parses with the alpha.6 schema', async context => {
     if (bindingNotRun) context.skip(bindingNotRun);
     const f = await fixture(); probe.machine = MACHINE;
-    const store = new FileInstallationIdentityStore(f.layout), identity = await store.loadOrCreate();
+    const store = producerlessStore(f.layout), identity = await store.loadOrCreate();
     expect(JSON.parse(await readFile(f.path, 'utf8')).binding).toMatchObject({ schemaVersion: 1 });
     expect(JSON.parse(await readFile(f.path, 'utf8')).binding).not.toHaveProperty('strength');
     expect(await alpha6(f.path)).toBe(true);
@@ -103,9 +111,9 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
 
   it.skipIf(bindingNotRun !== null).each(['keep', 'new'] as const)('--%s on a platform machine host writes an alpha.6-readable binding', async choice => {
     const f = await fixture(); probe.machine = MACHINE;
-    await new FileInstallationIdentityStore(f.layout).loadOrCreate();
+    await producerlessStore(f.layout).loadOrCreate();
     const copy = join(f.parent, 'copy'); await cp(f.root, copy, { recursive: true });
-    const store = new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: copy })), path = join(copy, '.deckent/installation-identity/identity.json');
+    const store = producerlessStore(resolveProductLayout({ projectRoot: copy })), path = join(copy, '.deckent/installation-identity/identity.json');
     await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     await store.resolveRelocation(choice === 'keep' ? { choice, admission: { class: REBIND_CLASS.moved, basis: 'human-tty' } } : { choice }, principal);
     expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ binding: { schemaVersion: 1 }, lastResolution: { choice } });
@@ -115,7 +123,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
   it('weak to platform machine strengthening writes an alpha.6-readable binding; the weak record before it is a typed INVALID for alpha.6 without heal', async context => {
     if (bindingNotRun) context.skip(bindingNotRun);
     const f = await fixture(); probe.machine = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    const store = new FileInstallationIdentityStore(f.layout), identity = await store.loadOrCreate(), weak = await readFile(f.path, 'utf8');
+    const store = producerlessStore(f.layout), identity = await store.loadOrCreate(), weak = await readFile(f.path, 'utf8');
     expect(JSON.parse(weak).binding).toMatchObject({ schemaVersion: 2, strength: 'weak' });
     // Known limit (rollback note): alpha.6 cannot express a weak binding. It refuses typed and never repairs; the bytes stay.
     expect(await alpha6(f.path)).toBe(false);
@@ -132,7 +140,7 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
   it('a configured-source binding is v2 only: alpha.6 reads it as a typed INVALID and does not heal it', async context => {
     if (bindingNotRun) context.skip(bindingNotRun);
     const f = await fixture(), source = join(f.parent, 'machine-identity'); await writeFile(source, 'site-rollback.node-identity-0001\n');
-    await new FileInstallationIdentityStore(f.layout, undefined, undefined, { machineIdentity: { source } }).loadOrCreate();
+    await producerlessStore(f.layout, { machineIdentity: { source } }).loadOrCreate();
     const bytes = await readFile(f.path, 'utf8');
     expect(JSON.parse(bytes).binding).toMatchObject({ schemaVersion: 2, strength: 'machine', source: 'configured' });
     expect(await alpha6(f.path)).toBe(false);

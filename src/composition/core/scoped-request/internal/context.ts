@@ -1,7 +1,7 @@
 import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, inspectProductFile, isCodedError, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
 import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
@@ -26,9 +26,27 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
-  const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId, { issuer: identity.issuer, subject: identity.subject }, reading?.inspectSource));
-  const installation = installationContext.kind === 'legacy' ? await accessIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation), access) : installationContext.identity;
-  if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
+  let writeAdmitted = false;
+  const admitWrite = async () => {
+    if (!writeAdmitted) await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'write');
+    writeAdmitted = true;
+  };
+  const installationContext = await readBootstrapIdentity(() => configuredInstallationProjectContext(config, options, scopeId,
+    { issuer: identity.issuer, subject: identity.subject }, reading?.inspectSource, access === 'write' ? admitWrite : undefined));
+  const sourceRepaired = writeAdmitted;
+  const installationStore = installationContext.kind === 'legacy'
+    ? new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation) : null;
+  const observed = installationStore ? await accessIdentity(installationStore, access) : installationContext.identity;
+  let installation = observed;
+  if (access === 'write') {
+    await admitWrite();
+    if (!sourceRepaired && installationStore && observed.status === 'available' && observed.pendingUpgrade) {
+      installation = await readBootstrapIdentity(async () => {
+        await installationStore.upgradeAdmittedBinding(observed.value.installationId);
+        return installationStore.read();
+      });
+    }
+  }
   const project = await accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
   return Object.freeze({ config, layout, installationLayout: installationContext.installationLayout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
@@ -94,25 +112,41 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
     const lifecycle = attachmentLifecycle(config, options);
     await lifecycle.assert();
     const store = new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation);
-    if (choice === 'new') return store.resolveRelocation({ choice }, principal);
+    const registry = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
+    const attached = config.installation.sharedRegistrationId || await registry.attachment();
+    if (choice === 'new') return attached ? store.resolveRelocation({ choice }, principal) : store.resolvePlainRelocation({ choice }, principal, lifecycle.assert);
     const admission = await admitInstallationRebinding(config, options, store, principal);
     const keep = async () => {
-      const registration = await new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs).registration();
-      const result = await store.resolveRelocation({ choice, admission }, principal);
+      const registration = await registry.registration();
+      const result = attached ? await store.resolveRelocation({ choice, admission }, principal)
+        : await store.resolvePlainRelocation({ choice, admission }, principal, lifecycle.assert);
       return { ...result, ...(registration?.source.installationId === result.installationId && registration.source.projectRoot !== config.projectRoot
         ? { attachmentRecordsUnreconciled: true as const } : {}) };
     };
-    // Only the plain-project exception needs this hold; open-class and witnessed/rule paths keep their existing dependencies.
     return admission.basis === 'macos-plain' ? lifecycle.hold(async () => {
-      if (!await plainMacosRebinding(config, options, (await store.inspectRebinding()).installationId)) throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
+      if (!await plainMacosRebinding(config, options, (await store.inspectPlainRebinding()).installationId))
+        throw new InstallationIdentityError('INSTALLATION_IDENTITY_REBIND_REQUIRED');
       return keep();
     }) : keep();
   }, choice);
 }
+/** Only an interactive terminal writer defers a potentially repairable registered-source observation. */
+export async function preflightConfiguredTerminalIdentity(root: string, options: ConfigLoadOptions, scopeId?: string) {
+  try {
+    const observed = await loadConfiguredInstallationIdentity(root, options);
+    if (observed.status === 'unavailable' && observed.reason === 'unsupported') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  } catch (error) {
+    if (!isCodedError(error, 'INSTALLATION_IDENTITY_RELOCATED') && !isCodedError(error, 'PROJECT_ATTACHMENT_UNAVAILABLE')) throw error;
+    const config = await loadComposedConfig(root, { ...options, heal: false });
+    const store = new FileProjectAttachmentStore(config.productLayout, options, config.installation.profileMaxBytes, config.installation.writeLockTimeoutMs);
+    const registered = await store.registration().catch(() => null);
+    if (!registered || registered.unregistered || (config.installation.sharedRegistrationId !== registered.registrationId
+      && (registered.source.projectRoot !== config.projectRoot || (scopeId !== undefined && registered.source.scopeId !== scopeId)))) throw error;
+  }
+}
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
 export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {
-  const observed = await loadConfiguredInstallationIdentity(root, options);
-  if (observed.status === 'unavailable' && observed.reason === 'unsupported') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  await preflightConfiguredTerminalIdentity(root, options, scopeId);
   const { installationId, projectId } = await loadConfiguredScopeContext(root, scopeId, options, 'write');
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');

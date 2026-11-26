@@ -4,6 +4,7 @@ import { dirname, join, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { sha256 } from '#platform/core/integrity/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
+import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
 export type JsonRecord = Record<string, unknown>;
 export function isRecord(value: unknown): value is JsonRecord {
@@ -35,7 +36,7 @@ export async function readJsonFile(path: string): Promise<JsonRead> {
   let handle;
   try {
     const before = await lstat(path);
-    if (!before.isFile() || before.isSymbolicLink() || before.size > 16 * 1024 * 1024) return { kind: 'io', error: ErrorRegistry.createError('CONFIG_READ_IO_HOLD') };
+    if (!before.isFile() || before.isSymbolicLink() || before.size > HOST_LIMITS_REGISTRY.jsonDocumentReadBytes) return { kind: 'io', error: ErrorRegistry.createError('CONFIG_READ_IO_HOLD') };
     handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const stat = await handle.stat();
     if (stat.ino !== before.ino || stat.dev !== before.dev) return { kind: 'io', error: ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD') };
@@ -56,7 +57,7 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
   await writeTextAtomic(path, serializeJsonDocument(value));
 }
 /** Atomic replace: a 0600 temporary file in the same directory, fsync, rename, directory fsync; the temporary file never survives. */
-export async function writeTextAtomic(path: string, text: string): Promise<void> {
+export async function writeTextAtomic(path: string, text: string | Uint8Array, beforeRename?: () => Promise<void>): Promise<void> {
   const directory = dirname(path);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const temp = join(directory, `.${basename(path)}.${randomUUID()}.tmp`);
@@ -65,6 +66,7 @@ export async function writeTextAtomic(path: string, text: string): Promise<void>
     handle = await open(temp, 'wx', 0o600);
     await handle.writeFile(text);
     await handle.sync(); await handle.close(); handle = undefined;
+    await beforeRename?.();
     await rename(temp, path);
     if (process.platform !== 'win32') { const dir = await open(directory, 'r'); try { await dir.sync(); } finally { await dir.close(); } }
   } finally {

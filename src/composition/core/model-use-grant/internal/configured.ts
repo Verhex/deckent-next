@@ -17,5 +17,6 @@ function ports(options: ConfigLoadOptions): ModelUseWritePorts {
     activationStore: async context => openSqliteModelActivationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
   };
 }
-export const grantConfiguredModelUse = (root: string, scopeId: string, options: ConfigLoadOptions = {}, expected?: string) => grantModelUse(ports(options), root, scopeId, expected);
+export const grantConfiguredModelUse = (root: string, scopeId: string, options: ConfigLoadOptions = {}, expected?: string, attachCommandId?: string) =>
+  grantModelUse(ports(options), root, scopeId, expected, attachCommandId);
 export const revokeConfiguredModelUse = (root: string, projectId: string, options: ConfigLoadOptions = {}) => revokeModelUse(ports(options), root, projectId);
