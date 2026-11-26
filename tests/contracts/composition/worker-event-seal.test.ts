@@ -33,25 +33,31 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     const later = () => vi.spyOn(performance, 'now').mockReturnValue(Number.MAX_VALUE), base = { maxBytes: 65536, deadlineMs: 60_000 };
     const plain = sink(true); saved.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, plain, base)).toEqual({ status: 'sealed', eventCount: 1 });
-    expect(plain.close).toHaveBeenCalledWith(undefined); saved.length = 0; stored.length = 0;
+    expect(plain.close).toHaveBeenCalledWith(); saved.length = 0; stored.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, offered: true })).toEqual(failed); expect(stored).toEqual([]);
-    expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read() { return Buffer.from('other'); } }, store, sink(true), { ...base, held: () => observation })).toEqual(failed);
-    expect(await closeAndSealAttemptWorkerEvents(identity, { put: () => new Promise<never>(() => {}) }, store, sink(true), { ...base, held: () => observation, deadlineMs: 1 })).toEqual(failed);
+    expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read() { return Buffer.from('other'); } }, store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
+    expect(await closeAndSealAttemptWorkerEvents(identity, { put: () => new Promise<never>(() => {}) }, store, sink(true), { ...base, offered: true, held: () => observation, deadlineMs: 1 })).toEqual(failed);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async put(scope: string, bytes: Uint8Array) { later(); return files.put(scope, bytes); } },
-      store, sink(true), { ...base, held: () => observation })).toEqual(failed);
+      store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     vi.restoreAllMocks(); expect(saved).toEqual([]);
     const slow = { async saveWorkerEventLog(record: never) { later(); saved.push(record); return record; } }, partial = sink(false);
-    expect(await closeAndSealAttemptWorkerEvents(identity, files, slow, partial, { ...base, held: () => observation })).toEqual({ status: 'sealed', eventCount: 2 });
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, slow, partial, { ...base, offered: true, held: () => observation })).toEqual({ status: 'sealed', eventCount: 2 });
     vi.restoreAllMocks(); expect(partial.close).toHaveBeenCalledWith(60_000); expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
     expect(Buffer.from(stored.at(-1)!).toString().trim().split('\n').map(line => JSON.parse(line) as unknown).at(-1)).toEqual({ ...observation, sequence: 2 });
-    // R2: the close owner never throws over the task (a rejecting sink close, a throwing source → the existing failure); a throwing read-back is
-    // unverified with `cause: null`; an expected sink that failed to open (null) seals its verdict as partial, never complete.
+    // R3: with NO offered observation a rejecting sink close or a throwing source rejects exactly as at HEAD; with one offered the same faults,
+    // a throwing held() (after the sink drained) and a synchronously throwing read-back map to the existing failure with `cause: null`.
     const verdict = { status: 'unverified' as const, admitted: null, observed: [], unexpected: [] }, source = { modelVerification: () => verdict, statistics: () => ({ eventsUnreported: 0 }) };
+    const rejecting = { close: async () => { throw Object.assign(new Error('close'), { code: 'EIO' }); } }, throwing = { ...source, statistics: () => { throw new Error('statistics'); } };
     saved.length = 0;
-    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, { close: async () => { throw Object.assign(new Error('close'), { code: 'EIO' }); } }, base)).toEqual(failed);
-    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, source: { ...source, modelVerification: () => { throw new Error('verdict'); } } })).toEqual(failed);
-    expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read(): Promise<never> { throw Object.assign(new Error('corrupt'), { code: 'ARTIFACT_CORRUPT' }); } },
-      store, sink(true), { ...base, held: () => observation })).toEqual(failed);
+    await expect(closeAndSealAttemptWorkerEvents(identity, files, store, rejecting, base)).rejects.toThrow('close');
+    await expect(closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, source: throwing })).rejects.toThrow('statistics');
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, rejecting, { ...base, offered: true, held: () => observation })).toEqual(failed);
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, offered: true, source: throwing, held: () => observation })).toEqual(failed);
+    const drained = sink(true);
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, drained, { ...base, offered: true, held: () => { throw new Error('held'); } })).toEqual(failed);
+    expect(drained.close).toHaveBeenCalledWith(60_000);
+    expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, read(): never { throw Object.assign(new Error('corrupt'), { code: 'ARTIFACT_CORRUPT' }); } },
+      store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     expect(saved).toEqual([]); expect(await closeAndSealAttemptWorkerEvents(identity, files, store, null, { ...base, source })).toEqual({ status: 'sealed', eventCount: 1 });
     expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
   });

@@ -19,6 +19,12 @@ const fenced = <T>(work: Promise<T>, deadline: number | undefined) => deadline =
   work.then(resolve, reject).finally(() => clearTimeout(timer));
 });
 
+/** Whether the stored bytes read back equal. Any failure of the read (synchronous or not, e.g. ARTIFACT_CORRUPT) or of its fence is `false`, so the
+ * caller reports `cause: null`, never a new cause value on this path. */
+async function readsBack(artifacts: Artifacts, identity: AttemptIdentity, receipt: Awaited<ReturnType<Artifacts['put']>>, bytes: Buffer, deadline: number | undefined) {
+  try { return !!artifacts.read && bytes.equals(await fenced(artifacts.read(identity.scopeId, receipt), deadline)); } catch { return false; }
+}
+
 /** Keep the events that fit the artifact limit (the loss stays visible as a byte-cap marker), retain them and record the sealed log. */
 export async function sealAttemptWorkerEvents(identity: AttemptIdentity, artifacts: Artifacts,
   store: Pick<SqliteAttemptStore, 'saveWorkerEventLog'>, input: SealInput): Promise<WorkerEventSealing> {
@@ -30,9 +36,7 @@ export async function sealAttemptWorkerEvents(identity: AttemptIdentity, artifac
     if (!lines.length) return Object.freeze({ status: 'nothing-to-seal' });
     const bytes = Buffer.from(lines.join('')), receipt = await fenced(artifacts.put(identity.scopeId, bytes), input.deadline);
     // The stored bytes must read back equal; the fence ends where the ledger write starts, so its result alone decides and never contradicts the row.
-    // A read that throws (e.g. ARTIFACT_CORRUPT) is unverified like unequal bytes: `cause: null`, never a new cause value on this path.
-    if (input.observation && !(artifacts.read && await fenced(artifacts.read(identity.scopeId, receipt), input.deadline).then(read => bytes.equals(read), () => false))
-      || expired()) throw new Error('unverified');
+    if (input.observation && !await readsBack(artifacts, identity, receipt, bytes, input.deadline) || expired()) throw new Error('unverified');
     await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now(),
       projection: input.projectionComplete === false ? 'partial' : 'complete' });
     return Object.freeze({ status: 'sealed', eventCount: lines.length });
@@ -43,16 +47,21 @@ export async function sealAttemptWorkerEvents(identity: AttemptIdentity, artifac
 }
 
 type SealSource = Readonly<{ modelVerification(): SealInput['verification'] | undefined; statistics(): Readonly<{ eventsUnreported: number }> }>;
-/** N0 close owner: drain the live sink, then seal. Only a required observation (offered or held) bounds both by `deadlineMs`, the existing control timeout.
- * It never throws over the task: a rejecting sink close or source maps to the existing failure (`cause: null`). `null`: the expected sink failed to open. */
+/** N0 close owner: drain the live sink, then seal. Only an offered observation bounds both by `deadlineMs`, the existing control timeout (held implies offered).
+ * `null`: the expected sink failed to open (projection partial). Without an offered observation it is HEAD's sequence: a sink or source fault rejects as before.
+ * With one, the sink drains before the held row is read and every fault maps to the existing failure (`cause: null`), never thrown over the task. */
 export async function closeAndSealAttemptWorkerEvents(identity: AttemptIdentity, artifacts: Artifacts, store: Pick<SqliteAttemptStore, 'saveWorkerEventLog'>,
   sink: Pick<Awaited<ReturnType<typeof openWorkerEventSink>>, 'close'> | null | undefined, input: Readonly<{ source?: SealSource | undefined;
     held?: (() => SealInput['observation']) | undefined; offered?: boolean | undefined; maxBytes: number; deadlineMs: number }>): Promise<WorkerEventSealing> {
-  try {
-    const observation = input.held?.(), required = !!input.offered || !!observation, deadline = required ? performance.now() + input.deadlineMs : undefined;
-    const closed = await sink?.close(required ? input.deadlineMs : undefined);
-    return await sealAttemptWorkerEvents(identity, artifacts, store, { events: closed?.events ?? [], verification: input.source?.modelVerification() ?? null,
+  const seal = (closed: Awaited<ReturnType<NonNullable<typeof sink>['close']>> | undefined, offered?: Pick<SealInput, 'observation' | 'deadline'>) =>
+    sealAttemptWorkerEvents(identity, artifacts, store, { events: closed?.events ?? [], verification: input.source?.modelVerification() ?? null,
       unreported: input.source?.statistics().eventsUnreported ?? 0, projectionComplete: sink === null ? false : closed?.projectionComplete, maxBytes: input.maxBytes,
-      observation, observationRequired: required, ...(deadline === undefined ? {} : { deadline }) });
+      ...(offered ? { ...offered, observationRequired: true } : {}) });
+  if (!input.offered) return seal(await sink?.close());
+  const deadline = performance.now() + input.deadlineMs;
+  const drained = await Promise.resolve().then(() => sink?.close(input.deadlineMs)).then(closed => ({ closed }), () => null);
+  try {
+    if (!drained) throw new Error('unverified');
+    return await seal(drained.closed, { observation: input.held?.(), deadline });
   } catch { return Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
 }

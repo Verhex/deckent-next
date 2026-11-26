@@ -269,7 +269,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (result.kind === 'terminal' && worker && !worker.supervisor.offeredObservation()) await worker.supervisor.release(request);
       } finally {
         await connection?.close(); await relay?.close();
-        // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order and timing stay. The seal never throws.
+        // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
         const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
         sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
           offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
