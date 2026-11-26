@@ -25,8 +25,8 @@ import { cleanupConnections, connection, testIsolation } from '../../fixtures/na
 import { bindCapacityResource, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { headlessCapacityBinding } from '#adapters/core/sqlite-model-invocation/index.js';
 import { readLocalOsIdentity, localPrincipalChannel, LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';
-import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, modelInvocationProfileDigest } from '#engine/index.js';
-import { clearConfigCache, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock, t } from '#platform/index.js';
+import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
+import { clearConfigCache, clockText, ErrorRegistry, headlessDiagnostic, redactForRecord, SystemTrustedClock, t } from '#platform/index.js';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
 import * as adapters from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
@@ -60,7 +60,8 @@ async function fixture(askEdits = true, headless?: { executable: string; configD
     modes: askEdits ? [{ id: 'person-ask', principal: { issuer: person.issuer, subject: person.subject }, scopes: ['s'], mode: 'standart', askEdits: true }] : [] }), { mode: 0o600 });
   clearConfigCache();
   const peer = await terminalRuntimePeer(createTerminalRuntimeClient(f.project, f.options));
-  const state = { limitAfterTool: null as null | 'credits-required' | 'quota', paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
+  const state = { limitAfterTool: null as null | 'credits-required' | 'quota', quotaWindow: null as null | { field: string; subtype: string; resetsAtMs: number },
+    paidExtraUsage: null as null | { kind: string; status: string; window: string; resetsAtMs: number | null }, builtinPlugins: [] as string[], cliVersion: '2.1.322', servers: [] as Server[], calls: 0, closes: 0, revoked: false, result: '', token: '', prompt: '', channels: [] as (string | undefined)[] };
   const pin = Object.freeze({ scopeId: 's', fixture: true });
   const resolveModelUse = vi.fn<NativeChatRuntime['resolveModelUse']>(async (_profile, actor, check) => {
     expect(actor.issuer).toBe(ai.issuer);
@@ -91,14 +92,14 @@ async function fixture(askEdits = true, headless?: { executable: string; configD
           });
           expect((await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'k11-fake-driver', version: '1' } } })).status).toBe(200);
           state.channels.push(localPrincipalChannel());
-          const args = state.limitAfterTool ? { path: state.limitAfterTool === 'quota' ? 'quota-result.txt' : 'credits-result.txt',
+          const quota = state.limitAfterTool === 'quota';
+          const args = state.limitAfterTool ? { path: quota ? `quota-${state.quotaWindow ? 'window-' : ''}result.txt` : 'credits-result.txt',
             content: 'retained before the refusal\n' } : JSON.parse(call.argumentsJson);
           const result = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: call.name, arguments: args, _meta: { 'claudecode/toolUseId': 'fake-use-1' } } });
           state.result = result.body;
           if (state.limitAfterTool) {
-            const quota = state.limitAfterTool === 'quota';
             return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(profile.adapter, quota ? 'http-status' : 'interrupted', quota ? 429 : null,
-              Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: state.limitAfterTool, ...(quota && { status: 429 }) })), quota) };
+              Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: state.limitAfterTool, ...(quota && { status: 429, ...state.quotaWindow }) })), quota) };
           }
           return { schemaVersion: 1, native: { headless: { cliVersion: state.cliVersion, builtinPlugins: state.builtinPlugins, ...(state.paidExtraUsage ? { paidExtraUsage: state.paidExtraUsage } : {}) }, object: 'chat.completion', model: 'vendor/model', choices: [{ index: 0, message: { role: 'assistant', content: 'finished' }, finish_reason: 'stop' }] }, usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } };
         } }),
@@ -195,25 +196,35 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
   expect.soft(t('error.HEADLESS_CREDITS_REQUIRED', {}, 'tr')).toBe('Abonelik bu istek için ek kredi istiyor.');
   expect(await h.run('credits-after-tool')).toMatchObject({ replayed: true, toolCalls: 1, note: failed.note });
   const oldAdvice = sentence + ' deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your provider account, then try again.';
-  const quotaSentence = 'Your subscription usage limit was reached. Check this turn’s earlier tool effects before repeating the work.';
+  const warning = 'Tool settlement is unknown.';
+  const savedCreditNote = failed.note!.replace(sentence, `${warning} ${oldAdvice}`);
+  const checkEffects = 'Check this turn’s earlier tool effects before repeating the work.';
+  const checkEffectsTr = 'İşi tekrarlamadan önce bu turdaki önceki araç çağrılarının etkilerini denetleyin.';
   const oldQuota = 'Your subscription usage limit was reached. Try again after it resets or choose another model in /model. No API call is made automatically.';
+  const historicalQuotaNote = failed.note!.replace(sentence, oldQuota);
+  const quotaDiagnosis = `${checkEffects} ${oldQuota}`;
+  let replayHistoricalQuota = false;
   const openTurn = adapters.openSqliteAgentTurnStore;
   const history = vi.spyOn(adapters, 'openSqliteAgentTurnStore').mockImplementation(async (...args) => {
     const retained = await openTurn(...args), claim = retained.claim.bind(retained);
     retained.claim = async input => {
       const stored = await claim(input);
-      if (stored.status !== 'finished' || !stored.outcome.note || stored.outcome.note.includes(oldAdvice)) return stored;
-      return { ...stored, outcome: { ...stored.outcome, note: stored.outcome.note.replace(sentence, oldAdvice).replace(quotaSentence, oldQuota) } };
+      if (stored.status !== 'finished') return stored;
+      const note = input.turnId === 'credits-after-tool' ? savedCreditNote : replayHistoricalQuota ? historicalQuotaNote : stored.outcome.note;
+      return { ...stored, outcome: { ...stored.outcome, note } };
     };
     return retained;
   });
   try {
     const calls = h.state.calls, replay = await h.run('credits-after-tool');
     expect.soft(replay).toMatchObject({ replayed: true, recorded: true, toolCalls: 1 });
-    const [correction, saved] = replay.note?.split('\n', 2) ?? [];
+    const [saved, correction] = replay.note?.split('\n', 2) ?? [];
     expect.soft(correction).toBe(`Current correction: ${sentence}`);
     expect.soft(correction).not.toMatch(/nothing was accepted|try again/u);
-    expect.soft(saved).toBe(`Saved note (historical wording): ${failed.note!.replace(sentence, oldAdvice)}`);
+    expect.soft(saved).toBe(`Saved note (historical wording): ${savedCreditNote}`);
+    const capacity = Buffer.byteLength(JSON.stringify({ ...replay, note: null })) + 105;
+    expect.soft(fitChatTurnResult({ ...replay, note: savedCreditNote.replace(oldAdvice, sentence) }, capacity).note).toContain(warning);
+    expect.soft(fitChatTurnResult(replay, capacity).note).toContain(warning);
     expect(h.state.calls).toBe(calls);
     expect.soft(t('agent.turn.outcome.replayCorrection', { correction: '…' }, 'tr')).toBe('Güncel düzeltme: …');
     expect.soft(t('agent.turn.outcome.replaySavedNote', { note: '…' }, 'tr')).toBe('Kaydedilen not (önceki ifade): …');
@@ -221,12 +232,22 @@ it('R4a: in the person\'s default standart the AI write runs without a card and 
     const quota = await h.run('quota-after-tool');
     expect(quota).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
     expect(await readFile(join(h.f.project, 'quota-result.txt'), 'utf8')).toBe('retained before the refusal\n');
-    expect.soft(quota.note).toContain(quotaSentence);
-    expect.soft(quota.note).not.toMatch(/try again|choose another model/iu);
-    expect.soft(t('headless.chat.quotaAfterTools', {}, 'tr'))
-      .toBe('Aboneliğinizin kullanım sınırına ulaşıldı. İşi tekrarlamadan önce bu turdaki önceki araç çağrılarının etkilerini denetleyin.');
+    expect.soft(quota.note).toContain(quotaDiagnosis);
+    expect.soft(quota.note?.replace(quotaDiagnosis, '')).not.toMatch(/try again|choose another model/iu);
+    expect.soft(t('headless.chat.quotaAfterTools', {}, 'tr')).toBe(checkEffectsTr);
+    expect.soft(t('headless.chat.quotaFallback', {}, 'tr')).toBe('Aboneliğinizin kullanım sınırına ulaşıldı. Sıfırlanmasını bekleyin veya /model ile başka bir model seçin. Otomatik API çağrısı yapılmaz.');
+    expect.soft(await h.run('quota-after-tool')).toMatchObject({ replayed: true, note: quota.note });
+    replayHistoricalQuota = true;
     const replayedQuota = await h.run('quota-after-tool');
-    expect.soft(replayedQuota.note).toBe(`Current correction: ${quotaSentence}\nSaved note (historical wording): ${quota.note!.replace(quotaSentence, oldQuota)}`);
+    expect.soft(replayedQuota.note).toBe(`Saved note (historical wording): ${historicalQuotaNote}\nCurrent correction: ${quotaDiagnosis}`);
+
+    h.state.quotaWindow = { field: 'five_hour', subtype: 'rejected', resetsAtMs: 1792773600000 };
+    const windowQuota = await h.run('window-quota-after-tool');
+    const reset = clockText(h.state.quotaWindow.resetsAtMs);
+    expect.soft(windowQuota).toMatchObject({ finish: 'error', answer: null, toolCalls: 1, recorded: true });
+    expect.soft(windowQuota.note).toContain(`${checkEffects} The subscription's usage limit is reached (five-hour window). Resets at: ${reset} (local time). deckent made no charge and stopped this turn instead of continuing on paid extra usage. Wait for the reset, sign in with another account (\`deckent models login --connection claude-cli-subscription\`), or use another connection.`);
+    expect.soft(t('headless.chat.quota', { window: t('headless.chat.quotaWindow.five_hour', {}, 'tr'), reset }, 'tr'))
+      .toBe(`Aboneliğinizin kullanım sınırına ulaşıldı (beş saatlik pencere). Sıfırlanma: ${reset} (yerel saat). deckent ücret almadı ve bu turu ücretli ek kullanımla sürdürmek yerine durdurdu. Sıfırlanmasını bekleyin, başka bir hesapla giriş yapın (\`deckent models login --connection claude-cli-subscription\`) veya başka bir bağlantı kullanın.`);
   } finally { history.mockRestore(); }
 });
 
