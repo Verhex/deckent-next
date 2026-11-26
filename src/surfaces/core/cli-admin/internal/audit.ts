@@ -1,6 +1,6 @@
 import { open } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { auditVerifyQuerySchema, auditRefusalMatchesPolicy, type AuditEvent, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
+import { auditListQuerySchema, auditVerifyQuerySchema, auditRefusalMatchesPolicy, modelInvocationQuerySchema, type AuditEvent, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
 import { optionalField, emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -8,6 +8,11 @@ import { formatAgo, formatClock } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminSinks, askAdminCard } from './io.js';
 export type AuditVerifyHandler = (root: string, query: AuditVerifyQuery, options: ConfigLoadOptions) => Promise<AuditVerification>;
+const refusalCandidateSchema = modelInvocationQuerySchema.unwrap().pick({ invocationId: true, reference: true });
+type RefusalCandidate = ReturnType<typeof refusalCandidateSchema.parse>;
+type TargetResolution = 'verified-match' | 'not-resolvable';
+type AuditCandidateView = AuditListView['records'][number] & Pick<AuditListView, 'related' | 'correlationLimited'> & { readonly targetResolution: TargetResolution };
+export type AuditCandidateHandler = (root: string, input: { sequence: number; scopeId: string; candidate: RefusalCandidate }, options: ConfigLoadOptions) => Promise<AuditCandidateView | null>;
 export type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
 export type AuditRebaselineHandler = (root: string, input: unknown, options: ConfigLoadOptions, confirm: (current: AuditRebaselineView) => Promise<boolean>) => Promise<AuditVerification | null>;
 
@@ -139,39 +144,56 @@ function auditLine(record: AuditListView['records'][number], locale: Locale, pee
  * log (who did what, when), verified page by page; `--json` is the export (every field of each sealed event). Read only, the `approval/inspect` cell.
  */
 async function auditListCommand(argv: readonly string[], context: AdminCommandContext): Promise<ExitCode> {
-  if (!context.listAudit) throw ErrorRegistry.createError('CLI_USAGE');
+  const { listAudit } = context;
+  if (!listAudit) throw ErrorRegistry.createError('CLI_USAGE');
   const show = argv[1] === 'show', values = new Map<string, string>(); let json = false, start = 2;
   if (show) { if (!/^[1-9]\d{0,15}$/u.test(argv[2] ?? '')) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('cli.audit.list.command', { action: argv[1]! }, commandLocale(context)), flag: '<n>' } }); start = 3; }
   for (let i = start; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json' && !json) { json = true; continue; }
     if (arg === '--no-color') continue;
-    if (!['--scope', '--lang', ...(show ? [] : ['--after', '--limit'])].includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!['--scope', '--lang', ...(show ? ['--candidate'] : ['--after', '--limit'])].includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
     const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(arg, value);
   }
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env }), locale = commandLocale(context, values.get('--lang'));
-  const scopeId = values.get('--scope') ?? (config.terminal as { scopeId?: string } | undefined)?.scopeId;
+  const source = values.get('--candidate'), explicitScope = values.get('--scope'), sequence = Number(argv[2]);
+  if (source !== undefined && (!context.showAuditCandidate || !auditListQuerySchema.safeParse({ schemaVersion: 1, scopeId: explicitScope }).success
+    || !Number.isSafeInteger(sequence))) throw ErrorRegistry.createError('CLI_USAGE');
+  const scopeId = explicitScope ?? (config.terminal as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   const number = (flag: string) => { const raw = values.get(flag); if (raw === undefined) return undefined; if (!/^\d{1,15}$/u.test(raw)) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('cli.audit.list.command', { action: 'list' }, locale), flag } }); return Number(raw); };
-  const after = show ? Number(argv[2]) - 1 : number('--after') ?? 0, limit = show ? 1 : number('--limit');
-  const view = await context.listAudit(root, { schemaVersion: 1, scopeId, after, ...optionalField('limit', limit) }, { env });
+  const after = show ? sequence - 1 : number('--after') ?? 0, limit = show ? 1 : number('--limit');
+  const list = () => listAudit(root, { schemaVersion: 1, scopeId, after, ...optionalField('limit', limit) }, { env });
   if (show) {
-    const record = view.records[0];
-    if (!record || record.sequence !== Number(argv[2])) throw ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND', { params: { sequence: argv[2]!, scope: terminalSafeText(scopeId) } });
-    emit(view.related || view.correlationLimited ? { ...record, ...optionalField('related', view.related), ...optionalField('correlationLimited', view.correlationLimited) } : record,
+    let candidateView: AuditCandidateView | null | undefined;
+    if (source !== undefined) {
+      const raw = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
+        { limit: 'CLI_USAGE', invalid: 'CLI_USAGE', tty: 'CLI_USAGE', unavailable: 'CLI_USAGE' }, context.stdin);
+      const locator = refusalCandidateSchema.safeParse(raw);
+      if (!locator.success) throw ErrorRegistry.createError('CLI_USAGE');
+      candidateView = await context.showAuditCandidate!(root, { sequence, scopeId, candidate: locator.data }, { env });
+    }
+    const view = candidateView === undefined ? await list() : candidateView;
+    const record = view && ('records' in view ? view.records[0] : { sequence: view.sequence, event: view.event });
+    if (!record || record.sequence !== sequence) throw ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND', { params: { sequence: argv[2]!, scope: terminalSafeText(scopeId) } });
+    const related = view?.related, limited = view?.correlationLimited, resolution = candidateView?.targetResolution;
+    emit({ ...record, ...optionalField('related', related), ...optionalField('correlationLimited', limited), ...optionalField('targetResolution', resolution) },
       { json, ...adminSinks(context), render: () => {
         const subject = record.event.subject;
-        return [auditLine(record, locale, view.related),
+        return [auditLine(record, locale, related),
           ...(subject.kind === 'installation-rebind' ? rebindDetails(subject, locale) : []),
           ...(subject.kind === 'access-refusal-summary' ? [subject.countBasis === 'at-least' ? t('cli.audit.refusal.countAtLeast', { count: subject.count }, locale) : t('cli.audit.refusal.countExact', { count: subject.count }, locale),
-            ...(subject.target.identity === null ? [t('cli.audit.refusal.unresolved', {}, locale)] : []),
+            ...(resolution === undefined && subject.target.identity === null ? [t('cli.audit.refusal.unresolved', {}, locale)] : []),
             refusalSource(subject.decisionSource, locale)] : []),
+          ...(resolution === undefined ? [] : [resolution === 'verified-match'
+            ? t('cli.audit.refusal.verifiedMatch', {}, locale) : t('cli.audit.refusal.unresolved', {}, locale)]),
           terminalSafeText(JSON.stringify(record, null, 2)),
-          ...(view.related ?? []).flatMap(peer => [auditLine(peer, locale, [record]), terminalSafeText(JSON.stringify(peer, null, 2))]),
-          ...(view.correlationLimited ? [t('cli.audit.refusal.correlationLimited', {}, locale)] : [])].join('\n');
+          ...(related ?? []).flatMap(peer => [auditLine(peer, locale, [record]), terminalSafeText(JSON.stringify(peer, null, 2))]),
+          ...(limited ? [t('cli.audit.refusal.correlationLimited', {}, locale)] : [])].join('\n');
       } });
     return EXIT_CODES.success;
   }
+  const view = await list();
   emit(view, { json, ...adminSinks(context), render: () => [t('cli.audit.list.head', { scope: terminalSafeText(scopeId) }, locale),
     ...(view.records.length ? view.records.map(record => auditLine(record, locale, [...view.records, ...(view.related ?? [])])) : [t('cli.audit.list.none', {}, locale)]),
     ...(view.correlationLimited ? [t('cli.audit.refusal.correlationLimited', {}, locale)] : []),

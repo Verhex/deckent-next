@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rmdir, writeFile } from 'node:fs/promises';
 import * as auditComposition from '#composition/core/audit/index.js';
 import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
+import { main as runCli } from '#composition/core/cli/index.js';
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -9,14 +12,15 @@ import * as invocationStore from '#adapters/core/sqlite-model-invocation/index.j
 import { nativeCliAgent, readLocalOsIdentity, withLocalPrincipalChannel, withMcpPrincipal } from '#adapters/index.js';
 import { encodeModelBindingDefinition, firstRunPolicyTemplate, modelInvocationProfileSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { brainPlannerConfigSchema, type NativeAgentCorrelation } from '#capabilities/index.js';
-import { FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, agentTurnResultDigest, modelInvocationProfileDigest } from '#engine/index.js';
+import { AuditApplication, FIRST_RUN_TOOL_NAMES, ModelInvocationControllers, ModelInvocationPolicyAuthorization, agentTurnResultDigest, modelInvocationProfileDigest, modelInvocationRequestDigest, type ModelInvocationStore } from '#engine/index.js';
 import { createConfiguredNativeChatRuntime, createRuntimeChatTurnHost, runPeerConfiguredChatTurn, type NativeChatRuntime } from '#composition/core/agent-turn/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
-import { inspectConfiguredModelInvocation, inspectionApplication } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, inspectRefusalCandidate } from '#composition/core/model-invocation/index.js';
 import { createServiceSameTurnPlanning, planServiceRun } from '#composition/core/run-planner/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadProposalViews } from '#surfaces/index.js';
-import { clearConfigCache, resolveGlobalConfigReadPath, sha256 } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, resolveGlobalConfigReadPath, sha256, t } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { personEnv } from '../support/person-env.js';
 import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
@@ -55,7 +59,7 @@ function snapshot(path: string, observe: (db: DatabaseSync) => void) {
   try { observe(db); } finally { db.close(); }
 }
 
-async function run(cli: 'codex' | 'claude', decision: Outcome) {
+async function run(cli: 'codex' | 'claude', decision: Outcome, variant?: 'rebind' | 'sign-failure' | 'append-failure') {
   const family = cli === 'codex' ? CODEX_FAMILY : FAMILY;
   const { meta, wire, call, draft: recordedDraft } = await recording(cli);
   const rawMask = '200.000000';
@@ -118,15 +122,19 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
     catch (error) { trace.push({ event: 'claim-register-refused', code: (error as { code: string }).code }); throw error; }
   });
   const openStore = invocationStore.openSqliteModelInvocationStore;
+  let claimInput: Parameters<ModelInvocationStore['claim']>[0] | undefined;
+  let retainedResponse: Parameters<ModelInvocationStore['recordResponse']>[1] | undefined;
   let settledResponse = false, selected = 0;
   vi.spyOn(invocationStore, 'openSqliteModelInvocationStore').mockImplementation(async (...args) => {
     const store = await openStore(...args), claim = store.claim.bind(store), record = store.recordResponse.bind(store);
     vi.spyOn(store, 'claim').mockImplementation(async input => {
+      claimInput = input;
       trace.push({ event: 'claim-attempt', commandId: input.command.commandId, reference: input.command.reference });
       try { const result = await claim(input); trace.push({ event: 'claimed', commandId: input.command.commandId }); return result; }
       catch (error) { trace.push({ event: 'claim-refused', code: (error as { code: string }).code }); throw error; }
     });
     vi.spyOn(store, 'recordResponse').mockImplementation(async (...response) => {
+      retainedResponse = response[1];
       const result = await record(...response);
       if (decision === 'corrupt') {
         const db = new DatabaseSync(f.path);
@@ -252,8 +260,16 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
         try { return await service.prepare(...args); }
         catch (error) { trace.push({ event: 'prepare-refused', ...code(error) }); throw error; }
       } };
+    }, signer);
+  const signer: typeof auditComposition.signRefusalTarget = variant === 'sign-failure' ? () => { throw new Error('fixture-sign-failure'); } : auditComposition.signRefusalTarget;
+  if (variant === 'append-failure') {
+    const record = AuditApplication.prototype.record;
+    vi.spyOn(AuditApplication.prototype, 'record').mockImplementation(function (this: AuditApplication, input) {
+      if ((input as { subject?: { kind?: string } }).subject?.kind === 'access-refusal-summary') throw new Error('fixture-append-failure');
+      return record.call(this, input);
     });
-  const host = { ...createHost(), signRefusalTarget: auditComposition.signRefusalTarget };
+  }
+  const host = createHost();
   const turnId = 'same-turn', command = { schemaVersion: 1 as const, scopeId: 's', turnId, messages: [{ role: 'user' as const, content: 'prepare a purchase' }] };
   const proofDir = process.env['DECKENT_K3C_PROOF_DIR'];
   async function retain(phase: string, event: Card) {
@@ -313,7 +329,10 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
   expect(selected).toBe(shouldCard || decision === 'corrupt' ? 1 : 0);
   expect(settledResponse).toBe(true);
   if (decision === 'refuse' || decision === 'fresh-refusal' || decision === 'corrupt') {
-    expect(result).toMatchObject({ finish: 'error', note: 'The system could not verify access to the saved reply for this chat. No plan was sent for approval and no Run started. Use /do to request a separate plan.' });
+    expect(result).toMatchObject({ finish: 'error', note: [
+      'The system could not verify access to the saved reply for this chat. No plan was sent for approval and no Run started. Use /do to request a separate plan.',
+      ...((variant === 'sign-failure' || variant === 'append-failure') ? ['This turn’s access-refusal audit summary could not be saved.'] : []),
+    ].join(' ') });
   }
   snapshot(f.path, db => {
     const proposals = db.prepare('SELECT record FROM run_proposals').all();
@@ -328,7 +347,7 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
       .map(row => JSON.parse(String(row.record)).event)
       .filter(event => event.subject.evidenceBasis === 'retained-response-authority');
     const readRefusals = readEvents.map(event => event.subject);
-    if (decision === 'refuse' || decision === 'fresh-refusal') {
+    if ((decision === 'refuse' || decision === 'fresh-refusal') && variant !== 'sign-failure' && variant !== 'append-failure') {
       const revision = decision === 'fresh-refusal' ? freshRevision : first.policy.revision;
       expect(readEvents.map(event => event.policyRevision)).toEqual([`${revision}+${bindingsRevision}`]);
       expect(readRefusals).toEqual([expect.objectContaining({ turnId, count: 1, samples: [],
@@ -386,34 +405,166 @@ async function run(cli: 'codex' | 'claude', decision: Outcome) {
       reference: profile.reference, invocationId, includeResponseContent: true }, f.options))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(selected).toBe(shouldCard ? 1 : 0);
   }
+  if (variant === 'sign-failure' || variant === 'append-failure') return result;
   if (decision === 'refuse') {
     const db = new DatabaseSync(f.path, { readOnly: true });
     let row: { sequence: number; invocationId: string };
     try {
       row = db.prepare("SELECT sequence, json_extract(record,'$.event.subject.invocationId') AS invocationId FROM audit_events WHERE kind='access-refusal-summary'").get() as typeof row;
     } finally { db.close(); }
-    const inspect: auditComposition.InspectRefusalCandidate = async (context, scopeId, candidate) => {
+    const inspect: auditComposition.InspectRefusalCandidate = async (context, ...args) => {
       expect(context.principal).toMatchObject({ issuer: owner.issuer, subject: owner.subject, assurance: 'os-user' });
-      const result = await inspectionApplication({ ...context, policy: { async load() { return context.document; } },
-        freshConfig: async () => context.config }).inspect({ schemaVersion: 2, scopeId, ...candidate, includeResponseContent: true });
-      if (!context.installationId || result.contentStatus !== 'retained' || result.purge || result.invocation?.outcome?.state !== 'responded') return null;
-      return { ...candidate, scopeId, installationId: context.installationId, companyId: context.config.company.id, descriptor: result.invocation.outcome.content };
+      return inspectRefusalCandidate(context, ...args);
     };
     const query = { sequence: row.sequence, scopeId: 's', candidate: { invocationId: row.invocationId, reference: profile.reference } };
     const show = (candidate = query.candidate, lookup = inspect) => auditComposition.showConfiguredAuditCandidate(f.project, { ...query, candidate }, f.options, lookup);
     expect(await show()).toMatchObject({ targetResolution: 'not-resolvable' });
-    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...first.policy, revision: 'refusal-reader' }), { mode: 0o600 });
+    const readerPolicy = { ...first.policy, revision: 'refusal-reader' };
+    const publishPolicy = (policy: typeof readerPolicy) => writeFile(policyFile, JSON.stringify(policy), { mode: 0o600 });
+    await publishPolicy(readerPolicy);
     const matched = await show();
     expect(matched).toMatchObject({ sequence: query.sequence, targetResolution: 'verified-match' });
     expect(JSON.stringify(matched)).not.toContain(RAW);
-    expect(await show({ ...query.candidate, invocationId: 'different-invocation' })).toMatchObject({ targetResolution: 'not-resolvable' });
-    for (const update of [{ companyId: 'foreign-company' }, { installationId: 'foreign-installation' }, { scopeId: 'foreign-scope' }]) {
+    if (variant === 'rebind') {
+      // Rebind only the UUID on this disposable fixture. Policy, DB path, key and verified locator are identical.
+      const identityPath = join(productResourcePath((await loadComposedConfig(f.project, f.options)).productLayout, 'installationIdentity'), 'identity.json');
+      const originalIdentity = await readFile(identityPath, 'utf8');
+      const replacement = randomUUID();
+      let changed = false;
+      try {
+        const rebound = await show(query.candidate, async (...args) => {
+          const verified = await inspect(...args);
+          if (verified) {
+            await writeFile(identityPath, JSON.stringify({ ...JSON.parse(originalIdentity), installationId: replacement }), { mode: 0o600 });
+            changed = true;
+          }
+          return verified;
+        });
+        expect(changed).toBe(true);
+        expect(rebound).toMatchObject({ targetResolution: 'not-resolvable' });
+      } finally { await writeFile(identityPath, originalIdentity, { mode: 0o600 }); }
+      return result;
+    }
+    const file = join(f.project, 'candidate.json');
+    await writeFile(file, JSON.stringify(query.candidate), { mode: 0o600 });
+    const publicShow = async (candidate = query.candidate, { source = '-', locale = 'en', json = true, sequence = query.sequence } = {}) => {
+      const stdout: string[] = [], stderr: string[] = [];
+      const argv = ['audit', 'show', String(sequence), '--scope', 's', '--candidate', source, '--lang', locale, ...(json ? ['--json'] : [])];
+      const stdin = Readable.from([JSON.stringify(candidate)]);
+      const mocks = [
+        vi.spyOn(process, 'cwd').mockReturnValue(f.project),
+        vi.spyOn(process.stdin, Symbol.asyncIterator).mockImplementation(() => stdin[Symbol.asyncIterator]()),
+        vi.spyOn(process.stdout, 'write').mockImplementation(line => { stdout.push(String(line)); return true; }),
+        vi.spyOn(process.stderr, 'write').mockImplementation(line => { stderr.push(String(line)); return true; }),
+      ];
+      vi.stubEnv('HOME', f.options.env.HOME);
+      vi.stubEnv('USERPROFILE', f.options.env.USERPROFILE);
+      let exit;
+      try { exit = await runCli(argv); }
+      finally { mocks.forEach(mock => mock.mockRestore()); vi.unstubAllEnvs(); }
+      const out = stdout.join(''), err = stderr.join('');
+      for (const privateValue of [RAW, candidate.reference.modelId, candidate.reference.providerId]) {
+        expect(out + err).not.toContain(privateValue);
+      }
+      return { exit, out, err };
+    };
+    for (const locale of ['en', 'tr'] as const) {
+      const json = await publicShow(query.candidate, { locale, source: 'candidate.json' });
+      expect(json).toMatchObject({ exit: 0, err: '' });
+      expect(JSON.parse(json.out)).toEqual(matched);
+      const human = await publicShow(query.candidate, { locale, json: false });
+      expect(human).toMatchObject({ exit: 0, err: '' });
+      expect(human.out).toContain(locale === 'en' ? 'Candidate target verified.' : 'Aday hedef doğrulandı.');
+    }
+    const unresolved = async (candidate = query.candidate, sequence = query.sequence) => {
+      const response = await publicShow(candidate, { sequence });
+      expect(response).toMatchObject({ exit: 0, err: '' });
+      const parsed = JSON.parse(response.out);
+      expect(parsed).toEqual({ ...parsed, sequence, targetResolution: 'not-resolvable' });
+      expect(Object.keys(parsed).sort()).toEqual(['event', 'sequence', 'targetResolution']);
+      if (candidate.invocationId !== query.candidate.invocationId) expect(response.out).not.toContain(candidate.invocationId);
+    };
+
+    const unrelatedId = 'same-scope-substitute', ctx = await loadConfiguredScopeContext(f.project, 's', f.options, 'read');
+    const models = await openStore(f.path, ctx.config.storage.sqlite, 'forbid');
+    try {
+      const original = claimInput!, command = { ...original.command, commandId: unrelatedId }, claimedAtMs = Date.now();
+      const other = await models.claim({ ...original, command, invocationId: unrelatedId, claimedAtMs, requestDigest: modelInvocationRequestDigest(command) });
+      await models.permitSend(other.record.receipt.claim, 'fixture-second-owner', claimedAtMs + 1);
+      await models.recordResponse(other.record.receipt.claim, retainedResponse!, claimedAtMs + 2);
+      const alternate = { ...query.candidate, invocationId: unrelatedId };
+      expect(await inspectRefusalCandidate(ctx, 's', alternate)).toMatchObject(alternate);
+      await unresolved(alternate);
+    } finally { models.close(); }
+    await unresolved({ ...query.candidate, reference: { ...query.candidate.reference, modelVersion: 2 } });
+    for (const update of [{ companyId: 'foreign-company' }, { installationId: 'foreign-installation' }, { scopeId: 'foreign-scope' },
+      { descriptor: { kind: 'native-response' as const, encoding: 'canonical-json' as const, schemaVersion: 1 as const, byteLength: 7, digest: 'f'.repeat(64) } }]) {
       expect(await show(query.candidate, async (...input) => {
         const verified = await inspect(...input);
         return verified ? { ...verified, ...update } : null;
       })).toMatchObject({ targetResolution: 'not-resolvable' });
     }
+
+    const auditOnly = { ...readerPolicy, revision: 'audit-only', grants: readerPolicy.grants.filter(grant => grant.resource.kind !== 'model-invocation') };
+    await publishPolicy(auditOnly);
+    await unresolved();
+    const humanUnresolved = await publicShow(query.candidate, { locale: 'tr', json: false });
+    expect(humanUnresolved).toMatchObject({ exit: 0, err: '' });
+    expect(humanUnresolved.out).toContain('Hedef çözümlenemiyor.');
+    await publishPolicy({ ...deniedPolicy, revision: 'content-revoked' });
+    await unresolved();
+    await publishPolicy({ ...readerPolicy, revision: 'audit-revoked', grants: readerPolicy.grants.filter(grant => grant.resource.kind !== 'approval') });
+    const noAudit = await publicShow();
+    expect(noAudit.exit).not.toBe(0);
+    expect(noAudit.err).toContain('APPROVAL_DENIED');
+    expect(noAudit.out).toBe('');
+
+    await publishPolicy(readerPolicy);
+    if (!matched || matched.event.subject.kind !== 'access-refusal-summary') throw new Error('fixture refusal missing');
+    const subject = matched.event.subject, target = subject.target;
+    const probes = [{ ...subject, invocationId: undefined }, { ...subject, target: { ...target, identity: null } },
+      { ...subject, target: { ...target, identity: { keyId: 'unavailable-target-key', digest: target.identity!.digest } } },
+      { ...subject, target: { ...target, identity: { ...target.identity!, digest: 'f'.repeat(64) } } }];
+    await withScopeAudit(ctx, async audit => {
+      // These rows have valid audit seals. Only the optional target binding varies.
+      const controls = probes.map((value, index) => audit.record({ ...matched.event, eventId: 'candidate-control-' + index, subject: value }));
+      for (const control of controls) await unresolved(query.candidate, control.sequence);
+      const position = { turnId, callId: 'correlation-fixture', round: 1, index: 0 };
+      const correlated = audit.record({ ...matched.event, eventId: 'candidate-correlated-refusal', subject: { ...subject, call: position, samples: [position] } });
+      const { turnId: correlatedTurn, ...call } = position;
+      const allowance = audit.record({ ...matched.event, eventId: 'candidate-correlated-policy', subject: { kind: 'policy-turn', turnId: correlatedTurn,
+        ceiling: false, refused: { count: 0, calls: [] }, allowed: { count: 1, calls: [{ tool: { name: 'read_file', version: 1 },
+          call, cell: 'read', argsDigest: 'a'.repeat(64), revision: matched.event.policyRevision }] } } });
+      const joined = await publicShow(query.candidate, { sequence: correlated.sequence });
+      expect(joined).toMatchObject({ exit: 0, err: '' });
+      expect(JSON.parse(joined.out)).toEqual({ sequence: correlated.sequence, event: correlated.event,
+        related: [{ sequence: allowance.sequence, event: allowance.event }], targetResolution: 'verified-match' });
+    }, false);
+
+    const purger = await openStore(f.path, ctx.config.storage.sqlite, 'forbid');
+    try {
+      const stored = await purger.loadInvocation('s', row.invocationId), { id, issuer, subject: principalSubject, assurance } = ctx.principal;
+      await purger.purgeContent({ command: { schemaVersion: 1, commandId: 'candidate-control-purge', scopeId: 's', ...query.candidate,
+        expectedContentDigest: stored!.content!.descriptor.digest }, actor: { id, issuer, subject: principalSubject, assurance },
+      authorization: { revision: readerPolicy.revision, ruleId: 'fixture-purge' }, purgedAtMs: Date.now() });
+    } finally { purger.close(); }
+    await unresolved();
+    const missingSequence = await publicShow(query.candidate, { sequence: 9999 });
+    expect(missingSequence.exit).not.toBe(0);
+    expect(missingSequence.err).toContain('AUDIT_RECORD_NOT_FOUND');
+
+    const forged = new DatabaseSync(f.path);
+    try {
+      forged.exec('DROP TRIGGER audit_events_no_update');
+      forged.prepare("UPDATE audit_events SET record=json_set(record,'$.event.policyRevision','forged-revision') WHERE scope_id=? AND sequence=?").run('s', row.sequence);
+    } finally { forged.close(); }
+    const tampered = await publicShow();
+    expect(tampered.exit).not.toBe(0);
+    expect(tampered.err).toContain('AUDIT_INTEGRITY');
+    expect(tampered.out).toBe('');
+
   }
+  return result;
 }
 
 for (const [cli, decision] of [['codex', 'allow'], ['claude', 'deny']] as const) {
@@ -441,3 +592,18 @@ it.skipIf(process.platform !== 'linux')('private read denial, lost connection an
 it.skipIf(process.platform !== 'linux')('attributes a retained read refusal to the fresh policy that denied it', async () => {
   await run('codex', 'fresh-refusal');
 }, 45_000);
+
+it.skipIf(process.platform !== 'linux')('downgrades a verified candidate when the installation rebinds at the same ledger path', async () => {
+  await run('codex', 'refuse', 'rebind');
+}, 45_000);
+
+it.skipIf(process.platform !== 'linux')('a keyed sign or append failure preserves the refusal and reaches only the original chat result note', async () => {
+  const original = await run('codex', 'refuse', 'rebind');
+  expect(original).toBeDefined();
+  for (const fault of ['sign-failure', 'append-failure'] as const) {
+    for (const close of cleanups.splice(0).reverse()) await close();
+    vi.restoreAllMocks(); vi.clearAllMocks();
+    const failed = await run('codex', 'refuse', fault);
+    expect(failed).toEqual({ ...original, note: original!.note + ' ' + t('agent.refusalAudit.failed') });
+  }
+}, 90_000);

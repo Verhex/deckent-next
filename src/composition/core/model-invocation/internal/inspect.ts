@@ -2,6 +2,7 @@ import { ModelInvocationError, modelInvocationQueryInputSchema, modelInvocationC
 import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationReader, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 
@@ -30,5 +31,19 @@ async function inspect(input: ModelInvocationQuery, loadContext: (scopeId: strin
     return await inspectionApplication(await loadContext(query.scopeId)).inspect(query, undefined, delivery);
   } catch (error) { throw queryFailure(error); }
 }
-export const inspectionApplication = (context: Awaited<ReturnType<typeof loadInvocationContext>>) => new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(context.policy),
+type InspectionContext = Awaited<ReturnType<typeof loadInvocationContext>>;
+export const inspectionApplication = (context: Pick<InspectionContext, 'principal' | 'policy' | 'path' | 'config'>) => new ModelInvocationInspectionApplication(verifiedPrincipal(context.principal), new ModelInvocationPolicyAuthorization(context.policy),
     async () => openSqliteModelInvocationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
+
+/** The caller owns the verified audit read. Inspect both permissions using its bound person and policy. */
+export async function inspectRefusalCandidate(context: Pick<InspectionContext, 'principal' | 'path' | 'config' | 'layout' | 'ownerUid' | 'installationId' | 'document'>,
+  scopeId: string, candidate: Pick<ModelInvocationQuery, 'invocationId' | 'reference'>) {
+  if (!context.installationId || context.principal.assurance !== 'os-user') return null;
+  const policy = contextPolicySource(context, context.document);
+  const result = await inspectionApplication({ ...context, policy }).inspect({ schemaVersion: 2, scopeId, invocationId: candidate.invocationId,
+    reference: candidate.reference, includeResponseContent: true });
+  const receipt = result.invocation;
+  if (!receipt || receipt.outcome?.state !== 'responded' || result.contentStatus !== 'retained' || result.purge || !result.responseContent) return null;
+  return { scopeId: result.scopeId, invocationId: result.invocationId, reference: result.reference, installationId: context.installationId,
+    companyId: context.config.company.id, descriptor: result.responseContent.descriptor };
+}

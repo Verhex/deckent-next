@@ -60,10 +60,11 @@ export type PlanServiceRun = (root: string, input: BrainPlanCommand, options: Co
   /** v31 (/do parity): the plan's progress (planning, a Brain quota wait), as `/do` observes it; absent: a quota refusal is the typed refusal at once. */ observe?: BrainPlanObserver,
   checkPackageCard?: import('#engine/index.js').RunPackageCardCheck) => Promise<RunPlanningResult>;
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>, planSameTurn?: CreateServiceSameTurnPlanning): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number, nativeAgent?: NativeChatRuntime, planWork?: PlanServiceRun, proposalViews?: () => Promise<AgentProposalViews>, planSameTurn?: CreateServiceSameTurnPlanning,
+  signRefusalTarget?: RuntimeChatTurnHost['signRefusalTarget']): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
   return Object.freeze({ model, ...(nativeAgent ? { nativeAgent } : {}), ...(planWork ? { planWork } : {}),
-    ...(planSameTurn ? { planSameTurn } : {}), ...(proposalViews ? { proposalViews } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
+    ...(signRefusalTarget ? { signRefusalTarget } : {}), ...(planSameTurn ? { planSameTurn } : {}), ...(proposalViews ? { proposalViews } : {}), signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 /** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
  * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */

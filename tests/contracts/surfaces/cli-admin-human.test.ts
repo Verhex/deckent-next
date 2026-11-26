@@ -480,6 +480,51 @@ it('audit lists the refusal source and role, shows lower bounds and unresolved t
   }
 });
 
+it('audit show passes one bounded locator file or pipe to the audit query and rejects invalid candidate usage', async () => {
+  const f = await project({ terminal: { scopeId: 'live' }, cli: { invocationInputMaxBytes: 256 } });
+  const locator = { invocationId: 'independently-held', reference: { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 } };
+  const encoded = JSON.stringify(locator), oversized = encoded.padEnd(257);
+  await writeFile(join(f.root, 'candidate.json'), encoded, { mode: 0o600 });
+  await writeFile(join(f.root, 'oversized.json'), oversized, { mode: 0o600 });
+  const showAuditCandidate = vi.fn(async () => null);
+  const listAudit = vi.fn(async () => { throw new Error('candidate used the separate list query'); });
+  const host = { showAuditCandidate, listAudit };
+  const valid = ['audit', 'show', '1', '--scope', 'live', '--candidate'];
+  for (const source of ['candidate.json', '-']) {
+    const call = io(f, { ...host, stdin: piped(encoded) });
+    const result = await main([...valid, source, '--json'], call.context);
+    expect(result).not.toBe(0);
+    expect(call.err.text()).toContain('AUDIT_RECORD_NOT_FOUND');
+    expect(call.out.text()).toBe('');
+  }
+  expect(showAuditCandidate).toHaveBeenCalledTimes(2);
+  expect(showAuditCandidate).toHaveBeenNthCalledWith(1, f.root, { sequence: 1, scopeId: 'live', candidate: locator }, { env: f.env });
+  expect(showAuditCandidate).toHaveBeenNthCalledWith(2, f.root, { sequence: 1, scopeId: 'live', candidate: locator }, { env: f.env });
+  const inputs: { argv: string[]; text?: string; tty?: boolean }[] = [
+    { argv: valid }, { argv: [...valid, '--json'] },
+    { argv: [...valid, '-', '--candidate', '-'] }, { argv: [...valid, '-', '--scope', 'live'] },
+    { argv: [...valid, '-', '--json', '--json'] }, { argv: ['audit', 'list', '--candidate', '-'] },
+    { argv: ['audit', 'show', '1', '--candidate', '-'] }, { argv: ['audit', 'show', '1', '--scope', '--candidate', '-'] },
+    { argv: ['audit', 'show', '1', '--scope', ' '.repeat(300), '--candidate', '-'] },
+    { argv: ['audit', 'show', '0', '--scope', 'live', '--candidate', '-'] },
+    { argv: ['audit', 'show', '9007199254740992', '--scope', 'live', '--candidate', '-'] },
+    { argv: [...valid, 'oversized.json'] }, { argv: [...valid, '-'], text: oversized }, { argv: [...valid, '-'], text: '{' },
+    { argv: [...valid, '-'], text: JSON.stringify({ ...locator, scopeId: 'other' }) },
+    { argv: [...valid, '-'], text: JSON.stringify({ ...locator, reference: { ...locator.reference, extra: true } }) },
+    { argv: [...valid, '-'], text: JSON.stringify({ ...locator, reference: { ...locator.reference, modelVersion: 0 } }) },
+    { argv: [...valid, '-'], tty: true },
+  ];
+  for (const { argv, text, tty } of inputs) {
+    const call = io(f, { ...host, stdin: Object.assign(piped(text ?? encoded), { isTTY: tty ?? false }) });
+    expect(await main(argv, call.context), argv.join(' ')).toBe(2);
+    expect(call.err.text()).toContain('CLI_USAGE');
+    expect(call.out.text()).toBe('');
+    expect(call.err.text()).not.toContain(locator.invocationId);
+  }
+  expect(showAuditCandidate).toHaveBeenCalledTimes(2);
+  expect(listAudit).not.toHaveBeenCalled();
+});
+
 it('audit rebind list/show preserve source and target events in EN/TR, four bases and an unmatched starting record', async () => {
   const integrity = createHmacIntegrity('fixture-key', randomBytes(32));
   const events = [
