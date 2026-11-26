@@ -50,8 +50,14 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
       const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'),
         'run', 'cancel', '--scope', f.command.scopeId, '--id', f.command.runId, '--command-id', f.command.commandId,
         '--expected-revision', String(f.command.expectedRevision), '--json'], { cwd: f.project, env: f.options.env })
-        .catch(error => { const typed = JSON.parse(error.stderr); throw Object.assign(new Error(typed.code), { code: typed.code }); });
-      return JSON.parse(result.stdout) as Awaited<ReturnType<typeof deliverRunCancellation>>;
+        .then(value => ({ stdout: value.stdout, exitCode: 0 }), error => {
+          if (error.stderr) { const typed = JSON.parse(error.stderr); throw Object.assign(new Error(typed.code), { code: typed.code }); }
+          return { stdout: error.stdout as string, exitCode: error.code as number };
+        });
+      const receipt = JSON.parse(result.stdout) as Awaited<ReturnType<typeof deliverRunCancellation>>;
+      // N4-1A (00f185903): the JSON receipt is unchanged; `run cancel` exits 1 while a delivery is outstanding and 0 when none is.
+      expect(result.exitCode).toBe(receipt.delivery.outcomes.some(item => !['terminal', 'not-dispatched', 'prevented'].includes(item.status)) ? 1 : 0);
+      return receipt;
     }
     if (!client) return deliverRunCancellation(f.project, f.command, f.options);
     const result = await client.callTool({ name: 'deliver_run_cancellation', arguments: f.command });

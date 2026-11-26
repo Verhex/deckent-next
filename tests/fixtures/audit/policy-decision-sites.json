@@ -22,7 +22,7 @@
     "src/engine/core/approval/internal/admission.ts": { "sites": 1, "class": "unsealed", "note": "task/execute admission; require-approval opens an approval request only" },
     "src/engine/core/approval/internal/application.ts": { "sites": 2, "class": "unsealed", "note": "approval decide/renew refusals; inspect is a read-gate" },
     "src/engine/core/approval/internal/mcp-capabilities.ts": { "sites": 2, "class": "unsealed", "note": "pre-checks before administerOwnPolicyChange" },
-    "src/engine/core/approval/internal/standing-inspection.ts": { "sites": 1, "class": "read-gate", "note": "policy/inspect-standing-grants" },
+    "src/engine/core/standing-grants/internal/standing-inspection.ts": { "sites": 1, "class": "read-gate", "note": "policy/inspect-standing-grants" },
     "src/engine/core/approval/internal/template-upgrade.ts": { "sites": 4, "class": "unsealed", "note": "pre-checks and lockout probes before administerOwnPolicyChange" },
     "src/engine/core/backup/internal/application.ts": { "sites": 1, "class": "sealed", "kind": "backup-operation" },
     "src/engine/core/config/internal/policy.ts": { "sites": 2, "class": "unsealed", "note": "only allow sealed (config-change); require-approval opens a config-change approval" },
