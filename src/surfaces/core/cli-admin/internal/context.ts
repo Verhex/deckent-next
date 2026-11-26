@@ -41,6 +41,7 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   changeCodingAllowance?: CodingAllowanceHandler;
   inspectCodingDependencies?: CodingDependenciesHandler;
   produceCodingDependencies?: ProduceCodingDependenciesHandler;
+  hasInstalledSubscriptionWorkerCli?: (env: NodeJS.ProcessEnv, signal?: AbortSignal) => Promise<boolean | undefined>;
   /** R8b/R8c: the worker CLI id a subscription connection's protocol family runs (native agent registry), or null. */
   workerCliOf?: (protocolFamily: string) => string | null;
   inspectWorkerReadiness?: (root: string, scopeId: string, options: ConfigLoadOptions, targetKind: string) => Promise<import('#domain/index.js').WorkerReadiness | null>;

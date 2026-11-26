@@ -131,9 +131,10 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
   } });
 }
 
-export type CodingTemplateHandler = (root: string, input: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; nodeDependencies?: true; apply: boolean },
+type TemplateRequest = { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; discovery?: string; nodeDependencies?: true; apply: boolean; digest?: string };
+export type CodingTemplateHandler = (root: string, input: TemplateRequest,
   options: ConfigLoadOptions) => Promise<{ status: 'preview' | 'applied' | 'unchanged'; profile: ExecutionProfileDefinition; kind: unknown;
-    registry: { revision: string }; expect: string | null; connection?: string | null; write: unknown }>;
+    registry: { revision: string }; expect: string | null; connection?: string | null; digest: string; write: unknown }>;
 type TemplateResult = Awaited<ReturnType<CodingTemplateHandler>>;
 type DependencyDigests = Readonly<{ listDigest: string; lockfileDigest: string }>;
 type PreparedDependencies = { kind: 'prepared'; written?: string; project: string; workTarget: string; platform: string; layout: typeof NATIVE_NODE_DEPENDENCY_LAYOUT;
@@ -228,7 +229,18 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   let provider = values.get('--provider') ?? (connected && cliOf(context)(connected) || undefined);
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
-    if (!providers.length) throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale });
+    if (!providers.length) {
+      let subscription: boolean | undefined;
+      try {
+        subscription = flags.has('--docker') ? false : await context.hasInstalledSubscriptionWorkerCli?.(env, context.signal);
+      } catch {
+        // The optional probe informs the guidance; the missing-toolchain refusal owns the result.
+      }
+      const message = subscription === undefined ? t('clisetup.coding.toolchainMissing.unknown', {}, locale)
+        : subscription ? t('clisetup.coding.toolchainMissing.subscription', {}, locale)
+        : t('clisetup.coding.toolchainMissing.docker', {}, locale);
+      throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED', { locale, message });
+    }
     provider = await ask(t('clisetup.coding.ask.provider', {}, locale), providers.map(id => ({ id, label: id })));
     if (!provider) return cancelled();
   }
@@ -246,15 +258,17 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   // Off a terminal the write intent stays explicit: `--preview` or `--apply` (the flag contract AI callers already use).
   if (!person && !flags.has('--preview') && !flags.has('--apply')) throw ErrorRegistry.createError('CLI_USAGE');
   const discovery = values.get('--discovery');
-  const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}), ...(flags.has('--node-dependencies') ? { nodeDependencies: true as const } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
-  const show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale, config, cliOf(context)) });
-  if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run(flags.has('--apply'))); return; }
-  const preview = await run(false);
+  const request = { provider, kind, ...(values.has('--connection') ? { connection: values.get('--connection')! } : {}), ...(flags.has('--docker') ? { detach: true } : {}), ...(image ? { image } : {}), ...(discovery ? { discovery } : {}), ...(flags.has('--node-dependencies') ? { nodeDependencies: true as const } : {}) };
+  const run = (decision: Pick<TemplateRequest, 'apply' | 'digest'>) => template(context, root, env, config, { ...request, ...decision }, locale);
+  const show = (result: TemplateResult, guidedApply = false) => emit(output(result), { ...sinks,
+    render: value => renderTemplate(value, locale, config, cliOf(context), guidedApply) });
+  if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run({ apply: flags.has('--apply') })); return; }
+  const preview = await run({ apply: false });
   if (preview.status !== 'preview') { show(preview); return; }
   const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale, config, cliOf(context)),
     options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), role: 'no' }] }, io);
   if (answer !== 'apply') return cancelled();
-  show(await run(true));
+  show(await run({ apply: true, digest: preview.digest }), true);
 }
 /** Kinds a template can bind for `provider`: the kinds already on its admitted profiles, then the conventional new ones still free. */
 function templateKinds(config: DeckentConfig, pins: Pins, provider: string): string[] {
@@ -264,9 +278,14 @@ function templateKinds(config: DeckentConfig, pins: Pins, provider: string): str
 const imageLabel = (image: string, pins: Pins, provider: string) =>
   `${shortImage(image)} · ${pins.filter(pin => pin.provider === provider && pin.imageId === image).map(pin => pin.cliVersion).join(', ')}`;
 async function template(context: AdminCommandContext, root: string, env: NodeJS.ProcessEnv, config: DeckentConfig,
-  request: { provider: string; kind: string; image?: string; connection?: string; detach?: boolean; discovery?: string; nodeDependencies?: true; apply: boolean }, locale: Locale): Promise<TemplateResult> {
+  request: TemplateRequest, locale: Locale): Promise<TemplateResult> {
   try { return await context.configureCodingTemplate!(root, request, { env, heal: false }); }
-  catch (error) { throw unadmittedImage(error, config, request, locale) ?? error; }
+  catch (error) {
+    if (isCodedError(error, 'CONFIG_CONCURRENT_REVISION_HOLD') && error.params?.['reason'] === 'coding-template-proposal-changed') {
+      throw ErrorRegistry.createError(error.code, { cause: error, locale, suggestion: t('clisetup.coding.card.changed', {}, locale) });
+    }
+    throw unadmittedImage(error, config, request, locale) ?? error;
+  }
 }
 /** Root cause of CODING_TEMPLATE_TOOLCHAIN_REQUIRED on a working installation (review §coding open question): without `--image` the template
  * looks for an admitted CLI on `execution.docker.imageId`, but the admitted profiles run on other images. Named with those images and a command. */
@@ -296,8 +315,9 @@ function templateLines(value: ReturnType<typeof output>, locale: Locale, config:
     ...(dependencies ? [t('coding.dependencies.template', { ...NATIVE_NODE_DEPENDENCY_LAYOUT, target: config.execution?.workTargets?.targets[0]?.path ?? '.' }, locale)] : []),
     t('clisetup.coding.result.registry', { revision: value.registryRevision }, locale)];
 }
-function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf): string {
-  const head = value.status === 'preview' ? t('cli.coding.template.preview', {}, locale) : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale)
-    : t('cli.coding.template.unchanged', {}, locale);
+function renderTemplate(value: ReturnType<typeof output>, locale: Locale, config: DeckentConfig, cli: CliOf, guidedApply: boolean): string {
+  const head = value.status === 'preview' ? t('cli.coding.template.preview', {}, locale)
+    : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale)
+    : guidedApply ? t('clisetup.coding.card.unchanged', {}, locale) : t('cli.coding.template.unchanged', {}, locale);
   return [head, ...templateLines(value, locale, config, cli), ...(value.status === 'preview' ? [t('clisetup.coding.applyHint', {}, locale)] : [])].join('\n');
 }

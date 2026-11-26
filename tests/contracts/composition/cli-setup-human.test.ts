@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as installation from '#composition/core/installation/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
@@ -11,7 +12,7 @@ import { configCommand, terminalConfigWrite, type ConfigPanelOpener } from '#sur
 import { setupInitCommand } from '#surfaces/core/setup/index.js';
 import { personMarkersUnset } from '../support/person-env.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { compileNativeCodingDockerProfile } from '#adapters/index.js';
+import { compileNativeCodingDockerProfile, hasInstalledSubscriptionWorkerCli } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
 
 // C-SETUP (review §coding, §operation, §inference): bare commands read; missing choices are named; errors name the right field and exit code.
@@ -121,6 +122,77 @@ describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
       expect(result.stderr).not.toMatch(/: -\./u);
     }
     expect(template).not.toHaveBeenCalled();
+  });
+  it('explains the missing prerequisite before the first picker, using the installed worker CLI route when available', async () => {
+    const f = await project({}), before = await readFile(f.path, 'utf8');
+    const bin = join(f.projectRoot, 'bin');
+    await mkdir(bin);
+    const configureCodingTemplate = vi.fn();
+    const cliHuman = await import('#surfaces/core/cli-human/index.js');
+    const completed = hasInstalledSubscriptionWorkerCli;
+    const deadline = AbortSignal.timeout(0);
+    await delay(0);
+    expect(deadline.aborted).toBe(true);
+    const timedOut = async (env: NodeJS.ProcessEnv, signal?: AbortSignal) => {
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline);
+      try { return await completed(env, signal); } finally { timeout.mockRestore(); }
+    };
+    const rejected = async () => { throw new Error('fixture detector rejected'); };
+    const dockerStep = {
+      en: 'No coding toolchain is approved yet, so configure an approved toolchain profile for your Docker worker image.',
+      tr: 'Henüz onaylı bir kodlama araç zinciri olmadığı için Docker işçi imajınız için onaylı bir araç zinciri profili yapılandırın.',
+    };
+    const subscriptionStep = {
+      en: 'No coding toolchain is approved yet, so open /setup in the terminal and set up the subscription CLI in the worker step.',
+      tr: 'Henüz onaylı bir kodlama araç zinciri olmadığı için terminalde /setup açın ve işçi adımında abonelik CLI’sini yapılandırın.',
+    };
+    const neutralStep = {
+      en: 'No coding toolchain is approved yet. Open /setup in the terminal and review the worker setup options.',
+      tr: 'Henüz onaylı bir kodlama araç zinciri yok. Terminalde /setup açın ve işçi kurulum seçeneklerini gözden geçirin.',
+    };
+    const cancelled = AbortSignal.abort();
+    const scenarios: readonly {
+      name: string;
+      detector?: typeof completed;
+      messages: typeof neutralStep;
+      installed?: boolean;
+      docker?: boolean;
+      signal?: AbortSignal;
+    }[] = [
+      { name: 'completed empty PATH', detector: completed, messages: dockerStep },
+      { name: 'installed CLI', detector: completed, installed: true, messages: subscriptionStep },
+      { name: 'embedded host', messages: neutralStep },
+      { name: 'Docker with installed CLI', detector: completed, docker: true, messages: dockerStep },
+      { name: 'Docker with absent detector', docker: true, messages: dockerStep },
+      { name: 'Docker with timed out detector', detector: timedOut, docker: true, messages: dockerStep },
+      { name: 'Docker with rejected detector', detector: rejected, docker: true, messages: dockerStep },
+      { name: 'timed out PATH lookup', detector: timedOut, messages: neutralStep },
+      { name: 'cancelled PATH lookup', detector: completed, signal: cancelled, messages: neutralStep },
+      { name: 'rejected detector', detector: rejected, messages: neutralStep },
+    ];
+    const ask = vi.spyOn(cliHuman, 'askCliCard').mockResolvedValue(null);
+    try {
+      for (const { name, detector, messages, installed, docker: dockerFlag, signal } of scenarios) {
+        if (installed) await writeFile(join(bin, 'codex'), '', { mode: 0o700 });
+        for (const lang of ['en', 'tr'] as const) {
+          const stdout = { isTTY: true, write: vi.fn() };
+          const detect = detector && vi.fn(detector);
+          const result = await run(f, ['coding', 'template', ...(dockerFlag ? ['--docker'] : []), '--lang', lang], {
+            env: { ...f.env, PATH: bin, NO_COLOR: '1' }, configureCodingTemplate, signal,
+            ...(detect ? { hasInstalledSubscriptionWorkerCli: detect } : {}),
+            stdin: { isTTY: true, setRawMode() {} }, stdout,
+          });
+          expect.soft(result.code, `${name} (${lang}) exit`).toBe(78);
+          expect.soft(result.stderr, `${name} (${lang}) message`).toContain(messages[lang]);
+          expect.soft(result.stderr, `${name} (${lang}) code`).toContain('[CODING_TEMPLATE_TOOLCHAIN_REQUIRED]');
+          if (detect) expect.soft(detect, `${name} (${lang}) detector calls`).toHaveBeenCalledTimes(dockerFlag ? 0 : 1);
+          expect(stdout.write).not.toHaveBeenCalled();
+        }
+      }
+      expect(ask).not.toHaveBeenCalled();
+      expect(configureCodingTemplate).not.toHaveBeenCalled();
+      expect(await readFile(f.path, 'utf8')).toBe(before);
+    } finally { ask.mockRestore(); }
   });
   it('root cause: TOOLCHAIN_REQUIRED on a configured image with no admitted CLI names the admitted images and the command that works', async () => {
     const f = await project(codingConfig());

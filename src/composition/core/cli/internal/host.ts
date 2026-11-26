@@ -6,7 +6,7 @@ import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocatio
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext, configuredAttachmentStore } from '#composition/core/scoped-request/index.js';
 import { captureAttachmentLocation, inspectFilesystemIdentity } from '#adapters/index.js';
-import { nativeCliAgent } from '#adapters/index.js';
+import { hasInstalledSubscriptionWorkerCli, nativeCliAgent } from '#adapters/index.js';
 import { lstat } from 'node:fs/promises';
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
@@ -189,7 +189,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectCodingDependencies: (projectRoot, scopeId, options, runId) => typed(inspectConfiguredNativeInputs(projectRoot, scopeId, options, runId)),
     produceCodingDependencies: (projectRoot, scopeId, options, cache) => typed(produceConfiguredNativeInputs(projectRoot, scopeId, options, cache)),
     openModelInspection: openConfiguredModelInspection,
-    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, inspectWorkerReadiness: inspectConfiguredWorkerReadiness, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, inspectWorkerReadiness: inspectConfiguredWorkerReadiness, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, hasInstalledSubscriptionWorkerCli, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,
