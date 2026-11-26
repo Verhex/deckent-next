@@ -16,6 +16,7 @@ import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.
 import { configuredWorkerSetupFact } from './internal/intent-facts.js';
 import { preflightConfiguredRunIntent, transitionConfiguredRunIntent } from './internal/intents.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
+import type { RunPackageCardCheck } from '#engine/index.js';
 export { inspectConfiguredRoleModels, inspectConfiguredBrainModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
  * shows planning progress (a quota wait, owner Q-H4) passes it; without it a quota refusal is the typed refusal at once. */
@@ -24,7 +25,10 @@ export function planConfiguredRun(root: string, input: BrainPlanCommand, options
 }
 /** alpha.64 B: the runtime service's own plan (a chat turn's `propose_work`): the same application, its Brain call on the service's model host. */
 export const planServiceRun = (root: string, input: BrainPlanCommand, options: ConfigLoadOptions, invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>,
-  signal?: AbortSignal, observe?: BrainPlanObserver) => plan(root, input, options, invoke, signal, undefined, observe);
+  signal?: AbortSignal, observe?: BrainPlanObserver, checkPackageCard?: RunPackageCardCheck) =>
+  plan(root, input, options, invoke, signal, (proposal, belowRecommended) => proposeConfiguredRun(root, proposal, options, withBrainNotice(checkPackageCard, belowRecommended)), observe);
+const withBrainNotice = (check: RunPackageCardCheck | undefined, belowRecommended: boolean | undefined): RunPackageCardCheck | undefined =>
+  check && belowRecommended ? (result, card) => check({ ...result, brainBelowRecommended: true }, card) : check;
 /** R9b (owner D3: command model, Brain model, chat model): a surface's `chatModel` enters the command only without a Brain model, before the intent is recorded. */
 export async function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver, chatModel?: BrainPlanCommand['reference']) {
   if (chatModel && !input.reference && !configuredBrainModel((await loadComposedConfig(root, options))['brain_planner'])) input = { ...input, reference: chatModel };
@@ -45,7 +49,7 @@ export async function planRuntimeRun(root: string, input: BrainPlanCommand, opti
 }
 async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOptions,
   invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>, signal?: AbortSignal,
-  propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver, starting = false) {
+  propose?: (proposal: RunProposal, brainBelowRecommended?: boolean) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver, starting = false) {
   let scoped: Awaited<ReturnType<typeof loadConfiguredScopeContext>> | undefined;
   try {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
@@ -80,7 +84,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
   } catch (error) {
     // BeUser D-08: a refused request (not a cancel) leaves a sealed, redacted audit record a person can find later; recording never masks the refusal.
     const failure = queryFailure(error), c = scoped;
-    if (c && failure.code !== 'BRAIN_CANCELLED') await withScopeAudit(c, audit => audit.record(runRequestRefusedEvent({ scopeId: input.scopeId, principal: c.principal,
+    if (c && failure.code !== 'BRAIN_CANCELLED' && failure.code !== 'CHAT_PACKAGE_APPROVAL_CARD_TOO_LARGE') await withScopeAudit(c, audit => audit.record(runRequestRefusedEvent({ scopeId: input.scopeId, principal: c.principal,
       policyRevision: c.document.revision, commandId: input.commandId, request: input.intent, code: failure.code, atMs: Date.now(), known: getConfigKnownSecrets(c.config) }))).catch(() => undefined);
     throw failure;
   }
@@ -163,6 +167,7 @@ export function createServiceSameTurnPlanning(ports: TurnPlanPorts) {
   const unavailable = async (): Promise<never> => { throw refuse(); };
   const readBudget = configuredBrainBudget(root, options);
   let admission: (() => ReturnType<typeof proposeConfiguredRun>) | undefined;
+  let checkPackageCard: RunPackageCardCheck | undefined;
   let known = getConfigKnownSecrets(ports.config);
   let claimed: { invocation: ModelInvocationCommand; receipt: ModelInvocationReceipt } | undefined;
   const settingsFor = async (context: ScopeContext) => {
@@ -187,9 +192,9 @@ export function createServiceSameTurnPlanning(ports: TurnPlanPorts) {
         || !isDeepStrictEqual(auth, receipt.authorization) || gate.belowRecommended !== input.prepared.brainBelowRecommended) return unavailable();
       return { ...input, ...await settingsFor(context) };
     },
-    propose(proposal, receipt, assertSource) {
+    propose(proposal, receipt, assertSource, belowRecommended) {
       signal.throwIfAborted();
-      admission = bindConfiguredTurnProposal(root, proposal, options, () => ports.inspect(receipt), assertSource);
+      admission = bindConfiguredTurnProposal(root, proposal, options, () => ports.inspect(receipt), assertSource, withBrainNotice(checkPackageCard, belowRecommended));
       return admission();
     },
   });
@@ -212,8 +217,9 @@ export function createServiceSameTurnPlanning(ports: TurnPlanPorts) {
         throw error;
       }
     },
-    finalize(result: ModelInvocationResult, parentSignal: AbortSignal) {
+    finalize(result: ModelInvocationResult, parentSignal: AbortSignal, check?: RunPackageCardCheck) {
       if (!planning.pin) throw refuse();
+      checkPackageCard ??= check;
       return planning.finalize(planning.pin, result, parentSignal);
     },
     admit() { signal.throwIfAborted(); return admission ? admission() : unavailable(); },

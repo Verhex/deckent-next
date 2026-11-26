@@ -1,15 +1,17 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { ToolErrorClass } from '#capabilities/index.js';
-import { AI_PROPOSAL_REGISTRY, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand, type BrainPlanObserver, type BrainPlanProgress } from '#domain/index.js';
-import { AI_PROPOSAL_TOOL_SPECS, agentToolResult, aiProposalToolDecision, awaitAgentToolApproval, isRunIntentResult, planAiProposal, verifyApproval, type RunPlanningResult } from '#engine/index.js';
+import { AI_PROPOSAL_REGISTRY, agentTurnStreamEventSchema, type AgentToolOutcome, type AgentToolSpec, type AgentTurnStreamEvent, type BrainPlanCommand, type BrainPlanObserver, type BrainPlanProgress } from '#domain/index.js';
+import { AI_PROPOSAL_TOOL_SPECS, agentToolResult, aiProposalToolDecision, awaitAgentToolApproval, isRunIntentResult, planAiProposal, verifyApproval, type RunPackageCardCheck, type RunPlanningResult } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, withMcpPrincipal, type LocalPeerIdentity } from '#adapters/index.js';
-import { CodedError, sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { CodedError, ErrorRegistry, sha256, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createChatSameTurnPlanning } from './same-turn.js';
 
-type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' | 'work' }>) => void;
-type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver) => Promise<RunPlanningResult>;
+type ApprovalCard = Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
+type Emit = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' | 'work' | 'text' }>) => void;
+type Plan = (command: BrainPlanCommand, signal: AbortSignal, observe: BrainPlanObserver, checkPackageCard: RunPackageCardCheck) => Promise<RunPlanningResult>;
+type SameTurnProposal = Pick<NonNullable<ReturnType<typeof createChatSameTurnPlanning>>, 'prepare' | 'finalize' | 'admit' | 'callId' | 'invocationId' | 'chosenBrain'>;
 /** The card and choice presentation the CLI host lends the service (composition never imports surfaces; the SDK entry stays surface-free). */
 export interface AgentProposalViews {
   readonly cardLines: (result: RunPlanningResult, locale: Locale, pool?: undefined,
@@ -18,6 +20,7 @@ export interface AgentProposalViews {
 }
 const said = { deny: 'the person declined; nothing was changed', expired: 'the card expired unanswered; nothing was changed', cancelled: 'the turn ended before the person answered; nothing was changed' } as const;
 const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? 'failed');
+const packageChatRefusal = (code: string) => code === 'CHAT_PACKAGE_APPROVAL_CARD_TOO_LARGE' || code === 'NATIVE_WORKER_PACKAGE_REVIEW_OVER_LIMIT';
 
 /**
  * alpha.64 B + C (owner S4/S5/S6 2026-11-09): the chat turn's `propose_work`, `propose_setting` and `list_setting_choices`. Every decision and
@@ -28,11 +31,39 @@ const codeOf = (error: unknown) => String((error as { code?: unknown } | null)?.
  */
 export function createAgentProposals(input: { readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly peer: LocalPeerIdentity; readonly scopeId: string;
   readonly turnId: string; readonly signal: AbortSignal; readonly emit: Emit; readonly locale: Locale; /** Absent (no service plan port): `propose_work` is not offered. */ readonly plan?: Plan;
-  readonly sameTurn?: ReturnType<typeof createChatSameTurnPlanning>; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
+  readonly sameTurn?: SameTurnProposal | null; /** Absent: the proposal tools answer unavailable. */ readonly views?: () => Promise<AgentProposalViews> }) {
   const { projectRoot, options, peer, scopeId, signal } = input;
   const ai = () => withMcpPrincipal(() => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'));
   const tag = (tool: string, text: string, kind: ToolErrorClass = 'ordinary'): AgentToolOutcome => agentToolResult({ status: 'error' as const, text: `[deckent] ${tool}: ${text}` }, kind);
   const origin = t('agent.proposal.origin', {}, input.locale);
+  const refusal = (code: string) => ErrorRegistry.createError(code, { locale: input.locale });
+  const showRefusal = (name: string, code: string) => {
+    const { message } = refusal(code);
+    input.emit({ kind: 'text', text: message });
+    return tag(name, message);
+  };
+  function assertPackageCard(event: ApprovalCard) {
+    const parsed = agentTurnStreamEventSchema.safeParse(event);
+    if (parsed.success) return;
+    if (parsed.error.issues.some(issue => issue.code === 'too_big' && issue.path[0] === 'preview'))
+      throw refusal('CHAT_PACKAGE_APPROVAL_CARD_TOO_LARGE');
+    throw refusal('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+  }
+  function planCard(callId: string, views: AgentProposalViews, sameTurn?: Readonly<{ invocationId: string; chosenBrain: string | null }>) {
+    const render = (result: RunPlanningResult) => [origin, ...views.cardLines(result, input.locale, undefined, sameTurn)].join('\n');
+    let checked: string | undefined;
+    return {
+      check(result: RunPlanningResult, { summary, review }: Parameters<RunPackageCardCheck>[1]) {
+        signal.throwIfAborted();
+        const preview = checked ?? render(result);
+        // The broker supplies a UUID, non-negative revision and expiry. Check the actual call id and text now.
+        assertPackageCard({ kind: 'approval.requested', callId, approvalId: 'pending', revision: 0, expiresAt: 0,
+          summary, preview: `${preview}\n${review}` });
+        checked = preview;
+      },
+      preview(result: RunPlanningResult) { return checked ?? render(result); },
+    };
+  }
   /** One pending approval the AI's request opened: on this turn's stream, awaited, always settled once requested. */
   async function card(callId: string, approvalId: string, preview: string) {
     const context = await ai(), integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
@@ -42,7 +73,14 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       const loaded = journal.store.load(scopeId, approvalId);
       if (!loaded) return { answer: 'expired' as const, kind: 'uncertain' as const };
       const record = verifyApproval(loaded, integrity);
-      input.emit({ kind: 'approval.requested', callId, approvalId, revision: record.revision, summary: record.request.summary, preview, expiresAt: record.request.expiresAt });
+      const { request } = record;
+      const packages = request.schemaVersion === 3 && request.subject.kind === 'run-create' ? request.preview : undefined;
+      const event = { kind: 'approval.requested' as const, callId, approvalId, revision: record.revision, summary: request.summary,
+        preview: packages ? `${preview}\n${packages.text}` : preview, expiresAt: request.expiresAt };
+      // A previously stored record still needs verification before the person's decision capability is minted.
+      if (packages?.cut) throw refusal('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+      if (packages) assertPackageCard(event);
+      input.emit(event);
       requested = true;
       let kind: ToolErrorClass = 'uncertain';
       outcome = await awaitAgentToolApproval(journal.store, integrity, record, new SystemTrustedClock(), signal, 250, undefined, terminal => {
@@ -68,11 +106,12 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       progress({ kind: 'planning', attempt: 1 });
       return input.sameTurn.prepare(command, args, callId, name);
     }
-    const plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress));
+    const presentation = planCard(callId, views);
+    const plan = () => withMcpPrincipal(() => input.plan!(command, signal, progress, presentation.check));
     progress({ kind: 'planning', attempt: 1 });
     let result = await plan();
     for (let round = 0; round < AI_PROPOSAL_REGISTRY.maxCardRounds && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; round++) {
-      const settled = await card(callId, result.proposal.approval.approvalId, [origin, ...views.cardLines(result, input.locale)].join('\n'));
+      const settled = await card(callId, result.proposal.approval.approvalId, presentation.preview(result));
       if (settled.answer !== 'allow') return tag(name, said[settled.answer], settled.kind);
       result = await plan();
     }
@@ -82,6 +121,7 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
     }
     // The durable proposal can contain any registered failure. Only known business refusal codes are ordinary.
     const reason = isRunIntentResult(result) ? 'work-parked' : result.proposal.reason ?? result.proposal.status;
+    if (packageChatRefusal(reason)) return showRefusal(name, reason);
     let kind: ToolErrorClass = 'uncertain';
     switch (reason) {
       case 'RUN_PROPOSAL_BUDGET_EXCEEDED': kind = 'limit'; break;
@@ -95,15 +135,16 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
   }
   async function completeSameTurn(parentSignal: AbortSignal) {
     const turn = input.sameTurn!;
-    let result = await turn.finalize(parentSignal);
     const { callId, invocationId, chosenBrain } = turn;
     if (!callId || !invocationId) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+    const views = await input.views?.();
+    const presentation = views && planCard(callId, views, { invocationId, chosenBrain });
+    let result = await turn.finalize(parentSignal, presentation?.check);
     if (!result.run) {
-      const views = await input.views?.();
       parentSignal.throwIfAborted();
-      if (!views || result.proposal.status !== 'pending' || !result.proposal.approval) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
-      const preview = [origin, ...views.cardLines(result, input.locale, undefined, { invocationId, chosenBrain })].join('\n');
-      const { answer: decision } = await card(callId, result.proposal.approval.approvalId, preview);
+      if (result.proposal.reason && packageChatRefusal(result.proposal.reason)) throw refusal(result.proposal.reason);
+      if (!presentation || result.proposal.status !== 'pending' || !result.proposal.approval) throw new CodedError('BRAIN_SAME_TURN_REFUSED');
+      const { answer: decision } = await card(callId, result.proposal.approval.approvalId, presentation.preview(result));
       if (decision === 'deny') return t('brain.sameTurn.declined', {}, input.locale);
       if (decision !== 'allow') throw new CodedError('BRAIN_SAME_TURN_REFUSED');
       parentSignal.throwIfAborted();
@@ -159,6 +200,7 @@ export function createAgentProposals(input: { readonly projectRoot: string; read
       } catch (error) {
         const code = codeOf(error);
         if (planned.tool === 'work') {
+          if (packageChatRefusal(code)) return showRefusal(name, code);
           const detail = code === 'RUN_PROPOSAL_OUTCOME_UNKNOWN' ? t('error.RUN_PROPOSAL_OUTCOME_UNKNOWN', {}, input.locale) : '';
           return tag(name, [`error=${code}`, detail, t('cli.do.command', { command: workCommandId(callId) }, input.locale)].filter(Boolean).join(' '), 'uncertain');
         }

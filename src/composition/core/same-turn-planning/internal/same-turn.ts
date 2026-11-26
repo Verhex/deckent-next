@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { type BrainPlanCommand, type ModelInvocationCommand, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/index.js';
 import { headlessCapacityBinding, nativeCliAgent, type LocalPeerIdentity } from '#adapters/index.js';
-import { agentToolArgumentsDigest, agentTurnResultDigest, type ModelInvocationResult, type RunProposalResult } from '#engine/index.js';
+import { agentToolArgumentsDigest, agentTurnResultDigest, type ModelInvocationResult, type RunPackageCardCheck, type RunProposalResult } from '#engine/index.js';
 import type { NativeAgentToolResult, SameTurnPlanningCall, SameTurnPlanningPort } from '#capabilities/index.js';
 import { ErrorRegistry, t, type ConfigLoadOptions, type Locale, type ResolvedConfig } from '#platform/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -28,7 +28,7 @@ export type CreateServiceSameTurnPlanning = (input: {
   claim(invocation: ModelInvocationCommand, receipt: ModelInvocationReceipt): void;
   prepare(command: BrainPlanCommand, call: SameTurnPlanningCall,
     bounds: { preparationMaxBytes: number; draftMaxBytes: number }): Promise<NativeAgentToolResult>;
-  finalize(result: ModelInvocationResult, signal: AbortSignal): Promise<RunProposalResult>;
+  finalize(result: ModelInvocationResult, signal: AbortSignal, checkPackageCard?: RunPackageCardCheck): Promise<RunProposalResult>;
   admit(): Promise<RunProposalResult>;
 } | null;
 
@@ -83,9 +83,9 @@ export function createChatSameTurnPlanning(input: {
       preparationCallId = callId;
       return result.outcome;
     },
-    finalize(parentSignal: AbortSignal) {
+    finalize(parentSignal: AbortSignal, checkPackageCard?: RunPackageCardCheck) {
       if (!retained) throw refuse();
-      return service.finalize(retained, parentSignal);
+      return service.finalize(retained, parentSignal, checkPackageCard);
     },
     admit: service.admit,
     get callId() { return preparationCallId; },

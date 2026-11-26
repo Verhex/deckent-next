@@ -1,16 +1,19 @@
+import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable, Writable } from 'node:stream';
+import { setImmediate as yieldToInput } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
 import { getDecisionSteps, type DecisionDelegationView, type ApprovalRecord } from '#domain/index.js';
 import { mcpCapabilityRegistry } from '#engine/index.js';
 import { answerOnCard, approvalPickLabel, cardIo, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
+import { until } from '../support/workline-harness.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
 /**
@@ -115,7 +118,7 @@ it('decide without --input: off a terminal (pipe, AI agent) nothing is asked or 
   expect(seen).toEqual([]);
 });
 
-it('the approval card: once / no only (a hard floor never "always"), system ids, default or own reason; cancel decides nothing', async () => {
+it('the approval card: once / no only (a hard floor never "always"), system ids, default or own reason; cancel decides nothing; stored reviews govern whether Yes is available', async () => {
   const sent: Record<string, unknown>[] = [], requests: CliCardRequest[] = [];
   const context = { decideApproval: async (input: Record<string, unknown>) => { sent.push(input); return { ...approval('wait-4', { status: 'decided' }) }; } };
   const ask = (answer: string | null): CardAsk => async request => { requests.push(request); return answer; };
@@ -138,6 +141,85 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
   const label = approvalPickLabel(approval('secret-1', { summary: `curl -H "x-api-key: ${token}" https://api.example` }), 'en');
   expect(label).not.toContain('sk-ant-api03-AAAA'); expect(label).toContain('curl');
   expect(requests[0]!.body!.join('\n')).not.toContain('sk-ant');
+
+  const pending = approval('packages'), heading = 'Review worker inputs';
+  const firstRow = `pkg/first.js · pattern:url-userinfo · SHA-256 ${digest}`;
+  const text = `${heading}\r${firstRow}\r\npkg/last\uFE0F.js\npkg/${token}.js`;
+  if (pending.request.schemaVersion !== 3) throw new Error('Expected a v3 approval');
+  const subject = { kind: 'run-create', runId: 'run-1', commandId: 'create', inputDigest: digest, admissionDigest: digest, decisionRecordId: 'd' } as const;
+  const cut = { shown: 1, total: 4, bytes: Buffer.byteLength(heading), totalBytes: Buffer.byteLength(text), digest, kept: '/fixture/package-review.txt' };
+  const truncated = { ...pending, request: { ...pending.request, subject,
+    preview: { schemaVersion: 1 as const, argsDigest: digest, text: heading, cut } } };
+  const complete = { ...truncated, request: { ...truncated.request, preview: { ...truncated.request.preview, text, cut: null } } };
+
+  // The application also refuses a Yes supplied by the prompt adapter itself.
+  await answerOnCard(truncated, undefined, 'live', context as never, ask('once'), 'tr');
+  const card = requests.at(-1)!;
+  expect(card.options.map(option => option.id)).toEqual(['once', 'no']);
+  expect(card.options[0]).toMatchObject({ disabled: true });
+  expect(card.body).toContain('Tam metin: /fixture/package-review.txt');
+  expect(sent).toHaveLength(3);
+
+  // Exercise the numbered and lettered options with a fresh TTY for each stored review.
+  {
+    const reasons = {
+      en: 'This approval cannot be granted because its stored package review is incomplete. If the package is too large, you can use deckent coding template --allow-dependencies --kind <kind> --scope <id> to approve reuse before requesting the work again.',
+      tr: 'Saklanan paket incelemesi eksik olduğu için bu kayıt onaylanamaz. Paket çok büyükse işi yeniden istemeden önce deckent coding template --allow-dependencies --kind <kind> --scope <id> ile yeniden kullanıma izin verebilirsiniz.',
+    };
+    for (const locale of ['en', 'tr'] as const) {
+      expect(t('terminal.approval.window.reviewIncomplete', {}, locale)).toBe(reasons[locale]);
+      expect(t('terminal.approval.window.choice.unavailable', {}, locale)).toBe(locale === 'en' ? 'Yes unavailable' : 'Evet kullanılamıyor');
+    }
+    for (const [kind, locale, record] of [['complete', 'tr', complete], ['cut', 'en', truncated]] as const) {
+      const decisions: unknown[] = [], controller = new AbortController();
+      let rendered = '';
+      const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => stdin, ref: () => stdin, unref: () => stdin });
+      const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { rendered += String(chunk); done(); } }), { isTTY: true, columns: 280, rows: 40 });
+      const context = { stdin, stdout, env: { TERM: 'xterm-256color', NO_COLOR: '1' }, signal: controller.signal,
+        decideApproval: async (input: unknown) => { decisions.push(input); return null; } };
+      const { ask } = cardIo(context, locale, 10_000);
+      const answer = answerOnCard(record, undefined, 'live', context as never, (request, expiresAt) => {
+        expect.soft(request.options.map(option => option.id)).toEqual(['once', 'no']);
+        return ask(request, expiresAt);
+      }, locale);
+      try {
+        const ready = locale === 'en' ? 'Enter confirm' : 'Enter onayla';
+        await until(() => rendered.includes(ready), 'armed CLI approval', 120);
+        if (process.env.DECKENT_L1_FRAME_PROOF) await writeFile(`${process.env.DECKENT_L1_FRAME_PROOF}-cli-${locale}-${kind}.txt`, rendered);
+        if (kind === 'cut') {
+          expect.soft(rendered).not.toContain(locale === 'en' ? 'Yes, once' : 'Evet, bu sefer');
+          expect.soft(rendered).toContain(locale === 'en' ? '1. Yes unavailable (y)' : '1. Evet kullanılamıyor (y)');
+          expect.soft(rendered).toContain(locale === 'en' ? '2. No (n)' : '2. Hayır (n)');
+          expect.soft(rendered).toContain(reasons[locale]);
+          for (const [key, move, selected] of [['1', '\u001b[A', '› 1.'], ['y', '\u001b[B', '› 2.']] as const) {
+            const start = rendered.length;
+            // Keep the shortcut and the navigation in separate reads so Ink cannot discard them as a burst.
+            const read = once(stdin, 'readable');
+            stdin.write(key);
+            await read;
+            await yieldToInput();
+            stdin.write(move);
+            await until(() => rendered.includes(selected, start), 'cut CLI approval highlight');
+            expect.soft(decisions).toEqual([]);
+            expect.soft(rendered.slice(start)).toContain(reasons[locale]);
+          }
+          stdin.write('2'); await answer;
+          expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'deny' })]);
+        } else {
+          expect(rendered).toContain('1. Evet, bu sefer (y)');
+          expect.soft(rendered).not.toContain(reasons[locale]);
+          expect.soft(rendered).toContain('pkg/last<U+FE0F>.js');
+          expect.soft(rendered).toContain('1 gizli karakter');
+          expect.soft(rendered).toContain(firstRow);
+          expect.soft(rendered.split('\n').find(line => line.includes(firstRow)) ?? '').not.toContain('pkg/last<U+FE0F>.js');
+          expect.soft(rendered).not.toContain(token);
+          expect.soft(rendered).toContain('[REDACTED]');
+          stdin.write('1'); await answer;
+          expect.soft(decisions).toEqual([expect.objectContaining({ decision: 'allow' })]);
+        }
+      } finally { controller.abort(); await answer; }
+    }
+  }
 });
 
 it('an approval card closes at the earlier deadline and sends nothing for an answer at expiry', async () => {

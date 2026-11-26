@@ -69,6 +69,7 @@ type ApprovalWindowInput = Readonly<{
   project?: string | undefined; home?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
   /** v21 (Astra 2431): the card's fields as producer data and the preview cut's facts; absent (an older service): the preview is shown whole. */
   call?: AgentToolCardCall | undefined; previewCut?: ApprovalPreviewCutFacts | undefined;
+  packagePreview?: ApprovalDecisionProjection | null; previewNotice?: string;
   /** T3 L4: a config-change approval's facts; its window speaks of the setting (scope, rule, undo) instead of a tool call. */
   config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }> | undefined;
 }>;
@@ -243,14 +244,20 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   // A long command is never cut: its whole text, character for character, under its own heading (the preview text itself may be cut).
   if (valueRows.length > VALUE_FIELD_ROWS) rows.push(blank, lineOf([span(fillTemplate(labels.fullCommand, { count: valueRows.length }), { bold: true })]), ...valueRows);
   // The producer's preview, whole: no line is taken for metadata and dropped (in doubt, show). A diff keeps its +/- colour roles.
-  if (preview || cut) {
+  if (preview || cut || input.packagePreview) {
     rows.push(blank, lineOf([span(f.preview, { bold: true })]));
     if (cut) rows.push(lineOf([span(fillTemplate(labels.previewCut, { shown: cut.shown, total: cut.total, bytes: cut.bytes, totalBytes: cut.totalBytes }), { role: 'warning' })]));
-    if (preview) { const shown = projectedRows(p(preview)).map(row => ({ ...row, exact: false })); rows.push(...(kind === 'edit' || kind === 'write' ? diffRows(shown) : shown)); }
+    if (preview) {
+      // A chat proposal can carry a combined plan and package review as one preview.
+      const shown = projectedRows(p(preview)).map(row => ({ ...row, exact: !call && input.runId === '-' }));
+      rows.push(...(kind === 'edit' || kind === 'write' ? diffRows(shown) : shown));
+    }
+    if (input.packagePreview) rows.push(...projectedRows(input.packagePreview));
   }
   rows.push(blank, lineOf([span(f.detail, { bold: true })]));
   const detail = (template: string, values: Parameters<typeof approvalTemplateLine>[1]) => { const line = approvalTemplateLine(template, values); rows.push({ ...line, spans: withRole(line.spans, 'muted') }); };
   detail(labels.detail.id, { id: p(input.approvalId) });
+  if (input.previewNotice) rows.push(lineOf([span(input.previewNotice, { role: 'warning' })]));
   if (call) detail(labels.detail.binding, { summary: p(input.summary) });
   if (input.runId !== '-') detail(labels.detail.run, { run: p(shortId(input.runId)), task: p(input.taskId) });
   if (cell) detail(labels.detail.cell, { risk: p(riskText(cell, labels)), cell: p(cell) }); // F2-10: the rule in words, its id beside it

@@ -1,5 +1,5 @@
 import { directoryPermissionCard } from '#surfaces/index.js';
-import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
+import { changeConfiguredPackageAllowance, configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
 import { openConfiguredModelInspection } from './model-inspection.js';
 import { openSqliteModelInvocationReader } from '#adapters/index.js';
 import { verifiedPrincipal, ModelInvocationInspectionApplication, ModelInvocationPolicyAuthorization } from '#engine/index.js';
@@ -41,7 +41,7 @@ import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvide
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
-  changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
+  changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer, inspectConfiguredNativeInputs, produceConfiguredNativeInputs } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askCliCard, cliMode, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, verifiedFirstPublicationPolicy, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
@@ -185,6 +185,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
     inspectWorkerInstructions: (projectRoot, options) => typed(inspectConfiguredWorkerInstructions(projectRoot, options)),
     changeWorkerInstructionTrust: (projectRoot, input, options) => typed(changeConfiguredWorkerInstructionTrust(projectRoot, input, options)),
+    changeCodingAllowance: (root, request, options, confirm) => typed(changeConfiguredPackageAllowance(root, request, options, confirm)),
+    inspectCodingDependencies: (projectRoot, scopeId, options, runId) => typed(inspectConfiguredNativeInputs(projectRoot, scopeId, options, runId)),
+    produceCodingDependencies: (projectRoot, scopeId, options, cache) => typed(produceConfiguredNativeInputs(projectRoot, scopeId, options, cache)),
     openModelInspection: openConfiguredModelInspection,
     inspectDeclaredModels, inspectModelBinding, inspectWorkerKinds: inspectConfiguredWorkerKinds, inspectWorkerReadiness: inspectConfiguredWorkerReadiness, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, workerCliOf: family => nativeCliAgent(family)?.id ?? null, initializeNativeCodingRegistry: (root, input, options) => typed(initializeNativeCodingRegistry(root, input, options)), addCodingProfile: addNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),

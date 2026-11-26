@@ -117,6 +117,8 @@ interface WindowProps {
   /** Visible labels of a custom option footer; entries must never be included. Shared pickers register their own labels. */
   readonly copyOptions?: readonly string[];
   readonly hints: string;
+  /** A short decision explanation kept in view as the body scrolls. */
+  readonly notice?: string | undefined;
   readonly scrollHint?: string | undefined;
   /** `{from}`, `{to}`, `{total}`: shown when the body does not fit. */
   readonly position: string;
@@ -147,7 +149,7 @@ interface WindowProps {
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, scrollHint, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, notice, scrollHint, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
   onFocusChange, onPaste, inputRevision, burstText = false, copyOptions = [] }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
@@ -196,11 +198,12 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const armedHints = burstText || typing.hint === null ? keyHints : typing.hint === 'early' ? armLabels.ignored : typing.hint === 'text' ? armLabels.typedText : `${armLabels.unchosen} ${keyHints}`;
   const hintText = queuedList && interactive && !arming.shown ? armLabels.arming : !guarded || !interactive ? keyHints : behind ? '' : arming.shown ? armedHints : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
-  const baseHints = wrapCells(hintText, width);
+  const noticeRows = notice ? wrapCells(notice, width) : [];
+  const baseHints = [...noticeRows, ...wrapCells(hintText, width)];
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
   const bodyRoom = terminalRows - reserved - FRAME_ROWS - footerRows - (noteText === null ? 0 : 1) - (waitingText === null ? 0 : 1);
   const hintRows = scrollHint && hintText === keyHints && rows.length > Math.max(minimum, bodyRoom - baseHints.length + 1)
-    ? wrapCells(`${scrollHint} · ${hintText}`, width) : baseHints;
+    ? [...noticeRows, ...wrapCells(`${scrollHint} · ${hintText}`, width)] : baseHints;
   const room = Math.max(minimum, bodyRoom - hintRows.length + 1);
   const overflow = rows.length > room, visible = overflow ? Math.max(1, room - 1) : rows.length;
   const [offset, setOffset] = useState(0);

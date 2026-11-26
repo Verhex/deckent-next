@@ -59,7 +59,7 @@ export function prepareMemoryContext(context: ScopeContext, sealing: { readonly 
     }
   };
   return Object.freeze({
-    wrap: (inner: RunAdmissionContext): RunAdmissionContext => ({ async resolve(admitted, principal) {
+    wrap: (inner: RunAdmissionContext): RunAdmissionContext => ({ async resolve(admitted, principal, deferRecording) {
       parts = new Map(); fits = new Map(); notes = [];
       let selection;
       try { selection = await select(admitted, principal); } catch (error) { throw hold('unavailable', error); }
@@ -71,7 +71,11 @@ export function prepareMemoryContext(context: ScopeContext, sealing: { readonly 
         if (task.withheld) notes.push({ code: 'MEMORY_CONTEXT_WITHHELD', taskId: task.taskId, reason: 'sources', count: task.withheld });
       }
       const resolved = await inner.resolve(admitted, principal);
-      if (selection.status === 'ok') seal(admitted, principal, selection.policyRevision);
+      if (selection.status === 'ok') {
+        const revision = selection.policyRevision;
+        if (deferRecording) return { ...resolved, recordPreparation: () => seal(admitted, principal, revision) };
+        seal(admitted, principal, revision);
+      }
       return resolved;
     } }),
     compile(taskId: string | undefined, build: (extra: readonly Part[]) => ExecutionProfileDefinition) {

@@ -47,6 +47,13 @@ describe('one deny list and one pattern table', () => {
 });
 
 describe('scanWorkerTree', () => {
+  it('requires a sealed input to scan listed entries, including Git-named entries, without path exceptions', async () => {
+    const root = await tree({ '.git/index': PROVIDER_TOKEN, 'lib/copy.txt': 'installed bytes' });
+    const view = { source: root, label: 'node_modules', sealedPaths: ['.git', '.git/index', 'lib', 'lib/copy.txt'] };
+    const scan = await scanWorkerTree([view], { ...options, allowPatternPaths: ['**'] });
+    expect(scan).toEqual({ status: 'refused', count: 1, findings: [{ path: 'node_modules/.git/index', rule: 'pattern:provider-token' }] });
+  });
+
   it('passes a clean tree unchanged; the clone metadata is scanned, only its object store (history, owner-deferred) and index are not read', async () => {
     const root = await tree({ 'src/index.ts': 'export const answer = 42;\n', 'README.md': '# project\n', '.git/HEAD': 'ref: refs/heads/main\n',
       '.git/objects/ab/cdef': `${PROVIDER_TOKEN}`, '.git/index': `${PROVIDER_TOKEN}` });

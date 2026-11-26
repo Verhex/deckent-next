@@ -12,6 +12,9 @@ export interface BubblewrapView {
   readonly projectRoot: string;
   /** Astra 2170 R1: the project bound read-only (an unbounded call the owner did not approve); absent = read-write. */
   readonly projectReadOnly?: boolean;
+  /** Deckent's verified native-only package tree. The destination is always the checkout's node_modules. */
+  readonly sealedNodeModules?: string;
+  readonly sealedLockfile?: string;
   /** SHELL-OVERLAY: the project mounted as an overlay (the real project the only lower layer) whose writes land in `upper` (bubblewrap
    * ≥ 0.11); both directories are Deckent's own, outside the project and outside this view. Replaces the project bind. */
   readonly overlay?: { readonly upper: string; readonly work: string };
@@ -102,6 +105,17 @@ function viewMounts(view: BubblewrapView): ViewMount[] {
   for (const path of view.maskedFiles) add(path, ['--ro-bind', '/dev/null', path], false, true);
   for (const path of view.hiddenPaths ?? view.open?.hidden ?? []) add(path, ['--perms', '0700', '--tmpfs', path], false, true);
   if (view.scratchDir) add(view.scratchDir, ['--bind', view.scratchDir, view.scratchDir], true, true);
+  if (view.sealedNodeModules) {
+    const source = view.sealedNodeModules, target = `${view.projectRoot}/node_modules`;
+    const overlaps = (a: string, b: string) => within(a, b) || within(b, a);
+    const lockfile = view.sealedLockfile;
+    if (view.open || view.network || view.homeBind || (lockfile && dirname(lockfile) !== view.projectRoot) || overlaps(source, view.projectRoot) || mounts.some(mount =>
+      (mount.hostWritable && overlaps(source, mount.target)) ||
+      (mount.target !== view.projectRoot && mount.target !== view.containedWorkspaceRoot && (overlaps(target, mount.target) || lockfile && overlaps(lockfile, mount.target)))))
+      throw new Error('NATIVE_WORKER_DEPENDENCIES_REFUSED');
+    add(target, ['--ro-bind', source, target], false, true);
+    if (lockfile) add(lockfile, ['--ro-bind', lockfile, lockfile], false, true);
+  }
   return mounts;
 }
 

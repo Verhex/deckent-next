@@ -1,6 +1,6 @@
 import { freezeConfigDefault } from '#platform/core/config-fields/index.js';
 import { CORE_SCHEMA, configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
-import { deepMerge, type JsonRecord } from '#platform/core/utils/index.js';
+import { deepMerge, isRecord, type JsonRecord } from '#platform/core/utils/index.js';
 import { validateStandardSchemaSync } from '#platform/core/validate/index.js';
 
 let generation = -1, memo: DeckentConfig;
@@ -21,5 +21,12 @@ export function createDefaultConfig(): DeckentConfig {
 export function mergeConfigLayers(global: JsonRecord, project: JsonRecord): DeckentConfig {
   const defaults = createDefaultConfig();
   delete (defaults.runRuntime as Partial<DeckentConfig['runRuntime']>).maxConcurrentRuns;
-  return deepMerge(deepMerge(defaults, global), project);
+  // One setting controls every writer of an installation's shared package store.
+  const installation = project['installation'];
+  const overlay = isRecord(installation) ? { ...project, installation: { ...installation } } : project;
+  if (overlay !== project) delete (overlay['installation'] as JsonRecord)['sealedPackageStoreMaxBytes'];
+  const tools = global['toolchains'];
+  const base = isRecord(tools) ? { ...global, toolchains: { ...tools } } : global;
+  if (base !== global) delete (base['toolchains'] as JsonRecord)['packageAllowances'];
+  return deepMerge(deepMerge(defaults, base), overlay);
 }

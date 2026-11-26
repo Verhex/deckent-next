@@ -317,6 +317,63 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   the witness alone. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
   the grant.
 
+- **Native Node dependency inputs.** Install the npm v3 packages at the selected Git work target and commit
+  `package-lock.json`. Run `deckent coding template --produce-dependencies` to write `deckent-package-files.json`.
+  Deckent works offline. It matches npm archive bytes to the committed lockfile and checks installed files against
+  each archive's inventory. It uses `~/.npm/_cacache` by default. Use `--npm-cache <directory>` to supply another
+  `_cacache` directory. To use that directory for later inspection and admission, an authorised operator sets
+  `installation.npmPackageCache` to its absolute path. If an archive is missing or mismatched, run your package
+  installation again and retry. The list excludes npm bookkeeping and test caches. It includes proved executable
+  links and copies each proved hard name independently when sealing. Review the full list and every match row in
+  the command output, then commit the generated list. The same Deckent verifier checks production and admission,
+  so a shared implementation error can pass both checks. The person's approval records the reviewed choice.
+
+  Declare the layout with `deckent coding template --connection <profile-id> --kind <kind> --node-dependencies`.
+  Run `deckent coding template --inspect-dependencies` to review the exact list and both SHA-256 digests. The Run card
+  shows every pattern match as a path, rule and content digest. A path and rule name do not show whether the content
+  is safe. If you approve a real secret that Deckent does not know, the worker can read it and send it to the model
+  provider. You may decline. A registered secret, unsafe path, unreadable file, archive or incomplete scan prevents
+  approval. Changed bytes or matching rules require new approval. An authorized operator can raise
+  `execution.secretGate.maxFileBytes` in the effective execution configuration. This affects all scans that use
+  that configuration. Total bytes, file count and timeout limits still apply.
+
+  The sealed package store has a shared 2 GiB bound per installation. It counts retained copies, private stages
+  and abandoned partial copies. If the next copy does not fit, Deckent shows the bound, accounted bytes in use
+  and bytes needed. An authorised person can raise `installation.sealedPackageStoreMaxBytes` using
+  `deckent config set --global`. A verified copy can be reused at the bound. Deckent keeps retained copies.
+
+  Each shell check has its own approval. The worker gets the read-only `node_modules` mount and a bounded private
+  `/tmp` for temporary files and caches. Add `--run <id>` to the inspection command to see the recorded checkout mount
+  and digests. Run checks from the checkout. For Vitest with a filesystem module cache, use
+  `--configLoader runner --no-cache --fsModuleCachePath /tmp/vitest-fs`. Record an unavailable required check as
+  `not-run` with its reason. A lost copy or changed lockfile requires a new admission.
+
+- **Reusable package approval.** From the project, run
+  `deckent coding template --allow-dependencies --kind <kind> --scope <id>`. A terminal-verified person with
+  configuration and work-target authority reviews the complete list and every pattern match. The allowance
+  applies only to that exact version in the same installation, company, scope, project, Git target and profile.
+  Runs without an allowance still use the per-Run package card. Each Run and Attempt has its own authority checks.
+  An unregistered secret approved by mistake can be read by later authorised workers and sent to a model provider.
+
+  A per-Run approval holds up to 16,384 UTF-16 units of package review. If the complete review exceeds that
+  limit, an authorised person may grant the reusable allowance above. Without it, the Run cannot start with
+  that list. If only the combined plan and review exceed the chat card's 65,536-unit limit, chat stops before
+  opening an approval. Start a new request under your own authority with
+  `deckent do --scope <scope> --request "<request>"` or `/do <request>`. If approval is requested, read the
+  package risk warning and every match row in `/approvals` or with `deckent approval inspect`.
+
+  The still-authorised approver or a scope administrator can withdraw the allowance. Withdrawal stops the next
+  admission or package opening that relies on it. Running processes and historical evidence are kept.
+  `deckent coding template --inspect-dependencies --scope <id> --run <id>` shows the recorded decision and,
+  when the version was retired, the reason and time. The final checks are ordered with the managed policy writer
+  and the selected, enumerable installation-managed secret store. Project vault changes, out-of-band writes to
+  external backends, manual file edits and process environment changes are outside that ordering guarantee.
+
+  A verified change in the authoritative Git source permanently ends the grant generation once the retirement
+  event is written. An incompatible pinned revision is refused on its own. If deckent is interrupted after
+  verifying a change and before writing retirement, and the approved version returns before the retry,
+  the allowance can still be used for that exact version under current policy and secret checks. A source that
+  stays changed is refused on retry. Once retirement is recorded, returning to the old version requires a new approval.
 - **A worker sees the project's instruction snapshot only after a person trusts it.** A Run snapshots one project instruction file
   (`.deckent/worker-instructions.md` by default, or `AGENTS.md`, or none; `execution.workerInstructions.source`) at the Git work target
   root. With a configured work target the file is read from the commit the target's base ref names (alpha.54), not from the folder:
@@ -902,35 +959,21 @@ in the policy file, as in every other audit record; do not put private text in r
 
 ## Recovery and upgrades
 
-### AI work after the beta.2.1 upgrade (119)
+- **Before switching from beta.2.1 to beta.2, withdraw reusable package allowances while on beta.2.1.**
+  From each affected project with the approved work target and profile selected, run these commands with
+  the affected scope and task kind. Complete the withdrawal card and repeat for each allowance.
 
-The first policy does not grant AI execution permission. When a service Run diagnosis says that permission is missing,
-a person should preview it at their own plain terminal (outside an AI tool's terminal):
+  ```sh
+  deckent config get toolchains.packageAllowances --json
+  deckent coding template --withdraw-dependencies --kind <kind> --scope <id>
+  deckent config get toolchains.packageAllowances --json
+  ```
 
-```sh
-deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
-```
-
-Check the named AI identity, scopes and broad permission before using the same command with `--apply`
-in place of `--preview`. An explicit company denial or approval requirement needs an authorized administrator's review;
-adding an allow may not resolve it. This permission is not restricted to the AI's own proposals.
-
-Use `/runs` (Enter for details), `deckent run inspect --scope SCOPE_ID --id RUN_ID` or `deckent doctor` to read the
-current service observation. The cause includes actor, scope and missing permission cells. `attempt/all` is coverage for
-not-yet-reserved attempts, not an invented Attempt id. A missing, stale or unavailable observation says unknown;
-recorded Run state remains separate. No observation is stored in the Run record. Eligible means current progression
-prerequisites, not proof of launch or acceptance; model, login and network checks remain separate.
-
-An AI proposal approved but not started before a service restart must be proposed again. If a Run was recorded,
-cancel it under your own permissions with `deckent run cancel --scope SCOPE_ID --id RUN_ID`, then make a new proposal
-through the service and answer the new card. A missing service-session start record does not establish when the Run
-was created. A card opened earlier but genuinely answered fresh through the new service can still admit fresh work.
-If AI cancel permission is also missing, the service may be unable to park the Run durably; applying permission alone
-does not restart that suspended Run. Your hold (`h` or `deckent run hold --scope SCOPE_ID --id RUN_ID`) and cancel
-use your own current permissions and can themselves be refused. Started or uncertain work stays under maintenance;
-cancellation neither proves worker termination nor settles uncertain effects. Revocation does not undo past effects.
-Assembled-release and real-account journey acceptance remain open.
-
+  The last withdrawal removes `toolchains.packageAllowances` from the managed project setting. Verify that the
+  setting is absent before switching binaries. For an exact retry of withdrawal, pass the same UUID with
+  `--command-id <uuid>`. If a setting remains or the original target or profile cannot be selected, keep beta.2.1
+  while resolving the cleanup. beta.2 refuses the new setting on load. After cleanup, the open Run and
+  historical evidence remain, and beta.2 refuses execution of the package-bearing Attempt.
 
 - **Before rolling back from beta.2 to beta.1.2, remove the paid-usage key while still on beta.2.** In each project where you set it, run:
 
@@ -1074,6 +1117,35 @@ Assembled-release and real-account journey acceptance remain open.
   clones are sparse); Codex and Cursor `disabled` kinds are refused by alpha.52; have an empty delivery queue at the switch (tickets
   are titled differently); the alpha.52 audit verify does not see the shadow store (it is outside the chain). If the Cursor catalog was
   registered for alpha.53 profiles, restore the backup. Ledger v59 and runtime protocol v29 did not change.
+
+### AI work after the beta.2.1 upgrade (119)
+
+The first policy does not grant AI execution permission. When a service Run diagnosis says that permission is missing,
+a person should preview it at their own plain terminal (outside an AI tool's terminal):
+
+```sh
+deckent policy upgrade --template current --only ai-execution --scope SCOPE_ID --preview
+```
+
+Check the named AI identity, scopes and broad permission before using the same command with `--apply`
+in place of `--preview`. An explicit company denial or approval requirement needs an authorized administrator's review;
+adding an allow may not resolve it. This permission is not restricted to the AI's own proposals.
+
+Use `/runs` (Enter for details), `deckent run inspect --scope SCOPE_ID --id RUN_ID` or `deckent doctor` to read the
+current service observation. The cause includes actor, scope and missing permission cells. `attempt/all` is coverage for
+not-yet-reserved attempts, not an invented Attempt id. A missing, stale or unavailable observation says unknown;
+recorded Run state remains separate. No observation is stored in the Run record. Eligible means current progression
+prerequisites, not proof of launch or acceptance; model, login and network checks remain separate.
+
+An AI proposal approved but not started before a service restart must be proposed again. If a Run was recorded,
+cancel it under your own permissions with `deckent run cancel --scope SCOPE_ID --id RUN_ID`, then make a new proposal
+through the service and answer the new card. A missing service-session start record does not establish when the Run
+was created. A card opened earlier but genuinely answered fresh through the new service can still admit fresh work.
+If AI cancel permission is also missing, the service may be unable to park the Run durably; applying permission alone
+does not restart that suspended Run. Your hold (`h` or `deckent run hold --scope SCOPE_ID --id RUN_ID`) and cancel
+use your own current permissions and can themselves be refused. Started or uncertain work stays under maintenance;
+cancellation neither proves worker termination nor settles uncertain effects. Revocation does not undo past effects.
+Assembled-release and real-account journey acceptance remain open.
 
 ## Core layers
 

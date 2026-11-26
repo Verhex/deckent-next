@@ -4,6 +4,7 @@ import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 
 /** Terminal projection of an approval record returned by the runtime approval application (display fields only). */
 export interface WorklineApproval {
+  readonly packageReview?: boolean;
   readonly approvalId: string;
   readonly runId: string;
   readonly taskId: string;

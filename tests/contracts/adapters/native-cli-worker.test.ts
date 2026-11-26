@@ -38,6 +38,21 @@ const invocation = { provider: entry.id, cliVersion: execution.cliVersion, disco
 const workInput = { schemaVersion: 1, task: 'Update the scoped note.', scope: { paths: ['note.txt'] }, acceptance: 'The note matches the requested text.',
   model: { channelId: 'fixture-channel', modelId: 'fixture-exact-model', auxiliaryModelIds: [] } };
 const profile = () => compileNativeCodingWorkInput(createNativeCodingTemplate(docker, invocation, binding), workInput);
+it('compiles a dependency declaration to a nonlaunchable native v2 profile until scoped input custody is supplied', async () => {
+  const declaration = createNativeCodingTemplate(docker, invocation, binding, 'node-npm');
+  const compiled = compileNativeCodingWorkInput(declaration, workInput), resolved = resolveNativeCliWorkerProfile(compiled);
+  expect(declaration.parameters['dependencyLayout']).toBe('node-npm');
+  expect(compiled.adapter).toEqual({ id: 'native-cli-worker', version: 2 });
+  expect(resolved.dependencies).toEqual({ state: 'declared', layout: 'node-npm' });
+  const f = fixture();
+  await expect(prepareNativeCliWorker({ profile: compiled, request: { ...request, argv: resolved.argv }, ports: f.ports, fence: f.fence }))
+    .rejects.toMatchObject({ code: 'SUPERVISOR_IDENTITY_CONFLICT' });
+  expect(f.ports.capacity.acquire).not.toHaveBeenCalled();
+  const sealed = createNativeCliWorkerProfile(resolved.base, resolved.binding, { state: 'sealed', layout: 'node-npm', platform: 'linux-x64', project: '/fixture/project',
+    workTarget: '/fixture/project', listDigest: 'd'.repeat(64), lockfileDigest: 'e'.repeat(64), approval: { scopeId: 'scope', commandId: 'create' } });
+  expect(resolveNativeCliWorkerProfile(JSON.parse(JSON.stringify(sealed))).dependencies).toEqual(sealed.parameters['dependencies']);
+  expect(() => resolveNativeCliWorkerProfile({ ...sealed, adapter: { ...sealed.adapter, version: 1 } })).toThrow('NATIVE_CLI_WORKER_PROFILE_INVALID');
+});
 it('K27: native defaults use the enforcing native bound, preserve declarations and leave Docker defaults unchanged', () => {
   for (const family of ['claude-code-stream-json', 'codex-jsonl']) {
     const agent = nativeCliAgent(family)!;

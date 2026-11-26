@@ -13,7 +13,9 @@ export type NativeCliWorkerReadiness = Readonly<{ state: 'ready'; execution: Nat
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type NativeCliWorkerProcessResult = Readonly<{ termination: 'confirmed' | 'unverified'; status: 'completed' | 'failed' | 'cancelled'; text: string;
   refusal?: import('#capabilities/index.js').NativeAgentReadinessReason }>;
 /** Admitted tool-realm resources; never passed to the login-bearing CLI realm. */
-export type NativeCliWorkerToolContext = Readonly<Pick<DockerSupervisorOptions, 'readOnlyMounts' | 'inputs' | 'handoffInputs'>>;
+export type NativeCliWorkerToolContext = Readonly<Pick<DockerSupervisorOptions, 'readOnlyMounts' | 'inputs' | 'handoffInputs'> & {
+  sealedNodeModules?: Readonly<{ source: string; target: string; digest: string; lockfile: string; validate(): Promise<void> }>;
+}>;
 export interface NativeCliWorkerDriver {
   /** K2/K3's guarded session delegates to the supplied K1 session; no new effect owner. */
   readonly tools: ToolSessionPort;
