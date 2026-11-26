@@ -174,7 +174,7 @@ async function checkTranscriptNumber(presentation: 'resize-hidden' | 'editor' | 
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   let output = '', holdFlush = false;
   const hidden = Promise.withResolvers<() => void>();
-  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: 8, rows: 60 });
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: presentation === 'accessible' ? 5 : 8, rows: 60 });
   const write = stdout.write.bind(stdout);
   stdout.write = ((chunk: unknown, ...args: unknown[]) => {
     if (holdFlush && chunk === '' && typeof args[0] === 'function') { holdFlush = false; hidden.resolve(args[0] as () => void); return true; }
@@ -184,13 +184,19 @@ async function checkTranscriptNumber(presentation: 'resize-hidden' | 'editor' | 
   let suspend!: ReturnType<typeof useApp>['suspendTerminal'];
   function EditorControl() { suspend = useApp().suspendTerminal; return null; }
   const host = await openTerminalHost({ palette: resolveWorklinePalette('none'), stdin: stdin as never, stdout: stdout as never,
-    fullscreen: presentation !== 'editor', view: context => createElement(Box, { flexDirection: 'column' }, createElement(EditorControl),
+    fullscreen: presentation !== 'editor', ascii: presentation === 'accessible', view: context => createElement(Box, { flexDirection: 'column' }, createElement(EditorControl),
       createElement(WorklineApp, { ...panelFixture({ ledger }), labels, ledger, fullscreen: context.fullscreen, target: 'fixture',
         decisionArmMs: 0, systemPrompt: 'SYSTEM', historyMessages: 40, completeTurn: async () => 'unused', errorText: String, pollMs: 60_000 })) });
   let release: (() => void) | undefined, suspension: Promise<unknown> | undefined;
   try {
     await host.flushed();
+    const opened = output.length;
     stdin.write('/transcript\r'); await host.flushed();
+    if (presentation === 'accessible') {
+      // Five ASCII columns cut the ellipsis: a screen reader hears the drawn marker piece of each row, not the cut ellipsis.
+      const lines = stripVTControlCharacters(output.slice(opened)).split('\n'), more = lines.lastIndexOf('  +4');
+      expect(lines.slice(more - 6, more)).toEqual(['>', ' ', ' ', ' ', ' ', ' ']);
+    }
     stdin.write(`${ESC}[A`); await host.flushed();
     stdin.write('\r'); await host.flushed();
     expect(inspect.mock.calls, presentation).toEqual([[tenth.identity]]);
