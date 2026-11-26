@@ -111,8 +111,8 @@ interface WindowProps {
   /** Right side of the title row (a countdown, a count); shortened before the title is. */
   readonly status?: readonly Span[];
   readonly body?: readonly WindowLine[];
-  /** Content under the body that does not scroll (a picker, a reason field); `rows` counts its height for the cap. */
-  readonly footer?: (focused: boolean) => ReactNode;
+  /** Content under the body with the same column limit as the body; footerRows reserves its height. */
+  readonly footer?: (focused: boolean, contentColumns: number) => ReactNode;
   readonly footerRows?: number;
   /** Visible labels of a custom option footer; entries must never be included. Shared pickers register their own labels. */
   readonly copyOptions?: readonly string[];
@@ -339,7 +339,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       {rows.slice(first, first + visible).map((row, index) => (ends => { const range = picked ? cardRowRange(picked, first + index) : null;
         return <Text key={first + index} wrap="truncate">{ends?.open}{range ? highlightCells(plainText(row) || ' ', range.start, range.end, palette.selection) : row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>; })(hyperlinkEnds(links[first + index])))}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
-      {footer ? <WindowInputContext.Provider value={queuedList ? acceptsListInput : acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
+      {footer ? <WindowInputContext.Provider value={queuedList ? acceptsListInput : acceptsInput}><CardCopyOptionsContext.Provider value={optionLabels.current}>{footer(focused, width)}</CardCopyOptionsContext.Provider></WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
       {hintRows.map((row, index) => <Text key={`hint:${index}`} {...palette.muted} wrap="truncate">{row}</Text>)}
     </Box>
